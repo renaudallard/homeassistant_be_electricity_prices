@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import shutil
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import ANY
 
+import aiohttp
 import pytest
 
 from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
@@ -108,6 +110,16 @@ def _card_fetch(
 
 async def _no_sleep(_seconds: float) -> None:
     return None
+
+
+async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
+    """Cociter's listing carries carriage returns; a text read back with
+    newline translation would be two bytes shorter than what the parser
+    saw, and every replay would rewrite the row for nothing."""
+    text = "line one\r\nline two\rline three"
+    rel = ac._write_text(tmp_path, "2026-09", text)
+    assert ac._read_text(tmp_path / rel) == text
+    assert hashlib.sha256(text.encode()).hexdigest() in rel
 
 
 async def test_a_card_is_filed_under_the_month_its_label_names(tmp_path: Path) -> None:
@@ -428,6 +440,259 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["_sources"][0]["pdf"] == f"cards-2026-09/{digest2}.pdf"
     assert card["energy"]["single"] == 0.3
+
+
+def _text_fetch(session: _Session, parser: dict[str, str], seen: list[date]) -> Fetch:
+    """A fetch whose parse depends on a knob the test turns, reading its
+    page through the memo like a real extractor and noting today's date.
+    The page reads ``price=<eur> month=<label>``."""
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        text = await fetch_text(session, CARD_URL)  # type: ignore[arg-type]
+        seen.append(date.today())
+        fields = dict(part.split("=", 1) for part in text.split(" ", 1))
+        price = float(fields["price"]) * (2 if parser["version"] == "doubling" else 1)
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price),
+            publication_label=fields["month"],
+            source_url=CARD_URL,
+        )
+
+    return fetch
+
+
+async def test_stored_rows_are_replayed_only_when_the_parser_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parser change replays every stored row from its stored texts, with
+    the clock pinned to the day the row was captured and no supplier asked;
+    a run under the same parser replays nothing."""
+    session = _Session({CARD_URL: "price=0.2 month=augustus 2026"})
+    parser = {"version": "plain"}
+    seen: list[date] = []
+    extractor = _extractor(_text_fetch(session, parser, seen))
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    assert (tmp_path / "parser.txt").read_text().strip() == "digest-a"
+    row = tmp_path / "acme/acme_fix/wallonia/2026-08.json"
+    assert json.loads(row.read_text())["energy"]["single"] == 0.2
+
+    # September, same parser: the live walk stores this month's card on the
+    # real clock, and nothing is replayed.
+    session.pages[CARD_URL] = "price=0.2 month=september 2026"
+    seen.clear()
+    later = NOW.replace(day=18)
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=later, sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.reparsed) == (0, 0)
+    assert seen == [date.today()]
+    assert (tmp_path / "acme/acme_fix/wallonia/2026-09.json").exists()
+
+    # The parser changed: August is replayed from its stored text under
+    # August's clock (the page itself is September's by now), and rewritten;
+    # September's row was already written by today's live walk.
+    parser["version"] = "doubling"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    seen.clear()
+    hits_before = session.hits
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=later, sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.reparsed, summary.unreplayable) == (2, 1, [])
+    assert session.hits == hits_before + 1  # the live walk only
+    card = json.loads(row.read_text())
+    assert card["energy"]["single"] == 0.4
+    assert card["publication_label"] == "augustus 2026"
+    assert card["_seen_on"] == "2026-08-05"
+    assert (tmp_path / "parser.txt").read_text().strip() == "digest-b"
+    assert seen == [date.today(), date(2026, 8, 5), date(2026, 9, 18)]
+
+    # And the forced flag replays even when the digest matches.
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=later, reparse=True, sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.reparsed) == (2, 0)
+
+
+async def test_a_row_that_cannot_be_reproduced_offline_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parser that now wants a page the row never read is refused, and a
+    row whose text file is gone is skipped; both are reported and neither
+    is rewritten."""
+    session = _Session({CARD_URL: "price=0.2 month=augustus 2026"})
+    parser = {"version": "plain"}
+    extractor = _extractor(_text_fetch(session, parser, []))
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    row = tmp_path / "acme/acme_fix/wallonia/2026-08.json"
+    before = row.read_text()
+
+    async def wants_more(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        # The page the row read comes from the memo; the extra one goes to
+        # the session handed in, which in a replay refuses it.
+        await fetch_text(session, CARD_URL)  # type: ignore[arg-type]
+        await fetch_text(_session, "https://acme.test/extra")
+        return make_snapshot(supplier="acme", contract=contract)
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[_extractor(wants_more)], now=NOW, sleep=_no_sleep
+    )
+    assert summary.replayed == 0
+    [reason] = summary.unreplayable
+    assert reason.startswith(
+        "acme/acme_fix/wallonia/2026-08: ExtractorError: network error"
+    )
+    assert row.read_text() == before
+
+    # The text the row read is gone from the branch. The page has moved on
+    # to September, so today's live walk files elsewhere and leaves this row.
+    card = json.loads(before)
+    card["_sources"][0]["text"] = "texts/2026-08/gone.txt"
+    row.write_text(json.dumps(card))
+    session.pages[CARD_URL] = "price=0.2 month=september 2026"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-c")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep
+    )
+    # September's fresh row replays fine; August is skipped and named.
+    assert summary.replayed == 1
+    assert summary.unreplayable == [
+        "acme/acme_fix/wallonia/2026-08: texts/2026-08/gone.txt is missing"
+    ]
+    assert json.loads(row.read_text()) == card
+    assert (tmp_path / "parser.txt").read_text().strip() == "digest-c"
+
+
+async def test_a_reader_that_changed_variant_gets_the_kept_pdf_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The row has text for the plain reading only; a parser that now reads
+    the card in layout mode finds no text and is handed the kept PDF from
+    the PDF directory, which is rendered and the row rewritten."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, renders))],
+        pdf_dir=pdfs,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert renders == [b"%PDF v1"]
+    session.pdfs.clear()  # the supplier is not there any more
+    layout_renders: list[bytes] = []
+
+    def render(payload: bytes) -> str:
+        layout_renders.append(payload)
+        return "layout text"
+
+    async def layout_fetch(
+        _session: Any, contract: str, region: str
+    ) -> SupplierSnapshot:
+        text = await _pdf._pdf_text(
+            _session, PDF_URL, variant="layout", timeout=5, render=render
+        )
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.5 if text == "layout text" else 0.0),
+            publication_label="september 2026",
+            source_url=PDF_URL,
+        )
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        out,
+        extractors=[_extractor(layout_fetch)],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=12),
+        sleep=_no_sleep,
+    )
+    # Today's live walk fails (the session is empty) but the replay has the PDF.
+    assert len(summary.failed) == 1
+    assert (summary.replayed, summary.reparsed, summary.unreplayable) == (1, 1, [])
+    assert layout_renders == [b"%PDF v1"]
+    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert card["energy"]["single"] == 0.5
+    assert card["_sources"][0]["variant"] == "layout"
+    digest = hashlib.sha256(b"%PDF v1").hexdigest()
+    assert card["_sources"][0]["pdf"] == f"cards-2026-09/{digest}.pdf"
+
+
+async def test_an_archive_row_replays_through_the_supplier_archive_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A backfilled row is replayed with fetch_for_month for its own month,
+    not with the live fetch."""
+    calls: list[tuple[str, date | None]] = []
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        calls.append(("live", None))
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label="september 2026"
+        )
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        calls.append(("archive", month))
+        return (
+            make_snapshot(
+                supplier="acme", contract=contract, publication_label=f"{month:%Y-%m}"
+            )
+            if month.month == 8
+            else None
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        fetch_for_month=fetch_for_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    calls.clear()
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep
+    )
+    assert summary.replayed == 2
+    assert calls == [("live", None), ("archive", date(2026, 8, 1)), ("live", None)]
+
+
+def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+
+    async def run() -> bytes:
+        async with replay.get("https://acme.test/card.pdf") as resp:
+            return await resp.read()
+
+    with pytest.raises(aiohttp.ClientConnectionError):
+        asyncio.run(run())
+    (tmp_path / "cards-2026-09").mkdir()
+    (tmp_path / "cards-2026-09/abc.pdf").write_bytes(b"%PDF kept")
+    replay.pdfs = {"https://acme.test/card.pdf": "cards-2026-09/abc.pdf"}
+    assert asyncio.run(run()) == b"%PDF kept"
 
 
 def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:

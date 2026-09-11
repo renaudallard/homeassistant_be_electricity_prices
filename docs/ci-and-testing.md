@@ -734,7 +734,7 @@ green does not mean covered.
 The live check asks whether today's card still parses. `scripts/archive_cards.py` keeps the
 answer: it walks the same registry, fetches every (supplier, contract, region) card through
 `extractor.fetch` exactly as the coordinator does, and writes the parsed snapshot to
-`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:191`). The
+`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:432`). The
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
@@ -752,20 +752,20 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:122`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:144`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:292`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:432`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:334`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:476`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
 block a downloaded card's validated bytes go to a hook instead of straight to the renderer. The
-archiver installs `_Cards.render` (`scripts/archive_cards.py:208`) there. It hashes the bytes, and
+archiver installs `_Cards.render` (`scripts/archive_cards.py:247`) there. It hashes the bytes, and
 for a (variant, digest) pair some stored row already names it serves that row's text from the
 branch instead of rendering, so a card that has not changed since it was last stored costs one
 download and no pdfplumber pass; on a Raspberry Pi the render is the 20 minutes of the walk, the
@@ -776,6 +776,27 @@ repository (see `archive_cards.yml` below) and appends each upload to `<out>/pdf
 manifest the next run seeds `_Cards` from: a digest the manifest does not list is written again
 until an upload succeeds, so a day without the token loses nothing for good. `_prune` drops
 manifest entries older than the retention alongside the rows.
+
+A parser fix reaches the stored months on its own. After the live walk the script compares a
+digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
+`_parser_digest`, `scripts/archive_cards.py:359`) with the one stamped in the branch's
+`parser.txt`; when they differ it replays every stored row (`_replay_row`,
+`scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
+the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
+loop's timers and the render threads keep working; some extractors choose a card by today's
+date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
+`_ReplaySession` (`scripts/archive_cards.py:299`) in place of aiohttp. That session reaches no
+supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
+with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
+cards releases (`--pdf-base-url`); anything else is refused as a network error, and the row is
+reported as not replayable and left as it was, as is a row whose text file is gone or whose
+archive path no longer settles it. A row whose parse came out differently is rewritten,
+keeping its capture day; `_cached_at` moves. The replay is a regex pass per row, no download
+and no render, so it is minutes for the whole branch, and a day without a code change replays
+nothing. `--reparse` forces it; `--rerender` also stops serving stored texts so every PDF is
+rendered afresh, which is the way to pick up a pdfplumber or pypdf upgrade, at the cost of
+downloading every kept card. A fresh archive only stamps the digest: it holds nothing older
+than the parser that wrote it.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
@@ -792,14 +813,15 @@ Per card, transient failures are retried three times with the live check's own c
 (`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
 skipped, so one supplier never stops the walk. The custom supplier has no card and a supplier
 past its `deprecated_until` has left the market, so neither is asked (`_targets`,
-`scripts/archive_cards.py:277`). The script exits 0 when at least one card was stored or
+`scripts/archive_cards.py:531`). The script exits 0 when at least one card was stored or
 confirmed unchanged and 1 when none was, which is a runner-wide problem rather than a
 supplier's; it files no issues, the live check already does that.
 
 `tests/test_archive_cards.py` drives it with a stub extractor and a canned page: filing by
 label, the shared-page attribution, the no-op repeat run, the digest-keyed render skip and PDF
-retention, the retry split, the skip rules, the backfill's absent and provisional months, the
-retention and the exit code.
+retention, the replay on a parser change (and only then), the rows a replay must leave alone, a
+reader that changed variant getting its kept PDF back, the retry split, the skip rules, the
+backfill's absent and provisional months, the retention and the exit code.
 
 ## GitHub workflows
 
@@ -904,10 +926,12 @@ ending green (`.github/workflows/live_check.yml:375`).
 
 Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
 and on manual dispatch (`.github/workflows/archive_cards.yml:3`), with `contents: write` because
-it pushes. The dispatch takes one input, `backfill_months`, passed to the script as `--backfill`;
-the schedule runs with 0, and a dispatch asking for a backfill gets a six-hour job timeout
-instead of the usual one hour, since a backfill is one archived card per supplier, contract,
-region and month on top of the daily walk. It checks out `main` for the script and the `archive` branch as a worktree under
+it pushes. The dispatch takes three inputs: `backfill_months`, passed to the script as `--backfill`, and
+the two booleans `reparse` and `rerender`, passed as the flags of the same names. The schedule
+runs with none of them. A dispatch asking for a backfill or a re-render gets a six-hour job
+timeout instead of the usual one hour, since either is far more work than the daily walk: a
+backfill is one archived card per supplier, contract, region and month, a re-render downloads
+and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and the `archive` branch as a worktree under
 `tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
 `git worktree add --orphan`, so nothing has to be pushed by hand
 (`.github/workflows/archive_cards.yml:46`). It then runs `scripts/archive_cards.py --out

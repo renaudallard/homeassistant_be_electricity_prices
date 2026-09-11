@@ -28,6 +28,19 @@ digest is what keeps a daily run cheap: a card whose bytes have not
 changed is served the text the branch already holds for it instead of
 being rendered again.
 
+A parser fix reaches the stored months on its own. Every row carries the
+texts its parse read, so the run replays each row through the current
+extractor with those texts served from the branch, the clock pinned to
+the day the row was captured and no supplier contacted, and rewrites the
+row when the parse came out differently. That replay costs a regex pass
+per row and nothing else, and it happens only when the parser sources
+changed since the branch was last replayed (a digest of them is stamped in
+``parser.txt``), so a day without a code change replays nothing;
+``--reparse`` forces it. A parser that now reads a card with a different
+PDF reader finds no stored text for that reading and gets the kept PDF
+back from the cards releases instead; ``--rerender`` asks for that on
+every card, which is the way to pick up a reader upgrade.
+
 ``--backfill N`` also asks every supplier that keeps an archive of its own
 for the N closed months before this one, through the same
 ``fetch_for_month`` the integration uses, and stores each month the branch
@@ -43,7 +56,9 @@ run goes red without filing anything. The live check already files
 per-supplier issues and this is not a second checker.
 
 Usage:
-    python scripts/archive_cards.py --out tmp/archive [--only mega ...] [--backfill 12]
+    python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs [--only mega ...]
+        [--backfill 12] [--reparse] [--rerender]
+        [--pdf-base-url https://github.com/<owner>/<cards repo>/releases/download]
 """
 
 from __future__ import annotations
@@ -62,6 +77,7 @@ from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiohttp
+from freezegun import freeze_time
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -102,6 +118,12 @@ _CARD_TIMEOUT_S = 300
 # Keys the daily run rewrites; two files that differ only here hold the
 # same card and the older one is kept.
 _VOLATILE_KEYS = ("_cached_at", "_seen_on")
+# The digest of the parser sources the branch was last replayed with.
+_PARSER_STAMP = "parser.txt"
+# What a parse depends on: the extractors, the shared readers and rate
+# dataclasses beside them, the constants they key on, and the codec the
+# rows are written with.
+_PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_store.py")
 
 _README = """# Tariff card archive
 
@@ -152,6 +174,9 @@ class _Summary:
     rendered: int = 0
     unrendered: int = 0
     pdfs_saved: int = 0
+    replayed: int = 0
+    reparsed: int = 0
+    unreplayable: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
 
 
@@ -171,16 +196,29 @@ class _Cards:
     are written under ``pdf_dir`` for the workflow to upload.
     """
 
-    def __init__(self, out: Path, pdf_dir: Path | None, seen_month: str) -> None:
+    def __init__(
+        self,
+        out: Path,
+        pdf_dir: Path | None,
+        seen_month: str,
+        *,
+        serve_texts: bool = True,
+    ) -> None:
         self.out = out
         self.pdf_dir = pdf_dir
         self.seen_month = seen_month
+        # False under --rerender: every card is rendered afresh, which is
+        # how a reader upgrade reaches the stored months.
+        self.serve_texts = serve_texts
         self.kept: dict[str, str] = {}
         manifest = out / _MANIFEST
         if manifest.exists():
             self.kept = json.loads(manifest.read_text(encoding="utf-8"))
-        # (variant, digest) -> text path on the branch, from every stored row.
+        # (variant, digest) -> text path on the branch, and digest -> release
+        # path, from every stored row: the second is how a replayed row keeps
+        # naming its PDF when the memo served the text and no download ran.
         self.texts: dict[tuple[str, str], str] = {}
+        self.known: dict[str, str] = {}
         for row in out.glob("*/*/*/????-??.json"):
             try:
                 sources = json.loads(row.read_text(encoding="utf-8")).get(
@@ -192,6 +230,7 @@ class _Cards:
                 if "pdf" in source:
                     digest = Path(source["pdf"]).stem
                     self.texts[(source["variant"], digest)] = source["text"]
+                    self.known[digest] = source["pdf"]
         self.fresh: dict[tuple[str, str], str] = {}
         self.digests: dict[str, str] = {}
         self.saved: dict[str, str] = {}
@@ -203,7 +242,7 @@ class _Cards:
         digest = self.digests.get(url)
         if digest is None:
             return None
-        return self.kept.get(digest) or self.saved.get(digest)
+        return self.kept.get(digest) or self.saved.get(digest) or self.known.get(digest)
 
     async def render(
         self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
@@ -222,10 +261,10 @@ class _Cards:
             self.saved[digest] = rel
         key = (variant, digest)
         text = self.fresh.get(key)
-        if text is None:
+        if text is None and self.serve_texts:
             stored = self.texts.get(key)
             if stored is not None and (self.out / stored).exists():
-                text = (self.out / stored).read_text(encoding="utf-8")
+                text = _read_text(self.out / stored)
         if text is not None:
             self.unrendered += 1
             return text
@@ -233,6 +272,99 @@ class _Cards:
         self.rendered += 1
         self.fresh[key] = text
         return text
+
+
+class _KeptResponse:
+    """The response shape the readers use, over bytes already in hand."""
+
+    status = 200
+    content_length = None
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def read(self) -> bytes:
+        return self._payload
+
+    async def text(self) -> str:
+        return self._payload.decode("utf-8", errors="replace")
+
+    async def __aenter__(self) -> _KeptResponse:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _ReplaySession:
+    """What a replayed parse may fetch: nothing from a supplier.
+
+    Every text the row read is seeded into the memo before the parse runs,
+    so the readers never reach this session for those. The one request
+    that can still arrive is a card the parser now wants read with another
+    PDF reader (a variant the row has no text for), and that is served
+    from the kept PDF, the local copy first and the cards releases
+    otherwise. Anything else is refused as a network error, which the
+    readers wrap the way they wrap a real one, and the row is left as it
+    was and reported.
+    """
+
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        pdf_dir: Path | None,
+        pdf_base_url: str | None,
+    ) -> None:
+        self._session = session
+        self._pdf_dir = pdf_dir
+        self._pdf_base_url = pdf_base_url
+        self.pdfs: dict[str, str] = {}
+
+    def get(self, url: str, **_kw: Any) -> Any:
+        return self._get(url)
+
+    async def _fetch(self, url: str) -> bytes:
+        path = self.pdfs.get(url)
+        if path is None:
+            raise aiohttp.ClientConnectionError(f"offline replay has nothing for {url}")
+        if self._pdf_dir is not None and (self._pdf_dir / path).exists():
+            return (self._pdf_dir / path).read_bytes()
+        if self._pdf_base_url is None:
+            raise aiohttp.ClientConnectionError(f"no kept copy of {url} to replay from")
+        async with self._session.get(
+            f"{self._pdf_base_url}/{path}", timeout=aiohttp.ClientTimeout(total=60)
+        ) as resp:
+            if resp.status >= 400:
+                raise aiohttp.ClientConnectionError(
+                    f"HTTP {resp.status} fetching the kept copy of {url}"
+                )
+            return await resp.read()
+
+    class _Pending:
+        """An awaitable-and-enterable stand-in for aiohttp's request context."""
+
+        def __init__(self, fetch: Awaitable[bytes]) -> None:
+            self._fetch = fetch
+
+        async def __aenter__(self) -> _KeptResponse:
+            return _KeptResponse(await self._fetch)
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    def _get(self, url: str) -> _Pending:
+        return self._Pending(self._fetch(url))
+
+
+def _parser_digest() -> str:
+    """One digest over every source a parse depends on."""
+    root = ROOT / "custom_components" / "be_electricity_prices"
+    digest = hashlib.sha256()
+    for pattern in _PARSER_SOURCES:
+        for path in sorted(root.glob(pattern)):
+            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _month_id(year: int, month: int) -> str:
@@ -268,6 +400,13 @@ def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     return entry
 
 
+def _read_text(path: Path) -> str:
+    """A stored text exactly as it was fetched: no newline translation, so
+    a replay hands the parser the very bytes it read the first time."""
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def _write_text(out: Path, seen_month: str, text: str) -> str:
     """Store ``text`` once, content-addressed, and return its path in ``out``."""
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -275,7 +414,8 @@ def _write_text(out: Path, seen_month: str, text: str) -> str:
     path = out / rel
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
     return rel
 
 
@@ -299,6 +439,7 @@ def _write_card(
     sources: list[dict[str, str]],
     now: datetime,
     via: str,
+    seen_on: date | None = None,
 ) -> bool:
     """Write the card's month file; True when the file changed.
 
@@ -308,8 +449,9 @@ def _write_card(
     line so a day's diff on the branch is readable. ``via`` records which
     path produced it, ``live`` (today's card, filed by its label) or
     ``archive`` (the supplier's own archive, filed by the month asked for).
+    A replay passes the day the row was first captured as ``seen_on``.
     """
-    today = now.astimezone(_BRUSSELS).date()
+    today = seen_on or now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
     card["_seen_on"] = today.isoformat()
     card["_sources"] = sources
@@ -407,6 +549,116 @@ def _targets(
     return out
 
 
+async def _replay_row(
+    path: Path,
+    extractors: dict[str, SupplierExtractor],
+    cards: _Cards,
+    replay: _ReplaySession,
+    now: datetime,
+    summary: _Summary,
+) -> None:
+    """Re-run one stored row through the current parser, offline."""
+    out = cards.out
+    supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
+    label = f"{supplier}/{contract}/{region}/{path.stem}"
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        summary.unreplayable.append(f"{label}: not a JSON row")
+        return
+    extractor = extractors.get(supplier)
+    if extractor is None:
+        summary.unreplayable.append(f"{label}: no extractor registered")
+        return
+    memo = _RecordingMemo()
+    for source in row.get("_sources", []):
+        text_path = out / source["text"]
+        if not text_path.exists():
+            summary.unreplayable.append(f"{label}: {source['text']} is missing")
+            return
+        key = (
+            source["url"]
+            if source["variant"] == "text"
+            else f"{source['variant']}\0{source['url']}"
+        )
+        # Seeded, not touched: only what the parse actually reads counts.
+        dict.__setitem__(memo, key, _read_text(text_path))
+    replay.pdfs = {s["url"]: s["pdf"] for s in row.get("_sources", []) if "pdf" in s}
+    for url, pdf in replay.pdfs.items():
+        cards.digests[url] = Path(pdf).stem
+    try:
+        seen_on = date.fromisoformat(row["_seen_on"])
+    except (KeyError, ValueError):
+        summary.unreplayable.append(f"{label}: no capture date")
+        return
+    first = date(int(path.stem[:4]), int(path.stem[5:]), 1)
+    session: Any = replay
+    with memoise_text_fetches(memo), render_through(cards.render):
+        try:
+            if row.get("_via") == "archive":
+                fetch_for_month = extractor.fetch_for_month
+                if fetch_for_month is None:
+                    summary.unreplayable.append(f"{label}: supplier has no archive now")
+                    return
+                snap = await fetch_for_month(session, contract, region, first)
+            else:
+                snap = await extractor.fetch(session, contract, region)
+        except Exception as err:  # noqa: BLE001 - a row that will not replay is reported, not fatal
+            summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
+            return
+    if snap is None or snap.provisional:
+        summary.unreplayable.append(f"{label}: the archive path no longer settles it")
+        return
+    seen_month = _month_id(seen_on.year, seen_on.month)
+    sources = [
+        _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
+        for key in sorted(memo.touched)
+    ]
+    summary.replayed += 1
+    if _write_card(
+        out,
+        supplier,
+        contract,
+        region,
+        path.stem,
+        snap,
+        sources,
+        now,
+        row.get("_via", "live"),
+        seen_on,
+    ):
+        summary.reparsed += 1
+
+
+async def _replay_all(
+    out: Path,
+    extractors: dict[str, SupplierExtractor],
+    cards: _Cards,
+    replay: _ReplaySession,
+    now: datetime,
+    summary: _Summary,
+) -> None:
+    """Every stored row, grouped by capture day so the clock is pinned
+    once per day rather than once per row."""
+    by_day: dict[str, list[Path]] = {}
+    for path in sorted(out.glob("*/*/*/????-??.json")):
+        try:
+            day = json.loads(path.read_text(encoding="utf-8")).get("_seen_on", "")
+        except ValueError:
+            day = ""
+        by_day.setdefault(day, []).append(path)
+    for day, paths in sorted(by_day.items()):
+        if not day:
+            for path in paths:
+                await _replay_row(path, extractors, cards, replay, now, summary)
+            continue
+        # Ticking, so the loop's own timers and the render threads keep
+        # working; the date stays the capture day for the seconds this takes.
+        with freeze_time(f"{day}T12:00:00+02:00", tick=True):
+            for path in paths:
+                await _replay_row(path, extractors, cards, replay, now, summary)
+
+
 async def archive(
     out: Path,
     *,
@@ -414,11 +666,15 @@ async def archive(
     keep_months: int = 36,
     backfill_months: int = 0,
     pdf_dir: Path | None = None,
+    pdf_base_url: str | None = None,
+    reparse: bool = False,
+    rerender: bool = False,
     extractors: Iterable[SupplierExtractor] | None = None,
     now: datetime | None = None,
     sleep: Callable[[float], Any] = asyncio.sleep,
 ) -> _Summary:
-    """Fetch every card, store what changed, prune the old, report."""
+    """Fetch every card, store what changed, replay what the parser
+    changed for, prune the old, report."""
     now = now or datetime.now(UTC)
     today = now.astimezone(_BRUSSELS).date()
     seen_month = _month_id(today.year, today.month)
@@ -428,10 +684,9 @@ async def archive(
         readme.write_text(_README, encoding="utf-8")
     summary = _Summary()
     memo = _RecordingMemo()
-    cards = _Cards(out, pdf_dir, seen_month)
-    targets = _targets(
-        all_extractors() if extractors is None else extractors, only or set(), today
-    )
+    cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
+    registry = tuple(all_extractors() if extractors is None else extractors)
+    targets = _targets(registry, only or set(), today)
     async with aiohttp.ClientSession() as session:
         with memoise_text_fetches(memo), render_through(cards.render):
             for ex, contract, region in targets:
@@ -497,6 +752,19 @@ async def archive(
                         "archive",
                     )
                     summary.backfilled += 1
+        # A fresh archive holds nothing older than this parser, so the first
+        # run only stamps it; from then on a changed digest replays the rows.
+        stamp = out / _PARSER_STAMP
+        parser = _parser_digest()
+        stamped = (
+            stamp.read_text(encoding="utf-8").strip() if stamp.exists() else parser
+        )
+        if reparse or rerender or stamped != parser:
+            replay = _ReplaySession(session, pdf_dir, pdf_base_url)
+            await _replay_all(
+                out, {ex.id: ex for ex in registry}, cards, replay, now, summary
+            )
+        stamp.write_text(parser + "\n", encoding="utf-8")
     summary.rendered = cards.rendered
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)
@@ -507,10 +775,13 @@ async def archive(
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "
-        f"{summary.pdfs_saved} new PDFs kept"
+        f"{summary.pdfs_saved} new PDFs kept; {summary.replayed} replayed, "
+        f"{summary.reparsed} reparsed, {len(summary.unreplayable)} not replayable"
     )
     for line in summary.failed:
         print(f"  failed {line[:300]}")
+    for line in summary.unreplayable:
+        print(f"  not replayable {line[:300]}")
     return summary
 
 
@@ -529,6 +800,22 @@ def main() -> int:
         help="write every PDF the branch has not recorded yet under DIR",
     )
     parser.add_argument(
+        "--pdf-base-url",
+        default=None,
+        metavar="URL",
+        help="where the kept PDFs are served from, for a replay that needs one",
+    )
+    parser.add_argument(
+        "--reparse",
+        action="store_true",
+        help="replay every stored row through the parser even if it did not change",
+    )
+    parser.add_argument(
+        "--rerender",
+        action="store_true",
+        help="replay every row with its PDFs rendered afresh, for a reader upgrade",
+    )
+    parser.add_argument(
         "--backfill",
         type=int,
         default=0,
@@ -543,6 +830,9 @@ def main() -> int:
             keep_months=args.keep_months,
             backfill_months=args.backfill,
             pdf_dir=args.pdfs,
+            pdf_base_url=args.pdf_base_url,
+            reparse=args.reparse,
+            rerender=args.rerender,
         )
     )
     return 0 if summary.stored or summary.unchanged else 1

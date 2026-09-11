@@ -16,6 +16,16 @@ on:
         default: "0"
         required: false
         type: string
+      reparse:
+        description: Replay every stored month through the parser even if it did not change.
+        default: false
+        required: false
+        type: boolean
+      rerender:
+        description: Replay every stored month with its PDFs rendered afresh, for a PDF reader upgrade.
+        default: false
+        required: false
+        type: boolean
 
 # The job pushes to the archive branch, and nothing else does.
 permissions:
@@ -35,7 +45,7 @@ jobs:
     # that never returns is bounded per card by the script. A backfill asks
     # one archived card per supplier, contract, region and month on top,
     # so a dispatch that asks for one gets six hours.
-    timeout-minutes: ${{ (github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') && 360 || 60 }}
+    timeout-minutes: ${{ ((github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') || github.event.inputs.rerender == 'true') && 360 || 60 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -50,8 +60,10 @@ jobs:
           # imports at module level: homeassistant, defusedxml for api.py
           # and the two PDF readers. Versions come from requirements-dev.txt
           # so this runs against what the test suite proved.
+          # freezegun pins the clock to a row's capture day while a stored
+          # month is replayed through the current parser.
           pip install -c requirements-dev.txt \
-            pypdf pdfplumber aiohttp defusedxml homeassistant
+            pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
 
       - name: Check out the archive branch
         # The archive lives on its own branch so three years of daily
@@ -67,9 +79,14 @@ jobs:
           fi
 
       - name: Store today's cards
+        env:
+          CARDS_REPO: renaudallard/be_electricity_prices_cards
         run: >-
           python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs
+          --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
           --backfill "${{ github.event.inputs.backfill_months || '0' }}"
+          ${{ github.event.inputs.reparse == 'true' && '--reparse' || '' }}
+          ${{ github.event.inputs.rerender == 'true' && '--rerender' || '' }}
 
       - name: Keep the cards themselves
         # The PDFs go to a separate repository's releases, one per month,

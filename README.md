@@ -1099,7 +1099,11 @@ branch names its PDF that way under `_sources`. A month of cards is about
 100 MB, which is why they live in releases rather than on a branch. That
 digest also keeps the daily run cheap: a card whose bytes have not changed
 is served the text the branch already holds instead of being rendered
-again.
+again. And a parser fix reaches the stored months on its own: when the
+parser sources change, the next run replays every stored month from the
+texts it kept, with the clock set to the day the card was captured and no
+supplier contacted, and rewrites what came out differently; a parser that
+now needs the card read another way gets the kept PDF back.
 
 The integration reads that branch for any past month a supplier's own
 archive does not serve, before falling back to the current card: one small
