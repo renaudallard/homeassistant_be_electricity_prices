@@ -57,7 +57,7 @@ a lowercased "month year" string ("april 2026") reconstructed from the filename 
 ## Contracts
 
 Five tiers are declared in `_TIERS` (`providers/frank.py:127`) and turned into `Contract`
-objects by the `EXTRACTOR` comprehension (`providers/frank.py:534`). Every one is
+objects by the `EXTRACTOR` comprehension (`providers/frank.py:551`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
@@ -91,12 +91,22 @@ The pattern is anchored on the `(incl. btw)` that follows the figure. `Korting` 
 is also the Korting tier's TITLE line, and the two sentences under the amount open with
 it as well: four occurrences in all, only one of which is the figure.
 
-Both conditions are assumed to hold and neither is knowable here. All three require a year
-of uninterrupted consumption, which an entry that left the contract fails by no longer
-being priced on this card. HV and JN add *"op voorwaarde dat je jouw facturen ... steeds op
-tijd hebt betaald"*, which is about the household rather than the tariff. A customer who
-paid late sees a credit they will not be granted, which is still nearer than ranking a
-tier as though its whole reason for existing were not there.
+The three tiers do not attach the same conditions, and all of them are assumed to hold:
+
+| condition | Korting | HV / JN | checkable here |
+| --- | --- | --- | --- |
+| *"na een jaar ononderbroken verbruik op dit contract"* | yes | yes | effectively: a household that left stops being priced on this card at all |
+| *"op voorwaarde dat je jouw facturen ... steeds op tijd hebt betaald"* | no | yes | no, it is about the household rather than the tariff |
+| *"niet cumuleerbaar met andere promoties of kortingen"* | no | yes | within the integration yes, since only one credit is ever applied per contract; a promotion taken outside it is invisible |
+| *"Op een sociaal tarief wordt door ons geen korting toegepast"* | no | yes | no, and no social tariff is modelled anywhere here, so such a household is already priced on the commercial card |
+
+The Korting tier says only that the credit goes to new customers and to existing ones
+switching to it, so its single condition is the one the entry itself stands in for. HV and
+JN carry all four, three of which are invisible from here.
+
+A household that fails one sees a credit it will not be granted, which is still nearer
+than ranking a tier as though its whole reason for existing were not there. The assumption
+is stated rather than left implied, here and in the README.
 
 ### Hourly or quarter-hourly settlement
 
@@ -230,10 +240,10 @@ sub-parsers. All five run against the layout-preserving text from
 
 | field | parser | source |
 | --- | --- | --- |
-| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:406` |
-| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:447` |
-| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:484` |
-| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:499` |
+| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:423` |
+| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:464` |
+| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:501` |
+| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:516` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1053` |
 
 ### Number format
@@ -247,7 +257,7 @@ and its dot-replaced twin parse identically.
 
 ## Energy formula
 
-`_extract_dynamic` (`providers/frank.py:406`) parses the PDF formula row with `_FORMULA_RE`
+`_extract_dynamic` (`providers/frank.py:423`) parses the PDF formula row with `_FORMULA_RE`
 (`providers/frank.py:330`), which matches:
 
 ```
@@ -282,15 +292,15 @@ fixture's 2,92 EUR/month resolves to 35.04 EUR/year (illustrative,
 
 Frank's injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)), not a monthly indicative and not the
-spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:447`) parses a
-`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:439`):
+spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:464`) parses a
+`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:456`):
 
 ```
 terugleveringsvergoeding: (<factor_pdf> x BELPEX per uur* <sign> <base_cents>)
 ```
 
 Injection is VAT-exempt (Belgian residential feed-in is never VAT-incl,
-`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:413`):
+`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:430`):
 
 ```
 factor = factor_pdf * 10.0
@@ -316,7 +326,7 @@ stays `None` too.
 
 ## Taxes
 
-`_extract_taxes` (`providers/frank.py:484`) parses five levy rows and builds a `TaxOverlay`.
+`_extract_taxes` (`providers/frank.py:501`) parses five levy rows and builds a `TaxOverlay`.
 All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
 (`providers/frank.py:447`, comment at :439) and pinned by `test_taxes_vat_rate_zero`
 (`tests/test_frank.py:220`).
@@ -353,7 +363,7 @@ are divided by 100 to reach EUR/kWh.
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/frank.py:499`) covers all eight Fluvius sub-areas via
+`_extract_dsos` (`providers/frank.py:516`) covers all eight Fluvius sub-areas via
 `_FLUVIUS_LABELS` (`providers/frank.py:147`), which maps the card's human label to the
 canonical DSO key:
 

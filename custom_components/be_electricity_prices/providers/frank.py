@@ -377,16 +377,33 @@ def _welcome_credit(text: str) -> float | None:
     Optional: two of the five tiers grant nothing, so a missing row is the
     ordinary case rather than a layout drift.
 
-    Every card that grants one makes it conditional, and neither condition is
-    knowable here. All three require "een jaar ononderbroken verbruik", which
-    an entry that left the contract fails by no longer being priced on this
-    card at all. HV and JN add "op voorwaarde dat je jouw facturen ... steeds
-    op tijd hebt betaald", which is about the household rather than the tariff.
-    Both are assumed to hold, the same ordinary case every other leg of the
-    bill assumes, and the assumption is disclosed rather than hidden: a
-    customer who paid late sees a credit they will not be granted, which is
-    still nearer than ranking a tier as though its whole reason for existing
-    were not there.
+    Every card that grants one makes it conditional, and the three tiers do not
+    attach the same conditions. All of them require a year of uninterrupted
+    supply ("na een jaar ononderbroken verbruik op dit contract"), which is the
+    one condition the entry itself stands in for: a household that left stops
+    being priced on this card at all.
+
+    HV and JN attach three more that nothing here can check:
+
+      - "op voorwaarde dat je jouw facturen tijdens de volledige duur van jouw
+        contract steeds op tijd hebt betaald" - every invoice paid on time,
+        which is about the household rather than the tariff;
+      - "Deze korting is niet cumuleerbaar met andere promoties of kortingen" -
+        only one credit is ever applied per contract here, so this holds within
+        the integration, but a promotion taken outside it is invisible;
+      - "Op een sociaal tarief wordt door ons geen korting toegepast" - no
+        social tariff is modelled anywhere in this integration, so such a
+        household is already priced on the commercial card and the credit is
+        the smaller of its two errors.
+
+    The Korting tier attaches none of those three: it says only that the credit
+    goes to new customers and to existing ones switching to it.
+
+    All four are assumed to hold, which is the same ordinary case every other
+    leg of the bill assumes, and the assumption is disclosed in the README and
+    the provider doc rather than left implied. A household that fails one sees
+    a credit it will not be granted, which is still nearer than ranking a tier
+    as though its whole reason for existing were not there.
     """
     m = _WELCOME_RE.search(text)
     return None if m is None else to_float(m.group(1))
