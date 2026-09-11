@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
     FixedRates,
     SupplierSnapshot,
     TaxOverlay,
@@ -1573,3 +1574,140 @@ async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
         return_value=instance,
     ):
         assert await bf.backfill_if_missing(hass, entry) is None
+
+
+@pytest.mark.parametrize(
+    "energy",
+    [
+        FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=48.0),
+    ],
+    ids=["fixed", "dynamic"],
+)
+async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
+    hass: HomeAssistant, energy: Any
+) -> None:
+    """A welcome credit is subtracted from the live year-to-date figure, so
+    the backfilled series has to carry it too or the two meet at a step: the
+    imported rows ended a quarter of a 200 EUR credit (49,32 EUR) ABOVE the
+    live sensor, and the seed row then handed the live chain a sum the sensor
+    stepped down from. Per-day and per-hour kinds alike."""
+    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+
+    snap = make_snapshot(energy=energy, welcome_credit_eur=200.0)
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        meter="dynamic",
+        title="Credited",
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+        contract_start_date="2026-01-01",
+    )
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = (
+        dt_util.start_of_local_day(date(2026, 3, 31)) + timedelta(days=1)
+    ).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    spots = {h: 0.06 for h in hours}
+    per_hour = {h: 0.4 for h in hours}
+    per_day: dict[date, float] = {}
+    for h in hours:
+        local_day = dt_util.as_local(h).date()
+        per_day[local_day] = per_day.get(local_day, 0.0) + 0.4
+
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots=dict(spots),
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.cons_total" else {}
+
+    async def fake_daily(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+
+    async def noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    captured: list[list[dict[str, Any]]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.append(list(stats))
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
+        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(
+            cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(
+            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        # The signing month's card is the current one here; what is under test
+        # is that the backfill reads the same card the live walk does.
+        patch.object(bf, "signing_month_snapshot", AsyncMock(return_value=snap)),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: (
+                dt_util.start_of_local_day(date(2026, 3, 31))
+                + timedelta(hours=23, minutes=59)
+            ),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            dict(spots),
+            {},
+        )
+        stats: dict[str, float] = {}
+        live = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+            breakdown=stats,
+        )
+    rows = [row for batch in captured for row in batch]
+    assert rows, "the backfill imported nothing"
+    assert live is not None
+    # The live side really carries 90 of the first year's 365 days of credit,
+    # or agreeing with it would prove nothing.
+    assert stats["welcome_credit_eur"] == pytest.approx(200.0 * 90 / 365)
+    assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)

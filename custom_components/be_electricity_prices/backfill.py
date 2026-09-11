@@ -89,6 +89,8 @@ from .synergrid import RlpWeights, SppWeights
 from .cohort import (
     _cohort_energy_leg,
     _month_snapshot_cache,
+    signing_month_snapshot,
+    ytd_window_start,
 )
 from .coordinator import (
     BePricesCoordinator,
@@ -105,6 +107,7 @@ from .fees import (
     _capped_capacity_monthly_eur,
     _compensation_kva,
     _prosumer_monthly_fee,
+    _welcome_credit_eur,
 )
 from .injection import (
     _historical_injection_rate,
@@ -131,6 +134,8 @@ from .pricing import (
     MeterType,
     compute_breakdown,
     compute_network_and_taxes,
+    renewables_eur_per_kwh,
+    yearly_fixed_fee_for_meter,
 )
 from .providers import get as get_extractor
 
@@ -395,6 +400,11 @@ class _BackfillContext:
     month_spp_cache: dict[tuple[int, int, bool], float | None]
     month_mean_cache: dict[tuple[int, int], float | None]
     hourly_injection: bool
+    # The card the welcome credit is read off: the signing month's where the
+    # supplier keeps an archive and the entry has a start date, else the
+    # current one. Same resolution the live year-to-date walk makes, so the
+    # backfilled series credits the amount the sensor does.
+    signing: Any
 
 
 def _recorder_models() -> tuple[Any, Any, Any, Any]:
@@ -445,6 +455,12 @@ async def _build_context(
     ) or regime == SOLAR_REGIME_COMPENSATION:
         await coordinator._ensure_rlp_weights(_rlp_blend_for(snap.energy))
         rlp_weights = coordinator._rlp_weights or None
+    # A cache hit whenever the live tick has run, which resolves the same row
+    # to freeze the signed energy rate; identity for an entry with no start
+    # date or a supplier with no archive.
+    signing = await signing_month_snapshot(
+        hass, coordinator._session, extractor, contract, region, entry, snap
+    )
     return _BackfillContext(
         region=region,
         dso=entry.data[CONF_DSO],
@@ -469,6 +485,7 @@ async def _build_context(
         # a signing cohort re-prices its ENERGY leg to a monthly mean. Same
         # gate the live tick and the YTD walk apply.
         hourly_injection=_injection_hourly_on_cohort(snap, entry),
+        signing=signing,
     )
 
 
@@ -679,7 +696,11 @@ async def _backfill_cost_sensor(
     (vs. the live ``days_in_ytd / days_in_year`` per-day proration);
     the two converge at end-of-day, but the hourly variant gives a
     smoother in-day curve. Per-month tariff archives are honoured the
-    same way as in the live path.
+    same way as in the live path. So is a welcome credit: subtracted per
+    day off the signing month's card through the same ``_welcome_credit_eur``
+    the live walk calls, capped against the same three running components,
+    so the imported series and the sensor agree at the end of every day
+    rather than meeting at a step of everything credited so far.
 
     ``current_year_cost`` is a cumulative ``TOTAL`` sensor that resets on
     Jan 1. ``hours`` MUST stay within a single calendar year, anchored at
@@ -766,6 +787,18 @@ async def _backfill_cost_sensor(
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
+    # The three components a welcome credit may come off, kept beside the bill
+    # the way the live walk keeps them: the supplier's energy component of the
+    # consumption (gross of any feed-in credit), the supplier's own standing
+    # charge and the green electricity / CHP contribution. The credit is
+    # capped against their running sum, so a series that omitted it met the
+    # live sensor at a step of everything credited so far.
+    running_energy_component = 0.0
+    running_supplier_fee = 0.0
+    running_green = 0.0
+    # The window the credit accrues over is the sensor's own, whichever year
+    # the caller anchored the hours on.
+    credit_window_start = ytd_window_start(entry, dt_util.as_local(hours[0]).date())
     netting = _NetAllocation()
     allocated = ctx.rlp_weights is not None
     for utc_hour in hours:
@@ -806,6 +839,10 @@ async def _backfill_cost_sensor(
         if bd is not None:
             cons = cons_per_hour.get(utc_hour, 0.0)
             inj = inj_per_hour.get(utc_hour, 0.0)
+            # An unpriced hour has a zero energy component, as in the live
+            # walk: nothing was charged, so nothing can be credited against.
+            running_energy_component += cons * bd.energy
+            running_green += cons * renewables_eur_per_kwh(snap_h.taxes, region)
             if is_compensation:
                 netting.add(
                     _register_for(local, meter, dso_mode, region),
@@ -843,6 +880,14 @@ async def _backfill_cost_sensor(
         annual_static = _annual_static_fees(snap_h, meter, entry)
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]
+        )
+        # The supplier's share of that, spread the same way, because a welcome
+        # credit may come off the standing charge and off none of the energy
+        # fund, data-management or OSP fees accrued beside it.
+        running_supplier_fee += (
+            float(yearly_fixed_fee_for_meter(snap_h.energy, meter) or 0.0)
+            / days_in_year
+            / hours_per_local_date[local.date()]
         )
 
         # Flemish capacity tariff, spread per local day like the prosumer fee
@@ -892,7 +937,18 @@ async def _backfill_cost_sensor(
         displayed_energy = (
             netting.billed(allocated=allocated) if is_compensation else running_energy
         )
-        state = round(displayed_energy + running_fees, 4)
+        # Credited by the DAY, as the live walk does, against what the window
+        # has charged so far: the two agree at the end of every local day and
+        # the backfill runs at most a day's share ahead inside one, the same
+        # kind of intra-day lead the fee proration above carries.
+        credit = _welcome_credit_eur(
+            ctx.signing,
+            entry,
+            credit_window_start,
+            local.date(),
+            running_energy_component + running_supplier_fee + running_green,
+        )
+        state = round(displayed_energy + running_fees - credit, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but
         # only emit rows inside the requested window, so a mid-year
         # ``start`` still carries the correct year-to-date sum instead of

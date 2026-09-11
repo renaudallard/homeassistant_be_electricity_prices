@@ -448,6 +448,11 @@ A negative `yearly_fixed_fee` was the obvious shortcut and is the wrong model: a
 has no expiry and no cap, so it would keep taking the discount off every year with nothing
 to flag it, and would be right only for households that never hit the cap.
 
+The statistics backfill (`_backfill_cost_sensor`) subtracts the same credit per day, off
+the same signing-month card and capped against the same three running components, so the
+imported `current_year_cost` series meets the live sensor at the end of every day instead
+of at a step of everything credited so far.
+
 ### Contractual price ceilings
 
 Mega Cap was the one product that capped what the commodity can cost: *"la
