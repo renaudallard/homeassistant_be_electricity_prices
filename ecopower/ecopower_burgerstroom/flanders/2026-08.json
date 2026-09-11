@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/321320c859b258ab669a05afb500ed6c795cdf04b9d0c8ec604d314b11072753.txt",
+   "text": "texts/2026-09/4c9edd9b0c49a8dcbf3e90c013e0192cbeebf28ba9e628e4ccc9fe32b6609aea.txt",
    "url": "https://ecopower.be/groene-stroom/prijs-nieuw",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/f9e0d795f8f93fa1ee79738557854550180e74fc3a9d3a078444130a6dc5c082.pdf",
    "text": "texts/2026-09/a4f548ab7234f87e41257270e24267f31d1f131cd6abd36982f6c43a8f5f7d09.txt",
    "url": "https://cdn.nimbu.io/s/4tn7vz5/channelentries/spiilz4/files/1788271546519/202608_gbs_tariefkaart.pdf?w01uqtn=&dl=1",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "ecopower_burgerstroom",
  "dsos": {
   "fluvius_antwerpen": {

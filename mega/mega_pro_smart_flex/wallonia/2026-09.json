@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/fb9dd249c12a9b0a6060439c8ab25d1cc41a97731316348e84b3a4b8488ba3df.pdf",
    "text": "texts/2026-09/85b0117edced09f7acea9a18a9b63f472e22f47be28405baff5c56995363a1fd.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-092026-Smart0109.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "mega_pro_smart_flex",
  "dsos": {
   "aieg": {

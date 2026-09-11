@@ -1,8 +1,8 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
    "text": "texts/2026-09/465e6be4e9dcccb0c7a2a7c81b1fedfa4ebcb00d2286f4b63bf8cd9120b84b64.txt",
@@ -10,11 +10,13 @@
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/638bf999150ae9c3e9f0b5bab614920f5c27735c4fb4c35b13b023b7373c1db6.pdf",
    "text": "texts/2026-09/4e3715b336ea352c0e0af43f4f65a28acba87289ad437482cc67ebacd2a828ea.txt",
    "url": "https://energie.blob.core.windows.net/cms/assets/VAST_Energie_be_RES_ELEK_pdf_f716a0f366.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "energiebe_fixed",
  "dsos": {
   "fluvius_antwerpen": {

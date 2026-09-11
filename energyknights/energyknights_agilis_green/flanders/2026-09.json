@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/69e56816e5469416a46aa381126c0388a668f082f9adcb8da36f40844360b83c.pdf",
    "text": "texts/2026-09/bd5ca7cfa8cc7e2e13d255f260cb85158ce15483d0f79c976283d96e69b7465c.txt",
    "url": "https://www.energyknights.be/website/getCurrentTariffchart/agilisonlinegreen/nl",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "energyknights_agilis_green",
  "dsos": {
   "fluvius_antwerpen": {

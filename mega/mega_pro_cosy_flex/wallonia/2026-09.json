@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/dd34c4a9d0db6b41f86e3a963b7b969271901cb83067394b357429e018464c29.pdf",
    "text": "texts/2026-09/56056cb9a6ebcf4316e2b684b3fa95a79071519cda42ed1cd1de931c03c6d6e4.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-092026-Cosy0109.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "mega_pro_cosy_flex",
  "dsos": {
   "aieg": {

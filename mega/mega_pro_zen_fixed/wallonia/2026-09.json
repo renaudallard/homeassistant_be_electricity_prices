@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/a94a29655e5f6fb7510ae8c88d3c7ca0f00e9baaecc4d6944fd4a801cb0c0c0c.pdf",
    "text": "texts/2026-09/f1e82e5a341a1f13dae26fa2a6db9d4c3b5ce1ad48816a77d86b63106c74ca3b.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-092026-Zen0109-Fixed.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "mega_pro_zen_fixed",
  "dsos": {
   "aieg": {

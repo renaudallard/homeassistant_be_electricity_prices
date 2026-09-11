@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/766dd43b5ffb55daa3cc30630c010933639e37e888ebfc0482e01100b072bfbe.pdf",
    "text": "texts/2026-09/24fedf4b347f568332f4e5225be4e66f85bb6588c672c1c642169f538e504e9d.txt",
    "url": "https://www.luminus.be/api-next/get-pricelist/?documentSlug=basicfix&energyType=electricity&language=fr&tabValue=Wallonia",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "luminus_basicfix",
  "dsos": {
   "aieg": {

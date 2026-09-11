@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/c3293d0c90bfaa052568fc1ee219088527db5eaa9ed38c570838d1196238bcf6.pdf",
    "text": "texts/2026-09/11b22dd0adf98f118492308e07b64325ff021b563540d7b614ebb1770d823c38.txt",
    "url": "https://www.luminus.be/api-next/get-pricelist/?documentSlug=maxxfix&energyType=electricity&language=fr&tabValue=Flanders",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "luminus_maxxfix",
  "dsos": {
   "fluvius_antwerpen": {

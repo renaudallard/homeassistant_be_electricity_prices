@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/8260aad33c99c3f4a08c15d739617285400d9cb6ded39704552965b204561053.pdf",
    "text": "texts/2026-09/48b3138ab90de96868c7794421bede631b2cbb41a9a299365f7772f93bf8befe.txt",
    "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_EMPOWER_R_GREEN_C_F_00_W_F&monthOffset=0&segment=R&language=F",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "engie_empower_fixed",
  "dsos": {
   "aieg": {

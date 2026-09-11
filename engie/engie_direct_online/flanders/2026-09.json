@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/73ca7e7ce0662ed651a3a1747a85c73fa13f0e0a9f2d3026abd2d436da9d8739.pdf",
    "text": "texts/2026-09/6cf8efddebe759808dcdb742e1123878ccf8f447687015579a622c45dfae573d.txt",
    "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_DIRECT_ONLINE_R_GREEN_C_I_12_V_F&monthOffset=0&segment=R&language=F",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "engie_direct_online",
  "dsos": {
   "fluvius_antwerpen": {

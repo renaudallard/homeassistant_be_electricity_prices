@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/fb54a39efc89eb284650d12b61e644e0841c1f9597d465818a30d5243dc32154.pdf",
    "text": "texts/2026-09/a75a9d46c55c7e433abcd3818cc85bfbbb7d3f2d0304dc4d389470a8281acfe1.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/MYDRIVE_ELECTRICITY_BXL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_mydrive",
  "dsos": {
   "sibelga": {

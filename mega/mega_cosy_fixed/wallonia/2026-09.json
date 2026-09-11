@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/8805a24d2f7383f4a49d9d16191b879db642fe379b34574f6912aaa339b15e23.txt",
+   "text": "texts/2026-09/1328c43d7f1abe49e441cd52859410c4bc6d75355e97de627b15ca8580c11bee.txt",
    "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/fc3f29efc7fec321157841dafb0f1b5d0a81d6f30c986ae04b6ca3d7de71d47a.pdf",
    "text": "texts/2026-09/b4fe2dca8d5e78986cd6c8a2bb5eff6919b771168847383af9212c47ed0a9fb2.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-WL-092026-Cosy0109-Fixed.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "mega_cosy_fixed",
  "dsos": {
   "aieg": {

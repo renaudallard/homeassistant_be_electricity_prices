@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/3a35e1a60704db1a5c50b027459f9b71907600641090407ed9b569c882453a03.pdf",
    "text": "texts/2026-09/a72a3c65b440330f021bf8f00485e3c53d9361a41be3c24fbb057de1f405da9d.txt",
    "url": "https://files.octaplus.be/tariffs/E_OCTA_SMARTVARIABLE_RE_VL_FR.pdf",
    "variant": "aligned:1.0"
   }
  ],
+ "_via": "live",
  "contract": "octaplus_smartvariable",
  "dsos": {
   "fluvius_antwerpen": {

@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/0ee313ca789d7ef59b315d5f39d351dfda7c0eb2b68ea98f702e564610e0067b.pdf",
    "text": "texts/2026-09/5b41c95a415e4fababef1446c4e01efc77420ba4310f937cd5e058720da93b43.txt",
    "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_BASIC_ONLINE_R_GREY_C_I_24_W_F&monthOffset=0&segment=R&language=F",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "engie_basic_online",
  "dsos": {
   "aieg": {

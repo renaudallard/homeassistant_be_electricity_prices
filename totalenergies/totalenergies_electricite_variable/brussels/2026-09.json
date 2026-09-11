@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/4ea41a8ba538ea8d9d26b9563b384e4fb8f1d7afbf9160196ef8467060ffea92.pdf",
    "text": "texts/2026-09/9dcbfb3af6b304669468d1e2044f61ccaf5c91fb50b7f314ae15f21876287f73.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/ELECTRICITE-VARIABLE_ELECTRICITY_BXL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_electricite_variable",
  "dsos": {
   "sibelga": {

@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/0f49e9e5a417fe6e039a53130efb814bde7077413ea5400f6d95142a4346cfbe.pdf",
    "text": "texts/2026-09/3848e628a2ee61323a2b38eedf8d369980d919f382403a9745d079cddd45ae46.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/ELECTRICITE-FIXE_ELECTRICITY_WAL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_electricite_fixe",
  "dsos": {
   "aieg": {

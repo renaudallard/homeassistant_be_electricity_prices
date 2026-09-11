@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/b6fdf8a022e778d4d7b233149682110cede7d984157fdad448a94190ef14a186.txt",
+   "text": "texts/2026-09/bd436f079ae1ede0f3f618e8990f8c397ea59ec864eccaad78aa72e20ad6b464.txt",
    "url": "https://www.boltenergie.be/fr/listes-des-prix",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/f229f59cd99199cb41b4c030a5395b42979b5d6c591be897084bfda9f1827af3.pdf",
    "text": "texts/2026-09/537ebca54ebd8a198b1613702989e9c88849c657673fe62cf4b54d922408f541.txt",
    "url": "https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "bolt_variable",
  "dsos": {
   "sibelga": {

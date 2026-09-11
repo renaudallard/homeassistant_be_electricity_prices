@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/b6fdf8a022e778d4d7b233149682110cede7d984157fdad448a94190ef14a186.txt",
+   "text": "texts/2026-09/bd436f079ae1ede0f3f618e8990f8c397ea59ec864eccaad78aa72e20ad6b464.txt",
    "url": "https://www.boltenergie.be/fr/listes-des-prix",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/59a3e93ed4d0bf4441a12f655ddf4749a6858f04ae55c3269ca6d6a844d3de5d.pdf",
    "text": "texts/2026-09/521b4e9a20a091fbc6b3870566af4483c56a0179233035a61a59283137af1e10.txt",
    "url": "https://files.boltenergie.be/pricelists/var/plenty_pro_el_fr_13.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "bolt_pro_plenty",
  "dsos": {
   "fluvius_antwerpen": {

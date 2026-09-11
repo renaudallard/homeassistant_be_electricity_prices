@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/73cfd97a2c5fe75aa24c740539c84ba01f30089994000498963b84bceb7d50f6.pdf",
    "text": "texts/2026-09/ec4a1beb38a11454e7855dc8e64006246705319f2cd2e9ee6fbdb494addc452b.txt",
    "url": "https://files.octaplus.be/tariffs/E_OCTA_FIXED_RE_WL_FR.pdf",
    "variant": "aligned:1.0"
   }
  ],
+ "_via": "live",
  "contract": "octaplus_fixed_impact",
  "dsos": {
   "aieg": {

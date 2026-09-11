@@ -1,8 +1,8 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
    "text": "texts/2026-09/2c710ac6384b1fc0ce9ec3b8f0e84f88e1d484ac53e4f01c0c5d6da0fa3bd1c4.txt",
@@ -10,11 +10,13 @@
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/b2f3e503f48d1b862cac3fadf35599e1d2d216ecb85107e79d85fe747eb774cf.pdf",
    "text": "texts/2026-09/ac0b61f40c408d60035b6f187b806202363a35ec1a737e938df9f24dc98346ad.txt",
    "url": "https://www.energyvision.be/sites/default/files/inline-files/EV-0926-GSDYN-nl.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "energyvision_dynamic",
  "dsos": {
   "fluvius_antwerpen": {

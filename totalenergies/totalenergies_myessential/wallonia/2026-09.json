@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/c1579b37b002b89d409ae36efe7c5c4d9f4963f6b65d90f9821af91c8612215b.pdf",
    "text": "texts/2026-09/b3d9db627c7b50fe6d3c676e88bdff9d834dcb10e5dfdf8e3edaa145ca976a07.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/MYESSENTIAL_ELECTRICITY_WAL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_myessential",
  "dsos": {
   "aieg": {

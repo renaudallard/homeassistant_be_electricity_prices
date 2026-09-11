@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/9d355d80382e819f1e2caadbd09e6b30ad1a1c6b029697328bf4375df351a8e3.pdf",
    "text": "texts/2026-09/2ac97d36069ae23275b07a25fe6e942684f17264359ca3df55cfe9cd1ea381ac.txt",
    "url": "https://files.octaplus.be/tariffs/E_OCTA_ECODYNAMIC_RE_WL_FR.pdf",
    "variant": "aligned:1.0"
   }
  ],
+ "_via": "live",
  "contract": "octaplus_ecodynamic",
  "dsos": {
   "aieg": {

@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/48fab87a51b4d134a9c9c7eea0c0b7e50db59a3bde9fe480088a36b94e6eb1c9.pdf",
    "text": "texts/2026-09/8da91c5f4616112a324e3a5b4f6a3471619b058b02b73382df9d3beb53449baa.txt",
    "url": "https://files.boltenergie.be/pricelists/fix/fix_pro_el_fr_202609.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "bolt_pro_fix",
  "dsos": {
   "fluvius_antwerpen": {

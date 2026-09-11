@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/ce7adc5b11cf661c12afd06e410231abebae5a52188f3d99fbea93a45b3bb753.pdf",
    "text": "texts/2026-09/9193986071a5291e1101a3ddc618731150501131997919b2fc5f60f3d666c021.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/MYDYNAMIC_ELECTRICITY_BXL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_mydynamic",
  "dsos": {
   "sibelga": {

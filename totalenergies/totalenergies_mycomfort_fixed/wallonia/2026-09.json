@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/f5f99d52f42e9978c8e3120a93650ecb2f9330c0eb1b54c72b558b85982cd177.pdf",
    "text": "texts/2026-09/3723853c88b79ab26ba8c280f455962a40a3f4f37206c8e945c94e5cbd2b6cba.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/MYCOMFORT-FIXED_ELECTRICITY_WAL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_mycomfort_fixed",
  "dsos": {
   "aieg": {

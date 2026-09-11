@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/151b4085094018f31affbd4429213d5c0789757b2e58a615a7cab8aeee7910ed.txt",
+   "text": "texts/2026-09/3b753aad2490b606fbf0c38af881d6a09fac5b3bebc45d546131459cf2ab5e24.txt",
    "url": "https://www.ebem.be/tarieven/",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/9aee93d14325f11a9fafa849293905dc290ecaff9baef4dcdfd16e6954ed835c.pdf",
    "text": "texts/2026-09/4d40fb56327c26be0530e7090ee7269bebf6723644eba3b2ab9b12d421b39cb8.txt",
    "url": "https://www.ebem.be/media/rb2bzwop/ebem_tariefkaart-elek-09-2026.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "ebem_variable",
  "dsos": {
   "fluvius_antwerpen": {

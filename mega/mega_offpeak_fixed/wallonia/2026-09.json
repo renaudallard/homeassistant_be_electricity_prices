@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/8805a24d2f7383f4a49d9d16191b879db642fe379b34574f6912aaa339b15e23.txt",
+   "text": "texts/2026-09/1328c43d7f1abe49e441cd52859410c4bc6d75355e97de627b15ca8580c11bee.txt",
    "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/0ff6b03cd8e5541765922199c646b96aadfa24f209ea03113a7b18c82df108dc.pdf",
    "text": "texts/2026-09/bfdeadb35d106aa66da5f6ee48fc518229c7a7615e842493c04bbd0857553455.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-WL-092026-Offpeak-Bi0109-Fix.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "mega_offpeak_fixed",
  "dsos": {
   "aieg": {

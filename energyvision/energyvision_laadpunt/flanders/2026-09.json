@@ -1,8 +1,8 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
    "text": "texts/2026-09/2c710ac6384b1fc0ce9ec3b8f0e84f88e1d484ac53e4f01c0c5d6da0fa3bd1c4.txt",
@@ -10,11 +10,13 @@
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/a4b82e026eab5ffcb886a82630015cf9baf4ecb585b61b006955e0ca0e5074e3.pdf",
    "text": "texts/2026-09/1d22931bcc30df8657309779f198d28ecc0ddb8d938b480a1e8cbbeceb54341e.txt",
    "url": "https://www.energyvision.be/sites/default/files/inline-files/EV-0926-GSLP-nl.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "energyvision_laadpunt",
  "dsos": {
   "fluvius_antwerpen": {

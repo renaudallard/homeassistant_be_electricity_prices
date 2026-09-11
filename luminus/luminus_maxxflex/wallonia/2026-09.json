@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/e7e33eabd81e53d4c8349eaf1cf92edc78f364cb467cc701ef688d55f09d9ec5.pdf",
    "text": "texts/2026-09/a17292b0d03541f486ed22d6ae988e2645f3dd11f8cff0719d892b771c308b5b.txt",
    "url": "https://www.luminus.be/api-next/get-pricelist/?documentSlug=maxxflex&energyType=electricity&language=fr&tabValue=Wallonia",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "luminus_maxxflex",
  "dsos": {
   "aieg": {

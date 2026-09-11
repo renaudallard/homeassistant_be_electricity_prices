@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/75bb710159753829070f81ecdc318304507ef754bb4781e1997b146f5de9e588.pdf",
    "text": "texts/2026-09/b03296d60f11cf318de6d1bc783a0ef99f6b753a925645fe2b685808d326de66.txt",
    "url": "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/MYESSENTIAL-FIXED_ELECTRICITY_BXL_FR.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "totalenergies_myessential_fixed",
  "dsos": {
   "sibelga": {

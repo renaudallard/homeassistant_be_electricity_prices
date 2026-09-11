@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/376690641053a00192fbc90a22785e4e6ae2a5288a03dbca17b275c9bbf11880.pdf",
    "text": "texts/2026-09/83b38a0af67d1eeb32a60bd36f06253d58d5e8899cf609cfcb5834307a4f5d9a.txt",
    "url": "https://www.energyknights.be/website/getCurrentTariffchart/essentiaonlinegreen/nl",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "energyknights_essentia_green",
  "dsos": {
   "fluvius_antwerpen": {

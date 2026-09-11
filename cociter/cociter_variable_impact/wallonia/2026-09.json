@@ -1,8 +1,8 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
    "text": "texts/2026-09/130c5e3c38000280056ff91b424a31f32ab29341fe38fb0a1f23479bbd972742.txt",
@@ -10,11 +10,13 @@
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/00613e2dc1e1671043731a0ea56fdd88933b2ab1c7859f17faf523df54d6d5a2.pdf",
    "text": "texts/2026-09/462c5da2db35e4f5612fdb8645bbde9a790f87ebbe245dabbeebd32a4e121fc0.txt",
    "url": "https://www.cociter.be/wp-content/uploads/2026/09/RCVaI_YMR_Coop-2609-fr.pdf",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "cociter_variable_impact",
  "dsos": {
   "aieg": {

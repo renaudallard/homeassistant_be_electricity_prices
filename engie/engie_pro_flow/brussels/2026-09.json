@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/3597ab4b9018deaaec8ef5de06dbab19508ba82d49dd466e8fe8b07ada198f88.pdf",
    "text": "texts/2026-09/c1934b7cd95a7e4095d4c300fbf323ba3b29c4a80b6f5f2a49b67b6af8d1bb28.txt",
    "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_FLOW_P_GREEN_C_I_24_B_F&monthOffset=0&segment=P&language=F",
    "variant": "plain"
   }
  ],
+ "_via": "live",
  "contract": "engie_pro_flow",
  "dsos": {
   "sibelga": {

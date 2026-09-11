@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/5cb31636406d215f980b722dc41a4717bf85a2e60b1321349cc6a655724aeba5.pdf",
    "text": "texts/2026-09/3fb5f54f204eca2196d5f03a32dd7d9e002beb8717a21a87e9285857302565d2.txt",
    "url": "https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202609.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "bolt_fix",
  "dsos": {
   "aieg": {

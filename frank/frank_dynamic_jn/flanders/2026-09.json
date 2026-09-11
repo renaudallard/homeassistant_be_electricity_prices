@@ -1,20 +1,22 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/5f5fd7a78cc15e1d0064f9daa0ec8a4b40382fdf22fd13bc281da63c296b8d5c.txt",
+   "text": "texts/2026-09/0299c9b95490e26f6accbf69404cbc427865a1fc1512f1676ae7512f10337c8b.txt",
    "url": "https://8navd656.api.sanity.io/v2023-01-01/data/query/production-be?[('query', '*[_type==\"sanity.fileAsset\" && originalFilename match \"*Dynamisch*\" && !(originalFilename match \"*Gas*\")]{originalFilename,url,_createdAt} | order(_createdAt desc)[0..29]')]",
    "variant": "text"
   },
   {
+   "pdf": "cards-2026-09/fb6d3f280f49733edbc833d867303a8af1c6e1c09b0601d280c517f9b732a4e8.pdf",
    "text": "texts/2026-09/781255f9f265f9fd7568af2acb06808ab3ad75330c0a5a62f9f1c2f404c06a9c.txt",
    "url": "https://cdn.sanity.io/files/8navd656/production-be/b815d99ca9b671af493149533ca72196cc372dc3.pdf",
    "variant": "layout"
   }
  ],
+ "_via": "live",
  "contract": "frank_dynamic_jn",
  "dsos": {
   "fluvius_antwerpen": {

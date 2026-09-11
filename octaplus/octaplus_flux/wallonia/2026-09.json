@@ -1,15 +1,17 @@
 {
- "_cached_at": "2026-09-11T17:46:19.852019+00:00",
+ "_cached_at": "2026-09-11T23:04:45.728121+00:00",
  "_probe_key": null,
  "_schema_version": 59,
- "_seen_on": "2026-09-11",
+ "_seen_on": "2026-09-12",
  "_sources": [
   {
+   "pdf": "cards-2026-09/fcc56ea19f77267a237a4035bd136dfa499a6f1a391b3f8ffa8337dda6584468.pdf",
    "text": "texts/2026-09/489042452878a639d3301a5a71a0614e3f158808c0232d9db75dbdd2ef18a8a3.txt",
    "url": "https://files.octaplus.be/tariffs/E_OCTA_FLUX_RE_WL_FR.pdf",
    "variant": "aligned:1.0"
   }
  ],
+ "_via": "live",
  "contract": "octaplus_flux",
  "dsos": {
   "aieg": {
