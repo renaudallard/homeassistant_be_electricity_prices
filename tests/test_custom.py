@@ -886,3 +886,38 @@ def test_absent_fallback_rates_price_off_the_single_rate() -> None:
     assert bd.energy == pytest.approx(0.20)
     assert bd.network == pytest.approx(0.05)
     assert bd.all_in == pytest.approx(0.25)
+
+
+def test_custom_tax_step_offers_the_connection_fee_in_wallonia_only() -> None:
+    """The only Belgian levy of that shape is the Walloon redevance de
+    raccordement, and the pricing engine bills region_connection_fee for
+    Wallonia alone. Offering the box to a Flemish entry stored a value that was
+    never priced: a Flanders customer typed the WKK levy into it, which belongs
+    in the renewables box with GSC, and saw 0 and 100 behave the same."""
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _custom_tax_schema,
+    )
+
+    def keys(region: str) -> set[str]:
+        schema = _custom_tax_schema({const.CONF_REGION: region})
+        return {str(getattr(k, "schema", k)) for k in schema.schema}
+
+    for region in (const.REGION_FLANDERS, const.REGION_BRUSSELS):
+        assert const.CONF_CUSTOM_TAX_REGION_CONNECTION_FEE not in keys(region), region
+        assert const.CONF_CUSTOM_TAX_REGIONAL_RENEWABLES in keys(region)
+    assert const.CONF_CUSTOM_TAX_REGION_CONNECTION_FEE in keys(const.REGION_WALLONIA)
+
+
+def test_custom_taxes_book_the_connection_fee_in_wallonia_only() -> None:
+    """A value stored on a Flemish or Brussels entry before the box was gated
+    must not linger; the renewables box is routed per region the same way."""
+    from custom_components.be_electricity_prices.providers.custom import _build_taxes
+
+    data = {
+        const.CONF_CUSTOM_TAX_REGION_CONNECTION_FEE: 0.00075,
+        const.CONF_CUSTOM_TAX_REGIONAL_RENEWABLES: 0.0156,
+    }
+    assert _build_taxes(data, const.REGION_WALLONIA).region_connection_fee == 0.00075
+    assert _build_taxes(data, const.REGION_FLANDERS).region_connection_fee == 0.0
+    assert _build_taxes(data, const.REGION_BRUSSELS).region_connection_fee == 0.0
+    assert _build_taxes(data, const.REGION_FLANDERS).flanders_renewables == 0.0156

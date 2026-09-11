@@ -187,8 +187,8 @@
         "data": {
           "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
           "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",
-          "custom_tax_regional_renewables": "Regional renewables levy (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Regional connection fee (EUR/kWh)",
+          "custom_tax_regional_renewables": "Green levy: GSC + WKK in Flanders, green-energy contribution in Wallonia and Brussels (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Walloon connection fee (redevance de raccordement, VAT-exempt, Wallonia only) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energy fund (EUR/month)",
           "custom_vat_rate": "VAT rate (e.g. 0.06)"
         }
@@ -468,8 +468,8 @@
         "data": {
           "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
           "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",
-          "custom_tax_regional_renewables": "Regional renewables levy (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Regional connection fee (EUR/kWh)",
+          "custom_tax_regional_renewables": "Green levy: GSC + WKK in Flanders, green-energy contribution in Wallonia and Brussels (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Walloon connection fee (redevance de raccordement, VAT-exempt, Wallonia only) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energy fund (EUR/month)",
           "custom_vat_rate": "VAT rate (e.g. 0.06)"
         }

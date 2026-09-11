@@ -917,12 +917,22 @@ def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _custom_tax_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Hand-entered taxes/levies overlay. One regional-renewables field is
     routed to the region's slot at build time; VAT grosses up every
-    component (injection stays exempt)."""
+    component (injection stays exempt).
+
+    The connection-fee box is Walloon only. The only Belgian levy of that
+    shape is the redevance de raccordement, and the pricing engine adds
+    ``region_connection_fee`` for Wallonia alone, so on a Flemish or Brussels
+    entry the box was stored and never priced: a Flanders customer put the
+    WKK levy in it (which belongs in the renewables box, with GSC) and saw 0
+    and 100 behave the same. Same region gate the DSO step already applies
+    to the prosumer and capacity boxes.
+    """
     fields: dict[Any, Any] = {}
     _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_FEDERAL_EXCISE)
     _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION)
     _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
+    if defaults.get(CONF_REGION) == REGION_WALLONIA:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
     _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH)
     fields[
         vol.Optional(

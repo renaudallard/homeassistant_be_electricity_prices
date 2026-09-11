@@ -187,8 +187,8 @@
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
-          "custom_tax_regional_renewables": "Abgabe erneuerbar (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Regionale Abgabe (EUR/kWh)",
+          "custom_tax_regional_renewables": "Grünstromabgabe: GSC + WKK in Flandern, Grünstrombeitrag in Wallonien und Brüssel (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Wallonische Anschlussabgabe (redevance de raccordement, MwSt.-frei, nur Wallonien) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
           "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
         }
@@ -468,8 +468,8 @@
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
-          "custom_tax_regional_renewables": "Abgabe erneuerbar (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Regionale Abgabe (EUR/kWh)",
+          "custom_tax_regional_renewables": "Grünstromabgabe: GSC + WKK in Flandern, Grünstrombeitrag in Wallonien und Brüssel (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Wallonische Anschlussabgabe (redevance de raccordement, MwSt.-frei, nur Wallonien) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
           "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
         }

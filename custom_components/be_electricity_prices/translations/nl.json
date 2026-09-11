@@ -187,8 +187,8 @@
         "data": {
           "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
-          "custom_tax_regional_renewables": "Heffing hernieuwbaar (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Gewestelijke bijdrage (EUR/kWh)",
+          "custom_tax_regional_renewables": "Groene heffing: GSC + WKK in Vlaanderen, bijdrage groene stroom in Wallonië en Brussel (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Waalse aansluitingsvergoeding (redevance de raccordement, btw-vrij, enkel Wallonië) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/maand)",
           "custom_vat_rate": "Btw-tarief (bv. 0.06)"
         }
@@ -468,8 +468,8 @@
         "data": {
           "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
-          "custom_tax_regional_renewables": "Heffing hernieuwbaar (EUR/kWh)",
-          "custom_tax_region_connection_fee": "Gewestelijke bijdrage (EUR/kWh)",
+          "custom_tax_regional_renewables": "Groene heffing: GSC + WKK in Vlaanderen, bijdrage groene stroom in Wallonië en Brussel (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Waalse aansluitingsvergoeding (redevance de raccordement, btw-vrij, enkel Wallonië) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/maand)",
           "custom_vat_rate": "Btw-tarief (bv. 0.06)"
         }

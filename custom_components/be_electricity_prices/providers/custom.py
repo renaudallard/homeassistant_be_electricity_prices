@@ -225,7 +225,14 @@ def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
         flanders_renewables=renewables if region == REGION_FLANDERS else 0.0,
         wallonia_renewables=renewables if region == REGION_WALLONIA else 0.0,
         brussels_renewables=renewables if region == REGION_BRUSSELS else 0.0,
-        region_connection_fee=_num(data, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE),
+        # Walloon only, like the box that collects it: the pricing engine bills
+        # this levy for Wallonia alone, and a value a Flemish or Brussels entry
+        # stored before the box was gated must not linger as a phantom.
+        region_connection_fee=(
+            _num(data, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
+            if region == REGION_WALLONIA
+            else 0.0
+        ),
         energy_fund_eur_per_month=_num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH),
         vat_rate=_num(data, CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE),
     )
