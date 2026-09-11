@@ -1,0 +1,207 @@
+Carte tarifaire
+* Avantages de la formule
+04:21
+6202
+reivnaj
+8
+| RF_CELE_cimanyDym_WR-C2B
+| TSAF
+TotalEnergies myDynamic
+septembre 2026
+Conditions particulières relatives à la formule variable myDynamic
+• Électricité en Région wallonne
+• TVA 6 % incluse
+Coût de l’énergie
+fournie par TotalEnergies
+"myDynamic"
+Coût de transport et distribution
+de l’énergie
+• Tarif horaire selon le prix instantané du marché
+• Gérez votre contrat dans l'app et suivez les prix quotidiens Contribution énergie verte
+de l'énergie, de votre consommation et de vos coûts
+• Électricité verte Taxes et surcharges
+• Téléphonez et chattez avec un expert énergie
+TVA
+* Basé sur une consommation moyenne de 2.500 kWh/an d'une famille (ayant un
+compteur monohoraire), et le prix moyen des gestionnaires de réseaux.
+Conditions particulières applicables aux consommateurs 1. Tarifs fournisseur :
+résidentiels en Région wallonne. 1.1 [Coût de l’énergie fournie par TotalEnergies] :
+Ces conditions sont applicables aux nouveaux contrats pour Le prix variable de l’énergie et de la redevance fixe
+une durée d’un an établis en s e p t e m b r e 2 0 2 6 et aux contrats
+1.2 [ Contribution énergie verte]:
+renouvelés en d é c e m b r e 2 0 2 6 (pour les renouvellements, la
+Contribution instaurée par l’Etat pour soutenir le développement
+carte tarifaire est ainsi connue deux mois avant application).
+des énergies renouvelables
+L'offre "TotalEnergies myDynamic" est une formule tarifaire
+2. Tarifs régulés [Coûts de réseaux et prélèvements] :
+accessible aux consommateurs résidentiels disposant d'un compteur
+2.1 [ Coût de transport et distribution de l’énergie] (intégralement
+digital et avec activation de la fonction SMR3 (non applicable au tarif
+restitués aux GRD/GRT)
+exclusif nuit).
+Les prix qui vous sont facturés en vertu de votre contrat sont 2.2 [ Taxes et surcharges]
+constitués de 2 parties : (intégralement restituées aux entités concernées)
+Coûts de l’énergie
+Prix de l’énergie
+Redevance Contribution énergie
+fixe 0 (c€/kWh) verte - Wallonie1
+(€/an) Compteur double** (c€/kWh)
+Compteur simple
+Heures pleines Heures creuses
+Consommation***
+Tarif mensuel
+16,17 16,17 16,17
+90,00 3,32
+0.1032 * BELPEXH + 1.99 0.1032 * BELPEXH + 1.99 0.1032 * BELPEXH + 1.99 Formule tarifaire
+Injection*** (Compensation pour la rétrocession)
+9,65 9,65 9,65
+0.1 * BELPEXH -1.3 0.1 * BELPEXH -1.3 0.1 * BELPEXH -1.3
+Le tarif dynamique est un prix variable sur une base horaire. Il est indexé selon les formules (hors TVA 6%) du tableau ci-dessus. Cela signifie que le prix de votre
+fourniture d'électricité est indexé toutes les heures sur la base du coefficient de la formule, le Belpex H, qui est la cotation Day Ahead Belpex Baseload qui change
+toutes les heures. Les valeurs Belpex H sont connues un jour à l'avance et sont disponibles à partir de 15 heures sur https://www.epexspot.com/en. Le prix attendu
+de l’énergie est annoncé la veille vers 15 heures dans l'application TotalEnergies Power & Gas Belgium et est également publié sur notre site Internet.
+La valeur estimée de l'indice Belpex H pour l'énergie prélevée pour l'année à venir est de 128,55 €/MWh en septembre 2026. La valeur estimée de l'énergie injectée
+du Belpex H pour l'année à venir est de 109,46 €/MWh en septembre 2026. Toutefois, la facturation tient compte du tarif horaire réel, qui change d'heure en heure.
+**Le tarif bihoraire n'est pas compatible avec la structure tarifaire incitative du gestionnaire du réseau de distribution pour laquelle vous pouvez opter à partir de
+janvier 2026.
+*** Prix annuels estimés pour la consommation selon la méthodologie du Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/nl/faq/hoe-berekent-de-v-testr-de-geschatte-jaarkost-voor-variabele-contracten.
+Il s'agit d'une estimation qui peut changer en fonction des fluctuations des prix du marché.
+04:21
+6202
+reivnaj
+8
+| RF_CELE_cimanyDym_WR-C2B
+| TSAF
+Carte tarifaire
+TotalEnergies myDynamic
+septembre 2026
+Coûts de réseaux et prélèvements
+Coûts de transport et de distribution Taxes et surcharges 4
+Ces surcharges sont intégralement reversées aux gestionnaires de réseaux de distribution et Ces surcharges sont intégralement
+de transport. reversées aux autorités publiques.
+Distribution 2 (c€/kWh) Coût Tarif capacitaire 8
+activité (€/kWh)
+Gestionnaire Tarif IMPACT 7 de Transport 3 Tarif Tarif
+de réseau Bi-horaire Bi-horaire mesure prosumer 6 Tarif
+Mono- Exclusif (c€/kWh) de puissance
+de distribution
+horaire
+H
+pl
+e
+e
+u
+in
+r
+e
+e
+s
+s
+c
+H
+re
+e
+u
+u
+s
+re
+e
+s
+s nuit He P u IC res M H E e D u I r U es M H E e C ur O es co ( m €/
+e
+p a
+t
+t n a ) ge
+(€/kVA/an)
+≤
+d
+p
+e
+1 o 2
+b
+in ,
+a
+7 t
+s
+e k
+e
+s W
+-
+sup > p p l 1 é o 2 m in ,7 e t e n k s t W a ire -
+Région wallonne
+AIEG 10,87 12,05 6,66 6,66 15,08 9,82 4,56 19,49 2,74 81,03 0,00 0,00
+AIESH 13,64 15,17 8,21 8,21 19,07 12,28 5,50 17,93 2,74 99,29 0,00 0,00
+RESA SA 11,06 12,20 7,01 7,01 15,11 10,05 4,99 26,50 2,74 84,22 0,00 0,00
+ORES (Namur - Namen) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+ORES (Hainaut - Henegouwen) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+ORES (Est) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+ORES (Luxembourg - Luxemburg) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+ORES (Verviers) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+REGIE DE WAVRE 12,48 13,78 7,84 7,84 17,11 11,32 5,52 26,44 2,74 93,00 0,00 0,00
+ORES (Waals-Brabant Wallon) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+ORES (Mouscron - Moeskroen) 11,98 13,27 7,39 7,39 16,57 10,83 5,09 14,10 2,74 85,84 0,00 0,00
+Accise fédérale 5 c€/kWh Suppléments c€/kWh
+Consommation entre 0 et 3.000 kWh 4,88 Cotisation sur l’énergie 0,20
+Consommation entre 3.000 et 20.000 kWh 4,88 Redevance de raccordement 0,07
+Consommation entre 20.000 et 50.000 kWh 4,88
+Consommation entre 50.000 et 1.000.000 kWh 4,88
+TotalEnergies garantit aux clients résidentiels signant un contrat 100% vert que cet engagement sera respecté pendant la durée de leur contrat.
+L'offre TotalEnergies myDynamic est soumise aux conditions spécifiques TotalEnergies myDynamic
+(https://totalenergies.be/fr/files/CGV-myDynamic.pdf) ainsi qu'aux conditions générales de TotalEnergies
+(https://totalenergies.be/fr/particuliers/conditions-generales-totalenergies-groupe). En cas de contradiction entre les présentes conditions
+contractuelles et les conditions générales de TotalEnergies, les présentes conditions prévalent.
+• Rendez-vous sur votre espace client
+• C onsultez notre FAQ
+Besoin d’aide?
+https://totalenergies.be/fr/particuliers/aide-et-contact/
+questions-frequentes
+• Posez vos questions via notre chat
+0 La redevance fixe est une indemnité forfaitaire par raccordement électrique. En cas de résiliation anticipée par le Client six mois après le début de la fourniture conformément au contrat de fourniture initial
+ou en cas de résiliation à partir de la deuxième année, une redevance fixe sera facturée au prorata du nombre de jours de fourniture.
+1 Déterminée et facturée sur la base de l'amende administrative fixée par l'état.
+2 TotalEnergies intervient dans la collecte des coûts de réseau de distribution en tant qu'intermédiaire. Les sommes perçues sont intégralement restituées aux Gestionnaires de Réseau de Distribution (GRD).
+Tarifs de réseau de distribution tels qu'approuvés par le régulateur régional (CWaPE) et publiés sur son site officiel (www.cwape.be).
+3 TotalEnergies intervient dans la collecte des coûts de réseau de transport en tant qu'intermédiaire. Les sommes perçues sont intégralement restituées au Gestionnaire de Réseau de Transport (GRT), Elia.
+Tarifs de réseau de transport tels qu'approuvés par le régulateur fédéral (CREG) et publiés sur son site officiel (www.creg.be).
+4 Les contributions, taxes et surcharges telles qu'en vigueur à la date de l'établissement de cette carte tarifaire (publiés sur le site officiel www.cwape.be). Toute modification légale des taxes, cotisations ou
+contributions sera répercutée au client sans majoration.
+5 Le produit de cette cotisation fédérale est destiné au financement de cinq fonds gérés par la CREG : le fonds de dénucléarisation, le fonds CREG, le fonds social énergie, le fonds gaz à effet de serre et le
+fonds clients protégés. Le montant de cette cotisation est fixé par arrêté en application de la loi du 29 avril 1999 relative à l'organisation du marché de l'électricité. La CREG est habilitée à contrôler la correcte
+application des dispositions relatives à la cotisation fédérale.
+6 Exemple pour une famille : Installation de 2,9 kW dans la région Inter-Energa: 2,9 kW x 85,4865 € = 247,91 € (TVA incl.).
+7 Le tarif ‘‘IMPACT’’ est une nouvelle tarification incitative comprenant trois prix par jour. Plus d’information : https://www.cwape.be/
+8 Le tarif capacitaire s'applique pour les compteurs électroniques dont la fonction communicante est active. Pour les années 2026 à 2029, ce tarif est fixé à 0€/kWh.
+Conformément à l'article 6.4. des conditions générales de vente pour la fourniture d'électricité et/ou de gaz naturel aux particuliers, le Client qui remplit les conditions du Tarif Social conformément à l'article 2
+de l'arrêté ministériel du 30 mars 2007, ou conformément à l'article 4 de la Loi Programme du 27 avril 2007, ou conformément à la législation qui les remplacerait, peut bénéficier du Tarif Social. A compter du
+moment où le Tarif Social est appliqué, le Client bénéficie de ce tarif spécifique et les conditions particulières de ce Tarif Social s'appliqueront au Client.
+Conditions liées à l’injection
+04:21
+6202
+reivnaj
+8
+| RF_CELE_cimanyDym_WR-C2B
+| TSAF
+Carte tarifaire
+TotalEnergies myDynamic
+septembre 2026
+L’offre TotalEnergies Injection Dynamic est une formule tarifaire uniquement accessible aux consommateurs résidentiels disposant d'un
+compteur digital avec activation de la fonction SMR3 et avec une installation de production d’énergie décentralisée d’une puissance AC
+maximale de 10 kVA, et ayant souscrit un Contrat de fourniture d’énergie avec une activation du Contrat d’injection pour l’électricité chez
+TotalEnergies.
+L’offre TotalEnergies Injection Dynamic est une offre dynamique dont les prix de l'injection sont indexés toutes les heures sur la base du
+coefficient de la formule injection (reprise dans le tableau en p.1), le Belpex H. Les valeurs Belpex H sont connues un jour à l'avance et sont
+disponibles à partir de 15 heures sur https://www.epexspot.com/en. Le prix attendu de l’énergie est annoncé la veille vers 15 heures dans
+l'application TotalEnergies Power & Gas Belgium et est également publié sur notre site Internet.
+La compensation pour la rétrocession qui vous sera octroyée en vertu de votre Contrat d’injection est constituée uniquement des tarifs
+fournisseurs, c’est-à-dire le prix horaire de l’énergie valorisé sur la base de votre formule d'injection et de la redevance fixe. Celle-ci sera déduite
+de vos factures mensuelles pour la fourniture d’énergie.
+L’offre TotalEnergies Injection Dynamic est soumise aux conditions générales de TotalEnergies. En cas de contradiction entre les présentes
+conditions contractuelles et les conditions générales de TotalEnergies
+(https://totalenergies.be/fr/particuliers/conditions-generales-totalenergies-groupe), les présentes conditions prévalent.
+Plus on est, plus on gagne !
+Grâce au programme de parrainage de TotalEnergies, vous pouvez économiser jusqu'à 600€ sur
+votre facture d'énergie, chaque année. Vous parrainez une personne qui devient client.e de
+TotalEnergies ? C'est 30€ de remise pour chacun et vous, vous pouvez cumuler jusqu'à 20
+parrainages chaque année. https://totalenergies.be/fr/particuliers/vous-voulez/parrainer-un-ami

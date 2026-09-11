@@ -1,0 +1,89 @@
+Carte tarifaire septembre 2026
+Électricité bon marché 1 an fixe
+Cette carte tarifaire est valable pour le produit « Électricité bon marché 1 an fixe » de septembre 2026 pour la fourniture d'électricité verte aux clients résidentiels
+en Wallonie. Tous les prix et tarifs incluent la TVA à 6 %. (EV-0926-GS1JV-WAL-fr)
+Bienvenue!
+Prix de l'énergie
+Électricité verte du réseau
+Frais fixes 75 €/an
+Électricité verte - tarif fixe 13,57 €cent/kWh
+Injection – variable 2,78 €cent/kWh
+EnergyVision NV - www.energyvision.be - hello@energyvision.be - Compte bancaire : BE82 7310 6308 8468 (KBC) - BIC : KREDBEBB Page 1
+Carte tarifaire septembre 2026
+Électricité bon marché 1 an fixe
+Explication
+L’électricité verte fournie est composée d’électricité provenant du soleil et du vent.
+« Électricité bon marché 1 an fixe» est un contrat à durée déterminée dans lequel le prix de l'énergie est en partie fixe et en partivea riable.
+a/ La composante fixe du tarif d'achat du produit « Électricité bon marché 1 an fixe » est fixe pendant 1 an.
+b/ Le tarif d'injection variable est calculé selon la formule suivante : 0,6 x Belpex-SPP-M - 15 EUR/MWh. Le paramètre d'indexation
+est basé sur la moyenne pondérée des cotations quotidiennes Day Ahead Belpex Baseload (disponibles sur www.epexspot.com)
+pendant le mois de livraison. Pour l'injection pondérée avec un SPP (Synthetic Production Profile). Cette pondération SPP est basée
+sur la moyenne arithmétique des profils SPP électricité des différents gestionnaires de réseau de distribution de Flandre (publication
+par Synergrid). La valeur du Belpex-SPP-M du mois en cours n'est connue qu'à la fin du mois. Les paramètres
+d’indexation sont consultables sur https://www.energyvision.be/fr-be/parametres-dindexation.
+c/ Les prix indiqués sont calculés selon la méthodologie du régulateur flamand des services publics, qui établit une estimation
+annuelle. Nous nous réservons le droit d’utiliser de nouveaux paramètres ou de nouvelles composantes pour calculer la formule
+tarifaire si les paramètres actuels changent, sont supprimés ou ne sont plus disponibles. EnergyVision s’efforcera de maintenir le
+niveau de prix moyen stable.
+d/ Les prix de l’« Électricité verte » doivent être majorés des taxes, redevances, suppléments et tous montants imposés pour l’utilisation
+des réseaux, ainsi que de la contribution pour l’énergie verte et/ou la cogénération, que EnergyVision peut ou doit facturer.
+e/ Nous vous accordons une réduction de bienvenue unique si vous souscrivez un nouveau contrat. Cela ne s’applique que
+pendant votre première année d’inscription pour cette version du produit. La réduction est accordée tant aux nouveaux clients
+qu’aux clients existants lors de la signature du contrat. La remise est calculée au prorata journalier sur la période de facturation. La
+réduction s'applique exclusivement au coût de l'énergie, au frais fixe et à la contribution pour l'électricité verte. Si la somme de ces
+trois éléments est inférieure à la réduction de bienvenue indiquée, la réduction sera limitée au montant maximal de cette somme.
+La réduction ne s'applique pas aux tarifs de réseau, aux taxes et aux redevances. Cette réduction unique n’est pas cumulable avec
+d’autres promotions ou réductions.
+Conditions
+1/ Le Contrat se compose du produit « Électricité bon marché 1 an fixe», des Conditions Générales, de la grille tarifaire « Électricité
+bon marché 1 an fixe », ensemble appelés le Contrat.
+2/ Pour ce produit, le service est assuré en ligne ou par téléphone. Vous recevez vos factures exclusivement par e-mail.
+3/ L’offre est uniquement valable pour les Clients Résidentiels. Les prix s’appliquent aux raccordements basse tension pour
+l’électricité.
+4/ Le partage d’énergie est possible moyennant un coût administratif de 100 €/an, facturé au prorata par jour.
+5/ Chez nous, l’énergie solaire n’est jamais sans valeur. Si le calcul de notre formule devait donner un résultat inférieur à 1 €cent/
+kWh, nous garantissons en tout état de cause 1 €cent/kWh. Ce calcul est effectué sur une base mensuelle.
+EnergyVision NV - www.energyvision.be - hello@energyvision.be - Compte bancaire : BE82 7310 6308 8468 (KBC) - BIC : KREDBEBB Page 2
+2026
+Tarifs du réseau
+Tarifs de réseau pour l'électricité
+(pour l'utilisation du réseau de distribution et de transport)
+Les tarifs de réseau sont intégralement reversés à votre gestionnaire de réseau. Toutes les charges liées à l’utilisation du réseau, ainsi que les taxes, redevances,
+contributions et surtaxes, restent variables, adaptables et entièrement répercutables sur le client, même avec effet rétroactif. Ces composantes tarifaires sont celles
+approuvées par les Régulateurs au moment de l’élaboration de cette grille tarifaire pour un compteur relevé annuellement. En cas de différence entre les tarifs
+indiqués dans cette grille tarifaire et les contributions légales et/ou les tarifs de réseau, seuls ces derniers prévalent.
+la Région Wallonne
+Coûts de distribution
+Tarif de gestion
+des données /
+Coûts de Tarif
+Gestionnaire Compteur bi-horaire Impact transport Activité de mesure prosumer
+de réseau Compteur Exclusif et de comptage /
+mono-horaire nuit Tarif fixe GRD
+Heures Heures
+ECO MEDIUM PIC
+pleines creuses
+€cent/kWh €cent/kWh €cent/kWh €cent/kWh €cent/kWh €cent/kWh €cent/kWh €cent/kWh €/an €/kW/an
+AIEG 10,87 12,05 6,66 4,56 9,82 15,08 6,66 2,74 19,49 81,03
+AIESH 13,63 15,16 8,21 5,49 12,28 19,06 8,21 2,74 17,93 99,29
+BRABANT WALLON 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+EST 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+HAINAUT ELECTRICITÉ 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+ORES LUXEMBOURG 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+MOUSCRON 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+NAMUR 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+VERVIERS 11,98 13,27 7,39 5,09 10,83 16,57 7,39 2,74 14,10 85,84
+TECTEO RESA 11,06 12,20 7,01 4,98 10,05 15,11 7,01 2,74 26,50 84,22
+WAVRE 12,47 13,77 7,83 5,51 11,31 17,11 7,83 2,74 26,44 93,00
+EnergyVision NV - www.energyvision.be - hello@energyvision.be - Compte bancaire : BE82 7310 6308 8468 (KBC) - BIC : KREDBEBB
+2026
+Taxes, redevances et cotisations
+Contribution pour l'électricité verte en Wallonie
+Contribution électricité verte est introduite sous forme de quotas auprès de la CWaPE.
+Coûts certificats verts et certificats de cogénération valables pour 3,00 €cent/kWh.
+Suppléments et accise fédérale
+Suppléments (€cent/kWh)
+Redevance de raccordement 0,07500 €cent/kWh
+Accise fédérale (€cent/kWh)
+Accise spéciale 4,876 €cent/kWh
+EnergyVision NV - www.energyvision.be - hello@energyvision.be - Compte bancaire : BE82 7310 6308 8468 (KBC) - BIC : KREDBEBB

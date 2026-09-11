@@ -1,0 +1,207 @@
+ 
+Carte tarifaire (1) septembre 2026 à prix variable trihoraire 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur à relevé annuel 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 1/4 
+Composition du prix de l’électricité 
+Le prix de l'électricité comporte plusieurs volets : 
+Le prix de fourniture d'énergie : c'est la part qui revient à votre fournisseur COCITER ; 
+Les coûts de transport et de distribution : c'est la part qui revient au gestionnaire de réseau de transport (ELIA) 
+et au gestionnaire de réseau de distribution (GRD) ; 
+Les taxes, accises, redevances et cotisations : c'est la part qui revient aux autorités. 
+ 
+1. Prix de fourniture d'énergie (3) 
+ 
+Le prix de fourniture d'énergie se compose lui-même de plusieurs parties : 
+Coût de l’énergie 
+proportionnel à la 
+consommation 
+(en c€/kWh) 
+ Partie ﬁxe 
+(abonnement annuel (4)) 
+ Contribution 
+"énergies renouvelables" 
+(5) 
+ Forfait panneaux 
+photovoltaïques (6) 
+(en régime de 
+compensation) 
+  53,00 €/an 
+TVAC  2,968 c€/kWh 
+TVAC  37,10 €/kVA 
+par an TVAC 
+ 
+ Le coût de l'énergie proportionnel à la consommation varie chaque mois. 
+Il est calculé en fonction de l'indice BELIX avec les formules suivantes : 
+ 
+Plage horaire FORMULE DE PRIX (7) BELIX * PRIX indicatif ** 
+TVAC 
+Prix maximum (8) 
+TVAC 
+Heures PIC (0,1 x BELIX + 5) + 6% TVA 129,32 19,0079 c€/kWh 26,5 c€/kWh 
+Heures MEDIUM (0,08 x BELIX + 5) + 6% TVA 129,32 16,2663 c€/kWh 26,5 c€/kWh 
+Heures ECO (0,06 x BELIX + 5) + 6% TVA 129,32 13,5248 c€/kWh 26,5 c€/kWh 
+Compteur exclusif nuit (0,06 x BELIX + 5) + 6% TVA 129,32 13,5248 c€/kWh 26,5 c€/kWh 
+ 
+* L'indice BELIX indiqué est celui du mois précédent, dans ce cas-ci août 2026. Il est exprimé en €/MWh. 
+** Le prix indiqué est calculé avec l'indice BELIX du mois précédent (août 2026). Il est renseigné à titre indicatif dans 
+cette carte tarifaire de septembre 2026. 
+  
+ 
+1 
+2 
+3 
+ 
+Carte tarifaire (1) septembre 2026 à prix variable trihoraire 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur à relevé annuel 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 2/4 
+2. Coûts de transport et de distribution (9) 
+ 
+Les coûts de transports sont restitués au gestionnaire de réseau de transport (ELIA). 
+Tarifs de transport TVAC (c€/kWh) 2,74252 
+ 
+Les coûts de distribution sont reversés au Gestionnaire de Réseau de Distribution (GRD). 
+Tarifs de distribution 2026 TVAC 
+GRD Terme ﬁxe 
+(€/an) 
+Terme proportionnel (c€/kWh) 
+Tarif Impact 
+Exclusif nuit 
+Heures PIC Heures MEDIUM Heures ECO 
+AIEG 19,49 15,08 9,82 4,56 6,66 
+AIESH 17,92 19,07 12,28 5,50 8,21 
+ORES 14,10 16,57 10,83 5,09 7,39 
+RESA 26,50 15,11 10,05 4,99 7,01 
+REW 26,44 17,11 11,32 5,52 7,84 
+ 
+3. Taxes et redevances (9) 
+ 
+Les taxes et redevances sont reversées aux autorités compétentes (État fédéral et Région wallonne). 
+Cotisation énergie 
+(c€/kWh - TVAC) 
+Droit d'accises spécial (c€/kWh - TVAC) 
+[Tranche de consommation ≤ 20.000 kWh] 
+Redevance de raccordement 
+(c€/kWh - pas de TVA) 
+0,204167 4,876000 0,075000 
+ 
+Injection (10) 
+ 
+Le prix de l'injection varie chaque quart d'heure. Il est calculé en fonction de l'indice QUARTER HOURL Y BELPEX *** avec 
+la formule suivante : 
+Type de compteur FORMULE DE PRIX 
+Compteur pouvant effectuer des mesures par quart d'heure (0,097 x QUARTER HOURL Y BELPEX – 2,1) 
+ 
+*** L'indice QUARTER HOURL Y BELPEX est l’indice de cotation quart-horaire Day-Ahead Belpex publié quotidiennement 
+sur la bourse EPEX Spot Belgium. Il varie tous les quarts d'heure. 
+  
+ 
+Carte tarifaire (1) septembre 2026 à prix variable trihoraire 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur à relevé annuel 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 3/4 
+(1) Carte tarifaire 
+Carte tarifaire IMPACT septembre 2026 à prix variables trihoraire pour coopérateurs (2) qui possèdent leur(s) part(s) coopérateur au 31 
+août 2026  au plus tard, pour un contrat de fourniture (consommation et év entuellement injection) commençant le 01/11/26. Ces 
+conditions particulières sont valables pour un contrat reçu par COCITER sc au plus tard le 30/09/26. 
+Cette carte tarifaire fait intégralement partie des Conditions Spéciﬁques et/ou Conditions Contractuelles de votre/vos Contrat(s) avec 
+COCITER. 
+Pour un contrat envoyé par voie électronique, le jour de la réception est réputé être le jour de l’envoi. Pour un contrat envoyé par courrier 
+postal, le jour de réception est réputé être le troisième jour ouvrable après la date d’envoi. 
+(2) Coopérateur 
+Vous êtes "coopérateur" si au moins un membre de votre ménage (personnes viv ant à la même adresse) possède une ou plusieurs 
+part(s) dans une des coopératives associées de COCITER pour un montant d e minimum 250 €  par point de fourniture d'énergie . Une 
+personne morale peut également être coopérateur. La carte tarifaire "coopérat eur", est accordée au prorata du temps pendant l equel 
+vous êtes dans les conditions requises durant la période de fourniture. L e reste du temps, c'est la carte tarifaire correspondante "non 
+coopérateur" qui s'applique. 
+(3) Prix de fourniture d'énergie 
+Conditions particulières COCITER pour la consommation d’électr icité 100% verte pour un raccordement avec relevé annuel, val able 
+pour les particuliers (Clients résidentiels) avec une consomm ation d’électricité annuelle de maximum 50 MWh. Dans le cas co ntraire, 
+COCITER se réserve le droit d'adapter votre prix. 
+(4) Abonnement annuel 
+Les frais d’abonnement sont facturés au prorata de la durée du contrat . L'abonnement n’est imputé qu'une seule fois pour les clients 
+qui ont un contrat de consommation, qu’il y ait ou non également injection d’électricité. 
+(5) Contribution énergie renouvelable 
+La contribution énergie renouvelable en c€/kWh est ﬁxée par année calendrier. En effet, le Gouvernement wallon ﬁxe les taux  de 
+certiﬁcats verts (CV) que les fournisseurs doivent res tituer à la CWaPE pour les quantités d'électricité four nies. Actuellement, le taux 
+est de 40,00% en 2026. Le Gouvernement wallon a la possibilité de revoir ces taux. COCITER vous facture un prix par CV restitué (d'une 
+valeur de 70€/CV), qui est ﬁxe sur toute la durée de votre contrat, mais  la contribution par kWh dépend du taux de restitution.  
+(6) Forfait annuel "panneaux photovoltaïques" 
+Forfait annuel facturé par kVA pour un point de raccordement avec un e installation photovoltaïque et en régime de compensatio n. Le 
+nombre de kVA correspond à la puissance de l’onduleur pour ce point de raccordement, telle que communiquée par votre gestionnaire 
+de réseau. 
+Ce forfait est destiné, d'une part, à contribuer aux coûts de déséqu ilibre plus élevés engendrés par une installation photovoltaïque et 
+d'autre part à compenser la différence de prix entre le moment où COCITER  reprend votre énergie injectée et le moment où COCI TER 
+vous la remet à disposition. 
+Le tarif est de 37,10 €/kVA/an TVAC pour les clients coopérateurs.  Si la période de fourniture ne couvre pas une année entière, le 
+forfait est dû au prorata de la durée de la période de fourniture.  Des frais s’appliquent également si l’unité de production n’est pas 
+photovoltaïque ; veuillez contacter nos services pour plus d’informations et connaître le prix. 
+(7) Contrat variable (indexé) 
+Le prix formant le coût de l'électricité prélevée,  hors contribution énergie renouvelable, est indexé mensuellement. L e paramètre 
+d'indexation est la moyenne arithmétique des cotations journa lières Day Ahead EPEX SPOT Belgium (ci -après BELIX) durant le mois 
+de fourniture. Les cotations journalières BELIX sont expri mées en €/MWh. Les valeurs historiques du BELIX (exprimées en €/ MWh) 
+peuvent être consultées sur le site www.cociter.be. 
+(8) Prix maximum 
+COCITER a décidé de plafonner le prix de fourniture de l'énergie aﬁn de protéger ses clients contr e une éventuelle ﬂambée des prix sur 
+le marché de l'électricité. 
+Concrètement, si le Belix venait à augmenter au point que l'application du prix variable (indexé) donne une valeur supérieure au prix 
+maximum, c'est le prix maximum qui s'applique. 
+ 
+Carte tarifaire (1) septembre 2026 à prix variable trihoraire 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur à relevé annuel 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 4/4 
+(9) Coûts de transport et de distribution - Taxes et redevances 
+Les parties "Coûts de transport et de distribution" et "Taxes et redevances " peuvent, après approbation du Gouvernement et/ou  de la 
+CREG ou de la CWaPE, changer en cours de contrat. Ces pos tes sont identiques chez tous les fournisseurs et ils v ous sont 
+intégralement refacturés au prix coûtant. 
+(10) Injection 
+Conditions particulières COCITER pour l'injection d’électricité provenant d'une installation de production décentralisée (photovoltaïque 
+ou autre) avec un raccordement en basse tension, avec relevé annuel, valable pour les particuliers (Clients rés identiels), hors régime 
+de compensation et disposant d’un compteur communicant.  
+Le prix formant le revenu de l'électricité injectée varie chaque heure et est  basé sur l'indice horaire des cotations journalières Day 
+Ahead EPEX SPOT Belgium (ci -après Belpex). Les cotations journalières BEL PEX sont exprimées en €/MWh. Les valeurs du BEL PEX 
+(exprimées en €/MWh) peuvent être consultées sur le site https://www.epexspot.com/en/market-data. 
+Le tarif d’injection correspond aux prix auxquels COCITER achète votre électricité produite et injectée sur le réseau conformément aux 
+présentes conditions particulières. 
+En ce qui concerne l'injection pour les clients résidentie ls (personnes physiques non assujetties à la TVA) dont l'inst allation de 
+production a une puissance inférieure à 10 kVA, il faut noter que la livraison d'électricité n'est pas soumise à la TVA. La TVA n'est donc 
+pas calculée sur l'injection déduite de votre facture. 
+(A) Modes de paiement et de réception des factures 
+Les prix annoncés sont valables quel que soit le mode de pai ement (virement ou domiciliation) et quel que soit le choix du mo de de 
+réception des factures (papier ou numérique). Vous choisissez votre fréquence de facturation (mensuelle ou trimestrielle). Nous vous 
+encourageons autant que faire se peut à recourir à la fa cturation électronique et au paiement par domiciliatio n aﬁn de rédui re nos 
+coûts, mais le choix ﬁnal vous revient. Si vous souhaitez changer de mode de réception des factures et/ou de mod e de paiement en 
+cours de contrat, contactez -nous pour l’adapter à vos préférences. La copie de votre contrat et tout es vos factures sont disponibles 
+en ligne, via votre espace sécurisé sur my.cociter.be. 
+(B) Début de fourniture 
+Pour autant que cela soit possible d’un point de vue technique, COCITE R débutera la fourniture à la date souhaitée par le cli ent. Le 
+début de la fourniture en cas de simple changement de fournisseur ne peut jamais être antérieur à : 
+- soit 30 jours après le dernier jour du mois civil au cours duquel la  demande de fourniture dûment complétée est réceptionnée,  pour 
+autant que cette demande soit réceptionnée au plus tard le 25ème jour de ce mois, 
+- soit 60 jours après le dernier jour du mois civil au cours duquel la demande de fourniture dûment complétée est réceptionnée, si cette 
+demande est réceptionnée après le 25ème jour de ce mois. 
+COCITER ne peut commencer la fourniture d’électricité qu’à condition que : 
+- COCITER ait été enregistré en tant que fournisseur pour le Point de fourniture dans le registre d’accès du Gestionnaire de réseau ; 
+- votre raccordement ait déjà été raccordé au réseau de distribution et n’ait pas été mis hors service et, 
+- le délai de résiliation légale d’un mois ait été respecté, en cas de changement de fournisseur. 
+(C) Forfait partage d'énergie 
+COCITER se réserve le droit de facturer des frais liés au partage d'énergie aux clients faisant partie de ce partage d'énergie. Ces coûts 
+s'élèvent à 80 €/an HTVA et correspondent à l'estimation faite par COCITER  des frais encourus aﬁn de respecter ses obligations de 
+fournisseur d'énergie. 
+(D) Origine de l'électricité de COCITER 
+L'électricité 100% verte et 100% citoyenne fournie par COCITER, est to talement couverte par des labels de garantie d'origine wallons 
+issus d'outils de production appartenant à des structures citoyennes et des petits producteurs. 
+Vous trouverez des informations sur les conséquences de la production  d'électricité sur l'environnement en ce qui concerne le s 
+émissions de CO2 et déchets radioactifs à partir de différentes sources d'énergie, sur les sites climat.be et ondraf.be. 
+Pour toute question concernant ces conditions particulières, vous pouvez contacte r COCITER par e -mail à l'adresse 
+info@cociter.be ou par téléphone 080 / 68 57 38 (lundi, mercredi et vendredi de 9h00 à 12h00). 

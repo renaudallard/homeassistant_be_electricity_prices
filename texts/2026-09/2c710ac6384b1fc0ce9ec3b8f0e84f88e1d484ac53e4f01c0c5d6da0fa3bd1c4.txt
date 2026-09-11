@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="nl-be" dir="ltr">
+  <head>
+          <!-- Server Side Tracking by Taggrs.io -->
+      <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://alfa-energy.energyvision.be/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-TW3LSKV');</script>
+      <!-- End Server Side Tracking by Taggrs.io -->
+        <meta charset="utf-8" />
+<noscript><style>form.antibot * :not(.antibot-message) { display: none !important; }</style>
+</noscript><link rel="canonical" href="https://www.energyvision.be/nl-be/tariefkaart" />
+<meta name="MobileOptimized" content="width" />
+<meta name="HandheldFriendly" content="true" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>div#sliding-popup, div#sliding-popup .eu-cookie-withdraw-banner, .eu-cookie-withdraw-tab {background: #0779bf} div#sliding-popup.eu-cookie-withdraw-wrapper { background: transparent; } #sliding-popup h1, #sliding-popup h2, #sliding-popup h3, #sliding-popup p, #sliding-popup label, #sliding-popup div, .eu-cookie-compliance-more-button, .eu-cookie-compliance-secondary-button, .eu-cookie-withdraw-tab { color: #ffffff;} .eu-cookie-withdraw-tab { border-color: #ffffff;}</style>
+<meta name="format-detection" content="telephone=no" />
+<link rel="apple-touch-icon" sizes="180x180" href="/themes/custom/dms_theme/img/fav/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="/themes/custom/dms_theme/img/fav/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/themes/custom/dms_theme/img/fav/favicon-16x16.png" />
+<link rel="manifest" href="/themes/custom/dms_theme/img/fav/site.webmanifest" />
+<link rel="mask-icon" color="#666666" href="/themes/custom/dms_theme/img/fav/safari-pinned-tab.svg" />
+<link rel="shortcut icon" href="/themes/custom/dms_theme/img/fav/favicon.ico" />
+<meta name="msapplication-config" content="/themes/custom/dms_theme/img/fav/browserconfig.xml" />
+<meta name="theme-color" content="#ffffff" />
+<link rel="icon" href="/themes/custom/dms_theme/favicon.ico" type="image/vnd.microsoft.icon" />
+<link rel="alternate" hreflang="en" href="https://www.energyvision.be/en/rate-card" />
+<link rel="alternate" hreflang="nl-be" href="https://www.energyvision.be/nl-be/tariefkaart" />
+<link rel="alternate" hreflang="fr-nl" href="https://www.energyvision.be/fr-be/carte-tarifaire" />
+
+    <title>Tariefkaart | EnergyVision</title>
+    <link rel="stylesheet" media="all" href="/sites/default/files/css/css_I8A6dGZ3pS4cFugLCPKlBrmkciWnsQUTBhER3-p5pRU.css?delta=0&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c" />
+<link rel="stylesheet" media="all" href="//unpkg.com/aos@2.3.1/dist/aos.css" />
+<link rel="stylesheet" media="all" href="//fonts.googleapis.com/css2?family=Inter:wght@300;500;700&amp;display=swap" />
+<link rel="stylesheet" media="all" href="/sites/default/files/css/css_DmetOwcX5yFnYMcKhe5849JC8T0NF0kqC6DL6PfFsLg.css?delta=3&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c" />
+<link rel="stylesheet" media="print" href="/sites/default/files/css/css_EoBzsSh4bDEWoX1ROaB6xMLne4OKW99t2NvH2iHo-9g.css?delta=4&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c" />
+<link rel="stylesheet" media="all" href="/sites/default/files/css/css_mjujyY3KVCfIJ7oxI9fnR1OjnMSJwpzCmWyhGbXwCj0.css?delta=5&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c" />
+
+    
+  </head>
+  <body class="no-sidebars not-front lang-nl-be logged-out path-node node-type-page node-id-840 mm-none site-sections--available">
+    <!-- Server Side Tracking by Taggrs.io (noscript) -->
+    <noscript><iframe src="https://alfa-energy.energyvision.be/ns.html?id=GTM-TW3LSKV" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Server Side Tracking by Taggrs.io (noscript) -->
+    
+      <div class="dialog-off-canvas-main-canvas" data-off-canvas-main-canvas>
+    <div class="wrapper">
+  
+  <header class="region region--header">
+    
+    <div class="region--header__content container container-fw">
+      <div class="region--header__branding">
+          
+
+
+<div id="block-dms-theme-branding" class="block block--system-branding-block block--system-branding-block-- block-dms-theme-branding block-system block-system-branding-block">
+  
+    
+        <a href="/nl-be" rel="home">
+      <img src="/themes/custom/dms_theme/img/logo.svg" alt="Home" />
+    </a>
+      
+</div>
+
+
+      </div>
+      <div class="region--header__main">
+          <div class="region region--top region-top" id="top">
+      
+
+
+
+<nav role="navigation" aria-labelledby="block-secondarymenu-2-menu" id="block-secondarymenu-2" class="block block--menu-block block--menu-block--secondary-menu block-secondarymenu-2 block-menu navigation block-system-menublock menu--secondary-menu">
+
+  
+    
+
+    
+              <ul class="menu menu--secondary-menu menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/nieuws" data-drupal-link-system-path="node/67">Nieuws</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/werken-bij-energyvision" data-drupal-link-system-path="node/919">Jobs</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/aanbod-voor-bedrijven" data-drupal-link-system-path="node/357">Aanbod voor bedrijven</a>
+              </li>
+                <li class="menu__item">
+              <a href="https://investors.energyvision.be/nl-be">Investor relations</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+
+
+<div class="language-switcher-language-url block block--language-block block--language-block--language-interface block-languageswitcher block-language block-language-blocklanguage-interface" id="block-languageswitcher" role="navigation">
+  
+    
+      <select class="links" aria-label="lang"><option hreflang="en" data-drupal-link-system-path="node/840" class="en"  class="language-link" value="en" data-url="/en/rate-card"><a href="/en/rate-card" class="language-link" value="en" data-url="/en/rate-card" hreflang="en" data-drupal-link-system-path="node/840">International - EN</a></option><option hreflang="nl-be" data-drupal-link-system-path="node/840" class="nl-be is-active" value="nl-be" selected="selected" data-url="/nl-be/tariefkaart"><a href="/nl-be/tariefkaart" class="language-link is-active" value="nl-be" selected="selected" data-url="/nl-be/tariefkaart" hreflang="nl-be" data-drupal-link-system-path="node/840">België - NL</a></option><option hreflang="fr-nl" data-drupal-link-system-path="node/840" class="fr-nl"  class="language-link" value="fr-nl" data-url="/fr-be/carte-tarifaire"><a href="/fr-be/carte-tarifaire" class="language-link" value="fr-nl" data-url="/fr-be/carte-tarifaire" hreflang="fr-nl" data-drupal-link-system-path="node/840">Belgique - FR</a></option></select>
+  </div>
+
+  </div>
+
+          <div class="region region--primary-navigation region-primary-navigation">
+    
+
+
+
+<nav role="navigation" aria-labelledby="block-mainnavigation-3-menu" id="block-mainnavigation-3" class="block block--menu-block block--menu-block--main block-mainnavigation-3 block-menu navigation block-system-menublock menu--main">
+
+    
+              <ul class="menu menu--main menu__list">
+                    <li class="menu__item menu__item--expanded">
+              <a href="/nl-be/oplossingen" data-drupal-link-system-path="node/731">Energieoplossingen</a>
+                                <ul class="menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/elektriciteit-gas" data-drupal-link-system-path="node/868">Elektriciteit &amp; gas</a>
+              </li>
+                <li class="menu__item">
+              <a href="/energieoplossingen/gratis-zonnepanelen-bovenop-de-goedkoopste-energie">Zonnepanelen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/een-thuislaadpunt-zonder-investering" data-drupal-link-system-path="node/1115">Thuislaadpunt</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/stekkerbatterij" data-drupal-link-system-path="node/1536">Stekkerbatterij</a>
+              </li>
+        </ul>
+  
+              </li>
+                <li class="menu__item">
+              <a href="https://www.energyvision.be/nl-be/verhuizen-wij-regelen-je-energie">Verhuis</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/elektrisch-rijden" data-drupal-link-system-path="node/730">Elektrisch rijden</a>
+              </li>
+                <li class="menu__item menu__item--expanded">
+              <a href="/nl-be/over-ons" data-drupal-link-system-path="node/234">Over ons</a>
+                                <ul class="menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/over-ons/over-energyvision" data-drupal-link-system-path="node/89">Over EnergyVision</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/jaarverslagen-van-energyvision" data-drupal-link-system-path="node/93">Jaarverslagen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/waar-komt-onze-groene-energie-vandaan" data-drupal-link-system-path="node/835">Waar komt onze groene energie vandaan?</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/duurzaam-voor-iedereen" data-drupal-link-system-path="node/836">Duurzaam voor iedereen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/wat-klanten-ons-dit-kwartaal-leerden-q1" data-drupal-link-system-path="node/1275">Klantenrapport</a>
+              </li>
+        </ul>
+  
+              </li>
+                <li class="menu__item">
+              <a href="https://support.energyvision.be/nl/support/home">Hulp &amp; contact</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/myenergyvision-klantenportaal" class="btn btn-primary user" data-drupal-link-system-path="node/808">MyEnergyVision</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+
+
+<div id="block-dms-theming-mobile-menu-toggle" class="block block--dms-theming-mobile-menu-toggle block--dms-theming-mobile-menu-toggle-- block-dms-theming-mobile-menu-toggle block-dms-theming">
+  
+    
+      <span class="mobile-menu-toggle__toggle"><span>Menu</span><i class="icon icon--bars"></i></span>
+  </div>
+
+  </div>
+
+      </div>
+    </div>
+  </header>
+
+    <div class="region region--breadcrumb region-breadcrumb container">
+    
+
+
+<div id="block-dms-theme-breadcrumbs" class="breadcrumb--block block block--system-breadcrumb-block block--system-breadcrumb-block-- block-dms-theme-breadcrumbs block-system block-system-breadcrumb-block">
+  <div class="container container-fw">
+    
+        
+            <nav class="nav__breadcrumb" role="navigation" aria-labelledby="system-breadcrumb">
+    <ul class="breadcrumb__list">
+          <li class="breadcrumb__item">
+                  <a href="/nl-be">Home</a>
+              </li>
+          <li class="breadcrumb__item">
+                  <span>Tariefkaart</span>
+              </li>
+        </ul>
+  </nav>
+
+      </div>
+</div>
+
+  </div>
+
+
+    <div class="region region--system region-system" id="system">
+    <div class="container">
+      <div data-drupal-messages-fallback class="hidden"></div>
+
+    </div>
+  </div>
+
+
+  <main role="main" id="main">
+
+      <div class="region region--content region-content" id="content">
+    
+
+
+<div id="block-dms-theme-content" class="block block--system-main-block block--system-main-block-- block-dms-theme-content block-system block-system-main-block">
+  
+    
+      
+
+<article class="node node--page node--page--full node--type-page node--view-mode-full">
+  <div class="node__content">
+    
+    
+
+
+
+<div class="field field--name-field-paragraphs field--type-entity-reference-revisions field--label-hidden" id="sections-container">
+      
+  <section class="paragraph paragraph--text-media paragraph--type--text-media paragraph--view-mode--default pg--has-media-right pg-valign--center pg-bg--none" id="content-block--18102">
+    <div class="container">
+    
+      <div class="pg-text-media__text">
+          <header class="inline_page_header">
+  <h1>Tariefkaart</h1>
+</header>
+
+
+        
+        
+
+
+
+  <div class="field field--name-field-text field--type-text-long field--label-hidden">
+                  <p><span>Bij EnergyVision begrijpen we dat transparantie en toegankelijkheid essentieel zijn voor het beheren van je energiekosten. Daarom bieden we je een pagina aan om tariefkaarten te raadplegen en de historiek van deze tarieven in te zien. </span></p>
+
+            </div>
+
+      </div>
+
+      <div class="pg-text-media__media">
+        
+
+
+
+  <div class="field field--name-field-media field--type-entity-reference field--label-hidden">
+                    <img loading="lazy" src="/sites/default/files/styles/pg_text_media/public/2024-04/energyvision_shoot_14-03-2024_597_hr-min.jpg.webp?itok=Cl139qPr" width="800" height="533" alt="" />
+
+
+
+            </div>
+
+      </div>
+
+        </div>
+  </section>
+
+      
+  <section class="paragraph paragraph--text paragraph--type--text paragraph--view-mode--default pg-bg--none pg-textcol--3" id="content-block--18101">
+    <div class="container">
+      
+
+              
+
+
+
+<div class="field field--name-field-text-columns field--type-entity-reference-revisions field--label-hidden">
+      
+  <div class="paragraph paragraph--text-column paragraph--type--text-column paragraph--view-mode--default pg-bg--none" id="content-block--18098">
+          
+
+
+
+  <div data-aos="fade-up" class="field field--name-field-text-column field--type-text-long field--label-hidden">
+                  <h5><span><strong>Tariefkaarten Vlaanderen - elektriciteit</strong></span></h5>
+<h6><strong>Huidige tariefkaart "Goedkope stroom 1.800 kWh vast"</strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS1800V-nl.pdf" data-entity-uuid="6ecd9fee-c1c7-4c89-8c88-9ca0ca001d33" data-entity-type="file" title="EV-0926-GS1800V-nl.pdf">GS 1.800 kWh vast 09/2026</a></p>
+<p><strong>Huidige tariefkaart "Goedkope stroom met vast injectieprijs"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSVI3-nl.pdf" data-entity-uuid="a15bf6cf-48fa-427b-b182-b1e29e30123c" data-entity-type="file" title="EV-0926-GSVI3-nl.pdf">GSVI3 09/2026</a> </p>
+<p><strong>Huidige tariefkaart "Goedkope stroom 3 jaar Vast"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS3JV-nl.pdf" data-entity-uuid="886c6b90-b0b1-4313-8a43-de1cdb476fef" data-entity-type="file" title="EV-0926-GS3JV-nl.pdf">GS3JV 09/2026</a> </p>
+<p><strong>Huidige tariefkaart 'Goedkope stroom Dynamisch"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSDYN-nl.pdf" data-entity-uuid="2d642049-eeb3-4745-b186-a1492b389bd0" data-entity-type="file" title="EV-0926-GSDYN-nl.pdf">GSDYN 09/2026</a> </p>
+<h6><strong>Huidige tariefkaart "Goedkope stroom + Eigen zon"</strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSEZ-nl.pdf" data-entity-uuid="bbf115d4-b7e8-4fae-87ef-978ba9818fef" data-entity-type="file" title="EV-0926-GSEZ-nl.pdf">GSEZ 09/2026</a></p>
+<h6><strong>Huidige tariefkaart "Goedkope stroom + Laadpunt"</strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSLP-nl.pdf" data-entity-uuid="ddde4eea-b332-41a7-9f14-0fb7cd2b68ec" data-entity-type="file" title="EV-0926-GSLP-nl.pdf">GSLP 09/2026</a></p>
+<h6><strong>Huidige tariefkaart "Goedkope stroom + Eigen zon + Laadpunt"</strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSEZLP-nl.pdf" data-entity-uuid="ce3f5b83-a048-465e-9aff-5c2602dbf656" data-entity-type="file" title="EV-0926-GSEZLP-nl.pdf">GSEZLP 09/2026</a><br /> </p>
+
+            </div>
+
+      </div>
+
+      
+  <div class="paragraph paragraph--text-column paragraph--type--text-column paragraph--view-mode--default pg-bg--none" id="content-block--18099">
+          
+
+
+
+  <div data-aos="fade-up" class="field field--name-field-text-column field--type-text-long field--label-hidden">
+                  <h5><strong>Tariefkaarten Vlaanderen - gas</strong></h5>
+<p><strong>Huidige tariefkaart "Goedkope stroom - Gas"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSG-nl.pdf" data-entity-uuid="5070794f-fd5a-4029-8cbc-c3842812b59c" data-entity-type="file" title="EV-0926-GSG-nl.pdf"> GSG 09/2026</a></p>
+<p><strong>Huidige tariefkaart "Goedkope stroom 1 jaar vast- Gas"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS1JVG-nl.pdf" data-entity-uuid="5f5ce4af-4b31-40a5-984c-9b1f78956e94" data-entity-type="file" title="EV-0926-GS1JVG-nl.pdf"> GSG 09/2026</a></p>
+<h5><strong>Tariefkaarten Wallonië - gas</strong></h5>
+<p><strong>Huidige tariefkaart "électricité bon marché - Gas"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GSG-WAL-fr.pdf" data-entity-uuid="e922e186-21c9-4dd7-9aa9-28fac7db6133" data-entity-type="file" title="EV-0926-GSG-WAL-fr.pdf">EBM 09/2026</a></p>
+<p><strong>Huidige tariefkaart "électricité bon marché 1 an fixe - Gas"</strong></p>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS1JVG-WAL-fr.pdf" data-entity-uuid="5a50df20-fd6d-42fe-90b6-9348d01b8604" data-entity-type="file" title="EV-0926-GS1JVG-WAL-fr.pdf">EBM 09/2026</a></p>
+<p> </p>
+<p> </p>
+
+            </div>
+
+      </div>
+
+      
+  <div class="paragraph paragraph--text-column paragraph--type--text-column paragraph--view-mode--default pg-bg--none" id="content-block--18100">
+          
+
+
+
+  <div data-aos="fade-up" class="field field--name-field-text-column field--type-text-long field--label-hidden">
+                  <h5><strong>Tariefkaart Wallonië</strong></h5>
+<h6><strong>Huidige tariefkaart  "électricité bon marché 1.800 kWh fixe" </strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS1800V-WAL-fr.pdf" data-entity-uuid="22e7cbdd-31c3-4ebd-a7b6-fb0e6b820ede" data-entity-type="file" title="EV-0926-GS1800V-WAL-fr.pdf">EBM 09/2026</a></p>
+<h6><strong>Huidige tariefkaart "électricité bon marché + 1 an fixe" </strong></h6>
+<p><a class="btn btn--document" href="/sites/default/files/inline-files/EV-0926-GS1JV-WAL-fr.pdf" data-entity-uuid="def9064e-1bae-48f4-9e7d-4ab02bc1654b" data-entity-type="file" title="EV-0926-GS1JV-WAL-fr.pdf">EBM 09/2026</a></p>
+
+            </div>
+
+      </div>
+
+  </div>
+
+          </div>
+  </section>
+
+      
+  <section class="paragraph paragraph--text-media paragraph--type--text-media paragraph--view-mode--stacked pg--has-media-right pg-valign--center pg-bg--neutral-green has-background" id="content-block--19347">
+    <div class="container">
+    
+      <div class="pg-text-media__text">
+        
+        
+<h2 data-aos="fade-up" class="pg-section__title">
+      Tariefkaarten groepsaankoop
+  </h2>
+        
+
+
+
+  <div data-aos="fade-up" class="field field--name-field-text field--type-text-long field--label-hidden">
+                  <p><span>Bekijk hieronder de </span><strong>tariefkaarten van de groepsaankoop.</strong></p>
+<p><strong>Groepsaankooptarief 10-2024</strong> - variabel tarief</p>
+<p><a class="btn btn--light" href="/sites/default/files/inline-files/EV-GA-1024-01.pdf" data-entity-uuid="52108990-6885-4972-ac29-22614460c7f6" data-entity-type="file" title="EV-GA-1024-01.pdf">Tariefkaart 10-2024</a></p>
+<p><strong>Groepsaankooptarief 05-2025</strong> - variabel tarief</p>
+<p><a class="btn btn--light" href="/sites/default/files/inline-files/EV-GA-0525-01..pdf" data-entity-uuid="09eb2b83-0207-4fe5-8d35-ec196f543258" data-entity-type="file" title="EV-GA-0525-01..pdf">Tariefkaart 05-2025</a></p>
+<p><strong>Groepsaankooptarief 10-2025</strong> - vast tarief</p>
+<p><a class="btn btn--light" href="/sites/default/files/inline-files/EV-GA-1025-vast%20%283%29%20%281%29.pdf" data-entity-uuid="f5542b8f-eeb2-4907-9ac9-33f2c6048b45" data-entity-type="file" title="EV-GA-1025-vast (3) (1).pdf">Tariefkaart 10-2025</a></p>
+<p><strong>Groepsaankooptarief 05-2026</strong> - vast tarief</p>
+<p><a class="btn btn--light" href="/sites/default/files/inline-files/EV-0526-GRSO-nl.pdf" data-entity-uuid="83a6ac77-ea94-4150-aba9-c2706ae5889d" data-entity-type="file" title="EV-0526-GRSO-nl.pdf">Tariefkaart 05-2026</a></p>
+
+            </div>
+
+      </div>
+
+      <div class="pg-text-media__media">
+        
+
+
+
+  <div data-aos="fade-up" class="field field--name-field-media field--type-entity-reference field--label-hidden">
+                    <img loading="lazy" src="/sites/default/files/styles/pg_text_media_stacked/public/2025-11/site.jpg.webp?itok=1v5oSy9-" width="950" height="860" />
+
+
+
+            </div>
+
+      </div>
+
+        </div>
+  </section>
+
+      
+  <section class="paragraph paragraph--list paragraph--type--list paragraph--view-mode--default pg-gridcol--4 pg-bg--none pg-decoration--left" id="content-block--17632">
+    <div class="container">
+      
+
+              
+        <div class="pg-list__wrapper">
+          
+
+
+
+<div class="field field--name-field-list-items field--type-entity-reference-revisions field--label-hidden">
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--17630">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom 1.000 kWh vast</h5>
+<p><a class="btn btn-outline-primary" href="/nl-be/historiek-tariefkaarten-gs-1000" data-entity-type="node" data-entity-uuid="766bc280-9b7e-4f3b-a3d8-87c5a7294eb9" data-entity-substitution="canonical" title="Historiek tariefkaarten">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--19641">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom 1.800 kWh vast</h5>
+<p><a class="btn btn-outline-primary" href="/nl-be/historiek-tariefkaarten-gs1800" data-entity-type="node" data-entity-uuid="401a13bf-38c0-4a11-889e-59594015b390" data-entity-substitution="canonical" title="Historiek tariefkaarten">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--17631">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom + Eigen Zon </h5>
+<p><a class="btn btn-outline-primary" href="/nl-be/historiek-tariefkaarten-gsez" data-entity-type="node" data-entity-uuid="ff954bf7-1135-440d-9166-3daa4f74eb68" data-entity-substitution="canonical" title="Historiek tariefkaarten">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--18013">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom + Laadpunt</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-gslp">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--18014">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom + Eigen zon + Laadpunt</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-gsezlp">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--19296">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor éléctricité bon marché </h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-gs-wal">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--19299">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom met vaste injectieprijs 3 jaar</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-GSVI3">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--19339">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Gas  - variabel</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-gas">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--19340">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom 3 jaar vast</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-gs3jv">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--20145">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Gas - vast</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-GS1JVG">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--20146">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor électricité bon marché - 1 an fixe</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-GS1JV">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--20619">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor électricité bon marché 1.800 kWh fixe</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-EBM1800">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+      
+  <div class="paragraph paragraph--list-item paragraph--type--list-item paragraph--view-mode--default pg-bg--none" id="content-block--21252">
+    
+      
+                              
+                  
+        
+                  
+
+
+
+  <div class="field field--name-field-list-item-text field--type-text-long field--label-hidden">
+                  <h5>Historiek voor Goedkope Stroom Dynamisch</h5>
+<p><a class="btn btn-outline-primary" href="https://www.energyvision.be/nl-be/historiek-tariefkaarten-dynamisch">Klik hier</a></p>
+
+            </div>
+
+        
+        
+      
+      </div>
+
+  </div>
+
+        </div>
+          </div>
+  </section>
+
+  </div>
+  </div>
+</article>
+
+  </div>
+
+  </div>
+
+
+    
+
+    
+
+  </main>
+
+    <footer class="region region--footer region-footer" id="footer">
+    <div class="container">
+      <div class="region__content">
+        
+
+
+<div id="block-dms-theme-site-branding-footer" class="block block--system-branding-block block--system-branding-block-- block-dms-theme-site-branding-footer block-system block-system-branding-block">
+  
+    
+        <a href="/nl-be" rel="home">
+      <img src="/themes/custom/dms_theme/img/logo.svg" alt="Home" />
+    </a>
+      
+  
+
+
+
+  <div class="field field--name-field-footer-left field--type-text-long field--label-hidden">
+                  <p>energy made simple<br /><br />Ondernemingsnummer: 0563.854.664<br />BTW nummer: BE0563.854.664<br />Rekeningnummer: <span lang="EN-GB" xml:lang="EN-GB" xml:lang="EN-GB">BE82 7310 6308 8468 </span></p>
+<p><a class="link link--arrow" href="https://support.energyvision.be/nl/support/tickets/new">Contacteer ons</a></p>
+
+            </div>
+
+  <div class="general-settings general-settings--socials">
+  
+
+
+
+  <div class="field field--name-field-gs-facebook field--type-link field--label-hidden">
+                  <a href="https://www.facebook.com/energyvisionbe" target="_blank"><span>Facebook</span> <i class="icon icon--facebook-official"></i></a>
+            </div>
+
+
+
+
+  <div class="field field--name-field-gs-instagram field--type-link field--label-hidden">
+                  <a href="https://www.instagram.com/energyvisionbe/" target="_blank"><span>Instagram</span> <i class="icon icon--instagram"></i></a>
+            </div>
+
+
+
+
+  <div class="field field--name-field-gs-linkedin field--type-link field--label-hidden">
+                  <a href="https://be.linkedin.com/company/energyvisionbe" target="_blank"><span>Linkedin</span> <i class="icon icon--linkedin-square"></i></a>
+            </div>
+</div>
+
+</div>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-main-navigation-footer-lvl1-menu" id="block-main-navigation-footer-lvl1" class="block block--menu-block block--menu-block--main block-main-navigation-footer-lvl1 block-menu navigation block-system-menublock menu--main">
+
+  
+    
+
+    
+              <ul class="menu menu--main menu__list">
+                    <li class="menu__item menu__item--collapsed">
+              <a href="/nl-be/oplossingen" data-drupal-link-system-path="node/731">Energieoplossingen</a>
+              </li>
+                <li class="menu__item">
+              <a href="https://www.energyvision.be/nl-be/verhuizen-wij-regelen-je-energie">Verhuis</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/elektrisch-rijden" data-drupal-link-system-path="node/730">Elektrisch rijden</a>
+              </li>
+                <li class="menu__item menu__item--collapsed">
+              <a href="/nl-be/over-ons" data-drupal-link-system-path="node/234">Over ons</a>
+              </li>
+                <li class="menu__item">
+              <a href="https://support.energyvision.be/nl/support/home">Hulp &amp; contact</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/myenergyvision-klantenportaal" class="btn btn-primary user" data-drupal-link-system-path="node/808">MyEnergyVision</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-menu-secondary-footer-menu" id="block-menu-secondary-footer" class="block block--menu-block block--menu-block--secondary-menu block-menu-secondary-footer block-menu navigation block-system-menublock menu--secondary-menu">
+
+  
+    
+
+    
+              <ul class="menu menu--secondary-menu menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/nieuws" data-drupal-link-system-path="node/67">Nieuws</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/werken-bij-energyvision" data-drupal-link-system-path="node/919">Jobs</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/aanbod-voor-bedrijven" data-drupal-link-system-path="node/357">Aanbod voor bedrijven</a>
+              </li>
+                <li class="menu__item">
+              <a href="https://investors.energyvision.be/nl-be">Investor relations</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+      </div>
+    </div>
+  </footer>
+
+
+    <div class="region region--bottom region-bottom" id="bottom">
+    <div class="container">
+      
+
+
+
+<nav role="navigation" aria-labelledby="block-bottommenu-menu" id="block-bottommenu" class="bottom-menu block block--menu-block block--menu-block--bottom-menu block-bottommenu block-menu navigation block-system-menublock menu--bottom-menu">
+
+  
+    
+
+    
+              <ul class="menu menu--bottom-menu menu__list">
+                    <li class="menu__item">
+              <span>© EnergyVision</span>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/privacy-beleid" data-drupal-link-system-path="node/858">Privacy Policy</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/disclaimer" data-drupal-link-system-path="node/3">Disclaimer</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/cookie-statement" data-drupal-link-system-path="node/73">Cookie statement</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/algemene-voorwaarden" target="_blank" data-drupal-link-system-path="node/844">Voorwaarden</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/consumentenakkoord-energie" data-drupal-link-system-path="node/998">Consumentenakkoord</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/klachten" data-drupal-link-system-path="node/1006">Klachten</a>
+              </li>
+                <li class="menu__item menu__item--active">
+              <a href="/nl-be/tariefkaart" data-drupal-link-system-path="node/840" class="is-active">Tariefkaarten</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/indexatieparameters" data-drupal-link-system-path="node/1004">Indexatieparameters</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/energieovernamedocument" data-drupal-link-system-path="node/896">Energieovernamedocument</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/herroepingsformulier" data-drupal-link-system-path="node/822">Herroepingsformulier</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/user/login" data-drupal-link-system-path="user/login">Login for staff</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/klokkenluider-procedure" data-drupal-link-system-path="node/804">Klokkenluider procedure</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-dmsmenu-menu" id="block-dmsmenu" class="dms-menu block block--menu-block block--menu-block--dms-menu block-dmsmenu block-menu navigation block-system-menublock menu--dms-menu">
+
+  
+    
+
+    
+              <ul class="menu menu--dms-menu menu__list">
+                    <li class="menu__item">
+              <a href="https://www.dms.be" target="_blank">Site by D’M&amp;S</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+    </div>
+  </div>
+
+
+</div>
+
+  
+
+
+
+<nav role="navigation" aria-labelledby="block-menu-cta-menu" id="block-menu-cta" class="block block--menu-block block--menu-block--cta block-menu-cta block-menu navigation block-system-menublock menu--cta">
+
+  
+    
+
+    
+  
+</nav>
+
+
+  <div class="region region--mobile-menu region-mobile-menu">
+    <span class="region--mobile-menu__close btn"><i class="icon icon--close"></i></span>
+    
+
+
+<div class="language-switcher-language-url language-switcher--mobile block block--language-block block--language-block--language-interface block-languageswitcher-2 block-language block-language-blocklanguage-interface" id="block-languageswitcher-2" role="navigation">
+  
+    
+      <select class="links" aria-label="lang"><option hreflang="en" data-drupal-link-system-path="node/840" class="en"  class="language-link" value="en" data-url="/en/rate-card"><a href="/en/rate-card" class="language-link" value="en" data-url="/en/rate-card" hreflang="en" data-drupal-link-system-path="node/840">International - EN</a></option><option hreflang="nl-be" data-drupal-link-system-path="node/840" class="nl-be is-active" value="nl-be" selected="selected" data-url="/nl-be/tariefkaart"><a href="/nl-be/tariefkaart" class="language-link is-active" value="nl-be" selected="selected" data-url="/nl-be/tariefkaart" hreflang="nl-be" data-drupal-link-system-path="node/840">België - NL</a></option><option hreflang="fr-nl" data-drupal-link-system-path="node/840" class="fr-nl"  class="language-link" value="fr-nl" data-url="/fr-be/carte-tarifaire"><a href="/fr-be/carte-tarifaire" class="language-link" value="fr-nl" data-url="/fr-be/carte-tarifaire" hreflang="fr-nl" data-drupal-link-system-path="node/840">Belgique - FR</a></option></select>
+  </div>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-mainnavigation-4-menu" id="block-mainnavigation-4" class="main-menu--mobile block block--menu-block block--menu-block--main block-mainnavigation-4 block-menu navigation block-system-menublock menu--main">
+
+  
+    
+
+    
+              <ul class="menu menu--main menu__list">
+                    <li class="menu__item menu__item--expanded">
+              <a href="/nl-be/oplossingen" data-drupal-link-system-path="node/731">Energieoplossingen</a>
+                                <ul class="menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/elektriciteit-gas" data-drupal-link-system-path="node/868">Elektriciteit &amp; gas</a>
+              </li>
+                <li class="menu__item">
+              <a href="/energieoplossingen/gratis-zonnepanelen-bovenop-de-goedkoopste-energie">Zonnepanelen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/een-thuislaadpunt-zonder-investering" data-drupal-link-system-path="node/1115">Thuislaadpunt</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/energieoplossingen/stekkerbatterij" data-drupal-link-system-path="node/1536">Stekkerbatterij</a>
+              </li>
+        </ul>
+  
+              </li>
+                <li class="menu__item">
+              <a href="https://www.energyvision.be/nl-be/verhuizen-wij-regelen-je-energie">Verhuis</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/elektrisch-rijden" data-drupal-link-system-path="node/730">Elektrisch rijden</a>
+              </li>
+                <li class="menu__item menu__item--expanded">
+              <a href="/nl-be/over-ons" data-drupal-link-system-path="node/234">Over ons</a>
+                                <ul class="menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/over-ons/over-energyvision" data-drupal-link-system-path="node/89">Over EnergyVision</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/jaarverslagen-van-energyvision" data-drupal-link-system-path="node/93">Jaarverslagen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/waar-komt-onze-groene-energie-vandaan" data-drupal-link-system-path="node/835">Waar komt onze groene energie vandaan?</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/duurzaam-voor-iedereen" data-drupal-link-system-path="node/836">Duurzaam voor iedereen</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/wat-klanten-ons-dit-kwartaal-leerden-q1" data-drupal-link-system-path="node/1275">Klantenrapport</a>
+              </li>
+        </ul>
+  
+              </li>
+                <li class="menu__item">
+              <a href="https://support.energyvision.be/nl/support/home">Hulp &amp; contact</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/myenergyvision-klantenportaal" class="btn btn-primary user" data-drupal-link-system-path="node/808">MyEnergyVision</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-menu-main-investors-mobile-menu" id="block-menu-main-investors-mobile" class="block block--menu-block block--menu-block--main-navigation-investors block-menu-main-investors-mobile block-menu navigation block-system-menublock menu--main-navigation-investors">
+
+  
+    
+
+    
+  
+</nav>
+
+
+
+
+<nav role="navigation" aria-labelledby="block-secondarymenu-3-menu" id="block-secondarymenu-3" class="secondary-menu--mobile block block--menu-block block--menu-block--secondary-menu block-secondarymenu-3 block-menu navigation block-system-menublock menu--secondary-menu">
+
+  
+    
+
+    
+              <ul class="menu menu--secondary-menu menu__list">
+                    <li class="menu__item">
+              <a href="/nl-be/nieuws" data-drupal-link-system-path="node/67">Nieuws</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/over-ons/werken-bij-energyvision" data-drupal-link-system-path="node/919">Jobs</a>
+              </li>
+                <li class="menu__item">
+              <a href="/nl-be/aanbod-voor-bedrijven" data-drupal-link-system-path="node/357">Aanbod voor bedrijven</a>
+              </li>
+                <li class="menu__item">
+              <a href="https://investors.energyvision.be/nl-be">Investor relations</a>
+              </li>
+        </ul>
+  
+
+
+  
+</nav>
+
+  </div>
+
+
+  </div>
+
+    
+    <script type="application/json" data-drupal-selector="drupal-settings-json">{"path":{"baseUrl":"\/","scriptPath":null,"pathPrefix":"nl-be\/","currentPath":"node\/840","currentPathIsAdmin":false,"isFront":false,"currentLanguage":"nl-be"},"pluralDelimiter":"\u0003","suppressDeprecationErrors":true,"ajaxPageState":{"libraries":"ajax_loader\/ajax_loader.throbber,dms_animations\/aos,dms_core\/gin,dms_theme\/fonts,dms_theme\/global_scripts,dms_theme\/global_styles,dms_theme\/icon_fonts,eu_cookie_compliance\/eu_cookie_compliance_default,hubspot\/hubspot.code_tracking,paragraphs\/drupal.paragraphs.unpublished,system\/base","theme":"dms_theme","theme_token":null},"ajaxTrustedUrl":[],"ajaxLoader":{"markup":"\u003Cdiv class=\u0022ajax-throbber sk-flow\u0022\u003E\n              \u003Cdiv class=\u0022sk-flow-dot\u0022\u003E\u003C\/div\u003E\n              \u003Cdiv class=\u0022sk-flow-dot\u0022\u003E\u003C\/div\u003E\n              \u003Cdiv class=\u0022sk-flow-dot\u0022\u003E\u003C\/div\u003E\n            \u003C\/div\u003E","hideAjaxMessage":true,"alwaysFullscreen":true,"throbberPosition":"body"},"clientside_validation_jquery":{"validate_all_ajax_forms":2,"force_validate_on_blur":false,"messages":{"required":"This field is required.","remote":"Please fix this field.","email":"Please enter a valid email address.","url":"Please enter a valid URL.","date":"Please enter a valid date.","dateISO":"Please enter a valid date (ISO).","number":"Please enter a valid number.","digits":"Please enter only digits.","equalTo":"Please enter the same value again.","maxlength":"Please enter no more than {0} characters.","minlength":"Voer ten minste {0} tekens in.","rangelength":"Please enter a value between {0} and {1} characters long.","range":"Please enter a value between {0} and {1}.","max":"Please enter a value less than or equal to {0}.","min":"Please enter a value greater than or equal to {0}.","step":"Please enter a multiple of {0}."}},"eu_cookie_compliance":{"cookie_policy_version":"1.0.0","popup_enabled":false,"popup_agreed_enabled":false,"popup_hide_agreed":false,"popup_clicking_confirmation":false,"popup_scrolling_confirmation":false,"popup_html_info":false,"use_mobile_message":false,"mobile_popup_html_info":false,"mobile_breakpoint":768,"popup_html_agreed":false,"popup_use_bare_css":false,"popup_height":"auto","popup_width":"100%","popup_delay":1000,"popup_link":"\/nl-be\/cookie-statement","popup_link_new_window":true,"popup_position":false,"fixed_top_position":true,"popup_language":"nl-be","store_consent":false,"better_support_for_screen_readers":false,"cookie_name":"","reload_page":false,"domain":"","domain_all_sites":false,"popup_eu_only":false,"popup_eu_only_js":false,"cookie_lifetime":100,"cookie_session":0,"set_cookie_session_zero_on_disagree":0,"disagree_do_not_show_popup":false,"method":"opt_in","automatic_cookies_removal":false,"allowed_cookies":"","withdraw_markup":"\u003Cbutton type=\u0022button\u0022 class=\u0022eu-cookie-withdraw-tab\u0022\u003EPrivacy settings\u003C\/button\u003E\n\u003Cdiv aria-labelledby=\u0022popup-text\u0022 class=\u0022eu-cookie-withdraw-banner\u0022\u003E\n  \u003Cdiv class=\u0022popup-content info eu-cookie-compliance-content\u0022\u003E\n    \u003Cdiv id=\u0022popup-text\u0022 class=\u0022eu-cookie-compliance-message\u0022 role=\u0022document\u0022\u003E\n      \u003Ch2\u003EWe gebruiken cookies op deze site om uw gebruikerservaring te verbeteren\u003C\/h2\u003E\n\u003Cp\u003EU hebt uw toestemming gegeven voor het plaatsen van cookies.\u003C\/p\u003E\n\n    \u003C\/div\u003E\n    \u003Cdiv id=\u0022popup-buttons\u0022 class=\u0022eu-cookie-compliance-buttons\u0022\u003E\n      \u003Cbutton type=\u0022button\u0022 class=\u0022eu-cookie-withdraw-button  button button--small button--primary\u0022\u003EWithdraw consent\u003C\/button\u003E\n    \u003C\/div\u003E\n  \u003C\/div\u003E\n\u003C\/div\u003E","withdraw_enabled":false,"reload_options":0,"reload_routes_list":"","withdraw_button_on_info_popup":false,"cookie_categories":["functional","analytics","advertisement","social_media"],"cookie_categories_details":{"functional":{"uuid":"e8d103e1-db8e-41fe-b2a1-89e23b53e74b","langcode":"en","status":true,"dependencies":[],"id":"functional","label":"Functionele en statistische cookies","description":"Om de website te laten functioneren en inzicht te krijgen in basisstatistieken, zonder dat er persoonsgegevens worden doorgezonden.","checkbox_default_state":"required","weight":-10},"analytics":{"uuid":"09d49b3c-a62a-481d-a7fc-a1a285cb254f","langcode":"en","status":true,"dependencies":[],"id":"analytics","label":"Analytische cookies","description":"Zo krijgen we inzicht in hoe je de website gebruikt en kunnen we deze verbeteren.","checkbox_default_state":"unchecked","weight":-9},"advertisement":{"uuid":"befa0f99-f47f-44d1-bc85-6acae339f8f3","langcode":"en","status":true,"dependencies":[],"id":"advertisement","label":"Advertenties op maat","description":"Je krijgt relevante advertenties op basis van jouw surfgedrag.","checkbox_default_state":"unchecked","weight":-8},"social_media":{"uuid":"6977991e-a8a8-441e-91ae-b994f4e65fae","langcode":"en","status":true,"dependencies":[],"id":"social_media","label":"Sociale media koppelingen","description":"Een optimale wisselwerking met sociale media zoals Youtube, Facebook of Instagram.","checkbox_default_state":"unchecked","weight":-7}},"enable_save_preferences_button":true,"cookie_value_disagreed":"0","cookie_value_agreed_show_thank_you":"1","cookie_value_agreed":"2","containing_element":"body","settings_tab_enabled":false,"olivero_primary_button_classes":" button button--small button--primary","olivero_secondary_button_classes":" button button--small","close_button_action":"close_banner","open_by_default":false,"modules_allow_popup":true,"hide_the_banner":false,"geoip_match":true},"user":{"uid":0,"permissionsHash":"8c6a3353a0e2eb842d0af4335d698d2ac9d5dd6031f33222f0afbc778f0fe21d"}}</script>
+<script src="/sites/default/files/js/js_rNtRfO1ZSHTsZYi3tRIWia0Gs1arabfRb8UC7zMyIe0.js?scope=footer&amp;delta=0&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c"></script>
+<script src="https://js.hs-scripts.com/139790153.js" id="hs-script-loader" defer async></script>
+<script src="/sites/default/files/js/js_YCZml2CYn_aZGgiFBsh2xcIjPsVqR8OU_qHUyqLqJ-I.js?scope=footer&amp;delta=2&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c"></script>
+<script src="/modules/contrib/eu_cookie_compliance/js/eu_cookie_compliance.min.js?v=10.1.6" defer></script>
+<script src="//unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script src="/sites/default/files/js/js_5flq8TRagSgjye195KleqAjwDKJ3oWpyykcPIDSChMc.js?scope=footer&amp;delta=5&amp;language=nl-be&amp;theme=dms_theme&amp;include=eJyNU-2S5CAIfKFkfCQLDROZqHigO5N9-nU2--Fc5arul9DSgNB6FjSLtALxUoRXQdUJbvCwkWFBMYN9qUHYOZRpSWr9k7lSnkJzWriar_PieUFbBfxGeZ1014rJOFD8pNWACc2Vc9XBJ8_Z_g2ukR1Eq3WPOOKeeSOcPacSCbIfEyeoPgSkNdQBjfC-P98wdtCJu-PHABWO-5VinF3EvMypv2O41Uh-G_w77IXpteM730dG7Yz9ptPtT0PZbSPT41Fyn_UbihLns6s7LSvW2etIPMBfoI8_V-G4CrdiRucs5ZUl_Quf-8p7uUQPOm0ngsOoY-WAfuuTE1iIzYt3xt9wfypiSOBarZzNcZxRaIg2iduLdL5V4YVKH_6nDG86H6KYsNnDsr_yMGfg_0faBa_QYp0KCKwCJejPj_lBLi2X5iJpwENlkKlrsa9YDbB-ACrjV5c"></script>
+
+  </body>
+</html>

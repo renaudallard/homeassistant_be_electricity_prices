@@ -1,0 +1,176 @@
+EASY Variable
+Prix variables électricité pour les contrats conclus en Septembre 2026 (durée de 3 ans)
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+Composition du prix de votre énergie(6)
+Composition du prix de votre énergie(9)
+ Vos avantages
+- Prix variable, adapté
+mensuellement
+- Électricité 100 % verte
+Services gratuits
+- Service client en ligne et
+hors ligne 5 étoiles
+- Suivez les prix et contrôlez
+votre consommation grâce à
+la Smart App
+- Facture électronique par
+défaut
+Prix d'énergie Variable (13)
+Coûts de réseaux (distribution et transport)(6)
+Redevance
+fixe(1) Prix par kWh (c€/kWh) Coûts énergie
+verte(5)
+65,00 €/an Type
+d'usage Normal Bihoraire
+Heures pleines
+Bihoraire
+Heures creuses
+Exclusif
+Nuit (c€/kWh)
+Prix Consommation(2) 19,475 21,504 16,502 16,502 2,652
+mensuels Injection(3) 5,083 5,083 5,083
+Prix annuels estimés
+Consommation(2) 18,691 20,620 15,856 15,856 2,652
+Injection(3) 3,959 3,959 3,959
+Gestionnaire du
+réseau de
+distribution
+Distribution
+Transport
+Normal
+Bihoraire
+Exclusif
+Nuit
+Activité de mesure
+Relevé annuel
+Puissance mise à disposition
+Heures pleines Heures
+creuses <=13kVA >13kVA
+c€/kWh c€/kWh c€/kWh c€/kWh €/an €/an €/an c€/kWh
+SIBELGA 9,96 9,96 7,53 7,53 14,73 50,07 100,15 2,27
+
+EASY Variable
+Prix variables électricité pour les contrats conclus en Septembre 2026 (durée de 3 ans)
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+Suppléments
+Accise fédérale(11) (c€/kWh)
+Toutes consommations 4,87600
+Droit pour le financement des Obligations de Service Public
+(OSP) (€/an)
+<= 1,44 kVA 0,00
+> 1,44 et <= 6 kVA 13,36
+> 6 et <= 9,6 kVA 21,37
+> 9,6 et <= 13 kVA 26,71
+> 13 et <= 18 kVA 39,94
+> 18 et <= 36 kVA 53,30
+> 36 et <= 56 kVA 106,59
+> 56 kVA 173,25
+(1) Sauf disposition contraire dans les conditions, la redevance fixe est
+facturée au prorata du nombre de jours effectifs de livraison (sur 365
+jours ou sur 366 jours lors d'une année bissextile). La redevance fixe
+n’est imputée que 1 seule fois chez les clients pour lesquels le
+prélèvement et l’injection appartiennent au même pack chez ENGIE.
+Pour les clients qui ne prennent qu'un pack pour l'injection, la
+redevance fixe sera calculée avec une TVA de 21% au lieu de 6%, ce
+qui donne une redevance fixe de 74,20€/an.
+(2) Le prix variable offert peut être modifié dans le courant du mois
+(p.ex. suite à des variations dans la disponibilité d’électricité sur le
+marché). Le prix valable est celui qui est affiché sur engie.be à la
+date de souscription du contrat. Les formules de prix sont valables
+pour tous les contrats conclus en Septembre 2026 et débutant au
+plus tard le dernier jour du 6e mois après la souscription du contrat.
+Le prix de l’électricité est indexé mensuellement. Le paramètre
+d’indexation est basé sur la moyenne arithmétique des cotations
+journalières ICE Endex reprises sous la rubrique «Belgian Power Base
+Load Futures», telles que publiés par ICE Endex sur son site internet,
+pendant le mois qui précède le mois de fourniture (ci-après
+ENDEX101). Le paramètre ENDEX101, exprimé en €/MWh, est
+calculé et publié par ENGIE (voir engie.be).
+Le prix ci-dessus a été calculé sur la base du paramètre ENDEX101
+du mois = 134,51 €/MWh, d’application pour Septembre 2026.
+Le paramètre ENDEX101 annuel estimé s’élève à 128,23 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+- e n - a a r d g a s
+Les formules hors TVA d’application pour Septembre 2026 sont les
+suivantes:
+- Normal = 2,5143 + (0,1179 x ENDEX101)
+- Tarif bihoraire heures pleines = 2,4243 + (0,1328 x ENDEX101)
+- Tarif bihoraire heures creuses = 2,5203 + (0,0970 x ENDEX101)
+- Exclusif nuit = 2,5203 + (0,0970 x ENDEX101)
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(3) Le tarif d’injection correspond aux prix auxquels ENGIE achète votre
+électricité produite et injectée sur le réseau conformément aux
+Conditions Contractuelles de votre Contrat. Ce tarif s’applique
+uniquement pour les installations de production décentralisées
+situées en Belgique raccordées en basse tension et disposant d’un
+compteur intelligent ou bidirectionnel. En plus du tarif d’injection,
+une redevance fixe est due et sera facturée sauf si vous êtes déjà
+client chez ENGIE pour la livraison d’électricité, auquel cas vous
+payez une seule redevance fixe du tarif de consommation.
+Le prix d’injection n’est pas soumis à la TVA.
+Les prix d’injection sont indexés en utilisant le paramètre ENDEX101.
+Le paramètre ENDEX101 = 134,51 €/MWh est d’application pendant
+le mois de Septembre 2026.
+Le paramètre ENDEX101 annuel estimé s’élève à 109,02 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+-en-aardgas
+Les formules hors TVA d’application pour Septembre 2026 sont les
+suivantes:
+- Normal = -0,8490 + (0,0441 x ENDEX101)
+- Tarif bihoraire heures pleines = -0,8490 + (0,0441 x ENDEX101)
+- Tarif bihoraire heures creuses = -0,8490 + (0,0441 x ENDEX101)
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(5) Ces coûts sont calculés de la manière suivante: Q x Pc pour le coût
+énergie verte . Q correspond au pourcentage, tel que déterminé
+légalement, des prélèvements du client pour lequel ENGIE doit
+remettre des certificats d’énergie verte . Pc correspond au prix par
+certificat d’énergie verte et s’élève à 93€.  Ce prix est hors TVA. Les
+coûts sont repris séparément sur la facture et sont adaptés en
+fonction des modifications légales.
+(6) Les coûts de réseau sont approuvés par la CREG et par BRUGEL.
+Concernant les tarifs de transport et de distribution d’électricité
+autres que pour la basse tension, veuillez-vous référer au site
+internet de BRUGEL
+EASY Variable
+Prix variables électricité pour les contrats conclus en Septembre 2026 (durée de 3 ans)
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+Si la structure tarifaire évoluée du gestionnaire de réseau vous est
+appliquée, à partir du 1er janvier 2028, et qu’il n’est pas prévu de
+prix de l’énergie spécifique selon les tranches horaires définies par le
+gestionnaire du réseau dans votre contrat alors, le prix de l’énergie
+pour l’électricité consommée pendant les 2 plages horaires les plus
+chères, comme défini par le gestionnaire du réseau, est égal à celui
+du tarif bihoraire heures pleines. Et le prix de l’énergie pour
+l’électricité consommée pendant la plage horaire la moins chère,
+comme défini par le gestionnaire du réseau, est égal à celui du tarif
+bihoraire heures creuses.
+(8) Vous ne payez pas de TVA sur ces coûts.
+(9) Le calcul a été effectué en janvier 2026 pour un contrat EASY
+Variable sur la base d’une consommation privée de 3500 kWh/an à
+Bruxelles. Prix 6% de tva comprise.
+(10) Vous trouverez plus d’informations sur vos paiements sur
+www.engie.be/fr/support/faq/facture/paiements.
+(11) Le droit d’accise spécial est calculé sur base annuelle.
+(12) La TVA peut être adaptée en fonction des modifications légales.
+(13) Nous nous réservons le droit d’adapter chaque année votre prix de
+l’énergie variable ou fixe conformément à la procédure prévue par
+l'article "Modification des conditions et des prix" des Conditions
+Générales pour consommateurs, indépendamment d'une éventuelle
+durée minimale du Contrat.
+Origine de l’électricité verte fournie dans le cadre de EASY : sources
+d’énergie renouvelables (100%).
+Origine de la fourniture totale d’électricité pour Electrabel sa en
+Région de Bruxelles-Capitale en 2025 : sources d'énergie
+renouvelables (59,33%), sources d’énergie non-renouvelables
+(40,67%).
+Frais de rappel et de mise en demeure (8) (10)
+Montants d’application à partir du 1er décembre 2023
+Frais de rappel (3 premiers gratuits) 7,50 €
+Mise en demeure 15,00 €

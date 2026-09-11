@@ -1,0 +1,232 @@
+(*) 12 mois après la date de début, une réduction de 5 % sur les coûts énergétiques de votre consommation annuelle, non-valable sur un compteur exclusif nuit, applicable au tarif Luminus ComfyFlex Electricité pendant 12 mois. Cette 
+remise sera répartie au pro rata sur votre (vos) décompte(s), au pro rata de la consommation de votre 2e année en tant que client. Cette réduction n’est valable que si vous avez choisi la domiciliation comme mode de paiement au 
+moment de l’établissement de votre (vos) décompte(s). En cas de déménagement, cette réduction est uniquement valable si vous emportez votre contrat actuel à votre nouvelle adresse. 
+(**) 24 mois après la date de début, une réduction annuelle récurrente de 10 % sur les coûts énergétiques de votre consommation annuelle, non-valable sur un compteur exclusif nuit, sera applicable au tarif Luminus ComfyFlex Electricité. 
+Cette remise sera répartie sur votre (vos) décompte(s), au pro rata de la consommation depuis votre 3e année en tant que client. Cette réduction n’est valable que si vous avez choisi la domiciliation comme mode de paiement au 
+moment de l’établissement de votre (vos) décompte(s). En cas de déménagement, cette réduction est uniquement valable si vous emportez votre contrat actuel à votre nouvelle adresse. 
+(***) En tant que nouveau client, vous bénéficiez d'une remise de 29% sur les coûts énergétiques, non-valable sur un compteur exclusif nuit, sur votre consommation annuel en heures pleines et creuses pendant 12 mois pour la conclusion 
+d'un contrat Luminus ComfyFlex Electricité en septembre 2026. Cette remise sera répartie au pro rata sur vos prochains décomptes. En cas de déménagement, cette réduction est uniquement valable si vous emportez votre contrat 
+actuel à votre nouvelle adresse.
+Luminus ComfyFlex Electricité(septembre 2026) 
+Conditions particulières : (ECF0C2.0)
+Région : Wallonie
+Consommateurs : résidentiels
+Tarif : variable
+Injection: variable
+Durée du contrat : 1 an 
+Valable pour les Consommateurs résidentiels avec une consommation d’électricité annuelle < 50 MWh. Dans le cas contraire, Luminus se réserve le droit d’adapter votre prix. 
+VOS AVANTAGES :
+Économie
+Vous bénéficiez des baisses des prix 
+du marché et une compensation 
+annuelle pour l’énergie injectée.
+Durable
+Electricité 100% verte et belge.
+Service
+Luminus propose un service 5 étoiles 
+en termes de prestations.
+SERVICES INCLUS :
+Luminus Extras & Energenius
+Avantages clients sur vos marques 
+préférées.
+My Luminus
+Votre espace client pour gérer tous 
+vos services en ligne.
+FactureManager
+La flexibilité de paiement et 
+l’assurance d’un budget sous 
+contrôle.
+VOS PROMOS :
+5 % de remise
+ Sur votre consommation 
+attribuée après 12 mois en cas 
+de paiement par domiciliation.
+(*)
+10 % de remise anuelle
+Sur votre consommation 
+attribuée après 24 mois en cas 
+de paiement par domiciliation.
+(**)
+- 29,00 %
+De remise sur votre consommation 
+annuel en heures pleines et 
+creuses pendant 12 mois.
+(***)
+Plus d'infos sur luminus.be
+TARIFS :
+Composition du prix de l'energie
+1 Énergie fournie par Luminus et injection
+2 Coût de transport de l'énergie
+3 Taxes et redevances
+4 TVA 6%
+ORIGINE DE VOTRE ÉNERGIE :
+Dernière origine 
+approuvée par:
+Energies renouvelables Nucléaires Gaz naturel (et autres 
+combustibles fossiles)
+Installations de 
+cogénération 
+de qualité
+WAL
+Le produit que vous 
+utilisez 100,00% - - -
+L'énergie fournie par 
+Luminus 62,72% 20,76% 16,52% -
+Pour des informations sur les conséquences pour l’environnement en ce qui concerne les émissions CO2 et déchets radioactifs de la production 
+d’électricité à partir de différentes sources d’énergie, consultez les sites www.climat.be et www.ondraf.be.
+1 Prix de l’énergie Luminus (TVA incl.)1 :
+Compteur 
+mono-horaire
+Compteur 
+bi-horaire
+Compteur 
+exclusif nuit
+Heures 
+pleines
+Heures 
+creuses
+Énergie fournie  (c€/kWh) 16,28 18,85 14,26 14,26
+ Tarif de l'énergie 
+injectée (c€/kWh)2 3,89 3,89 3,89 -
+Estimation annuelle de 
+l'énergie fournie (c€/kWh)3 20,22 23,48 17,64 17,64
+Estimation annuelle du tarif 
+de l'énergie injectée (c€/kWh) 4,68 4,68 4,68 -
+Redevance fixe (€/an) 65,00 65,00 -
+Coûts énergie verte (c€/kWh)4
+WAL
+3,03
+1 Pour plus d’informations, voir ci-dessous : ‘Informations sur votre tarif’. 
+2 Compensation à taux variable pour les propriétaires de panneaux solaires avec un compteur digital 
+(uniquement applicable à un point de livraison utilisé à la fois pour le prélèvement et l'injection). La TVA s'élève 
+à 0%. Pour plus d'info, voir ci-dessous: "Information sur votre tarif". 
+3 Cette estimation annuelle est basée sur l'évolution actuelle et attendue des prix au cours des quatre prochains 
+trimestres. 
+4 Les coûts de l’électricité verte sont adaptés en fonction des modifications législatives. Les montants mentionnés 
+dans les présentes conditions sont valables pour le trimestre en cours. Vous trouverez de plus amples 
+informations sur www.luminus.be/tarifselectriciteverte. 
+2 Coûts d'utilisation des réseaux :
+Coûts de distribution (c€/kWh)
+Gestionnaire de réseau Compteur 
+mono-horaire
+Compteur bi-horaire
+Heures pleines Heures 
+creuses
+Exclusif nuit Coûts de transport
+(c€/kWh)
+Tarif gestion des données / Activité de 
+mesure et de comptage / Terme fixe GRD
+(€/an)
+Tarif prosumer
+(€/kW/an) (*)
+WAL
+AIEG 10,87 12,05 6,66 6,66 2,74 19,49 81,03
+AIESH 13,64 15,17 8,21 8,21 2,74 17,92 99,29
+ORES (Brabant Wallon) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (EST) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (Hainaut Electricité) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (Luxembourg) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (Mouscron) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (Namur) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+ORES (Verviers) 11,98 13,27 7,39 7,39 2,74 14,10 85,84
+TECTEO RESA 11,06 12,20 7,01 7,01 2,74 26,50 84,22
+WAVRE 12,48 13,78 7,84 7,84 2,74 26,44 93,00
+ (*) En cas de production personnelle (panneaux solaires) avec une puissance maximale de l’onduleur de 10 kW : si vous disposez d’un compteur bidirectionnel, la redevance réseau peut également être calculée sur la base du prélèvement brut 
+d’électricité, si ce calcul est plus avantageux que la facturation du tarif prosumer. 
+3 Taxes et redevances : WAL
+Cotisation Fonds énergie  (*) (€/mois)
+Basse tension non résidentiel
+Basse tension résidentiel
+Droit d’accise spécial (**) (c€/kWh)
+Cotisation sur l"énergie (c€/kWh)
+Redevance de raccordement (*)(***) (c€/kWh)
+-
+-
+4,8760
+-
+0,0750
+(*) TVA non applicable.
+(**) Tarif différent dépendant de la consommation sur base annuelle : 0-3.000 kWh : 4,8760 c€/kWh, 3.001-20.000 kWh : 4,8760 c€/kWh, 20.001-50.000 kWh : 
+4,8760 c€/kWh
+(***) Non applicable sur les premiers 100 kWh. Cette redevance est majorée d’un montant forfaitaire de €  0,075.
+INFORMATION SUR VOTRE TARIF :
+La TVA sur les prix indiqués et les éventuelles promotions est de 6 %. Si le taux de TVA en vigueur 
+change pendant la durée de votre contrat, alors les prix et les promotions changent également.
+Formules tarifaires pour le coût de l’énergie (HTVA):
+Index (HTVA): Belpex =  94,25 €/MWh (valeur de l'indice du 2ième trimestre 2026); Compteur 
+mono-horaire =  0,1099  x  Belpex  +   0,0000  x  Endex 1-0-3  + 5,0041; Heures pleines (Compteur 
+bi-horaire) =  0,1293   x  Belpex  + 0,0000   x  Endex 1-0-3 + 5,5967; Heures creuses =  0,0943  x  
+Belpex  + 0,0000  x  Endex 1-0-3  +  4,5677; Exclusif nuit =  0,0943  x  Belpex  + 0,0000  x  Endex 
+1-0-3 +  4,5677 
+Formule tarifaire de l’énergie injectée (si d’application pour vous) (HTVA) : 
+Index (HTVA): Belpex  =  94,25 €/MWh (valeur de l'indice du 2ième trimestre 2026); Compteur 
+mono-horaire =  0,0481 x Belpex - 0,6392; Heures pleines (Compteur bi-horaire) =  0,0481 x Belpex 
+- 0,6392; Heures creuses =  0,0481 x Belpex - 0,6392;
+Les montants mentionnés sont arrondis. Votre tarif sera indexé tous les trimestres. Les trimestres 
+commencent le 1er janvier, 1er avril, 1er juillet et 1er octobre. La valeur Belpex du trimestre en 
+cours n’est connue qu’à la fin du trimestre. Les prix affichés sont calculés sur la base de la dernière 
+valeur Belpex connue (trimestre précédent). La méthode de calcul, ainsi que les valeurs de l’index 
+et de ses composantes, sont publiées sur le site www.luminus.be/parametres-d-indexation. Sur le 
+décompte, Luminus appliquera les valeurs moyennes trimestrielles pour les périodes déjà connues 
+au moment du décompte. Pour les périodes auxquelles ces valeurs ne sont pas encore connues au 
+moment du décompte, Luminus appliquera les valeurs moyennes mensuelles. Nous nous réservons 
+le droit d’utiliser de nouveaux paramètres ou de nouvelles composantes pour calculer la formule 
+du prix si les paramètres actuels viennent à changer, sont supprimés ou s'ils devaient ne plus être 
+disponibles. Luminus s'efforcera de maintenir le prix moyen au même niveau. Le prix de l'énergie 
+est calculé sur base de l’index applicable durant la période pour laquelle vous êtes facturés lors du 
+décompte de votre consommation réelle. Les montants mentionnés dans votre décompte peuvent 
+dès lors varier par rapport aux prix ci-dessus. 
+La redevance fixe est une redevance annuelle forfaitaire par raccordement au réseau d’électricité 
+qui couvre tous les coûts d’exploitation fixes de Luminus. Si le contrat avec Luminus est résilié 
+prématurément (= dans le courant du premier semestre à compter du début de la fourniture), 
+le client sera tenu de payer la moitié de la redevance fixe annuelle par raccordement au réseau 
+d’électricité. Au terme du premier semestre à compter du début de la fourniture, la redevance 
+fixe n’est imputée qu’au prorata de la durée effective de fourniture ininterrompue d’électricité par 
+Luminus. La redevance fixe est imputée sur le décompte ou le décompte de clôture. Les coûts 
+d'utilisation des réseaux mentionnés ci-dessus sont les coûts approuvés par le régulateur (CWaPE) 
+et les valeurs des taxes, redevances, cotisations et surcharges sont les valeurs les plus récentes 
+connues au moment de l’édition de ces conditions particulières. Les éventuelles modifications de 
+ces éléments vous seront intégralement refacturées au prix coûtant.
+Luminus vous garantit une électricité provenant exclusivement de sources d'énergie renouvelables 
+belges pendant toute la durée de votre contrat.
+DUREE DE VOTRE CONTRAT :
+Luminus ComfyFlex Electricité est un contrat d’une durée d’un an pour des points de fourniture 
+situés dans la Région wallonne, qui est automatiquement prolongé de périodes successives d’un 
+an, conformément à l’article 4.2 de nos conditions générales.
+Si vous êtes un nouveau client Luminus, ce contrat entrera en vigueur à la date de début de 
+fourniture. Si vous êtes déjà client chez Luminus pour votre  électricité pour le Point de fourniture 
+et conformément à l’article 11.4 des Conditions générales, souhaitez passer au contrat  Luminus 
+ComfyFlex Electricité , le nouveau contrat entrera en vigueur 21 jours calendrier après la date de 
+signature, sauf si une autre date est convenue en concertation avec nous.
+L’article 4.3 des Conditions générales demeure inchangé.
+Si vous n’êtes pas encore client chez Luminus, votre contrat chez Luminus doit débuter au plus tard 
+4 mois après la signature. Si tel n’est pas le cas, Luminus est en droit de refuser votre demande de 
+contrat ou de vous faire une nouvelle proposition de contrat.
+PAIEMENT ET MODE D'ENVOI DE VOS FACTURES :
+Vous choisissez votre mode de paiement (domiciliation ou virement) et la fréquence de facturation 
+(mensuelle, bimestrielle ou trimestrielle). 
+Si vous n’avez pas encore de domiciliation, mais décidez d’opter pour ce mode de paiement, vous 
+bénéficiez d’une réduction unique de 20 € (TVA comprise) en cas de paiement à temps et vous ne 
+recevrez pas de factures d’acompte, mais uniquement votre décompte annuel. 
+Toutes vos factures seront cependant disponibles en ligne via votre Espace Client sur 
+www.luminus.be. 
+Si vous souhaitez quand même recevoir toutes vos factures par la poste, cette réduction n’est pas 
+d’application. Si vous activez votre domiciliation au cours de la première année de fourniture, cette 
+réduction sera attribuée 1 an après la date de début. Si vous activez votre domiciliation après la 
+première année de fourniture, cette réduction sera attribuée sur votre prochain décompte. 
+Les réductions pour la domiciliation et la facture numérique ne sont pas cumulables. Si vous êtes 
+client chez nous pour l’électricité et le gaz, cette réduction n’est appliquée qu’une seule fois. 
+Vous choisissez le mode d’envoi de vos factures : par courrier ou par voie digitale (par email ou via 
+le service Zoomit disponible dans votre programme d’Internet banking habituel).
+En cas de retard de paiement ou de refus d’un ordre de domiciliation, vous êtes tenus, en plus du 
+solde dû :
+- des rappels à 7,50€ - le 1er rappel n’est pas facturé pour les 3 premières dettes échues dans une 
+année civile) et autres courriers à 15€. Ces frais s'appliquent uniquement aux envois postaux, et 
+sont plafonnés à 20€ pour un solde jusqu'à 150€ et à 30€ + 10 % du montant dû sur la tranche 
+supérieure, avec un max. de 55€/an et par énergie) ; et
+- des intérêts de retard au taux légal, calculés dès la fin du délai du rappel jusqu'au paiement 
+complet ; 
+La compensation pour l’énergie injectée est automatiquement calculée sur votre facture de 
+décompte.
+Luminus est une marque et un nom commercial de Luminus SA, Boulevard Roi Albert II 7, 1210 Bruxelles, TVA-BE0471811661, RPM Bruxelles. IBAN BE 76 3350 5545 9895 BIC BBRUBEBB
+ 

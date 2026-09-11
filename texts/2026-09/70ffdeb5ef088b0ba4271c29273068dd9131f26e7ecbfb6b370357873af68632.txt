@@ -1,0 +1,101 @@
+Tariefkaart vanaf 1 augustus 2026
+Alle bedragen zijn exclusief btw. Particuliere klanten betalen 6% btw. Zakelijke klanten betalen 21% btw.
+De terugleververgoeding is voor particulieren vrijgesteld van btw, voor zakelijke klanten bedraagt de btw 21%.
+De Bijdrage Energiefonds is voor alle klanten vrijgesteld van btw.
+Productnaam:
+Dynamische Burgerstroom
+(digitale meters in meetregime 3 op laagspanning)
+Energiekost (het gedeelte voor Ecopower)
+Abonnementskost 5,00 euro/maand
+Dynamische Burgerstroom elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh
+Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015 euro/kWh
+Kost GSC 0,011 euro/kWh
+Kost WKK 0,00392 euro/kWh
+Nettarieven1 (het gedeelte dat Ecopower doorstort aan de netbeheerder)
+Databeheer2 Capaciteitstarief Afnametarief Maximumtarief Injectietarief3
+indien van toepassing indien van toepassing
+Netbeheerder
+euro/jaar euro/kW/jaar euro/kWh euro/kWh euro/kWh
+Enkelvoudig/tweevoudig Uitsluitend nacht
+Fluvius Antwerpen 17,85 49,40 0,0505027 0,0454058 0,0017510
+Fluvius Halle-Vilvoorde 17,85 56,04 0,0531770 0,0482899 0,0017510
+Fluvius Imewo 17,85 54,20 0,0522864 0,0473024 0,0017510
+Fluvius Kempen 17,85 56,21 0,0597838 0,0534019 0,0017510
+0,3276168
+Fluvius Limburg 17,85 49,05 0,0542695 0,0489353 0,0017510
+Fluvius Midden-
+17,85 50,12 0,0498061 0,0450784 0,0017510
+Vlaanderen
+Fluvius West 17,85 57,10 0,0631937 0,0565360 0,0017510
+Fluvius Zenne-Dijle 17,85 56,12 0,0553921 0,0501456 0,0017510
+Meer info zie pagina 2
+Heffingen1 (het gedeelte dat Ecopower doorstort aan de overheden)
+particulier zakelijk
+Bijdrage op de energie 0,00 euro/kWh 0,0019261 euro/kWh
+Bijzondere accijns verbruik tussen 0 en 3.000 kWh: 0,04600 euro/kWh 0,01421 euro/kWh
+Bijzondere accijns verbruik tussen 3.000 en 20.000 kWh: 0,04600 euro/kWh 0,01421 euro/kWh
+Bijzondere accijns verbruik tussen. 20.000 en 50.000 kWh: 0,04600 euro/kWh 0,01209 euro/kWh
+Bijzondere accijns verbruik tussen 50.000 en 1.000.000 kWh: 0,04600 euro/kWh 0,01139 euro/kWh
+Bijdrage Energiefonds 0,004 euro/maand 10,07 euro/maand
+Bijkomende kosten voor energiedelen
+Administratieve bijdrage 2,00 euro/maand
+1 Nettarieven en heffingen zoals gekend op 1 augustus 2026
+2 Heeft u een afzonderlijk toegangspunt voor injectie, dan betaalt u het tarief databeheer per EAN-nummer.
+3 Het injectietarief is enkel van toepassing voor zonnepanelen met een omvormervermogen > 10 kVA
+4 Als er niemand gedomiciliëerd is op het adres is de bijdrage 10,07 euro per maand
+TARIEFKAART VANAF 1 JANUARI 2026
+Informatie over de onderdelen
+en prijsformule
+Energiekost (Ecopower)
+Dynamische burgerstroom Maximumtarief
+Ecopower levert lokale hernieuwbare elektriciteit geproduceerd door Zou u met het capaciteitstarief en afnametarief meer nettarieven
+de coöperatieve Ecopower-installaties, de installaties van bevriende betalen dan met het maximumtarief? Dan betaalt u het
+burgercoöperaties en de zonnepanelen van onze coöperanten. Met maximumtarief. Meer informatie over het maximumtarief vindt u op
+een dynamische prijs wordt de prijs losgekoppeld van de kostprijs de website van de VNR.
+van de installaties, zodat klanten minder verbruiken op momenten
+met tekorten. Dit product noemen we dynamische burgerstroom. Injectietarief (bij zonnepanelen met omvormervermogen > 10 kVA)
+Kost voor de netbeheerders voor het transport van uw opgewekte
+Prijsformule dynamische burgerstroom stroom via het hoog- en laagspanningsnet. Dit wordt berekend per
+De prijsformule voor dynamische burgerstroom wordt elk kwartier teruggeleverde kWh. Tarieven worden goedgekeurd door de VNR en
+uitgerekend aan de hand van de EPEX DA marktprijs van dat de CREG en een-op-een doorgerekend.
+kwartier. De prijs is dus heel variabel en volatiel.
+Heffingen (overheden)
+De EPEX DA notering is de dagelijks bepaalde kwartierprijs voor Bijdrage op de energie
+elektriciteit in België (uitgedrukt in euro/MWh). U vindt deze Belasting (of gewone accijns) voor de federale overheid die wordt
+op de website van Nordpool of via de sectororganisatie van de berekend per afgenomen kWh en een-op-een doorgerekend.
+transmissienetbeheerders in Europa ENTSO-E. U vindt de links op
+www.ecopower.be/dbs-formule. Bijzondere accijns
+Belasting voor de federale overheid die wordt berekend per
+Het verschil met de zuivere EPEX DA dient om de onbalanskosten afgenomen kWh en een-op-een doorgerekend.
+af te dekken, en wordt ook toegepast bij energiedelen. Voor de
+administratie en werking wordt een maandelijkse abonnemenstkost Bijdrage Energiefonds
+gevraagd. Belasting voor de Vlaamse overheid aangerekend als vast bedrag
+per aansluiting van elektriciteit. Per aansluiting op een adres met
+Kost GSC en kost WKK minstens één gedomicilieerde persoon betaalt u als particuliere
+Kost voor de groenestroomcertificaten en certificaten voor klant de verminderde bijdrage. Voor een bedrijf of een adres waar
+warmtekrachtkoppeling die Ecopower voor elke geleverde kWh moet niemand gedomicilieerd is, betaalt u de gewone bijdrage.
+indienen bij de Vlaamse Nutsregulator (VNR).
+Btw
+Nettarieven (netbeheerder) Particuliere klanten betalen 6% btw. Zakelijke klanten betalen
+Kost databeheer 21% btw. De terugleververgoeding is voor particulieren vrijgesteld
+Vaste kost voor netbeheerder Fluvius voor alle activiteiten m.b.t. de van btw, voor zakelijke klanten bedraagt de btw 21%. De Bijdrage
+registratie van uw data. Deze kost wordt een-op-een doorgerekend Energiefonds is voor alle klanten vrijgesteld van btw.
+a rato van het aantal dagen in de verbruiksperiode van de factuur.
+Bijkomende kosten voor energiedelen (Ecopower)
+Capaciteitstarief Administratieve bijdrage
+Kost voor netbeheerder Fluvius voor het gebruik van het Voor energiedelen moeten maandelijks aparte facturen worden
+elektriciteitsnet. Dit wordt berekend op basis van uw gemiddelde opgemaakt. Die extra administratie wordt met deze bijdrage
+maandpiek. Het doel van het capaciteitstarief is bijdragen aan het vergoed.
+evenwicht tussen productie en verbruik op het elektriciteitsnet;
+een belangrijke pijler in de transitie naar een 100% hernieuwbaar
+elektriciteitssysteem. Als u een digitale meter heeft, wordt uw
+gemiddelde maandpiek gemeten door Fluvius en een-op-een
+doorgerekend met een minimale bijdrage voor een maandpiek van
+2,5 kW.
+Afnametarief (voor netgebruik per kWh)
+Kost voor de netbeheerders voor het transport van uw stroom via
+het hoog- en laagspanningsnet. Dit wordt berekend per afgenomen
+kWh. Tarieven worden goedgekeurd door de VNR en de CREG en
+een-op-een doorgerekend.
+Ecopower T. 03 287 37 79 Posthoflei 3 bus 3 www.ecopower.be IBAN BE07 0012 2805 5766
+erkende cv BTW BE 0445.389.356 2600 Berchem info@ecopower.be RPR Antwerpen – Afd. Antwerpen

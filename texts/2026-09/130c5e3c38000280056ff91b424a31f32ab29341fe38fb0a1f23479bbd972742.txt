@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="fr-BE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nos cartes tarifaires &#8211; Cociter sc</title>
+<meta name='robots' content='noindex, nofollow' />
+<link rel="alternate" href="https://www.cociter.be/fr/electricite/tarifs/cartes-tarifaires/" hreflang="fr" />
+<link rel="alternate" href="https://www.cociter.be/de/strom/unsere-tarife/unsere-stromtarife/" hreflang="de" />
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://www.cociter.be/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.cociter.be%2Ffr%2Felectricite%2Ftarifs%2Fcartes-tarifaires%2F&#038;lang=fr" />
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://www.cociter.be/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.cociter.be%2Ffr%2Felectricite%2Ftarifs%2Fcartes-tarifaires%2F&#038;format=xml&#038;lang=fr" />
+<style id="wp-img-auto-sizes-contain-inline-css">
+img:is([sizes=auto i],[sizes^="auto," i]){contain-intrinsic-size:3000px 1500px}
+/*# sourceURL=wp-img-auto-sizes-contain-inline-css */
+</style>
+<style id="wp-emoji-styles-inline-css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+/*# sourceURL=wp-emoji-styles-inline-css */
+</style>
+<style id="wp-block-library-inline-css">
+:root{--wp-block-synced-color:#7a00df;--wp-block-synced-color--rgb:122,0,223;--wp-bound-block-color:var(--wp-block-synced-color);--wp-editor-canvas-background:#ddd;--wp-admin-theme-color:#007cba;--wp-admin-theme-color--rgb:0,124,186;--wp-admin-theme-color-darker-10:#006ba1;--wp-admin-theme-color-darker-10--rgb:0,107,160.5;--wp-admin-theme-color-darker-20:#005a87;--wp-admin-theme-color-darker-20--rgb:0,90,135;--wp-admin-border-width-focus:2px}@media (min-resolution:192dpi){:root{--wp-admin-border-width-focus:1.5px}}.wp-element-button{cursor:pointer}:root .has-very-light-gray-background-color{background-color:#eee}:root .has-very-dark-gray-background-color{background-color:#313131}:root .has-very-light-gray-color{color:#eee}:root .has-very-dark-gray-color{color:#313131}:root .has-vivid-green-cyan-to-vivid-cyan-blue-gradient-background{background:linear-gradient(135deg,#00d084,#0693e3)}:root .has-purple-crush-gradient-background{background:linear-gradient(135deg,#34e2e4,#4721fb 50%,#ab1dfe)}:root .has-hazy-dawn-gradient-background{background:linear-gradient(135deg,#faaca8,#dad0ec)}:root .has-subdued-olive-gradient-background{background:linear-gradient(135deg,#fafae1,#67a671)}:root .has-atomic-cream-gradient-background{background:linear-gradient(135deg,#fdd79a,#004a59)}:root .has-nightshade-gradient-background{background:linear-gradient(135deg,#330968,#31cdcf)}:root .has-midnight-gradient-background{background:linear-gradient(135deg,#020381,#2874fc)}:root{--wp--preset--font-size--normal:16px;--wp--preset--font-size--huge:42px}.has-regular-font-size{font-size:1em}.has-larger-font-size{font-size:2.625em}.has-normal-font-size{font-size:var(--wp--preset--font-size--normal)}.has-huge-font-size{font-size:var(--wp--preset--font-size--huge)}:root .has-text-align-center{text-align:center}:root .has-text-align-left{text-align:left}:root .has-text-align-right{text-align:right}.has-fit-text{white-space:nowrap!important}#end-resizable-editor-section{display:none}.aligncenter{clear:both}.items-justified-left{justify-content:flex-start}.items-justified-center{justify-content:center}.items-justified-right{justify-content:flex-end}.items-justified-space-between{justify-content:space-between}.screen-reader-text{word-wrap:normal!important;border:0;clip-path:inset(50%);height:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;width:1px;word-break:normal!important}.screen-reader-text:focus{background-color:#ddd;clip-path:none;color:#444;display:block;font-size:1em;height:auto;left:5px;line-height:normal;padding:15px 23px 14px;text-decoration:none;top:5px;width:auto;z-index:100000}html :where(.has-border-color){border-style:solid}html :where([style^=border-color],[style*=";border-color"],[style*="; border-color"]){border-style:solid}html :where([style^=border-top-color],[style*=";border-top-color"],[style*="; border-top-color"]){border-top-style:solid}html :where([style^=border-right-color],[style*=";border-right-color"],[style*="; border-right-color"]){border-right-style:solid}html :where([style^=border-bottom-color],[style*=";border-bottom-color"],[style*="; border-bottom-color"]){border-bottom-style:solid}html :where([style^=border-left-color],[style*=";border-left-color"],[style*="; border-left-color"]){border-left-style:solid}html :where([style^=border-width],[style*=";border-width"],[style*="; border-width"]){border-style:solid}html :where([style^=border-top-width],[style*=";border-top-width"],[style*="; border-top-width"]){border-top-style:solid}html :where([style^=border-right-width],[style*=";border-right-width"],[style*="; border-right-width"]){border-right-style:solid}html :where([style^=border-bottom-width],[style*=";border-bottom-width"],[style*="; border-bottom-width"]){border-bottom-style:solid}html :where([style^=border-left-width],[style*=";border-left-width"],[style*="; border-left-width"]){border-left-style:solid}html :where(img[class*=wp-image-]){height:auto;max-width:100%}:where(figure){margin:0 0 1em}html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:var(--wp-admin--admin-bar--height,0px)}@media screen and (max-width:600px){html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:0px}}
+
+/*# sourceURL=/wp-includes/css/dist/block-library/common.min.css */
+</style>
+
+<style id="global-styles-inline-css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}.wp-block-button{--wp--preset--dimension--25: 25%;--wp--preset--dimension--50: 50%;--wp--preset--dimension--75: 75%;--wp--preset--dimension--100: 100%;}:root { --wp--style--global--content-size: 48rem;--wp--style--global--wide-size: 48rem; }:where(body) { margin: 0; }.wp-site-blocks > .alignleft { float: left; margin-right: 2em; }.wp-site-blocks > .alignright { float: right; margin-left: 2em; }.wp-site-blocks > .aligncenter { justify-content: center; margin-left: auto; margin-right: auto; }:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}.is-layout-flow > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}.is-layout-flow > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}.is-layout-flow > .aligncenter{margin-left: auto !important;margin-right: auto !important;}.is-layout-constrained > .alignleft{float: left;margin-inline-start: 0;margin-inline-end: 2em;}.is-layout-constrained > .alignright{float: right;margin-inline-start: 2em;margin-inline-end: 0;}.is-layout-constrained > .aligncenter{margin-left: auto !important;margin-right: auto !important;}.is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)){max-width: var(--wp--style--global--content-size);margin-left: auto !important;margin-right: auto !important;}.is-layout-constrained > .alignwide{max-width: var(--wp--style--global--wide-size);}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}body{padding-top: 0px;padding-right: 0px;padding-bottom: 0px;padding-left: 0px;}:root :where(.wp-element-button, .wp-block-button__link){background-color: #32373c;border-width: 0;color: #fff;font-family: inherit;font-size: inherit;font-style: inherit;font-weight: inherit;letter-spacing: inherit;line-height: inherit;padding-top: calc(0.667em + 2px);padding-right: calc(1.333em + 2px);padding-bottom: calc(0.667em + 2px);padding-left: calc(1.333em + 2px);text-decoration: none;text-transform: inherit;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+/*# sourceURL=global-styles-inline-css */
+</style>
+
+<link rel='stylesheet' id='contact-form-7-css' href='https://www.cociter.be/wp-content/plugins/contact-form-7/includes/css/styles.css?ver=6.1.7' media='all' />
+<script id="bodhi-dompurify-library-js" src="https://www.cociter.be/wp-content/plugins/svg-support/vendor/DOMPurify/DOMPurify.min.js?ver=2.5.9"></script>
+<script id="jquery-core-js" src="https://www.cociter.be/wp-includes/js/jquery/jquery.min.js?ver=3.7.1"></script>
+<script id="jquery-migrate-js" src="https://www.cociter.be/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1"></script>
+<script id="bodhi_svg_inline-js-extra">
+var svgSettings = {"skipNested":""};
+//# sourceURL=bodhi_svg_inline-js-extra
+</script>
+<script id="bodhi_svg_inline-js" src="https://www.cociter.be/wp-content/plugins/svg-support/js/min/svgs-inline-min.js?ver=2.6.1"></script>
+<script id="bodhi_svg_inline-js-after">
+cssTarget={"Bodhi":"img.style-svg","ForceInlineSVG":"style-svg"};ForceInlineSVGActive="false";frontSanitizationEnabled="on";
+//# sourceURL=bodhi_svg_inline-js-after
+</script>
+<link rel="https://api.w.org/" href="https://www.cociter.be/wp-json/" /><link rel="alternate" title="JSON" type="application/json" href="https://www.cociter.be/wp-json/wp/v2/pages/30" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.cociter.be/xmlrpc.php?rsd" />
+
+<link rel="canonical" href="https://www.cociter.be/fr/electricite/tarifs/cartes-tarifaires/" />
+<link rel='shortlink' href='https://www.cociter.be/?p=30' />
+<link rel="icon" href="https://www.cociter.be/wp-content/uploads/2026/09/cropped-favicon-1-32x32.png" sizes="32x32" />
+<link rel="icon" href="https://www.cociter.be/wp-content/uploads/2026/09/cropped-favicon-1-192x192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="https://www.cociter.be/wp-content/uploads/2026/09/cropped-favicon-1-180x180.png" />
+<meta name="msapplication-TileImage" content="https://www.cociter.be/wp-content/uploads/2026/09/cropped-favicon-1-270x270.png" />
+
+  <link rel="preload" as="style" href="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-Zl2X09k8.css" /><link rel="preload" as="style" href="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-BnGLgMVy.css" /><link rel="modulepreload" as="script" href="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-CgRjYG3e.js" /><link rel="stylesheet" href="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-Zl2X09k8.css" /><link rel="stylesheet" href="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-BnGLgMVy.css" /><script type="module" src="https://www.cociter.be/wp-content/themes/cociter-2026/public/build/assets/app-CgRjYG3e.js"></script></head>
+
+<body class="wp-singular page-template page-template-templates page-template-rate-cards page-template-templatesrate-cards page page-id-30 page-child parent-pageid-28 wp-embed-responsive wp-theme-cociter-2026 overflow-x-hidden cartes-tarifaires">
+<header id="header" class="flex-0 w-full sticky  z-40 top-0">
+  <div id="header--main" class="px-default py-4 rl:py-6 lg:py-8 grid-default">
+    <div
+      class="col-start-1 col-span-2 md:col-start-1 md:col-span-3 rl:col-start-1 rl:col-span-1 lg:col-start-1 lg:col-span-5 2xl:col-start-2 2xl:col-span-4 flex items-center justify-start lg:gap-6 xl:gap-20">
+      <button id="header-toggle--button" type="button" data-scale-on-scrolled
+              aria-controls="header--drawer" aria-expanded="false" aria-haspopup="true"
+              aria-label="Ouvrir le menu" data-label-open="Ouvrir le menu"
+              data-label-close="Fermer le menu">
+        <span id="menu-toggle--icons" aria-hidden="true">
+            <svg aria-hidden="true" focusable="false" class="icon icon-menu-open aspect-square menu-toggle--icon open" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M2.563 4.353c2.89-.275 5.813-.071 8.707-.111 0 0 8.62.223 9.023.242 3.348-.006 6.69.287 9.986.875a2.2 2.2 0 0 1 1.376 1.092c.153.31.24.648.257.993.105 1.514.095 2.826.076 4.353q.018 1.313-.158 2.614c-.117.413-2.973.501-3.327.535-1.7.167-16.371-.101-16.747-.127-1.087-.075-3.274-.023-3.695-.04-1.489-.068-2.166-.049-3.659-.212a6.1 6.1 0 0 1-3.47-.723C-.375 12.752.076 9.677.068 6.502a1.84 1.84 0 0 1 1.189-1.89q.646-.163 1.305-.258m10.354 2.712L2.764 7.29c-.472.011-.834.55-.781 1.164l.246 1.835a1.266 1.266 0 0 0 1.1 1.22l10.291.107c.39 0 15.179.447 15.179.447a1.1 1.1 0 0 0 .933-1.193 7.8 7.8 0 0 0-.068-2.271.47.47 0 0 0-.297-.317 14 14 0 0 0-2.339-.36c-3.011-.379-6.053-.216-9.08-.6-.375-.048-4.547-.268-5.03-.257M29.433 27.647c-2.89.275-5.814.071-8.708.111 0 0-8.618-.223-9.02-.242a56.3 56.3 0 0 1-9.986-.875A2.2 2.2 0 0 1 .344 25.55a2.5 2.5 0 0 1-.257-.993c-.104-1.513-.094-2.826-.075-4.353A17 17 0 0 1 .17 17.59c.117-.413 2.973-.5 3.327-.535 1.699-.167 16.37.102 16.744.128 1.086.074 3.274.022 3.695.04 1.494.063 2.169.044 3.657.207a6.1 6.1 0 0 1 3.477.722c1.305 1.1.852 4.168.86 7.343a1.84 1.84 0 0 1-1.186 1.89q-.647.162-1.306.258M19.077 24.93l10.152-.225c.472-.011.825-.55.781-1.164l-.246-1.835a1.27 1.27 0 0 0-1.1-1.219l-10.29-.107c-.39 0-15.177-.447-15.177-.447a1.1 1.1 0 0 0-.933 1.192 7.8 7.8 0 0 0 .066 2.272.47.47 0 0 0 .299.316c.767.187 1.55.308 2.338.36 3.011.379 6.053.216 9.08.6.375.048 4.547.268 5.03.257"/>
+</svg>          <svg aria-hidden="true" focusable="false" class="icon icon-menu-close aspect-square menu-toggle--icon close" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M10.72 1.392c2.12 2.363 3.952 4.996 5.923 7.484l.404-.108c2.136-2.067 4.198-4.25 6.471-6.165q.638-.625 1.363-1.143c.528-.34 1.158-.96 1.884-.125.17.196.861.948 1.095 1.22a37 37 0 0 1 2.356 3.228 1.59 1.59 0 0 1-.158 2.005l-.713.733c-2.763 2.828-3.856 4.39-6.694 7.138a.89.89 0 0 0-.102 1.16 81 81 0 0 1 6.138 9.11c.289.54.366 1.17.216 1.765-.091.285-.255.54-.475.74a32 32 0 0 1-2.788 2.337 11 11 0 0 1-1.809 1.225c-.35.116-2.323-2.314-2.584-2.602-1.256-1.385-4.57-6.204-5.098-6.596-.53-.392-2.414 1.814-2.414 1.814-1.059 1.022-2.45 2.232-4.948 4.424-.342.298-2.043 2.178-2.778 1.36-.708-.79-1.534-1.468-2.24-2.253a20.5 20.5 0 0 1-2.184-2.74c-.463-.844 1.111-1.9 1.229-2.02 1.828-1.961 2.755-3.003 4.844-5.198.749-.79 1.63-1.454 2.35-2.275a.886.886 0 0 0 .07-1.094c-.686-.98-2.188-2.847-2.46-3.22-.96-1.327-1.427-1.903-2.32-3.278-.283-.43-1.743-2.024-1.867-3.383C3.268 3.233 5.576 2.02 7.643.356A1.56 1.56 0 0 1 9.673.4c.425.383.854.785 1.046.998m6.52 10.47-.006.006a.9.9 0 0 1-.682.243.9.9 0 0 1-.642-.336L8.94 3.101a.87.87 0 0 0-.628-.322.86.86 0 0 0-.656.254l-1.029 1.17a1.25 1.25 0 0 0-.056 1.59l6.847 8.97a.89.89 0 0 1-.042 1.136c-2.296 2.543-6.798 7.045-8.404 8.643a.883.883 0 0 0-.032 1.22c.64.712 1.613 1.766 1.69 1.804.36.183 1.084-.812 1.344-1.059.914-.852 1.902-1.655 2.801-2.524 1.556-1.508 3.016-3.112 4.546-4.64a.87.87 0 0 1 .665-.246.86.86 0 0 1 .624.338l6.707 8.708a.997.997 0 0 0 1.403.187s1.205-.736 1.437-1.245a.48.48 0 0 0 .007-.422 20 20 0 0 0-1.341-2.222c-1.778-2.805-3.932-5.36-5.712-8.171a.89.89 0 0 1 .13-1.106l8.307-8.246a.89.89 0 0 0 .115-1.128L26.63 4.264a.72.72 0 0 0-.48-.304.7.7 0 0 0-.548.147l-.83.67c-2.038 2.005-3.013 2.713-5.09 4.675-.83.784-1.607 1.637-2.443 2.415"/>
+</svg>        </span>
+      </button>
+      <div role="navigation" class="max-lg:hidden">
+        <ul id="header-menu--highlighted-pages" class="header-menu--highlighted-pages"><li id="menu-item-67" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor menu-item-67"><a href="https://www.cociter.be/fr/electricite/"><span>Électricité</span></a></li>
+<li id="menu-item-66" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-66"><a href="https://www.cociter.be/fr/cociter/"><span>Cociter</span></a></li>
+<li id="menu-item-65" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-65"><a href="https://www.cociter.be/fr/aide-contact/"><span>Aide &#038; contact</span></a></li>
+</ul>      </div>
+    </div>
+    <div class="col-start-3 col-span-2 md:col-start-4 md:col-span-2 rl:col-start-2 rl:col-span-3 lg:col-start-6 lg:col-span-2 flex items-center justify-center">
+      <a id="header--logo" href="https://www.cociter.be"  data-hidden >
+        <span class="sr-only">Retour à l'accueil</span>
+        <svg aria-hidden="true" focusable="false" class="icon icon-text" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 600 148">
+    <path d="M0 93.391c0-30.259 22.746-53.21 53.422-53.21 16.902 0 30.885 7.095 39.65 18.365a3.037 3.037 0 0 1-.418 4.38l-12.52 12.31a3.72 3.72 0 0 1-5.427 0c-5.633-5.636-11.683-8.56-20.033-8.56-16.278 0-26.92 11.682-26.92 26.71s10.642 27.547 27.546 27.547c7.93 0 13.982-2.922 19.617-8.56a3.72 3.72 0 0 1 2.712-1.175 3.72 3.72 0 0 1 2.713 1.175l12.521 12.313a3.05 3.05 0 0 1 1.147 2.103 3.04 3.04 0 0 1-.73 2.28c-8.765 11.268-22.745 18.362-39.233 18.362C22.954 147.431 0 124.06 0 93.384M95.247 93.809c0-30.26 22.745-53.632 53.631-53.632 30.675 0 53.422 23.366 53.422 53.632s-22.747 53.63-53.422 53.63c-30.885 0-53.63-23.371-53.63-53.63m53.631 27.129c14.399 0 25.666-10.434 25.666-27.13 0-16.694-11.268-27.128-25.666-27.128-14.608 0-25.877 10.435-25.877 27.129s11.269 27.129 25.877 27.129M210.565 93.391c0-30.259 22.746-53.21 53.422-53.21 16.902 0 30.885 7.095 39.649 18.365a3.04 3.04 0 0 1 .729 2.28 3.041 3.041 0 0 1-1.146 2.1l-12.521 12.31a3.72 3.72 0 0 1-5.426 0c-5.633-5.636-11.683-8.56-20.033-8.56-16.278 0-26.92 11.682-26.92 26.71s10.642 27.547 27.545 27.547c7.931 0 13.983-2.922 19.617-8.56a3.71 3.71 0 0 1 2.713-1.175 3.72 3.72 0 0 1 2.712 1.175l12.522 12.313a3.042 3.042 0 0 1 .416 4.383c-8.764 11.268-22.744 18.362-39.232 18.362-31.092 0-54.047-23.371-54.047-54.047M312.467 15.863a15.77 15.77 0 0 1 4.691-11.317A15.78 15.78 0 0 1 328.536.003a15.594 15.594 0 0 1 15.859 15.86 15.65 15.65 0 0 1-4.503 11.416 15.64 15.64 0 0 1-11.356 4.652 15.817 15.817 0 0 1-16.069-16.068m1.461 29.947a2.95 2.95 0 0 1 1.903-2.943 3 3 0 0 1 1.227-.187h22.747a2.96 2.96 0 0 1 3.13 3.13v95.995a2.97 2.97 0 0 1-.861 2.269 2.95 2.95 0 0 1-2.269.861h-22.747a2.97 2.97 0 0 1-2.269-.861 2.95 2.95 0 0 1-.861-2.269zM369.772 116.345V65.01h-12.939a2.956 2.956 0 0 1-3.13-3.13V45.81a2.97 2.97 0 0 1 .861-2.268 2.96 2.96 0 0 1 2.269-.86h12.939v-24a2.97 2.97 0 0 1 .861-2.268 2.96 2.96 0 0 1 2.269-.861h22.747a2.956 2.956 0 0 1 3.124 3.13V42.68h16.069a2.958 2.958 0 0 1 3.13 3.13V61.88a2.97 2.97 0 0 1-.861 2.269 2.96 2.96 0 0 1-2.269.86h-16.064v48.206c0 6.052 3.549 8.974 8.974 8.974 1.879 0 3.964 0 6.47-.208 2.295-.209 3.756.834 3.756 2.921v15.235c0 4.798-10.434 6.051-17.322 6.051-16.275 0-30.885-7.512-30.885-29.844M424.896 102.444c-5.35-29.57 11.267-56.116 42.273-61.727 30.599-5.535 52.344 13.86 56.951 39.322 1.783 9.857.527 15.81-8.303 17.408l-61.191 11.07c5.383 12.174 17.12 17.261 33.341 14.327a45.2 45.2 0 0 0 22.293-10.397 2.34 2.34 0 0 1 1.866-.778 2.35 2.35 0 0 1 1.775.968l9.493 9.1c1.286 1.251 1.342 2.726-.211 4.703-7.064 10.185-19.257 16.632-33.429 19.195-33.061 5.98-59.361-12.801-64.859-43.191m73.149-22.354c-4.06-13.049-14.319-18.192-26.432-16-12.528 2.266-20.954 10.789-21.005 24.582zM537.786 141.805V45.81a2.951 2.951 0 0 1 1.903-2.943 3 3 0 0 1 1.227-.187h21.702c1.879 0 2.922.835 3.13 3.34l.834 13.146c3.548-10.85 10.018-18.989 22.122-18.989 4.8 0 7.721 1.25 9.39 2.503a4.487 4.487 0 0 1 1.877 4.175v18.364c0 2.503-1.461 3.13-4.172 2.503a27.2 27.2 0 0 0-7.513-1.04c-14.19 0-21.704 9.388-21.704 23.997v51.127a2.95 2.95 0 0 1-.86 2.27 2.965 2.965 0 0 1-2.27.86h-22.536a2.95 2.95 0 0 1-2.269-.861 2.95 2.95 0 0 1-.861-2.269"/>
+</svg>      </a>
+    </div>
+    <div id="header--tools"
+         class="relative max-rl:z-50 col-end-7 col-span-2 md:col-end-9 md:col-span-3 rl:col-end-9 rl:col-span-4 lg:col-end-13 lg:col-span-5 2xl:col-end-12 2xl:col-span-4 flex items-center justify-end gap-3 lg:gap-4 xl:gap-6">
+              <ul id="header-menu--actions" class="max-rl:hidden!">
+                      <li class="menu-item">
+              <a
+  href="https://contrat.cociter.be/"    target="_blank"    rel="noopener noreferrer"    class="btn-orange-filled"   
+>
+    <span>Devenir client</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                      <li class="menu-item">
+              <a
+  href="https://my.cociter.be/"    target="_blank"    rel="noopener noreferrer"    class="btn-teal-outline"   
+>
+    <span>MyCociter</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                  </ul>
+            <span class="relative z-1 aspect-square h-12 lg:h-13 flex items-center justify-center bg-cc-white text-cc-teal-500 border-2 lg:border-3 border-cc-teal-500 rounded-full font-accent font-normal text-1.5xl lg:text-2xl ease-all" data-scale-on-scrolled data-mobile-drawer-only data-mobile-drawer-persistent>
+    FR
+  </span>
+              <ul id="header-menu--contact-mobile" class="rl:hidden!">
+                      <li class="menu-item" data-scale-on-scrolled data-mobile-drawer-persistent
+                 data-mobile-drawer-only >
+              <a
+  href="mailto:info@cociter.be"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-email aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M15.369 27.078 10.44 29.09c-2.09.855-4.125.41-5.299-1.72-1.988-3.613-3.786-7.406-4.97-11.39-.577-1.944.338-4 2.13-4.786l11.142-4.882 8.201-3.436c3.94-1.653 5.68 2.464 7.139 5.89 1.12 2.625 2.263 5.148 3.061 7.878.55 1.886-.412 3.703-2.147 4.462L21.016 24.9l-5.647 2.183zm-6.14-11.963 7.298 1.562 6.816-11.92c-3.898 1.301-7.24 2.853-10.83 4.366-3.368 1.424-6.625 2.72-9.835 4.43 2.263.893 4.278 1.079 6.552 1.568zm-.322 12.027c3.448-.999 6.583-2.184 9.835-3.575l9.508-4.08c1.523-.653 1.808-2.013 1.2-3.458l-4.087-9.705-3.157 5.27-3.924 6.443c-.365.6-1.385.924-2.094.786L10.23 17.67l-7.926-1.89c1.385 3.404 3.944 12.127 6.604 11.356z"/>
+</svg>    <span>info@cociter.be</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                      <li class="menu-item" data-scale-on-scrolled data-mobile-drawer-persistent
+                >
+              <a
+  href="tel:080685738"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-phone aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="m29.273 24.513-7.068-6.583c-.588-.55-1.562-1.32-2.406-.484-1.366 1.356-2.185 2.802-3.195 4.624l-1.806-1.882a14.06 14.06 0 0 1-3.605-6.78c1.687-.4 3.267-.64 4.663-1.6.558-.383.225-1.769.041-2.348-.944-2.94-1.883-5.663-3.285-8.363-1.324-2.539-6.034-.394-8.327 3.596-1.657 2.885-2.114 6.278-1.562 9.629 1.016 6.165 4.585 11.218 9.468 14.927 2.904 2.205 6.147 3.154 9.788 2.593 5.958-.914 8.292-6.404 7.3-7.335zm-5.66 4.324c-2.394.932-5.293 1.046-7.62-.19C9.47 25.186 4.308 17.965 4.86 10.474c.285-3.865 2.251-7.216 5.934-8.733l3.16 8.877-3.35.746c-3.053.096-.962 5.866 1.295 8.781 1.467 1.894 3.795 4.57 5.524 4.307.944-.143 1.574-3.07 3.296-4.809l6.445 5.651c-.82 1.481-1.93 2.91-3.552 3.542"/>
+</svg>    <span>080 68 57 38</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                  </ul>
+          </div>
+  </div>
+  </div>
+  <div id="header--drawer" role="dialog" aria-labelledby="header-toggle--button"
+       aria-modal="true" aria-hidden="true">
+    <div
+      class="rl:fixed rl:z-10 rl:inset-x-0 px-default pt-4 lg:pt-8 grid-default rl:grid-rows-[4rem_auto] max-rl:hidden">
+              <div role="navigation" class="col-span-full rl:col-start-1 rl:col-span-6 rl:max-lg:pl-20 lg:col-start-2 lg:col-span-6 2xl:col-start-3 2xl:col-span-5">
+          <ul id="header-menu--profiles">
+                          <li class="menu-item">
+                <a
+  href="https://www.cociter.be/fr/profils/particulier/"         
+>
+    <span>Client privé</span>
+  </a>
+              </li>
+                          <li class="menu-item">
+                <a
+  href="https://www.cociter.be/fr/profils/pme-independant/"         
+>
+    <span>PME &#038; indépendant</span>
+  </a>
+              </li>
+                          <li class="menu-item">
+                <a
+  href="https://www.cociter.be/fr/profils/grande-entreprise/"         
+>
+    <span>Grande entreprise</span>
+  </a>
+              </li>
+                      </ul>
+        </div>
+            <div class="col-end-7 col-span-3 rl:col-end-9 rl:col-span-2 lg:col-end-13 lg:col-span-5 2xl:col-end-12 2xl:col-span-4">
+                  <ul id="header-menu--contact" class="max-rl:hidden!">
+                          <li class="menu-item">
+                <a
+  href="mailto:info@cociter.be"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-email aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M15.369 27.078 10.44 29.09c-2.09.855-4.125.41-5.299-1.72-1.988-3.613-3.786-7.406-4.97-11.39-.577-1.944.338-4 2.13-4.786l11.142-4.882 8.201-3.436c3.94-1.653 5.68 2.464 7.139 5.89 1.12 2.625 2.263 5.148 3.061 7.878.55 1.886-.412 3.703-2.147 4.462L21.016 24.9l-5.647 2.183zm-6.14-11.963 7.298 1.562 6.816-11.92c-3.898 1.301-7.24 2.853-10.83 4.366-3.368 1.424-6.625 2.72-9.835 4.43 2.263.893 4.278 1.079 6.552 1.568zm-.322 12.027c3.448-.999 6.583-2.184 9.835-3.575l9.508-4.08c1.523-.653 1.808-2.013 1.2-3.458l-4.087-9.705-3.157 5.27-3.924 6.443c-.365.6-1.385.924-2.094.786L10.23 17.67l-7.926-1.89c1.385 3.404 3.944 12.127 6.604 11.356z"/>
+</svg>    <span>info@cociter.be</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+              </li>
+                          <li class="menu-item">
+                <a
+  href="tel:080685738"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-phone aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="m29.273 24.513-7.068-6.583c-.588-.55-1.562-1.32-2.406-.484-1.366 1.356-2.185 2.802-3.195 4.624l-1.806-1.882a14.06 14.06 0 0 1-3.605-6.78c1.687-.4 3.267-.64 4.663-1.6.558-.383.225-1.769.041-2.348-.944-2.94-1.883-5.663-3.285-8.363-1.324-2.539-6.034-.394-8.327 3.596-1.657 2.885-2.114 6.278-1.562 9.629 1.016 6.165 4.585 11.218 9.468 14.927 2.904 2.205 6.147 3.154 9.788 2.593 5.958-.914 8.292-6.404 7.3-7.335zm-5.66 4.324c-2.394.932-5.293 1.046-7.62-.19C9.47 25.186 4.308 17.965 4.86 10.474c.285-3.865 2.251-7.216 5.934-8.733l3.16 8.877-3.35.746c-3.053.096-.962 5.866 1.295 8.781 1.467 1.894 3.795 4.57 5.524 4.307.944-.143 1.574-3.07 3.296-4.809l6.445 5.651c-.82 1.481-1.93 2.91-3.552 3.542"/>
+</svg>    <span>080 68 57 38</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+              </li>
+                      </ul>
+              </div>
+    </div>
+    <div id="drawer--scrollable" tabindex="-1">
+      <div class="px-default pb-4 lg:pb-8 pt-6 lg:pt-14 grid-default gap-y-10">
+        <div
+          class="lg:relative col-span-full rl:col-start-1 rl:col-span-5 lg:col-start-1 lg:col-span-8 xl:col-start-1 xl:col-span-7 2xl:col-start-2 2xl:col-span-6 xl:-mr-20 flex flex-col rounded-3xl lg:rounded-5xl bg-cc-white shadow-subtle shadow-cc-teal-500/25 overflow-hidden">
+          <div class="flex-1 relative grid rl:grid-cols-5 lg:grid-cols-5 gap-y-14 lg:gap-x-8 xl:gap-x-10 p-8 lg:p-16 xl:p-24 xl:pb-32">
+            <div role="navigation" class="rl:col-start-1 rl:col-span-2 lg:col-start-1 lg:col-span-2">
+              <ul id="header-menu--primary" class="header-menu--primary"><li id="menu-item-947" data-item-id="947" data-parent="electricite" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor menu-item-has-children parent-item"><a href="https://www.cociter.be/fr/electricite/" aria-expanded="false"><span>Électricité</span><svg aria-hidden="true" focusable="false" class="icon menu-item__icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg></a>
+<ul class="sub-menu">
+<li id="menu-item-957" data-item-id="957" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/"><span>Comment devenir client ?</span></a></li>
+<li id="menu-item-958" data-item-id="958" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/"><span>Déménagement / Achat de bien</span></a></li>
+<li id="menu-item-948" data-item-id="948" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/tarifs/"><span>Nos tarifs</span></a></li>
+<li id="menu-item-815" data-item-id="815" class="menu-item menu-item-type-custom menu-item-object-custom"><a href="#"><span>Calculer mon prix</span></a></li>
+</ul>
+</li>
+<li id="menu-item-949" data-item-id="949" data-parent="cociter" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children parent-item"><a href="https://www.cociter.be/fr/cociter/" aria-expanded="false"><span>Cociter</span><svg aria-hidden="true" focusable="false" class="icon menu-item__icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg></a>
+<ul class="sub-menu">
+<li id="menu-item-959" data-item-id="959" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/cociter/"><span>Le modèle</span></a></li>
+<li id="menu-item-960" data-item-id="960" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/cociter/"><span>La production</span></a></li>
+<li id="menu-item-961" data-item-id="961" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/cociter/"><span>L&rsquo;aspect humain</span></a></li>
+<li id="menu-item-950" data-item-id="950" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/"><span>Devenir client</span></a></li>
+</ul>
+</li>
+<li id="menu-item-951" data-item-id="951" data-parent="infos-pratiques" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children parent-item"><a href="https://www.cociter.be/fr/infos-pratiques/" aria-expanded="false"><span>Infos pratiques</span><svg aria-hidden="true" focusable="false" class="icon menu-item__icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg></a>
+<ul class="sub-menu">
+<li id="menu-item-963" data-item-id="963" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/aide-contact/"><span>Document de reprise</span></a></li>
+<li id="menu-item-964" data-item-id="964" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/"><span>Installation photovoltaïque</span></a></li>
+<li id="menu-item-965" data-item-id="965" class="menu-item menu-item-type-post_type menu-item-object-page current-page-ancestor"><a href="https://www.cociter.be/fr/electricite/"><span>Comprendre ma facture</span></a></li>
+<li id="menu-item-825" data-item-id="825" class="menu-item menu-item-type-custom menu-item-object-custom"><a target="_blank" rel="noopener noreferrer" href="https://my.cociter.be/"><span>Mon espace client</span></a></li>
+</ul>
+</li>
+<li id="menu-item-826" data-item-id="826" data-parent="aide-contact" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children parent-item"><a href="https://www.cociter.be/de/hilfe-kontakt/" aria-expanded="false"><span>Aide &#038; contact</span><svg aria-hidden="true" focusable="false" class="icon menu-item__icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg></a>
+<ul class="sub-menu">
+<li id="menu-item-945" data-item-id="945" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/aide-contact/faq/"><span>Nos FAQ</span></a></li>
+<li id="menu-item-966" data-item-id="966" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/aide-contact/"><span>Documents utiles</span></a></li>
+<li id="menu-item-967" data-item-id="967" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/aide-contact/"><span>Nos conseils</span></a></li>
+<li id="menu-item-946" data-item-id="946" class="menu-item menu-item-type-post_type menu-item-object-page"><a href="https://www.cociter.be/fr/aide-contact/"><span>Nous contacter</span></a></li>
+</ul>
+</li>
+</ul>            </div>
+            <div id="header-menu--primary-clone-wrapper" class="rl:col-end-6 rl:col-span-3 lg:col-end-6 lg:col-span-3">
+              <div id="header-menu--primary-clone">
+                                  <div data-parent="electricite" class="menu-wrapper">
+                    <button type="button" class="menu-back-button" tabindex="-1">
+                      <span>Électricité</span>
+                      <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg>                    </button>
+                                          <ul class="menu-children">
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/"        class="children-item"   data-item-id="957" aria-hidden="true" tabindex="-1"
+>
+    <span>Comment devenir client ?</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/"        class="children-item"   data-item-id="958" aria-hidden="true" tabindex="-1"
+>
+    <span>Déménagement / Achat de bien</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/tarifs/"        class="children-item"   data-item-id="948" aria-hidden="true" tabindex="-1"
+>
+    <span>Nos tarifs</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="#"        class="children-item"   data-item-id="815" aria-hidden="true" tabindex="-1"
+>
+    <span>Calculer mon prix</span>
+  </a>
+                          </li>
+                                              </ul>
+                                      </div>
+                                  <div data-parent="cociter" class="menu-wrapper">
+                    <button type="button" class="menu-back-button" tabindex="-1">
+                      <span>Cociter</span>
+                      <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg>                    </button>
+                                          <ul class="menu-children">
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/cociter/"        class="children-item"   data-item-id="959" aria-hidden="true" tabindex="-1"
+>
+    <span>Le modèle</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/cociter/"        class="children-item"   data-item-id="960" aria-hidden="true" tabindex="-1"
+>
+    <span>La production</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/cociter/"        class="children-item"   data-item-id="961" aria-hidden="true" tabindex="-1"
+>
+    <span>L'aspect humain</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/"        class="children-item"   data-item-id="950" aria-hidden="true" tabindex="-1"
+>
+    <span>Devenir client</span>
+  </a>
+                          </li>
+                                              </ul>
+                                      </div>
+                                  <div data-parent="infos-pratiques" class="menu-wrapper">
+                    <button type="button" class="menu-back-button" tabindex="-1">
+                      <span>Infos pratiques</span>
+                      <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg>                    </button>
+                                          <ul class="menu-children">
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/aide-contact/"        class="children-item"   data-item-id="963" aria-hidden="true" tabindex="-1"
+>
+    <span>Document de reprise</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/"        class="children-item"   data-item-id="964" aria-hidden="true" tabindex="-1"
+>
+    <span>Installation photovoltaïque</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/electricite/"        class="children-item"   data-item-id="965" aria-hidden="true" tabindex="-1"
+>
+    <span>Comprendre ma facture</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://my.cociter.be/"    target="_blank"    rel="noopener noreferrer"    class="children-item"   data-item-id="825" aria-hidden="true" tabindex="-1"
+>
+    <span>Mon espace client</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+                          </li>
+                                              </ul>
+                                      </div>
+                                  <div data-parent="aide-contact" class="menu-wrapper">
+                    <button type="button" class="menu-back-button" tabindex="-1">
+                      <span>Aide &#038; contact</span>
+                      <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945z"/>
+</svg>                    </button>
+                                          <ul class="menu-children">
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/aide-contact/faq/"        class="children-item"   data-item-id="945" aria-hidden="true" tabindex="-1"
+>
+    <span>Nos FAQ</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/aide-contact/"        class="children-item"   data-item-id="966" aria-hidden="true" tabindex="-1"
+>
+    <span>Documents utiles</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/aide-contact/"        class="children-item"   data-item-id="967" aria-hidden="true" tabindex="-1"
+>
+    <span>Nos conseils</span>
+  </a>
+                          </li>
+                                                  <li class="menu-item">
+                            <a
+  href="https://www.cociter.be/fr/aide-contact/"        class="children-item"   data-item-id="946" aria-hidden="true" tabindex="-1"
+>
+    <span>Nous contacter</span>
+  </a>
+                          </li>
+                                              </ul>
+                                      </div>
+                              </div>
+            </div>
+                          <div role="navigation" class="rl:hidden">
+                <ul id="header-menu--profiles-mobile">
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/profils/particulier/"         
+>
+      <img class="style-svg icon icon-particulier aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/08/particulier.svg" alt="">    <span>Client privé</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/profils/pme-independant/"         
+>
+      <img class="style-svg icon icon-pme-independant aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/08/pme-independant.svg" alt="">    <span>PME &#038; indépendant</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/profils/grande-entreprise/"         
+>
+      <img class="style-svg icon icon-grande-entreprise aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/08/grande-entreprise.svg" alt="">    <span>Grande entreprise</span>
+  </a>
+                    </li>
+                                  </ul>
+              </div>
+                                      <ul id="header-menu--actions-mobile" class="rl:hidden!">
+                                  <li class="menu-item">
+                    <a
+  href="https://contrat.cociter.be/"    target="_blank"    rel="noopener noreferrer"    class="btn-orange-filled"   
+>
+    <span>Devenir client</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+                  </li>
+                                  <li class="menu-item">
+                    <a
+  href="https://my.cociter.be/"    target="_blank"    rel="noopener noreferrer"    class="btn-teal-outline"   
+>
+    <span>MyCociter</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+                  </li>
+                              </ul>
+                      </div>
+                  </div>
+        <div
+          class="col-span-full rl:col-end-9 rl:col-span-3 lg:col-end-13 lg:col-span-4 xl:col-end-13 xl:col-span-4 2xl:col-end-12 2xl:col-span-3">
+                      <div
+              class="relative aspect-square rl:aspect-3/4 lg:aspect-auto rounded-3xl rl:h-full lg:rounded-5xl bg-cc-white shadow-subtle shadow-cc-teal-500/25 overflow-hidden">
+              <div class="absolute z-1 inset-0 flex flex-col justify-between">
+                                <div class="py-5 px-6 xl:py-8 xl:px-12 flex flex-col lg:items-end gap-1.5 lg:gap-2.5">
+                                                    </div>
+              </div>
+              <div class="img-container relative bg-cc-teal-100 overflow-hidden h-full wp-full">
+            <picture class="h-full w-full object-cover object-center" decoding="async" fetchpriority="high">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312.jpg.webp 1326w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-683x1024.jpg" alt="" decoding="async" fetchpriority="high" srcset="https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/08/FAUVILLERS-LUCEOLE_312.jpg 1326w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+            </div>
+                  </div>
+      </div>
+    </div>
+    <div id="header--notification-mobile">
+      <p></p>
+          </div>
+    <div id="header--background">
+      <div class="img-container relative bg-cc-teal-100 overflow-hidden md:hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1366x2048.jpg.webp 1366w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-scaled.jpg.webp 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1366x2048.jpg 1366w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-scaled.jpg 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+      <div class="img-container relative bg-cc-teal-100 overflow-hidden max-md:hidden lg:hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1366x2048.jpg.webp 1366w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-scaled.jpg.webp 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-1366x2048.jpg 1366w, https://www.cociter.be/wp-content/uploads/2026/08/cociter2©maelleheliaslouis-062-scaled.jpg 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+      <div class="img-container relative bg-cc-teal-100 overflow-hidden max-lg:hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-1024x683.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-300x200.jpg.webp 300w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-768x512.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-1536x1025.jpg.webp 1536w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46.jpg.webp 2048w" sizes="(max-width: 1024px) 100vw, 1024px"/>
+<img width="1024" height="683" src="https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-1024x683.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-1024x683.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-300x200.jpg 300w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-768x512.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46-1536x1025.jpg 1536w, https://www.cociter.be/wp-content/uploads/2026/08/cociter_web©maelleheliaslouis-46.jpg 2048w" sizes="(max-width: 1024px) 100vw, 1024px"/>
+</picture>
+
+      </div>
+    </div>
+</header>
+
+<main id="page--rate-cards" class="--overflow-x-hidden --min-h-[120vh]">
+    <div class="px-default grid-default gap-y-8 lg:gap-y-20 mt-2 lg:mt-2.5 lg:py-16 lg:pt-0 overflow-hidden">
+  <div class="col-span-full 2xl:col-start-2 2xl:col-span-10 flex flex-col gap-10 lg:gap-14">
+    <div role="navigation" id="breadcrumb" aria-label="Fil d'Ariane" class="">
+    <ol>
+              <li>
+                      <a href="https://www.cociter.be/fr" >
+                              <span class="sr-only">Accueil</span>
+                <svg aria-hidden="true" focusable="false" class="icon icon-home aspect-square h-5 lg:h-6 -translate-y-px" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M12.268 30.47a.63.63 0 0 0 .636-.631v-1.105l.008-9.996h5.88l-.008 9.996.006 1.385a.383.383 0 0 0 .386.381l1.117-.01 6.159-.055c.457 0 1.423.015 1.44-1.252l-.019-12.82 3.1-.128c.87-.142 1.527-1.313.516-2.472L17.677 2.192a3.55 3.55 0 0 0-4.566.3L.433 14.001a1.56 1.56 0 0 0-.415 1.31c.165.517.378.916 1.01 1.007l3.127.068.022 12.63c0 .384-.085 1.354.74 1.39l1.086.01z"/>
+</svg>                          </a>
+            <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square icon-separator -rotate-90 h-2.5 lg:h-3" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962z"/>
+</svg>                  </li>
+              <li>
+                      <a href="https://www.cociter.be/fr/electricite/"  data-active >
+                              Électricité
+                          </a>
+            <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square icon-separator -rotate-90 h-2.5 lg:h-3" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962z"/>
+</svg>                  </li>
+              <li>
+                      <a href="https://www.cociter.be/fr/electricite/tarifs/"  data-active >
+                              Nos tarifs
+                          </a>
+            <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square icon-separator -rotate-90 h-2.5 lg:h-3" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962z"/>
+</svg>                  </li>
+              <li>
+                      <span  aria-current="page" >
+                              Nos cartes tarifaires
+                          </span>
+                              </li>
+          </ol>
+  </div>
+    <div class="flex flex-col gap-3 lg:gap-4">
+      <h1 class="font-display text-2.5xl md:text-4xl lg:text-5.5xl tracking-[0.03em]">Nos cartes tarifaires</h1>
+              <p class="font-light text-lg rl:text-xl lg:text-2.5xl">Tu ne sais pas comment lire une carte tarifaire ? <br />
+Pas de soucis ! On t’expliques tout ici en dessous.</p>
+          </div>
+  </div>
+  <div class="col-span-full flex flex-col gap-12 lg:gap-24">
+          <div id="rate-cards--wrapper" data-timeline="rate-cards"
+           class="grid-default gap-y-6 lg:gap-y-20">
+        <div id="rate-cards--timeline" class="max-rl:hidden col-span-full 2xl:col-start-2 2xl:col-span-10">
+          <div role="tablist" id="timeline--tabs" aria-label="Sélection de l'année">
+                                        <button type="button" role="tab" id="rate-cards--tab-2026"
+                      class="timeline--tab" data-timeline-tab
+                      aria-controls="rate-cards--panel-2026"
+                      data-key="2026"
+                      aria-selected="true"
+                      tabindex="0"
+                       data-active               >
+                <span>2026</span>
+              </button>
+                                        <button type="button" role="tab" id="rate-cards--tab-2025"
+                      class="timeline--tab" data-timeline-tab
+                      aria-controls="rate-cards--panel-2025"
+                      data-key="2025"
+                      aria-selected="false"
+                      tabindex="-1"
+                                    >
+                <span>2025</span>
+              </button>
+                                        <button type="button" role="tab" id="rate-cards--tab-2024"
+                      class="timeline--tab" data-timeline-tab
+                      aria-controls="rate-cards--panel-2024"
+                      data-key="2024"
+                      aria-selected="false"
+                      tabindex="-1"
+                                    >
+                <span>2024</span>
+              </button>
+                        <span id="timeline--active-marker" data-tabs-active-marker></span>
+          </div>
+          <span id="timeline--track">
+          <span class="grid grid-cols-[1fr_auto_auto] gap-0.5">
+            <svg aria-hidden="true" focusable="false" class="icon icon-track-line mr-1" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 1">
+  <path d="M2.904.11.444.12C.315.12.162.125.047.116-.044.11.02.056.056.043c.032-.012.078 0 .212 0l2.995-.01 9.23-.027L22.568 0l5.788.01 3.461-.005c.151 0 .167.005.173.02.006.013.044.048-.088.049l-1.135.01L24.615.08 13.238.081z"/>
+</svg>            <svg aria-hidden="true" focusable="false" class="icon icon-track-dot aspect-square h-2 mr-px" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 33">
+  <path d="M31.263 21.144a16.1 16.1 0 0 1-3.518 6.625 15.9 15.9 0 0 1-6.117 4.288 16.28 16.28 0 0 1-10.942-.008 18.3 18.3 0 0 1-5.016-2.768 13.84 13.84 0 0 1-4.954-7.428 20.3 20.3 0 0 1-.704-6.028 14.53 14.53 0 0 1 3.252-8.817A19.13 19.13 0 0 1 15.076.1c2.534-.296 5.1.067 7.457 1.053a15.13 15.13 0 0 1 6.762 6.072 16.4 16.4 0 0 1 2.542 6.735c.341 2.408.145 4.862-.574 7.184"/>
+</svg>            <svg aria-hidden="true" focusable="false" class="icon icon-track-dot aspect-square h-2" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 33">
+  <path d="M31.263 21.144a16.1 16.1 0 0 1-3.518 6.625 15.9 15.9 0 0 1-6.117 4.288 16.28 16.28 0 0 1-10.942-.008 18.3 18.3 0 0 1-5.016-2.768 13.84 13.84 0 0 1-4.954-7.428 20.3 20.3 0 0 1-.704-6.028 14.53 14.53 0 0 1 3.252-8.817A19.13 19.13 0 0 1 15.076.1c2.534-.296 5.1.067 7.457 1.053a15.13 15.13 0 0 1 6.762 6.072 16.4 16.4 0 0 1 2.542 6.735c.341 2.408.145 4.862-.574 7.184"/>
+</svg>          </span>
+      </span>
+        </div>
+        <div id="rate-cards--controls" class="col-span-full">
+          <div class="rate-card-controls--field">
+            <label for="rate-card-year-select">Année</label>
+            <div class="select-wrapper">
+              <select id="rate-card-year-select" data-timeline-control data-field="year">
+                                  <option value="2026" selected>2026</option>
+                                  <option value="2025" >2025</option>
+                                  <option value="2024" >2024</option>
+                              </select>
+              <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962zM2.898 8.076l7.389 10.379 5.504 7.463c3.932-4.43 7.017-9.13 10.6-13.774l2.876-3.726-2.754-2.64-5.835 7.08-3.599 4.382a1.74 1.74 0 0 1-1.6.596 2.64 2.64 0 0 1-1.255-.923L6.176 5.72z"/>
+</svg>            </div>
+          </div>
+          <div class="rate-card-controls--field">
+            <label for="rate-card-price-group-select">
+              Type de tarif
+            </label>
+
+            <div class="select-wrapper">
+              <select
+                id="rate-card-price-group-select"
+                data-timeline-control
+                data-field="price-group"
+              ></select>
+
+              <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962zM2.898 8.076l7.389 10.379 5.504 7.463c3.932-4.43 7.017-9.13 10.6-13.774l2.876-3.726-2.754-2.64-5.835 7.08-3.599 4.382a1.74 1.74 0 0 1-1.6.596 2.64 2.64 0 0 1-1.255-.923L6.176 5.72z"/>
+</svg>            </div>
+          </div>
+        </div>
+        <div class="col-span-full 2xl:col-start-2 2xl:col-span-10">
+                      <div role="tabpanel" id="rate-card--panel-group-2026"
+                 class="rate-card--panel-group" data-timeline-panel-group
+                 aria-labelledby="rate-card--tab-2026"
+                 data-year="2026">
+                              <div
+  data-year="2026"
+  data-price-group="prix-variable"
+  data-label="Prix variable"
+  class="rate-card--panel"
+  data-timeline-panel
+>
+  <p class="panel--title">Prix variable</p>
+
+  <ul class="panel--list">
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2601-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Janvier 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">01/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Janvier 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2602-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Février 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">02/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Février 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2603-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mars 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">03/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mars 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2604-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Avril 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">04/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Avril 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2605-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mai 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">05/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mai 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2606-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juin 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">06/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juin 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2607-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juillet 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">07/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juillet 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2608-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Août 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">08/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Août 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2609-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Septembre 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">09/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Septembre 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="octobre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">10/2026</span>
+      <span class="sr-only">octobre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="novembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">11/2026</span>
+      <span class="sr-only">novembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="décembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">12/2026</span>
+      <span class="sr-only">décembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+      </ul>
+
+
+
+
+
+
+</div>
+                              <div
+  data-year="2026"
+  data-price-group="prix-variable-trihoraire"
+  data-label="Prix variable (trihoraire)"
+  class="rate-card--panel"
+  data-timeline-panel
+>
+  <p class="panel--title">Prix variable (trihoraire)</p>
+
+  <ul class="panel--list">
+          <li class="panel--item panel--item-never">
+      <span  title="janvier 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">01/2026</span>
+      <span class="sr-only">janvier 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="février 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">02/2026</span>
+      <span class="sr-only">février 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="mars 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">03/2026</span>
+      <span class="sr-only">mars 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="avril 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">04/2026</span>
+      <span class="sr-only">avril 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="mai 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">05/2026</span>
+      <span class="sr-only">mai 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="juin 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">06/2026</span>
+      <span class="sr-only">juin 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="juillet 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">07/2026</span>
+      <span class="sr-only">juillet 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="août 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">08/2026</span>
+      <span class="sr-only">août 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVaI_YMR_Coop-2609-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable (trihoraire) &#8211; Septembre 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">09/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable (trihoraire) &#8211; Septembre 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="octobre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">10/2026</span>
+      <span class="sr-only">octobre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="novembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">11/2026</span>
+      <span class="sr-only">novembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="décembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">12/2026</span>
+      <span class="sr-only">décembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+      </ul>
+
+
+
+
+
+
+</div>
+                              <div
+  data-year="2026"
+  data-price-group="prix-dynamique"
+  data-label="Prix dynamique"
+  class="rate-card--panel"
+  data-timeline-panel
+>
+  <p class="panel--title">Prix dynamique</p>
+
+  <ul class="panel--list">
+          <li class="panel--item panel--item-never">
+      <span  title="janvier 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">01/2026</span>
+      <span class="sr-only">janvier 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-never">
+      <span  title="février 2026 - Non disponible">
+      <span class="display-text" aria-hidden="true">02/2026</span>
+      <span class="sr-only">février 2026 - Non disponible</span>
+    </span>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2603-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Mars 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">03/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Mars 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2604-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Avril 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">04/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Avril 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2605-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Mai 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">05/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Mai 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2606-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Juin 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">06/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Juin 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2607-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Juillet 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">07/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Juillet 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2608-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Août 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">08/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Août 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2609-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix dynamique &#8211; Septembre 2026 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">09/2026</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix dynamique &#8211; Septembre 2026 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="octobre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">10/2026</span>
+      <span class="sr-only">octobre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="novembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">11/2026</span>
+      <span class="sr-only">novembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+          <li class="panel--item panel--item-unavailable">
+      <span  tabindex="0"  title="décembre 2026 - Pas encore disponible">
+      <span class="display-text" aria-hidden="true">12/2026</span>
+      <span class="sr-only">décembre 2026 - Pas encore disponible</span>
+    </span>
+  </li>
+      </ul>
+
+
+
+
+
+
+</div>
+                          </div>
+                      <div role="tabpanel" id="rate-card--panel-group-2025"
+                 class="rate-card--panel-group" data-timeline-panel-group
+                 aria-labelledby="rate-card--tab-2025"
+                 data-year="2025">
+                              <div
+  data-year="2025"
+  data-price-group="prix-variable"
+  data-label="Prix variable"
+  class="rate-card--panel"
+  data-timeline-panel
+>
+  <p class="panel--title">Prix variable</p>
+
+  <ul class="panel--list">
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2501-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Janvier 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">01/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Janvier 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2502-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Février 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">02/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Février 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2503-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mars 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">03/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mars 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2504-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Avril 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">04/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Avril 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2505-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mai 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">05/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mai 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2506-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juin 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">06/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juin 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2507-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juillet 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">07/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juillet 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2508-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Août 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">08/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Août 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2509-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Septembre 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">09/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Septembre 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2510-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Octobre 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">10/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Octobre 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2511-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Novembre 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">11/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Novembre 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2512-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Décembre 2025 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">12/2025</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Décembre 2025 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+      </ul>
+
+
+
+
+
+
+</div>
+                          </div>
+                      <div role="tabpanel" id="rate-card--panel-group-2024"
+                 class="rate-card--panel-group" data-timeline-panel-group
+                 aria-labelledby="rate-card--tab-2024"
+                 data-year="2024">
+                              <div
+  data-year="2024"
+  data-price-group="prix-variable"
+  data-label="Prix variable"
+  class="rate-card--panel"
+  data-timeline-panel
+>
+  <p class="panel--title">Prix variable</p>
+
+  <ul class="panel--list">
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2401-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Janvier 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">01/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Janvier 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2402-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Février 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">02/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Février 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2403-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mars 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">03/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mars 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2404-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Avril 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">04/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Avril 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2405-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Mai 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">05/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Mai 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2406-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juin 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">06/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juin 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2407-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Juillet 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">07/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Juillet 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2408-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Août 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">08/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Août 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2409-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Septembre 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">09/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Septembre 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2410-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Octobre 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">10/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Octobre 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2411-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Novembre 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">11/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Novembre 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+          <li class="panel--item ">
+      <a href="https://www.cociter.be/wp-content/uploads/2026/09/RCVar_YMR_Coop-2412-fr.pdf" target="_blank" rel="noopener noreferrer" title="Carte tarifaire &#8211; Prix variable &#8211; Décembre 2024 (PDF, nouvel onglet)">
+      <span class="display-text" aria-hidden="true">12/2024</span>
+      <span class="sr-only">Carte tarifaire &#8211; Prix variable &#8211; Décembre 2024 (PDF, nouvel onglet)</span>
+    </a>
+  </li>
+      </ul>
+
+
+
+
+
+
+</div>
+                          </div>
+                  </div>
+      </div>
+              <div class="grid-default gap-y-6">
+                  <article
+            class="col-span-full flex flex-col gap-3 lg:gap-8 rl:col-start-1 rl:col-span-4 lg:col-start-1 lg:col-span-6 2xl:col-start-2 2xl:col-span-5"
+            aria-labelledby="historique-belix">
+            <h2 id="historique-belix"
+                class="font-display text-2xl lg:text-3.5xl lg:tracking-[0.03em]">Historique Belix</h2>
+            <a
+  href="https://www.cociter.be/wp-content/uploads/2026/09/20260801-historique-belix-cociter.pdf"    target="_blank"    rel="noopener noreferrer"    class="underline-arrow-default lg:underline-arrow-xl xl:underline-arrow-2xl underline-arrow-teal"   
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-simple-arrow aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M.012 16.96c0 1.293-.032 1.907 2.28 1.885 6.548-.064 23.008-.603 23.008-.603s-3.843 2.554-5.027 3.664c-1.824 1.703.739 3.342 2.79 2.232 5.06-2.738 8.871-5.94 8.937-7.642.065-1.639-7.297-7.06-9.1-8.235-1.183-.765-2.725-.97-3.126-.539-.869.938-.337 2.124.271 2.695 1.89 1.789 3.724 3.427 5.006 4.505 0 0-16.852-.668-23.518-.733-1.097-.01-1.564.647-1.531 1.348v1.422z"/>
+</svg>    <span>Clique ici pour télécharger l’historique du Belix</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+          </article>
+                  <article
+            class="col-span-full flex flex-col gap-3 lg:gap-8 rl:col-end-9 rl:col-span-4 lg:col-end-13 lg:col-span-6 2xl:col-end-12 2xl:col-span-5 lg:pl-6 2xl:pl-8"
+            aria-labelledby="historique-belpex">
+            <h2 id="historique-belpex"
+                class="font-display text-2xl lg:text-3.5xl lg:tracking-[0.03em]">Historique Belpex</h2>
+            <a
+  href="https://www.cociter.be/wp-content/uploads/belpex/Belpex_year2026.xlsx"  download    target="_blank"    rel="noopener noreferrer"    class="underline-arrow-default lg:underline-arrow-xl xl:underline-arrow-2xl underline-arrow-teal"   
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-simple-arrow aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M.012 16.96c0 1.293-.032 1.907 2.28 1.885 6.548-.064 23.008-.603 23.008-.603s-3.843 2.554-5.027 3.664c-1.824 1.703.739 3.342 2.79 2.232 5.06-2.738 8.871-5.94 8.937-7.642.065-1.639-7.297-7.06-9.1-8.235-1.183-.765-2.725-.97-3.126-.539-.869.938-.337 2.124.271 2.695 1.89 1.789 3.724 3.427 5.006 4.505 0 0-16.852-.668-23.518-.733-1.097-.01-1.564.647-1.531 1.348v1.422z"/>
+</svg>    <span>Clique ici pour télécharger l’historique du belpex</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+          </article>
+              </div>
+      </div>
+</div>
+  <section aria-labelledby="comment-lire-notre-carte-tarifaire"
+           class="px-default py-16 pb-0 lg:py-20 xl:pb-56 grid-default gap-y-8 lg:gap-y-16 2xl:gap-y-20">
+    <div class="col-span-full 2xl:col-start-2 2xl:col-span-10 flex flex-col gap-10 lg:gap-24">
+      <div class="flex flex-col gap-3 lg:gap-4">
+        <h2 id="comment-lire-notre-carte-tarifaire"
+            class="font-display text-2.5xl md:text-4xl lg:text-5.5xl lg:tracking-[0.03em]">Comment lire notre carte tarifaire ?</h2>
+                  <p class="font-light text-lg rl:text-xl lg:text-2.5xl">Le prix de ton électricité se compose de 3 parties différentes.<br />
+Tu pourras découvrir les détails de chacune des composantes en cliquant dessus.</p>
+              </div>
+    </div>
+    <div data-tabs="rate-card-details" id="rate-card-details--wrapper"
+         class="col-span-full 2xl:col-start-2 2xl:col-span-10 flex flex-col gap-6 lg:gap-24">
+      <div id="rate-card-details--controls">
+        <div class="rate-card-details-controls--field">
+          <label for="rate-card-details-topic-select">Composants</label>
+          <div class="select-wrapper">
+            <select id="rate-card-details-topic-select" data-tabs-control>
+                                              <option value="le-prix-de-fourniture-denergie" selected>
+                  Le prix de  fourniture d’énergie
+                </option>
+                                              <option value="les-couts-de-transport-distribution" >
+                  Les coûts de  transport & distribution
+                </option>
+                                              <option value="les-taxes-redevances-cotisations" >
+                  Les taxes, redevances  & cotisations
+                </option>
+                          </select>
+            <svg aria-hidden="true" focusable="false" class="icon icon-small-chevron aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M6.004 17.18.146 8.596a1.52 1.52 0 0 1 .414-1.83L5.806 3.32c.96-.63 1.829.201 2.322.891l7.579 10.547L24.32 4.24c.744-.938 2.177-1.764 3.187-.829 2.008 1.835 5.489 4.004 4.222 5.598l-4.984 6.81L17 28.473a1.54 1.54 0 0 1-1.425.504 2.85 2.85 0 0 1-1.422-.962zM2.898 8.076l7.389 10.379 5.504 7.463c3.932-4.43 7.017-9.13 10.6-13.774l2.876-3.726-2.754-2.64-5.835 7.08-3.599 4.382a1.74 1.74 0 0 1-1.6.596 2.64 2.64 0 0 1-1.255-.923L6.176 5.72z"/>
+</svg>          </div>
+        </div>
+      </div>
+      <div role="tablist" data-tabs-tabs id="rate-card-details--tabs">
+                            <button type="button" role="tab" data-tabs-tab data-theme="teal_dark"
+                  id="rate-card-detail--tab-le-prix-de-fourniture-denergie"
+                  class="tab-item tab-item--odd"
+                  data-key="le-prix-de-fourniture-denergie" aria-controls="rate-card-detail--panel-le-prix-de-fourniture-denergie"
+                  aria-selected="true"
+                  tabindex="0">
+            <span class="icon-wrapper">
+              <img class="style-svg icon icon-rate-card-details-energie aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-energie.svg" alt="">            </span>
+            <span class="label-wrapper">
+              <span class="">Le prix de  fourniture d’énergie</span>
+              <span class="label-recipient">(pour cociter)</span>
+            </span>
+          </button>
+                      <span aria-hidden="true" class="flex justify-center flex-1 rl:px-3 rl:pt-16 lg:pt-28 text-cc-teal-500">
+              <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square rl:h-10 lg:h-14" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945zm4.075-9.06c.011-1.8-.265-3.267.141-4.848.215-.828 1.496-.645 2.077-.69l9.308-.16a.474.474 0 0 0 .468-.457l.102-2.427a.505.505 0 0 0-.502-.53L19 13.838c-.576.04-1.016-.525-1.01-1.068L18 2.662a.497.497 0 0 0-.513-.503h-2.81a.485.485 0 0 0-.47.491v9.689c-.022.907-.614 1.433-1.495 1.45-4.092.085-6.779.057-9.72.051a.674.674 0 0 0-.671.697l.062 2.335a.53.53 0 0 0 .519.514l10.414.057c.4-.035.993.405.982.799l-.107 10.933c0 .32.254.577.57.565l2.608-.068a.55.55 0 0 0 .536-.543l.124-6.189z"/>
+</svg>            </span>
+                                      <button type="button" role="tab" data-tabs-tab data-theme="teal_light"
+                  id="rate-card-detail--tab-les-couts-de-transport-distribution"
+                  class="tab-item tab-item--even"
+                  data-key="les-couts-de-transport-distribution" aria-controls="rate-card-detail--panel-les-couts-de-transport-distribution"
+                  aria-selected="false"
+                  tabindex="-1">
+            <span class="icon-wrapper">
+              <img class="style-svg icon icon-rate-card-details-transport-distribution aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-transport-distribution.svg" alt="">            </span>
+            <span class="label-wrapper">
+              <span class="">Les coûts de  transport & distribution</span>
+              <span class="label-recipient">(pour les gestionnaires de réseau)</span>
+            </span>
+          </button>
+                      <span aria-hidden="true" class="flex justify-center flex-1 rl:px-3 rl:pt-16 lg:pt-28 text-cc-teal-500">
+              <svg aria-hidden="true" focusable="false" class="icon icon-plus aspect-square rl:h-10 lg:h-14" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M13.955 31.989c-.864.017-1.728-.28-1.97-1.074-.288-.93-.068-3.905-.068-3.905v-7.285l-9.29-.04C1.65 19.731.16 19.16.091 17.858c0 0-.514-6.188.886-6.28 3.392-.217 6.819.126 9.895 0 .643-.028 1.134-.605 1.163-1.256l-.012-8.883c.04-.754.672-1.245 1.327-1.439l4.656.011c.971-.09 2.015.509 2.01 1.639l-.028 9.831 7.01.097 3.675.035c.666.005 1.315.519 1.28 1.627L32 17.813c-.09 1.153-.847 1.787-1.987 1.907l-9.94.017c.08 3.762-.04 6.85-.124 11.013-.022.97-1.084 1.181-2.049 1.25h-3.945zm4.075-9.06c.011-1.8-.265-3.267.141-4.848.215-.828 1.496-.645 2.077-.69l9.308-.16a.474.474 0 0 0 .468-.457l.102-2.427a.505.505 0 0 0-.502-.53L19 13.838c-.576.04-1.016-.525-1.01-1.068L18 2.662a.497.497 0 0 0-.513-.503h-2.81a.485.485 0 0 0-.47.491v9.689c-.022.907-.614 1.433-1.495 1.45-4.092.085-6.779.057-9.72.051a.674.674 0 0 0-.671.697l.062 2.335a.53.53 0 0 0 .519.514l10.414.057c.4-.035.993.405.982.799l-.107 10.933c0 .32.254.577.57.565l2.608-.068a.55.55 0 0 0 .536-.543l.124-6.189z"/>
+</svg>            </span>
+                                      <button type="button" role="tab" data-tabs-tab data-theme="green"
+                  id="rate-card-detail--tab-les-taxes-redevances-cotisations"
+                  class="tab-item tab-item--odd"
+                  data-key="les-taxes-redevances-cotisations" aria-controls="rate-card-detail--panel-les-taxes-redevances-cotisations"
+                  aria-selected="false"
+                  tabindex="-1">
+            <span class="icon-wrapper">
+              <img class="style-svg icon icon-rate-card-details-taxes aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-taxes.svg" alt="">            </span>
+            <span class="label-wrapper">
+              <span class="">Les taxes, redevances  & cotisations</span>
+              <span class="label-recipient">(pour l’état)</span>
+            </span>
+          </button>
+                        </div>
+      <div id="rate-card-details--panels">
+                  <section role="tabpanel" data-tabs-panel data-key="le-prix-de-fourniture-denergie"
+         aria-labelledby="rate-card-detail--tab-le-prix-de-fourniture-denergie" data-theme="teal_dark"
+         id="rate-card-detail--panel-le-prix-de-fourniture-denergie" class="panel-item">
+  <p class="panel-head">
+              <span class="icon-wrapper">
+                <img class="style-svg icon icon-rate-card-details-energie aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-energie.svg" alt="">              </span>
+    <span class="label-wrapper">
+                <span class="">Le prix de  fourniture d’énergie</span>
+                <span class="label-recipient">(pour cociter)</span>
+              </span>
+  </p>
+  <section aria-labelledby="le-prix-de-fourniture-denergie" class="panel-body" data-accordion-scope="le-prix-de-fourniture-denergie">
+    <h3 id="le-prix-de-fourniture-denergie" class="sr-only">Le prix de  fourniture d’énergie</h3>
+                <div class="panel-body-group">
+                  <p class="group-description">Le prix de fourniture d’énergie se compose lui-même de plusieurs parties :</p>
+                          <div class="group-items">
+                          <article aria-labelledby="le-prix-de-fourniture-denergie-couts-de-lenergie" class="group-item">
+  <div data-accordion="le-prix-de-fourniture-denergie" class="accordion-card group-item-content">
+          <h4 id="le-prix-de-fourniture-denergie-couts-de-lenergie" class="accordion-head"><span>Coûts de l’énergie</span></h4>
+      </div>
+  <p class="group-item-formula">en c€/kWh</p>
+</article>
+                          <article aria-labelledby="le-prix-de-fourniture-denergie-abonnement-annuel" class="group-item">
+  <div data-accordion="le-prix-de-fourniture-denergie" class="accordion-card group-item-content">
+          <h4 id="le-prix-de-fourniture-denergie-abonnement-annuel" class="accordion-head"><span>Abonnement annuel</span></h4>
+      </div>
+  <p class="group-item-formula">53 €/an</p>
+</article>
+                          <article aria-labelledby="le-prix-de-fourniture-denergie-contribution-energies-renouvelables" class="group-item">
+  <div data-accordion="le-prix-de-fourniture-denergie" class="accordion-card group-item-content">
+          <h4 id="le-prix-de-fourniture-denergie-contribution-energies-renouvelables" class="accordion-head"><span>Contribution énergies renouvelables</span></h4>
+      </div>
+  <p class="group-item-formula">2,988776 c€/kWh</p>
+</article>
+                          <article aria-labelledby="le-prix-de-fourniture-denergie-forfait-panneaux-photovoltaiques" class="group-item">
+  <div data-accordion="le-prix-de-fourniture-denergie" class="accordion-card group-item-content">
+          <h4 id="le-prix-de-fourniture-denergie-forfait-panneaux-photovoltaiques" class="accordion-head"><span>Forfait panneaux photovoltaïques</span></h4>
+      </div>
+  <p class="group-item-formula">37,1 €/kVA/an</p>
+</article>
+                      </div>
+              </div>
+      </section>
+</section>
+                  <section role="tabpanel" data-tabs-panel data-key="les-couts-de-transport-distribution"
+         aria-labelledby="rate-card-detail--tab-les-couts-de-transport-distribution" data-theme="teal_light"
+         id="rate-card-detail--panel-les-couts-de-transport-distribution" class="panel-item">
+  <p class="panel-head">
+              <span class="icon-wrapper">
+                <img class="style-svg icon icon-rate-card-details-transport-distribution aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-transport-distribution.svg" alt="">              </span>
+    <span class="label-wrapper">
+                <span class="">Les coûts de  transport & distribution</span>
+                <span class="label-recipient">(pour les gestionnaires de réseau)</span>
+              </span>
+  </p>
+  <section aria-labelledby="les-couts-de-transport-distribution" class="panel-body" data-accordion-scope="les-couts-de-transport-distribution">
+    <h3 id="les-couts-de-transport-distribution" class="sr-only">Les coûts de  transport & distribution</h3>
+                <div class="panel-body-group">
+                  <p class="group-description">Les coûts de transports sont restitués au gestionnaire de réseau de transport (ELIA).</p>
+                          <div class="group-items">
+                          <article aria-labelledby="les-couts-de-transport-distribution-tarifs-de-transport-tvac-elia" class="group-item">
+  <div data-accordion="les-couts-de-transport-distribution" class="accordion-card group-item-content">
+          <h4 id="les-couts-de-transport-distribution-tarifs-de-transport-tvac-elia" class="accordion-head"><span>Tarifs de transport TVAC (Elia)</span></h4>
+      </div>
+  <p class="group-item-formula">2,74252 c€/kWh</p>
+</article>
+                      </div>
+              </div>
+                <div class="panel-body-group">
+                  <p class="group-description">Les coûts de distribution sont reversés au Gestionnaire de Réseau de Distribution (GRD) et dépendent de chaque GRD.</p>
+                          <div class="group-items">
+                          <article aria-labelledby="les-couts-de-transport-distribution-tarifs-de-distribution-tvac-grd" class="group-item">
+  <div data-accordion="les-couts-de-transport-distribution" class="accordion-card group-item-content">
+          <h4 id="les-couts-de-transport-distribution-tarifs-de-distribution-tvac-grd" class="accordion-head"><span>Tarifs de distribution TVAC (GRD)</span></h4>
+      </div>
+  <p class="group-item-formula">/</p>
+</article>
+                      </div>
+              </div>
+      </section>
+</section>
+                  <section role="tabpanel" data-tabs-panel data-key="les-taxes-redevances-cotisations"
+         aria-labelledby="rate-card-detail--tab-les-taxes-redevances-cotisations" data-theme="green"
+         id="rate-card-detail--panel-les-taxes-redevances-cotisations" class="panel-item">
+  <p class="panel-head">
+              <span class="icon-wrapper">
+                <img class="style-svg icon icon-rate-card-details-taxes aspect-square" src="https://www.cociter.be/wp-content/uploads/2026/09/rate-card-details-taxes.svg" alt="">              </span>
+    <span class="label-wrapper">
+                <span class="">Les taxes, redevances  & cotisations</span>
+                <span class="label-recipient">(pour l’état)</span>
+              </span>
+  </p>
+  <section aria-labelledby="les-taxes-redevances-cotisations" class="panel-body" data-accordion-scope="les-taxes-redevances-cotisations">
+    <h3 id="les-taxes-redevances-cotisations" class="sr-only">Les taxes, redevances  & cotisations</h3>
+                <div class="panel-body-group">
+                  <p class="group-description">Les taxes et redevances sont reversées aux autorités compétentes (État fédéral et Région wallonne).</p>
+                          <div class="group-items">
+                          <article aria-labelledby="les-taxes-redevances-cotisations-cotisation-energie-tvac" class="group-item">
+  <div data-accordion="les-taxes-redevances-cotisations" class="accordion-card group-item-content">
+          <h4 id="les-taxes-redevances-cotisations-cotisation-energie-tvac" class="accordion-head"><span>Cotisation énergie (TVAC)</span></h4>
+      </div>
+  <p class="group-item-formula">0,204167 c€/kWh</p>
+</article>
+                          <article aria-labelledby="les-taxes-redevances-cotisations-droit-daccises-special-tvac" class="group-item">
+  <div data-accordion="les-taxes-redevances-cotisations" class="accordion-card group-item-content">
+          <h4 id="les-taxes-redevances-cotisations-droit-daccises-special-tvac" class="accordion-head"><span>Droit d’accises spécial (TVAC)</span></h4>
+      </div>
+  <p class="group-item-formula">5,03288 c€/kWh</p>
+</article>
+                          <article aria-labelledby="les-taxes-redevances-cotisations-redevance-de-raccordement-pas-de-tva" class="group-item">
+  <div data-accordion="les-taxes-redevances-cotisations" class="accordion-card group-item-content">
+          <h4 id="les-taxes-redevances-cotisations-redevance-de-raccordement-pas-de-tva" class="accordion-head"><span>Redevance de raccordement (pas de TVA)</span></h4>
+      </div>
+  <p class="group-item-formula">0,075 c€/kWh</p>
+</article>
+                      </div>
+              </div>
+      </section>
+</section>
+              </div>
+    </div>
+  </section>
+  <section id="footer--contact-alt" aria-labelledby="tu-hesites-entre-plusieurs-tarifs"
+           class="px-default --py-12 --pt-0 --lg:py-54 --lg:pt-80 py-12 rl:py-16 lg:py-44 lg:pt-52 xl:py-32 xl:pb-52 2xl:py-40 2xl:pb-32 grid-default">
+    <div class="col-span-full rl:col-start-1 rl:col-span-4 lg:col-start-1 lg:col-span-5 2xl:col-start-2 2xl:col-span-4 lg:pb-28 flex flex-col gap-6 lg:gap-24">
+      <div class="flex flex-col gap-2 lg:gap-6">
+        <h2 id="tu-hesites-entre-plusieurs-tarifs" class="font-display text-2.5xl rl:text-4xl lg:text-5xl">Tu hésites entre plusieurs tarifs ?</h2>
+        <p class="text-lg lg:text-2.5xl lg:leading-normal">Notre équipe te conseillera avec plaisir.</p>
+      </div>
+      <ul class="footer-menu--contact">
+                  <li class="menu-item">
+            <a href="tel:080685738" target="_blank" rel="noopener noreferrer">
+              <span class="icon-wrapper"><svg aria-hidden="true" focusable="false" class="icon icon-phone aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="m29.273 24.513-7.068-6.583c-.588-.55-1.562-1.32-2.406-.484-1.366 1.356-2.185 2.802-3.195 4.624l-1.806-1.882a14.06 14.06 0 0 1-3.605-6.78c1.687-.4 3.267-.64 4.663-1.6.558-.383.225-1.769.041-2.348-.944-2.94-1.883-5.663-3.285-8.363-1.324-2.539-6.034-.394-8.327 3.596-1.657 2.885-2.114 6.278-1.562 9.629 1.016 6.165 4.585 11.218 9.468 14.927 2.904 2.205 6.147 3.154 9.788 2.593 5.958-.914 8.292-6.404 7.3-7.335zm-5.66 4.324c-2.394.932-5.293 1.046-7.62-.19C9.47 25.186 4.308 17.965 4.86 10.474c.285-3.865 2.251-7.216 5.934-8.733l3.16 8.877-3.35.746c-3.053.096-.962 5.866 1.295 8.781 1.467 1.894 3.795 4.57 5.524 4.307.944-.143 1.574-3.07 3.296-4.809l6.445 5.651c-.82 1.481-1.93 2.91-3.552 3.542"/>
+</svg></span>
+              <span class="label-wrapper">lun • mer • ven : 9h-12h</span>
+            </a>
+          </li>
+                  <li class="menu-item">
+            <a href="mailto:info@cociter.be" target="_blank" rel="noopener noreferrer">
+              <span class="icon-wrapper"><svg aria-hidden="true" focusable="false" class="icon icon-email aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M15.369 27.078 10.44 29.09c-2.09.855-4.125.41-5.299-1.72-1.988-3.613-3.786-7.406-4.97-11.39-.577-1.944.338-4 2.13-4.786l11.142-4.882 8.201-3.436c3.94-1.653 5.68 2.464 7.139 5.89 1.12 2.625 2.263 5.148 3.061 7.878.55 1.886-.412 3.703-2.147 4.462L21.016 24.9l-5.647 2.183zm-6.14-11.963 7.298 1.562 6.816-11.92c-3.898 1.301-7.24 2.853-10.83 4.366-3.368 1.424-6.625 2.72-9.835 4.43 2.263.893 4.278 1.079 6.552 1.568zm-.322 12.027c3.448-.999 6.583-2.184 9.835-3.575l9.508-4.08c1.523-.653 1.808-2.013 1.2-3.458l-4.087-9.705-3.157 5.27-3.924 6.443c-.365.6-1.385.924-2.094.786L10.23 17.67l-7.926-1.89c1.385 3.404 3.944 12.127 6.604 11.356z"/>
+</svg></span>
+              <span class="label-wrapper">info@cociter.be</span>
+            </a>
+          </li>
+              </ul>
+    </div>
+          <div class="max-rl:hidden col-span-full rl:col-end-9 rl:col-span-4 lg:col-end-13 lg:col-span-7 2xl:col-end-12 2xl:col-span-6 lg:pt-20">
+        <div class="relative h-full lg:pl-3.5" data-count="3">
+                      <div class="img-container relative bg-cc-teal-100 overflow-hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-1366x2048.jpg.webp 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-scaled.jpg.webp 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-683x1024.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-1366x2048.jpg 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-145-scaled.jpg 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+                      <div class="img-container relative bg-cc-teal-100 overflow-hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-1366x2048.jpg.webp 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-scaled.jpg.webp 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-683x1024.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-1366x2048.jpg 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-138-scaled.jpg 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+                      <div class="img-container relative bg-cc-teal-100 overflow-hidden">
+            <picture class="h-full w-full object-cover object-center" decoding="async">
+<source type="image/webp" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-683x1024.jpg.webp 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-200x300.jpg.webp 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-768x1152.jpg.webp 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-1024x1536.jpg.webp 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-1366x2048.jpg.webp 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-scaled.jpg.webp 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+<img width="683" height="1024" src="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-683x1024.jpg" alt="" decoding="async" srcset="https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-683x1024.jpg 683w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-200x300.jpg 200w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-768x1152.jpg 768w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-1024x1536.jpg 1024w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-1366x2048.jpg 1366w, https://www.cociter.be/wp-content/uploads/2026/09/cociter2©maelleheliaslouis-144-scaled.jpg 1707w" sizes="(max-width: 683px) 100vw, 683px"/>
+</picture>
+
+      </div>
+                  </div>
+      </div>
+      </section>
+  
+        
+      <section id="footer--contact" aria-labelledby="encore-des-questions"
+           class="px-default --py-14 --pb-20 --lg:py-40 --lg:pb-56 py-12 lg:py-20 lg:pb-56 grid-default">
+    <div class="col-span-full 2xl:col-start-4 2xl:col-span-6 flex flex-col items-center gap-10 lg:gap-24">
+      <div class="flex flex-col items-center text-center gap-4 lg:gap-20">
+        <h2 id="encore-des-questions" class="font-display text-3.5xl lg:text-8xl">Encore des questions ?</h2>
+        <p class="text-2xl lg:text-4.5xl">Pas de soucis, on est là pour toi !</p>
+      </div>
+      <ul class="footer-menu--contact">
+                  <li class="menu-item">
+            <a href="tel:080685738" target="_blank" rel="noopener noreferrer">
+              <span class="icon-wrapper"><svg aria-hidden="true" focusable="false" class="icon icon-phone aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="m29.273 24.513-7.068-6.583c-.588-.55-1.562-1.32-2.406-.484-1.366 1.356-2.185 2.802-3.195 4.624l-1.806-1.882a14.06 14.06 0 0 1-3.605-6.78c1.687-.4 3.267-.64 4.663-1.6.558-.383.225-1.769.041-2.348-.944-2.94-1.883-5.663-3.285-8.363-1.324-2.539-6.034-.394-8.327 3.596-1.657 2.885-2.114 6.278-1.562 9.629 1.016 6.165 4.585 11.218 9.468 14.927 2.904 2.205 6.147 3.154 9.788 2.593 5.958-.914 8.292-6.404 7.3-7.335zm-5.66 4.324c-2.394.932-5.293 1.046-7.62-.19C9.47 25.186 4.308 17.965 4.86 10.474c.285-3.865 2.251-7.216 5.934-8.733l3.16 8.877-3.35.746c-3.053.096-.962 5.866 1.295 8.781 1.467 1.894 3.795 4.57 5.524 4.307.944-.143 1.574-3.07 3.296-4.809l6.445 5.651c-.82 1.481-1.93 2.91-3.552 3.542"/>
+</svg></span>
+              <span class="label-wrapper">080 68 57 38</span>
+            </a>
+          </li>
+                  <li class="menu-item">
+            <a href="mailto:info@cociter.be" target="_blank" rel="noopener noreferrer">
+              <span class="icon-wrapper"><svg aria-hidden="true" focusable="false" class="icon icon-email aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+  <path d="M15.369 27.078 10.44 29.09c-2.09.855-4.125.41-5.299-1.72-1.988-3.613-3.786-7.406-4.97-11.39-.577-1.944.338-4 2.13-4.786l11.142-4.882 8.201-3.436c3.94-1.653 5.68 2.464 7.139 5.89 1.12 2.625 2.263 5.148 3.061 7.878.55 1.886-.412 3.703-2.147 4.462L21.016 24.9l-5.647 2.183zm-6.14-11.963 7.298 1.562 6.816-11.92c-3.898 1.301-7.24 2.853-10.83 4.366-3.368 1.424-6.625 2.72-9.835 4.43 2.263.893 4.278 1.079 6.552 1.568zm-.322 12.027c3.448-.999 6.583-2.184 9.835-3.575l9.508-4.08c1.523-.653 1.808-2.013 1.2-3.458l-4.087-9.705-3.157 5.27-3.924 6.443c-.365.6-1.385.924-2.094.786L10.23 17.67l-7.926-1.89c1.385 3.404 3.944 12.127 6.604 11.356z"/>
+</svg></span>
+              <span class="label-wrapper">info@cociter.be</span>
+            </a>
+          </li>
+              </ul>
+    </div>
+  </section>
+  </main>
+
+<footer id="footer" class="flex-0 relative">
+
+  <section aria-labelledby="footer--main"
+           class="flex flex-col px-default py-10 pt-18 lg:py-24 lg:pt-28 xl:py-30 xl:pt-34 lg:text-xl text-cc-teal-100 bg-cc-teal-500">
+    <h2 id="footer--main" class="sr-only">Pied de page</h2>
+    <div class="grid-default gap-y-8 pb-14 lg:pb-24 xl:pb-30">
+      <div
+        class="max-lg:-mx-4 col-start-2 col-span-4 md:col-start-3 md:col-span-4  lg:col-start-4 lg:col-span-6 2xl:col-start-5 2xl:col-span-4 lg:py-10 lg:px-18 2xl:px-0 ">
+        <a id="footer--logo" href="https://www.cociter.be">
+          <span class="sr-only">Retour à l'accueil</span>
+          <svg aria-hidden="true" focusable="false" class="icon icon-text-icon-baseline" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 687 199">
+    <path fill="#cde41b" d="M60.05 120.1c33.17 0 60.05-26.89 60.05-60.05S93.21 0 60.05 0 0 26.89 0 60.05s26.89 60.05 60.05 60.05"/>
+    <path d="M137.91 34.42c-4.45-7.27-13.8-14.08-21.42-17.7-4.92-2.34-14.13-4.69-19.62-5.2-10.44-.98-15.99.17-26.2 2.49a60.53 60.53 0 0 0-36.71 25.11c-3.7 5.46-6.9 11.27-8.07 17.81-1.63 9.12-1.78 16.8 1.29 25.71 1.5 4.36 2.92 8.53 5.34 12.49 4.87 7.96 9.66 16.05 14.97 23.74.81 1.17 1.74 2.27 2.56 3.44 4.26 6.11 7.94 13.55 16.02 14.99 3.09.55 5.84-.1 7.97-1.55v-.02c-4.17 2.05-7.34-3.4-5.22-6.96-.76.64-1.8.8-2.72.1-1.49-1.14-2.76-3.25-3.9-4.71-1.28-1.65-2.69-3.24-3.94-4.91-3.93-5.22-7.3-10.89-10.63-16.52-3.22-5.47-6.28-11.05-9.1-16.72-2.8-5.64-4.87-10.47-4.95-16.93-.22-16.46 11.6-32.32 25.19-40.1 10.8-6.18 23.01-8.37 35.52-7.84 11.29.47 20.62 4.05 29.13 11.48 6.4 5.59 10.26 13 11.99 21.3 3.53 16.94-.97 35.05-5.02 51.47-1.87 7.58-4 15.13-5.81 22.72-.12.52-.04 1.2-.39 1.64l-10.5 1.59c-2.7.41-5.39.94-8.08 1.38-1.61.26-3.27.37-4.87.65-3.79.64-7.54 1.78-11.27 2.63-12.17 2.79-26.84 14.23-18.73 27.88 1.43 2.41 3.29 4.47 5.68 5.93-.32 2.01-.3 4.06.03 6.07.74 4.48 2.39 7.39 5.25 10.79 3.5 4.15 9.23 7.63 14.38 9.26 13.31 4.22 23.98 3.83 35.09-5.56 3.8-3.21 9.65-11.5 10.02-16.51.17-2.22-.44-5.24-3.15-5.43-3.25-.23-4.42 3.43-5.77 5.61-3.07 4.93-7.4 9.05-12.17 12.34-6.17 4.25-15.03 3.21-21.77.88-6.43-2.22-10.17-6.79-12.98-12.78-.06-.14-.08-.14.09-.16.51-.06 1.89.29 2.54.36 12.27 1.32 27.08-1.68 38.3-6.64 5.3-2.34 11.08-7.69 9.92-14.08-.91-4.96-8.37-8.64-12.96-8.97-10.76-.77-24.65 2.65-34.2 7.56-3.24 1.67-5.79 3.88-8.12 6.65-.32.38-.56.81-.85 1.21-2.11-2.42-1.54-6.2.2-8.66 3.64-5.12 10.63-7.02 16.5-8.31 4.46-.98 7.8-1.52 12.24-2.08 1.87-.23 6.53-.55 8.4-.79 3.87-.5 8.88.13 11.89-2.37 1.96-1.63 3.91-8.02 4.75-10.61a232 232 0 0 0 7.43-29.26c2.1-11.21 4.2-22.71 3.88-34.17-.32-11.27-1.43-19.91-7.44-29.73zM92 161.62c2.73-2.07 5.17-2.87 8.36-3.92 6.28-2.06 12.74-4.1 19.4-3.86 1.07.04 2.77.19 3.79.48 2.24.64 1.91 2.93.41 4.23-2.53 2.2-8.48 4.06-11.75 4.76-4.62.99-10.34 1.65-15.08 2.03-2.24.18-6.32.35-8.43-.23-.17-.05-.36-.04-.38-.27 1.28-1.01 2.37-2.23 3.67-3.22z"/>
+    <path d="M114.76 65.71c-.18-.16-.99-.61-1.06-.74-.01-.48-.03-.97-.1-1.44-.73-5.42-4.36-9.89-10.01-10.44-3.18-.31-5.41.81-7.74 2.85-.62-.31-1.2-.7-1.84-.97-3.95-1.64-8.01.57-10.31 3.84-1.63-.91-4.26-1.67-6.13-1.33-2.88.53-5.34 3.27-6.81 5.66-1.6-.95-4.05-1.13-5.79-.48-1.14.43-3.28 2.08-4.18 2.96-4.87 4.77-3.56 15-2.59 21.11 1.28 8.08 3.89 15.75 6.36 23.52.97 3.04 2.04 6.08 2.91 9.11.65 2.26 2.46 6.28 1.77 8.78-3.16 3.75.87 10.68 5.74 6.98 2.48-2.42 3.68-6.14 2.88-10.17-.93-4.64-2.74-9.02-4.16-13.51-1.67-5.23-3.23-10.5-4.96-15.69-.25-.76-.54-1.52-.79-2.27 2.19.28 4.78 0 6.6-1.33.86-.63 1.38-1.4 2.06-2.18 4.04 2.49 9.23 1.58 12.62-1.61 1.79-1.69 3.47-3.74 3.98-6.2.1-.11 1.11.77 1.27.88 2.58 1.64 5.15 2.82 7.69 2.31s2.62-2.26 2.77-2.76c.89-2.91-.2-3.21-2.44-3.4-1.49-.13-2.99-.12-4.45-.54-1.35-.4-2.54-1.81-2.55-3.25-.04-7.03 8.76-7.88 13.78-5.71 2.09.9 2.54 2.51 3.15 4.56 2.34 7.82-1.45 14.46-7.25 19.46-.86.74-1.91 1.28-2.59 2.23.44 2.35 1.27 6.43 1.27 6.43l.72 3.12s1.69 6.29 2.69 9.52c.54 1.76 1.21 3.97 1.85 6.09a4.334 4.334 0 0 0 5.32 2.91l2.7-.76c1.56-.44 2.4-2.14 1.8-3.65-1.56-3.91-2.82-6.86-4.68-11.27a46 46 0 0 1-2.9-9.75c0-.32 1.08-1.11 1.33-1.39 4.11-4.3 7.88-11.05 8.2-17.08.3-5.57-1.92-10.8-6.14-14.4zM71.54 76.33c.68 3.24 1.65 8.25-.83 10.91-1.54 1.65-4.2-.4-5.19-1.76-2.39-3.27-2.8-11.82-.93-15.47.26-.5.88-1.37 1.39-1.6.87-.38 1.99.21 2.68.75 1.86 1.47 2.42 4.96 2.88 7.16zm14.65 6c-.76 4.52-4.6 3.58-6.69.57-1.89-2.72-4.39-9.82-4.72-13.08-.27-2.68.36-4.62 3-5.65.93-.36 3.01-.07 3.79.55.63.5 1.7 2.53 1.97 3.32 1.03 3.01 3.15 11.31 2.65 14.29m9.45-16.57c-1.79.93-3.54 3.5-4.39 5.31-.32.69-.5 1.45-.8 2.15-.2-.66-.32-1.36-.52-2.02-.92-2.96-2.86-6.82-1.11-9.77.81-1.36 3.14-2.49 4.21-1.96s1.2 1.86 1.82 3.23l.8 3.06zm12.43-2.19c-1.15.08-2.31-.06-3.46 0-1.6.09-2.53 0-4.08.38-.73-1.74-1.05-3.89.68-5.21 1.92-1.47 3.77-.93 5.4.7 1.22 1.22 1.23 2.51 1.45 4.12z"/>
+    <path d="M182.89 186.81H168.8v-20.24h4.06V183h10.03zM189.38 166.57l-2.03 7.51h-2.92l1.17-7.51zM205.07 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.68-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zm-3.84-11-1.66 4.34h2.34l2.68-4.34zM213.07 186.81h-3.94v-22.15h3.94zM229.25 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.68-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM247.28 183.15c-.27.57-.63 1.1-1.09 1.58s-.99.9-1.58 1.25-1.25.62-1.95.8-1.46.28-2.26.28c-1.13 0-2.18-.19-3.17-.57s-1.83-.92-2.54-1.62-1.27-1.51-1.69-2.45q-.63-1.395-.63-3.03c0-1.09.21-2.12.63-3.05.42-.92.98-1.73 1.69-2.43s1.55-1.24 2.54-1.62 2.04-.57 3.17-.57c.8 0 1.55.09 2.26.28.71.18 1.36.45 1.95.8s1.12.76 1.58 1.25.83 1.01 1.09 1.58l-3.17 1.63a3.7 3.7 0 0 0-.63-.86c-.26-.27-.54-.49-.86-.68-.32-.18-.66-.33-1.01-.45s-.74-.17-1.15-.17c-.57 0-1.12.11-1.63.32-.51.22-.96.52-1.34.91s-.68.84-.91 1.35a4 4 0 0 0-.34 1.66c0 .59.11 1.18.34 1.71s.53.98.91 1.37.82.69 1.34.91c.51.22 1.06.32 1.63.32.8 0 1.52-.21 2.17-.62s1.14-.92 1.49-1.54l3.17 1.63zM250.45 171.98l.86-4h3.11v4h4.21v3.2h-4.21v6.03c0 .66.08 1.17.23 1.54s.41.63.75.77.79.19 1.32.14 1.17-.17 1.91-.35v3.26c-1.25.35-2.38.53-3.38.54s-1.86-.14-2.57-.45a3.48 3.48 0 0 1-1.65-1.45c-.39-.66-.58-1.47-.58-2.43v-7.6h-2.46v-3.2zM265.15 186.81h-3.94v-14.83h3.38l.15 2.28c.31-.47.65-.9 1.03-1.28s.8-.68 1.28-.91c.47-.23.98-.36 1.54-.4.55-.04 1.15.04 1.78.25l-.03 3.78c-.68-.23-1.33-.32-1.95-.29-.63.03-1.18.2-1.66.49s-.87.72-1.15 1.28-.43 1.23-.43 2.03zM272.04 166.89a3 3 0 0 1 .55-.83c.22-.24.49-.42.8-.55s.64-.2.98-.2c.37 0 .71.07 1.01.2.31.13.58.32.83.55.25.24.44.51.57.83s.2.66.2 1.03c0 .35-.07.69-.2 1.02s-.32.61-.57.85-.52.43-.83.57-.65.22-1.01.22c-.35 0-.68-.07-.98-.22a2.5 2.5 0 0 1-.8-.57c-.23-.24-.41-.52-.55-.85s-.22-.67-.22-1.02c0-.37.07-.71.22-1.03m.37 5.09h3.97v14.83h-3.97zM293.61 183.15c-.27.57-.63 1.1-1.09 1.58s-.99.9-1.58 1.25-1.25.62-1.95.8-1.46.28-2.26.28c-1.13 0-2.18-.19-3.17-.57s-1.83-.92-2.54-1.62-1.27-1.51-1.69-2.45q-.63-1.395-.63-3.03c0-1.09.21-2.12.63-3.05.42-.92.98-1.73 1.69-2.43s1.55-1.24 2.54-1.62 2.04-.57 3.17-.57c.8 0 1.55.09 2.26.28.71.18 1.36.45 1.95.8s1.12.76 1.58 1.25.83 1.01 1.09 1.58l-3.17 1.63a3.7 3.7 0 0 0-.63-.86c-.26-.27-.54-.49-.86-.68-.32-.18-.66-.33-1.01-.45s-.74-.17-1.15-.17c-.57 0-1.12.11-1.63.32-.51.22-.96.52-1.34.91s-.68.84-.91 1.35a4 4 0 0 0-.34 1.66c0 .59.11 1.18.34 1.71s.53.98.91 1.37.82.69 1.34.91c.51.22 1.06.32 1.63.32.8 0 1.52-.21 2.17-.62s1.14-.92 1.49-1.54l3.17 1.63zM295.43 166.89a3 3 0 0 1 .55-.83c.22-.24.49-.42.8-.55s.64-.2.98-.2c.37 0 .71.07 1.01.2.31.13.58.32.83.55.25.24.44.51.57.83s.2.66.2 1.03c0 .35-.07.69-.2 1.02s-.32.61-.57.85-.52.43-.83.57-.65.22-1.01.22c-.35 0-.68-.07-.98-.22a2.5 2.5 0 0 1-.8-.57c-.23-.24-.41-.52-.55-.85s-.22-.67-.22-1.02c0-.37.07-.71.22-1.03m.36 5.09h3.97v14.83h-3.97zM304.35 171.98l.86-4h3.11v4h4.21v3.2h-4.21v6.03c0 .66.08 1.17.23 1.54s.41.63.75.77.79.19 1.32.14 1.17-.17 1.91-.35v3.26c-1.25.35-2.38.53-3.38.54s-1.86-.14-2.57-.45a3.48 3.48 0 0 1-1.65-1.45c-.39-.66-.58-1.47-.58-2.43v-7.6h-2.46v-3.2zM327.82 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.68-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zm-3.84-11-1.66 4.34h2.34l2.68-4.34zM342.47 171.98l3.48 10.58h.06l3.51-10.58h4.43l-5.57 14.83h-4.77l-5.57-14.83zM367.72 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.67-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM375.72 186.81h-3.94v-14.83h3.38l.15 2.28c.31-.47.65-.9 1.03-1.28s.8-.68 1.28-.91c.47-.23.98-.36 1.54-.4.55-.04 1.15.04 1.78.25l-.03 3.78c-.68-.23-1.33-.32-1.95-.29-.63.03-1.18.2-1.66.49s-.87.72-1.15 1.28-.43 1.23-.43 2.03zM384.83 171.98l.86-4h3.11v4h4.21v3.2h-4.21v6.03c0 .66.08 1.17.23 1.54s.41.63.75.77.79.19 1.32.14 1.17-.17 1.91-.35v3.26c-1.25.35-2.38.53-3.38.54s-1.86-.14-2.57-.45a3.48 3.48 0 0 1-1.65-1.45c-.39-.66-.58-1.47-.58-2.43v-7.6h-2.46v-3.2zM408.3 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.67-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM417.01 181.73l-2.34 9.14h-2.86l1.05-9.14zM431.38 186.81h-3.94v-22.15h3.94zM434.24 176.44c.41-.94.97-1.76 1.69-2.46s1.57-1.25 2.57-1.65c.99-.4 2.08-.6 3.25-.6s2.25.2 3.25.6c.99.4 1.86.95 2.58 1.65q1.095 1.05 1.71 2.46c.41.94.62 1.94.62 2.98s-.21 2.04-.62 2.98a7.6 7.6 0 0 1-1.71 2.46c-.73.7-1.59 1.25-2.58 1.66s-2.08.62-3.25.62-2.25-.21-3.25-.62c-.99-.41-1.85-.96-2.57-1.66a7.7 7.7 0 0 1-1.69-2.46c-.41-.94-.62-1.94-.62-2.98s.2-2.04.62-2.98m3.58 4.6c.21.52.51.98.88 1.37s.82.7 1.34.92c.52.23 1.08.34 1.68.34s1.18-.11 1.69-.34.95-.53 1.32-.92.66-.84.88-1.35c.21-.51.32-1.07.32-1.66s-.11-1.12-.32-1.65c-.22-.52-.51-.98-.88-1.37s-.81-.7-1.32-.92c-.51-.23-1.08-.34-1.69-.34s-1.15.11-1.68.34c-.52.23-.97.53-1.34.92s-.66.84-.88 1.35-.32 1.07-.32 1.66.11 1.12.32 1.65M466.33 183.15c-.27.57-.63 1.1-1.09 1.58s-.99.9-1.58 1.25-1.25.62-1.95.8-1.46.28-2.26.28c-1.13 0-2.18-.19-3.17-.57s-1.83-.92-2.54-1.62-1.27-1.51-1.69-2.45q-.63-1.395-.63-3.03c0-1.09.21-2.12.63-3.05.42-.92.98-1.73 1.69-2.43s1.55-1.24 2.54-1.62 2.04-.57 3.17-.57c.8 0 1.55.09 2.26.28.71.18 1.36.45 1.95.8s1.12.76 1.58 1.25.83 1.01 1.09 1.58l-3.17 1.63a3.7 3.7 0 0 0-.63-.86c-.26-.27-.54-.49-.86-.68-.32-.18-.66-.33-1.01-.45s-.74-.17-1.15-.17c-.57 0-1.12.11-1.63.32-.51.22-.96.52-1.34.91s-.68.84-.91 1.35a4 4 0 0 0-.34 1.66c0 .59.11 1.18.34 1.71s.53.98.91 1.37.82.69 1.34.91c.51.22 1.06.32 1.63.32.8 0 1.52-.21 2.17-.62s1.14-.92 1.49-1.54l3.17 1.63zM470.11 176.81l-2.18-2.58c.2-.2.51-.46.91-.75s.88-.58 1.43-.85 1.18-.49 1.89-.68c.71-.18 1.48-.28 2.32-.28.9 0 1.76.12 2.57.35.81.24 1.52.6 2.12 1.09s1.08 1.11 1.43 1.86.52 1.65.52 2.69v9.14h-3.38l-.28-1.97c-.27.35-.56.67-.88.95q-.48.435-1.08.72c-.4.2-.83.34-1.29.45-.46.1-.96.15-1.49.15-.78 0-1.48-.12-2.09-.35-.62-.24-1.14-.56-1.57-.97s-.76-.89-.98-1.43c-.23-.54-.34-1.13-.34-1.77s.13-1.27.4-1.83.68-1.05 1.25-1.46c.56-.41 1.28-.74 2.14-.98s1.89-.37 3.08-.37h2.77v-.22c0-.86-.26-1.53-.77-2s-1.28-.71-2.31-.71c-.47 0-.93.06-1.37.18s-.84.28-1.2.46-.68.38-.97.58-.5.39-.65.55zm7.26 3.57-2.52-.03q-1.665 0-2.37.6c-.47.4-.71.87-.71 1.4 0 .23.05.45.14.66.09.22.22.41.4.57s.4.3.68.42c.28.11.6.17.97.17.39 0 .79-.08 1.2-.25.41-.16.77-.39 1.09-.69s.58-.66.8-1.09.32-.92.32-1.48zM488.17 186.81h-3.94v-22.15h3.94zM504.35 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.67-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM529.09 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.68-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM534.19 171.98l.86-4h3.11v4h4.21v3.2h-4.21v6.03c0 .66.08 1.17.23 1.54s.41.63.75.77.79.19 1.32.14 1.17-.17 1.91-.35v3.26c-1.25.35-2.38.53-3.38.54s-1.86-.14-2.57-.45a3.48 3.48 0 0 1-1.65-1.45c-.39-.66-.58-1.47-.58-2.43v-7.6h-2.46v-3.2zM566.65 183.15c-.27.57-.63 1.1-1.09 1.58s-.99.9-1.58 1.25-1.25.62-1.95.8-1.46.28-2.26.28c-1.13 0-2.18-.19-3.17-.57s-1.83-.92-2.54-1.62-1.27-1.51-1.69-2.45q-.63-1.395-.63-3.03c0-1.09.21-2.12.63-3.05.42-.92.98-1.73 1.69-2.43s1.55-1.24 2.54-1.62 2.04-.57 3.17-.57c.8 0 1.55.09 2.26.28.71.18 1.36.45 1.95.8s1.12.76 1.58 1.25.83 1.01 1.09 1.58l-3.17 1.63a3.7 3.7 0 0 0-.63-.86c-.26-.27-.54-.49-.86-.68-.32-.18-.66-.33-1.01-.45s-.74-.17-1.15-.17c-.57 0-1.12.11-1.63.32-.51.22-.96.52-1.34.91s-.68.84-.91 1.35a4 4 0 0 0-.34 1.66c0 .59.11 1.18.34 1.71s.53.98.91 1.37.82.69 1.34.91c.51.22 1.06.32 1.63.32.8 0 1.52-.21 2.17-.62s1.14-.92 1.49-1.54l3.17 1.63zM568.44 166.89a3 3 0 0 1 .55-.83c.22-.24.49-.42.8-.55s.64-.2.98-.2c.37 0 .71.07 1.01.2.31.13.58.32.83.55.25.24.44.51.57.83s.2.66.2 1.03c0 .35-.07.69-.2 1.02s-.32.61-.57.85-.52.43-.83.57-.65.22-1.01.22c-.35 0-.68-.07-.98-.22a2.5 2.5 0 0 1-.8-.57c-.23-.24-.41-.52-.55-.85s-.22-.67-.22-1.02c0-.37.07-.71.22-1.03m.36 5.09h3.97v14.83h-3.97zM577.36 171.98l.86-4h3.11v4h4.21v3.2h-4.21v6.03c0 .66.08 1.17.23 1.54s.41.63.75.77.79.19 1.32.14 1.17-.17 1.91-.35v3.26c-1.25.35-2.38.53-3.38.54s-1.86-.14-2.57-.45a3.48 3.48 0 0 1-1.65-1.45c-.39-.66-.58-1.47-.58-2.43v-7.6h-2.46v-3.2zM587.57 176.44c.41-.94.97-1.76 1.69-2.46s1.57-1.25 2.57-1.65c.99-.4 2.08-.6 3.25-.6s2.25.2 3.25.6c.99.4 1.86.95 2.58 1.65q1.095 1.05 1.71 2.46c.41.94.62 1.94.62 2.98s-.21 2.04-.62 2.98a7.6 7.6 0 0 1-1.71 2.46c-.73.7-1.59 1.25-2.58 1.66s-2.08.62-3.25.62-2.25-.21-3.25-.62c-.99-.41-1.85-.96-2.57-1.66a7.7 7.7 0 0 1-1.69-2.46c-.41-.94-.62-1.94-.62-2.98s.2-2.04.62-2.98m3.59 4.6c.21.52.51.98.88 1.37s.82.7 1.34.92c.52.23 1.08.34 1.68.34s1.18-.11 1.69-.34.95-.53 1.32-.92.66-.84.88-1.35c.21-.51.32-1.07.32-1.66s-.11-1.12-.32-1.65c-.22-.52-.51-.98-.88-1.37s-.81-.7-1.32-.92c-.51-.23-1.08-.34-1.69-.34s-1.15.11-1.68.34c-.52.23-.97.53-1.34.92s-.66.84-.88 1.35-.32 1.07-.32 1.66.11 1.12.32 1.65M607.85 171.98l3.38 10.43h.06l3.41-10.43h4.43l-8.62 21.91h-4.28l2.92-7.11-5.75-14.8zM632.95 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.68-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31zM640.95 186.81h-3.94v-14.83h3.38l.18 2.31c.59-.78 1.3-1.41 2.12-1.89s1.72-.72 2.71-.72c1.05 0 1.94.17 2.68.52s1.34.83 1.82 1.43c.47.61.82 1.32 1.03 2.15s.32 1.73.32 2.69v8.34h-3.94v-7.97c0-.49-.05-.95-.14-1.38s-.25-.8-.46-1.12c-.22-.32-.51-.57-.88-.75s-.84-.28-1.42-.28c-.49 0-.95.1-1.38.31s-.8.49-1.11.85-.55.77-.72 1.25c-.18.47-.26.97-.26 1.51v7.6zM658.15 186.81h-3.94v-14.83h3.38l.18 2.31c.59-.78 1.3-1.41 2.12-1.89s1.72-.72 2.71-.72c1.05 0 1.94.17 2.68.52s1.34.83 1.82 1.43c.47.61.82 1.32 1.03 2.15s.32 1.73.32 2.69v8.34h-3.94v-7.97c0-.49-.05-.95-.14-1.38s-.25-.8-.46-1.12c-.22-.32-.51-.57-.88-.75s-.84-.28-1.42-.28c-.49 0-.95.1-1.38.31s-.8.49-1.11.85-.55.77-.72 1.25c-.18.47-.26.97-.26 1.51v7.6zM684.48 185.21c-.27.21-.6.42-1 .65q-.6.345-1.38.63c-.52.2-1.1.35-1.72.48s-1.28.18-1.95.18c-1.19 0-2.27-.2-3.23-.6q-1.44-.6-2.46-1.65c-.68-.7-1.21-1.51-1.58-2.45q-.57-1.395-.57-3.03c0-1.09.19-2.07.58-3.02.39-.94.93-1.76 1.62-2.45s1.51-1.23 2.48-1.63c.96-.4 2.02-.6 3.17-.6 1.21 0 2.29.2 3.25.6.95.4 1.76.94 2.42 1.63s1.15 1.5 1.49 2.43q.51 1.395.51 3.03a8 8 0 0 1-.12 1.38l-11.23-.03c.12.49.31.92.57 1.28s.56.67.91.92c.35.26.74.45 1.17.58s.88.2 1.35.2a6.2 6.2 0 0 0 2.51-.5c.3-.13.55-.27.77-.42.22-.14.39-.28.51-.4l1.97 2.77zm-2.67-8.26c-.16-.4-.4-.74-.71-1.01-.31-.28-.68-.49-1.11-.65-.43-.15-.91-.23-1.45-.23s-.98.07-1.42.22c-.43.14-.82.35-1.15.63-.34.28-.62.62-.85 1.01-.23.4-.39.85-.49 1.34h7.45c-.02-.47-.11-.91-.28-1.31z"/>
+    <path d="M166.44 104.47c0-26.16 19.66-46 46.18-46 14.61 0 26.7 6.13 34.28 15.88 1.08 1.26.72 2.71-.36 3.79l-10.82 10.64c-1.44 1.44-3.43 1.26-4.69 0-4.87-4.87-10.1-7.4-17.32-7.4-14.07 0-23.27 10.1-23.27 23.09s9.2 23.81 23.81 23.81c6.86 0 12.09-2.53 16.96-7.4 1.26-1.26 3.25-1.44 4.69 0l10.82 10.64c1.08 1.08 1.44 2.53.36 3.79-7.58 9.74-19.66 15.87-33.92 15.87-26.88 0-46.72-20.2-46.72-46.72zM248.79 104.83c0-26.16 19.66-46.36 46.36-46.36s46.18 20.2 46.18 46.36-19.66 46.36-46.18 46.36-46.36-20.2-46.36-46.36m46.36 23.46c12.45 0 22.19-9.02 22.19-23.45s-9.74-23.45-22.19-23.45-22.37 9.02-22.37 23.45 9.74 23.45 22.37 23.45M348.48 104.47c0-26.16 19.66-46 46.18-46 14.61 0 26.7 6.13 34.28 15.88 1.08 1.26.72 2.71-.36 3.79l-10.82 10.64c-1.44 1.44-3.43 1.26-4.69 0-4.87-4.87-10.1-7.4-17.32-7.4-14.07 0-23.27 10.1-23.27 23.09s9.2 23.81 23.81 23.81c6.86 0 12.09-2.53 16.96-7.4 1.26-1.26 3.25-1.44 4.69 0l10.82 10.64c1.08 1.08 1.44 2.53.36 3.79-7.58 9.74-19.66 15.87-33.92 15.87-26.88 0-46.72-20.2-46.72-46.72zM436.57 37.45c0-7.58 5.95-13.71 13.89-13.71s13.71 6.13 13.71 13.71-5.77 13.89-13.71 13.89-13.89-6.13-13.89-13.89m1.27 25.89c0-1.62 1.08-2.71 2.71-2.71h19.66c1.62 0 2.71 1.08 2.71 2.71v82.99c0 1.62-1.08 2.71-2.71 2.71h-19.66c-1.62 0-2.71-1.08-2.71-2.71zM486.12 124.32V79.94h-11.19c-1.62 0-2.71-1.08-2.71-2.71V63.34c0-1.62 1.08-2.71 2.71-2.71h11.19V39.88c0-1.62 1.08-2.71 2.71-2.71h19.66c1.62 0 2.71 1.08 2.71 2.71v20.75h13.89c1.62 0 2.71 1.08 2.71 2.71v13.89c0 1.62-1.08 2.71-2.71 2.71H511.2v41.67c0 5.23 3.07 7.76 7.76 7.76 1.62 0 3.43 0 5.59-.18 1.98-.18 3.25.72 3.25 2.53v13.17c0 4.15-9.02 5.23-14.97 5.23-14.07 0-26.7-6.49-26.7-25.8zM533.77 112.3c-4.62-25.56 9.74-48.51 36.55-53.36 26.45-4.79 45.25 11.98 49.23 33.99 1.54 8.52.45 13.67-7.18 15.05l-52.9 9.57c4.65 10.52 14.8 14.92 28.82 12.39 6.75-1.22 12.91-3.62 19.27-8.99 1.11-.93 2.03-.92 3.15.16l8.21 7.87c1.11 1.08 1.16 2.36-.18 4.07-6.11 8.81-16.65 14.38-28.9 16.59-28.58 5.17-51.32-11.07-56.07-37.34m63.24-19.33c-3.51-11.28-12.38-15.73-22.85-13.83-10.83 1.96-18.11 9.33-18.16 21.25zM631.36 146.33V63.34c0-1.62 1.08-2.71 2.71-2.71h18.76c1.62 0 2.53.72 2.71 2.89l.72 11.36c3.07-9.38 8.66-16.42 19.12-16.42 4.15 0 6.68 1.08 8.12 2.16 1.26.9 1.62 1.98 1.62 3.61v15.88c0 2.16-1.26 2.71-3.61 2.16-1.98-.54-3.97-.9-6.49-.9-12.27 0-18.76 8.12-18.76 20.75v44.2c0 1.62-1.08 2.71-2.71 2.71h-19.48c-1.62 0-2.71-1.08-2.71-2.71z"/>
+</svg>        </a>
+      </div>
+          </div>
+    <div id="footer-border-section" class="grid-default items-center gap-y-8 py-14 lg:py-28">
+      <nav aria-labelledby="footer--socials"
+           class="col-start-2 col-span-4 md:col-start-3 md:col-span-4 rl:col-start-1 rl:col-span-3 lg:col-start-2 lg:col-span-4 xl:col-start-2 cl:col-span-5 2xl:col-start-3 2xl:col-span-4">
+        <h3 id="footer--socials" class="sr-only">Nos réseaux sociaux</h3>
+        <ul id="footer-menu--socials">
+                      <li class="menu-item">
+              <a
+  href="https://www.facebook.com/cociter"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-facebook aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+    <path d="M21.105 5.312H24V.224A39 39 0 0 0 19.78 0c-4.188 0-7.052 2.656-7.052 7.52v4.192H8v5.696h4.728V32h5.667V17.408h4.712l.708-5.696h-5.42V8.08c0-1.68.43-2.768 2.71-2.768"/>
+</svg>    <span>Visiter notre page Facebook</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                      <li class="menu-item">
+              <a
+  href="https://be.linkedin.com/company/cociter"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-linkedin aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+    <path d="M0 4.101q0-1.566 1.081-2.583T3.891.5q1.7 0 2.75 1.002 1.08 1.034 1.081 2.693 0 1.503-1.05 2.505-1.08 1.033-2.842 1.033H3.8q-1.7 0-2.75-1.033T0 4.101M.402 31.5V10.583h6.857V31.5zm10.656 0h6.857V19.82q0-1.096.247-1.69.432-1.065 1.313-1.801.88-.735 2.208-.736 3.46 0 3.46 4.728V31.5H32V19.507q0-4.635-2.162-7.03t-5.714-2.395q-3.985 0-6.209 3.476v.062h-.03l.03-.062v-2.975h-6.857q.062 1.002.062 6.231 0 5.23-.062 14.686"/>
+</svg>    <span>Visiter notre page Linkedin</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                      <li class="menu-item">
+              <a
+  href="https://www.facebook.com/cociter"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-instagram aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+    <path d="M24.544 5.536a1.92 1.92 0 1 0 0 3.84 1.92 1.92 0 0 0 0-3.84m7.36 3.872a12.1 12.1 0 0 0-.736-3.888 7.9 7.9 0 0 0-1.856-2.832A7.5 7.5 0 0 0 26.48.848a11.7 11.7 0 0 0-3.888-.752C20.896 0 20.352 0 16 0s-4.896 0-6.592.096A11.7 11.7 0 0 0 5.52.848a7.65 7.65 0 0 0-2.832 1.84A7.5 7.5 0 0 0 .848 5.52a11.7 11.7 0 0 0-.752 3.888C0 11.104 0 11.648 0 16s0 4.896.096 6.592a11.7 11.7 0 0 0 .752 3.888 7.5 7.5 0 0 0 1.84 2.832 7.65 7.65 0 0 0 2.832 1.84 11.7 11.7 0 0 0 3.888.752C11.104 32 11.648 32 16 32s4.896 0 6.592-.096a11.7 11.7 0 0 0 3.888-.752 7.5 7.5 0 0 0 2.832-1.84 7.8 7.8 0 0 0 1.856-2.832c.456-1.247.705-2.56.736-3.888 0-1.696.096-2.24.096-6.592s0-4.896-.096-6.592M29.024 22.4a9 9 0 0 1-.544 2.976 4.9 4.9 0 0 1-1.2 1.84 5.1 5.1 0 0 1-1.84 1.2 9 9 0 0 1-2.976.544c-1.6.08-2.192.096-6.4.096s-4.8 0-6.4-.096a9.2 9.2 0 0 1-3.104-.48 5.2 5.2 0 0 1-1.76-1.2 4.8 4.8 0 0 1-1.184-1.84 8.9 8.9 0 0 1-.64-3.04c0-1.6-.096-2.192-.096-6.4s0-4.8.096-6.4a8.9 8.9 0 0 1 .56-3.04A4.8 4.8 0 0 1 4.8 4.8a5 5 0 0 1 1.76-1.28 9.2 9.2 0 0 1 3.04-.544c1.6 0 2.192-.096 6.4-.096s4.8 0 6.4.096a9 9 0 0 1 2.976.544c.727.27 1.38.709 1.904 1.28a4.9 4.9 0 0 1 1.2 1.76c.356.974.54 2.003.544 3.04.08 1.6.096 2.192.096 6.4s-.016 4.8-.096 6.4M16 7.792A8.208 8.208 0 1 0 24.224 16 8.194 8.194 0 0 0 16 7.792m0 13.536a5.328 5.328 0 1 1 0-10.657 5.328 5.328 0 0 1 0 10.657"/>
+</svg>    <span>Visiter notre page Instagram</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                      <li class="menu-item">
+              <a
+  href="https://www.youtube.com/@cociter-comptoircitoyendes4956"    target="_blank"    rel="noopener noreferrer"     
+>
+      <svg aria-hidden="true" focusable="false" class="icon icon-youtube aspect-square" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32">
+    <path d="M31.993 12.606a12.9 12.9 0 0 0-1.323-6.14 4.22 4.22 0 0 0-2.5-1.488c-4.045-.375-8.107-.529-12.167-.46-4.046-.072-8.093.077-12.124.445a4.14 4.14 0 0 0-2.122 1.1C.45 7.299.304 9.41.158 11.194a73 73 0 0 0 0 9.635 14.5 14.5 0 0 0 .436 2.974c.176.751.53 1.446 1.032 2.022a4.13 4.13 0 0 0 2.166 1.16 64 64 0 0 0 9.449.49c5.087.075 9.55 0 14.827-.416a4.16 4.16 0 0 0 2.224-1.16c.407-.416.71-.926.887-1.486.52-1.632.775-3.34.756-5.056.058-.832.058-5.858.058-6.75m-19.275 7.642v-9.203l8.605 4.624c-2.413 1.368-5.597 2.914-8.606 4.58"/>
+</svg>    <span>Visiter notre page Youtube</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+            </li>
+                  </ul>
+      </nav>
+      <nav id="footer-menu--primary" aria-labelledby="footer--primary" 
+      class="col-start-2 col-span-4 md:col-start-2 md:col-span-6 rl:col-end-9 rl:col-span-5 lg:col-end-12 lg:col-span-6 xl:col-end-12 xl:col-span-5 2xl:col-end-11 2xl:col-span-4">
+        <h3 id="footer--primary" class="sr-only">Menu</h3>
+        <div id="footer-menu--primary-wrapper">
+                      <div class="menu-parent">
+
+
+
+
+
+
+
+
+
+              <p class="menu-head">Liens pratiques</p>
+              <div class="menu-items-wrapper">
+                <ul id="footer-menu-group--liens-pratiques" class="menu-items">
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/electricite/"         
+>
+    <span>Je déménage</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/electricite/"         
+>
+    <span>Je suis prosumer</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://contrat.cociter.be/Cociter/Contract/FR/"    target="_blank"    rel="noopener noreferrer"     
+>
+    <span>Calculer mon prix</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+                    </li>
+                                  </ul>
+              </div>
+            </div>
+                      <div class="menu-parent">
+
+
+
+
+
+
+
+
+
+              <p class="menu-head">Cociter</p>
+              <div class="menu-items-wrapper">
+                <ul id="footer-menu-group--cociter" class="menu-items">
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/cociter/"         
+>
+    <span>Le modèle</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/cociter/"         
+>
+    <span>La production</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/cociter/equipe/"         
+>
+    <span>L&#8217;équipe</span>
+  </a>
+                    </li>
+                                  </ul>
+              </div>
+            </div>
+                      <div class="menu-parent">
+
+
+
+
+
+
+
+
+
+              <p class="menu-head">Clients</p>
+              <div class="menu-items-wrapper">
+                <ul id="footer-menu-group--clients" class="menu-items">
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/electricite/"         
+>
+    <span>Je deviens client</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://my.cociter.be/"    target="_blank"    rel="noopener noreferrer"     
+>
+    <span>MyCociter</span>
+      <span class="new-tab-text sr-only"> (nouvel onglet)</span>
+  </a>
+                    </li>
+                                      <li class="menu-item">
+                      <a
+  href="https://www.cociter.be/fr/electricite/"         
+>
+    <span>Ma facture</span>
+  </a>
+                    </li>
+                                  </ul>
+              </div>
+            </div>
+                  </div>
+      </nav>
+    </div>
+    <div class="grid-default items-center gap-y-4 pt-6 lg:pt-11">
+      <nav aria-labelledby="footer--legal"
+           class="col-span-full rl:col-end-9 rl:col-span-5 lg:col-end-12 lg:col-span-6 xl:col-end-12 xl:col-span-6 2xl:col-end-11 2xl:col-span-5">
+        <h3 id="footer--legal" class="sr-only">RGPD</h3>
+        <ul id="footer-menu--legal-pages" class="footer-menu--legal-pages"><li id="menu-item-50" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-50"><a href="https://www.cociter.be/fr/politique-de-confidentialite/conditions-generales/"><span>Conditions générales</span></a></li>
+<li id="menu-item-51" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-51"><a href="https://www.cociter.be/fr/politique-de-confidentialite/mentions-legales/"><span>Mentions légales</span></a></li>
+<li id="menu-item-52" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-52"><a href="https://www.cociter.be/fr/politique-de-confidentialite/politique-de-vie-privee/"><span>Politique de vie privée</span></a></li>
+</ul>      </nav>
+      <p
+        class="col-span-full rl:row-start-1 rl:col-start-1 rl:col-span-3 lg:col-start-2 lg:col-span-4 xl:col-start-2 xl:col-span-4 2xl:col-start-3 2xl:col-span-3 max-rl:text-center">&copy; 2026 COCITER SC. Tous droits réservés.</p>
+    </div>
+  </section>
+</footer>
+
+
+
+<script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/wp-*.php","/wp-admin/*","/wp-content/uploads/*","/wp-content/*","/wp-content/plugins/*","/wp-content/themes/cociter-2026/*","/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<script id="wp-hooks-js" src="https://www.cociter.be/wp-includes/js/dist/hooks.min.js?ver=f0f188028580e8dc1255"></script>
+<script id="wp-i18n-js" src="https://www.cociter.be/wp-includes/js/dist/i18n.min.js?ver=1dfe7db3940c23ea9216"></script>
+<script id="wp-i18n-js-after">
+wp.i18n.setLocaleData( { 'text direction\u0004ltr': [ 'ltr' ] } );
+//# sourceURL=wp-i18n-js-after
+</script>
+<script id="swv-js" src="https://www.cociter.be/wp-content/plugins/contact-form-7/includes/swv/js/index.js?ver=6.1.7"></script>
+<script id="contact-form-7-js-before">
+var wpcf7 = {
+    "api": {
+        "root": "https:\/\/www.cociter.be\/wp-json\/",
+        "namespace": "contact-form-7\/v1"
+    }
+};
+//# sourceURL=contact-form-7-js-before
+</script>
+<script id="contact-form-7-js" src="https://www.cociter.be/wp-content/plugins/contact-form-7/includes/js/index.js?ver=6.1.7"></script>
+<script id="wp-emoji-settings" type="application/json">
+{"baseUrl":"https://s.w.org/images/core/emoji/17.0.2/72x72/","ext":".png","svgUrl":"https://s.w.org/images/core/emoji/17.0.2/svg/","svgExt":".svg","source":{"concatemoji":"https://www.cociter.be/wp-includes/js/wp-emoji-release.min.js?ver=4ed8447334dd6471d5c1c52005e0ac80"}}
+</script>
+<script type="module">
+/*! This file is auto-generated */
+var e="script#wp-emoji-settings",t=document.querySelector(e);if(!(t instanceof HTMLScriptElement))throw new Error("Element missing: "+e);const r=JSON.parse(t.text),s=(window._wpemojiSettings=r,"wpEmojiSettingsSupports"),o=["flag","emoji"];function i(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(s,JSON.stringify(t))}catch(e){}}function c(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0);const r=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);return t.every((e,t)=>e===r[t])}function p(e,t){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var n=e.getImageData(16,16,1,1);for(let e=0;e<n.data.length;e++)if(0!==n.data[e])return!1;return!0}function u(e,t,n,r){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\udde8\ud83c\uddf6","\ud83c\udde8\u200b\ud83c\uddf6")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!r(e,"\ud83e\u1fac8")}return!1}function f(e,t,n,r){let a;const s=(a="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):document.createElement("canvas")).getContext("2d",{willReadFrequently:!0}),o=(s.textBaseline="top",s.font="600 32px Arial",{});return e.forEach(e=>{o[e]=t(s,e,n,r)}),o}function a(e){var t=document.createElement("script");t.src=e,t.defer=!0,document.head.appendChild(t)}r.supports={everything:!0,everythingExceptFlag:!0},new Promise(t=>{let n=function(){try{var e=JSON.parse(sessionStorage.getItem(s));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(o),u.toString(),c.toString(),p.toString()].join(",")+"));",r=new Blob([e],{type:"text/javascript"});const a=new Worker(URL.createObjectURL(r),{name:"wpTestEmojiSupports"});return void(a.onmessage=e=>{i(n=e.data),a.terminate(),t(n)})}catch(e){}i(n=f(o,u,c,p))}t(n)}).then(e=>{for(const n in e)r.supports[n]=e[n],r.supports.everything=r.supports.everything&&r.supports[n],"flag"!==n&&(r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&r.supports[n]);var t;r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&!r.supports.flag,r.supports.everything||((t=r.source||{}).concatemoji?a(t.concatemoji):t.wpemoji&&t.twemoji&&(a(t.twemoji),a(t.wpemoji)))});
+//# sourceURL=https://www.cociter.be/wp-includes/js/wp-emoji-loader.min.js
+</script>
+</body>
+</html>
