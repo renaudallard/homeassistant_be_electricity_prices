@@ -114,7 +114,7 @@ publication and how to parse it.
 > | `EL_Ecofix_Flexy_NL.pdf` | 5 pages, 11 851 chars | 5 pages, 344 chars |
 > | `EL_Ecofix_Motion_NL.pdf` | 5 pages, 11 406 chars | 5 pages, 174 chars |
 > | `EL_Ecofix_Motion_Online_NL.pdf` | 4 pages, 8 400 chars | 4 pages, 158 chars |
-| `EL_Ecofix_Flexy_Online_NL.pdf` | not committed in May | 4 pages, 325 chars |
+> | `EL_Ecofix_Flexy_Online_NL.pdf` | not committed in May | 4 pages, 325 chars |
 >
 > The page counts are unchanged and only the text layer is gone. The PDF
 > metadata shows the producing tool changed from Canva to pypdf, which is what a
