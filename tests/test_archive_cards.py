@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -222,6 +223,82 @@ async def test_transient_failures_are_retried_and_permanent_ones_are_not(
     assert summary.failed == [
         f"beta/acme_fix/wallonia: ExtractorError: HTTP 404 fetching {CARD_URL}"
     ]
+
+
+async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
+    tmp_path: Path,
+) -> None:
+    """A supplier with an archive is asked for each closed month the branch
+    lacks; a month it answers None for or still flags provisional stays
+    absent, a month already on disk is not asked again, and a supplier
+    without an archive is not asked at all."""
+    asked: list[date] = []
+    settled = {(2026, 7): 0.21, (2026, 6): 0.22}
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(month)
+        if (month.year, month.month) == (2026, 8):
+            snap = make_snapshot(
+                supplier="acme", contract=contract, publication_label="augustus 2026"
+            )
+            return replace(snap, provisional=True)
+        price = settled.get((month.year, month.month))
+        if price is None:
+            return None
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price),
+            publication_label=f"{month:%Y-%m}",
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_card_fetch("september 2026"),
+        fetch_for_month=fetch_for_month,
+    )
+    without = _extractor(_card_fetch("september 2026"), sid="beta")
+    summary = await ac.archive(
+        tmp_path,
+        extractors=[extractor, without],
+        backfill_months=4,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert (summary.stored, summary.backfilled, summary.absent) == (2, 2, 2)
+    assert asked == [
+        date(2026, 8, 1),
+        date(2026, 7, 1),
+        date(2026, 6, 1),
+        date(2026, 5, 1),
+    ]
+    july = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-07.json").read_text())
+    assert july["_via"] == "archive"
+    assert july["energy"]["single"] == 0.21
+    assert (tmp_path / "acme/acme_fix/wallonia/2026-06.json").exists()
+    assert not (tmp_path / "acme/acme_fix/wallonia/2026-08.json").exists()
+    assert not (tmp_path / "acme/acme_fix/wallonia/2026-05.json").exists()
+    assert not (tmp_path / "beta/acme_fix/wallonia/2026-08.json").exists()
+    live = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert live["_via"] == "live"
+    # A second run asks only for the months still missing.
+    asked.clear()
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=4, now=NOW, sleep=_no_sleep
+    )
+    assert asked == [date(2026, 8, 1), date(2026, 5, 1)]
+    assert (summary.backfilled, summary.absent) == (0, 2)
 
 
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:

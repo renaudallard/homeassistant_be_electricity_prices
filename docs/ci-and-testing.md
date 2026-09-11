@@ -734,7 +734,7 @@ green does not mean covered.
 The live check asks whether today's card still parses. `scripts/archive_cards.py` keeps the
 answer: it walks the same registry, fetches every (supplier, contract, region) card through
 `extractor.fetch` exactly as the coordinator does, and writes the parsed snapshot to
-`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:179`). The
+`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:191`). The
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
@@ -752,27 +752,38 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:100`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:110`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:179`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:191`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:216`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:233`).
+
+`--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
+own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
+months before the current one that the branch does not hold yet, and each answer is stored under
+the month asked for with `_via` set to `archive` (a live capture carries `live`). A month the
+supplier answers None for is left absent, as is a card still flagged provisional (Eneco's
+estimate before the next card prints the settled index), so a later backfill fills it once it has
+settled, and a month already on disk is never asked again. The branch thus mirrors the supplier
+archives: insurance against a supplier dropping its archive, as DATS 24 did, and a cheap read for
+any month a supplier's own path cannot serve. The daily schedule runs with `--backfill 0`; the
+workflow's manual dispatch takes the number as an input.
 
 Per card, transient failures are retried three times with the live check's own classification
 (`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
 skipped, so one supplier never stops the walk. The custom supplier has no card and a supplier
 past its `deprecated_until` has left the market, so neither is asked (`_targets`,
-`scripts/archive_cards.py:261`). The script exits 0 when at least one card was stored or
+`scripts/archive_cards.py:277`). The script exits 0 when at least one card was stored or
 confirmed unchanged and 1 when none was, which is a runner-wide problem rather than a
 supplier's; it files no issues, the live check already does that.
 
 `tests/test_archive_cards.py` drives it with a stub extractor and a canned page: filing by
 label, the shared-page attribution, the no-op repeat run, the retry split, the skip rules, the
-retention and the exit code.
+backfill's absent and provisional months, the retention and the exit code.
 
 ## GitHub workflows
 
@@ -877,7 +888,10 @@ ending green (`.github/workflows/live_check.yml:375`).
 
 Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
 and on manual dispatch (`.github/workflows/archive_cards.yml:3`), with `contents: write` because
-it pushes. It checks out `main` for the script and the `archive` branch as a worktree under
+it pushes. The dispatch takes one input, `backfill_months`, passed to the script as `--backfill`;
+the schedule runs with 0, and a dispatch asking for a backfill gets a six-hour job timeout
+instead of the usual one hour, since a backfill is one archived card per supplier, contract,
+region and month on top of the daily walk. It checks out `main` for the script and the `archive` branch as a worktree under
 `tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
 `git worktree add --orphan`, so nothing has to be pushed by hand
 (`.github/workflows/archive_cards.yml:46`). It then runs `scripts/archive_cards.py --out

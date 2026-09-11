@@ -8,6 +8,14 @@ on:
     # sheds scheduled runs first.
     - cron: "41 5 * * *"
   workflow_dispatch:
+    inputs:
+      backfill_months:
+        description: >-
+          Also mirror this many closed months before the current one from the
+          supplier archives, for months the branch does not hold yet.
+        default: "0"
+        required: false
+        type: string
 
 # The job pushes to the archive branch, and nothing else does.
 permissions:
@@ -24,8 +32,10 @@ jobs:
   archive:
     runs-on: ubuntu-latest
     # A full walk is about 250 cards, 21 minutes on a Raspberry Pi; a parse
-    # that never returns is bounded per card by the script.
-    timeout-minutes: 60
+    # that never returns is bounded per card by the script. A backfill asks
+    # one archived card per supplier, contract, region and month on top,
+    # so a dispatch that asks for one gets six hours.
+    timeout-minutes: ${{ (github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') && 360 || 60 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -57,7 +67,9 @@ jobs:
           fi
 
       - name: Store today's cards
-        run: python scripts/archive_cards.py --out tmp/archive
+        run: >-
+          python scripts/archive_cards.py --out tmp/archive
+          --backfill "${{ github.event.inputs.backfill_months || '0' }}"
 
       - name: Commit and push what changed
         run: |

@@ -17,13 +17,22 @@ already on disk is rewritten only when the parse changed, so a quiet day
 leaves nothing to commit, and months older than ``--keep-months`` are
 removed on every run.
 
+``--backfill N`` also asks every supplier that keeps an archive of its own
+for the N closed months before this one, through the same
+``fetch_for_month`` the integration uses, and stores each month the branch
+does not hold yet. That makes the branch a mirror of those archives:
+insurance against a supplier dropping its archive (DATS 24 did) and a
+cheap read for any month a supplier's own path cannot serve. A month the
+supplier answers None for is left absent, as is a card still flagged
+provisional, so a later backfill fills it once it has settled.
+
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the
 run goes red without filing anything. The live check already files
 per-supplier issues and this is not a second checker.
 
 Usage:
-    python scripts/archive_cards.py --out tmp/archive [--only mega ...]
+    python scripts/archive_cards.py --out tmp/archive [--only mega ...] [--backfill 12]
 """
 
 from __future__ import annotations
@@ -34,11 +43,11 @@ import hashlib
 import json
 import shutil
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -70,6 +79,7 @@ from homeassistant.helpers.json import json_dumps  # noqa: E402
 # month is read by the same function the live check's freshness gate uses.
 from live_check import label_month  # type: ignore[import-not-found]  # noqa: E402
 
+_T = TypeVar("_T")
 _BRUSSELS = ZoneInfo("Europe/Brussels")
 _ATTEMPTS = 3
 _RETRY_BACKOFF_S = (10, 30)
@@ -125,6 +135,8 @@ class _RecordingMemo(dict[str, str]):
 class _Summary:
     stored: int = 0
     unchanged: int = 0
+    backfilled: int = 0
+    absent: int = 0
     failed: list[str] = field(default_factory=list)
 
 
@@ -181,22 +193,27 @@ def _write_card(
     supplier: str,
     contract: str,
     region: str,
+    month_id: str,
     snap: SupplierSnapshot,
     sources: list[dict[str, str]],
     now: datetime,
+    via: str,
 ) -> bool:
     """Write the card's month file; True when the file changed.
 
     The dict is what the integration's own Store persists for a month row,
     round-tripped through Home Assistant's encoder so the file holds exactly
     the types ``_snapshot_from_dict`` reads back, then laid out one key per
-    line so a day's diff on the branch is readable.
+    line so a day's diff on the branch is readable. ``via`` records which
+    path produced it, ``live`` (today's card, filed by its label) or
+    ``archive`` (the supplier's own archive, filed by the month asked for).
     """
     today = now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
     card["_seen_on"] = today.isoformat()
     card["_sources"] = sources
-    path = out / supplier / contract / region / f"{_card_month(snap, today)}.json"
+    card["_via"] = via
+    path = out / supplier / contract / region / f"{month_id}.json"
     existing: dict[str, Any] | None = None
     if path.exists():
         try:
@@ -239,18 +256,17 @@ def _transient(err: BaseException) -> bool:
 
 
 async def _fetch_card(
-    extractor: SupplierExtractor,
-    session: aiohttp.ClientSession,
-    contract: str,
-    region: str,
+    fetch: Callable[[], Awaitable[_T]],
     sleep: Callable[[float], Any] = asyncio.sleep,
-) -> SupplierSnapshot:
-    """One card, retrying the transient failures the live check retries."""
+) -> _T:
+    """One card, retrying the transient failures the live check retries.
+
+    ``fetch`` builds a fresh awaitable per attempt, since one can only be
+    awaited once.
+    """
     for attempt in range(_ATTEMPTS):
         try:
-            return await asyncio.wait_for(
-                extractor.fetch(session, contract, region), _CARD_TIMEOUT_S
-            )
+            return await asyncio.wait_for(fetch(), _CARD_TIMEOUT_S)
         except Exception as err:
             if attempt == _ATTEMPTS - 1 or not _transient(err):
                 raise
@@ -284,6 +300,7 @@ async def archive(
     *,
     only: set[str] | None = None,
     keep_months: int = 36,
+    backfill_months: int = 0,
     extractors: Iterable[SupplierExtractor] | None = None,
     now: datetime | None = None,
     sleep: Callable[[float], Any] = asyncio.sleep,
@@ -307,7 +324,9 @@ async def archive(
                 label = f"{ex.id}/{contract}/{region}"
                 memo.touched.clear()
                 try:
-                    snap = await _fetch_card(ex, session, contract, region, sleep)
+                    snap = await _fetch_card(
+                        lambda: ex.fetch(session, contract, region), sleep
+                    )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
                     continue
@@ -315,13 +334,57 @@ async def archive(
                     _source_entry(key, _write_text(out, seen_month, memo[key]))
                     for key in sorted(memo.touched)
                 ]
-                if _write_card(out, ex.id, contract, region, snap, sources, now):
+                month_id = _card_month(snap, today)
+                if _write_card(
+                    out, ex.id, contract, region, month_id, snap, sources, now, "live"
+                ):
                     summary.stored += 1
                 else:
                     summary.unchanged += 1
+            for ex, contract, region in targets:
+                fetch_for_month = ex.fetch_for_month
+                if fetch_for_month is None:
+                    continue
+                for back in range(1, backfill_months + 1):
+                    month_id = _months_before(today, back)
+                    if (out / ex.id / contract / region / f"{month_id}.json").exists():
+                        continue
+                    first = date(int(month_id[:4]), int(month_id[5:]), 1)
+                    label = f"{ex.id}/{contract}/{region}/{month_id}"
+                    memo.touched.clear()
+                    try:
+                        past = await _fetch_card(
+                            lambda: fetch_for_month(session, contract, region, first),
+                            sleep,
+                        )
+                    except Exception as err:  # noqa: BLE001 - one month must not stop the walk
+                        summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                        continue
+                    if past is None or past.provisional:
+                        # Not out yet, past the horizon, or still carrying an
+                        # estimate: leave the month for a later backfill.
+                        summary.absent += 1
+                        continue
+                    sources = [
+                        _source_entry(key, _write_text(out, seen_month, memo[key]))
+                        for key in sorted(memo.touched)
+                    ]
+                    _write_card(
+                        out,
+                        ex.id,
+                        contract,
+                        region,
+                        month_id,
+                        past,
+                        sources,
+                        now,
+                        "archive",
+                    )
+                    summary.backfilled += 1
     removed = _prune(out, keep_months, today)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
+        f"{summary.backfilled} backfilled, {summary.absent} absent, "
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked"
     )
@@ -337,9 +400,21 @@ def main() -> int:
         "--only", action="append", default=[], help="restrict to a supplier id"
     )
     parser.add_argument("--keep-months", type=int, default=36)
+    parser.add_argument(
+        "--backfill",
+        type=int,
+        default=0,
+        metavar="N",
+        help="also mirror the N closed months before this one from the supplier archives",
+    )
     args = parser.parse_args()
     summary = asyncio.run(
-        archive(args.out, only=set(args.only), keep_months=args.keep_months)
+        archive(
+            args.out,
+            only=set(args.only),
+            keep_months=args.keep_months,
+            backfill_months=args.backfill,
+        )
     )
     return 0 if summary.stored or summary.unchanged else 1
 
