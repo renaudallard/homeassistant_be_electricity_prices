@@ -2618,7 +2618,7 @@ _NL_MONTH_NAMES: dict[str, int] = {
 }
 
 
-def _label_month(label: str) -> tuple[int, int] | None:
+def label_month(label: str) -> tuple[int, int] | None:
     """Read ``(year, month)`` out of a card's publication label.
 
     Every shape the suppliers actually print: ``08/2026``, ``2026-08`` and a
@@ -2698,7 +2698,7 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
             )
 
     label = str(getattr(snap, "publication_label", "") or "")
-    parsed = _label_month(label)
+    parsed = label_month(label)
     if parsed is None:
         # Not a failure: an unknown label shape is not evidence of staleness.
         # Reported so a new shape is visible rather than silently uncovered.

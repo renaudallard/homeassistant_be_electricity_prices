@@ -1,11 +1,12 @@
 # CI and testing
 
 This document covers how the Belgian Electricity Prices integration is tested and released: the
-fixture-driven pytest suite (`tests/`), the weekly live extractor harness
+fixture-driven pytest suite (`tests/`), the daily live extractor harness
 (`scripts/live_check.py`) that fetches every supplier's real tariff card and asserts the
-extractors still parse, the four GitHub Actions workflows (`test.yml`, `validate.yml`,
-`live_check.yml`, `autorelease.yml`), and the exact local commands a contributor runs before
-committing. It also spells out the version-bump policy that gates a release.
+extractors still parse, the daily card archiver (`scripts/archive_cards.py`) that stores what
+every extractor parsed on the `archive` branch, the five GitHub Actions workflows (`test.yml`,
+`validate.yml`, `live_check.yml`, `archive_cards.yml`, `autorelease.yml`), and the exact local
+commands a contributor runs before committing. It also spells out the version-bump policy that gates a release.
 
 Related docs:
 
@@ -728,9 +729,54 @@ relabelled injection row that zeroed a solar credit passed CI for all but two su
 shape gate existed, issues #31/F53). When you add a field to a snapshot, add a gate for it here;
 green does not mean covered.
 
+## scripts/archive_cards.py
+
+The live check asks whether today's card still parses. `scripts/archive_cards.py` keeps the
+answer: it walks the same registry, fetches every (supplier, contract, region) card through
+`extractor.fetch` exactly as the coordinator does, and writes the parsed snapshot to
+`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:179`). The
+dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
+round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
+`_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
+`archive` branch (see `archive_cards.yml` below) and the month cache reads the result for any
+month a supplier's own archive cannot serve (`snapshot_store._archived_card_from_github`, see
+[coordinator.md](coordinator.md)).
+
+Three design points:
+
+- **A card is filed under the month its label names**, read by `label_month`
+  (`scripts/live_check.py:2621`), the same function the freshness gate uses. Filing by
+  capture date would put Ecopower's definitive card, which lands at the end of the month it
+  covers, under the wrong month, and a supplier publishing ahead would overwrite the running
+  month with next month's card. Only a label the function cannot read files under the day's
+  month.
+- **What each parse read is kept too.** The run shares one text memo
+  (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:100`) notes which memo
+  entries each fetch touched. Those texts are stored content-addressed under
+  `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
+  re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
+  tens of megabytes.
+- **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:179`),
+  so the branch gains a commit only when a card changed. Months older than `--keep-months`
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:216`).
+
+Per card, transient failures are retried three times with the live check's own classification
+(`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
+skipped, so one supplier never stops the walk. The custom supplier has no card and a supplier
+past its `deprecated_until` has left the market, so neither is asked (`_targets`,
+`scripts/archive_cards.py:261`). The script exits 0 when at least one card was stored or
+confirmed unchanged and 1 when none was, which is a runner-wide problem rather than a
+supplier's; it files no issues, the live check already does that.
+
+`tests/test_archive_cards.py` drives it with a stub extractor and a canned page: filing by
+label, the shared-page attribution, the no-op repeat run, the retry split, the skip rules, the
+retention and the exit code.
+
 ## GitHub workflows
 
-Four workflows live under `.github/workflows/`.
+Five workflows live under `.github/workflows/`.
 
 ### test.yml - Tests
 
@@ -827,6 +873,27 @@ informational, not a regression (`.github/workflows/live_check.yml:361`). A sepa
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
 ending green (`.github/workflows/live_check.yml:375`).
 
+### archive_cards.yml - Archive tariff cards
+
+Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
+and on manual dispatch (`.github/workflows/archive_cards.yml:3`), with `contents: write` because
+it pushes. It checks out `main` for the script and the `archive` branch as a worktree under
+`tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
+`git worktree add --orphan`, so nothing has to be pushed by hand
+(`.github/workflows/archive_cards.yml:46`). It then runs `scripts/archive_cards.py --out
+tmp/archive`, and commits and pushes only when the tree changed.
+
+The archive lives on its own branch on purpose: three years of daily commits would bury
+`main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
+made with the workflow's `GITHUB_TOKEN` start no other workflow, and `test.yml`, `validate.yml`
+and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather than cancelled
+(`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
+same day twice and lose the second push as non-fast-forward.
+
+Mega blocks the GitHub runner address range (its listing fetch times out only from Actions),
+so its cards fail every run and are simply reported; Mega has its own archive and the month
+cache never needs the repository's copy for it.
+
 ### autorelease.yml - Autorelease
 
 Runs only on push to `main` that changes
@@ -893,5 +960,9 @@ Notes:
 - The full live check is network-bound and can be run locally with
   `python scripts/live_check.py`; it writes `catalog_report.md` and `drift_report.md` to the repo
   root and prints the extractor report to stdout. It is not part of the pre-commit gate.
+- `python scripts/archive_cards.py --out tmp/archive` stores today's cards under `tmp/archive`
+  the way the daily workflow stores them on the `archive` branch. A full walk asks about 250
+  cards and takes 21 minutes on a Raspberry Pi, most of it Bolt's and Mega's PDF parses, and
+  writes about 7 MB. Not part of the gate either.
 - Per the repository conventions, ensure `__pycache__` contents are cleared before committing and
   keep `README.md` and any man page in step with runtime-affecting changes.

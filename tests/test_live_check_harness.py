@@ -838,7 +838,7 @@ def test_label_month_reads_every_shape_the_cards_print(
     """A character class that forgets the u in "aout" fails to read 104 of the
     236 live labels, and an unreadable label is skipped -- so the check would
     have quietly covered almost nothing."""
-    assert lc._label_month(label) == expect
+    assert lc.label_month(label) == expect
 
 
 def test_a_card_from_a_past_month_fails(monkeypatch: pytest.MonkeyPatch) -> None:

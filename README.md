@@ -1028,6 +1028,7 @@ ruff format --check .
 mypy --strict custom_components/be_electricity_prices
 pytest tests/
 python scripts/live_check.py    # hits real supplier endpoints
+python scripts/archive_cards.py --out tmp/archive   # stores today's cards there
 ```
 
 Tests run against fixture PDFs and HTML snippets in

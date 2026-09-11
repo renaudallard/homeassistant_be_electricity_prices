@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1326`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1328`). It declares
 the `Contract`s it sells (`providers/base.py:79`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -267,7 +267,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:458`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:467`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -277,7 +277,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (DATS 24, energie.be, Engie, Luminus, where the
   only cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:225`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:460`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:469`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py:839`).
@@ -301,7 +301,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1380`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1383`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
@@ -309,8 +309,9 @@ A new supplier is a self-contained change; the contract is in
    `EXTRACTORS` dict (`providers/__init__.py:66`). The `Eneco` module is the reference
    implementation.
 3. Ship a fixture-driven unit test against a real card sample (`tests/fixtures/*.pdf`), and add
-   the supplier to the weekly `scripts/live_check.py` harness that fetches every real card and
-   asserts the extractor still parses. See [ci-and-testing.md](ci-and-testing.md).
+   the supplier to the daily `scripts/live_check.py` harness that fetches every real card and
+   asserts the extractor still parses. See [ci-and-testing.md](ci-and-testing.md). The daily
+   card archiver (`scripts/archive_cards.py`) walks the registry and needs no change.
 
 The extractor maps the card's own DSO labels onto the canonical DSO keys (`const.py:49`), sets a
 per-contract `regions` set for products that are not sold everywhere, and, if the card ships

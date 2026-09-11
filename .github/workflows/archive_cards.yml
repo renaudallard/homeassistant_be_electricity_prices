@@ -1,0 +1,73 @@
+name: Archive tariff cards
+
+on:
+  schedule:
+    # 05:41 UTC = 06:41 CET / 07:41 CEST, after the suppliers' overnight
+    # publication and before the 06:17 live check. Off the hour for the
+    # reason live_check.yml spells out: the top of the hour is where GitHub
+    # sheds scheduled runs first.
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+# The job pushes to the archive branch, and nothing else does.
+permissions:
+  contents: write
+
+# A manual run overlapping the schedule would push the same day's cards
+# twice and the second push would be rejected as non-fast-forward. Queue
+# it instead of cancelling: both runs are worth finishing.
+concurrency:
+  group: archive-cards
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    # A full walk is about 250 cards, 21 minutes on a Raspberry Pi; a parse
+    # that never returns is bounded per card by the script.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # The script imports the integration package itself (for the
+          # snapshot codec the Store uses), so it needs what the package
+          # imports at module level: homeassistant, defusedxml for api.py
+          # and the two PDF readers. Versions come from requirements-dev.txt
+          # so this runs against what the test suite proved.
+          pip install -c requirements-dev.txt \
+            pypdf pdfplumber aiohttp defusedxml homeassistant
+
+      - name: Check out the archive branch
+        # The archive lives on its own branch so three years of daily
+        # commits stay out of main's history and out of every HACS
+        # download. Checked out as a worktree under tmp/, which main's
+        # .gitignore covers. The first run creates the branch unborn.
+        run: |
+          if git fetch --depth=1 origin archive; then
+            git worktree add --detach tmp/archive FETCH_HEAD
+            git -C tmp/archive checkout -B archive
+          else
+            git worktree add --orphan -b archive tmp/archive
+          fi
+
+      - name: Store today's cards
+        run: python scripts/archive_cards.py --out tmp/archive
+
+      - name: Commit and push what changed
+        run: |
+          cd tmp/archive
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no card changed today"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
+          git push origin archive
