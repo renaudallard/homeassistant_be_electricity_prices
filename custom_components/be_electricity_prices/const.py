@@ -452,6 +452,10 @@ CARD_ARCHIVE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/"
     "homeassistant_be_electricity_prices/archive"
 )
+# The month the daily captures began. A supplier with no archive of its own
+# has nothing on the branch before it, since a backfill can only mirror a
+# supplier's archive, so the month cache never asks for those months.
+CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 9)
 
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live

@@ -2356,14 +2356,15 @@ async def test_snapshot_for_month_reasks_a_row_that_can_still_move(
 
 
 async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """An extractor without fetch_for_month, or one whose fetch_for_month
     returns None for the requested month, asks the repository's card archive
     and, when that has nothing either, falls back to the current snapshot as
     a proxy."""
 
-    current = _archive_snapshot("2026-04")
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
     extractor = SupplierExtractor(
         id="test",
         label="Test",
@@ -2375,11 +2376,11 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
     github = AsyncMock(return_value=None)
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 1, 1), current
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
         assert snap is current
         github.assert_awaited_once_with(
-            ANY, "test", "test", "wallonia", date(2026, 1, 1)
+            ANY, "test", "test", "wallonia", date(2026, 9, 1)
         )
 
         async def _none_fetch(*_args: object, **_kw: object) -> SupplierSnapshot | None:
@@ -2393,23 +2394,30 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
             fetch_for_month=_none_fetch,
         )
         snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor2, "test", "wallonia", date(2025, 6, 1), current
+            hass,
+            MagicMock(),
+            extractor2,
+            "test",
+            "wallonia",
+            date(2026, 10, 1),
+            current,
         )
         assert snap is current
     assert github.await_count == 2
     # Neither archive has the month: cached as such, and re-asked on the
     # provisional TTL like any other "not out yet" answer.
-    assert _monthly_snapshots(hass)[("test2", "test", "wallonia", "2025-06")] is None
+    assert _monthly_snapshots(hass)[("test2", "test", "wallonia", "2026-10")] is None
 
 
 async def test_snapshot_for_month_reads_the_repository_archive(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A supplier with no archive of its own is billed on the card the
     repository stored for the month, cached like any archived row."""
 
-    current = _archive_snapshot("2026-04")
-    stored = _archive_snapshot("2026-01")
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
+    stored = _archive_snapshot("2026-09")
     extractor = SupplierExtractor(
         id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
     )
@@ -2423,12 +2431,12 @@ async def test_snapshot_for_month_reads_the_repository_archive(
                 extractor,
                 "test",
                 "wallonia",
-                date(2026, 1, 1),
+                date(2026, 9, 1),
                 current,
             )
             assert snap is stored
     assert github.await_count == 1
-    assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-01")] is stored
+    assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-09")] is stored
 
 
 async def test_repository_archive_is_asked_only_when_the_supplier_has_nothing(
@@ -2472,13 +2480,14 @@ async def test_repository_archive_is_asked_only_when_the_supplier_has_nothing(
 
 
 async def test_repository_archive_failure_is_retried_not_cached(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A transient failure reading the repository is not "no card": no row
     is written, the failure marker holds the retry, and the current card
     stands in meanwhile."""
 
-    current = _archive_snapshot("2026-04")
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
     extractor = SupplierExtractor(
         id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
     )
@@ -2493,12 +2502,12 @@ async def test_repository_archive_failure_is_retried_not_cached(
                 extractor,
                 "test",
                 "wallonia",
-                date(2026, 1, 1),
+                date(2026, 9, 1),
                 current,
             )
             assert snap is current
     assert github.await_count == 1
-    key = ("test", "test", "wallonia", "2026-01")
+    key = ("test", "test", "wallonia", "2026-09")
     assert key not in _monthly_snapshots(hass)
     assert key in _monthly_failed_fetches(hass)
 
@@ -2510,8 +2519,8 @@ async def test_the_running_month_never_reaches_the_repository_archive(
     current snapshot holds; the repository's copy is a day behind at best,
     so only a closed month is looked up there."""
 
-    freezer.move_to("2026-06-20 09:00:00+02:00")
-    current = _archive_snapshot("2026-06")
+    freezer.move_to("2026-10-20 09:00:00+02:00")
+    current = _archive_snapshot("2026-10")
     extractor = SupplierExtractor(
         id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
     )
@@ -2520,16 +2529,72 @@ async def test_the_running_month_never_reaches_the_repository_archive(
     github = AsyncMock(return_value=_archive_snapshot("stored"))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 6, 1), current
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 10, 1), current
         )
         assert snap is current
         github.assert_not_awaited()
         snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 5, 1), current
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
         assert snap is github.return_value
         github.assert_awaited_once_with(
-            ANY, "test", "test", "wallonia", date(2026, 5, 1)
+            ANY, "test", "test", "wallonia", date(2026, 9, 1)
+        )
+
+
+async def test_months_before_the_captures_began_are_not_asked_for(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A supplier with no archive of its own has nothing on the branch from
+    before September 2026, so those months are never fetched; a supplier
+    with an archive may have been backfilled and is still asked."""
+
+    freezer.move_to("2026-10-05 09:00:00+02:00")
+    current = _archive_snapshot("2026-10")
+    without = SupplierExtractor(
+        id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
+    )
+
+    async def _none(*_a: object, **_kw: object) -> SupplierSnapshot | None:
+        return None
+
+    with_archive = SupplierExtractor(
+        id="test2",
+        label="Test2",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_none,
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    with patch.object(snapshot_store, "_archived_card_from_github", github):
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), without, "test", "wallonia", date(2026, 8, 1), current
+        )
+        assert snap is current
+        github.assert_not_awaited()
+        assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-08")] is None
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), without, "test", "wallonia", date(2026, 9, 1), current
+        )
+        assert snap is github.return_value
+        github.assert_awaited_once_with(
+            ANY, "test", "test", "wallonia", date(2026, 9, 1)
+        )
+        github.reset_mock()
+        snap = await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            with_archive,
+            "test",
+            "wallonia",
+            date(2026, 8, 1),
+            current,
+        )
+        assert snap is github.return_value
+        github.assert_awaited_once_with(
+            ANY, "test2", "test", "wallonia", date(2026, 8, 1)
         )
 
 

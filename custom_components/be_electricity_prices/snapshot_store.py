@@ -53,6 +53,7 @@ import aiohttp
 import asyncio
 
 from .const import (
+    CARD_ARCHIVE_FIRST_MONTH,
     CARD_ARCHIVE_URL,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_INCLUDE_VAT,
@@ -777,6 +778,24 @@ async def _archived_card_from_github(
         return None
 
 
+def _card_archive_may_hold(
+    extractor: "SupplierExtractor", year_month: date, today: date
+) -> bool:
+    """Whether the repository's card archive can hold this month for this card.
+
+    Only a closed month: the running month's card is the one being served
+    live, which is what the current snapshot holds, and the repository's
+    copy of it is a day behind at best. And a supplier with no archive of
+    its own has nothing on the branch from before the daily captures began:
+    a backfill can only mirror a supplier's archive, so asking for an earlier
+    month is a 404 a day for nothing.
+    """
+    month = (year_month.year, year_month.month)
+    if month >= (today.year, today.month):
+        return False
+    return extractor.fetch_for_month is not None or month >= CARD_ARCHIVE_FIRST_MONTH
+
+
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -799,7 +818,8 @@ async def _snapshot_for_month(
     (TotalEnergies), a card named by version rather than by month (Bolt's
     variable folder) or a month before the supplier's horizon. The current
     snapshot is the proxy when neither has the month, and it is the running
-    month's card by definition, so that month never reaches the repository.
+    month's card by definition, so that month never reaches the repository
+    (``_card_archive_may_hold`` says which months do).
 
     Caches the result per (supplier, contract, region, YYYY-MM): a hit
     skips the network round-trip on subsequent refreshes. ``None`` is
@@ -899,13 +919,7 @@ async def _snapshot_for_month(
                 snap = await extractor.fetch_for_month(
                     session, contract, region, year_month
                 )
-            if snap is None and (year_month.year, year_month.month) < (
-                today.year,
-                today.month,
-            ):
-                # Only a closed month: the running month's card is the one
-                # being served live, which is what current_snapshot holds,
-                # and the repository's copy of it is a day behind at best.
+            if snap is None and _card_archive_may_hold(extractor, year_month, today):
                 snap = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )
