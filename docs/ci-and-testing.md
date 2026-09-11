@@ -890,9 +890,10 @@ and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather
 (`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
 same day twice and lose the second push as non-fast-forward.
 
-Mega blocks the GitHub runner address range (its listing fetch times out only from Actions),
-so its cards fail every run and are simply reported; Mega has its own archive and the month
-cache never needs the repository's copy for it.
+Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
+Actions, from 2026-07-06 on), and on such a day its cards fail and are simply reported. The first
+run, on 2026-09-11, stored all 61 of them, so the block is not permanent; either way Mega has its
+own archive and the month cache rarely needs the repository's copy for it.
 
 ### autorelease.yml - Autorelease
 

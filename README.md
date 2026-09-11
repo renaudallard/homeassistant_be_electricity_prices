@@ -1096,9 +1096,9 @@ the extractor of that day parsed; a later parser fix does not re-parse it,
 which is what the supplier's own archive still gives the suppliers that
 have one, so that archive is asked first. The archive has no PDF bytes (a
 month of cards is tens of megabytes, three years of them would not fit a
-repository), Mega blocks the GitHub runners so its cards come from its own
-archive alone, and a card the parser cannot read (Ecofix's page images) is
-not stored at all.
+repository), a supplier that blocks the GitHub runners for a day (Mega has,
+the live check's timeouts show) just misses that day's capture, and a card
+the parser cannot read (Ecofix's page images) is not stored at all.
 
 ## License
 
