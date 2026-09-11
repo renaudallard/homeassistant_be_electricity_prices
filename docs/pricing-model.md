@@ -419,7 +419,7 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
-| `pro_rata` | EnergyVision, four cards | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | energy + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
+| `pro_rata` | EnergyVision, four cards | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
 | `anniversary` | Frank Energie, three tiers | the whole amount, in the window the first anniversary falls in and no other | none; that card states none |
 
 The two rules travel together on one field because each card states one complete rule
@@ -429,8 +429,13 @@ lump, is what would split them.
 The cap counts only the three components the card names. Not the energy fund, the
 data-management charge or the Brussels OSP fee that sit beside the standing charge in
 `_annual_static_fees`, which is why `_ytd_static_fees` reports the supplier's share
-separately. It binds only on a very small connection: around 900 kWh a year against a
-200 EUR credit.
+separately; and not the all-in figure the walks bill, which carries the network and tax
+legs and is net of the feed-in credit, which is why both walks keep the supplier's energy
+component beside it (`energy_component_ytd_eur`). Measured against the all-in figure the
+cap let a 365 kWh/year connection through at 42,61 EUR over a quarter where the card
+grants 26,28, and capped a site exporting more than it used below its own energiekost.
+It binds only on a very small connection: around 1.100 kWh a year against a 200 EUR
+credit.
 
 Two gates keep it honest. The amount is read from the SIGNING month's card
 (`signing_month_snapshot`), because the credit belongs to the product version signed and

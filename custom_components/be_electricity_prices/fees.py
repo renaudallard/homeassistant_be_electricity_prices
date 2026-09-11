@@ -386,10 +386,14 @@ def _welcome_credit_eur(
     credit may come off: *"De korting heeft uitsluitend betrekking op de
     energiekost, de vaste vergoeding, de bijdrage groene stroom en WKK ... De
     korting is niet van toepassing op nettarieven, taksen en heffingen"*. The
+    energiekost is the supplier's energy component of the consumption alone,
+    gross of any feed-in credit: the network and tax legs that make up the
+    rest of the all-in rate are excluded by the same sentence, and the
+    feed-in is a separate invoice line rather than a reduction of it. The
     cap is prorated onto the credited days, so a running figure can never
     credit more than the same days were charged. It binds only on a very small
     connection: against a 200 EUR credit and a 50 EUR standing charge it needs
-    a year under roughly 900 kWh.
+    a year under roughly 1.100 kWh.
 
     A card that grants its credit at the ANNIVERSARY instead (Frank Energie's
     Dynamisch Korting: *"De korting wordt toegekend via de factuur na een jaar

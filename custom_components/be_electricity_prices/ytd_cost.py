@@ -516,6 +516,12 @@ async def _ytd_hourly_energy(
     )
 
     energy_cost = 0.0
+    # The supplier's ENERGY component of what the window's consumption was
+    # charged, gross of any feed-in credit. Not part of the bill, which the
+    # all-in figure above already carries; it is the base a welcome credit is
+    # capped against, and the card names exactly this component, not the
+    # network or tax legs beside it and not the feed-in line either.
+    energy_component = 0.0
     # How much of the window actually got an energy price. A YTD that is low
     # because the spot cache is thin looks identical to a low one that is
     # correct, so report the coverage instead of leaving the user to guess.
@@ -569,6 +575,9 @@ async def _ytd_hourly_energy(
             continue
         kwh_cons = cons_per_hour.get(utc_hour, 0.0)
         kwh_inj = inj_per_hour.get(utc_hour, 0.0)
+        # An unpriced hour carries a zero energy component, so it adds nothing
+        # here either: what could not be charged cannot be credited against.
+        energy_component += kwh_cons * bd.energy
         if regime == SOLAR_REGIME_COMPENSATION:
             # Yearly net metering: the hour's net lands in a register and is
             # priced by _NetAllocation after the walk, on the profile when it
@@ -657,6 +666,7 @@ async def _ytd_hourly_energy(
         breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
+        breakdown["energy_component_ytd_eur"] = energy_component
     return energy_cost
 
 
@@ -1006,11 +1016,19 @@ async def _compute_current_year_cost(
                 window_start,
                 today,
                 # The three components a welcome credit may come off and no
-                # others: the energy leg, the SUPPLIER's standing charge (not
+                # others: the supplier's ENERGY component of what the window's
+                # consumption was charged, the SUPPLIER's standing charge (not
                 # the energy fund, the data-management charge or the Brussels
                 # OSP fee sitting beside it in static_fees) and the region's
-                # green electricity / CHP contribution.
-                max(energy, 0.0)
+                # green electricity / CHP contribution. Not ``energy``: that
+                # is the all-in figure the walks bill, network and taxes
+                # included and net of the feed-in credit, and measured against
+                # it the cap let a 365 kWh/year connection through at 42,61
+                # EUR over a quarter where the card grants 26,28, while a site
+                # exporting more than it used was capped below its own
+                # energiekost. The walks keep the component beside the bill
+                # for exactly this sum.
+                stats.get("energy_component_ytd_eur", 0.0)
                 + static_fees.supplier_fee
                 + stats.get("consumption_ytd_kwh", 0.0)
                 * renewables_eur_per_kwh(snapshot.taxes, region),
@@ -1173,6 +1191,10 @@ async def _compute_current_year_cost(
         return bundle
 
     energy_cost = 0.0
+    # The supplier's energy component of the window's consumption, gross of
+    # the feed-in credit: the cap base of a welcome credit (see the hourly
+    # walk above, which keeps the same running sum for the same reason).
+    energy_component = 0.0
     netting = _NetAllocation()
     # A flat energy leg can still carry a monthly-indexed feed-in credit
     # (energie.be Vast). The daily walk has no spot of its own, so resolve the
@@ -1193,6 +1215,11 @@ async def _compute_current_year_cost(
         total_inj = d_inj + n_inj
 
         bi_capable = meter in ("bi", "dynamic")
+        energy_component += (
+            d_cons * peak_bd.energy + n_cons * offpeak_bd.energy
+            if bi_capable
+            else total_cons * single_bd.energy
+        )
         if regime == SOLAR_REGIME_COMPENSATION:
             # Yearly net metering, per register, priced after the walk by
             # _NetAllocation: on the day's RLP mass when the profile is
@@ -1287,6 +1314,7 @@ async def _compute_current_year_cost(
         energy_ytd_raw = energy_cost
 
     stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
+    stats["energy_component_ytd_eur"] = energy_component
     if breakdown is not None:
         # The per-day counterpart of hours_seen / hours_elapsed above: the
         # static branch reported no coverage at all, so a gap here was

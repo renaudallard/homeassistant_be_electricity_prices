@@ -7376,3 +7376,219 @@ def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> No
     # A corrupt stored value falls through rather than raising.
     corrupt = cast(Any, SimpleNamespace(data={"annual_consumption_kwh": "x"}))
     assert entry_annual_kwh(corrupt) == 3500.0
+
+
+async def _tiny_connection_cost(
+    hass: HomeAssistant,
+    snap: Any,
+    entry: Any,
+    *,
+    kwh_day: float,
+    inj_day: float = 0.0,
+    spots: dict[datetime, float] | None = None,
+) -> float:
+    """The engine over 1 January .. 31 March 2026 on a flat ``kwh_day``.
+
+    Both walks are fed: the per-day one through ``_recorder_daily_kwh`` and
+    the hourly one through ``_sum_hourly_kwh``, so the same helper drives a
+    fixed card and a dynamic one.
+    """
+    days = 90
+    daily = {
+        date(2026, 1, 1) + timedelta(days=n): (kwh_day, 0.0, inj_day, 0.0)
+        for n in range(days)
+    }
+    start = datetime(2026, 1, 1, tzinfo=ZoneInfo("Europe/Brussels")).astimezone(UTC)
+    stop = datetime(2026, 4, 1, tzinfo=ZoneInfo("Europe/Brussels")).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    per_cons = {h: kwh_day / 24 for h in hours}
+    per_inj = {h: inj_day / 24 for h in hours}
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {d: v[0] for d, v in daily.items()}
+        if entity_id == "sensor.inj_total":
+            return {d: v[2] for d, v in daily.items()}
+        return {}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return dict(per_cons)
+        if entity_id == "sensor.inj_total":
+            return dict(per_inj)
+        return {}
+
+    async def _noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=_noop),
+    ):
+        return cast(
+            float,
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                historical_spots=spots or {},
+            ),
+        )
+
+
+def _card_rule_credit(
+    snap: Any, region: str, kwh: float, days: int, energy_per_kwh: float
+) -> float:
+    """What footnote e grants: the accrued amount, capped at what the period
+    charged for the ENERGY component, the standing charge and the green /
+    WKK contribution. Network tariffs, taxes and any feed-in credit are not
+    in the sum."""
+    from custom_components.be_electricity_prices.pricing import (
+        renewables_eur_per_kwh,
+        yearly_fixed_fee_for_meter,
+    )
+
+    accrued = 200.0 * days / 365
+    eligible = (
+        kwh * energy_per_kwh
+        + yearly_fixed_fee_for_meter(snap.energy, "mono") * days / 365
+        + kwh * renewables_eur_per_kwh(snap.taxes, region)
+    )
+    return min(accrued, eligible)
+
+
+async def test_welcome_credit_cap_counts_the_energy_component_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """*"De korting heeft uitsluitend betrekking op de energiekost, de vaste
+    vergoeding, de bijdrage groene stroom en WKK ... niet van toepassing op
+    nettarieven, taksen en heffingen."* On a tiny connection the cap is the
+    binding term, and measuring it against the all-in per-kWh cost (network
+    and taxes included) credited a 365 kWh/year site 42,61 EUR over a quarter
+    where the card grants 26,28."""
+    from custom_components.be_electricity_prices.pricing import static_breakdown
+
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    taxes = TaxOverlay(
+        federal_excise=0.05, energy_contribution=0.002, flanders_renewables=0.015
+    )
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+    )
+    energy = FixedRates(single=0.14, yearly_fixed_fee=50.0)
+    without = replace(
+        _snapshot(prosumer=None, capacity=None, energy=energy), taxes=taxes
+    )
+    with_credit = replace(without, welcome_credit_eur=200.0)
+    bd = static_breakdown(without, "ores", "flanders", "single", "bi_horaire")
+    assert bd is not None and bd.all_in > bd.energy
+
+    for kwh_day in (1.0, 1.5, 2.0):
+        plain = await _tiny_connection_cost(hass, without, entry, kwh_day=kwh_day)
+        credited = await _tiny_connection_cost(
+            hass, with_credit, entry, kwh_day=kwh_day
+        )
+        want = _card_rule_credit(without, "flanders", kwh_day * 90, 90, bd.energy)
+        assert plain - credited == pytest.approx(want), kwh_day
+
+
+async def test_welcome_credit_cap_is_gross_of_the_feed_in_credit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The energiekost the cap is measured against is what the household was
+    charged for the energy it took; the feed-in credit is a separate invoice
+    line and does not shrink it. Netting it in under-credited a site that
+    exports more than it uses."""
+    from custom_components.be_electricity_prices.pricing import static_breakdown
+
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    taxes = TaxOverlay(
+        federal_excise=0.05, energy_contribution=0.002, flanders_renewables=0.015
+    )
+    entry = _entry(
+        region="flanders",
+        solar_regime="injection",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+        injection_kwh="sensor.inj_total",
+    )
+    energy = FixedRates(single=0.14, yearly_fixed_fee=50.0)
+    without = replace(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=energy,
+            injection=InjectionRates(current=0.05),
+        ),
+        taxes=taxes,
+    )
+    with_credit = replace(without, welcome_credit_eur=200.0)
+    bd = static_breakdown(without, "ores", "flanders", "single", "bi_horaire")
+    assert bd is not None
+
+    plain = await _tiny_connection_cost(hass, without, entry, kwh_day=2.0, inj_day=10.0)
+    credited = await _tiny_connection_cost(
+        hass, with_credit, entry, kwh_day=2.0, inj_day=10.0
+    )
+    assert plain - credited == pytest.approx(
+        _card_rule_credit(without, "flanders", 180.0, 90, bd.energy)
+    )
+
+
+async def test_welcome_credit_cap_reads_the_energy_component_on_the_hourly_walk(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Same rule on the branch a dynamic card takes, where the energy
+    component is ``factor * spot + base`` per hour."""
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    taxes = TaxOverlay(
+        federal_excise=0.05, energy_contribution=0.002, flanders_renewables=0.015
+    )
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="dynamic",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+    )
+    energy = DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=50.0)
+    without = replace(
+        _snapshot(prosumer=None, capacity=None, energy=energy), taxes=taxes
+    )
+    with_credit = replace(without, welcome_credit_eur=200.0)
+    tz = ZoneInfo("Europe/Brussels")
+    hours: list[datetime] = []
+    when = datetime(2026, 1, 1, tzinfo=tz).astimezone(UTC)
+    while when < datetime(2026, 4, 1, tzinfo=tz).astimezone(UTC):
+        hours.append(when)
+        when += timedelta(hours=1)
+    spots = {h: 0.06 for h in hours}
+
+    plain = await _tiny_connection_cost(hass, without, entry, kwh_day=1.0, spots=spots)
+    credited = await _tiny_connection_cost(
+        hass, with_credit, entry, kwh_day=1.0, spots=spots
+    )
+    # The hourly walk sees 90 local days of hours; Q1 2026 has 2159 of them.
+    kwh = len(hours) / 24
+    assert plain - credited == pytest.approx(
+        _card_rule_credit(without, "flanders", kwh, 90, 1.0 * 0.06 + 0.02)
+    )
