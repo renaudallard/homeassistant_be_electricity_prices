@@ -64,10 +64,17 @@ Related reading:
 > rasterise-and-reassemble step added to a publishing pipeline looks like, which
 > is why this reads as a pipeline change rather than a one-month accident.
 >
-> Ecofix has been contacted with these figures, asking them to export the cards
-> with their text layer again. No change here is needed if they do: the
-> unreadable signal is derived per fetch, not from a stored flag, so support
-> resumes on the next refresh.
+> Ecofix replied on 11 September 2026 and confirmed the reading above: the
+> cards have been generated automatically since August 2026 (only the indexes,
+> formulas and other variable figures are entered each month), and the
+> generator renders the parts that do not change from month to month as page
+> images. Losing nearly the whole text layer was not intended. They will not
+> return to the manual layout, but will look at keeping the text layer within
+> the automated generation, with no date given. They floated AI/OCR as a
+> stopgap for reading the current files, which is ruled out below. No change
+> here is needed if they restore the text layer: the unreadable signal is
+> derived per fetch, not from a stored flag, so support resumes on the next
+> refresh.
 >
 > Until then an existing entry keeps serving the last card it managed to parse,
 > across restarts and across an integration upgrade. The schema gate would

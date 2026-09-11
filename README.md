@@ -120,10 +120,18 @@ publication and how to parse it.
 > metadata shows the producing tool changed from Canva to pypdf, which is what a
 > rasterise-and-reassemble step in a publishing pipeline looks like.
 >
-> **Ecofix has been contacted** about this, with the figures above, asking them
-> to export the cards with their text layer again. Nothing here needs to change
-> if they do: the integration decides from the card it just downloaded, so
-> support resumes on the next refresh with no update on your side.
+> **Ecofix has confirmed the cause and is looking into it.** Their reply of
+> 11 September 2026: since August 2026 the cards are no longer laid out by hand
+> every month but generated automatically from the new indexes, formulas and
+> other variable figures, and that generator renders the blocks that do not
+> change from month to month as page images. Losing almost the whole text
+> layer was not intended. Going back to the manual layout is not an option for
+> them, but they will look at keeping the text layer within the automated
+> generation. No date was given. They also suggested AI/OCR as a stopgap for
+> reading the current files, which this integration will not do (see below).
+> Nothing here needs to change if they restore the text layer: the integration
+> decides from the card it just downloaded, so support resumes on the next
+> refresh with no update on your side.
 >
 > The extractor will not OCR them. Reading dense numeric tables printed with
 > Belgian comma decimals is where OCR is least reliable, and a single misread
