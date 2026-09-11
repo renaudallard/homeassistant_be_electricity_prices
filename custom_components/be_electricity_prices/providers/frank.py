@@ -73,6 +73,7 @@ from ..const import (
     DSO_FLUVIUS_WEST,
     DSO_FLUVIUS_ZENNE_DIJLE,
     REGION_FLANDERS,
+    WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
     NUM_NO_THOUSANDS,
@@ -340,6 +341,8 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=_extract_injection(text),
+        welcome_credit_eur=_welcome_credit(text),
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
 
 
@@ -351,6 +354,43 @@ def parse_snapshot(
 # mandatory tax row silently dropping to 0, or the VAT multiplier 1,06
 # collapsing to 1 - instead of failing loud.
 _NUM = NUM_NO_THOUSANDS
+
+# "Korting 120 EUR (incl. btw)". Three of the five tiers grant one and they do
+# not agree on the amount: 120 on Korting, 115 on HV, 35 on JN, and nothing at
+# all on the standard and Slim tiers. The "(incl. btw)" suffix is part of the
+# anchor because "Korting" on its own is also the Korting tier's TITLE ("Frank
+# Energie Dynamisch - Korting - juni 2026"), and the two sentences under the
+# amount open with it as well: four occurrences, one figure.
+#
+# It is the entire reason the Korting tier exists: its formula and its
+# subscription are both worse than JN's, so without the credit the ranking
+# calls it the cheaper tier's loser while in year one it is about 93 EUR
+# better.
+_WELCOME_RE = re.compile(
+    rf"Korting\s+{_NUM}\s*EUR\s*\(\s*incl\.?\s*btw\s*\)", re.IGNORECASE
+)
+
+
+def _welcome_credit(text: str) -> float | None:
+    """The cashback in EUR, or ``None`` on a card that prints none.
+
+    Optional: two of the five tiers grant nothing, so a missing row is the
+    ordinary case rather than a layout drift.
+
+    Every card that grants one makes it conditional, and neither condition is
+    knowable here. All three require "een jaar ononderbroken verbruik", which
+    an entry that left the contract fails by no longer being priced on this
+    card at all. HV and JN add "op voorwaarde dat je jouw facturen ... steeds
+    op tijd hebt betaald", which is about the household rather than the tariff.
+    Both are assumed to hold, the same ordinary case every other leg of the
+    bill assumes, and the assumption is disclosed rather than hidden: a
+    customer who paid late sees a credit they will not be granted, which is
+    still nearer than ranking a tier as though its whole reason for existing
+    were not there.
+    """
+    m = _WELCOME_RE.search(text)
+    return None if m is None else to_float(m.group(1))
+
 
 _FORMULA_RE = re.compile(
     rf"\({_NUM}\s*x\s*BELPEX\s*per\s*uur\*?\s*"

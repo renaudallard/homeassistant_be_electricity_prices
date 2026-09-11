@@ -7052,3 +7052,43 @@ async def test_welcome_credit_is_never_given_to_another_supplier_contract(
     own = await _cost(None)
     other = await _cost("someone_elses_contract")
     assert other - own == pytest.approx(200.0 * 90 / 365)
+
+
+def test_anniversary_credit_lands_whole_in_the_window_that_holds_it() -> None:
+    """Frank grants its cashback as a lump rather than an accrual: *"De korting
+    wordt toegekend via de factuur na een jaar ononderbroken verbruik"*. So it
+    is nothing at all until the first year completes, then the whole amount,
+    and only in the window the anniversary falls in - which is what stops a
+    figure that resets every 1 January from granting it twice."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+
+    snap = make_snapshot(
+        welcome_credit_eur=120.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+    )
+    entry = SimpleNamespace(
+        data={"contract": "test", "contract_start_date": "2026-01-10"}
+    )
+    anniversary = date(2026, 1, 10) + timedelta(days=365)
+
+    def credit(window_start: date, today: date, eligible: float = 900.0) -> float:
+        return _welcome_credit_eur(
+            snap,
+            cast(Any, entry),
+            window_start,
+            today,
+            eligible,
+        )
+
+    # Mid-way through the first year: nothing yet, where a pro-rata card would
+    # already have accrued more than half of it.
+    assert credit(date(2026, 1, 1), date(2026, 9, 10)) == 0.0
+    # The window holding the anniversary takes the whole lump.
+    assert credit(date(2027, 1, 1), anniversary) == pytest.approx(120.0)
+    # The year after does not take it again.
+    assert credit(date(2028, 1, 1), date(2028, 12, 31)) == 0.0
+    # And it is NOT capped: Frank's card states no cap, unlike EnergyVision's,
+    # so a tiny connection still gets the cashback its invoice will carry.
+    assert credit(date(2027, 1, 1), anniversary, 5.0) == pytest.approx(120.0)

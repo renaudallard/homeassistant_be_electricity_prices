@@ -181,7 +181,7 @@ filled in rather than a scraped card.
 | --- | --- | --- | --- |
 | `id` | `str` | required | Stable contract key, stored in the config entry. |
 | `label` | `str` | required | Human-facing product name. |
-| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py:53`). Selects which `EnergyRates` variant the snapshot carries. |
+| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py:58`). Selects which `EnergyRates` variant the snapshot carries. |
 | `regions` | `frozenset[str]` | all three | Regions the product is actually published in. Defaults to `{flanders, wallonia, brussels}`; extractors override per-contract for products that 404 outside their home region (for example TotalEnergies Impact is Wallonia-only). |
 | `spot_indexed_injection` | `bool` | `False` | `True` when a non-dynamic product's feed-in is index-linked and its energy leg fetches no spots, so pricing the injection needs an ENTSO-E key the energy side never asks for. Both index resolutions count: per hour (`_injection_needs_spot`) and a delivery-month mean (`_injection_needs_month_spot`). The config flow reads it to offer the API-key step on the injection regime. Dynamic contracts already collect the key via their energy formula and leave this `False`. The README states the current count and a test derives it from the registry, so it is not repeated here. |
 | `month_indexed_energy` | `bool` | `False` | `True` when a non-spot-priced product's ENERGY is indexed on the delivery month's mean and its card prints last month's figure, so the config flow offers the optional ENTSO-E key on every solar regime. The registry twin of the parser's `month_indexed`; the live check holds each fetched card to it (`_expect_month_indexed_registry`). |
@@ -262,7 +262,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:401`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:406`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -352,7 +352,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:175`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:180`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |

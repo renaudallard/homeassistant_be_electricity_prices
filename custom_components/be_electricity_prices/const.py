@@ -263,6 +263,14 @@ SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_imp
 # flow fetch a spot before it can quote either side of a switch.
 SPOT_PRICED_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "spot_monthly")
 
+# How a card's one-off welcome credit is granted, which is the rule the card
+# itself states. PRO_RATA accrues by the day over the first subscription year
+# and is capped at what that period charged for the three components the credit
+# may come off; ANNIVERSARY is a lump granted once a full year has been
+# consumed, with no cap stated. See SupplierSnapshot.welcome_credit_kind.
+WELCOME_CREDIT_PRO_RATA: Final = "pro_rata"
+WELCOME_CREDIT_ANNIVERSARY: Final = "anniversary"
+
 # The third partition of TariffKind, after the two above: which kinds may be
 # RANKED against one another. The ranking page sorts its rows on one annual
 # figure, and that figure only means the same thing down a column of contracts

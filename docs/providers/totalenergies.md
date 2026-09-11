@@ -20,7 +20,7 @@ Related reading:
 
 TotalEnergies is a full-service supplier that sells residential electricity in
 all three Belgian regions: Flanders, Wallonia and Brussels. `EXTRACTOR.regions()`
-(the union over every contract's `regions`, `providers/base.py:83`) therefore
+(the union over every contract's `regions`, `providers/base.py:88`) therefore
 resolves to all three. Only one product, Impact, is region limited (Wallonia
 only, see the contracts table).
 
@@ -299,7 +299,7 @@ about the INDEX and not about the flag: 8 of the 9 contracts set
 never fetches.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:847`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:852`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 

@@ -48,7 +48,12 @@ from typing import Any, Literal, Protocol
 
 import aiohttp
 
-from ..const import METER_EXCLUSIVE_NIGHT, METER_MONO, REGIONS
+from ..const import (
+    METER_EXCLUSIVE_NIGHT,
+    METER_MONO,
+    REGIONS,
+    WELCOME_CREDIT_PRO_RATA,
+)
 
 TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
@@ -893,9 +898,24 @@ class SupplierSnapshot:
     #
     # It belongs to the product VERSION signed rather than to the current
     # card: EnergyVision moved this figure four times between March and
-    # September 2026 (300, 200, 250, 200), so a cohort with an archive should
-    # read it from its signing month.
+    # September 2026 (300, 200, 250, 200), so a cohort with an archive reads it
+    # from its signing month.
     welcome_credit_eur: float | None = None
+    # WHEN that credit lands, which is the rule its own card states:
+    #
+    #   "pro_rata"    accrued by the day across the first subscription year
+    #                 and capped at what that period charged for energy, the
+    #                 standing charge and the green contribution. EnergyVision
+    #                 footnote e.
+    #   "anniversary" a lump granted on the invoice once a full year has been
+    #                 consumed without interruption, with no cap stated. Frank
+    #                 Energie's Dynamisch Korting: "De korting wordt toegekend
+    #                 via de factuur na een jaar ononderbroken verbruik".
+    #
+    # The cap rides with the kind because each card states one complete rule
+    # rather than two independent ones. A future card that pro-rates without a
+    # cap, or caps a lump, is what would split this into two fields.
+    welcome_credit_kind: str = WELCOME_CREDIT_PRO_RATA
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:

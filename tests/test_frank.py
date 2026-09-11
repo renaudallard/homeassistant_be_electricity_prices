@@ -605,3 +605,41 @@ def test_a_stored_answer_is_inert_on_a_card_that_fixes_its_own_grid() -> None:
         sibling,
     )
     assert _dynamic(carried).quarter_hourly
+
+
+def test_cashback_is_read_from_the_tiers_that_grant_one() -> None:
+    """Three of the five tiers print a cashback and they disagree on the
+    amount, so this cannot be a per-supplier constant. The Korting tier exists
+    only for its 120 EUR: its formula and its subscription are both worse than
+    JN's, and without the credit the ranking calls it the cheaper tier's loser
+    while in year one it is about 93 EUR better."""
+    for fixture, contract, amount in (
+        ("frank_dynamic_korting_jun.pdf", "frank_dynamic_korting", 120.0),
+        ("frank_dynamic_hv_jun.pdf", "frank_dynamic_hv", 115.0),
+        ("frank_dynamic_jn_jun.pdf", "frank_dynamic_jn", 35.0),
+    ):
+        snap = parse_snapshot(
+            fixture_text(fixture, layout=True), "test://frank", contract, "juni 2026"
+        )
+        assert snap.welcome_credit_eur == pytest.approx(amount), fixture
+        # A lump after a full year, not an accrual across it.
+        assert snap.welcome_credit_kind == "anniversary", fixture
+
+    # The tiers that grant nothing must come back None rather than raising:
+    # a missing row is the ordinary case on this supplier.
+    for fixture in ("frank_dynamic_apr.pdf", "frank_dynamic_slim_may.pdf"):
+        snap = parse_snapshot(
+            fixture_text(fixture, layout=True), "test://frank", "frank_dynamic", ""
+        )
+        assert snap.welcome_credit_eur is None, fixture
+
+
+def test_the_cashback_anchor_survives_the_word_korting_elsewhere() -> None:
+    """ "Korting" is also the Korting tier's own TITLE line, and the two
+    sentences under the amount open with it as well, so the pattern is anchored
+    on the "(incl. btw)" that follows the figure rather than on the word."""
+    text = fixture_text("frank_dynamic_korting_jun.pdf", layout=True)
+    # Four occurrences, only one of which is the figure.
+    assert text.lower().count("korting") == 4
+    snap = parse_snapshot(text, "test://frank", "frank_dynamic_korting", "juni 2026")
+    assert snap.welcome_credit_eur == pytest.approx(120.0)

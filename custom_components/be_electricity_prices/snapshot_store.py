@@ -61,6 +61,7 @@ from .const import (
     DOMAIN,
     METER_MONO,
     STORAGE_VERSION,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from .providers import offers_quarter_hourly
 from .providers.base import (
@@ -1200,7 +1201,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # of EnergyVision's cards print. A v57 snapshot has None there, so an entry
 # with a contract start date would be credited nothing until its supplier next
 # republished, which on a monthly card is up to a month.
-_SNAPSHOT_SCHEMA_VERSION = 58
+# v59: welcome_credit_kind joins it, and Frank Energie's three cards that grant
+# a cashback now parse theirs. A v58 blob carries neither, so a Frank entry
+# would keep being ranked as though its tier's whole reason for existing were
+# not there.
+_SNAPSHOT_SCHEMA_VERSION = 59
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1249,6 +1254,7 @@ def _snapshot_to_dict(
         "injection": snap.injection.__dict__ if snap.injection else None,
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
         "welcome_credit_eur": snap.welcome_credit_eur,
+        "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
 
@@ -1321,6 +1327,7 @@ def _snapshot_from_dict(
             "supplier_prosumer_eur_per_kva_year"
         ),
         welcome_credit_eur=data.get("welcome_credit_eur"),
+        welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 
 

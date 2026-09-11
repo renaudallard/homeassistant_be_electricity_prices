@@ -149,21 +149,21 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1306`). It declares
-the `Contract`s it sells (`providers/base.py:74`), each carrying a `TariffKind`
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1326`). It declares
+the `Contract`s it sells (`providers/base.py:79`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
 | TariffKind | Energy model | Rates dataclass | Notes |
 | --- | --- | --- | --- |
-| `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py:139`) | Optional `exclusive_night` rate for a dedicated night circuit. |
-| `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py:161`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
-| `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:263`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
-| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:405`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
-| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:453`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. Cociter's card prints last month's BELIX per band and flags `month_indexed`, so `_month_indexed_leg` re-prices it through a banded `SpotMonthlyRates`. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:292`) | energie.be Variabel and Energy Knights Essentia Online (both Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
+| `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py:144`) | Optional `exclusive_night` rate for a dedicated night circuit. |
+| `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py:166`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
+| `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:268`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
+| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:410`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
+| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:458`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. Cociter's card prints last month's BELIX per band and flags `month_indexed`, so `_month_indexed_leg` re-prices it through a banded `SpotMonthlyRates`. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:297`) | energie.be Variabel and Energy Knights Essentia Online (both Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
-their home region) and `spot_indexed_injection` (`providers/base.py:105`), a flag for the
+their home region) and `spot_indexed_injection` (`providers/base.py:110`), a flag for the
 non-dynamic cards (the two Cociter variable ones, every Bolt fixed and variable card, and
 every month-indexed card) where pricing the injection still needs an ENTSO-E spot.
 
@@ -183,13 +183,13 @@ each falling back when the card does not publish a separate value.
 
 ### The two orthogonal axes
 
-The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:323`) is a grid-side billing choice
+The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:331`) is a grid-side billing choice
 independent of the supplier meter: `simple`, `bi_horaire`, or (Wallonia SMR3 opt-in) `impact`
 (Tarif Impact, three distribution rates by CWaPE hour-of-day band). Outside Wallonia only
 `simple` and `bi_horaire` are meaningful, and the coordinator falls back automatically when the
 DSO does not publish Impact rates.
 
-The solar regime (`CONF_SOLAR_REGIME`, `const.py:390`) is independent again: `none` (no panels),
+The solar regime (`CONF_SOLAR_REGIME`, `const.py:398`) is independent again: `none` (no panels),
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
@@ -245,7 +245,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:847`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:852`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -267,7 +267,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:450`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:458`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -277,7 +277,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (DATS 24, energie.be, Engie, Luminus, where the
   only cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:225`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:452`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:460`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py:839`).
@@ -301,7 +301,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1360`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1380`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.

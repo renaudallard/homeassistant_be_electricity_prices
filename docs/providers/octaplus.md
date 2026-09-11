@@ -77,7 +77,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:239-266`.
+  long-term statistics). See `DynamicRates` docs in `base.py:267-293`.
 - 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
   mean a per-hour index, which is what this said: it means the injection needs
   spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them

@@ -52,12 +52,12 @@ config (contract_id) ->  probe(): GROQ newest _createdAt  -> freshness key
 The `source_url` stored in the snapshot is the resolved Sanity asset URL (whatever
 `_resolve_pdf_url` returned), not a stable human-facing page. The `publication_label` is
 a lowercased "month year" string ("april 2026") reconstructed from the filename by
-`_resolve_pdf_url` (`providers/frank.py:188`).
+`_resolve_pdf_url` (`providers/frank.py:189`).
 
 ## Contracts
 
-Five tiers are declared in `_TIERS` (`providers/frank.py:126`) and turned into `Contract`
-objects by the `EXTRACTOR` comprehension (`providers/frank.py:494`). Every one is
+Five tiers are declared in `_TIERS` (`providers/frank.py:127`) and turned into `Contract`
+objects by the `EXTRACTOR` comprehension (`providers/frank.py:534`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
@@ -68,10 +68,35 @@ hourly formula; the household's own answer flips it, and every tier carries
 | contract id | label | TariffKind | regions | filename suffix | quarter-hour choice | note |
 | --- | --- | --- | --- | --- | --- | --- |
 | `frank_dynamic` | Frank Energie Dynamisch | dynamic | flanders | none (bare month) | offered | standard tier |
-| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | higher subscription, lower per-kWh margin |
+| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | higher subscription, lower per-kWh margin; 115 EUR cashback after 1 year |
 | `frank_dynamic_korting` | Frank Energie Dynamisch Korting | dynamic | flanders | `VT` | offered | 120 EUR cashback after 1 year |
-| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base |
+| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base; 35 EUR cashback after 1 year |
 | `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
+
+### Cashback
+
+Three of the five tiers print `Korting <amount> EUR (incl. btw)` and they disagree on the
+figure: 120 on Korting, 115 on HV, 35 on JN, nothing on the standard and Slim tiers. It is
+the entire reason the Korting tier exists, since its formula and its subscription are both
+worse than JN's; without the credit the ranking page calls it the cheaper tier's loser
+while in year one it is about 93 EUR better.
+
+`_welcome_credit` reads it with `welcome_credit_kind = "anniversary"`, because Frank
+grants a LUMP rather than an accrual: *"De korting wordt toegekend via de factuur na een
+jaar ononderbroken verbruik op dit contract"*. The year-to-date engine credits it whole in
+the window the first anniversary falls in and in no other, and does not cap it, since this
+card states no cap (EnergyVision's does, which is why the rule travels beside the amount).
+
+The pattern is anchored on the `(incl. btw)` that follows the figure. `Korting` on its own
+is also the Korting tier's TITLE line, and the two sentences under the amount open with
+it as well: four occurrences in all, only one of which is the figure.
+
+Both conditions are assumed to hold and neither is knowable here. All three require a year
+of uninterrupted consumption, which an entry that left the contract fails by no longer
+being priced on this card. HV and JN add *"op voorwaarde dat je jouw facturen ... steeds op
+tijd hebt betaald"*, which is about the household rather than the tariff. A customer who
+paid late sees a credit they will not be granted, which is still nearer than ranking a
+tier as though its whole reason for existing were not there.
 
 ### Hourly or quarter-hourly settlement
 
@@ -123,11 +148,11 @@ sixth tier instead of silently ignoring it.
 
 ### Discovery and download (`fetch`)
 
-`fetch` (`providers/frank.py:240`) validates the contract id and region, calls
+`fetch` (`providers/frank.py:241`) validates the contract id and region, calls
 `_resolve_pdf_url(session, contract_id)` with no target month to get the latest card, then
 `fetch_pdf_text_layout` to download and layout-extract the PDF, then `parse_snapshot`.
 
-`_resolve_pdf_url` (`providers/frank.py:188`) builds a GROQ query. With no target month it
+`_resolve_pdf_url` (`providers/frank.py:189`) builds a GROQ query. With no target month it
 asks for every "Dynamisch" file asset ordered newest first (`[0..29]`):
 
 ```groq
@@ -157,7 +182,7 @@ surviving rows are sorted by `_createdAt` descending and the newest is chosen
 
 ### Probe (freshness key)
 
-`probe` (`providers/frank.py:273`) returns the `_createdAt` of the single newest
+`probe` (`providers/frank.py:274`) returns the `_createdAt` of the single newest
 "Dynamisch" asset across all tiers, on the same `_CARD_SELECT`:
 
 ```groq
@@ -181,7 +206,7 @@ query will crash on `list(result)` returning the dict's keys.
 ### Archive support (`fetch_for_month`)
 
 Frank has a real, queryable archive: past months' PDFs remain in the Sanity CMS.
-`fetch_for_month` (`providers/frank.py:254`) passes `target_month=year_month` into
+`fetch_for_month` (`providers/frank.py:255`) passes `target_month=year_month` into
 `_resolve_pdf_url`, which switches to the month-scoped GROQ query that adds
 `originalFilename match "*<MonthName>*"` and `"*<year>*"` filters
 (`providers/frank.py:171`). The Dutch month title comes from `_NL_MONTHS_TITLE`
@@ -199,16 +224,16 @@ proxy.
 
 ## Parsing
 
-`parse_snapshot` (`providers/frank.py:327`) assembles the `SupplierSnapshot` from five
+`parse_snapshot` (`providers/frank.py:328`) assembles the `SupplierSnapshot` from five
 sub-parsers. All five run against the layout-preserving text from
 `fetch_pdf_text_layout` (which keeps column alignment, important for the DSO table).
 
 | field | parser | source |
 | --- | --- | --- |
-| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:366` |
-| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:407` |
-| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:444` |
-| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:459` |
+| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:406` |
+| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:447` |
+| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:484` |
+| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:499` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1053` |
 
 ### Number format
@@ -222,7 +247,7 @@ and its dot-replaced twin parse identically.
 
 ## Energy formula
 
-`_extract_dynamic` (`providers/frank.py:366`) parses the PDF formula row with `_FORMULA_RE`
+`_extract_dynamic` (`providers/frank.py:406`) parses the PDF formula row with `_FORMULA_RE`
 (`providers/frank.py:330`), which matches:
 
 ```
@@ -257,15 +282,15 @@ fixture's 2,92 EUR/month resolves to 35.04 EUR/year (illustrative,
 
 Frank's injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)), not a monthly indicative and not the
-spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:407`) parses a
-`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:399`):
+spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:447`) parses a
+`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:439`):
 
 ```
 terugleveringsvergoeding: (<factor_pdf> x BELPEX per uur* <sign> <base_cents>)
 ```
 
 Injection is VAT-exempt (Belgian residential feed-in is never VAT-incl,
-`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:373`):
+`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:413`):
 
 ```
 factor = factor_pdf * 10.0
@@ -291,7 +316,7 @@ stays `None` too.
 
 ## Taxes
 
-`_extract_taxes` (`providers/frank.py:444`) parses five levy rows and builds a `TaxOverlay`.
+`_extract_taxes` (`providers/frank.py:484`) parses five levy rows and builds a `TaxOverlay`.
 All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
 (`providers/frank.py:447`, comment at :439) and pinned by `test_taxes_vat_rate_zero`
 (`tests/test_frank.py:220`).
@@ -328,8 +353,8 @@ are divided by 100 to reach EUR/kWh.
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/frank.py:459`) covers all eight Fluvius sub-areas via
-`_FLUVIUS_LABELS` (`providers/frank.py:146`), which maps the card's human label to the
+`_extract_dsos` (`providers/frank.py:499`) covers all eight Fluvius sub-areas via
+`_FLUVIUS_LABELS` (`providers/frank.py:147`), which maps the card's human label to the
 canonical DSO key:
 
 | card label | canonical key |
@@ -391,9 +416,9 @@ parsed date is what makes `archive_validity_check` authoritative in `fetch_for_m
 - GROQ `[0]` returns a dict, not a list. `_sanity_query` wraps a lone dict
   (`providers/frank.py:149`); removing that branch breaks `probe`.
 - Suffix is not the tier name. Korting's filename token is `VT`, Slim's is `SL` or the
-  full word `Slim` (aliased in `_SUFFIX_ALIASES`, `providers/frank.py:144`). Both Slim
+  full word `Slim` (aliased in `_SUFFIX_ALIASES`, `providers/frank.py:145`). Both Slim
   spellings are live simultaneously.
-- Both decimal separators must be accepted (`_NUM`, `providers/frank.py:353`); a
+- Both decimal separators must be accepted (`_NUM`, `providers/frank.py:356`); a
   comma-only regex truncated dot-rendered values (`test_dot_decimal_render_matches_comma`).
 - VAT applied only to energy. The `x 1,06` multiplier scales the energy factor and base
   (`providers/frank.py:354`) but not injection (VAT-exempt, `providers/frank.py:396`).
@@ -436,8 +461,8 @@ layout-preserving extraction used in production.
 
 | symptom | likely culprit | why |
 | --- | --- | --- |
-| Every tier serves last month's card | `_CARD_SELECT` (`providers/frank.py:113`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
-| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:163`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
+| Every tier serves last month's card | `_CARD_SELECT` (`providers/frank.py:114`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
+| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:164`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` (`:330`) | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
 | Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` (`:354`) | Frank switched units or dropped the VAT multiplier |
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` (`:336`) | "Abonnementskost (EUR/maand)" label reworded |

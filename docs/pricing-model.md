@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:783-799`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:796`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:801`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1087`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1107`)
 resolves it against the entry's yearly volume (`entry_annual_kwh`) and writes
 one rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -408,6 +408,37 @@ A household inside the tranche has no variable leg at all and comes back as
 `FixedRates`: leaving it as a zeroed-factor formula would price correctly and
 still demand a monthly mean, and a month with no cached spot would then fail
 the tick over a coefficient that cannot matter.
+
+### Welcome credits
+
+A card may grant a one-off credit to a new customer's first year. It is an invoice line
+rather than a tariff, so it is subtracted from the bill after every component of it, and
+only when the entry carries a contract start date: without one there is no first year to
+place it in. `SupplierSnapshot` carries the amount and the rule its card states
+(`welcome_credit_kind`), and `_welcome_credit_eur` (`fees.py`) applies it:
+
+| kind | who | grant | cap |
+| --- | --- | --- | --- |
+| `pro_rata` | EnergyVision, four cards | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | energy + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
+| `anniversary` | Frank Energie, three tiers | the whole amount, in the window the first anniversary falls in and no other | none; that card states none |
+
+The two rules travel together on one field because each card states one complete rule
+rather than two independent ones. A future card that pro-rates without a cap, or caps a
+lump, is what would split them.
+
+The cap counts only the three components the card names. Not the energy fund, the
+data-management charge or the Brussels OSP fee that sit beside the standing charge in
+`_annual_static_fees`, which is why `_ytd_static_fees` reports the supplier's share
+separately. It binds only on a very small connection: around 900 kWh a year against a
+200 EUR credit.
+
+It is never applied to another supplier's contract: the compare page walks the same
+year-to-date engine for a contract the household never signed, where its own start date
+says nothing about when it would have signed that one.
+
+A negative `yearly_fixed_fee` was the obvious shortcut and is the wrong model: a fee box
+has no expiry and no cap, so it would keep taking the discount off every year with nothing
+to flag it, and would be right only for households that never hit the cap.
 
 ### Contractual price ceilings
 
@@ -716,7 +747,7 @@ same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:832-832`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:837-837`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and

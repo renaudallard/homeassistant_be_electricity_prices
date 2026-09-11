@@ -35,7 +35,10 @@ from unittest.mock import AsyncMock
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.const import (
+    DOMAIN,
+    WELCOME_CREDIT_PRO_RATA,
+)
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text,
     extract_pdf_text_layout,
@@ -95,6 +98,7 @@ def make_snapshot(
     valid_until: date | None = None,
     supplier_prosumer_eur_per_kva_year: float | None = None,
     welcome_credit_eur: float | None = None,
+    welcome_credit_kind: str = WELCOME_CREDIT_PRO_RATA,
 ) -> SupplierSnapshot:
     """SupplierSnapshot with sensible defaults for tests.
 
@@ -120,6 +124,7 @@ def make_snapshot(
         valid_until=valid_until,
         supplier_prosumer_eur_per_kva_year=supplier_prosumer_eur_per_kva_year,
         welcome_credit_eur=welcome_credit_eur,
+        welcome_credit_kind=welcome_credit_kind,
     )
 
 

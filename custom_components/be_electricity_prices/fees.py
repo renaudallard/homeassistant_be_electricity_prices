@@ -54,6 +54,7 @@ from .const import (
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     VREG_CAPACITY_FLOOR_KW,
+    WELCOME_CREDIT_ANNIVERSARY,
 )
 from .pricing import (
     MeterType,
@@ -390,6 +391,13 @@ def _welcome_credit_eur(
     connection: against a 200 EUR credit and a 50 EUR standing charge it needs
     a year under roughly 900 kWh.
 
+    A card that grants its credit at the ANNIVERSARY instead (Frank Energie's
+    Dynamisch Korting: *"De korting wordt toegekend via de factuur na een jaar
+    ononderbroken verbruik"*) is a lump rather than an accrual, so it lands
+    whole in the window the first anniversary falls in and nothing before it.
+    No cap either, because that card states none: the two rules travel together
+    on ``welcome_credit_kind`` because each card states one complete rule.
+
     Returns a POSITIVE number; the caller subtracts it.
     """
     amount = snapshot.welcome_credit_eur
@@ -397,6 +405,14 @@ def _welcome_credit_eur(
         return 0.0
     start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
     if start is None:
+        return 0.0
+    if snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
+        # The day the first year completes. Credited in whichever window
+        # contains it and in no other, which is what stops a figure that resets
+        # every 1 January from granting the same lump a second time.
+        anniversary = start + timedelta(days=_WELCOME_YEAR_DAYS)
+        if window_start <= anniversary <= today:
+            return amount
         return 0.0
     first = max(start, window_start)
     last = min(today, start + timedelta(days=_WELCOME_YEAR_DAYS - 1))
