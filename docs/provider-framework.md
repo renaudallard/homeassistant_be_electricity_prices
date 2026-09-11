@@ -157,10 +157,14 @@ month at the current rate. Return-value semantics:
   running month on a supplier that publishes in arrears (energie.be), and any
   month before the supplier's archive horizon (Engie's 2023 cards predate the
   layout its parser reads, energie.be's mid-2025 cards are page images). On
-  `None` the coordinator falls back to the current snapshot as a proxy.
+  `None` the month cache asks the repository's own card archive
+  (`snapshot_store._archived_card_from_github`, fed daily by
+  `scripts/archive_cards.py`, see [ci-and-testing.md](ci-and-testing.md)) and
+  only then falls back to the current snapshot as a proxy.
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
-has no archive at all. Providers that do implement it typically cross-check the
+has no archive at all; its past months come from the repository archive alone.
+Providers that do implement it typically cross-check the
 resolved card with `archive_validity_check()` (see below) so a CDN that silently
 substitutes the current card for a withdrawn archive URL does not mis-bill past
 months.

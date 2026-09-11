@@ -444,6 +444,15 @@ ENERGY_CHARTS_ATTRIBUTION: Final = (
     "Bundesnetzagentur | SMARD.de"
 )
 
+# The repository's own card archive. .github/workflows/archive_cards.yml
+# stores what every extractor parsed, daily, on the ``archive`` branch, and
+# the month cache reads it for any month a supplier's own archive cannot
+# serve: one small JSON per (supplier, contract, region, month).
+CARD_ARCHIVE_URL: Final = (
+    "https://raw.githubusercontent.com/renaudallard/"
+    "homeassistant_be_electricity_prices/archive"
+)
+
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps

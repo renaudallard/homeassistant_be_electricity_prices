@@ -1314,9 +1314,11 @@ SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None
 # Historical-fetch contract: fetch the published card for a specific
 # (year, month). Used by the time-correct yearly-cost flow to bill each
 # past month at its own rate. Returns ``None`` when the supplier has no
-# accessible archive for that month (overwrite-in-place suppliers like
-# OCTA+ / TotalEnergies, API-only suppliers like Engie / Luminus,
-# or a month before the supplier's archive horizon).
+# accessible archive for that month (an overwrite-in-place supplier like
+# TotalEnergies, a card named by version rather than by month like Bolt's
+# variable folder, or a month before the supplier's archive horizon); the
+# month cache then asks the repository's own card archive before proxying
+# the current card.
 ArchivedSnapshotFetcher = Callable[
     [aiohttp.ClientSession, str, str, "date"], Awaitable["SupplierSnapshot | None"]
 ]
@@ -1337,8 +1339,9 @@ class SupplierExtractor:
     # Optional historical fetch: returns the published snapshot for a
     # given (year, month) so past consumption can be billed at the
     # correct historical rate. ``None`` (or a callable returning ``None``)
-    # means "no archive for this month" - the coordinator falls back to
-    # using the current snapshot as a proxy.
+    # means "no archive for this month" - the coordinator then asks the
+    # repository's card archive and falls back to the current snapshot as
+    # a proxy.
     fetch_for_month: ArchivedSnapshotFetcher | None = None
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry

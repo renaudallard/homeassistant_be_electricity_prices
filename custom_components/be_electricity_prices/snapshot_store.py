@@ -36,6 +36,7 @@ produces has to move this number with it."""
 
 from __future__ import annotations
 
+import json
 import logging
 
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ import aiohttp
 import asyncio
 
 from .const import (
+    CARD_ARCHIVE_URL,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_INCLUDE_VAT,
     CONF_METER,
@@ -61,13 +63,16 @@ from .const import (
     DOMAIN,
     METER_MONO,
     STORAGE_VERSION,
+    SUPPLIER_CUSTOM,
     WELCOME_CREDIT_PRO_RATA,
 )
 from .providers import offers_quarter_hourly
+from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
     EnergyRates,
+    ExtractorError,
     FixedRates,
     ImpactRates,
     InjectionRates,
@@ -730,6 +735,48 @@ def restore_monthly_rows(
     return restored
 
 
+async def _archived_card_from_github(
+    session: aiohttp.ClientSession,
+    supplier: str,
+    contract: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card the repository's own archive holds for this month, or None.
+
+    ``archive_cards.yml`` stores what every extractor parsed, daily, on the
+    ``archive`` branch (``scripts/archive_cards.py``), so a month a supplier
+    cannot serve itself is still billed on the card that was live in it
+    rather than on today's. The row was parsed by the extractor of its day
+    and there is no re-parse to heal it with, which is the page-image
+    replay's position exactly, so it is read at the same degraded schema
+    floor: for a past month a row parsed under an older schema beats the
+    current card as a proxy.
+
+    None on a 404, which is a month the archive predates, a contract it does
+    not cover or the branch not yet created, and on a row that no longer
+    decodes. A transient failure propagates so the caller's negative cache
+    treats it like a supplier archive blip and asks again later.
+    """
+    url = (
+        f"{CARD_ARCHIVE_URL}/{supplier}/{contract}/{region}/"
+        f"{year_month.year:04d}-{year_month.month:02d}.json"
+    )
+    try:
+        body = await fetch_text(session, url)
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return None
+    try:
+        return _snapshot_from_dict(
+            json.loads(body), min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
+        )
+    except (KeyError, TypeError, ValueError) as err:
+        _LOGGER.debug("card archive row %s does not decode: %s", url, err)
+        return None
+
+
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -744,12 +791,20 @@ async def _snapshot_for_month(
 ) -> "SupplierSnapshot":
     """Resolve the historical snapshot for ``year_month`` or fall back.
 
+    Three tiers, in order. The supplier's own archive (``fetch_for_month``)
+    is the card the supplier files under the month, parsed by today's
+    extractor, so it comes first. The repository's card archive
+    (``_archived_card_from_github``) answers for a closed month the
+    supplier cannot serve: a supplier with no archive at all
+    (TotalEnergies), a card named by version rather than by month (Bolt's
+    variable folder) or a month before the supplier's horizon. The current
+    snapshot is the proxy when neither has the month, and it is the running
+    month's card by definition, so that month never reaches the repository.
+
     Caches the result per (supplier, contract, region, YYYY-MM): a hit
     skips the network round-trip on subsequent refreshes. ``None`` is
-    cached too -- "supplier doesn't archive this month" is a stable
-    signal we shouldn't keep re-asking. The fallback is the current
-    snapshot, used as a proxy for non-archive suppliers (OCTA+,
-    TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
+    cached too: "no archive has this month" is a stable signal we
+    shouldn't keep re-asking.
 
     The cache is shared across entries, so it holds archived cards exactly
     as parsed and each caller's own VAT / consumption facts are applied on
@@ -805,23 +860,22 @@ async def _snapshot_for_month(
         # process even after the card appeared.
         cache.pop(cache_key, None)
         fetched_at.pop(cache_key, None)
-    fetch_archived = extractor.fetch_for_month
-    if fetch_archived is None:
-        # Not an archive supplier at all, which is a property of the extractor
-        # rather than of the month, so this row is never provisional.
+    if extractor.id == SUPPLIER_CUSTOM:
+        # Assembled from the entry rather than published: no archive holds
+        # a card for it, whatever the month, so this row is never provisional.
         cache[cache_key] = None
         fetched_at[cache_key] = dt_util.utcnow()
         return current_snapshot
     if cached_only:
         # Uncached and no fetch allowed: the documented fallback. Nothing is
-        # written to the cache, so the warm-up still asks the supplier.
+        # written to the cache, so the warm-up still asks the archives.
         return current_snapshot
-    # Negative cache: a transient fetch_for_month failure is intentionally
-    # NOT written to ``cache`` (a cached None means "no archive for
-    # this month"); without this secondary marker the hourly YTD walk
-    # would re-attempt every uncached month against a flaky CDN. Skip
-    # the retry while the marker is fresh; current_snapshot is the
-    # documented proxy for non-archive months.
+    # Negative cache: a transient archive failure is intentionally NOT
+    # written to ``cache`` (a cached None means "no archive has this
+    # month"); without this secondary marker the hourly YTD walk would
+    # re-attempt every uncached month against a flaky CDN. Skip the retry
+    # while the marker is fresh; current_snapshot is the documented proxy
+    # for non-archive months.
     last_fail = failed.get(cache_key)
     if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
         return current_snapshot
@@ -839,11 +893,25 @@ async def _snapshot_for_month(
         ):
             return current_snapshot
         fetch_failed = False
+        snap: SupplierSnapshot | None = None
         try:
-            snap = await fetch_archived(session, contract, region, year_month)
+            if extractor.fetch_for_month is not None:
+                snap = await extractor.fetch_for_month(
+                    session, contract, region, year_month
+                )
+            if snap is None and (year_month.year, year_month.month) < (
+                today.year,
+                today.month,
+            ):
+                # Only a closed month: the running month's card is the one
+                # being served live, which is what current_snapshot holds,
+                # and the repository's copy of it is a day behind at best.
+                snap = await _archived_card_from_github(
+                    session, extractor.id, contract, region, year_month
+                )
         except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
             _LOGGER.debug(
-                "fetch_for_month failed for %s/%s/%s/%s: %s",
+                "archive fetch failed for %s/%s/%s/%s: %s",
                 extractor.id,
                 contract,
                 region,

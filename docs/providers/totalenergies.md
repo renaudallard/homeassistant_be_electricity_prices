@@ -117,8 +117,11 @@ not serve; the coordinator then falls back to its time based TTL.
 There is **no** `fetch_for_month` on the extractor (`EXTRACTOR`,
 `totalenergies.py:820`, only sets `fetch` and `probe`). TotalEnergies is an
 overwrite-in-place supplier: the `/latest/` URL exposes only the current month
-and no dated archive is reachable (`providers/base.py:527-532`). The yearly cost
-backfill therefore bills every past month with the current snapshot as a proxy.
+and no dated archive is reachable (`providers/base.py:527-532`). Since September
+2026 the repository's own card archive (`.github/workflows/archive_cards.yml`)
+stores each month's card as it was live, and the month cache reads it before
+proxying the current snapshot, so past months from then on bill at their own
+rate here too; earlier months still take the current snapshot as a proxy.
 
 ### Discovery (CI only)
 

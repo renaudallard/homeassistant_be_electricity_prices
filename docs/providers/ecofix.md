@@ -208,8 +208,12 @@ There is **no** `fetch_for_month`: the registry leaves it unset (`ecofix.py:747`
 constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
-consumption windows at the current snapshot's rates. If Ecofix ever exposes a
-dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:1320`).
+consumption windows at the current snapshot's rates. The repository's own card
+archive (`.github/workflows/archive_cards.yml`) would cover past months from
+September 2026 on the way it does for TotalEnergies, but it stores what the
+extractor parsed, and while the cards are page images that is nothing. If Ecofix
+ever exposes a dated archive, add an `ArchivedSnapshotFetcher` (see
+`providers/base.py:1320`).
 
 ### discover()
 
@@ -454,7 +458,8 @@ test in the source.
   reconstruction) parses correctly (`ecofix.py:42`).
 - **Overwrite-in-place, no archive.** Filenames are stable and reused each month,
   so there is no `fetch_for_month` and past months fall back to the current snapshot
-  as a proxy (`ecofix.py:45`).
+  as a proxy (`ecofix.py:45`); the repository's card archive has nothing for them
+  either while the cards are page images.
 - **Magnitude disambiguation of fee vs renewable.** The two Vlaanderen numbers flip
   order across cards; the parser keys off magnitude (`< 5` = renewable, `>= 10` =
   fee) not position (`ecofix.py:263`).
