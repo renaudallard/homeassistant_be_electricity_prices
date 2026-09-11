@@ -65,6 +65,7 @@ from .coordinator import (
     BePricesCoordinator,
     CoordinatorData,
     supplier_device_info,
+    month_window_reset,
     ytd_window_reset,
 )
 from .pricing import PriceBreakdown, breakdown_row, slot_start
@@ -459,6 +460,24 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         suggested_display_precision=2,
         value_fn=lambda d: d.current_year_cost_eur,
         last_reset_fn=ytd_window_reset,
+    ),
+    BePriceSensorDescription(
+        key="current_month_cost",
+        translation_key="current_month_cost",
+        # The same bill as current_year_cost over the running month, which is
+        # the period a household budgets in and the one an invoice covers.
+        # Priced as its own window rather than sliced off the year, so under
+        # the compensation regime it nets THAT month's registers and twelve of
+        # these do not add up to the yearly figure; on every other regime they
+        # do. ``TOTAL`` with ``last_reset`` on the 1st for the same reason the
+        # yearly one carries it, and MEASUREMENT would be wrong twice over:
+        # this is money accumulating over a period, not a reading.
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.current_month_cost_eur,
+        last_reset_fn=month_window_reset,
     ),
     BePriceSensorDescription(
         key="projected_year_cost",

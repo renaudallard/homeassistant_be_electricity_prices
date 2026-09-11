@@ -780,6 +780,9 @@
       "current_year_cost": {
         "name": "Kosten dieses Jahr"
       },
+      "current_month_cost": {
+        "name": "Kosten diesen Monat"
+      },
       "projected_year_cost": {
         "name": "Voraussichtliche Jahreskosten"
       },

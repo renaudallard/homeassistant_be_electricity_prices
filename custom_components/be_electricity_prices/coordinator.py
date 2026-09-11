@@ -264,6 +264,11 @@ class CoordinatorData:
     # negative when injection credit exceeds consumption + pro-rated
     # fees; for "none" only consumption counts.
     current_year_cost_eur: float | None = None
+    # The same bill accumulated over the running month instead of the year.
+    # Priced as its own window, so under the compensation regime it nets that
+    # month's registers rather than taking a slice of the year's netting, and
+    # twelve of them do not add up to current_year_cost_eur on such an entry.
+    current_month_cost_eur: float | None = None
     # Optional diagnostic breakdown behind current_year_cost: YTD and today
     # consumption / injection kWh, the pre-clamp raw energy term and the fees
     # floor. Populated only on the static per-day (fixed / variable) path;
@@ -320,6 +325,36 @@ def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> dateti
     """
     now = when or dt_util.now()
     start = ytd_window_start(entry, now.date())
+    return now.replace(
+        month=start.month, day=start.day, hour=0, minute=0, second=0, microsecond=0
+    )
+
+
+def month_window_start(entry: ConfigEntry, today: date | None = None) -> date:
+    """First day ``current_month_cost`` accumulates from.
+
+    The 1st of the running month, except on an entry that bills its
+    year-to-date from its contract start date and signed part-way through this
+    one: then it is the start date. Billing the whole month there would charge
+    the days before the contract existed, which on a 15 March signing is a
+    fortnight of energy and standing charge the household never owed. The
+    yearly window already refuses those days; the monthly one has to agree with
+    it, or the month is not a slice of the year it sits in.
+    """
+    day = today or dt_util.now().date()
+    return max(day.replace(day=1), ytd_window_start(entry, day))
+
+
+def month_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:
+    """Local midnight of the day ``current_month_cost`` accumulates from.
+
+    The datetime form of :func:`month_window_start`, and it inherits the same
+    invariant its yearly sibling above spells out: the instant published as
+    ``last_reset`` has to be the instant actually billed from, or the
+    statistics compiler buckets a period the sensor never accumulated over.
+    """
+    now = when or dt_util.now()
+    start = month_window_start(entry, now.date())
     return now.replace(
         month=start.month, day=start.day, hour=0, minute=0, second=0, microsecond=0
     )
@@ -1130,6 +1165,29 @@ class BePricesCoordinator(
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
         )
+        # The same bill over the running month. A second pass rather than an
+        # accumulator inside the first: the walk has four branches and four
+        # fees-floor exits, and a month total threaded through all eight is the
+        # shape that drifts. A month is an eighth of a mid-year window, and the
+        # month cards and spots the first pass resolved are all cached, so what
+        # it costs is one short recorder read and the pricing loop over ~30
+        # days.
+        month_cost = await _compute_current_year_cost(
+            self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
+            self._snapshot,
+            self.entry,
+            historical_spots=self._historical_spots,
+            spot_quarters=self._historical_spot_quarters,
+            spp_weights=self._spp_weights if spp_weighted else None,
+            rlp_weights=(
+                (self._rlp_weights or None) if (rlp_weighted or allocating) else None
+            ),
+            billed_peak_kw=billed_peak,
+            cached_only=cached_months_only,
+            window_start_override=month_window_start(self.entry),
+        )
         if cached_months_only:
             self._month_cards_deferred = False
             self.entry.async_create_background_task(
@@ -1190,6 +1248,7 @@ class BePricesCoordinator(
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
+            current_month_cost_eur=month_cost,
             ytd_diagnostics=ytd_breakdown or None,
             projected_year_cost_eur=projected_year_cost,
             projection_diagnostics=projection_breakdown or None,

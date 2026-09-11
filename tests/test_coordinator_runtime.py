@@ -4607,14 +4607,17 @@ async def test_the_first_tick_prices_the_year_from_cards_in_hand(
         patch.object(entry, "async_create_background_task", _capture_task),
     ):
         await coord._update_body()
-        assert modes == [True], "setup must not wait on one PDF per elapsed month"
+        # Two passes per tick, the year and the running month, and BOTH have to
+        # stay off the network here: either one fetching a card per elapsed
+        # month is the setup stall this guards.
+        assert modes == [True, True], "setup must not wait on one PDF per elapsed month"
         assert [coro.__name__ for coro in scheduled] == ["_fill_month_cards"]
         scheduled[0].close()
 
         # Once per coordinator, not once per tick: with the cache warm the
         # walk is free, and skipping it would keep serving the proxy card.
         await coord._update_body()
-        assert modes == [True, False]
+        assert modes == [True, True, False, False]
         assert len(scheduled) == 1
 
 

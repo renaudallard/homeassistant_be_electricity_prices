@@ -3881,7 +3881,15 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
         prosumer_proration=prosumer_proration,
     )
 
-    live = await _ytd_prosumer(hass, MagicMock(), MagicMock(), snapshot, entry, today)
+    live = await _ytd_prosumer(
+        hass,
+        MagicMock(),
+        MagicMock(),
+        snapshot,
+        entry,
+        today,
+        window_start=date(2026, 1, 1),
+    )
     assert live > 0.0
     assert quoted == pytest.approx(live, rel=1e-9)
 

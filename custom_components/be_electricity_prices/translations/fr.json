@@ -780,6 +780,9 @@
       "current_year_cost": {
         "name": "Cout de l annee"
       },
+      "current_month_cost": {
+        "name": "Cout du mois"
+      },
       "projected_year_cost": {
         "name": "Cout annuel projete"
       },

@@ -149,6 +149,7 @@ async def _walk_ytd_months(
     entry: ConfigEntry,
     today: date,
     *,
+    window_start: date,
     contract: str | None = None,
     cached_only: bool = False,
 ) -> AsyncIterator[tuple[SupplierSnapshot, date, int, int]]:
@@ -184,7 +185,7 @@ async def _walk_ytd_months(
     """
     region = entry.data.get(CONF_REGION, "")
     contract = contract or entry.data[CONF_CONTRACT]
-    cur = ytd_window_start(entry, today)
+    cur = window_start
     while cur <= today:
         month_first = date(cur.year, cur.month, 1)
         snap_m = await _effective_snapshot_for_month(
@@ -224,6 +225,7 @@ async def _ytd_static_fees(
     entry: ConfigEntry,
     today: date,
     *,
+    window_start: date,
     contract: str | None = None,
     meter: MeterType | None = None,
     cached_only: bool = False,
@@ -257,6 +259,7 @@ async def _ytd_static_fees(
         snapshot,
         entry,
         today,
+        window_start=window_start,
         contract=contract,
         cached_only=cached_only,
     ):
@@ -276,6 +279,7 @@ async def _ytd_prosumer(
     entry: ConfigEntry,
     today: date,
     *,
+    window_start: date,
     contract: str | None = None,
     cached_only: bool = False,
 ) -> float:
@@ -295,6 +299,7 @@ async def _ytd_prosumer(
         snapshot,
         entry,
         today,
+        window_start=window_start,
         contract=contract,
         cached_only=cached_only,
     ):
@@ -315,6 +320,7 @@ async def _ytd_capacity(
     today: date,
     billed_peak_kw: float,
     *,
+    window_start: date,
     contract: str | None = None,
     meter: MeterType | None = None,
     cached_only: bool = False,
@@ -357,6 +363,7 @@ async def _ytd_capacity(
         snapshot,
         entry,
         today,
+        window_start=window_start,
         contract=contract,
         cached_only=cached_only,
     ):
@@ -379,6 +386,7 @@ async def _ytd_hourly_energy(
     entry: ConfigEntry,
     today: date,
     *,
+    window_start: date,
     contract: str | None = None,
     meter: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
@@ -453,7 +461,6 @@ async def _ytd_hourly_energy(
     if not cons_ids and not inj_ids:
         return None
 
-    window_start = ytd_window_start(entry, today)
     cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, window_start, today)
     inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Statistics only carry the last COMPILED hour, so top today up from the
@@ -660,6 +667,8 @@ async def _ytd_spot_injection_credit(
     today: date,
     historical_spots: dict[datetime, float] | None,
     snap_for: Callable[[date], Awaitable[SupplierSnapshot]] | None = None,
+    *,
+    window_start: date,
 ) -> float:
     """YTD solar-injection credit (EUR) for a contract whose injection is
     a per-hour spot formula with no monthly indicative.
@@ -698,7 +707,6 @@ async def _ytd_spot_injection_credit(
     inj_ids = _hourly_injection_sensors(entry)
     if not inj_ids:
         return 0.0
-    window_start = ytd_window_start(entry, today)
     per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Topped up from the live meter, exactly as both sibling paths do: the
     # daily branch through _recorder_daily_kwh and the hourly branch through
@@ -748,6 +756,7 @@ async def _compute_current_year_cost(
     breakdown: dict[str, float] | None = None,
     billed_peak_kw: float = 0.0,
     cached_only: bool = False,
+    window_start_override: date | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -893,7 +902,13 @@ async def _compute_current_year_cost(
     )
     eff_energy = snapshot.energy if cohort_energy is None else cohort_energy
 
-    window_start = ytd_window_start(entry, today)
+    # The window every leg below accumulates over. Normally the year-to-date
+    # one; ``window_start_override`` narrows it to the running month for the
+    # month-to-date sensor, which is the same bill over a shorter period. It is
+    # resolved ONCE here and handed to every accumulator rather than each
+    # deriving it: an override reaching the energy walk but not the fee walk is
+    # how these legs have drifted apart before.
+    window_start = window_start_override or ytd_window_start(entry, today)
     # A welcome credit belongs to the product version signed, and EnergyVision
     # moved that figure four times between March and September 2026, so the
     # amount comes off the SIGNING month's card rather than today's. Identity
@@ -918,6 +933,7 @@ async def _compute_current_year_cost(
         snapshot,
         entry,
         today,
+        window_start=window_start,
         contract=contract,
         meter=meter,
         cached_only=cached_only,
@@ -929,6 +945,7 @@ async def _compute_current_year_cost(
         snapshot,
         entry,
         today,
+        window_start=window_start,
         contract=contract,
         cached_only=cached_only,
     )
@@ -940,6 +957,7 @@ async def _compute_current_year_cost(
         entry,
         today,
         billed_peak_kw,
+        window_start=window_start,
         contract=contract,
         meter=meter,
         cached_only=cached_only,
@@ -1016,6 +1034,7 @@ async def _compute_current_year_cost(
             snapshot,
             entry,
             today,
+            window_start=window_start,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -1040,6 +1059,7 @@ async def _compute_current_year_cost(
             snapshot,
             entry,
             today,
+            window_start=window_start,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -1076,6 +1096,7 @@ async def _compute_current_year_cost(
             snapshot,
             entry,
             today,
+            window_start=window_start,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -1259,6 +1280,7 @@ async def _compute_current_year_cost(
                 entry,
                 cached_only=cached_only,
             ),
+            window_start=window_start,
         )
         # This regime has no compensation clamp, so the billed energy is
         # already the raw energy term.

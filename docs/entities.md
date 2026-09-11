@@ -40,8 +40,8 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:552`) instance driven by a
-frozen `BePriceSensorDescription` (`sensor.py:78`), which extends HA's
+Every sensor is one `BePriceSensor` (`sensor.py:571`) instance driven by a
+frozen `BePriceSensorDescription` (`sensor.py:79`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
 ```python
@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:617`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:636`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -64,16 +64,16 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:519`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py:538`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
-| `SENSORS` (11 core price sensors) | `sensor.py:386` | always |
-| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:418` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:485` | `CONF_REGION == REGION_FLANDERS` |
-| `PROSUMER_SENSORS` (1) | `sensor.py:403` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
-| `INJECTION_SENSORS` (1) | `sensor.py:414` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:701` | `CONF_CONTRACT_END_DATE` is set |
+| `SENSORS` (11 core price sensors) | `sensor.py:387` | always |
+| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:419` | always |
+| `CAPACITY_SENSORS` (2) | `sensor.py:504` | `CONF_REGION == REGION_FLANDERS` |
+| `PROSUMER_SENSORS` (1) | `sensor.py:404` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
+| `INJECTION_SENSORS` (1) | `sensor.py:415` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
+| `ContractEndDateSensor` (1) | `sensor.py:720` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -105,6 +105,7 @@ pulls (all fields defined at `coordinator.py:763`).
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
+| Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only) |
@@ -115,7 +116,7 @@ pulls (all fields defined at `coordinator.py:763`).
 
 ### Current-slot selection and the nearest-slot guard
 
-`_current_slot_value` (`sensor.py:88`) looks a per-slot table up at
+`_current_slot_value` (`sensor.py:89`) looks a per-slot table up at
 `slot_start(utcnow, resolution)`. On an exact miss it falls back to the
 temporally nearest slot but only within one billing slot of "now": `max_gap` is
 3600 s on an hourly contract and 900 s on a quarter-hourly one
@@ -124,7 +125,7 @@ yesterday's last slot as "current"; a fixed 1 h window used to let a
 quarter-hourly sensor present an up-to-45-min-stale slot as current. The 1 h
 hourly window also absorbs the DST seam.
 
-Two sensors read the clock through it: `_current` (`sensor.py:119`) over
+Two sensors read the clock through it: `_current` (`sensor.py:120`) over
 `data.hourly` for the price sensors, and `_current_injection`
 (`sensor.py:114`) over `data.injection_hourly` for `injection_price`. Reading
 the clock at state time rather than at refresh time is what keeps them on the
@@ -138,16 +139,16 @@ use, so the state shows an adjacent slot's rate; the tick's scalar survives
 only as the last resort, for the flat contracts that emit no array at all and
 for a table with nothing inside the window.
 
-`_next_hour` (`sensor.py:144`) targets `slot_start(now) + 1h`. On a 15-minute
+`_next_hour` (`sensor.py:145`) targets `slot_start(now) + 1h`. On a 15-minute
 contract that deliberately stays the same quarter one hour later, so the sensor
 keeps its "next hour" meaning rather than becoming "next 15 minutes". If that
 exact slot is absent the sensor is `None` (no nearest-slot fallback).
 
-The today/tomorrow scalar sensors (`_bucket`, `sensor.py:154`) reduce over every
+The today/tomorrow scalar sensors (`_bucket`, `sensor.py:155`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
-The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py:220`),
+The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py:221`),
 which returns `None` unless `_has_tomorrow(data)` holds. Reusing the binary
 sensor's own predicate rather than repeating its `snapshot_valid_until` check
 makes the invariant exact: a `tomorrow_*` sensor has a value precisely when
@@ -162,7 +163,7 @@ issue.
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, and `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:309`);
+`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:310`);
 every other sensor returns `{}`.
 
 #### `current_price`
@@ -202,7 +203,7 @@ the recorded remainder, which runs about 6 KB; a test measures both halves so
 a future attribute added without excluding it fails loudly rather than costing
 every other attribute its history (an over-cap state stores none of them).
 
-`_today_ranked` (`sensor.py:255`) guarantees the cheapest and dearest lists are
+`_today_ranked` (`sensor.py:256`) guarantees the cheapest and dearest lists are
 disjoint (cheapest take their share first) and breaks price ties on the hour so
 the result is deterministic across reloads. Gotcha for automation authors: on a
 flat tariff where every hour rounds to the same all-in price the tie-break makes
@@ -275,11 +276,40 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:612`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:631`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
 floor, so the sensor never goes `unknown`.
+
+### `current_month_cost`: the same bill over a shorter window
+
+`current_month_cost` is `current_year_cost` accumulated from the 1st instead of
+from 1 January, which is the period a household budgets in and the one an
+invoice covers. It carries the same `MONETARY` / `TOTAL` pair and for the same
+reasons, with `last_reset` on the 1st via `month_window_reset`.
+
+It is a SECOND pass of `_compute_current_year_cost` with
+`window_start_override`, not a slice of the first. The engine prices a window
+four different ways and falls back to a fees floor in four more places, and a
+month total threaded through all eight is the shape that drifts; a month is
+also an eighth of a mid-year window, and the month cards and spots the first
+pass resolved are cached, so the second costs one short recorder read and the
+pricing loop over about thirty days.
+
+`window_start` is now a REQUIRED keyword on every accumulator the engine calls
+(`_walk_ytd_months`, the three fee walks, the two per-hour helpers) rather than
+each deriving it from the entry. That is deliberate: a defaulted override
+reaching the energy walk and not the fee walk is exactly how these legs have
+drifted apart before, and a required argument makes every call site state which
+window it is accumulating over.
+
+One consequence worth knowing: under the **compensation regime** the month is
+netted as its own window, per register and clamped at zero, so twelve monthly
+figures do not add up to `current_year_cost` on such an entry. On every other
+regime they do. The annual netting is what the supplier actually settles, so
+the yearly sensor stays the authority and the monthly one answers "what did
+this month cost, on its own".
 
 ### `monthly_peak_kw`: why MEASUREMENT
 

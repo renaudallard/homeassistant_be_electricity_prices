@@ -1055,7 +1055,9 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         return {}
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        credit = await _ytd_spot_injection_credit(hass, snap, entry, today, spots)
+        credit = await _ytd_spot_injection_credit(
+            hass, snap, entry, today, spots, window_start=date(2026, 1, 1)
+        )
     # 2*(0.9*0.10-0.01) + 1*(0.9*0.20-0.01); the 5 kWh hour has no spot.
     assert credit == pytest.approx(2 * (0.9 * 0.10 - 0.01) + 1 * (0.9 * 0.20 - 0.01))
     # Monthly-indicative injection -> no-op here (the daily path credits it).
@@ -1067,7 +1069,10 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
     )
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         assert (
-            await _ytd_spot_injection_credit(hass, monthly, entry, today, spots) == 0.0
+            await _ytd_spot_injection_credit(
+                hass, monthly, entry, today, spots, window_start=date(2026, 1, 1)
+            )
+            == 0.0
         )
 
 
@@ -1193,7 +1198,13 @@ async def test_ytd_spot_injection_credit_uses_each_month_own_card(
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         credit = await _ytd_spot_injection_credit(
-            hass, _snap_with(march), entry, today, spots, _snap_for
+            hass,
+            _snap_with(march),
+            entry,
+            today,
+            spots,
+            _snap_for,
+            window_start=date(2026, 1, 1),
         )
     # January at its own base (+0.02), and February skipped: its card printed
     # an indicative, so the walk this is added to already credited it.
@@ -1203,7 +1214,7 @@ async def test_ytd_spot_injection_credit_uses_each_month_own_card(
     # the backfill disagreed with.
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         flat = await _ytd_spot_injection_credit(
-            hass, _snap_with(march), entry, today, spots
+            hass, _snap_with(march), entry, today, spots, window_start=date(2026, 1, 1)
         )
     assert flat == pytest.approx(4 * (1.0 * 0.10 - 0.03))
 
@@ -1581,7 +1592,9 @@ async def test_ytd_spot_injection_credit_tops_up_today_from_the_meter(
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
         patch("homeassistant.components.recorder.get_instance", return_value=inst),
     ):
-        credit = await _ytd_spot_injection_credit(hass, snap, entry, today, spots)
+        credit = await _ytd_spot_injection_credit(
+            hass, snap, entry, today, spots, window_start=date(2026, 1, 1)
+        )
     # The meter reports 12 kWh injected today, statistics carry 8. All 12 are
     # credited at 0.10; stopping at the compiled 8 would credit 0.80.
     assert credit == pytest.approx(1.20)
@@ -3748,6 +3761,7 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
             snap,
             entry,
             date(2026, 12, 31),
+            window_start=date(2026, 1, 1),
         )
         fee_override = await _ytd_static_fees(
             hass,
@@ -3757,6 +3771,7 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
             entry,
             date(2026, 12, 31),
             meter="exclusive_night",
+            window_start=date(2026, 1, 1),
         )
     assert fee_entry.total == pytest.approx(85.0)
     assert fee_override.total == pytest.approx(35.04)
@@ -3841,6 +3856,13 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
     async def _snap_for_month(*_a: Any, **_k: Any) -> Any:
         return snap
 
+    # Each entry bills from its OWN window, which is the whole point here: the
+    # second one opted into billing from its contract start date, so a blanket
+    # 1 January would prorate twelve months of standing charges over six months
+    # of energy, the very thing the option exists to stop.
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+
+    end = date(2026, 12, 31)
     with patch(
         "custom_components.be_electricity_prices.ytd_cost"
         "._effective_snapshot_for_month",
@@ -3852,7 +3874,8 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
             None,  # type: ignore[arg-type]
             snap,
             from_jan,
-            date(2026, 12, 31),
+            end,
+            window_start=ytd_window_start(from_jan, end),
         )
         half_year = await _ytd_static_fees(
             hass,
@@ -3860,7 +3883,8 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
             None,  # type: ignore[arg-type]
             snap,
             from_contract,
-            date(2026, 12, 31),
+            end,
+            window_start=ytd_window_start(from_contract, end),
         )
     # 365 EUR/year at 1 EUR/day: the full year, then 1 July to 31 December.
     assert whole_year.total == pytest.approx(365.0)
@@ -5616,6 +5640,7 @@ async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> N
             _capacity_entry(),
             date(2026, 12, 31),
             4.0,
+            window_start=date(2026, 1, 1),
         )
     # 12 months x (4.0 * 52.37 / 12) == a full year of the annual rate.
     assert total == pytest.approx(4.0 * 52.37)
@@ -5675,6 +5700,7 @@ async def test_ytd_capacity_honours_the_vreg_ceiling(hass: HomeAssistant) -> Non
             entry,
             date(2026, 12, 31),
             8.0,
+            window_start=date(2026, 1, 1),
         )
     uncapped = 8.0 * 52.3679
     expected = _capped_capacity_annual(
@@ -5708,6 +5734,7 @@ async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
             _capacity_entry(region="wallonia"),
             date(2026, 1, 31),
             4.0,
+            window_start=date(2026, 1, 1),
         )
     assert total == 0.0
 
@@ -5737,6 +5764,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
             _capacity_entry(),
             date(2026, 2, 28),
             4.0,
+            window_start=date(2026, 1, 1),
         )
     assert total == pytest.approx(4.0 * 52.37 / 12.0)  # February only
 
@@ -5764,6 +5792,7 @@ async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> N
             _capacity_entry(),
             date(2026, 2, 14),
             4.0,
+            window_start=date(2026, 1, 1),
         )
     monthly = 4.0 * 52.37 / 12.0
     assert total == pytest.approx(monthly * (1 + 14 / 28))
@@ -5856,6 +5885,7 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
         entry,  # type: ignore[arg-type]
         today,
         meter="dynamic",
+        window_start=date(2026, 1, 1),
     )
     assert hourly is None, "hourly path must refuse it the same way"
 
@@ -6708,6 +6738,7 @@ async def test_the_capacity_cap_follows_the_meter_the_quote_is_priced_on(
             4.0,
             meter=meter,
             cached_only=True,
+            window_start=date(2026, 1, 1),
         )
 
     # On the mono rate the per-kWh term eats the whole allowance, so the cap
@@ -7152,6 +7183,108 @@ async def test_welcome_credit_is_read_from_the_signing_month_card(
     with_archive = await _cost(True)
     assert without_archive - with_archive == pytest.approx((300.0 - 200.0) * 90 / 365)
 
+
+async def test_month_window_bills_only_the_running_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """``current_month_cost`` is the same engine over a shorter window, so a
+    month that used a third of the year's kWh has to cost a third of its
+    energy - and its standing charges have to prorate over the month's days
+    rather than the year's, which is what the window override exists for."""
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        consumption_kwh="sensor.cons_total",
+    )
+    # A standing charge of exactly 1 EUR a day, so the fee leg is big enough
+    # to see. Without one the whole bill is energy and this test passes even
+    # when the window override never reaches the fee walk.
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.18, yearly_fixed_fee=365.0),
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        # A flat 10 kWh a day since 1 January: 90 days in the window, 31 of
+        # them in March.
+        return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+
+    async def _cost(window: date | None) -> float:
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                    window_start_override=window,
+                ),
+            )
+
+    year = await _cost(None)
+    march = await _cost(date(2026, 3, 1))
+    # Every kWh bills at one flat rate here, so the energy legs are in the
+    # ratio of the days, and the standing charge prorates the same way. That
+    # makes the whole bill proportional, which is the invariant worth pinning:
+    # a window override reaching the energy walk but not the fee walk breaks it.
+    assert march == pytest.approx(year * 31 / 90)
+    # And the fee leg is really in there, or the proportionality above is a
+    # statement about energy alone: 31 days of a 1 EUR/day standing charge.
+    assert march > 31.0
+
+
+async def test_month_window_is_a_no_op_on_the_year_when_omitted() -> None:
+    """The override defaults to None and the year-to-date figure must be the
+    number it always was; every existing entry gets the second pass for free
+    and the first one unchanged."""
+    from custom_components.be_electricity_prices.coordinator import (
+        month_window_reset,
+        month_window_start,
+    )
+
+    entry = cast(Any, SimpleNamespace(data={}))
+    when = datetime(2026, 3, 31, 12, tzinfo=UTC)
+    reset = month_window_reset(entry, when)
+    assert (reset.year, reset.month, reset.day) == (2026, 3, 1)
+    assert (reset.hour, reset.minute, reset.second) == (0, 0, 0)
+
+    # An entry that bills its year from its contract start date and signed
+    # part-way through THIS month starts there instead. Billing the whole month
+    # would charge the fortnight before the contract existed, and the yearly
+    # window already refuses those days.
+    mid = cast(
+        Any,
+        SimpleNamespace(
+            data={"contract_start_date": "2026-03-17", "ytd_from_contract_start": True}
+        ),
+    )
+    assert month_window_start(mid, date(2026, 3, 31)) == date(2026, 3, 17)
+    assert month_window_reset(mid, when).day == 17
+
+    # A start date in an earlier month does not move it: that month is over and
+    # the running one is billed whole.
+    older = cast(
+        Any,
+        SimpleNamespace(
+            data={"contract_start_date": "2026-01-09", "ytd_from_contract_start": True}
+        ),
+    )
+    assert month_window_start(older, date(2026, 3, 31)) == date(2026, 3, 1)
+    # And an entry that never opted in is on the 1st whatever its start date.
+    optout = cast(Any, SimpleNamespace(data={"contract_start_date": "2026-03-17"}))
+    assert month_window_start(optout, date(2026, 3, 31)) == date(2026, 3, 1)
+
+
 async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -7206,6 +7339,7 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     # can use the result without checking which it got.
     assert other is snap
     assert own is snap
+
 
 def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> None:
     """Four answers in order: a full year of meter, then what the entry typed,

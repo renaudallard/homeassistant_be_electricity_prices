@@ -37,7 +37,7 @@ below map onto these three layers plus the taxes:
 ```
 
 `all_in = (energy + distribution + transport + levies) * (1 + VAT)`
-(README.md:259). The coordinator selects one `contract` and one `dso` sub-area
+(README.md:260). The coordinator selects one `contract` and one `dso` sub-area
 per config entry (`providers/base.py:478`).
 
 ## Terms
@@ -47,7 +47,7 @@ per config entry (`providers/base.py:478`).
 | AIEG | Small Walloon DSO, one of the five Wallonia distribution operators offered in the config flow. The source carries only the key and display label, not a spelled-out name. | `const.py:58`, `const.py:113` |
 | AIESH | Small Walloon DSO (Association Intercommunale d'Electricite du Sud-Hainaut). | `const.py:59`, `const.py:114` |
 | ArchivedSnapshotFetcher | Optional per-supplier callable that fetches the published card for a specific `(year, month)` so past consumption bills at that month's real rate; returns `None` when the supplier has no accessible archive (overwrite-in-place or API-only suppliers). | `providers/base.py:525`, `providers/base.py:547` |
-| all-in price | The single EUR/kWh the integration exposes: energy + distribution + transport + levies, times (1 + VAT). VAT spreads uniformly so the three component sensors sum to `current_price`. | README.md:259, README.md:271 |
+| all-in price | The single EUR/kWh the integration exposes: energy + distribution + transport + levies, times (1 + VAT). VAT spreads uniformly so the three component sensors sum to `current_price`. | README.md:260, README.md:271 |
 | Belpex-RLP-M | Eneco's monthly index for Zon & Wind Flex and Flex One: the RLP-weighted mean of the delivery month's hourly Belpex quotations, the weights being the mean of Synergrid's distinct regional RLP0N curves in local time. Known only at month end and published by Eneco on the next card; the running month is priced on the weighted mean to date, which is Eneco's own interim rule. `VariableRates.rlp_indexed`, `spot_stats._rlp_month_mean`. | `synergrid.py`, `spot_stats.py` |
 | Belpex / eSpot_15 / EPEX / EPEX DA | Names Belgian suppliers print for the wholesale day-ahead spot their dynamic formula multiplies. The integration always sources this curve from ENTSO-E, not the branded feed; the labels are only documentation of what a card references. | `providers/base.py:148`, README.md:265 |
 | bi-hourly meter (`METER_BI`) | Meter with two registers, peak (day) and off-peak (night). Drives the `peak` / `offpeak` energy and distribution columns. | `const.py:236`, `providers/base.py:155` |
