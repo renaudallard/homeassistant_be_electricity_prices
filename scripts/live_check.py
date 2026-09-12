@@ -2203,7 +2203,9 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         carries the same weight: without it the coefficients read as a
         per-hour formula and the credit follows the current slot's spot.
       * ``"bihourly"`` - a static current / peak / offpeak credit with no
-        transition slot or index formula. Trevion Vast is the case.
+        transition slot or index formula, flagged ``bi_hourly`` so the
+        engine reads the pair as the meter's registers. Trevion Vast is
+        the case.
       * ``"triplet"`` - a per-slot peak / transition / offpeak credit whose
         three slots are each a month formula: the printed triplet, the three
         coefficient pairs AND ``month_indexed``. Engie Empower Flextime is the
@@ -2256,9 +2258,11 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             and offpeak is not None
             and transition is None
             and factor is None
-            and base is None,
+            and base is None
+            and bool(getattr(injection, "bi_hourly", False)),
             detail=f"current={current}, peak={peak}, transition={transition}, "
-            f"offpeak={offpeak}, factor={factor}, base={base}",
+            f"offpeak={offpeak}, factor={factor}, base={base}, "
+            f"bi_hourly={getattr(injection, 'bi_hourly', None)}",
         )
     elif shape in ("spp", "month"):
         # Both shapes are month coefficients plus the card's printed

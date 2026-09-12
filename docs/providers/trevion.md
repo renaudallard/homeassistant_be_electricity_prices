@@ -64,9 +64,12 @@ same DSO, tax, and validity parsers to every product.
 
 `_extract_fixed` reads the `Enkelvoudig`, `Piekuren`, `Daluren`, and
 `Exclusief Nacht` rows. Consumption and injection are published in cEUR/kWh
-and converted to EUR/kWh. The feed-in triplet is intentionally retained:
-`injection.py` selects peak or off-peak with the standard Belgian schedule for
-a fixed or variable energy leg that has no explicit three-band TOU rule.
+and converted to EUR/kWh. The feed-in pair is kept and flagged `bi_hourly`:
+the card prints one feed-in rate per meter register, so `injection.py`
+credits a bi-hourly or digital meter by register on Flanders' day/night
+schedule and a single-register meter at the `Enkelvoudig` rate. The flag is
+what makes the pair readable; the engine ignores an unflagged pair on a
+fixed or variable card, so no other supplier is affected.
 
 ### Monthly indexed
 

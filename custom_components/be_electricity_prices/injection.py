@@ -41,22 +41,25 @@ from homeassistant.util import dt as dt_util
 from statistics import fmean
 
 from .const import (
+    CONF_METER,
+    CONF_REGION,
     CONF_SOLAR_REGIME,
+    METER_MONO,
+    REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
 )
 from .pricing import (
+    MeterType,
     is_offpeak,
     tou_slot,
 )
 from .providers.base import (
     DynamicRates,
     EnergyRates,
-    FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierSnapshot,
     TimeOfUseRates,
-    VariableRates,
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
@@ -261,9 +264,13 @@ def _tou_injection_rate(
     energy: EnergyRates,
     when: datetime,
     month_mean: float | None = None,
+    *,
+    meter: MeterType = METER_MONO,
+    region: str = REGION_FLANDERS,
 ) -> float | None:
     """Per-slot injection rate for a time-of-use contract whose feed-in
-    tariff varies by slot (Engie Empower Flextime).
+    tariff varies by slot (Engie Empower Flextime), or per register for a
+    card that prints a day and night feed-in pair (Trevion Vast).
 
     Returns ``None`` when the contract isn't TOU or its injection is a
     single rate (``peak`` unset), so the caller falls back to the normal
@@ -271,6 +278,13 @@ def _tou_injection_rate(
     ``weekend_rule`` so injection and consumption agree on the slot for a
     given hour, whether that leg is the card's ``TimeOfUseRates`` or the
     month-mean leg it re-prices through.
+
+    A pair on a card that is not time-of-use is read only when the card
+    flags it as the meter's register rates (``bi_hourly``), and then only
+    for a meter with two registers, on the same regional day/night schedule
+    the consumption side bills by; a single-register meter is credited at
+    ``current``, which is the rate its card prints for it. A pair without
+    the flag is not read at all, so no other supplier's credit changes.
 
     ``month_mean`` is the delivery month's mean for a month-indexed triplet:
     the slot's own coefficient pair is resolved against it, and the printed
@@ -283,9 +297,9 @@ def _tou_injection_rate(
     if inj.peak is None:
         return None
     if rule is None:
-        if not isinstance(energy, (FixedRates, VariableRates)):
+        if not inj.bi_hourly or meter not in ("bi", "dynamic"):
             return None
-        return inj.offpeak if is_offpeak(when) else inj.peak
+        return inj.offpeak if is_offpeak(when, region) else inj.peak
     slot = tou_slot(when, rule)
     if month_mean is not None and inj.month_indexed:
         coefs = _slot_coefficients(inj)
@@ -436,12 +450,16 @@ def _injection_price_for_slot(
     energy: EnergyRates,
     spot: float | None,
     when: datetime,
+    *,
+    meter: MeterType = METER_MONO,
+    region: str = REGION_FLANDERS,
 ) -> float | None:
     """Injection price in EUR/kWh for a single slot.
 
     The per-slot core shared by the live current-hour scalar and the
     today/tomorrow injection array. Priority (identical to the historical
-    walk): a per-slot TOU rate first (Engie Empower Flextime), then the
+    walk): a per-slot TOU or per-register rate first (Engie Empower
+    Flextime, Trevion Vast on a two-register meter), then the
     spot-indexed formula ``factor*spot + base`` when the contract is
     spot-indexed, otherwise the printed monthly ``current`` indicative.
     ``spot`` is the already-resolved spot for ``when``'s billing slot (None
@@ -458,7 +476,7 @@ def _injection_price_for_slot(
     credit would flip to a spot-varying one on the several dynamic-injection
     cards that publish BOTH a ``current`` and ``factor``/``base``.
     """
-    tou_rate = _tou_injection_rate(inj, energy, when)
+    tou_rate = _tou_injection_rate(inj, energy, when, meter=meter, region=region)
     if tou_rate is not None:
         return tou_rate
     if _injection_is_spot_formula(inj, energy):
@@ -494,19 +512,24 @@ def _compute_injection_price(
         snapshot.energy,
         _now_slot_spot(snapshot.energy, spot_prices),
         dt_util.now(),
+        meter=entry.data.get(CONF_METER, METER_MONO),
+        region=entry.data.get(CONF_REGION, REGION_FLANDERS),
     )
 
 
-def _injection_varies_intraday(inj: InjectionRates, energy: EnergyRates) -> bool:
+def _injection_varies_intraday(
+    inj: InjectionRates, energy: EnergyRates, *, meter: MeterType = METER_MONO
+) -> bool:
     """True when this contract's injection changes across the day -- a TOU
-    schedule (Engie Empower Flextime) or a spot-indexed formula (every dynamic
+    schedule (Engie Empower Flextime), a day/night register pair on a meter
+    with two registers (Trevion Vast) or a spot-indexed formula (every dynamic
     contract plus Cociter Tarif Variable). Flat monthly-indicative, fixed and
     (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
     array is worth emitting for it. Mirrors the branch conditions of
     ``_injection_price_for_slot``."""
     if inj.peak is not None and (
         _tou_weekend_rule(energy) is not None
-        or isinstance(energy, (FixedRates, VariableRates))
+        or (inj.bi_hourly and meter in ("bi", "dynamic"))
     ):
         return True
     return _injection_is_spot_formula(inj, energy)
@@ -519,12 +542,17 @@ def _historical_injection_rate(
     quarters: Sequence[float] | None = None,
     energy: EnergyRates | None = None,
     when: datetime | None = None,
+    meter: MeterType = METER_MONO,
+    region: str = REGION_FLANDERS,
 ) -> float | None:
     """Best-effort EUR/kWh injection rate for a *past* hour.
 
     Mirrors the live ``_compute_injection_price`` priority: a per-slot TOU
-    rate first (Engie Empower Flextime, when ``energy`` + ``when`` are
-    given), then the spot-indexed formula ``factor*spot + base`` when both
+    or per-register rate first (Engie Empower Flextime, Trevion Vast on a
+    two-register meter, when ``energy`` + ``when`` are given; ``meter`` and
+    ``region`` say which registers and whose day/night schedule, and default
+    to a single-register meter, which is credited at ``current``), then the
+    spot-indexed formula ``factor*spot + base`` when both
     the formula and a historical spot are available, falling back to the
     monthly indicative ``current`` otherwise. Several dynamic-injection
     contracts (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a
@@ -554,7 +582,9 @@ def _historical_injection_rate(
         rates = [
             rate
             for rate in (
-                _historical_injection_rate(injection, q, energy=energy, when=when)
+                _historical_injection_rate(
+                    injection, q, energy=energy, when=when, meter=meter, region=region
+                )
                 for q in quarters
             )
             if rate is not None
@@ -563,7 +593,9 @@ def _historical_injection_rate(
     if energy is not None and when is not None:
         # ``spot`` is the month mean whenever the caller settles this credit
         # on one, which is exactly when a month-indexed triplet may use it.
-        tou_rate = _tou_injection_rate(injection, energy, when, spot)
+        tou_rate = _tou_injection_rate(
+            injection, energy, when, spot, meter=meter, region=region
+        )
         if tou_rate is not None:
             return tou_rate
     if injection.factor is not None and injection.base is not None and spot is not None:

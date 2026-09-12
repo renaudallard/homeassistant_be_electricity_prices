@@ -503,6 +503,8 @@ def _injection_rate_for_hour(
     month_spp_cache: dict[tuple[int, int, bool], float | None],
     hourly_injection: bool,
     today: date,
+    meter: MeterType = METER_MONO,
+    region: str = REGION_FLANDERS,
 ) -> float | None:
     """The feed-in rate for one backfilled hour, or None when it has none.
 
@@ -542,6 +544,8 @@ def _injection_rate_for_hour(
         ),
         energy=snap_h.energy,
         when=local,
+        meter=meter,
+        region=region,
     )
 
 
@@ -649,6 +653,8 @@ async def _backfill_price_sensors(
                     month_spp_cache=month_spp_cache,
                     hourly_injection=hourly_injection,
                     today=today,
+                    meter=meter,
+                    region=region,
                 )
                 if inj_rate is None:
                     continue
@@ -867,6 +873,8 @@ async def _backfill_cost_sensor(
                     month_spp_cache=month_spp_cache,
                     hourly_injection=hourly_injection,
                     today=today,
+                    meter=meter,
+                    region=region,
                 )
                 if inj_rate is not None:
                     running_energy -= inj * inj_rate

@@ -639,6 +639,8 @@ async def _ytd_hourly_energy(
                 quarters=quarters.get(utc_hour),
                 energy=snap_h.energy,
                 when=local,
+                meter=meter,
+                region=region,
             )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate

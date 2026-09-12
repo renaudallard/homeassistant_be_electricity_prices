@@ -621,14 +621,27 @@ def test_historical_injection_rate_picks_tou_slot() -> None:
     )
     # No energy/when context -> single-rate fallback.
     assert _historical_injection_rate(inj) == pytest.approx(0.05)
-    # Fixed and variable bi-hourly cards use the standard Belgian off-peak
-    # schedule even though they do not carry a three-band TOU rule.
+    # A non-TOU contract ignores the per-slot fields entirely.
     assert _historical_injection_rate(
         inj, energy=FixedRates(single=0.20), when=peak_h
+    ) == pytest.approx(0.05)
+    # A card that flags the pair as its meter registers (Trevion Vast) is
+    # credited by register on a two-register meter, on the region's own
+    # day/night schedule, and at the single rate on a single-register one.
+    pair = InjectionRates(current=0.05, peak=0.084, offpeak=0.015, bi_hourly=True)
+    fixed = FixedRates(single=0.20, peak=0.22, offpeak=0.18)
+    assert _historical_injection_rate(
+        pair, energy=fixed, when=peak_h, meter="bi"
     ) == pytest.approx(0.084)
     assert _historical_injection_rate(
-        inj, energy=FixedRates(single=0.20), when=off_h
+        pair, energy=fixed, when=off_h, meter="dynamic"
     ) == pytest.approx(0.015)
+    assert _historical_injection_rate(pair, energy=fixed, when=peak_h) == pytest.approx(
+        0.05
+    )
+    assert _historical_injection_rate(
+        pair, energy=fixed, when=peak_h, meter="mono"
+    ) == pytest.approx(0.05)
 
 
 def test_injection_price_dynamic_returns_none_without_spot() -> None:
@@ -871,10 +884,15 @@ def test_injection_varies_intraday_true_for_spot_and_tou() -> None:
             peak=0.2, transition=0.15, offpeak=0.1, weekend_rule="weekend_no_peak"
         ),
     )
-    # Trevion Vast publishes a peak/off-peak injection pair on fixed energy.
-    assert _injection_varies_intraday(
-        InjectionRates(current=0.05, peak=0.08, offpeak=0.02),
-        FixedRates(single=0.2, peak=0.22, offpeak=0.18),
+    # Trevion Vast flags its peak/off-peak pair as the meter's registers: it
+    # varies on a two-register meter only, and an unflagged pair on fixed
+    # energy is not read at all.
+    pair = InjectionRates(current=0.05, peak=0.08, offpeak=0.02, bi_hourly=True)
+    fixed = FixedRates(single=0.2, peak=0.22, offpeak=0.18)
+    assert _injection_varies_intraday(pair, fixed, meter="bi")
+    assert not _injection_varies_intraday(pair, fixed)
+    assert not _injection_varies_intraday(
+        InjectionRates(current=0.05, peak=0.08, offpeak=0.02), fixed, meter="bi"
     )
 
 

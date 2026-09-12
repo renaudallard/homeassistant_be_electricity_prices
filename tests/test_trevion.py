@@ -90,6 +90,7 @@ def test_fixed_card_parses_both_pdf_text_orders(layout: bool) -> None:
     assert snap.injection.current == pytest.approx(0.057615)
     assert snap.injection.peak == pytest.approx(0.063329)
     assert snap.injection.offpeak == pytest.approx(0.043330)
+    assert snap.injection.bi_hourly is True
     assert snap.valid_until == date(2026, 9, 30)
 
 

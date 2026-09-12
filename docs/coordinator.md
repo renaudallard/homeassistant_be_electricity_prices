@@ -402,6 +402,7 @@ Belgian residential injection is VAT-exempt, so `InjectionRates` values are neve
 | (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, Luminus, Mega, OCTA+, TotalEnergies dynamic |
 | (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable, Cociter Variable Trihoraire |
 | (d) month-indexed formula | `current` + `factor`/`base` + `spp_indexed` or `month_indexed`, or the TOU triplet with its per-slot `factor_*`/`base_*` pairs | `factor*month_mean+base` for the DELIVERY month (per slot for the triplet), `current` or the printed triplet only while that mean is unpublished | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed, Trevion Flex/LifePowr; Engie Empower Flextime per slot |
+| (e) register pair | `current` + `peak`/`offpeak` with `bi_hourly` | `peak` or `offpeak` by the entry's meter registers on the region's day/night schedule (`is_offpeak`), `current` on a single-register meter | Trevion Groene Energie Vast |
 
 Shape (d) is what several cards used to be read as shape (a). They print a
 figure AND a formula, and say in their own footnotes that the figure is the

@@ -565,6 +565,15 @@ class InjectionRates:
     peak: float | None = None
     transition: float | None = None
     offpeak: float | None = None
+    # True when ``peak`` and ``offpeak`` are the day and night register rates
+    # of a bi-hourly meter rather than time-of-use slots: the card prints one
+    # feed-in rate per meter register beside its consumption rates (Trevion
+    # Groene Energie Vast). The pricing engine then credits a bi-hourly or
+    # digital meter by register on the DSO's day/night schedule and a
+    # single-register meter at ``current``. Without the flag a pair on a
+    # fixed or variable card is not read at all, so no other supplier's
+    # credit moves.
+    bi_hourly: bool = False
     # Month coefficient pair per TOU slot, for a card whose per-slot credit is
     # itself indexed on the delivery month. Engie Empower Flextime is the case:
     # one EPEXDAM formula per Flextime band on the injection side too, and the

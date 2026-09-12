@@ -251,6 +251,7 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
             current=_number(single.group(2)) / 100.0,
             peak=_number(peak.group(2)) / 100.0,
             offpeak=_number(offpeak.group(2)) / 100.0,
+            bi_hourly=True,
         ),
     )
 

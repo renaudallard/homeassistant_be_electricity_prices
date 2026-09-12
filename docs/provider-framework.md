@@ -366,6 +366,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 | `peak` | `float \| None` | `None` | Per-slot injection peak rate for a TOU contract whose feed-in varies by slot (Engie Empower Flextime). When set, the engine selects the slot with the same `tou_slot()` rule as the consumption side. |
 | `transition` | `float \| None` | `None` | Per-slot transition injection rate. |
 | `offpeak` | `float \| None` | `None` | Per-slot off-peak (super-off-peak) injection rate. |
+| `bi_hourly` | `bool` | `False` | The `peak` / `offpeak` pair is the day and night register rate of a bi-hourly meter, not TOU slots (Trevion Groene Energie Vast). The engine credits a two-register meter by register on the region's day/night schedule and a single-register meter at `current`; a pair without the flag on a fixed or variable card is not read. |
 | `floor_at_zero` | `bool` | `False` | Opt-in: clamp the resolved injection rate at 0 (the contract guarantees a never-negative feed-in tariff, e.g. the Mega groepsaankoop). Applied in both the live and historical paths. Leave `False` for every scraped card, which must respect negative formulas. |
 
 When the per-slot triplet is set, `current` stays the single-meter fallback. The

@@ -1556,12 +1556,19 @@ class BePricesCoordinator(
         if self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
             return {}
         inj = injection_snapshot.injection
-        if inj is None or not _injection_varies_intraday(inj, energy):
+        meter = self.entry.data.get(CONF_METER, METER_MONO)
+        if inj is None or not _injection_varies_intraday(inj, energy, meter=meter):
             return {}
+        region = self.entry.data.get(CONF_REGION, REGION_FLANDERS)
         out: dict[datetime, float] = {}
         for utc in grid_keys:
             rate = _injection_price_for_slot(
-                inj, energy, spot_prices.get(utc), dt_util.as_local(utc)
+                inj,
+                energy,
+                spot_prices.get(utc),
+                dt_util.as_local(utc),
+                meter=meter,
+                region=region,
             )
             if rate is not None:
                 out[utc] = rate
