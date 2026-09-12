@@ -2,9 +2,10 @@
 
 One row per contract and region, one column per month the branch holds.
 `live` is a card captured while it was current, `mirror` one copied from the
-supplier's own archive; a blank cell is a month the branch does not hold.
-Each month links to the PDF it was parsed from, in the cards repository's
-releases; `pdfs.md` lists those files the other way round.
+supplier's own archive; a blank cell is a month the branch does not hold, and
+`no card` a row parsed from something that was not a PDF, so there is nothing to
+download for it. Each month links to the PDF it was parsed from, in the cards
+repository's releases; `pdfs.md` lists those files the other way round.
 
 ## bolt
 
@@ -275,21 +276,21 @@ releases; `pdfs.md` lists those files the other way round.
 
 | contract | region | 2026-01 | 2026-02 | 2026-03 | 2026-04 | 2026-05 | 2026-06 | 2026-07 | 2026-08 | 2026-09 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| octaplus_dynamic | flanders | mirror |  | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/bc968688751e7365d7fda35e60a47a140f53cdc5418db27becc49b4b63f0b1a7.pdf) |
-| octaplus_dynamic | wallonia |  |  | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/25ccbcb3ba866a61a0f3c1f4d37a92c97f9d686cc495b153b43f96f5422050ce.pdf) |
-| octaplus_ecodynamic | flanders | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d8a657706c08402e63098db023b526568688c929badf4bf57505568a21603593.pdf) |
-| octaplus_ecodynamic | wallonia | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/9d355d80382e819f1e2caadbd09e6b30ad1a1c6b029697328bf4375df351a8e3.pdf) |
-| octaplus_ecofixed | flanders | mirror | mirror |  | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/ba0f5d9c481726da15338b3dbcea8da67d224bb013a97049cc031c0c7e4cf9ba.pdf) |
-| octaplus_ecofixed | wallonia | mirror | mirror |  | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/4e8c907f81e2dafbf304d11e80b13533143c0e555f5111c074043b894e9d19cb.pdf) |
-| octaplus_ecoflux | flanders | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/13fcd7331df68f8eb1eeec41ea414ec28d7086e1d09ac39daee3eb67c76b7d8f.pdf) |
-| octaplus_ecoflux | wallonia | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/57e71e33228d3e46dd21da8151f76d79dc8a9b2b0f0a3ea148727350766768b3.pdf) |
-| octaplus_fixed | flanders | mirror | mirror |  | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/41068c4551f1d31f9dcd0d43722034aa1fd44918712abd46a55abc44eccafb01.pdf) |
-| octaplus_fixed | wallonia | mirror | mirror |  | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/73cfd97a2c5fe75aa24c740539c84ba01f30089994000498963b84bceb7d50f6.pdf) |
-| octaplus_fixed_impact | wallonia | mirror | mirror |  | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/73cfd97a2c5fe75aa24c740539c84ba01f30089994000498963b84bceb7d50f6.pdf) |
-| octaplus_flux | flanders | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d1964de5208d0012b20305991fe8028e46291afc8526ab577cd1f6e7da36e708.pdf) |
-| octaplus_flux | wallonia | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/fcc56ea19f77267a237a4035bd136dfa499a6f1a391b3f8ffa8337dda6584468.pdf) |
-| octaplus_smartvariable | flanders | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/3a35e1a60704db1a5c50b027459f9b71907600641090407ed9b569c882453a03.pdf) |
-| octaplus_smartvariable | wallonia | mirror | mirror | mirror | mirror | mirror | mirror | mirror | mirror | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d3b4e1c6fc071ac098515ddee4d94d9a5d0f661ed1f46c2c5f3ccb114d543414.pdf) |
+| octaplus_dynamic | flanders | no card |  | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/bc968688751e7365d7fda35e60a47a140f53cdc5418db27becc49b4b63f0b1a7.pdf) |
+| octaplus_dynamic | wallonia |  |  | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/25ccbcb3ba866a61a0f3c1f4d37a92c97f9d686cc495b153b43f96f5422050ce.pdf) |
+| octaplus_ecodynamic | flanders | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d8a657706c08402e63098db023b526568688c929badf4bf57505568a21603593.pdf) |
+| octaplus_ecodynamic | wallonia | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/9d355d80382e819f1e2caadbd09e6b30ad1a1c6b029697328bf4375df351a8e3.pdf) |
+| octaplus_ecofixed | flanders | no card | no card |  | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/ba0f5d9c481726da15338b3dbcea8da67d224bb013a97049cc031c0c7e4cf9ba.pdf) |
+| octaplus_ecofixed | wallonia | no card | no card |  | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/4e8c907f81e2dafbf304d11e80b13533143c0e555f5111c074043b894e9d19cb.pdf) |
+| octaplus_ecoflux | flanders | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/13fcd7331df68f8eb1eeec41ea414ec28d7086e1d09ac39daee3eb67c76b7d8f.pdf) |
+| octaplus_ecoflux | wallonia | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/57e71e33228d3e46dd21da8151f76d79dc8a9b2b0f0a3ea148727350766768b3.pdf) |
+| octaplus_fixed | flanders | no card | no card |  | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/41068c4551f1d31f9dcd0d43722034aa1fd44918712abd46a55abc44eccafb01.pdf) |
+| octaplus_fixed | wallonia | no card | no card |  | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/73cfd97a2c5fe75aa24c740539c84ba01f30089994000498963b84bceb7d50f6.pdf) |
+| octaplus_fixed_impact | wallonia | no card | no card |  | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/73cfd97a2c5fe75aa24c740539c84ba01f30089994000498963b84bceb7d50f6.pdf) |
+| octaplus_flux | flanders | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d1964de5208d0012b20305991fe8028e46291afc8526ab577cd1f6e7da36e708.pdf) |
+| octaplus_flux | wallonia | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/fcc56ea19f77267a237a4035bd136dfa499a6f1a391b3f8ffa8337dda6584468.pdf) |
+| octaplus_smartvariable | flanders | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/3a35e1a60704db1a5c50b027459f9b71907600641090407ed9b569c882453a03.pdf) |
+| octaplus_smartvariable | wallonia | no card | no card | no card | no card | no card | no card | no card | no card | [live](https://github.com/renaudallard/be_price_cards/releases/download/electricity-2026-09/d3b4e1c6fc071ac098515ddee4d94d9a5d0f661ed1f46c2c5f3ccb114d543414.pdf) |
 
 ## totalenergies
 
