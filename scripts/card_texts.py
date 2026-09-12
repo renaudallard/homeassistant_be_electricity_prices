@@ -65,6 +65,11 @@ class StoredTexts:
         self.fresh: dict[tuple[str, str], str] = {}
         # url -> digest, for whoever needs to name the PDF behind a URL.
         self.digests: dict[str, str] = {}
+        # Every card this run was handed, in order: a provider that gets a
+        # card some other way than through a reader (OCTA+'s archive, base64
+        # inside JSON) leaves nothing in the text memo, and this is how the
+        # archiver still learns what it read. Cleared per fetch by the caller.
+        self.calls: list[tuple[str, str, str, str]] = []
         self.rendered = 0
         self.unrendered = 0
 
@@ -89,8 +94,10 @@ class StoredTexts:
                 text = read_text(self.archive / stored)
         if text is not None:
             self.unrendered += 1
+            self.calls.append((variant, url, digest, text))
             return text
         text = await asyncio.to_thread(renderer, payload)
         self.rendered += 1
         self.fresh[key] = text
+        self.calls.append((variant, url, digest, text))
         return text

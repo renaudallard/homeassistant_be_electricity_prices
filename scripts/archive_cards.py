@@ -470,6 +470,34 @@ def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     return entry
 
 
+def _sources_of(
+    memo: _RecordingMemo, cards: _Cards, out: Path, seen_month: str
+) -> list[dict[str, str]]:
+    """Everything one parse read: the memo entries it touched, plus any card
+    the render hook saw that never passed through the memo (a card handed
+    over inside a JSON answer), each with its text stored and its digest."""
+    sources = [
+        _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
+        for key in sorted(memo.touched)
+    ]
+    named = {(s["variant"], s["url"]) for s in sources}
+    for variant, url, digest, text in cards.calls:
+        if (variant, url) in named:
+            continue
+        named.add((variant, url))
+        sources.append(
+            {
+                "url": url,
+                "variant": variant,
+                "text": _write_text(out, seen_month, text),
+                "pdf": digest,
+            }
+        )
+    return sorted(
+        sources, key=lambda s: (s["variant"] != "text", s["variant"], s["url"])
+    )
+
+
 def _write_text(out: Path, seen_month: str, text: str) -> str:
     """Store ``text`` once, content-addressed, and return its path in ``out``."""
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -634,9 +662,10 @@ def _write_coverage(out: Path, pdf_base_url: str | None = None) -> None:
         "",
         "One row per contract and region, one column per month the branch holds.",
         "`live` is a card captured while it was current, `mirror` one copied from the",
-        "supplier's own archive; a blank cell is a month the branch does not hold.",
-        "Each month links to the PDF it was parsed from, in the cards repository's",
-        "releases; `pdfs.md` lists those files the other way round.",
+        "supplier's own archive; a blank cell is a month the branch does not hold, and",
+        "`no card` a row parsed from something that was not a PDF, so there is nothing to",
+        "download for it. Each month links to the PDF it was parsed from, in the cards",
+        "repository's releases; `pdfs.md` lists those files the other way round.",
         "",
     ]
     for supplier in sorted(held):
@@ -651,6 +680,8 @@ def _write_coverage(out: Path, pdf_base_url: str | None = None) -> None:
             for month in months:
                 via, digests = have.get(month, ("", []))
                 label = _VIA_LABELS.get(via, "")
+                if label and not digests:
+                    label = "no card"
                 links = [
                     link
                     for link in (_pdf_link(d, kept, pdf_base_url) for d in digests)
@@ -790,6 +821,7 @@ async def _replay_row(
         s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
     }
     cards.digests.update(replay.pdfs)
+    cards.calls.clear()
     try:
         seen_on = date.fromisoformat(row["_seen_on"])
     except (KeyError, ValueError):
@@ -814,10 +846,10 @@ async def _replay_row(
         summary.unreplayable.append(f"{label}: the archive path no longer settles it")
         return
     seen_month = _month_id(seen_on.year, seen_on.month)
-    sources = [
-        _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
-        for key in sorted(memo.touched)
-    ]
+    sources = _sources_of(memo, cards, out, seen_month)
+    # A card the row had never named (OCTA+'s, before its archive path went
+    # through the seam) is kept now, under this row's month.
+    cards.file(path.stem, (s["pdf"] for s in sources if "pdf" in s))
     summary.replayed += 1
     if _write_card(
         out,
@@ -905,6 +937,7 @@ async def archive(
                     continue
                 label = f"{ex.id}/{contract}/{region}"
                 memo.touched.clear()
+                cards.calls.clear()
                 try:
                     snap = await _fetch_card(
                         lambda: ex.fetch(session, contract, region), sleep
@@ -915,10 +948,7 @@ async def archive(
                         summary.given_up.append(ex.id)
                     continue
                 patience.ok(ex.id)
-                sources = [
-                    _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
-                    for key in sorted(memo.touched)
-                ]
+                sources = _sources_of(memo, cards, out, seen_month)
                 month_id = _card_month(snap, today)
                 if _write_card(
                     out, ex.id, contract, region, month_id, snap, sources, now, "live"
@@ -940,6 +970,7 @@ async def archive(
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
                     memo.touched.clear()
+                    cards.calls.clear()
                     try:
                         past = await _fetch_card(
                             lambda: fetch_for_month(session, contract, region, first),
@@ -956,12 +987,7 @@ async def archive(
                         # estimate: leave the month for a later backfill.
                         summary.absent += 1
                         continue
-                    sources = [
-                        _source_entry(
-                            key, _write_text(out, seen_month, memo[key]), cards
-                        )
-                        for key in sorted(memo.touched)
-                    ]
+                    sources = _sources_of(memo, cards, out, seen_month)
                     _write_card(
                         out,
                         ex.id,

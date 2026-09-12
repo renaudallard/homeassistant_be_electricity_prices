@@ -41,7 +41,6 @@ on a single line.
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import re
@@ -69,6 +68,7 @@ from ._pdf import (
     SIGN_CHARS,
     archive_validity_check,
     extract_pdf_text_aligned,
+    render_pdf,
     fetch_pdf_text_aligned,
     fetch_text,
     fold_accents,
@@ -321,7 +321,15 @@ async def fetch_for_month(
         if name is None:
             return None
         payload = await _fetch_archive_pdf(session, name)
-        text = await asyncio.to_thread(extract_pdf_text_aligned, payload, 3, 1.0)
+        # Through the readers' render seam, not a bare thread: the card
+        # archiver keeps what passes there, and this card arrived base64
+        # inside JSON rather than through a reader.
+        text = await render_pdf(
+            "aligned",
+            f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}",
+            payload,
+            lambda bytes_: extract_pdf_text_aligned(bytes_, 3, 1.0),
+        )
         snap = parse_snapshot(
             contract_id, text, region, f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}"
         )

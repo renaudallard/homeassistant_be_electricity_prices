@@ -92,3 +92,19 @@ def _clear_energy_charts_cooldown() -> Iterator[None]:
         yield
     finally:
         api._energy_charts_retry_at = None
+
+
+@pytest.fixture(autouse=True)
+def _card_archive_holds_nothing() -> Iterator[None]:
+    """The month cache asks the repository's card archive first for every
+    closed month, over the network. Tests that are not about that tier get a
+    branch that holds nothing, which is also what a fresh checkout sees; a
+    test about the tier patches the same name itself and its patch wins."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import snapshot_store
+
+    with patch.object(
+        snapshot_store, "_archived_card_from_github", AsyncMock(return_value=None)
+    ):
+        yield

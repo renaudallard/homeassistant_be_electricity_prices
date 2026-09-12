@@ -256,14 +256,28 @@ async def _pdf_text(
     if memo is not None and key in memo:
         return memo[key]
     payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
-    hook = _RENDER_HOOK.get()
-    if hook is None:
-        text = await asyncio.to_thread(render, payload)
-    else:
-        text = await hook(variant, url, payload, render)
+    text = await render_pdf(variant, url, payload, render)
     if memo is not None:
         memo[key] = text
     return text
+
+
+async def render_pdf(
+    variant: str, url: str, payload: bytes, render: Callable[[bytes], str]
+) -> str:
+    """Turn validated PDF bytes into text, through the render hook when one
+    is installed and in a worker thread otherwise.
+
+    The readers call it after their download. A provider that receives a
+    card some other way calls it too: OCTA+'s archive hands the card over
+    base64 inside a JSON answer, and rendering those bytes directly would
+    keep the card archiver, which listens on the hook, from ever seeing
+    them. ``url`` is whatever names the card for that provider.
+    """
+    hook = _RENDER_HOOK.get()
+    if hook is None:
+        return await asyncio.to_thread(render, payload)
+    return await hook(variant, url, payload, render)
 
 
 async def fetch_pdf_text(

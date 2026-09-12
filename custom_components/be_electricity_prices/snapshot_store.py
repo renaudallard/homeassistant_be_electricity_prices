@@ -748,13 +748,15 @@ async def _archived_card_from_github(
     """The card the repository's own archive holds for this month, or None.
 
     ``archive_cards.yml`` stores what every extractor parsed, daily, on the
-    ``archive`` branch (``scripts/archive_cards.py``), so a month a supplier
-    cannot serve itself is still billed on the card that was live in it
-    rather than on today's. The row was parsed by the extractor of its day
-    and there is no re-parse to heal it with, which is the page-image
-    replay's position exactly, so it is read at the same degraded schema
-    floor: for a past month a row parsed under an older schema beats the
-    current card as a proxy.
+    ``archive`` branch (``scripts/archive_cards.py``), and mirrors the
+    supplier archives onto it, so a closed month is one small JSON there
+    against a PDF download and a parse from the supplier: that is why the
+    month cache asks here first. The row was parsed by the extractor of its
+    day and re-parsed by the branch the day after a parser change, so it
+    is read at the degraded schema floor, the page-image replay's position:
+    for a past month a row parsed under an older schema beats the current
+    card as a proxy, and the supplier's own archive still answers for a
+    month the branch does not hold.
 
     None on a 404, which is a month the archive predates, a contract it does
     not cover or the branch not yet created, and on a row that no longer
@@ -822,16 +824,20 @@ async def _snapshot_for_month(
 ) -> "SupplierSnapshot":
     """Resolve the historical snapshot for ``year_month`` or fall back.
 
-    Three tiers, in order. The supplier's own archive (``fetch_for_month``)
-    is the card the supplier files under the month, parsed by today's
-    extractor, so it comes first. The repository's card archive
-    (``_archived_card_from_github``) answers for a closed month the
-    supplier cannot serve: a supplier with no archive at all
-    (TotalEnergies), a card named by version rather than by month (Bolt's
-    variable folder) or a month before the supplier's horizon. The current
+    Three tiers, in order. The repository's card archive
+    (``_archived_card_from_github``) comes first for a closed month it can
+    hold (``_card_archive_may_hold``): one small JSON per month, holding the
+    supplier archives mirrored and every card captured live, against a PDF
+    download and a parse per month from the supplier, which is what made
+    the first year-to-date fill of a Frank or Bolt entry minutes on a
+    Raspberry Pi. The supplier's own archive (``fetch_for_month``) answers
+    for what the branch does not hold: the running month, a month before
+    the branch's horizon, a row the branch cannot serve. The current
     snapshot is the proxy when neither has the month, and it is the running
-    month's card by definition, so that month never reaches the repository
-    (``_card_archive_may_hold`` says which months do).
+    month's card by definition, so that month never reaches the repository.
+    A blip reading the branch is not "no card": the supplier is still
+    asked, and a month neither could give is retried on the failure marker
+    rather than cached.
 
     Caches the result per (supplier, contract, region, YYYY-MM): a hit
     skips the network round-trip on subsequent refreshes. ``None`` is
@@ -925,29 +931,44 @@ async def _snapshot_for_month(
         ):
             return current_snapshot
         fetch_failed = False
+        branch_failed = False
         snap: SupplierSnapshot | None = None
-        try:
-            if extractor.fetch_for_month is not None:
-                snap = await extractor.fetch_for_month(
-                    session, contract, region, year_month
-                )
-            if snap is None and _card_archive_may_hold(
-                extractor, year_month, today, entry
-            ):
+        if _card_archive_may_hold(extractor, year_month, today, entry):
+            try:
                 snap = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )
-        except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
-            _LOGGER.debug(
-                "archive fetch failed for %s/%s/%s/%s: %s",
-                extractor.id,
-                contract,
-                region,
-                cache_key[3],
-                err,
-            )
-            snap = None
+            except Exception as err:  # noqa: BLE001 - a blip on the branch must not cost the supplier tier
+                _LOGGER.debug(
+                    "card archive read failed for %s/%s/%s/%s: %s",
+                    extractor.id,
+                    contract,
+                    region,
+                    cache_key[3],
+                    err,
+                )
+                branch_failed = True
+        if snap is None and extractor.fetch_for_month is not None:
+            try:
+                snap = await extractor.fetch_for_month(
+                    session, contract, region, year_month
+                )
+            except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
+                _LOGGER.debug(
+                    "fetch_for_month failed for %s/%s/%s/%s: %s",
+                    extractor.id,
+                    contract,
+                    region,
+                    cache_key[3],
+                    err,
+                )
+                snap = None
+                fetch_failed = True
+        if snap is None and branch_failed:
+            # The branch may well hold the month; ask again on the failure
+            # marker rather than cache a None the TTL would hold for a day.
             fetch_failed = True
+        if fetch_failed:
             failed[cache_key] = dt_util.utcnow()
         # Skip the cache write if eviction ran during the await: the
         # tuple is no longer this entry's, and re-creating the row

@@ -868,6 +868,137 @@ async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
     ]
 
 
+async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
+    tmp_path: Path,
+) -> None:
+    """A provider that gets its card some other way than through a reader
+    renders it through render_pdf; the archiver sees it there, keeps the
+    bytes under the row's month and names the card in the row's sources,
+    text and digest alike, so the row links to it and a replay finds it."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _Session({CARD_URL: '{"sheet": "base64-ish"}'})
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await fetch_text(session, CARD_URL)  # type: ignore[arg-type]
+        text = await _pdf.render_pdf(
+            "aligned",
+            "https://acme.test/sheet?name=x",
+            b"%PDF from json",
+            lambda p: "sheet text",
+        )
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.2 if text == "sheet text" else 0.0),
+            publication_label="september 2026",
+        )
+
+    summary = await ac.archive(
+        out, extractors=[_extractor(fetch)], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    assert (summary.stored, summary.pdfs_saved, summary.rendered) == (1, 1, 1)
+    digest = hashlib.sha256(b"%PDF from json").hexdigest()
+    assert (
+        pdfs / f"electricity-2026-09/{digest}.pdf"
+    ).read_bytes() == b"%PDF from json"
+    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert card["energy"]["single"] == 0.2
+    kinds = {(s["variant"], s["url"]): s for s in card["_sources"]}
+    sheet = kinds[("aligned", "https://acme.test/sheet?name=x")]
+    assert sheet["pdf"] == digest
+    assert (out / sheet["text"]).read_text() == "sheet text"
+    assert ("text", CARD_URL) in kinds
+    coverage = (out / "coverage.md").read_text()
+    assert "| acme_fix | wallonia | live |" in coverage
+
+
+async def test_a_row_that_read_no_pdf_says_so_in_the_coverage_table(
+    tmp_path: Path,
+) -> None:
+    summary = await ac.archive(
+        tmp_path,
+        extractors=[_extractor(_card_fetch("september 2026"))],
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert summary.stored == 1
+    assert "| acme_fix | wallonia | no card |" in (tmp_path / "coverage.md").read_text()
+
+
+async def test_a_replay_names_and_keeps_a_card_the_row_never_had(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mirrored row written before a provider's card went through the
+    seam names no PDF. When the parser changes and the row is replayed, the
+    card the hook is handed is added to the row's sources and its bytes are
+    filed under the row's month, so the row gets its link."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _Session({"https://acme.test/sheet": '{"sheet": "base64-ish"}'})
+    renders: list[bytes] = []
+
+    def render_july(payload: bytes) -> str:
+        renders.append(payload)
+        return "july text"
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 7:
+            return None
+        await fetch_text(session, "https://acme.test/sheet")  # type: ignore[arg-type]
+        text = await _pdf.render_pdf(
+            "aligned", "https://acme.test/sheet?name=july", b"%PDF july", render_july
+        )
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.2 if text == "july text" else 0.0),
+            publication_label="2026-07",
+        )
+
+    acme = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_card_fetch("september 2026"),
+        fetch_for_month=fetch_for_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[acme],
+        pdf_dir=pdfs,
+        backfill_months=2,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    row = out / "acme/acme_fix/wallonia/2026-07.json"
+    card = json.loads(row.read_text())
+    assert any("pdf" in s for s in card["_sources"])
+    # Make it a row from before the seam: no card named, no bytes kept.
+    card["_sources"] = [s for s in card["_sources"] if "pdf" not in s]
+    row.write_text(json.dumps(card))
+    shutil.rmtree(pdfs)
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        out, extractors=[acme], pdf_dir=pdfs, now=NOW.replace(day=13), sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.reparsed, summary.unreplayable) == (2, 1, [])
+    card = json.loads(row.read_text())
+    [sheet] = [s for s in card["_sources"] if "pdf" in s]
+    digest = hashlib.sha256(b"%PDF july").hexdigest()
+    assert sheet["pdf"] == digest
+    assert sheet["variant"] == "aligned"
+    assert (pdfs / f"electricity-2026-07/{digest}.pdf").read_bytes() == b"%PDF july"
+
+
 def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:
     (tmp_path / "pdfs.json").write_text(
         json.dumps(
@@ -986,7 +1117,7 @@ async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> 
     coverage = (tmp_path / "coverage.md").read_text()
     assert "## acme" in coverage
     assert "| contract | region | 2026-08 | 2026-09 |" in coverage
-    assert "| acme_fix | wallonia | mirror | live |" in coverage
+    assert "| acme_fix | wallonia | no card | no card |" in coverage
     again = await ac.archive(
         tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
     )

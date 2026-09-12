@@ -159,12 +159,12 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py:755-801` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:271-291` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1083` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1097` |
 
 Shared numeric helpers: `to_float` (`_pdf.py:744-756`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
 `parse_sign` (`_pdf.py:759-770`) turns any hyphen/dash/Unicode-minus into
-`-1.0`; `SIGN_CHARS` (`_pdf.py:792`) is the character class of accepted sign
+`-1.0`; `SIGN_CHARS` (`_pdf.py:806`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py:179-186`) downloads the PDF and extracts
 text with pypdf off the event loop.
 
@@ -500,7 +500,7 @@ comment:
   `base.py:166-206`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py:340-352`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:792`).
+  (`cociter.py:340-352`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:806`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py:865-873`).
   Losing the gate zeros or drifts the solar credit.

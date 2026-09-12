@@ -664,7 +664,7 @@ step. The box after it, `CONF_CARD_ARCHIVE` (default on), is the one
 opt-out of the same step: it lets the entry keep the month cache from asking
 the repository's card archive for a past month the supplier no longer serves,
 which is the only call the integration makes to GitHub;
-`_card_archive_may_hold` (`snapshot_store.py:783`) reads it, and a caller with
+`_card_archive_may_hold` (`snapshot_store.py:785`) reads it, and a caller with
 no entry in hand keeps the default. Those months are then priced on the
 current card, as they were before the archive existed.
  `async_run_daily_compare` (`compare_flow.py:646`) drives

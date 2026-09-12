@@ -2449,21 +2449,24 @@ async def test_snapshot_for_month_reads_the_repository_archive(
     assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-09")] is stored
 
 
-async def test_repository_archive_is_asked_only_when_the_supplier_has_nothing(
-    hass: HomeAssistant,
+async def test_the_branch_is_asked_first_and_the_supplier_for_what_it_lacks(
+    hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The supplier's own archive is authoritative: a month it serves never
-    reaches the repository, a month it answers None for does."""
+    """A closed month comes from the branch when it holds it, one small JSON
+    against a PDF and a parse; the supplier's own archive answers only for
+    a month the branch does not hold."""
 
-    current = _archive_snapshot("2026-04")
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
     own = _archive_snapshot("own")
     stored = _archive_snapshot("stored")
-    served: dict[int, SupplierSnapshot | None] = {1: own, 2: None}
+    asked: list[date] = []
 
     async def _fetch_for_month(
         _session: object, _contract: str, _region: str, month: date
     ) -> SupplierSnapshot | None:
-        return served[month.month]
+        asked.append(month)
+        return own
 
     extractor = SupplierExtractor(
         id="test",
@@ -2473,20 +2476,62 @@ async def test_repository_archive_is_asked_only_when_the_supplier_has_nothing(
         fetch_for_month=_fetch_for_month,
     )
     _monthly_snapshots(hass).clear()
-    github = AsyncMock(return_value=stored)
+    held = {date(2026, 9, 1): stored}
+    github = AsyncMock(side_effect=lambda *a: held.get(a[4]))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 1, 1), current
-        )
-        assert snap is own
-        github.assert_not_awaited()
-        snap = await _snapshot_for_month(
-            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 2, 1), current
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
         assert snap is stored
-        github.assert_awaited_once_with(
-            ANY, "test", "test", "wallonia", date(2026, 2, 1)
+        assert asked == []
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 10, 1), current
         )
+        assert snap is own
+        assert asked == [date(2026, 10, 1)]
+    assert github.await_count == 2
+
+
+async def test_a_blip_on_the_branch_still_asks_the_supplier(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A transient failure reading the branch costs nothing: the supplier's
+    archive is asked and its answer cached; and when the supplier has
+    nothing either, the month is retried on the failure marker rather than
+    cached as "no card", since the branch may well hold it."""
+
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
+    own = _archive_snapshot("own")
+
+    async def _fetch_for_month(
+        _session: object, _contract: str, _region: str, month: date
+    ) -> SupplierSnapshot | None:
+        return own if month.month == 9 else None
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_failed_fetches(hass).clear()
+    github = AsyncMock(side_effect=ExtractorError("network error fetching x: reset"))
+    with patch.object(snapshot_store, "_archived_card_from_github", github):
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
+        )
+        assert snap is own
+        assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-09")] is own
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), extractor, "test", "wallonia", date(2026, 10, 1), current
+        )
+        assert snap is current
+    key = ("test", "test", "wallonia", "2026-10")
+    assert key not in _monthly_snapshots(hass)
+    assert key in _monthly_failed_fetches(hass)
 
 
 async def test_repository_archive_failure_is_retried_not_cached(

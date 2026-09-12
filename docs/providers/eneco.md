@@ -239,7 +239,7 @@ swapping comma for dot.
 
 `_extract_publication_month` (`eneco.py:409-411`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:1083`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_pdf.py:1097`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:381-395`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
@@ -268,7 +268,7 @@ the earlier rigid four-newline skip and took Power Flex offline.
 `test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py:315-324`)
 injects an extra header line to guard the anchor. The current rate is the first of
 four numbers before `Maandprijs`; the formula string accepts any sign character
-between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:792`) so a polarity
+between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:806`) so a polarity
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
 (`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:241-248`).
@@ -453,7 +453,7 @@ Injection taxonomy (the three-shape rule, `base.py:268-306`):
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via
-  `parse_sign` (`_pdf.py:740-751`).
+  `parse_sign` (`_pdf.py:754-765`).
 
 No Eneco contract is the spot-indexed-variable shape (Cociter Variable), but
 that is not what the flag means: Fix, Flex and Flex One all set

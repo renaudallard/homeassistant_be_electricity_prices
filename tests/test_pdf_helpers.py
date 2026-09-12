@@ -91,6 +91,30 @@ class _PdfSession:
         return _PdfResponse(self.payload)
 
 
+async def test_render_pdf_is_the_seam_for_bytes_that_came_another_way() -> None:
+    """A provider handed a card outside a reader (OCTA+'s archive, base64 in
+    JSON) renders it through the same hook the readers use; without a hook
+    it renders in a thread like them."""
+    seen: list[tuple[str, str, bytes]] = []
+
+    async def hook(
+        variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        seen.append((variant, url, payload))
+        return "hooked"
+
+    with _pdf.render_through(hook):
+        assert (
+            await _pdf.render_pdf("aligned", "u", b"%PDF x", lambda p: "rendered")
+            == "hooked"
+        )
+    assert seen == [("aligned", "u", b"%PDF x")]
+    assert (
+        await _pdf.render_pdf("aligned", "u", b"%PDF x", lambda p: "rendered")
+        == "rendered"
+    )
+
+
 async def test_render_hook_sees_the_bytes_and_decides_the_text() -> None:
     """Inside render_through the reader hands the validated bytes and its
     own renderer to the hook and takes the hook's text; outside it renders
