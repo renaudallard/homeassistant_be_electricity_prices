@@ -13,11 +13,12 @@ Written daily by `.github/workflows/archive_cards.yml` running
   the releases of the cards repository (`be_price_cards`, shared with
   be_water_prices; this integration's releases are `electricity-<YYYY-MM>`,
   one per month of cards, whatever day the card was captured on).
-- `coverage.md`: which months the branch holds for each contract and
-  region, whether each was captured live or mirrored from the supplier's
-  archive, and links from each month to the PDF it was parsed from, to the
-  page text it read and to the JSON above.
+- `coverage.md` and `coverage/<supplier>.md`: which months the branch
+  holds for each contract and region, whether each was captured live or
+  mirrored from the supplier's archive, and links from each month to the
+  PDF it was parsed from, to the page text it read and to the JSON above;
+  one sheet per supplier, the index naming them.
 
-To get the original card of a contract and month: open `coverage.md`, find
-the row, click `pdf` (or `page`); `json` is what the integration parsed out
-of it. Months older than three years are removed.
+To get the original card of a contract and month: open `coverage.md`, open
+the supplier's sheet, find the row, click `pdf` (or `page`); `json` is what
+the integration parsed out of it. Months older than three years are removed.
