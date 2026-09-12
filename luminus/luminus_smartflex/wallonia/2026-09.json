@@ -1,11 +1,11 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "pdf": "cards-2026-09/363f4e50b4b87a8cca3b84671c297815c3cd51c9f23b8a594cd4f1812639b6d7.pdf",
+   "pdf": "363f4e50b4b87a8cca3b84671c297815c3cd51c9f23b8a594cd4f1812639b6d7",
    "text": "texts/2026-09/cbc156b42f1212c36500edf9f9efaba0255a2ffa6a4adcd49532a645cd6ee4ec.txt",
    "url": "https://www.luminus.be/api-next/get-pricelist/?documentSlug=smartflex&energyType=electricity&language=fr&tabValue=Wallonia",
    "variant": "plain"

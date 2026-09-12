@@ -1,0 +1,108 @@
+Koning Albert II -laan 7, 1210 Brussel
+BE0476.243.769 Energie.be
+Elektriciteit particulier online – februari 2026
+Tariefkaart geldig voor de levering van Belgisch groene stroom aan particuliere
+klanten in Vlaanderen. Alle prijzen zijn inclusief btw tenzij anders vermeld.
+Energieprijs en vaste vergoeding
+De energieprijs is een variabele prijs die de groothandelsprijzen volgt
+Energieprijs
+11,52 volgens de formule (excl. btw): (1,10 x Belpex_RLP + 0,80) c€/kWh.
+(c€/kWh)
+Weergegeven prijs op basis van de ingeschatte index (VNR
+Vaste vergoeding
+35 methodologie): 9,15 c€/kWh.
+(€/jaar)
+Terugleveringsvergoeding
+Eigenaars van zonnepanelen met een digitale meter ontvangen
+Zonnestroom
+2,55 een variabele terugleververgoeding volgens de formule:
+(c€/kWh)
+(0,60 x Belpex_SPP – 0,80) c€/kWh. Weergegeven prijs op basis van de
+ingeschatte index (VNR methodologie): 5,58 c€/kWh.
+Kosten groene stroom en WKK
+De kosten die wij aanrekenen voor het vervullen van onze verplichtingen
+GSC
+1,17 m.b.t. groene stroom en WKK , worden aangepast in functie van de
+(c€/kWh)
+wettelijke wijzigingen (bv. wijzigingen van het aantal certificaten die wij
+WKK
+0,39 als leverancier per geleverde kWh moeten indienen). De bedragen
+(c€/kWh)
+vermeld op deze tariefkaart zijn geldig voor het huidige kwartaal.
+Taksen en heffingen
+Bijzondere accijns op Energie (c€/kWh)** 5,0329
+Bijdrage Energiefonds Particulier (€/ maand ) * 0
+Bijdrage Energiefonds Niet-Particulier (€/ maand ) * 10,0700
+Bijdrage op de Energie (c€/kWh) 0,2042
+* btw niet van toepassing .
+** Degressiviteit van toepassing voor verbruik > 20,000 kWh.
+1
+Koning Albert II -laan 7, 1210 Brussel
+BE0476.243.769 Energie.be
+Elektriciteit particulier online – februari 2026
+Nettarieven
+Digitale meter met piekmeting (*) Klassieke meter
+Tarief
+data- Pro-
+Netbeheerder Afname Afname Afname Afname
+beheer Capaciteits tarief tarief excl. Capaciteit - tarief tarief excl. sumenten
+(€/jaar) -tarief normaal nacht starief normaal nacht tarief
+(€/kW/jaar) (€/jaar) (€/kW/jaar)
+(c€/kWh) (c€/kWh) (c€/kWh) (c€/kWh)
+(**)
+Vlaanderen
+Fluvius (Antwerpen ) 18,92 52,37 5,35 4,81 130,92 8,09 7,55 54,63
+Fluvius (Halle-
+18,92 59,41 5,64 5,12 148,52 9,28 8,76 62,66
+Vilvoorde)
+Fluvius (Imewo) 18,92 57,45 5,54 5,01 143,63 8,90 8,37 60,12
+Fluvius (Kempen) 18,92 59,58 6,34 5,66 148,95 10,03 9,36 67,79
+Fluvius (Limburg) 18,92 51,99 5,75 5,19 129,98 9,23 8,67 62,38
+Fluvius (Midden-
+18,92 53,13 5,28 4,78 132,83 8,77 8,27 59,23
+Vlaanderen )
+Fluvius (West) 18,92 60,53 6,70 5,99 151,32 10,30 9,60 69,59
+Fluvius (Zenne-Dijle) 18,92 59,49 5,87 5,32 148,73 9,70 9,14 65,51
+(*) Voor meetregimes per kwartier bedraagt het tarief voor databeheer 18,92 EUR per jaar. Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh (excl.
+databeheer). Als de digitale meter niet communiceert met Fluvius gelden de tarieven voor de klassieke meter.
+(**) In het geval van eigen productie (zonnepanelen) met een maximaal omvormervermogen van 10 kW en een terugdraaiende teller . Het tarief wordt per maand verdeeld
+volgens de gemiddelde productie zoals vastgelegd door de VNR.
+Duur van de (Terug)Leveringsovereenkomst Vaste vergoeding
+De (Terug)Leveringsovereenkomst heeft een duurtijd van 1 jaar. De vaste vergoeding is een forfaitaire jaarlijkse vergoeding voor onze operationele
+kosten. Tijdens de eerste 6 maanden dat men klant is bij Energie.be is de vaste
+Informatie over uw tariefformule vergoeding integraal verschuldigd voor een periode van 6 maanden, ook als u tijdens
+deze eerste 6 maanden overstapt naar een andere leverancier. Vanaf de 7 demaand
+De energieprijs voor verbruik wordt geïndexeerd op basis van de Belpex_RLP parameter. wordt de vaste vergoeding enkel aangerekend in verhouding tot de werkelijke verdere
+De parameter Belpex_RLP wordt als volgt gedefinieerd: de RLP -gewogen Belpex duur van onafgebroken contractuele relatie met Energie.be.
+uurprijzen waarbij Belpex staat voor de Day Ahead Baseload Belpex (publicatie door
+Epexspot). De RLP -weging gebeurt met het verbruiksprofiel RLP (Real load profile) dat het Andere onderdelen van de factuur
+rekenkundig gemiddelde is van de profielen van de verschillende distributienetbeheerders
+(publicatie door Synergrid). De bovenstaande tabel toont de energieprijs die is gebaseerd Zoals beschreven in de Algemene Voorwaarden, wordt de energieprijs die u betaalt voor
+op de methodologie van de VNR. de elektriciteit die u afneemt, verhoogd met andere onderdelen. De nettarieven voor
+distributie en transmissie die hierboven worden vermeld, zijn de tarieven die zijn
+De terugleveringsvergoeding wordt geïndexeerd op basis van de Belpex_SPP parameter. goedgekeurd door de bevoegde regulator. De bedragen en berekeningswijze van de
+De parameter Belpex_SPP wordt als volgt gedefinieerd: de SPP -gewogen Belpex belastingen en heffingen, bijdragen, toeslagen en kosten zijn de meest recente op het
+uurprijzen waarbij Belpex staat voor de Day Ahead Baseload Belpex (publicatie door moment waarop deze bijzondere voorwaarden zijn opgesteld. Wij kunnen alle wijzigingen
+Epexspot). De SPP -weging gebeurt met het productieprofiel SPP (Synthetic production van deze onderdelen volledig aan u doorrekenen, ook retroactief, zoals bepaald in de
+profile) dat het rekenkundig gemiddelde is van de profielen van de verschillende Algemene Voorwaarden.
+distributienetbeheerders (publicatie door Synergrid). De bovenstaande tabel toont de
+energieprijs die is gebaseerd op de methodologie van de VNR. Communicatie en betalingen
+Als de huidige parameters worden afgeschaft, niet langer beschikbaar zijn, niet of Dit is een online contract waarbij u Energie.be enkel via digitale kanalen (chat, online) kan
+onregelmatig worden gepubliceerd of niet langer representatief zijn voor de economische bereiken. U ontvangt eveneens uw facturen steeds via e -mail. De betalingswijze
+waarde, kunnen wij nieuwe parameters of componenten toepassen. (overschrijving of domiciliering) kan u vrij kiezen.
+De energieprijs en de Terugleveringsvergoeding, die variëren naargelang de evolutie van Kosten voor herinneringen en ingebrekestellingen
+de parameters waaruit de tariefformule bestaat, worden berekend op basis van de index
+die van toepassing is tijdens de periode waarvoor u wordt gefactureerd bij de afrekening De kosten van een herinnering bedragen €7,50, met uitzondering van de eerste
+van uw reële verbruik en desgevallend teruglever. De bedragen die in uw herinnering die volledig gratis is. De kost van een ingebrekestelling bedraagt € 10.
+afrekeningsfactuur worden vermeld, kunnen dus afwijken van de hierboven vermelde
+prijzen. Overzicht actief aanbod Energie.be
+Energiedelen • Elektriciteit particulier online –Elektriciteit vast particulier online
+• Elektriciteit professioneel online –Elektriciteit vast professioneel online
+Voor energiedelen of peer -to-peer handel wordt er een administratieve jaarlijkse kost van • Elektriciteit dynamisch particulier online –Elektriciteit dynamisch professioneel
+€35 (incl. 21% btw) per aansluiting aangerekend. online
+• Gas particulier online –Gas vast particulier online
+• Gas professioneel online –Gas vast professioneel online
+U kan ons actief aanbod altijd vergelijken met andere tarieven op https://vtest.vreg.be/ )
+of op https://www.creg.be/nl/consumenten/prijzen -en-tarieven/vergelijking -van-prijzen-
+voor-elektriciteit -en-aardgas .
+2

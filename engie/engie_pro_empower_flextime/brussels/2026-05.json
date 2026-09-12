@@ -1,0 +1,113 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "pdf": "fc18319018dd0531d170747c8b4e44589b3c7fe5fc0abdfe052f4a56e55a1e01",
+   "text": "texts/2026-09/506f7bb892145bbc95f231f6618e6edd32e2838b8b80522a8b533f35de28b34c.txt",
+   "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_EMPOWER_P_GREEN_C_I_00_B_F&monthOffset=4&segment=P&language=F",
+   "variant": "plain"
+  }
+ ],
+ "_via": "archive",
+ "contract": "engie_pro_empower_flextime",
+ "dsos": {
+  "sibelga": {
+   "brussels_osp_by_tier": {
+    "gt56": 163.44,
+    "le13": 25.2,
+    "le18": 37.68,
+    "le1_44": 0.0,
+    "le36": 50.28,
+    "le56": 100.56,
+    "le6": 12.6,
+    "le9_6": 20.16
+   },
+   "brussels_power_term_above_13kva": 108.38000000000001,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 61.14,
+   "distribution_eco": null,
+   "distribution_exclusive_night": 0.071,
+   "distribution_medium": null,
+   "distribution_offpeak": 0.071,
+   "distribution_peak": 0.09390000000000001,
+   "distribution_pic": null,
+   "distribution_single": 0.09390000000000001,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": null,
+   "transport": 0.021400000000000002
+  }
+ },
+ "energy": {
+  "formula": null,
+  "formula_base_offpeak": 0.011223,
+  "formula_base_peak": 0.027073,
+  "formula_base_transition": 0.021023,
+  "formula_factor_offpeak": 0.846,
+  "formula_factor_peak": 1.3980000000000001,
+  "formula_factor_transition": 1.084,
+  "month_indexed": true,
+  "offpeak": 0.07801,
+  "peak": 0.13743,
+  "transition": 0.10659,
+  "weekend_rule": "weekend_no_peak",
+  "yearly_fixed_fee": 95.0
+ },
+ "energy_kind": "tou",
+ "injection": {
+  "base": null,
+  "base_offpeak": 0.0003,
+  "base_peak": 0.0003,
+  "base_transition": 0.0003,
+  "current": 0.04135,
+  "factor": null,
+  "factor_offpeak": 0.14800000000000002,
+  "factor_peak": 0.903,
+  "factor_transition": 0.513,
+  "floor_at_zero": false,
+  "formula": "Flextime: peak 0.0300 + (0.0903 x EPEXDAM); transition 0.0300 + (0.0513 x EPEXDAM); offpeak 0.0300 + (0.0148 x EPEXDAM)",
+  "minimum": null,
+  "month_indexed": true,
+  "offpeak": 0.01198,
+  "peak": 0.07158,
+  "slot_indexed": false,
+  "spp_indexed": false,
+  "transition": 0.0408,
+  "vat_applies": true
+ },
+ "publication_label": "Mai 2026",
+ "source_url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF",
+ "supplier": "engie",
+ "supplier_prosumer_eur_per_kva_year": null,
+ "taxes": {
+  "brussels_renewables": 0.025019999999999997,
+  "energy_contribution": 0.0019261,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.01421,
+  "federal_excise_bands": [
+   [
+    20000.0,
+    0.01421
+   ],
+   [
+    50000.0,
+    0.01209
+   ],
+   [
+    1000000.0,
+    0.01139
+   ]
+  ],
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.0,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.21,
+  "wallonia_renewables": 0.0
+ },
+ "valid_until": "2026-05-31",
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

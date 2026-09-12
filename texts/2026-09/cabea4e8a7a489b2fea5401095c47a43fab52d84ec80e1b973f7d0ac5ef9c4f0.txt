@@ -1,0 +1,165 @@
+Tarif bâtiment vide
+Prix variables électricité pour les contrats conclus en Août 2026
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+Composition du prix de votre énergie(6)
+Composition du prix de votre énergie(9)
+ Vos avantages
+- Vous payez uniquement
+votre consommation réelle
+sans redevance annuelle.
+- Cette offre d’énergie a été
+créée spécifiquement pour les
+maisons vides
+ Services gratuits
+- Service client en ligne et
+hors ligne 5 étoiles
+- Suivez les prix et contrôlez
+votre consommation grâce à
+la Smart App
+- Facture électronique par
+défaut
+Prix d'énergie Variable (13)
+Coûts de réseaux (distribution et transport)(6)
+Redevance
+fixe(1) Prix par kWh (c€/kWh) Coûts énergie
+verte(5)
+0,00 €/an Type
+d'usage (c€/kWh)
+Prix Consommation(2) 28,306 2,652
+mensuels Injection(3) 5,363
+Prix annuels estimés
+Consommation(2) 31,257 2,652
+Injection(3) 5,299
+Gestionnaire du
+réseau de
+distribution
+Distribution
+Transport
+Normal
+Bihoraire
+Exclusif
+Nuit
+Activité de mesure
+Relevé annuel
+Puissance mise à disposition
+Heures pleines Heures
+creuses <=13kVA >13kVA
+c€/kWh c€/kWh c€/kWh c€/kWh €/an €/an €/an c€/kWh
+SIBELGA 9,96 9,96 7,53 7,53 14,73 50,07 100,15 2,27
+
+Tarif bâtiment vide
+Prix variables électricité pour les contrats conclus en Août 2026
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+Suppléments
+Accise fédérale(11) (c€/kWh)
+Toutes consommations 4,87600
+Droit pour le financement des Obligations de Service Public
+(OSP) (€/an)
+<= 1,44 kVA 0,00
+> 1,44 et <= 6 kVA 13,36
+> 6 et <= 9,6 kVA 21,37
+> 9,6 et <= 13 kVA 26,71
+> 13 et <= 18 kVA 39,94
+> 18 et <= 36 kVA 53,30
+> 36 et <= 56 kVA 106,59
+> 56 kVA 173,25
+(1) Sauf disposition contraire dans les conditions, la redevance fixe est
+facturée au prorata du nombre de jours effectifs de livraison (sur 365
+jours ou sur 366 jours lors d'une année bissextile). La redevance fixe
+n’est imputée que 1 seule fois chez les clients pour lesquels le
+prélèvement et l’injection appartiennent au même pack chez ENGIE.
+Pour les clients qui ne prennent qu'un pack pour l'injection, la
+redevance fixe sera calculée avec une TVA de 21% au lieu de 6%, ce
+qui donne une redevance fixe de 0,00€/an.
+(2) Le prix de l’électricité est indexé mensuellement. Le paramètre
+d’indexation est la moyenne arithmétique des cotations journalières
+Day Ahead EPEX SPOT Belgium (ci-après EPEXDAM) durant le mois
+de fourniture. Les cotations journalières EPEXDAM sont exprimées en
+€/MWh.
+La valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de
+mois. À titre informatif, les prix indiqués sont basés sur la dernière
+valeur du EPEXDAM connue (Juillet 2026 :  109,25 €/MWh). Les
+valeurs historiques du EPEXDAM peuvent être consultées sur
+engie.be.
+Le paramètre EPEXDAM annuel estimé s’élève à 122,20 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+- e n - a a r d g a s
+La formule hors TVA d’application pour Août 2026 est la suivante:
+3,2150 + (0,2150 x EPEXDAM)
+Le résultat de cette formule est un montant exprimé en c€/kWh.
+(3) Le tarif d’injection correspond aux prix auxquels ENGIE achète votre
+électricité produite et injectée sur le réseau conformément aux
+Conditions Contractuelles de votre Contrat. Ce tarif s’applique
+uniquement pour les installations de production décentralisées
+situées en Belgique raccordées en basse tension et disposant d’un
+compteur intelligent ou bidirectionnel. En plus du tarif d’injection,
+une redevance fixe est due et sera facturée sauf si vous êtes déjà
+client chez ENGIE pour la livraison d’électricité, auquel cas vous
+payez une seule redevance fixe du tarif de consommation.
+Le prix d’injection n’est pas soumis à la TVA.
+Les prix d’injection sont indexés en utilisant le paramètre EPEXDAM.
+La valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de
+mois. À titre informatif, les prix indiqués sont basés sur la dernière
+valeur du EPEXDAM connue (Juillet 2026 : 109,25 €/MWh).
+Le paramètre EPEXDAM annuel estimé s’élève à 107,99 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+-en-aardgas
+La formule hors TVA d’application pour Août 2026 est la suivantes:
+-0,1000 + (0,0500 x EPEXDAM)
+Le résultat de cette formule est un montant exprimé en c€/kWh.
+(5) Ces coûts sont calculés de la manière suivante: Q x Pc pour le coût
+énergie verte . Q correspond au pourcentage, tel que déterminé
+légalement, des prélèvements du client pour lequel ENGIE doit
+remettre des certificats d’énergie verte . Pc correspond au prix par
+certificat d’énergie verte et s’élève à 93€.  Ce prix est hors TVA. Les
+coûts sont repris séparément sur la facture et sont adaptés en
+fonction des modifications légales.
+(6) Les coûts de réseau sont approuvés par la CREG et par BRUGEL.
+Concernant les tarifs de transport et de distribution d’électricité
+autres que pour la basse tension, veuillez-vous référer au site
+internet de BRUGEL
+Si la structure tarifaire évoluée du gestionnaire de réseau vous est
+appliquée, à partir du 1er janvier 2028, et qu’il n’est pas prévu de
+prix de l’énergie spécifique selon les tranches horaires définies par le
+gestionnaire du réseau dans votre contrat alors, le prix de l’énergie
+pour l’électricité consommée pendant les 2 plages horaires les plus
+chères, comme défini par le gestionnaire du réseau, est égal à celui
+du tarif bihoraire heures pleines. Et le prix de l’énergie pour
+l’électricité consommée pendant la plage horaire la moins chère,
+comme défini par le gestionnaire du réseau, est égal à celui du tarif
+bihoraire heures creuses.
+(8) Vous ne payez pas de TVA sur ces coûts.
+(9) Le calcul a été effectué en janvier 2026 pour un contrat EASY
+Variable sur la base d’une consommation privée de 3500 kWh/an à
+Bruxelles. Prix 6% de tva comprise.
+Tarif bâtiment vide
+Prix variables électricité pour les contrats conclus en Août 2026
+Pour les particuliers en Région de Bruxelles-Capitale
+Prix, 6% de tva comprise(12)
+(10) Vous trouverez plus d’informations sur vos paiements sur
+www.engie.be/fr/support/faq/facture/paiements.
+(11) Le droit d’accise spécial est calculé sur base annuelle.
+(12) La TVA peut être adaptée en fonction des modifications légales.
+(13) Nous nous réservons le droit d’adapter chaque année votre prix de
+l’énergie variable ou fixe conformément à la procédure prévue par
+l'article "Modification des conditions et des prix" des Conditions
+Générales pour consommateurs, indépendamment d'une éventuelle
+durée minimale du Contrat.
+Origine de l’électricité fournie dans le cadre de EMPTYHOUSE en
+Région de Bruxelles-Capitale en 2025 : sources d'énergie
+renouvelables (18,00%), combustibles fossiles (28,00%), nucléaire
+(54,00%).
+Origine de la fourniture totale d’électricité pour Electrabel sa en
+Région de Bruxelles-Capitale en 2025 : sources d'énergie
+renouvelables (65,39%), combustibles fossiles (11,76%), nucléaire
+(22,84%).
+Frais de rappel et de mise en demeure (8) (10)
+Montants d’application à partir du 1er décembre 2023
+Frais de rappel (3 premiers gratuits) 7,50 €
+Mise en demeure 15,00 €

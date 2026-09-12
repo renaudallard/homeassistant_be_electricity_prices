@@ -1,0 +1,161 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "pdf": "89ac96464e9c45ab227769ac243d4cbb520e3399c58749297303f18da6148574",
+   "text": "texts/2026-09/93d71ee089035ce0ff12ea9a0b5c9f83dcae332c8a5a23d4c226834793b6abbd.txt",
+   "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-052026-Smart0105-Fixed.pdf",
+   "variant": "plain"
+  }
+ ],
+ "_via": "archive",
+ "contract": "mega_pro_smart_fixed",
+ "dsos": {
+  "aieg": {
+   "brussels_osp_by_tier": null,
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 18.39,
+   "distribution_eco": 0.043,
+   "distribution_exclusive_night": 0.0629,
+   "distribution_medium": 0.0926,
+   "distribution_offpeak": 0.0629,
+   "distribution_peak": 0.1137,
+   "distribution_pic": 0.1422,
+   "distribution_single": 0.1026,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": 76.45,
+   "transport": 0.0259
+  },
+  "aiesh": {
+   "brussels_osp_by_tier": null,
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 16.91,
+   "distribution_eco": 0.0519,
+   "distribution_exclusive_night": 0.0775,
+   "distribution_medium": 0.1159,
+   "distribution_offpeak": 0.0775,
+   "distribution_peak": 0.1431,
+   "distribution_pic": 0.17989999999999998,
+   "distribution_single": 0.12869999999999998,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": 93.7,
+   "transport": 0.0259
+  },
+  "ores": {
+   "brussels_osp_by_tier": null,
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 13.3,
+   "distribution_eco": 0.048,
+   "distribution_exclusive_night": 0.0697,
+   "distribution_medium": 0.10220000000000001,
+   "distribution_offpeak": 0.0697,
+   "distribution_peak": 0.1252,
+   "distribution_pic": 0.1564,
+   "distribution_single": 0.113,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": 81.0,
+   "transport": 0.0259
+  },
+  "resa": {
+   "brussels_osp_by_tier": null,
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 25.0,
+   "distribution_eco": 0.0471,
+   "distribution_exclusive_night": 0.0662,
+   "distribution_medium": 0.09480000000000001,
+   "distribution_offpeak": 0.0662,
+   "distribution_peak": 0.1151,
+   "distribution_pic": 0.1426,
+   "distribution_single": 0.10439999999999999,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": 79.5,
+   "transport": 0.0259
+  },
+  "rew": {
+   "brussels_osp_by_tier": null,
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 24.94,
+   "distribution_eco": 0.052000000000000005,
+   "distribution_exclusive_night": 0.0739,
+   "distribution_medium": 0.1067,
+   "distribution_offpeak": 0.0739,
+   "distribution_peak": 0.13,
+   "distribution_pic": 0.16149999999999998,
+   "distribution_single": 0.1177,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": 87.74,
+   "transport": 0.0259
+  }
+ },
+ "energy": {
+  "exclusive_night": 0.1365,
+  "offpeak": 0.1365,
+  "peak": 0.172,
+  "single": 0.15130000000000002,
+  "yearly_fixed_fee": 105.0,
+  "yearly_fixed_fee_exclusive_night": null
+ },
+ "energy_kind": "fixed",
+ "injection": {
+  "base": null,
+  "base_offpeak": null,
+  "base_peak": null,
+  "base_transition": null,
+  "current": 0.0151,
+  "factor": null,
+  "factor_offpeak": null,
+  "factor_peak": null,
+  "factor_transition": null,
+  "floor_at_zero": false,
+  "formula": null,
+  "minimum": null,
+  "month_indexed": false,
+  "offpeak": null,
+  "peak": null,
+  "slot_indexed": false,
+  "spp_indexed": false,
+  "transition": null,
+  "vat_applies": true
+ },
+ "publication_label": "mai 2026",
+ "source_url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-052026-Smart0105-Fixed.pdf",
+ "supplier": "mega",
+ "supplier_prosumer_eur_per_kva_year": 86.4,
+ "taxes": {
+  "brussels_renewables": 0.0,
+  "energy_contribution": 0.0019261,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.01421,
+  "federal_excise_bands": [
+   [
+    20000.0,
+    0.01421
+   ],
+   [
+    50000.0,
+    0.01209
+   ],
+   [
+    1000000.0,
+    0.01139
+   ]
+  ],
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.00075,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.21,
+  "wallonia_renewables": 0.028380000000000002
+ },
+ "valid_until": "2026-05-31",
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

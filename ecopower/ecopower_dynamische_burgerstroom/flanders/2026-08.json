@@ -1,16 +1,16 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/b02dff8b8fb410b145ccfe48a4dbcefeed51fd33ca2c98b5f42245d155f31771.txt",
+   "text": "texts/2026-09/bf70f33e000779be7d100b9fa61db08f88f7b0b786712cc000e05aecbf202d45.txt",
    "url": "https://ecopower.be/groene-stroom/dynamische-burgerstroom",
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/bdbb4442f034eedde450dc2e30f51f53c330889db82b753adfeb82835cd6cdee.pdf",
+   "pdf": "bdbb4442f034eedde450dc2e30f51f53c330889db82b753adfeb82835cd6cdee",
    "text": "texts/2026-09/70ffdeb5ef088b0ba4271c29273068dd9131f26e7ecbfb6b370357873af68632.txt",
    "url": "https://cdn.nimbu.io/s/4tn7vz5/channelentries/1slcny6/files/1785767305340/20260801_dbs_tariefkaart.pdf?q127ge0=&dl=1",
    "variant": "layout"

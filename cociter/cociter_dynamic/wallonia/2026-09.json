@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -10,7 +10,7 @@
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/cc41958837bf7465408d17beb38105ed97a32c8d2050f5ca3a8e6b814b6e8ab8.pdf",
+   "pdf": "cc41958837bf7465408d17beb38105ed97a32c8d2050f5ca3a8e6b814b6e8ab8",
    "text": "texts/2026-09/e024d6ce4e9e6f54d57ededcdfb0ebe710c5e53ffa5ee9b6d53a3e31a965bbe9.txt",
    "url": "https://www.cociter.be/wp-content/uploads/2026/09/RCDyn_SM3_Coop-2609-fr.pdf",
    "variant": "plain"

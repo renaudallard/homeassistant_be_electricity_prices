@@ -1,16 +1,16 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/1328c43d7f1abe49e441cd52859410c4bc6d75355e97de627b15ca8580c11bee.txt",
+   "text": "texts/2026-09/71b0eaa71c0666e36f43f7e6d1a978b568c19937543df00fa4658f7a8f568f6e.txt",
    "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/0503fde275413927de26b7689b44e3f05f2086f7bd4215fbb0febe4c3cb04050.pdf",
+   "pdf": "0503fde275413927de26b7689b44e3f05f2086f7bd4215fbb0febe4c3cb04050",
    "text": "texts/2026-09/b82a3c0353123675d6344db7b91a55bfcac28faf8cd961e5d0930ca463d811c0.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-VL-092026-Smart0109.pdf",
    "variant": "plain"

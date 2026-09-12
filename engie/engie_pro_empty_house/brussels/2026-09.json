@@ -1,11 +1,11 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "pdf": "cards-2026-09/06b4686c2cc0676db5cdca29f4920734d379b5f43bc9f7d4a73322410f5c2751.pdf",
+   "pdf": "06b4686c2cc0676db5cdca29f4920734d379b5f43bc9f7d4a73322410f5c2751",
    "text": "texts/2026-09/e3e2298265a57a21fafbc123a7f42f1d0e1208c7ff60f3064d99b58e681fd75a.txt",
    "url": "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF?document=E_EMPTYHOUSE_P_GREY_C_I_00_B_F&monthOffset=0&segment=P&language=F",
    "variant": "plain"

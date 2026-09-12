@@ -1,0 +1,96 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "text": "texts/2026-09/71b0eaa71c0666e36f43f7e6d1a978b568c19937543df00fa4658f7a8f568f6e.txt",
+   "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
+   "variant": "text"
+  },
+  {
+   "pdf": "b1fb8b09605bddda4c4a4c228a40c8cfa79289d91f9274e65f933825eb6158a7",
+   "text": "texts/2026-09/dc9525cdc9841c5c6f1acd7a29abee0210b532c9f52f4a3abf4a2855f27c03bd.txt",
+   "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-BX-042026-Dynamic0104.pdf",
+   "variant": "plain"
+  }
+ ],
+ "_via": "archive",
+ "contract": "mega_dynamic",
+ "dsos": {
+  "sibelga": {
+   "brussels_osp_by_tier": {
+    "gt56": 173.25,
+    "le13": 26.71,
+    "le18": 39.94,
+    "le1_44": 0.0,
+    "le36": 53.3,
+    "le56": 106.59,
+    "le6": 13.36,
+    "le9_6": 21.37
+   },
+   "brussels_power_term_above_13kva": 114.8788,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 64.8044,
+   "distribution_eco": null,
+   "distribution_exclusive_night": 0.0753,
+   "distribution_medium": null,
+   "distribution_offpeak": 0.0753,
+   "distribution_peak": 0.09960000000000001,
+   "distribution_pic": null,
+   "distribution_single": 0.09960000000000001,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": null,
+   "transport": 0.0227
+  }
+ },
+ "energy": {
+  "base": 0.013500000000000002,
+  "factor": 1.05,
+  "quarter_hourly": false,
+  "yearly_fixed_fee": 42.4
+ },
+ "energy_kind": "dynamic",
+ "injection": {
+  "base": -0.04,
+  "base_offpeak": null,
+  "base_peak": null,
+  "base_transition": null,
+  "current": 0.0645,
+  "factor": 1.0,
+  "factor_offpeak": null,
+  "factor_peak": null,
+  "factor_transition": null,
+  "floor_at_zero": false,
+  "formula": "formule suivante (HTVA) : Day Ahead EPEX SPOT Belgium * 1 – 4 c€/kWh",
+  "minimum": null,
+  "month_indexed": false,
+  "offpeak": null,
+  "peak": null,
+  "slot_indexed": false,
+  "spp_indexed": false,
+  "transition": null,
+  "vat_applies": false
+ },
+ "publication_label": "avril 2026",
+ "source_url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-BX-042026-Dynamic0104.pdf",
+ "supplier": "mega",
+ "supplier_prosumer_eur_per_kva_year": null,
+ "taxes": {
+  "brussels_renewables": 0.024820000000000002,
+  "energy_contribution": 0.0020417,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.05032879999999999,
+  "federal_excise_bands": null,
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.0,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.0,
+  "wallonia_renewables": 0.0
+ },
+ "valid_until": "2026-04-30",
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

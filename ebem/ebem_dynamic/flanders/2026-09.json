@@ -1,16 +1,16 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/3b753aad2490b606fbf0c38af881d6a09fac5b3bebc45d546131459cf2ab5e24.txt",
+   "text": "texts/2026-09/6ff161480132a28ebfb9c17d99256652d5d8e99e3c165e559741179a87df02b9.txt",
    "url": "https://www.ebem.be/tarieven/",
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/e7d6374705f7efe5c0fd8a207e9e0bdebe5bed03cb2c9f00d0adb1a153779685.pdf",
+   "pdf": "e7d6374705f7efe5c0fd8a207e9e0bdebe5bed03cb2c9f00d0adb1a153779685",
    "text": "texts/2026-09/30df52b9fe2703e475eb486a7613a1fc58c04d147e58ed44f6fa8b17cd182e67.txt",
    "url": "https://www.ebem.be/media/4fgnxtwr/ebem_tariefkaart-dynamic-09-2026.pdf",
    "variant": "layout"

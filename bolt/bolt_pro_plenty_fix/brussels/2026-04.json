@@ -1,0 +1,93 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "pdf": "b93b6fd2b5624fb84319bc0592112a4c4724929876a4d4bcdb6408025b0666f3",
+   "text": "texts/2026-09/cef5d9b26d7fe8af77e8734781eab23777378a9551a21dc1bb280d8787a68baa.txt",
+   "url": "https://files.boltenergie.be/pricelists/fix/plenty_fix_pro_el_fr_202604.pdf",
+   "variant": "layout"
+  }
+ ],
+ "_via": "archive",
+ "contract": "bolt_pro_plenty_fix",
+ "dsos": {
+  "sibelga": {
+   "brussels_osp_by_tier": {
+    "gt56": 163.44,
+    "le13": 25.2,
+    "le18": 37.68,
+    "le1_44": 0.0,
+    "le36": 50.28,
+    "le56": 100.56,
+    "le6": 12.6,
+    "le9_6": 20.16
+   },
+   "brussels_power_term_above_13kva": null,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 13.9,
+   "distribution_eco": null,
+   "distribution_exclusive_night": 0.071,
+   "distribution_medium": null,
+   "distribution_offpeak": 0.071,
+   "distribution_peak": 0.09390000000000001,
+   "distribution_pic": null,
+   "distribution_single": 0.09390000000000001,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": null,
+   "transport": 0.021400000000000002
+  }
+ },
+ "energy": {
+  "exclusive_night": 0.15960000000000002,
+  "offpeak": 0.15960000000000002,
+  "peak": 0.15960000000000002,
+  "single": 0.15960000000000002,
+  "yearly_fixed_fee": 119.88,
+  "yearly_fixed_fee_exclusive_night": null
+ },
+ "energy_kind": "fixed",
+ "injection": {
+  "base": -0.01133,
+  "base_offpeak": null,
+  "base_peak": null,
+  "base_transition": null,
+  "current": 0.053099999999999994,
+  "factor": 0.94,
+  "factor_offpeak": null,
+  "factor_peak": null,
+  "factor_transition": null,
+  "floor_at_zero": false,
+  "formula": "Belpex * 0,94 - 11,33",
+  "minimum": null,
+  "month_indexed": false,
+  "offpeak": null,
+  "peak": null,
+  "slot_indexed": true,
+  "spp_indexed": false,
+  "transition": null,
+  "vat_applies": true
+ },
+ "publication_label": "Avril 2026",
+ "source_url": "https://files.boltenergie.be/pricelists/fix/plenty_fix_pro_el_fr_202604.pdf",
+ "supplier": "bolt",
+ "supplier_prosumer_eur_per_kva_year": null,
+ "taxes": {
+  "brussels_renewables": 0.0254,
+  "energy_contribution": 0.0019261,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.01421,
+  "federal_excise_bands": null,
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.0,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.21,
+  "wallonia_renewables": 0.0
+ },
+ "valid_until": null,
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

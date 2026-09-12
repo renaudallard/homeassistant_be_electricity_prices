@@ -1,0 +1,106 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "pdf": "177ae3ec280425a61ab298d88b59c5fd70bfe3d3ab738a59b1a424f73763d325",
+   "text": "texts/2026-09/9d20c16bb0cc8d8d6c76a0601c6c930bd0029adbf7ea46ec3d333dafcea5d5b2.txt",
+   "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-BX-032026-Cosy0103-Fixed.pdf",
+   "variant": "plain"
+  }
+ ],
+ "_via": "archive",
+ "contract": "mega_pro_cosy_fixed",
+ "dsos": {
+  "sibelga": {
+   "brussels_osp_by_tier": {
+    "gt56": 163.44,
+    "le13": 25.2,
+    "le18": 37.68,
+    "le1_44": 0.0,
+    "le36": 50.28,
+    "le56": 100.56,
+    "le6": 12.6,
+    "le9_6": 20.16
+   },
+   "brussels_power_term_above_13kva": 108.38000000000001,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 61.14,
+   "distribution_eco": null,
+   "distribution_exclusive_night": 0.071,
+   "distribution_medium": null,
+   "distribution_offpeak": 0.071,
+   "distribution_peak": 0.09390000000000001,
+   "distribution_pic": null,
+   "distribution_single": 0.09390000000000001,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": null,
+   "transport": 0.021400000000000002
+  }
+ },
+ "energy": {
+  "exclusive_night": 0.12279999999999999,
+  "offpeak": 0.12279999999999999,
+  "peak": 0.13849999999999998,
+  "single": 0.1308,
+  "yearly_fixed_fee": 135.0,
+  "yearly_fixed_fee_exclusive_night": null
+ },
+ "energy_kind": "fixed",
+ "injection": {
+  "base": null,
+  "base_offpeak": null,
+  "base_peak": null,
+  "base_transition": null,
+  "current": 0.014499999999999999,
+  "factor": null,
+  "factor_offpeak": null,
+  "factor_peak": null,
+  "factor_transition": null,
+  "floor_at_zero": false,
+  "formula": null,
+  "minimum": null,
+  "month_indexed": false,
+  "offpeak": null,
+  "peak": null,
+  "slot_indexed": false,
+  "spp_indexed": false,
+  "transition": null,
+  "vat_applies": true
+ },
+ "publication_label": "mars 2026",
+ "source_url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-BX-032026-Cosy0103-Fixed.pdf",
+ "supplier": "mega",
+ "supplier_prosumer_eur_per_kva_year": null,
+ "taxes": {
+  "brussels_renewables": 0.02342,
+  "energy_contribution": 0.0019261,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.01421,
+  "federal_excise_bands": [
+   [
+    20000.0,
+    0.01421
+   ],
+   [
+    50000.0,
+    0.01209
+   ],
+   [
+    1000000.0,
+    0.01139
+   ]
+  ],
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.0,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.21,
+  "wallonia_renewables": 0.0
+ },
+ "valid_until": "2026-03-31",
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

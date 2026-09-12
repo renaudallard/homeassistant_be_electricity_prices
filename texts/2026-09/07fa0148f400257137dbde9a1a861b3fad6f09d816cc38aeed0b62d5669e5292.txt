@@ -1,0 +1,250 @@
+ 
+Carte tarifaire (1) juin 2026 à prix dynamique 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur SMR3 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 1/5 
+Composition du prix de l’électricité 
+Le prix de l'électricité comporte plusieurs volets : 
+Le prix de fourniture d'énergie : c'est la part qui revient à votre fournisseur COCITER ; 
+Les coûts de transport et de distribution : c'est la part qui revient au gestionnaire de réseau de transport (ELIA) 
+et au gestionnaire de réseau de distribution (GRD) ; 
+Les taxes, accises, redevances et cotisations : c'est la part qui revient aux autorités. 
+ 
+1. Prix de fourniture d'énergie (3) 
+ 
+Le prix de fourniture d'énergie se compose lui-même de plusieurs parties : 
+Coût de l’énergie 
+proportionnel à la 
+consommation 
+(en c€/kWh) 
+ Partie ﬁxe 
+(abonnement annuel (4)) 
+ Contribution 
+"énergies renouvelables" 
+(5) 
+ Forfait 
+partage d'énergie (6) 
+  53,00 €/an 
+TVAC  2,968 c€/kWh 
+TVAC  80 €/an 
+ 
+ Le coût de l'énergie proportionnel à la consommation varie chaque quart d'heure. 
+Il est calculé en fonction de l'indice QUARTER HOURL Y BELPEX* avec la formule suivante : 
+ 
+TYPE DE COMPTEUR FORMULE DE PRIX (7) 
+Compteur SMR3 (0,103 x QUARTER HOURL Y BELPEX + 3) + 6% TVA 
+ 
+* L'indice QUARTER HOURL Y BELPEX est l’indice de cotation quart-horaire Day-Ahead Belpex publié quotidiennement 
+sur la bourse EPEX Spot Belgium. Il varie tous les quarts d'heure. 
+Cette grande variabilité fait qu'il n'est pas possible de donner un prix indicatif pour le futur. 
+Le Client reconnait avoir été informé des risques liés à la formule de prix dynamique, et notamment des risques de 
+ﬂuctuation du prix, suivant, entre autres, son proﬁl de consommation et l’évolution globale du marché de 
+l’électricité (7). Pour plus d’informations à ce sujet, COCITER renvoie le Client vers son site internet 
+(https://www.cociter.be). 
+Nom:  .......................................................  N° contrat :  ...............................................  Date :  .................................  
+Adresse de fourniture :  ...................................................................................  
+ .........................................................................................................................  
+Signature 
+  
+ 
+1 
+2 
+3 
+ 
+Carte tarifaire (1) juin 2026 à prix dynamique 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur SMR3 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 2/5 
+2. Coûts de transport et de distribution (8) 
+ 
+Les coûts de transports sont restitués au gestionnaire de réseau de transport (ELIA). 
+Tarifs de transport TVAC (c€/kWh) 2,74252 
+ 
+Les coûts de distribution sont reversés au Gestionnaire de Réseau de Distribution (GRD). 
+Tarifs de distribution 2026 TVAC 
+GRD Terme ﬁxe 
+(€/an) 
+Terme proportionnel (c€/kWh) 
+Mono-
+horaire 
+Bihoraire 
+Exclusif 
+nuit 
+Tarif Impact 
+Heures 
+pleines 
+Heures 
+creuses 
+Heures 
+PIC 
+Heures 
+MEDIUM 
+Heures 
+ECO 
+AIEG 19,49 10,87 12,05 6,66 6,66 15,08 9,82 4,56 
+AIESH 17,92 13,64 15,17 8,21 8,21 19,07 12,28 5,50 
+ORES 14,10 11,98 13,27 7,39 7,39 16,57 10,83 5,09 
+RESA 26,50 11,06 12,20 7,01 7,01 15,11 10,05 4,99 
+REW 26,44 12,48 13,78 7,84 7,84 17,11 11,32 5,52 
+ 
+3. Taxes et redevances (8) 
+ 
+Les taxes et redevances sont reversées aux autorités compétentes (État fédéral et Région wallonne). 
+Cotisation énergie 
+(c€/kWh - TVAC) 
+Droit d'accises spécial (c€/kWh - TVAC) 
+[Tranche de consommation ≤ 20.000 kWh] 
+Redevance de raccordement 
+(c€/kWh - pas de TVA) 
+0,204167 5,032880 0,075000 
+ 
+Injection (9) 
+ 
+Le prix de l'injection varie chaque quart d'heure. Il est calculé en fonction de l'indice QUARTER HOURL Y BELPEX** avec la 
+formule suivante : 
+Type de compteur FORMULE DE PRIX 
+Compteur SMR3 (0,097 x QUARTER HOURL Y BELPEX – 2,1) 
+ 
+** L'indice QUARTER HOURL Y BELPEX est l’indice de cotation quart-horaire Day-Ahead Belpex publié quotidiennement 
+sur la bourse EPEX Spot Belgium. Il varie tous les quarts d'heure. 
+  
+ 
+Carte tarifaire (1) juin 2026 à prix dynamique 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur SMR3 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 3/5 
+(1) Carte tarifaire 
+Carte tarifaire juin 2026 à prix dynamique pour coopérateurs (2) qui possèdent leur(s) part(s) coopérateur au 31 mai 2026 au plus tard, 
+pour un contrat de fourniture (consommation et éventuellement injection) commençant le 01/08/26. Ces conditions particulières sont 
+valables pour un contrat reçu par COCITER sc au plus tard le 30/06/26. 
+Cette carte tarifaire fait intégralement partie des Conditions Spéciﬁques et/ou Conditions Contractuelles de votre/vos Contrat(s) avec 
+COCITER. 
+Pour un contrat envoyé par voie électronique, le jour de la réception est réputé être le jour de l’envoi. Pour un contrat envoyé par courrier 
+postal, le jour de réception est réputé être le troisième jour ouvrable après la date d’envoi. 
+(2) Coopérateur 
+Vous êtes "coopérateur" si au moins un membre de votre ménage (personnes viv ant à la même adresse) possède une ou plusieurs 
+part(s) dans une des coopératives associées de COCITER pour un montant d e minimum 250 €  par point de fourniture d'énergie . Une 
+personne morale peut également être coopérateur. La carte tarifaire "coopérat eur", est accordée au prorata du temps pendant l equel 
+vous êtes dans les conditions requises durant la période de fourniture. L e reste du temps, c'est la carte tarifaire correspondante "non 
+coopérateur" qui s'applique. 
+(3) Prix de fourniture d'énergie 
+Conditions particulières COCITER pour la consommation d’électricité 100% verte pour un raccordement avec relevé en temps réel (via 
+un compteur numérique opérationnel permettant de mesurer l’électrici té consommée ou produite en temps réel, communicant de 
+manière bidirectionnelle et pouvant être relevé à distance, conﬁguré de façon à permettre un mesurage de type  Smart Meter Regime  
+(SMR) 3 [mesures de la consommation du Client par quart d’heures ]), valable pour les particuliers (Clients résidentiels) avec une  
+consommation d’électricité annuelle de maximum 50 MWh. Dans le cas contraire, COCITER se réserve le droit d'adapter votre prix. 
+(4) Abonnement annuel 
+Les frais d’abonnement sont facturés au prorata de la durée du contrat . L'abonnement n’est imputé qu'une seule fois pour les clients 
+qui ont un contrat de consommation, qu’il y ait ou non également injection d’électricité. 
+(5) Contribution énergie renouvelable 
+La contribution énergie renouvelable en c€/kWh est ﬁxée par année calendrier. En effet, le Gouvernement wallon ﬁxe les taux  de 
+certiﬁcats verts (CV) que les fournisseurs doivent res tituer à la CWaPE pour les quantités d'électricité four nies. Actuellement, le taux 
+est de 40,00% en 2026. Le Gouvernement wallon a la possibilité de revoir ces taux. COCITER vous facture un prix par CV restitué (d'une 
+valeur de 70€/CV), qui est ﬁxe sur toute la durée de votre contrat, mais la contribution par kWh dépend du taux de restitution. 
+(6) Forfait partage d'énergie 
+COCITER se réserve le droit de facturer des frais liés au partage d'énergie aux clients faisant partie de ce partage d'énergie. Ces coûts 
+s'élèvent à 80 €/an HTVA et correspondent à l'estimation faite par COCITER  des frais encourus aﬁn de respecter ses obligations de 
+fournisseur d'énergie. 
+(7) Contrat dynamique (indexé) 
+Le prix est déterminé sur une base quart -horaire, conformément aux formules reprises dans la présente carte tari faire, et dépendent 
+des indices du QUARTER HOURL Y BELPEX ; ils peuvent ﬂuctuer à la hausse comme à la baisse. Les variations de prix quart -horaires 
+ne constituent pas une modiﬁcation contractuelle et ne donnent pas droit à une résiliation. 
+Le prix de l’électricité appliqué dans le cadre du présent Contrat est u n prix dynamique. COCITER ne peut être tenu responsable des 
+éventuelles erreurs affectant les cotisations des paramètres d’inde xation ou de l’absence de publication de celles -ci par les autorités 
+compétentes. De la même manière, COCITER ne peut en aucun cas être tenue responsable des problèmes techniques ou informatiques, 
+ni de la perte de données qui seraient la conséquence  des limites techniques du matériel informatique ou des  moyens de 
+communication électronique que le Client a choisis, ou des limites techniques de la technologie en tant que tel. 
+La souscription au présent Contrat à prix dynamique est conditionnée au respect cumulatif des exigences suivantes : 
+a) Le Client doit disposer d’un compteur intelligent, càd un co mpteur numérique opérationnel permettant de mesurer l’électr icité 
+consommée ou produite en temps réel, communicant de manière bidirectionnell e et pouvant être relevé à distance. Ce compteur 
+doit également être conﬁguré de façon à permettre un mesurage de ty pe Smart Meter Regime (SMR) 3 (mesures de la 
+consommation du Client par quart d’heures) ;  
+b) Le régime de comptage SMR3 doit être activé auprès du Gestionnaire de réseau pour le Point d’accès concerné. 
+ 
+Carte tarifaire (1) juin 2026 à prix dynamique 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur SMR3 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 4/5 
+La tariﬁcation dynamique est incompatible avec le système de compensation (compteur qui tourne à l'envers). 
+L’électricité qui serait éventuellement fournie au Cli ent avant la conﬁrmation de l’activation du SMR3 par l e Gestionnaire d e réseau 
+sera facturée au Client, au pro rata, tel que prévu à l’alinéa *. 
+En cas d’absence ou de désactivation du régime SMR 3 pendant la durée du présent Contrat, pour quelque raison que ce soit (y compris 
+en cas de compteur défectueux), l’ alinéa * est d’application à partir de la date à laquelle ledit mesurage n’a plus  été possible, tel 
+qu’indiqué dans la notiﬁcation envoyée par le Gestionn aire de réseau à COCITER, et ce jusqu’au moment où le mesura ge SMR3 es t 
+rétabli. Si le Client a un compteur exclusif nuit, l’appl ication du présent Contrat à prix dynamique est exclue,  et l ’alinéa * est 
+d’application. 
+* Dans tous les cas où le présent Contrat à prix dynamiq ue ne peut pas s'appliquer, COCITER continuera à fournir le  Client (i) sur la 
+base d’un contrat avec un prix variable  le meilleur marché de COCITER tel que mis en vente sur le site de COCITE R 
+https://www.cociter.be/ pendant le mois de souscription du Client, si le Client n'étai t pas encore client de COCITER avant la 
+conclusion de son Contrat à prix dynamique ou (ii) sur la base du co ntrat que le Client avait avec COCITER avant la conclusio n de 
+son Contrat à prix dynamique et dans la mesure où le contrat précédent a encore une durée minimale de trois (3) mois. Si la durée 
+restante de ce contrat précédent est de moins que trois (3) mois, les dispositions du point (i) s'appliquent. Une telle modiﬁcation 
+sera notiﬁée au Client dans les plus brefs délais. 
+(8) Coûts de transport et de distribution - Taxes et redevances 
+Les parties "Coûts de transport et de distribution" et "Taxes et redevances " peuvent, après approbation du Gouvernement et/ou  de la 
+CREG ou de la CWaPE, changer en cours de contrat. Ces pos tes sont identiques chez tous les fournisseurs et ils v ous sont 
+intégralement refacturés au prix coûtant. 
+(9) Injection 
+Conditions particulières COCITER pour l'injection d’électricité provenant d'une installation de production décentralisée (photovoltaïque 
+ou autre) avec un raccordement en basse tension, avec relevé quart-horaire, valable pour les particuliers (Clients résidentiels), hors 
+régime de compensation  et disposant d’un compteur numérique opérationnel permettant de mesurer l’électricité consommée ou 
+produite en temps réel, communicant de manière bidirectionnelle et pouvant être relevé à distance, conﬁguré de façon à permettre un 
+mesurage de type Smart Meter Regime (SMR) 3 (mesures de la consommation du Client par quart d’heures).  
+Le prix formant le revenu de l'électricité injectée varie chaque quart d' heure et est basé sur l'  indice de cotation quart -horaire Day-
+Ahead Belpex publié quotidiennement sur la bourse EPEX Spot Belgi um (ci-après QUARTER HOURL Y BELPEX). Les cotations quart-
+horaire QUARTER HOURL Y BELPEX sont exprimées en €/MWh. Les valeurs du QUARTER HOURL Y BELPEX (exprimées en €/MWh) 
+peuvent être consultées sur le site https://www.epexspot.com/en/market-data. 
+Le tarif d’injection correspond aux prix auxquels COCITER achète votre électricité produite et injectée sur le réseau conformément aux 
+présentes conditions particulières. 
+En ce qui concerne l'injection pour les clients résidentie ls (personnes physiques non assujetties à la TVA) dont l'inst allation de 
+production a une puissance inférieure à 10 kVA, il faut noter que la livraison d'électricité n'est pas soumise à la TVA. La TVA n'est donc 
+pas calculée sur l'injection déduite de votre facture. 
+(A) Facturation  
+Avec la tariﬁcation dynamique, la facturation est men suelle. Cela permet au client d'avoir une vue chaque mois  sur les coûts  liés au 
+tarif dynamique. 
+Avec une facturation mensuelle, le Client reçoit des factures mensuelles établies sur base des volumes horaires effectivement prélevés 
+à son Point de prélèvement et/ou injectés à son Point d’injection. Il n'y a pas de factures d’acompte. 
+(B) Modes de paiement et de réception des factures 
+Les prix annoncés sont valables quel que soit le mode de pai ement (virement ou domiciliation) et quel que soit le choix du mo de de 
+réception des factures (papier ou numérique). Nous vous encourageons autant que faire se peut à recourir à la facturation électronique 
+et au paiement par domiciliation aﬁn de réduire nos c oûts, mais le choix ﬁnal vous revient. Si vous souhaitez c hanger de mo de de 
+réception des factures et/ou de mode de paiement en cours de contrat, cont actez-nous pour l’adapter à vos préférences. La copie de 
+votre contrat et toutes vos factures sont disponibles en ligne, via votre espace sécurisé sur my.cociter.be. 
+ 
+Carte tarifaire (1) juin 2026 à prix dynamique 
+Fourniture de votre électricité verte, locale et citoyenne 
+Client résidentiel, coopérateur (2)– Compteur SMR3 
+ 
+ E.R. : COCITER sc (Comptoir Citoyen des Energies) – Grand'Rue, 4 7900 Leuze-en-Hainaut – Tel. 080 68 57 38 – info@cociter.be  
+ RPM Tournai – TVA BE 0508.727.881 5/5 
+(C) Début de fourniture 
+Pour autant que cela soit possible d’un point de vue technique, COCITE R débutera la fourniture à la date souhaitée par le cli ent. Le 
+début de la fourniture en cas de simple changement de fournisseur ne peut jamais être antérieur à : 
+- soit 30 jours après le dernier jour du mois civil au cours duquel la  demande de fourniture dûment complétée est réceptionnée,  pour 
+autant que cette demande soit réceptionnée au plus tard le 25ème jour de ce mois, 
+- soit 60 jours après le dernier jour du mois civil au cours duquel la demande de fourniture dûment complétée est réceptionnée, si cette 
+demande est réceptionnée après le 25ème jour de ce mois. 
+COCITER ne peut commencer la fourniture d’électricité qu’à condition que : 
+- COCITER ait été enregistré en tant que fournisseur pour le Point de fourniture dans le registre d’accès du Gestionnaire de réseau ; 
+- votre raccordement ait déjà été raccordé au réseau de distribution et n’ait pas été mis hors service et, 
+- le délai de résiliation légale d’un mois ait été respecté, en cas de changement de fournisseur. 
+Sans préjudice de l’alinéa précédent, le Contrat à prix dynamique ne pourra en trer en application qu'une fois que le Gestionnaire de 
+réseau aura conﬁrmé l’activation du SMR3 à COCITER. L’élec tricité qui serait éventuellement fournie au Client et/o u le Clien t aurait 
+éventuellement injecté avant la conﬁrmation du SMR3 par le Gestionnaire de réseau sera à facturer, au pro rata, sur base des Conditions 
+Particulières du produit variable à durée indéterminée le meil leur marché de COCITER tel que mis en vente sur le site de COCITER 
+https://www.cociter.be/ pendant le mois de souscription du Client. 
+(D) Origine de l'électricité de COCITER 
+L'électricité 100% verte et 100% citoyenne fournie par COCITER, est to talement couverte par des labels de garantie d'origine wallons 
+issus d'outils de production appartenant à des structures citoyennes et des petits producteurs. 
+Vous trouverez des informations sur les conséquences de la production  d'électricité sur l'environnement en ce qui concerne le s 
+émissions de CO2 et déchets radioactifs à partir de différentes sources d'énergie, sur les sites climat.be et ondraf.be. 
+Pour toute question concernant ces conditions particulières, vous pouvez contacte r COCITER par e -mail à l'adresse 
+info@cociter.be ou par téléphone 080 / 68 57 38 (lundi, mercredi et vendredi de 9h00 à 12h00). 

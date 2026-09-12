@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -10,7 +10,7 @@
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/2d835895945494953fb734928d5114ecd517648671f22589f3fd58dda69842e8.pdf",
+   "pdf": "2d835895945494953fb734928d5114ecd517648671f22589f3fd58dda69842e8",
    "text": "texts/2026-09/a343ef1870087abc819e4f82a03bb89f619d9cce17743af1e46bbd30875181b0.txt",
    "url": "https://www.energyvision.be/sites/default/files/inline-files/EV-0926-GS3JV-nl.pdf",
    "variant": "layout"

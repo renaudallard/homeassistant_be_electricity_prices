@@ -1,0 +1,231 @@
+Frank Energie Dynamisch — Korting — februari 2026
+Geldig voor contracten van onbepaalde duur voor klanten met een digitale meter afgesloten in 2026. Formule
+en kosten zijn geldig voor contracten getekend in februari 2026. Indien je recht hebt op een cashback dan vind
+je die terug in de app onder beloningen. De tarieven (incl. 6% btw, tenzij anders vermeld) die aan je worden
+gefactureerd, bestaan uit de volgende componenten:
+Vaste vergoeding
+De abonnementskost is een forfaitaire maandelijkse vergoeding voor onze operationele kosten.
+Abonnementskost (EUR/maand) 2,92
+Energiekosten (24u)
+De stroomprijs is een variabele prijs die de groothandelsprijzen volgt volgens onderstaande formule, waarbij de
+uurlijkse stroomprijs telkens geldt voor de in dat uur afgenomen kilowatturen.
+Formule Stroomprijs: (0,1068 x BELPEX per uur* + 1,500) x 1,06 in EURct/kWh
+Verwacht volgens methode VREG voor februari 2026 (EURct/kWh) 11,9540
+Energiekosten terug levering (24u)
+Eigenaars van zonnepanelen met een digitale meter ontvangen een variabele terugleveringsvergoeding volgens
+onderstaande formule, waarbij de variabele terugleveringsvergoeding telkens geldt voor de in dat uur
+teruggeleverde kilowatturen. Je hebt enkel recht op deze vergoeding als je ook een Leveringsovereenkomst
+voor elektriciteit met ons hebt afgesloten.
+Formule Terugleveringsvergoeding: (0,1 x BELPEX per uur* -1,150), in EURct/kWh (vrijgesteld van btw)
+Verwacht volgens methode VREG voor februari 2026 (EURct/kWh) 4,4338
+Frank Energie België B.V. — Lange Lozanastraat 142 bus 2, 2018 Antwerpen, België — klantenservice@frankenergie.be
+
+Pagina1/4
+www.frankenergie.be — Ondernemingsnummer: 0799.312.959 — IBAN: BE61 3632 2013 9217 — BTW: BE0799.312.959
+*Afrekening uur- of kwartierprijzen
+De energieprijs wordt standaard berekend op basis van uurprijzen (EPEX Spot België / Belpex). 
+Je kan er via de Frank Energie app voor kiezen om de energieprijs te laten berekenen op basis van
+kwartierprijzen. In dat geval wordt het verbruik per kwartier afgerekend volgens de bijbehorende
+kwartiermarktprijzen [Quarter Hourly BELPEX].
+
+
+De keuze voor uurprijzen of kwartierprijzen kan maandelijks aangepast worden en geldt vanaf de start van de
+betreffende kalendermaand.
+Kosten groene stroom en WKK
+De kosten die wij aanrekenen voor het vervullen van onze verplichtingen m.b.t. groene stroom en
+WKK, worden aangepast in functie van de wettelijke wijzigingen (bv. wijzigingen van het aantal
+certificaten die wij als leverancier per geleverde kilowattuur moeten indienen). De bedragen vermeld
+op deze tariefkaart zijn geldig voor het huidige kwartaal.
+GSC (EURct/kWh)
+ 1,166
+
+WKK (EURct/kWh) 0,371
+Taksen en heffingen
+Deze bijdragen worden integraal doorgestort aan de respectievelijke overheden.
+Bijzondere accijns op Energie (EURct/kWh) **
+ 5,0328
+
+Bijdrage Energiefonds Residentieel (EUR/maand) *
+ 0,0000
+Bijdrage Energiefonds Niet-Residentieel (EUR/maand) *
+ 10,0700
+
+Bijdrage op Energie (EURct/kWh) 0,2042
+* Btw niet van toepassing
+
+** Degressiviteit van toepassing voor verbruik > 20.000 kWh
+Frank Energie België B.V. — Lange Lozanastraat 142 bus 2, 2018 Antwerpen, België — klantenservice@frankenergie.be
+
+Pagina2/4
+www.frankenergie.be — Ondernemingsnummer: 0799.312.959 — IBAN: BE61 3632 2013 9217 — BTW: BE0799.312.959
+Nettarieven
+Deze bijdragen worden integraal doorgestort aan de netbeheerders.
+Digitale meter met piekmeting* Databeheer Capaciteit Afname
+EUR/jaar EUR/kW/jaar EURct/kWh
+Normaal Excl. nacht
+Fluvius (Antwerpen)
+ 18,92
+ 52,37
+ 5,35
+ 4,81
+
+Fluvius (Halle-Vilvoorde)
+ 18,92
+ 59,41
+ 5,64
+ 5,12
+
+Fluvius (Imewo)
+ 18,92
+ 57,45
+ 5,54
+ 5,01
+
+Fluvius [Kempen)
+ 18,92
+ 59,58
+ 6,34
+ 5,66
+
+Fluvius (Limburg)
+ 18,92
+ 51,99
+ 5,75
+ 5,19
+
+Fluvius (Midden-Vlaanderen)
+ 18,92
+ 53,13
+ 5,28
+ 4,78
+
+Fluvius (West)
+ 18,92
+ 60,53
+ 6,70
+ 5,99
+
+Fluvius (Zenne-Dijle)
+ 18,92
+ 59,49
+ 5,87
+ 5,32
+
+Klassieke meter Prosumenten** Databeheer Capaciteit Afname
+EUR/jaar EUR/jaar EUR/jaar EURct/kWh
+Normaal Excl. nacht
+Fluvius (Antwerpen)
+ 54,63
+ 18,92
+ 130,92
+ 8,09
+ 7,55
+
+Fluvius (Halle-Vilvoorde)
+ 62,66
+ 18,92
+ 148,52  9,28
+ 8,76
+
+Fluvius (Imewo)
+ 60,12
+ 18,92
+ 143,63
+ 8,90
+ 8,37
+
+Fluvius [Kempen)
+ 67,79
+ 18,92
+ 148,95
+ 10,03
+ 9,36
+
+Fluvius (Limburg)
+ 62,38
+ 18,92
+ 129,98
+ 9,23
+ 8,67
+
+Fluvius (Midden-Vlaanderen)
+ 59,23
+ 18,92
+ 132,83
+ 8,77
+ 8,27
+
+Fluvius (West)
+ 69,59
+ 18,92
+ 151,32
+ 10,30
+ 9,60
+
+Fluvius (Zenne-Dijle)
+ 65,51 18,92
+ 148,73  9,70
+ 9,14
+
+* Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh (excl. databeheer). Als de digitale meter niet communiceert met
+Fluvius gelden de tarieven voor de klassieke meter.
+
+** In het geval van eigen productie (zonnepanelen) met een maximaal vermogen van 10 kW en een terugdraaiende teller. Het tarief wordt
+per maand verdeeld volgens de gemiddelde productie zoals vastgelegd door de VREG.
+Informatie over uw tariefformule
+De stroomprijs voor verbruik wordt ieder uur bepaald op basis van de BELPEX per uur parameter en
+Frank Energie België B.V. — Lange Lozanastraat 142 bus 2, 2018 Antwerpen, België — klantenservice@frankenergie.be
+
+Pagina3/4
+www.frankenergie.be — Ondernemingsnummer: 0799.312.959 — IBAN: BE61 3632 2013 9217 — BTW: BE0799.312.959
+getoonde formule. De terugleveringsvergoeding wordt ieder uur bepaald op basis van de BELPEX per uur
+parameter en getoonde formule.
+
+
+Als de huidige parameters worden afgeschaft, niet langer beschikbaar zijn, niet of onregelmatig worden
+gepubliceerd of niet langer representatief zijn voor de economische waarde, kunnen wij nieuwe parameters of
+componenten toepassen.
+
+
+De stroomprijs en de terugleveringsvergoeding variëren naargelang de evolutie van de BELPEX parameters en
+de werkelijke uurlijkse consumptie. De prijzen die in uw termijnfactuur worden getoond zijn inschattingen van die
+prijs en die consumptie. Na afloop van de maand wordt vastgesteld wat de werkelijke prijzen, consumptie en
+dus werkelijke kosten waren. Het verschil tussen termijnbedrag en werkelijke kosten wordt vervolgens
+gecorrigeerd op de eerstvolgende factuur. Een toelichting daarop is vindbaar in onze app. Ook kunnen daar de
+uurprijzen en uurlijkse consumptie via een export worden ontsloten.
+Andere onderdelen van de factuur
+Zoals beschreven in de Algemene Voorwaarden, wordt de stroomprijs die je betaalt voor de elektriciteit die je
+afneemt verhoogd met andere onderdelen. De nettarieven voor distributie en transmissie die hierboven worden
+vermeld zijn de tarieven die zijn goedgekeurd door de bevoegde regulator. De bedragen en berekeningswijze
+van de belastingen en heffingen, bijdragen, toeslagen en kosten zijn de meest recente op het moment waarop
+deze tariefkaart is opgesteld. In het geval dat er een verschil zou zijn tussen de tarieven van Frank Energie
+enerzijds en de wettelijke bijdragen en nettarieven anderzijds, zijn het deze laatste die gelden.
+Termijnbedrag
+Frank Energie hanteert een “dubbel voorschot”. Dat houdt in dat zowel voor de eerstvolgende als de
+daaropvolgende maand een termijnbedrag wordt geïnd. Dat tweede termijnbedrag wordt in de volgende
+maand terugbetaald en vervangen voor het bedrag van de maand daarop. Zie hier hoe dat werkt. Te veel
+betaalde bedragen worden aan het einde contract altijd terugbetaald. Uiteindelijk betaal je alleen voor de
+werkelijk gemaakte energiekosten. Frank Energie hanteert een dynamisch termijnbedrag op basis van je
+verwachte verbruik per maand. In de zomer is je termijnbedrag lager, in de winter is je termijnbedrag hoger.
+
+
+Frank Energie behoudt zich het recht voor om voor sommige klant(en)(groepen) discretionair een “enkel
+voorschot” te hanteren. Lees hier meer over hoe we factureren: https://www.frankenergie.be/nl/hoe-we-
+factureren
+Verzend- en betaalwijze facturen
+Je ontvangt onze facturen per e-mail. Je kiest je betaalwijze: per domiciliëring of overschrijving. De eerste factuur
+dient betaald te worden voor de start leveringsdatum. We behouden ons het recht voor om de start
+leveringsdatum uit te stellen als daaraan niet wordt voldaan.
+Forfait energiedelen: 0 EUR/jaar
+Wij rekenen geen extra jaarlijkse kosten per toegangspunt dat aan energiedelen doet.
+Frank Energie België B.V. — Lange Lozanastraat 142 bus 2, 2018 Antwerpen, België — klantenservice@frankenergie.be
+
+Pagina4/4
+www.frankenergie.be — Ondernemingsnummer: 0799.312.959 — IBAN: BE61 3632 2013 9217 — BTW: BE0799.312.959
+Korting 120 EUR (incl. btw)
+De korting wordt toegekend via de factuur na één jaar ononderbroken verbruik op dit contract bij Frank Energie.
+De korting geldt voor nieuwe klanten en voor bestaande klanten die naar dit contract overstappen.
+Frank Energie België B.V. — Lange Lozanastraat 142 bus 2, 2018 Antwerpen, België — klantenservice@frankenergie.be
+
+Pagina5/5
+www.frankenergie.be — Ondernemingsnummer: 0799.312.959 — IBAN: BE61 3632 2013 9217 — BTW: BE0799.312.959

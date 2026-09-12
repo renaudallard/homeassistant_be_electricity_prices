@@ -1,16 +1,16 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/1328c43d7f1abe49e441cd52859410c4bc6d75355e97de627b15ca8580c11bee.txt",
+   "text": "texts/2026-09/71b0eaa71c0666e36f43f7e6d1a978b568c19937543df00fa4658f7a8f568f6e.txt",
    "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/18b5e0afc6ef2c93fdd362b6f055b655898169bf4240b05abc7e77ebf5ecdfcc.pdf",
+   "pdf": "18b5e0afc6ef2c93fdd362b6f055b655898169bf4240b05abc7e77ebf5ecdfcc",
    "text": "texts/2026-09/824cbb4ef42cdf365f08f5a8fba6a0548f6e73e4f31b85dd2423a98d4ce2c8c2.txt",
    "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-WL-092026-Online0109-Green.pdf",
    "variant": "plain"

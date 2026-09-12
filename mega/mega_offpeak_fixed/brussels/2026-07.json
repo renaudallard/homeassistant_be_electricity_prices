@@ -1,0 +1,98 @@
+{
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_probe_key": null,
+ "_schema_version": 59,
+ "_seen_on": "2026-09-12",
+ "_sources": [
+  {
+   "text": "texts/2026-09/71b0eaa71c0666e36f43f7e6d1a978b568c19937543df00fa4658f7a8f568f6e.txt",
+   "url": "https://www.mega.be/fr/energie/cartes-tarifaires",
+   "variant": "text"
+  },
+  {
+   "pdf": "1af8c5a83b2f080837c2b7d86c1de9e47e35691cf2079365d4a48014466323c5",
+   "text": "texts/2026-09/db428cf938a92f92caba266cb3bf7e410ba32802799de0b301c5e6edec4b9d30.txt",
+   "url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-BX-072026-Offpeak-Bi0107-Fix.pdf",
+   "variant": "plain"
+  }
+ ],
+ "_via": "archive",
+ "contract": "mega_offpeak_fixed",
+ "dsos": {
+  "sibelga": {
+   "brussels_osp_by_tier": {
+    "gt56": 173.25,
+    "le13": 26.71,
+    "le18": 39.94,
+    "le1_44": 0.0,
+    "le36": 53.3,
+    "le56": 106.59,
+    "le6": 13.36,
+    "le9_6": 21.37
+   },
+   "brussels_power_term_above_13kva": 114.8788,
+   "capacity_eur_per_kw_year": null,
+   "data_management_per_year": 64.8044,
+   "distribution_eco": null,
+   "distribution_exclusive_night": 0.0753,
+   "distribution_medium": null,
+   "distribution_offpeak": 0.0753,
+   "distribution_peak": 0.09960000000000001,
+   "distribution_pic": null,
+   "distribution_single": 0.09960000000000001,
+   "network_ceiling_eur_per_kwh": null,
+   "prosumer_eur_per_kva_year": null,
+   "transport": 0.0227
+  }
+ },
+ "energy": {
+  "exclusive_night": 0.1323,
+  "offpeak": 0.1323,
+  "peak": 0.17329999999999998,
+  "single": 0.15289999999999998,
+  "yearly_fixed_fee": 74.2,
+  "yearly_fixed_fee_exclusive_night": null
+ },
+ "energy_kind": "fixed",
+ "injection": {
+  "base": null,
+  "base_offpeak": null,
+  "base_peak": null,
+  "base_transition": null,
+  "current": 0.0262,
+  "factor": null,
+  "factor_offpeak": null,
+  "factor_peak": null,
+  "factor_transition": null,
+  "floor_at_zero": false,
+  "formula": null,
+  "minimum": null,
+  "month_indexed": false,
+  "offpeak": null,
+  "peak": null,
+  "slot_indexed": false,
+  "spp_indexed": false,
+  "transition": null,
+  "vat_applies": false
+ },
+ "publication_label": "juillet 2026",
+ "source_url": "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-BX-072026-Offpeak-Bi0107-Fix.pdf",
+ "supplier": "mega",
+ "supplier_prosumer_eur_per_kva_year": null,
+ "taxes": {
+  "brussels_renewables": 0.024820000000000002,
+  "energy_contribution": 0.0020417,
+  "energy_fund_eur_per_month": 0.0,
+  "federal_excise": 0.05032879999999999,
+  "federal_excise_bands": null,
+  "flanders_renewables": 0.0,
+  "published_vat_rate": 0.0,
+  "region_connection_fee": 0.0,
+  "region_connection_fee_unavailable": false,
+  "vat_rate": 0.0,
+  "wallonia_renewables": 0.0
+ },
+ "valid_until": "2026-07-31",
+ "welcome_credit_eur": null,
+ "welcome_credit_kind": "pro_rata"
+}

@@ -1,0 +1,117 @@
+Tariefkaart mei 2026
+Alle bedragen zijn exclusief btw. Particuliere klanten betalen 6% btw. Zakelijke klanten betalen 21% btw.
+De terugleververgoeding is voor particulieren vrijgesteld van btw, voor zakelijke klanten bedraagt de btw 21%.
+De Bijdrage Energiefonds is voor alle klanten vrijgesteld van btw.
+Productnaam:
+Groene burgerstroom
+(laagspanning en jaarlijks uitgelezen analoge meters of digitale meters in meetregime 1)
+Energiekost (het gedeelte voor Ecopower)
+Afname Groene burgerstroom (50% vast aan 0,17 euro + 50% variabel aan 0,09810780 1 euro) 0,1341 euro/kWh
+Kost GSC 0,0110 euro/kWh
+Kost WKK 0,00392 euro/kWh
+Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh
+Forfait terugdraaiende meter 60,0 euro/kVA/jaar
+1 Dit is het werkelijke RLP gewogen gemiddelde van de Day Ahead Baseload Belpex (Belpex DA) voor de maand mei.
+2 Vanaf 1 juli 2026 wordt de prijs van de terugleververgoeding 50% variabel. Meer info op onze website.
+Nettarieven4 (het gedeelte dat Ecopower doorstort aan de netbeheerder)
+Databeheer5 Capaciteits- Capaciteits- Afnametarief Maximumtarief Prosumententarief3
+tarief tarief
+indien van toepassing
+Netbeheerder
+euro/jaar euro/kW/jaar euro/jaar euro/kWh euro/kWh euro/kW/jaar
+Enkelvoudig/ Uitsluitend nacht
+tweevoudig
+DIGITALE METER
+Fluvius Antwerpen 17,85 49,40 - 0,0505027 0,0454058 -
+Fluvius Halle-Vilvoorde 17,85 56,04 - 0,0531770 0,0482899 -
+Fluvius Imewo 17,85 54,20 - 0,0522864 0,0473024 0,3276168 -
+0,3276168
+Fluvius Kempen 17,85 56,21 - 0,0597838 0,0534019 -
+Meer info op
+Fluvius Limburg 17,85 49,05 - 0,0542695 0,0489353 -
+pagina 2
+Fluvius Midden-Vlaanderen 17,85 50,12 - 0,0498061 0,0450784 -
+Fluvius West 17,85 57,10 - 0,0631937 0,0565360 -
+Fluvius Zenne-Dijle 17,85 56,12 - 0,0553921 0,0501456 -
+ANALOGE METER
+Fluvius Antwerpen 17,85 - 123,51 0,0762962 0,0711993 - 51,54
+Fluvius Halle-Vilvoorde 17,85 - 140,11 0,0875018 0,0826147 - 59,11
+Fluvius Imewo 17,85 - 135,50 0,0839581 0,0789741 - 56,72
+Fluvius Kempen 17,85 - 140,52 0,0946657 0,0882838 - 63,95
+Fluvius Limburg 17,85 - 122,62 0,0871194 0,0817852 - 58,85
+Fluvius Midden-Vlaanderen 17,85 - 125,31 0,0827142 0,0779865 - 55,88
+Fluvius West 17,85 - 142,75 0,0971801 0,0905224 - 65,65
+Fluvius Zenne-Dijle 17,85 - 140,31 0,0914730 0,0862265 - 61,80
+3 Het prosumententarief wordt per maand aangerekend (volgens de spreiding van de normaal uren zonneschijn in Ukkel).
+Maand januari februari maart april mei juni juli augustus september oktober november december
+Verdeling
+per maand 3,68345% 4,54585% 7,84144% 10,67994% 12,36484% 12,42595% 12,67289% 12,00005% 9,63172% 7,02331% 4,10124% 3,02932%
+Heffingen4 (het gedeelte dat Ecopower doorstort aan de overheden)
+particulier zakelijk
+Bijdrage op de energie 0,0019261 euro/kWh 0,0019261 euro/kWh
+Bijzondere accijns verbruik tussen 0 en 3.000 kWh: 0,04748 euro/kWh 0,01421 euro/kWh
+Bijzondere accijns verbruik tussen 3.000 en 20.000 kWh: 0,04748 euro/kWh 0,01421 euro/kWh
+Bijzondere accijns verbruik tussen 20.000 en 50.000 kWh: 0,04546 euro/kWh 0,01209 euro/kWh
+Bijzondere accijns verbruik tussen 50.000 en 1.000.000 kWh: 0,04478 euro/kWh 0,01139 euro/kWh
+Bijdrage Energiefonds 0,006 euro/maand 10,07 euro/maand
+4 Nettarieven en heffingen zoals gekend op 1 mei 2026
+5 Heeft u een afzonderlijk toegangspunt voor injectie, dan betaalt u het tarief databeheer per EAN-nummer.
+6Als er niemand gedomiciliëerd is op het adres is de bijdrage 10,07 euro per maand.
+TARIEFKAART MEI 2026
+Informatie over de onderdelen
+en prijsformule
+Energiekost (Ecopower) Afnametarief (per kWh)
+Groene Burgerstroom Kost voor de netbeheerders voor het transport van uw stroom via
+Ecopower levert lokale hernieuwbare elektriciteit geproduceerd door het hoog- en laagspanningsnet. Dit wordt berekend per afgenomen
+de coöperatieve Ecopower-installaties, de installaties van bevriende kWh.
+burgercoöperaties en de zonnepanelen van onze coöperanten. De
+prijs is eerlijk, transparant en zo stabiel mogelijk. Dit unieke product Minimumbijdrage en maximumtarief
+noemen we Groene Burgerstroom. Zou u met het capaciteitstarief en het nettarief per kWh meer
+nettarieven betalen dan met het maximumtarief? Dan betaalt u het
+Prijsformule Groene Burgerstroom maximumtarief. U betaalt dus nooit meer dan dat. U betaalt wel
+De prijsformule voor Groene Burgerstroom is voor de helft vast en minstens de minimumbijdrage van 2,5 kW. Meer informatie over het
+voor de helft variabel. Het vaste gedeelte van de prijs voor afname maximumtarief vindt u op de website van de Vlaamse Nutsregulator
+legt Ecopower vast en is gebaseerd op de kosten voor productie en (VNR).
+werking. De andere helft van de prijs is variabel en volgt de uurprijs
+op de Belgische elektriciteitsmarkt aan de hand van een theoretisch Prosumententarief
+afnameprofiel. Meer details over deze prijsformule en de link naar de Het prosumententarief wordt aangerekend door Fluvius voor het
+marktprijzen vindt u op www.ecopower.be/prijsformule. gebruik van het elektriciteitsnet door mensen met een analoge
+meter en zonnepanelen. De berekening gebeurt op basis van het
+Forfait terugdraaiende meter geïnstalleerd vermogen van de omvormer van uw zonnepanelen.
+Het forfait terugdraaiende meter geldt enkel voor klanten
+met een terugdraaiende meter. Het is een bedrag per eenheid Heffingen (overheden)
+omvormervermogen (kVA) en per jaar. Als slechts een deel van het Bijdrage op de energie
+jaar wordt afgerekend, betaalt u enkel voor het deel van het jaar dat Belasting (of gewone accijns) voor de federale overheid die wordt
+al verstreken is. berekend per afgenomen kWh en een-op-een doorgerekend.
+Kost GSC en kost WKK Bijzondere accijns
+Kost voor de groenestroomcertificaten en certificaten voor Belasting voor de federale overheid die wordt berekend per
+warmtekrachtkoppeling die Ecopower voor elke geleverde kWh moet afgenomen kWh en een-op-een doorgerekend.
+indienen bij de Vlaamse Nutsregulator (VNR).
+Bijdrage Energiefonds
+Injectie Groene Burgerstroom (terugleververgoeding) Belasting voor de Vlaamse overheid aangerekend als vast bedrag
+De vergoeding die klanten met zonnepanelen en een digitale meter per aansluiting van elektriciteit. Per aansluiting op een adres met
+krijgen voor hun injectie. De terugleververgoeding wordt automatisch minstens één gedomicilieerde persoon betaalt u als particuliere
+toegepast o.b.v. injectiedata die we doorkrijgen van netbeheerder klant de verminderde bijdrage. Voor een bedrijf of een adres waar
+Fluvius. De terugleververgoeding is voor de helft vast en voor de niemand gedomicilieerd is, betaalt u de gewone bijdrage.
+helft variabel. Het variabele deel volgt de uurprijs op de Belgische
+elektriciteitsmarkt aan de hand van een theoretisch injectieprofiel. Btw
+Meer details en de link naar de marktprijzen vindt u op ecopower.be/ Particuliere klanten betalen 6% btw. Zakelijke klanten betalen
+prijsformule. 21% btw. De terugleververgoeding is voor particulieren vrijgesteld
+van btw, voor zakelijke klanten bedraagt de btw 21%. De Bijdrage
+Nettarieven (netbeheerder) Energiefonds is voor alle klanten vrijgesteld van btw.
+Tarieven worden goedgekeurd door de VNR en de CREG en een-op-
+een doorgerekend. Fluvius energiedelen of zonnepanelen > 10 kVA
+Indien u zonnepanelen met omvormervermogen groter dan 10
+Kost databeheer (per jaar) kVA heeft of participeert in Fluvius energiedelen bent u verplicht
+Vaste kost voor netbeheerder Fluvius voor alle activiteiten m.b.t. de meetregime 3 te nemen, wat bij Ecopower enkel met een
+registratie van uw data. Deze kost wordt een-op-een doorgerekend dynamische prijs kan. Voor energiedelen komen daar nog enkele
+a rato van het aantal dagen in de verbruiksperiode van de factuur. specifieke kosten bij. Netgebruikers met decentrale productie
+> 10 kVA betalen ook injectiekosten aan de netbeheerder. Alle
+Capaciteitstarief (per kW facturatiepiek) info over het dynamische contract vindt u op www.ecopower.be/
+Kost voor netbeheerder Fluvius voor het gebruik van het dynamischeburgerstroom.
+elektriciteitsnet. Fluvius berekent de facturatiepiek. U kan de
+maandpieken waarop de facturatiepiek gebaseerd is terugvinden
+op www.mijnfluvius.be onder de netkosten. Als u een analoge meter
+heeft, betaalt u de vaste minimumbijdrage.
+Ecopower T. 03 287 37 79 Posthoflei 3 bus 3 www.ecopower.be IBAN BE07 0012 2805 5766
+erkende cv BTW BE 0445.389.356 2600 Berchem info@ecopower.be RPR Antwerpen – Afd. Antwerpen

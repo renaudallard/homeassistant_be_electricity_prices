@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -10,7 +10,7 @@
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/04349bc66900561c48de9c9aa712fe2641807d657fe914cbd0f1f251f0941d47.pdf",
+   "pdf": "04349bc66900561c48de9c9aa712fe2641807d657fe914cbd0f1f251f0941d47",
    "text": "texts/2026-09/be17f3af9661f35abca0b568d072f5e27df59b389bfce1792ef5bec59e1fb75f.txt",
    "url": "https://energie.blob.core.windows.net/cms/assets/Energie_be_Elek_Particulier_845a8a2ff1.pdf",
    "variant": "layout"

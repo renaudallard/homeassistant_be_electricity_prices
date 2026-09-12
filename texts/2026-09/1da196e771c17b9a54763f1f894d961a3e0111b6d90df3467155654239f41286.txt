@@ -1,0 +1,114 @@
+Tariefkaart 2026-03
+Deze tariefkaart is geldig voor particulieren in Vlaanderen
+Alle prijzen en tarieven zijn inclusief 6% btw
+De tariefkaart is geldig van 01/03/2026 tot en met 31/03/2026
+Met Agilior Online van Energy Knights kies je voor:
+een prijs die elk kwartier anders is
+een contract voor één jaar
+grijze stroom
+100% digitaal
+Energie
+Abonnement (€/jaar) 15,00
+Verbruik enkelvoudig (c€/kWh) 10,11 Belpex_15 * 1,07 + 7
+(*)Tariefformule in EUR/MWh excl BTW. Prijs
+Verbruik dag (c€/kWh) 10,11 Belpex_15 * 1,07 + 7 berekend met de gewogen gemiddelde
+Verbruik nacht (c€/kWh) 10,11 Belpex_15 * 1,07 + 7 VREG jaarprijs voor afname. (2026-03 = 82,58
+€/MWh)
+Verbruik exclusief nacht (c€/kWh) 10,11 Belpex_15 * 1,07 + 7
+(*)Heb je zonnepanelen en een digitale
+meter? Met de optie "solar" bieden wij jou een
+optie "solar" (c€/kWh) (1) 3,81 Belpex_15 * 0,86 - 5 terugleververgoeding. Prijs berekend met de
+gewogen gemiddelde VREG jaarprijs voor
+teruglevering. (2026-03 = 50,10 €/MWh)
+Kortingen
+Doe online aankopen via de webshops in ons platform en spaar munten
+Spaar korting met munten (€/jaar)
+25,00 voor een tegoed op jouw afrekening. Het getoonde bedrag komt overeen
+(2)
+met de gemiddelde potentiële korting per klant per jaar.
+Extra kosten
+Lid van energiegemeenschap
+0,00 Voor deelname aan 'energiedelen' rekenen wij geen extra kosten aan.
+(€/jaar)
+Energy Knights BV • De Regenboog 11 bus 4 • 2800 Mechelen • info@energyknights.be
+www.energyknights.be • BTW BE1001276164 • IBAN BE59068950221626
+Gebruik van het net
+Dit zijn de tarieven verbonden aan het gebruik van het distributie- en transmissienet.
+Deze kosten worden 1 op 1 doorgestort aan jouw netbeheerder Fluvius.
+digitale meter
+afname normaal afname ex nacht databeheer SMR1 databeheer SMR3 capaciteitstarief
+netbeheerder
+(c€/kWh) (c€/kWh) (€/jaar) (a) (€/jaar) (b) (€/kW/jaar)
+Fluvius (Antwerpen) 5,35 4,81 18,92 18,92 52,37
+Fluvius (Halle-Vilvoorde) 5,64 5,12 18,92 18,92 59,41
+Fluvius (Imewo) 5,54 5,01 18,92 18,92 57,45
+Fluvius (Kempen) 6,34 5,66 18,92 18,92 59,58
+Fluvius (Limburg) 5,75 5,19 18,92 18,92 51,99
+Fluvius (Midden-Vlaanderen) 5,28 4,78 18,92 18,92 53,13
+Fluvius (West) 6,70 5,99 18,92 18,92 60,53
+Fluvius (Zenne-Dijle) 5,87 5,32 18,92 18,92 59,49
+klassieke meter
+afname normaal afname ex nacht databeheer capaciteitstarief prosumententarief
+netbeheerder
+(c€/kWh) (c€/kWh) (€/jaar) (€/kW/jaar) (€/kVa/jaar) (c)
+Fluvius (Antwerpen) 8,09 7,55 18,92 130,92 54,63
+Fluvius (Halle-Vilvoorde) 9,28 8,76 18,92 148,52 62,66
+Fluvius (Imewo) 8,90 8,37 18,92 143,63 60,12
+Fluvius (Kempen) 10,03 9,36 18,92 148,95 67,79
+Fluvius (Limburg) 9,23 8,67 18,92 129,98 62,38
+Fluvius (Midden-Vlaanderen) 8,77 8,27 18,92 132,83 59,23
+Fluvius (West) 10,30 9,60 18,92 151,32 69,59
+Fluvius (Zenne-Dijle) 9,70 9,14 18,92 148,73 65,51
+Belastingen en heffingen
+Dit zijn de belastingen, heffingen en toeslagen die worden opgelegd door de overheid en 1 op 1 worden doorgestort aan de overheid.
+Bijdrage energiefonds (€/maand) (1) Bijzondere accijns (c€/kWh)
+Standaard tarief 0,00 Verbruik tussen 0 en 3.000 kWh 5,0329
+Niet-gedomiciliëerd 10,07 Verbruik tussen 3.000 en 20.000 kWh 5,0329
+Beschermd tarief 0,00 Verbruik tussen 20.000 en 50.000 kWh 4,8188
+Energiebijdrage (c€/kWh) Bijdrage groene stroom en WKK (c€/kWh) (d)
+Standaard tarief 0,2042 Bijdrage groene stroom 1,16
+Beschermd tarief 0,0000 Bijdrage WKK 0,36
+Bijkomende toelichting
+(1) Bedrag niet onderworpen aan BTW
+(2) Korting wordt verrekend op het bedrag exclusief BTW
+(3) Op administratieve kosten is 21% BTW van toepassing
+(a) SMR1: meter regime 1 met een maandelijkse of jaarlijkse meterlezing
+(b) SMR3: meter regime 3 met metingen per kwartier
+(c) enkel van toepassing voor een installatie met zonnepanelen met een omvormer waarvan het vermogen < 10kW in combinatie met een terugdraaiende
+teller
+(d) deze kosten worden aangepast in functie van de wettelijke bepalingen die opgenomen zijn in het Vlaamse Energiedecreet
+Informatie over jouw tariefformule
+(*)De energieprijzen vermeld op deze tariefkaart zijn een schatting op basis van de gewogen gemiddelde jaarprijzen berekend door de VREG voor de huidige
+maand. (https://www.vlaamsenutsregulator.be/nl/energiemarkt-cijfers)
+Voor de facturatie worden kwartierprijzen gehanteerd volgens de Belpex Day Ahead Market noteringen, waarbij de 'meetregime 3' kwartierwaarden voor
+zowel afname als injectie worden gequoteerd volgens de corresponderende kwartierprijs. Energy Knights behoudt zich het recht voor om het
+indexatiemechanisme en de bijbehorende coëfficiënten te wijzigen, mits de regelgeving op dit gebied verandert of wordt afgeschaft, of als de betrokken
+indexen inhoudelijk wijzigen, niet langer representatief zijn voor de economische waarde van de geleverde elektriciteit, of niet langer of onregelmatig worden
+gepubliceerd.
+De energieprijs wordt verhoogd met de toepasselijke belastingen, heffingen, toeslagen en alle opgelegde kosten voor het gebruik van de netten, evenals met
+de bijdrage voor groene energie en/of warmtekrachtkoppeling die Energy Knights kan of moet aanrekenen. De vermelde bedragen zijn de laatst bekende
+bedragen. Het verbruik wordt altijd afgerekend op basis van de op dat moment geldende tarieven, eventueel met terugwerkende kracht. Energy Knights
+behoudt zich het recht voor om deze kosten aan te passen in lijn met veranderingen in het regelgevend kader. Wijzigingen aan deze elementen, waarvoor
+Energy Knights niet verantwoordelijk is, worden volledig doorgerekend aan de klant (dit kan ook retroactief gebeuren).
+De opgegeven prijzen zijn uitsluitend van toepassing voor klanten met huishoudelijk verbruik, een jaarlijks gemeten elektriciteitsverbruik van maximaal 50
+MWh en een laagspanningsaansluiting met een aansluitingsvermogen van maximaal 56 kVA. In andere gevallen behoudt Energy Knights zich het recht voor
+om je tarief aan te passen. De vaste vergoeding is een jaarlijkse kost per elektriciteitsaansluiting en wordt pro rata temporis in elke afrekenings- en/of
+slotfactuur verrekend. Indien het contract vroegtijdig wordt verbroken in de eerste 6 maanden, zal een vaste vergoeding voor 6 maanden worden
+aangerekend.
+Energiedelen: als je ervoor kiest om energiedelen op het Fluvius portaal te activeren, dien je Energy Knights hiervan vooraf op de hoogte te stellen.
+Indien Energy Knights om technische redenen geen kwartierwaarden ontvangt (vb defect van de Fluvius meter), zal voor de betreffende periode het
+standaard variabel tarief « Essentia Online » worden toegepast voor de facturatie.
+Inschrijving en dienstverlening
+Inschrijven kan enkel via het inschrijvingsformulier op onze website www.energyknights.be Contact met onze klantendienst gebeurt volledig via jouw
+klantenzone waarbij je de mogelijkheid hebt om jouw vragen te stellen of informatie zelf op te zoeken via onze informatie databank.
+Facturatie en betaling
+Energy Knights biedt betaling aan via overschrijving of domiciliëring en doet beroep op de betaalprovider Mollie. Facturen worden steeds per e-mail
+verzonden en worden beschikbaar gesteld in de klantenzone.
+Kosten bij laattijdige betaling
+De eerste drie betalingsherinneringen zijn gratis. Vanaf een extra betalingsherinnering rekent Energy Knights 8€ aan, en in geval van een ingebrekestelling
+wordt er 20€ aangerekend. Op deze bedragen is geen BTW verschuldigd.
+Algemene voorwaarden
+Voor een volledig inzicht in onze diensten en bepalingen, verwijzen wij je naar onze algemene voorwaarden. Deze documenten bevatten alle relevante
+informatie over jouw rechten en plichten en zijn essentieel voor een transparante samenwerking. Je kan de voorwaarden vinden op onze website.
+Energy Knights BV • De Regenboog 11 bus 4 • 2800 Mechelen • info@energyknights.be
+www.energyknights.be • BTW BE1001276164 • IBAN BE59068950221626

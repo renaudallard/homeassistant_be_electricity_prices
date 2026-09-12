@@ -1,0 +1,349 @@
+Un prix fixe pendant un an
+Boulevard Saint-Lazare 4-10, 1210 Bruxelles
+ Avec Bolt Fixe, vous choisissez un contrat qui vous prémunit des fluctuations des prix
+0726.633.730 boltenergie.be de l’énergie. Le prix pour 1 kilowattheure (kWh), l’unité dans laquelle votre
+consommation est exprimée et relevée, est défini pour le reste de l’année en début de
+contrat. Vous ne devez donc pas vous soucier du prix de votre énergie pendant un an.
+Contrairement au prix fixe de consommation pour l’électricité, le prix pour l’injection
+est quant à lui variable selon l’indice Belpex.
+Bolt Fixe - électricité
+01/03/2026-13/03/2026 - professionnel HTVA
+Coût de l'énergie Simple
+ c€12,45/kWh
+ Type de compteur Formule tarifaire
+
+(€/MWh - HTVA)
+Jour
+ c€12,45/kWh
+
+Nuit
+ c€12,45/kWh
+ Simple
+ Fixe
+
+Excl. nuit c€12,45/kWh Jour
+ Fixe
+
+Nuit
+ Fixe
+
+Excl. nuit
+ Fixe
+
+Abonnement €13,99/mois Injection Belpex * 0,94 - 11,33
+(*) Pour des régimes de mesure par quart d’heure, le tarif de gestion des données s’élève à 15,14 € par an. Un tarif maximal de 0,2035480 €/kWh (hors gestion des données) s’applique aux
+Electricité - Coûts de distributions et de transports (TTC) compteurs digitaux. Si le compteur digital ne communique pas avec Fluvius, les tarifs du compteur classique s’appliquent.
+(**) En cas de production personnelle (panneaux solaires) avec une puissance maximale de l’onduleur de 10 kW et un compteur inversé. Le tarif est réparti par mois en fonction de la
+production moyenne fixée par la VREG
+
+(***) En cas de production personnelle (panneaux solaires) avec une puissance maximale de l’onduleur de 10 kW : si vous disposez d’un compteur bidirectionnel, la redevance réseau peut
+également être calculée sur la base du prélèvement brut d’électricité, si ce calcul est plus avantageux que la facturation du tarif prosumer.
+Compteur digital (*) Compteur classique
+Tarif de gestion Tarif de Tarif de
+Tarif prosumer
+des données
+ Tarif de capacité prélèvement Tarif de prélèvement Tarif de capacité prélèvement Tarif de prélèvement
+(€/kW/an) **
+Flandres (€/an) (€/kW/an) normal (c€/kWh) excl.nuit (c€/kWh) (€/an) normal (c€/kWh) excl.nuit (c€/kWh)
+Fluvius Antwerpen 17,85
+ 49,40
+ 5,05
+ 4,54
+ 123,51
+ 7,63
+ 7,12
+ 51,54
+
+Fluvius Halle-Vilvoorde
+ 17,85
+ 56,04
+ 5,32
+ 4,83
+ 140,11
+ 8,75
+ 8,26
+ 59,11
+
+Fluvius Imewo
+ 17,85
+ 54,20
+ 5,23
+ 4,73
+ 133,50
+ 8,40
+ 7,90
+ 56,72
+
+Fluvius Kempen
+ 17,85
+ 56,21
+ 5,98
+ 5,34
+ 140,52
+ 9,47
+ 8,83
+ 63,95
+
+Fluvius Limburg
+ 17,85
+ 49,05
+ 5,43
+ 4,89
+ 122,62
+ 8,71
+ 8,18
+ 58,85
+
+Fluvius Midden-Vl
+ 17,85
+ 50,12
+ 4,98
+ 4,50
+ 125,31
+ 8,27
+ 7,80
+ 55,88
+
+Fluvius West
+ 17,85
+ 57,10
+ 6,32
+ 5,65
+ 142,75
+ 9,72
+ 9,05
+ 65,65
+
+Fluvius Zenne-Dijle 17,85 56,12 5,54 5,01 140,31 9,15 8,62 61,80
+Coûts de distribution (c€/kWh)
+Tarif gestion des
+données/Activités de
+Coûts de transport mesure et de Tarif prosumer
+Wallonie Simple Jour Nuit Exclusif nuit Pic Medium Eco (c€/kWh) comp G ta R g D e ( / € T / e a rm n) e fixe (€/kW/an) ***
+AIEG
+ 9,98
+ 11,10
+ 6,02
+ 6,02
+ 13,95
+ 8,99
+ 4,03
+ 2,59
+ 18,39
+ 76,45
+
+AIESH
+ 12,87
+ 14,31
+ 7,75
+ 7,75
+ 17,99
+ 17,99
+ 5,19
+ 2,59
+ 16,91
+ 93,67
+
+ORES (Brabant Wallon)
+ 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (EST)
+ 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (Hainaut Electricité)
+ 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (Luxembourg)
+ 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (Mouscron) 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (Namur) 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+ORES (Verviers)
+ 10,85
+ 12,07
+ 6,52
+ 6,52
+ 15,18
+ 15,18
+ 4,35
+ 2,59
+ 13,30
+ 80,98
+
+TECTEO RESA 11,77
+ 13,00
+ 7,39
+ 7,39
+ 16,15
+ 16,15
+ 5,20
+ 2,59
+ 24,94
+ 87,74
+
+WAVRE 10,44 11,51 6,62 6,62 14,26 14,26 4,71 2,59 25,00 79,45
+Coûts de distribution (c€/kWh)
+Tarif gestion des
+données/Activités de
+Coûts de transport mesure et de comptage/ Tarif prosumer
+Bruxelles Simple Jour Nuit Exclusif nuit (c€/kWh) Terme fixe GRD (€/an) (€/kW/an) ***
+SIBELGA 9,39 9,39 7,10 7,10 2,14 13,90 -
+Contribution énergie verte et cogénération (HTVA)
+Taxes et redevances (HTVA)
+VL WAL BRU
+VL WAL BRU
+Certificats verts (c€/kWh)*
+ 1,10
+ 2,86
+ 2,54
+Droit d’accise spécial (c€/kwh) (*) 1,4210 1,4210 1,4210
+Cogénération (c€/kWh)* 0,36 -
+Cotisation Fond énergie (€/mois)
+* Les coûts de l’électricité verte et les coûts de la cogénération sont adaptés en fonction des
+Résidentiel
+ -
+ -
+ -
+ m po o u d r i fi le c t a r t i i m on e s s t lé re g i e s n la c t o iv u e r s s . . Les montants mentionnés dans les présentes conditions sont valables
+Non-résidentiel 10,07 - -
+Contribution sur l'énergie (c€/kWh)
+ 0,19261
+ 0,19261
+ 0,19261
+ Tarif d'injection (HTVA)
+Redevance de raccordement (c€/kWh) (**) - 0,075 - Le coût de l’énergie est calculé sur base des valeurs de l’indice
+Belpex ci-dessous*
+(*) Tarif réduit en fonction de la consommation annuelle : 0-20.000 kWh: 1,4210 c€/kWh, 20.001-50.000 kWh: 1,4210 Simple Jour Nuit
+c€/kWh
+
+(**) Non applicable sur les premiers 100 kWh. Cette redevance est majorée d’un montant forfaitaire de € 0,075. Belpex Q4 2025 (€/MWh)
+ 74,54
+ 83,26
+ 52,27
+
+Injection (c€/kWh) 5,87 6,69 3,78
+*Les valeurs de l’indice sont publiées quotidiennement sur :
+https://www.epexspot.com/en/market-data?market_area=BE
+Obligations de service publique (Bruxelles) €/an
+< 1,44 kVA
+ 0
+
+1,44 kVA en 6,00 kVA
+ 12,60
+
+6,01 kVA en 9,60 kVA
+ 20,16
+
+9,61 kVA en 13,00 kVA
+ 25,20
+
+13,01 kVA en 18,00 kVA
+ 37,68
+
+18,01 kVA en 36 kVA
+ 50,28
+
+36,01 kVA en 56,00 kVA
+ 100,56
+
+> 56,00 kVA 163,44
+Partage d’énergie Fluvius €/MWh
+Coût 45
+INFORMATIONS CONCERNANT LA FORMULE TARIFAIRE
+ DUREE DES CONDITIONS DU CONTRAT DE FOURNITURE
+
+Les prix fixes pour la consommation d’électricité s’appliquent uniquement aux contrats Les conditions du contrat de fourniture sont d’application pour une durée d’un an.
+
+
+conclus au cours du mois indiqué sur la carte tarifaire. Le prix proposé peut évoluer dans
+le courant du mois (en raison de la disponibilité fluctuante de l’électricité sur le marché, PAIEMENT ET FACTURATION
+
+par exemple). Le prix affiché sur le site internet et la carte tarifaire à la date de La signature de ce contrat ne peut se faire qu’en ligne. Le client choisit la méthode de
+souscription s’applique. Les formules tarifaires s’appliquent à tous les contrats conclus au paiement (domiciliation ou virement) ainsi que le mode d’envoi des factures (par e-mail ou
+cours du mois mentionné sur la carte tarifaire et au plus tard le dernier jour du quatrième par la poste).
+mois après la souscription.
+En ce qui concerne l’injection d’électricité sur le réseau, l’indice Belpex fait référence au En cas de retard de paiement, un premier rappel sera envoyé. En cas de non-paiement dans
+marché de l’électricité Epex Spot avec des cotations de prix belges. L’indice Belpex qui le délai indiqué dans le premier rappel, une lettre de mise en demeure sera envoyée et
+est calculé sur cette carte tarifaire est défini comme la moyenne des prix horaires « Day facturée 15 euros. En cas de retard de paiement, le client particulier est tenu de payer des
+Ahead » belges pondérée par le RLP. Le tableau ci-dessus indique le prix de vente basé intérêts moratoires au taux d’intérêt légal, le client professionnel, au taux d’intérêt stipulé
+sur la valeur Belpex la plus récente. Dans la facturation, l’injection par quart d’heure est dans la loi du 2 août 2002 concernant la lutte contre le retard de paiement dans les
+multipliée par la valeur Belpex pour ce quart d’heure. Si l’injection à facturer obtenue transactions commerciales. Lorsque la facture est transférée à un tiers, une indemnité
+auprès du gestionnaire de réseau ne contient pas de valeurs quart-horaires, nous forfaitaire de 10 % sur chaque montant impayé sera facturée, avec un minimum de
+redistribuerons l’injection selon le profil de 55 euros, à titre de compensation pour frais de recouvrement extrajudiciaires, et ce, sans
+production SPP (publication par Synergrid). préjudice d’autres dommages et intérêts.
+Bolt peut appliquer de nouveaux paramètres ou de nouveaux composants à la formule L'injection des mini-producteurs sera payée en même temps que la facture de
+tarifaire, à condition que les paramètres actuels ne soient plus représentatifs de la valeur régularisation, en soustraction du volume consommé. Sur demande du client professionnel,
+économique, soient supprimés, ne soient plus disponibles, ne soient pas publiés ou une facture séparée peut également être générée par autofacturation.
+soient publiés de manière irrégulière. Dans ce cas, Bolt s’efforcera de maintenir un niveau
+de prix équivalent. Le coût de l’énergie, qui varie en fonction de l’évolution des
+paramètres qui composent la formule tarifaire, est calculé sur la base de l’indice
+applicable pendant la période pour laquelle vous êtes facturé lors du calcul de votre
+injection réelle. Les montants mentionnés dans votre décompte peuvent donc différer
+des prix indiqués ci-dessus. Des frais de plateforme mensuels calculés au prorata par
+point raccordement (gaz et/ou électricité) sont également facturés. Ceux-ci couvrent les
+frais opérationnels fixes de Bolt. Si le contrat est résilié prématurément (= dans le
+courant de la première année de fourniture), les frais de plateforme mensuels pour
+l’année entière doivent être payés. Les frais de plateforme sont calculés sur toutes les
+factures d’acompte ou factures finales. Les tarifs susmentionnés pour l’utilisation du
+réseau sont les coûts approuvés par le régulateur compétent. Le montant des taxes,
+prélèvements, contributions et surtaxes sont les valeurs les plus récentes, publiées par le
+législateur au moment de la création des présentes conditions particulières. Toute
+modification de ces éléments sera facturée en totalité au prix coûtant tel que défini dans
+les conditions générales de vente. Cela peut également être fait rétroactivement.
+

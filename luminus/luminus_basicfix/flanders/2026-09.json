@@ -1,11 +1,11 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "pdf": "cards-2026-09/5db8182a6dd65cced158f7d5781065a96e207938a6cbf3512fa61cecd6e2b393.pdf",
+   "pdf": "5db8182a6dd65cced158f7d5781065a96e207938a6cbf3512fa61cecd6e2b393",
    "text": "texts/2026-09/5d2ba8e255e27c815f7a8a19db5cc97d19e8c5f626b25316274d51f317ec450f.txt",
    "url": "https://www.luminus.be/api-next/get-pricelist/?documentSlug=basicfix&energyType=electricity&language=fr&tabValue=Flanders",
    "variant": "plain"

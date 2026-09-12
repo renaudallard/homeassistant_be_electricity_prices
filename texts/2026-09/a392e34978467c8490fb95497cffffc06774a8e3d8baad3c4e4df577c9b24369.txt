@@ -1,0 +1,267 @@
+EMPOWER Variable (avec/sans Flextime)
+durée indéterminée
+Prix variables électricité pour les contrats conclus en Janvier 2026
+Pour les particuliers en Région Wallonne
+Prix, 6% de tva comprise(12)
+Composition du prix de votre énergie(6)
+Composition du prix de votre énergie(9)
+ Vos avantages
+- Tarif heures (super-)
+creuses extra bas
+- Electricité verte belge
+- Indexation mensuelle de
+votre prix de l’énergie
+variable, formule de prix de
+l’énergie garantie pendant
+une période d’un an
+ Services gratuits
+- Smart App (avec
+recompense pour votre
+recharge intelligente)(16)
+- Service client par téléphone
+ou en ligne
+- Réductions chez nos
+partenaires
+Prix de l'énergie variable- formule de prix de l'énergie garantie pour une période de 1 an (13)
+Redevance
+fixe(1)
+€/an
+Prix de consommation par kWh (c€/kWh)
+Coûts énergie
+verte(5)
+ (c€/kWh)Normal
+Bihoraire(17) Flextime(18)
+Exclusif
+nuitHeures
+pleines
+Heures
+creuses
+Heures
+pleines
+Heures
+creuses
+Heures
+super-creuses
+Prix mensuels
+85,00 Consommation(2) 12,976 14,104 10,604 15,931 11,576 8,765 11,430 3,095
+Injection(3) 4,169 4,169 4,169 7,805 3,982 1,174 -- --
+Prix annuels
+estimés
+85,00 Consommation(2) 12,289 13,375 10,040 15,101 10,976 8,292 10,857 3,095
+Injection(3) 3,572 3,572 3,572 6,684 3,412 1,009 -- --
+Partage de l’énergie(15)
+Coût administratif 121 €/an
+
+EMPOWER Variable (avec/sans Flextime)
+durée indéterminée
+Prix variables électricité pour les contrats conclus en Janvier 2026
+Pour les particuliers en Région Wallonne
+Prix, 6% de tva comprise(12)
+Coûts de réseaux (distribution et transport)(6)
+Gestionnaire
+du réseau
+de distribution
+Distribution
+Transport
+Normal
+Bihoraire * Impact **
+Exclusif
+Nuit
+Activité de
+mesure
+Tarif
+prosumer(7)
+Heures
+pleines
+Heures
+creuses PIC MEDIUM ECO
+c€/kWh c€/kWh c€/kWh c€/kWh c€/kWh c€/kWh c€/kWh €/an €/kWe/an c€/kWh
+AIEG 10,87 12,05 6,66 15,08 9,82 4,56 6,66 19,49 81,03 2,74
+AIESH 13,64 15,17 8,21 19,07 12,28 5,50 8,21 17,92 99,29 2,74
+ORES (Brab. Wal.) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Est) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Hainaut) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Luxembourg) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Mouscron) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Namur) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+ORES (Verviers) 11,98 13,27 7,39 16,57 10,83 5,09 7,39 14,10 85,84 2,74
+REGIE DE WAVRE 12,48 13,78 7,84 17,11 11,32 5,52 7,84 26,44 93,00 2,74
+TECTEO - RESA 11,06 12,20 7,01 15,11 10,05 4,99 7,01 26,50 84,22 2,74
+
+EMPOWER Variable (avec/sans Flextime)
+durée indéterminée
+Prix variables électricité pour les contrats conclus en Janvier 2026
+Pour les particuliers en Région Wallonne
+Prix, 6% de tva comprise(12)
+Suppléments
+Suppléments (c€/kWh)
+Cotisation sur l'énergie 0,20417
+Redevance raccordement(8) 0,07500
+Accise fédérale(11) (c€/kWh)
+Consommation entre 0 et 3.000 kWh 5,03288
+Consommation entre 3.000 et 20.000 kWh 5,03288
+Consommation entre 20.000 et 50.000 kWh 4,81876
+Consommation entre 50.000 et 1.000.000 kWh 4,74668
+(1) Sauf disposition contraire dans les conditions, la redevance fixe est
+facturée au prorata du nombre de jours effectifs de livraison (sur 365
+jours ou sur 366 jours lors d'une année bissextile). La redevance fixe
+n’est imputée que 1 seule fois chez les clients pour lesquels le
+prélèvement et l’injection appartiennent au même pack chez ENGIE.
+Pour les clients qui ne prennent qu'un pack pour l'injection, la
+redevance fixe sera calculée avec une TVA de 21% au lieu de 6%, ce
+qui donne une redevance fixe de 97,03€/an.
+(2) Le prix variable offert peut être modifié dans le courant du mois
+(p.ex. suite à des variations dans la disponibilité d’électricité sur le
+marché). Le prix valable est celui qui est affiché sur engie.be à la
+date de souscription du contrat. Les formules de prix sont valables
+pour tous les contrats conclus en Janvier 2026 et débutant au plus
+tard le dernier jour du 6e mois après la souscription du contrat.
+Le prix de l’électricité est indexé mensuellement. Le paramètre
+d’indexation est la moyenne arithmétique des cotations journalières
+Day Ahead EPEX SPOT Belgium (ci-après EPEXDAM) durant le mois
+de fourniture. Les cotations journalières EPEXDAM sont exprimées en
+€/MWh. La valeur du EPEXDAM du mois en cours ne sera connue
+qu'en fin de mois. À titre informatif, les prix indiqués sont basés sur
+la dernière valeur du EPEXDAM connue (Décembre 2025: 85,35
+€/MWh). Les valeurs historiques du EPEXDAM peuvent être
+consultées sur engie.be.
+Le paramètre EPEXDAM annuel estimé s’élève à 79,84 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/nl/faq/hoe-berekent-de-v-testr
+- d e - g e s c h a t t e - j a a r k o s t - v o o r - v a r i a b e l e - c o n t r a c t e n
+Les formules hors TVA d’application pour Janvier 2026 sont les
+suivantes:
+- Normal = 2,1955 + (0,1177 x EPEXDAM)
+- Tarif bihoraire heures pleines = 2,6455 + (0,1249 x EPEXDAM)
+- Tarif bihoraire heures creuses = 1,7508 + (0,0967 x EPEXDAM)
+- Flextime Heures pleines = 2,8921 + (0,1422 x EPEXDAM)
+- Flextime Heures creuses = 2,1471 + (0,1028 x EPEXDAM)
+- Flextime Heures super-creuses = 1,3471 + (0,0811 x EPEXDAM)
+- Exclusif nuit = 2,4014 + (0,0982 x EPEXDAM)
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(3) Le tarif d’injection correspond aux prix auxquels ENGIE achète votre
+électricité produite et injectée sur le réseau conformément aux
+Conditions Contractuelles de votre Contrat. Ce tarif s’applique
+uniquement pour les installations de production décentralisées
+situées en Belgique raccordées en basse tension et disposant d’un
+compteur intelligent ou bidirectionnel. En plus du tarif d’injection,
+une redevance fixe est due et sera facturée sauf si vous êtes déjà
+client chez ENGIE pour la livraison d’électricité, auquel cas vous
+payez une seule redevance fixe du tarif de consommation.
+Le prix d’injection n’est pas soumis à la TVA.
+Les prix d’injection sont indexés en utilisant le paramètre EPEXDAM.
+La valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de
+mois. À titre informatif, les prix indiqués sont basés sur la dernière
+valeur du EPEXDAM connue (Décembre 2025: 85,35 €/MWh).
+Les valeurs historiques du EPEXDAM peuvent être consultées sur
+engie.be.
+Le paramètre EPEXDAM annuel estimé s’élève à 73,04 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/nl/faq/hoe-berekent-de-v-testr
+-de-geschatte-jaarkost-voor-variabele-contracten
+Les formules hors TVA d’application pour Janvier 2026 sont les
+suivantes:
+- Normal = 0,0300 + (0,0485 x EPEXDAM)
+- Tarif bihoraire heures pleines = 0,0300 + (0,0485 x EPEXDAM)
+- Tarif bihoraire heures creuses = 0,0300 + (0,0485 x EPEXDAM)
+- Flextime Heures pleines = 0,0300 + (0,0911 x EPEXDAM)
+- Flextime Heures creuses = 0,0300 + (0,0463 x EPEXDAM)
+- Flextime Heures super-creuses = 0,0300 + (0,0134 x EPEXDAM).
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(5) Ces coûts sont calculés de la manière suivante: Q x Pc pour le coût
+énergie verte . Q correspond au pourcentage, tel que déterminé
+légalement, des prélèvements du client pour lequel ENGIE doit
+remettre des certificats d’énergie verte . Pc correspond au prix par
+certificat d’énergie verte et s’élève en Janvier 2026 à 73€.  Ce prix
+est hors TVA. Les coûts sont repris séparément sur la facture et sont
+adaptés en fonction des modifications légales.
+(6) Les coûts de réseau sont approuvés par la CREG et par la CWaPE.
+Concernant les tarifs de transport et de distribution d’électricité
+autres que pour la basse tension, veuillez-vous référer au site
+internet de la CWaPE
+Si vous optez pour la structure tarifaire incitative du gestionnaire de
+réseau, à partir du 1er janvier 2026, et qu’il n’est pas prévu de prix
+de l’énergie spécifique selon les tranches horaires définies par le
+gestionnaire du réseau dans votre contrat alors, le prix de l’énergie
+pour l’électricité consommée pendant les 2 plages horaires les plus
+chères, comme défini par le gestionnaire du réseau, est égal à celui
+du tarif bihoraire heures pleines. Et le prix de l’énergie pour
+l’électricité consommée pendant la plage horaire la moins chère,
+comme défini par le gestionnaire du réseau, est égal à celui du tarif
+bihoraire heures creuses.
+*A partir du 1er janvier 2026 : Heures pleines de 7 h à 11 h et de 17
+h à 22 h et, Heures creuses : de 22 h à 7 h et de 11 h à 17 h. Les
+horaires seront identiques en semaine et le week-end. Plus
+d’information : https://www.cwape.be/
+EMPOWER Variable (avec/sans Flextime)
+durée indéterminée
+Prix variables électricité pour les contrats conclus en Janvier 2026
+Pour les particuliers en Région Wallonne
+Prix, 6% de tva comprise(12)
+**A partir du 1er janvier 2026, le tarif ‘‘IMPACT’’ introduit une
+tarification incitative selon l’heure de la journée. Plus d’information :
+https://www.cwape.be/
+(7) Le tarif prosumer s’applique aux installations d’une puissance de
+production maximale de 10 kVA disposant d’un compteur d’électricité
+tournant à l’envers. Il est porté en compte au prorata de l’année
+civile. Vous trouverez davantage d’informations sur cwape.be.
+(8) Vous ne payez pas de TVA sur ces coûts.
+(9) Le calcul a été effectué en janvier 2024 pour un contrat EASY
+Variable sur la base d’une consommation privée de 3500 kWh/an en
+Wallonie. Prix 6% de tva comprise.
+(10) Vous trouverez plus d’informations sur vos paiements sur
+www.engie.be/fr/support/faq/facture/paiements.
+(11) Droit d’accise spécial d’application à partir du 01/01/2022 remplaçant
+les contributions pour les obligations de service public fédéral et la
+cotisation fédérale. Il est calculé sur base annuelle, suivant un tarif
+dégressif par tranche de consommation.
+(12) La TVA peut être adaptée en fonction des modifications légales.
+(13) Nous nous réservons le droit d’adapter chaque année votre prix de
+l’énergie variable ou fixe conformément à la procédure prévue par
+l'article "Modification des conditions et des prix" des Conditions
+Générales pour consommateurs, indépendamment d'une éventuelle
+durée minimale du Contrat.
+(15) Le terme « Partage d’énergie » couvre toutes les formes de partage
+d’énergie ou de vente d’énergie possible, autorisées dans votre
+région, comme par exemple la vente pair à pair, la vente pair à pair
+multiple, le partage d’énergie ou la vente d’énergie (ex. ACP) au sein
+d’un même immeuble d'habitation ou bâtiment polyvalent, ou le
+partage au sein d’une communauté d’énergie (d’énergie renouvelable
+ou citoyenne).
+Le coût administratif pour le Partage d’énergie est un coût annuel
+d’énergie facturé intégralement à tout client participant à une forme
+de Partage d’énergie ; il n’y a pas de facturation au prorata dans
+l’année. Le taux de TVA – inclus dans le prix - pour ce coût
+administratif est de 21%. Si 1 ou 2 EAN enregistrés pour un compte
+au nom d’un même client sont concernés, le coût administratif pour
+le Partage d’énergie n’est facturé qu’une seule fois. Si plus de 2 EAN
+enregistrés pour un compte au nom d’un même client sont
+concernés, le coût est facturé pour chacun de ces EAN.
+(16) Avec le contrat Empower, vous pouvez générer des gains pour un
+montant de 1,5c€/kWh en rechargeant votre VE intelligemment , à
+condition que votre voiture et/ou votre borne de recharge est
+compatible (voir conditions compatibilité sur
+engie.be/fr/ev-Récompense). Ces c€/kWh sont définis pour le mois
+et peuvent varier de mois en mois sans préavis de notre part. Vous
+pouvez vérifier le montant actuel des gains en allant sur :
+engie.be/fr/ev-Récompense.
+(17) Pour le tarif bihoraire, les Heures pleines et les Heures creuses sont
+celles   définies par les gestionnaires de réseaux.
+(18) Les prix de l’électricité du contrat Empower avec FLEXTIME varient
+en fonction de ces tranches horaires définies par ENGIE pour
+encourager une consommation d'électricité plus efficace et
+économique.
+Flextime Du lundi au vendredi Du samedi au
+dimanche
+Heures pleines 7h - 11h et 17h - 22h -
+Heures creuses 11h - 17h et 22h - 1h 7h - 11h et 17h - 1h
+Heures super-creuses 1h - 7h 1h - 7h et 11h - 17h
+Origine de l’électricité verte fournie dans le cadre de EMPOWER :
+sources d’énergie renouvelables belge (100%).
+Origine de la fourniture totale d’électricité pour Electrabel sa en
+Région Wallonne en 2023 : sources d'énergie renouvelables
+(22,22%),  combustibles fossiles (29,61%), nucléaire (48,17%).
+Frais de rappel et de mise en demeure (8) (10)
+Montants d’application à partir du 1er décembre 2023
+Frais de rappel (3 premiers gratuits) 7,50 €
+Mise en demeure 15,00 €

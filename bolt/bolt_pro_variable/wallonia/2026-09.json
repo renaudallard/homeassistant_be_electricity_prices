@@ -1,16 +1,16 @@
 {
- "_cached_at": "2026-09-11T23:04:45.728121+00:00",
+ "_cached_at": "2026-09-12T00:16:44.505808+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/bd436f079ae1ede0f3f618e8990f8c397ea59ec864eccaad78aa72e20ad6b464.txt",
+   "text": "texts/2026-09/61062eec946eec8fa1db6fe7167c831bdfcbd43aa4e6e58899b3aaff1f612eb5.txt",
    "url": "https://www.boltenergie.be/fr/listes-des-prix",
    "variant": "text"
   },
   {
-   "pdf": "cards-2026-09/96ddc5b107ce06d763a5288056e6412307a4c5ac26c3f13fd20ac898ecc14e76.pdf",
+   "pdf": "96ddc5b107ce06d763a5288056e6412307a4c5ac26c3f13fd20ac898ecc14e76",
    "text": "texts/2026-09/de411e3a729253220ce074f6787e4f4cacc034fa29a205ad6ed9938fbea3564d.txt",
    "url": "https://files.boltenergie.be/pricelists/var/bolt_pro_el_fr_13.pdf",
    "variant": "layout"

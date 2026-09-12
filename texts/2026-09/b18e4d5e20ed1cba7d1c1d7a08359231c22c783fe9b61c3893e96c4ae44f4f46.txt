@@ -1,0 +1,94 @@
+TARIEFKAART EBEM Groen Dyn@mic_26_04 / Energiedelen juli 2026
+Variabel internet-tarief* van onbepaalde duur voor levering aan particulieren en kleinzakelijk verbruik.
+EBEM Groen DYN@MIC
+EBEM EXCLUSIEF BTW INCLUSIEF BTW 6%
+VERSIE 2026 E07
+TARIEFFORMULE (c€/kWh) (c€/kWh)
+alle uren 0,108 Belpex15’ + 1,625 12,3337 13,0737
+injectie alle uren 0,0925 Belpex15’ - 1,10 7,2638
+Abonnement 66,04 €/jaar 70 €/jaar
+Gegarandeerde oorsprong geleverde stroom: 100% Belgische hernieuwbare energie. De energieprijzen DIT CONTRACT IS VAN
+zijn variabele tarieven, geïndexeerd volgens indexatieparameter Belpex15’. De tarieven voor de lopende maand ONBEPAALDE DUUR
+zijn uiteraard nog niet gekend en meer nog: u kan die zelf ook sturen. Op de tariefkaart, in de prijssimulator
+van Ebem en die van de V-test bij de VNR worden door de VNR ingeschatte parameters gebruikt die een
+prognose maken voor de volgende 12 maanden. In afwachting van de implementatie van de energie-
+prijscurve van de VNR gebruiken wij de -door de VNR berekende- maandrekenkundig gemiddeldes: 99,15457
+voor de afname en 90,41935 voor de injectie. Het Belpex kwartiertarief is van toepassing tijdens alle
+kwartieren. Meer informatie hierover vindt u in het "Mijn Ebem" platform op onze website. Alle
+abonnementen worden prorata afgerekend. Ebem Groen Dyn@mic is een tariefformule met een looptijd
+van onbepaalde duur. Ebem Groen Dyn@mic is enkel mogelijk indien u over een digitale meter beschikt
+met een SMR3-regime (kwartieruitlezing). Maandelijkse digitale facturatie is verplicht bij dit product. Uiterste
+startdatum is 6 maand na tekendatum contract.
+-B ijkomende voorwaarden voor dynamisch product:
+- Correspondentie en maandelijkse facturatie via elektronische weg zijn verplicht en worden automatisch toegepast.
+- Een digitale meter met kwartier-uitlezing is een absolute voorwaarde bij dit tarief.
+- Enkel mogelijk via inschrijvingen via de website.
+EXCLUSIEF BTW INCLUSIEF BTW 6%
+ENERGIEDELEN
+(c€/kWh) (c€/kWh)
+Vaste vergoeding 80 €/jaar 96,80 €/jaar
+Bijkomende voorwaarden Energiedelen:
+- Er wordteen jaarlijkse vergoeding i.v.m. databeheer van 80 € excl. BTW aangerekend zowel bij de producerende als de afnemende
+partij: deze hoeven evenwel niet beiden bij Ebem klant te zijn.
+- De leverpunten waarvoor u Energiedelen wenst toe te passen, zijn uitsluitend gelegen in het Vlaams Gewest.
+- Energiedelen kan bij Ebem uitsluitend in combinatie met dynamische prijszetting en het EBEM Groen Dyn@mic-tarief. Digitale meter,
+SMR3-regime met dynamisch tarief en maandelijkse afrekening zijn verplicht. Er wordt niet met voorschotten gewerkt.
+- De communicatie en facturatie verlopen uitsluitend digitaal.
+- Ebem maakt 2 keer per jaar (semestrieel) een correctiefactuur op over de voorafgaande periode van 6 maanden.
+- Deze overeenkomst is van onbepaalde duur en is geldig gedurende de hele looptijd van uw reguliere leveringsovereenkomst.
+- Meer gedetailleerde informatie vindt u in onze algemene voorwaarden.
+Ebem bvba • Leopoldstraat 10 bus 001• B-2330 Merksplas tel 014 43 10 31 fax 014 43 10 32 info@ebem.be
+www.ebem.be RPR Turnhout • BTW BE 0477 065 004 IBAN BE25 0910 1690 2782 • BIC GKCCBEBB
+DUURZAAM
+Bijdrage voor groene stroom en WKK in Vlaanderen in 2026
+Deze bijdrage dient ter ondersteuning van de investeringen in groene stroom en warmtekrachtkoppeling (WKK). De quota hiervoor
+worden opgelegd door de Vlaamse overheid en gelden voor alle leveranciers. Ebem rekent u, op transparante wijze, louter de werkelijke
+verwervingskosten van deze certifi ca ten door via uw afrekenfactuur.:
+Bijdrage groene stroom: 1,100 c€/kWh
+Bijdrage WKK: 0,420 c€/kWh
+Totale bijdrage: 1,520 c€/kWh excl. BTW
+1,6112 c€/kWh incl. BTW 6%
+Nettarieven elektriciteit (incl. 6% BTW)
+Dit is de kost voor het gebruik van de distributie- en transportnetten en wordt integraal doorgestort aan uw netbeheerder.
+DIGITALE METER
+NETBEHEERDER CAPACITEITSTARIEF NETKOSTEN NETKOSTEN TARIEF
+GEMIDDELDE in c€/kWh EXCL NACHT DATABEHEER
+MAANDPIEK in c€/kWh in €/jaar
+in €/kW piek
+Fluvius Antwerpen 52,37 5,24 4,81 18,92
+Fluvius Halle Vilvoorde 59,41 5,64 5,12 18,92
+Fluvius Imewo 57,45 5,54 5,01 18,92
+Fluvius Kempen 59,58 6,34 5,66 18,92
+Fluvius Limburg 51,99 5,75 5,19 18,92
+Fluvius Midden-Vlaanderen 53,13 5,28 4,78 18,92
+Fluvius West 60,53 6,70 5,99 18,92
+Fluvius Zenne-Dijle 59,49 5,87 5,32 18,92
+Belastingen, heffingen en toeslagen
+Deze kost wordt integraal doorgestort aan de bevoegde overheden.
+BIJDRAGE ENERGIEFONDS TARIEF PER ENERGIEBIJDRAGE BIJZONDERE ACCIJNZEN INCL BTW
+VLAAMS GEWEST afnamepunt/maand (INCL. BTW) (c€/kWh) Staffel
+vanaf 1 januari 2026 (0% BTW)
+Huishoudelijk (incl BTW)
+Huishoudelijk (incl BTW)
+Beschermende klanten, klanten met 0-3 MWH 5,0329 c€/kWh
+actieve budgetmeter of stroombegrenzer €0 0,20417 3-20 MWh 5,0329 c€/kWh
+Residentiële klanten laagspanning €0 20-50 MWh 4,8188 c€/kWh
+Zakelijk (excl BTW)
+Niet-residentiële klanten laagspanning €10,07 50-1000 MWh 4,7467 c€/kWh
+Klanten middenspanning €192,11 0,19261
+Sociaal Tarief
+geen 2,5037
+Zakelijk (excl BTW)
+• Op de tariefkaart worden getallen afgerond op 2 cijfers na de komma. De “Bijzondere
+0- 20 MWh 1,421 c€/kWh
+Accijns” werd ingevoerd vanaf 01/01/2022. De overige bedragen zijn, met uitzondering van
+de bijdrage energiefonds, inclusief BTW en toepasbaar vanaf 01/01/2026. BTW bedraagt 20-50 MWH 1,209 c€/kWh
+6% voor huishoudelijke klanten en 21% voor zakelijke klanten. Ebem rekent de nettarieven, 50-1000 MWh 1,139 c€/kWh
+belastingen, heffingen en toeslagen door zoals goedgekeurd door de CREG en de
+bevoegde overheden, en gepubliceerd door de bevoegde netbeheerders. De toeslagen
+worden opgelegd door de bevoegde overheid en via de netbeheerder doorgerekend aan
+de eindklant. Deze tariefkaart is enkel geldig voor laagspanningsaansluitingen met een
+aansluitvermogen van maximaal 56 kVA.
+Ebem bv • Leopoldstraat 10 bus 001 • B-2330 Merksplas tel 014 43 10 31 fax 014 43 10 32 info@ebem.be
+www.ebem.be RPR Turnhout • BTW BE 0477 065 004 IBAN BE25 0910 1690 2782 • BIC GKCCBEBB
+DUURZAAM

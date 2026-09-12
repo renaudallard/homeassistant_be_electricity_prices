@@ -1,0 +1,237 @@
+FLOW Variable 2 ans
+Prix variables électricité pour les contrats conclus en Avril 2026
+Pour les particuliers en Région Flamande
+Prix, 6% de tva comprise(12)
+Composition du prix de votre énergie(6)
+Composition du prix de votre énergie(9)
+ Vos avantages
+- Prix variable, adapté
+mensuellement
+- Formule de prix garantie 2
+ans
+- Électricité 100% verte
+Services gratuits
+- Service client en ligne et
+hors ligne 5 étoiles
+- Suivez les prix et contrôlez
+votre consommation grâce à
+la Smart App
+- Facture électronique par
+défaut
+Prix d'énergie Variable - 2 ans
+Redevance
+fixe(1) Prix par kWh (c€/kWh)
+Coûts énergie verte
+&
+cogénération(5)
+59,00 €/an Type
+d'usage Normal Bihoraire
+Heures pleines
+Bihoraire
+Heures creuses
+Exclusif
+Nuit (c€/kWh)
+Prix Consommation(2) 14,117 15,118 12,460 12,460 1,582
+mensuels Injection(3) 4,918 4,918 4,918
+Prix annuels estimés
+Consommation(2) 16,374 17,561 14,396 14,396 1,582
+Injection(3) 5,547 5,547 5,547
+Partage de l’énergie(15)
+Coût administratif 121 €/an
+
+FLOW Variable 2 ans
+Prix variables électricité pour les contrats conclus en Avril 2026
+Pour les particuliers en Région Flamande
+Prix, 6% de tva comprise(12)
+Coûts de réseaux (distribution et transport)(6)
+Région Flamande Compteur digital
+Gestionnaire du
+réseau de distribution
+Distribution**
+Tarif capacitaire
+moyenne des pics
+mensuels*
+Total tarif-kWh Total tarif-kWh
+exclusif nuit
+Tarif gestion de données
+régime de mesure :
+quart-horaire
+Tarif gestion de données
+régime de mesure :
+mensuel/annuel
+€/kW/an c€/kWh c€/kWh €/an €/an
+FLUVIUS ANTWERPEN 52,3679 5,35329 4,81301 18,92 18,92
+FLUVIUS HALLE-VILVOORDE 59,4055 5,63676 5,11873 18,92 18,92
+FLUVIUS IMEWO 57,4530 5,54236 5,01405 18,92 18,92
+FLUVIUS KEMPEN 59,5794 6,33708 5,66060 18,92 18,92
+FLUVIUS LIMBURG 51,9898 5,75257 5,18714 18,92 18,92
+FLUVIUS MIDDEN-VLAANDEREN 53,1314 5,27945 4,77831 18,92 18,92
+FLUVIUS WEST 60,5255 6,69853 5,99282 18,92 18,92
+FLUVIUS ZENNE-DIJLE 59,4902 5,87156 5,31543 18,92 18,92
+Cette liste de prix comprend les tarifs du réseau de distribution incluant déjà les coûts de transport.
+Région Flamande Compteur analogique
+Gestionnaire du
+réseau de distribution
+Distribution
+Tarif capacitaire
+terme fixe Total tarif-kWh Total tarif-kWh
+exclusif nuit
+Tarif gestion de
+données
+régime de mesure :
+mensuel/annuel
+Tarif prosumer
+(7)
+€/an c€/kWh c€/kWh €/an €/kW/an
+FLUVIUS ANTWERPEN 130,9206 8,08740 7,54713 18,92 54,63
+FLUVIUS HALLE-VILVOORDE 148,5166 9,27519 8,75716 18,92 62,66
+FLUVIUS IMEWO 143,6300 8,89956 8,37125 18,92 60,12
+FLUVIUS KEMPEN 148,9512 10,03456 9,35808 18,92 67,79
+FLUVIUS LIMBURG 129,9772 9,23466 8,66923 18,92 62,38
+FLUVIUS MIDDEN-VLAANDEREN 132,8286 8,76771 8,26657 18,92 59,23
+FLUVIUS WEST 151,3150 10,30109 9,59537 18,92 69,56
+FLUVIUS ZENNE-DIJLE 148,7286 9,69614 9,14001 18,92 65,51
+Cette liste de prix comprend les tarifs du réseau de distribution incluant déjà les coûts de transport.
+
+FLOW Variable 2 ans
+Prix variables électricité pour les contrats conclus en Avril 2026
+Pour les particuliers en Région Flamande
+Prix, 6% de tva comprise(12)
+Suppléments
+Suppléments (c€/kWh)
+Cotisation sur l'énergie 020417
+Cotisation Fonds Energie Région Flamande(8) (€/mois)
+Résidentiel (avec domicile) 0,00
+Résidentiel (sans domicile) 10,07
+Accise fédérale(11) (c€/kWh)
+Consommation entre 0 et 3.000 kWh 5,03288
+Consommation entre 3.000 et 20.000 kWh 5,03288
+Consommation entre 20.000 et 50.000 kWh 4,81876
+Consommation entre 50.000 et 1.000.000 kWh 4,74668
+(1) Sauf disposition contraire dans les conditions, la redevance fixe est
+facturée au prorata du nombre de jours effectifs de livraison (sur 365
+jours ou sur 366 jours lors d'une année bissextile). La redevance fixe
+n’est imputée que 1 seule fois chez les clients pour lesquels le
+prélèvement et l’injection appartiennent au même pack chez ENGIE.
+Pour les clients qui ne prennent qu'un pack pour l'injection, la
+redevance fixe sera calculée avec une TVA de 21% au lieu de 6%, ce
+qui donne une redevance fixe de 67,35€/an.
+(2) Le prix variable offert peut être modifié dans le courant du mois
+(p.ex. suite à des variations dans la disponibilité d’électricité sur le
+marché). Le prix valable est celui qui est affiché sur engie.be à la
+date de souscription du contrat. Les formules de prix sont valables
+pour tous les contrats conclus en Avril 2026 et débutant au plus tard
+le dernier jour du 6e mois après la souscription du contrat.
+Le prix de l’électricité est indexé mensuellement. Le paramètre
+d’indexation est la moyenne arithmétique des cotations journalières
+Day Ahead EPEX SPOT Belgium (ci-après EPEXDAM) durant le mois
+de fourniture. Les cotations journalières EPEXDAM sont exprimées en
+€/MWh. La valeur du EPEXDAM du mois en cours ne sera connue
+qu'en fin de mois. À titre informatif, les prix indiqués sont basés sur
+la dernière valeur du EPEXDAM connue (Mars 2026: 92,57 €/MWh).
+Les valeurs historiques du EPEXDAM peuvent être consultées sur
+engie.be.
+Le paramètre EPEXDAM annuel estimé s’élève à 110,75 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+- e n - a a r d g a s
+Les formules hors TVA d’application pour Avril 2026 sont les
+suivantes:
+- Normal = 2,4780 + (0,1171 x EPEXDAM)
+- Tarif bihoraire heures pleines = 2,5240 + (0,1268 x EPEXDAM)
+- Tarif bihoraire heures creuses = 2,4510 + (0,1005 x EPEXDAM)
+- Exclusif nuit = 2,4510 + (0,1005 x EPEXDAM)
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(3) Le tarif d’injection correspond aux prix auxquels ENGIE achète votre
+électricité produite et injectée sur le réseau conformément aux
+Conditions Contractuelles de votre Contrat. Ce tarif s’applique
+uniquement pour les installations de production décentralisées
+situées en Belgique raccordées en basse tension et disposant d’un
+compteur intelligent ou bidirectionnel. En plus du tarif d’injection,
+une redevance fixe est due et sera facturée sauf si vous êtes déjà
+client chez ENGIE pour la livraison d’électricité, auquel cas vous
+payez une seule redevance fixe du tarif de consommation.
+Le prix d’injection n’est pas soumis à la TVA.
+Les prix d’injection sont indexés en utilisant le paramètre EPEXDAM.
+La valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de
+mois. À titre informatif, les prix indiqués sont basés sur la dernière
+valeur du EPEXDAM connue (Mars 2026: 92,57 €/MWh).
+Les valeurs historiques du EPEXDAM peuvent être consultées sur
+engie.be.
+Le paramètre EPEXDAM annuel estimé s’élève à 104,50 €/MWh pour
+ce mois-ci selon la méthodologie de la Vlaamse Nutsregulator :
+https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/energi
+eprijzen-en-facturen/waaruit-bestaat-de-energieprijs-voor-elektriciteit
+-en-aardgas
+Les formules hors TVA d’application pour Avril 2026 sont les
+suivantes:
+- Normal = 0,0300 + (0,0528 x EPEXDAM)
+- Tarif bihoraire heures pleines = 0,0300 + (0,0528 x EPEXDAM)
+- Tarif bihoraire heures creuses = 0,0300 + (0,0528 x EPEXDAM)
+Le résultat de ces formules est un montant exprimé en c€/kWh.
+(5) Ces coûts sont calculés de la manière suivante: Q x Pc pour le coût
+énergie verte et le coût cogénération. Q correspond au pourcentage,
+tel que déterminé légalement, des prélèvements du client pour lequel
+ENGIE doit remettre des certificats d’énergie verte et des certificats
+de cogénération. Pc correspond au prix par certificat d’énergie verte
+et s’élève à 100€. Le prix par certificat de cogénération s'élève à 28
+€. Ces prix sont hors TVA. Les coûts sont repris séparément sur la
+facture et sont adaptés en fonction des modifications légales.
+(6) Les coûts de réseau sont approuvés par la CREG et par la Vlaamse
+Nutsregulator. Concernant les tarifs de transport et de distribution
+d’électricité autres que pour la basse tension, veuillez-vous référer au
+site internet de la Vlaamse Nutsregulator
+(7) Le tarif prosumer s’applique aux installations d’une puissance de
+production maximale de 10 kVA disposant d’un compteur d’électricité
+tournant à l’envers. Il est porté en compte au prorata de l’année
+civile. Vous trouverez davantage d’informations sur
+vlaamsenutsregulator.be.
+(8) Vous ne payez pas de TVA sur ces coûts.
+(9) Le calcul a été effectué en janvier 2026 pour un contrat EASY
+Variable sur la base d’une consommation privée de 3500 kWh/an en
+Flandre. Prix 6% de tva comprise.
+(10) Vous trouverez plus d’informations sur vos paiements sur
+www.engie.be/fr/support/faq/facture/paiements.
+(11) Droit d’accise spécial d’application à partir du 01/01/2022 remplaçant
+les contributions pour les obligations de service public fédéral et la
+cotisation fédérale. Il est calculé sur base annuelle, suivant un tarif
+dégressif par tranche de consommation.
+FLOW Variable 2 ans
+Prix variables électricité pour les contrats conclus en Avril 2026
+Pour les particuliers en Région Flamande
+Prix, 6% de tva comprise(12)
+(12) La TVA peut être adaptée en fonction des modifications légales.
+(15) Le terme « Partage d’énergie » couvre toutes les formes de partage
+d’énergie ou de vente d’énergie possible, autorisées dans votre
+région, comme par exemple la vente pair à pair, la vente pair à pair
+multiple, le partage d’énergie ou la vente d’énergie (ex. ACP) au sein
+d’un même immeuble d'habitation ou bâtiment polyvalent, ou le
+partage au sein d’une communauté d’énergie (d’énergie renouvelable
+ou citoyenne).
+Le coût administratif pour le Partage d’énergie est un coût annuel
+d’énergie facturé intégralement à tout client participant à une forme
+de Partage d’énergie ; il n’y a pas de facturation au prorata dans
+l’année. Le taux de TVA – inclus dans le prix - pour ce coût
+administratif est de 21%. Si 1 ou 2 EAN enregistrés pour un compte
+au nom d’un même client sont concernés, le coût administratif pour
+le Partage d’énergie n’est facturé qu’une seule fois. Si plus de 2 EAN
+enregistrés pour un compte au nom d’un même client sont
+concernés, le coût est facturé pour chacun de ces EAN.
+(*)Si votre "pic mensuel" est inférieur à 2,5 kW, vous serez facturé
+en tout cas avec un minimum de 2,5 kW selon les règles de la
+Vlaamse Nutsregulator
+(https://www.vlaamsenutsregulator.be/elektriciteit-en-aardgas/nettar
+ieven/capaciteitstarief)
+(**)Si la somme de votre tarif capacitaire et votre total du tarif-kWh
+est supérieure au tarif maximum, qui est de 34,72738 c€/kWh, vous
+payerez au maximum ce tarif plafonné. Le traitement des données
+tarifaires n'a pas été pris en compte dans le tarif maximum.
+Origine de l’électricité verte fournie dans le cadre de FLOW : sources
+d’énergie renouvelables (100%).
+Origine de la fourniture totale d’électricité pour Electrabel sa en
+Région Flamande en 2024 : sources d'énergie renouvelables
+(30,04%), combustibles fossiles (23,78%), nucléaire (46,18%).
+Frais de rappel et de mise en demeure (8) (10)
+Montants d’application à partir du 1er décembre 2023
+Frais de rappel (3 premiers gratuits) 7,50 €

@@ -1,0 +1,113 @@
+TARIEFKAART EBEM Groen Variabel_26_04 juni 2026
+Variabel per maand,van onbepaalde duur,voor levering aan particulieren en klein zakelijk verbruik
+EBEM GESCHATTE GESCHATTE
+VERSIE2026 E06 EXCL. BTW INCL. BTW 6%
+TARIEFFORMULE JAARPRIJS JAARPRIJS
+(type verbruik) (c€/kWh) (c€/kWh)
+(variabel tarief) EXCL. BTW INCL. BTW 6%
+Enkelvoudige teller 0,110 Belpex + 2,2 13,0922 13,8777 13,8147 14,6435
+RLP0
+Dubbele teller piek 0,120 Belpex + 2,2 14,0824 14,9273 14,8705 15,7628
+RLP0
+Dubbele teller dal 0,099 Belpex + 2,2 12,0030 12,7232 12,6532 13,4124
+RLP0
+Exclusief nacht 0,099 Belpex + 2,2 12,0030 12,7232 12,6532 13,4124
+RLP0
+Injectie alle uren 0,0925 Belpex - 1,25 2,6692 4,4855
+SPP0
+Vaste vergoeding (jaarlijkse vaste bijdrage) 80,19 €/jaar 85,00 €/jaar
+Vaste vergoeding exclusief nacht 33,06 €/jaar 35,04 €/jaar
+Gegarandeerde oorsprong geleverde stroom: 100% Belgische hernieuwbare energie. De energieprijzen zijn DIT CONTRACT IS VAN
+variabele tarieven, geïndexeerd volgens indexatieparameter Belpex. Voor de huidige maand is deze index nog
+ONBEPAALDE DUUR
+niet gekend, vorige maand bedroeg deze index 99,02. In de prijssimulator van Ebem en die van de V-test bij de VNR
+wordt een door de VNR ingeschatte parameter voor het toekomstige jaar gebruikt: 105,58785.
+Weging gebeurt met het gemiddelde van de RLP’s in Vlaanderen van Synergrid. Voor de injectie is dit op basis van het
+SPP0-lastprofiel. De SPP0 vorige maand bedroeg 42,37. In de simulator van Ebem en bij de VNR
+wordt 62,00534 als inschatting gebruikt. Meer uitleg hierover vindt u op onze website.
+Alle abonnementen wordenprorata afgerekend. Ebem Groen Variabel is een tariefformule met een
+looptijd van onbepaalde duur. Uiterste startdatum is 6 maand na tekendatum contract.
+TARIEFKAART EBEM Groen B@sic+_26_04 juni 2026
+Variabel internet-tarief* van onbepaalde duur voor levering aan particulieren en kleinzakelijk verbruik.
+GESCHATTE GESCHATTE
+EBEM EXCL. BTW INCL. BTW 6%
+VERSIE2026 E06 JAARPRIJS JAARPRIJS
+TARIEFFORMULE (c€/kWh) (c€/kWh)
+EXCL. BTW INCL. BTW 6%
+Verbruik alle uren 0,110 Belpex + 2,0 12,8922 13,6657 13,6147 14,4315
+RLP0
+Injectie alle uren 0,0925 Belpex - 1,25 2,6692 4,4855
+SPP0
+Abonnement 66,04 €/jaar 70 €/jaar
+Gegarandeerde oorsprong geleverde stroom: 100% Belgische hernieuwbare energie. De energieprijzen DIT CONTRACT IS VAN
+zijn variabele tarieven, geïndexeerd volgens indexatieparameter Belpex. Voor de huidige maand is deze index
+ONBEPAALDE DUUR
+nog niet gekend, vorige maand bedroeg deze index 99,02. In de prijssimulator van Ebem en die van de V-test
+bij de VNR wordt een door de VNR ingeschatte parameter voor het toekomstige jaar gebruikt:
+105,58785. Weging gebeurt met het gemiddelde van de RLP’s in Vlaanderen van Synergrid. Voor de
+injectie is dit op basis van het SPP0-lastprofiel. De SPP0 vorige maand bedroeg 42,37. In
+de simulator en bij de VNR is de inschatting 62,00534. Meer uitleg hierover vindt u
+op onze website. Alle abonnementen worden prorata afgerekend. Ebem Groen B@sic +
+is een tariefformule met een looptijd van onbepaalde duur. Exclusief-nacht vergoeding
+bedraagt 33,06 €/jaar (35,04 € incl BTW). Uiterste startdatum is 6 maand na tekendatum contract.
+Bijkomende voorwaarden voor dit product:
+- *Correspondentie en facturatie via elektronische weg worden aanbevolen en automatisch toegepast.
+- Enkel mogelijk via inschrijvingen via de website.
+Bijdrage voor groene stroom en WKK in Vlaanderen in 2026
+Deze bijdrage dient ter ondersteuning van de investeringen in groene stroom en warmtekrachtkoppeling (WKK). De quota hiervoor
+worden opgelegd door de Vlaamse overheid en gelden voor alle leveranciers. Ebem rekent u, op transparante wijze, louter de werkelijke
+verwervingskosten van deze certifi caten door via uw afrekenfactuur.:
+Bijdrage groene stroom: 1,100 c€/kWh
+Bijdrage WKK: 0,420 c€/kWh
+Totale bijdrage: 1,520 c€/kWh excl. BTW
+1,6112 c€/kWh incl. BTW 6%
+Ebem biedt voorlopig geen vaste contracten meer aan.
+Nettarieven elektriciteit (incl. 6% BTW)
+Dit is de kost voor het gebruik van de distributie- en transportnetten en wordt integraal doorgestort aan uw netbeheerder.
+ANALOGE METER
+NETBEHEERDER CAPACITEITSTARIEF NETKOSTEN NETKOSTEN TARIEF PROSUMENTEN-
+VASTE TERM in c€/kWh EXCL NACHT DATABEHEER TARIEF
+2,5kW in €/jaar in c€/kWh in €/jaar in €/kWe/jaar
+Fluvius Antwerpen 130,92 8,09 7,55 18.92 54,63
+Fluvius Halle Vilvoorde 148,52 9,28 8,76 18,92 62,66
+Fluvius Imewo 143,63 8,90 8,37 18,92 60,12
+Fluvius Kempen 148,95 10,04 9,36 18,92 67,79
+Fluvius Limburg 129,98 9,23 8,67 18,92 62,38
+Fluvius Midden-Vlaanderen 132,83 8,77 8,27 18,92 59,23
+Fluvius West 151,32 10,30 9,60 18,92 69,59
+Fluvius Zenne-Dijle 148,73 9,70 9,14 18,92 65,51
+DIGITALE METER
+NETBEHEERDER CAPACITEITSTARIEF NETKOSTEN NETKOSTEN TARIEF
+GEMIDDELDE in c€/kWh EXCL NACHT DATABEHEER
+MAANDPIEK in c€/kWh in €/jaar
+in €/kW piek
+Fluvius Antwerpen 52,37 5,35 4,81 18,92
+Fluvius Halle Vilvoorde 59,41 5,64 5,12 18,92
+Fluvius Imewo 57,45 5,54 5,01 18,92
+Fluvius Kempen 59,58 6,34 5,66 18,92
+Fluvius Limburg 51,99 5,75 5,19 18,92
+Fluvius Midden-Vlaanderen 53,13 5,28 4,78 18,92
+Fluvius West 60,53 6,70 5,99 18,92
+Fluvius Zenne-Dijle 59,49 5,87 5,32 18,92
+Belastingen, heffingen en toeslagen
+Deze kost wordt integraal doorgestort aan de bevoegde overheden.
+BIJDRAGE ENERGIEFONDS TARIEF PER ENERGIEBIJDRAGE BIJZONDERE ACCIJNZEN INCL BTW
+VLAAMS GEWEST afnamepunt/maand (INCL. BTW) (c€/kWh) Staffel
+vanaf 1 januari 2026 (0% BTW)
+Huishoudelijk (incl BTW)
+Huishoudelijk (incl BTW)
+Beschermende klanten, klanten met €0 0,20417 0-3 MWH 5,0329 c€/kWh
+actieve budgetmeter of stroombegrenzer 3-20 MWh 5,0329 c€/kWh
+Residentiële klanten laagspanning €0 Zakelijk (excl BTW) 20-50 MWh 4,8188 c€/kWh
+Niet-residentiële klanten laagspanning €10,07 0,19261 50-1000 MWh 4,7569 c€/kWh
+Klanten middenspanning €192,11 Sociaal Tarief
+geen 2,5037
+• Op de tariefkaart worden getallen afgerond op 2 cijfers na de komma. De “Bijzondere Accijns”werd
+Zakelijk (excl BTW)
+ingevoerd vanaf 01/01/2022. De overige bedragen zijn, met uitzondering van de bijdrage energiefonds,
+inclusief BTW en toepasbaar vanaf 01/01/2026. BTW bedraagt 6% voor huishoudelijke klanten en 21% voor 0- 20 MWh 1,421 c€/kWh
+zakelijke klanten. Ebem rekent de nettarieven, belastingen, heffingen en toeslagen door zoals goedgekeurd
+door de CREG en de bevoegde overheden, en gepubliceerd door de bevoegde netbeheerders. De toeslagen 20-50 MWH 1,209 c€/kWh
+worden opgelegd door de bevoegde overheid en via de netbeheerder doorgerekend aan de eindklant. 50-1000 MWh 1,139 c€/kWh
+Deze tariefkaart is enkel geldig voor laagspanningsaansluitingen met een aansluitvermogen van
+maximaal 56 kVA of voor jaargemeten laagspanningsaansluitingen met een analoge meter.

@@ -1,0 +1,407 @@
+ 
+Electricité
+ 
+Energie (c€/kWh)
+Electricité 100% verte
+Cosy
+Fixed
+(Fixe)
+Injection
+(Fixe)
+Compteur mono-horaire
+17.25
+2.35
+Compteur
+bi-horaire
+Tarif jour
+19.67
+2.35
+Tarif nuit
+15.51
+2.35
+Exclusif nuit
+15.51
+0
+Redevance fixe (€/an)
+143.1
+0
+Forfait panneaux solaires
+(€/kVA par mois)
+6.75
+0
+Forfait partage d'énergie
+(€/an)
+90,75
+0
+- 
+Le produit Cosy comprend un service dédié en ligne ou par
+téléphone chez Mega.
+- 
+En souscrivant à un nouveau contrat Cosy Fixed, vous bénéficiez
+d'une ristourne (*) composée d'une réduction de 0,848 c€/kWh
+(TVA de 6% incluse) sur le prix de l’énergie de Cosy Fixed, tel que
+mentionné sur la carte tarifaire, pour votre première année de
+consommation nette d'électricité et d'une réduction de 74,2 €
+(TVA de 6% incluse) sur la redevance fixe de Cosy Fixed (soit une
+réduction de base de 31,8 € + 42,4 € supplémentaires en cas de
+paiement par domiciliation bancaire), comme mentionné sur la
+carte tarifaire, pour votre première année de souscription à ce
+produit. Le montant total de la ristourne est plafonné à 848 €
+(TVA de 6% incluse). Si vous injectez de l’énergie, en régime de
+commercialisation contrainte, vous pouvez également bénéficier
+d’un bonus (**) de 1,06 c€/kWh (TVA de 6% incluse) sur le prix de
+l’énergie de Cosy Fixed, comme mentionné sur la carte tarifaire,
+pour votre injection sur le réseau de distribution pour votre
+première année de souscription à ce produit
+Carte tarifaire
+Client résidentiel - Wallonie
+Votre contrat de fourniture d’électricité 100% verte à durée indéterminée comprend les présentes conditions tarifaires ainsi que
+le formulaire d'inscription complété par vos soins et les 
+conditions générales de Mega
+ accessibles sur le site www.mega.be.
+Nous sommes à votre disposition pour tout renseignement complémentaire sur nos tarifs.
+Les prix qui vous sont facturés en vertu de votre contrat sont constitués de 4 parties :
+1
+. 
+Le coût de l'énergie (MEGA)
+2
+. 
+Les coûts énergie verte (certificats verts, etc.)
+3
+. 
+Les tarifs des réseaux
+4
+. 
+Les impôts, taxes, surcharges, contributions (fixés par les pouvoirs publics)
+Répartition des coûts *
+Energie MEGA
+Réseaux
+Taxes et Surcharges
+Coûts énergie verte
+TVA
+Coût de l'énergie, redevance annuelle (1)
+- Les prix d’injection sont exemptés de TVA.
+- Si vous êtes éligible au Tarif Social, vous trouverez plus d'informations sur le montant et le tarif social en tant que tel sur le site web de la CREG.
+- Le forfait panneaux solaires est facturé pour un point de raccordement avec une installation photovoltaïque et sous le régime de la compensation
+(énergie injectée soustraite de l’énergie consommée). Le nombre de kVA correspond à la puissance de votre onduleur, communiquée par votre
+gestionnaire de réseau.
+- Tarif d'injection : dans le cas où vous avez souscrit au tarif fixe pour votre consommation, le prix de rachat de votre énergie injectée sur le réseau sera
+fixé également pour une durée d'un an.
+- La redevance fixe est payée par année de contrat entamée, quelle que soit la durée de la livraison en énergie par Mega (le contrat étant à durée
+indéterminée).
+- Le forfait partage d’énergie est un coût annuel par point d’accès faisant l’objet d'un partage d’énergie. Celui-ci est facturé au prorata du nombre de
+jours pendant lesquels le partage de l’énergie est actif sur ce point d’accès quelle que soit la durée de votre contrat. Il est soumis à 21% de TVA.
+- Si vous optez pour la structure tarifaire incitative à trois niveaux (éco / medium / pic) mise en place par le gestionnaire de réseau à partir du 1er
+janvier 2026 et qu’aucun prix d’énergie spécifique n’est prévu dans votre contrat pour ces tranches horaires, vos consommations seront facturées
+comme suit : 
+- plages “medium” et “pic”: tarif bi-horaire heures pleines ; 
+- plage “éco” : tarif bi-horaire heures creuses. 
+Cette option est réservée aux clients Basse Tension(<= 56 kVA) équipés d’un compteur digital communicant activé.
+Si vous disposez d'un compteur bihoraire, votre consommation de jour et de nuit est comptabilisée différemment selon l'heure de la journée et de la
+nuit : Heures pleines (tarif jour) : 7h–11h & 17h–22h ; Heures creuses (tarif nuit) : 11h–17h & 22h–7h. Cet horaire est applicable tous les jours sans
+distinction (jours ouvrables, weekend et jours fériés).
+- Le prix de l'électricité fixe, est fixe pour la durée du prix garanti selon vos conditions contractuelles. Ce prix est garanti pour une durée d'un an.
+(*) La ristourne vous est uniquement accordée après une année ininterrompue de consommation au tarif Cosy Fixed de Mega et octroyée sur la
+première facture de régularisation après cette année, pour autant que, tout au long du contrat, vous ayez payé vos factures sans le moindre retard. Si
+vos paiements ne sont pas effectués par domiciliation bancaire, la ristourne sur la redevance fixe sera diminuée de 42,4 euros (TVA de 6% incluse) par
+contrat. Cette ristourne est unique et ne peut être cumulée avec d’autres promotions ou réductions. Elle s’applique sur votre consommation lors des 12
+premiers mois de contrat, telle que déterminée par votre gestionnaire de réseau. Si nous disposons de plus de 12 mois d’historique de consommation,
+nous déterminons la consommation pour les 12 premiers mois à l’aide des courbes de consommation standard (RLP).
+(**) Le bonus vous est uniquement accordé après douze mois ininterrompus d’injection au tarif Cosy Fixed de Mega et est octroyée sur la première
+Sources d'énergie pour :
+votre produit : 
+ 100% verte
+la région wallonne (telles qu’approuvées par la CWaPE) : 89,5% verte
+et 10,5% grise
+Prix du 
+mois 06/2026
+ - 
+TVA 6% incluse - Publié le 28-05-2026
+1
+/
+3
+Power Online SA
+ 
+| 
+Rue Natalis, 2 - 4020 Liège 
+| 
+TVA BE0535.615.192 
+| 
+IBAN BE96 3631 2058 6905 
+| 
+info@mega.be 
+| 
+04 268
+20 00
+www.mega.be
+ 
+facture de régularisation après cette année. Ce bonus est unique et ne peut être cumulé avec d’autres promotions ou réductions. Néanmoins, ce
+bonus peut être combiné avec la ristourne sur la consommation tel que mentionné sur cette carte tarifaire, si les conditions pour la ristourne sont
+remplies. 
+Coût énergie verte (2)
+Cotisation Verte (c€/kWh)
+Certificat vert
+Wallonie
+3.008
+(1) Ces prix sont d’application pour les contrats de fourniture d’électricité de clients résidentiels dont la consommation annuelle est inférieure à < 100
+MWh. Les prix affichés sont d’application pour les compteurs avec relevé annuel ou mensuel et avec un raccordement basse tension en dessous de
+56 kVA . Ils sont valables pour tout contrat signé en 06/2026.
+(2) Le coût énergie verte et le coût cogénération (pour la Flandre) sont calculés de la manière suivante: Q x Pc. Q correspond au pourcentage
+(déterminé par les Régions) de vos consommations pour lequel Mega doit acheter des certificats d’énergie verte et, le cas échéant, des certificats de
+cogénération. L'achat de ces certificats fait office de taxe au consommateur et sert à soutenir la production d'énergie verte en Belgique. Pc
+correspond au prix par certificat et s’élève (hors TVA) pour l’énergie verte à 70,94 € en Wallonie, à 87,05 € à Bruxelles et à 101,63 € en Flandre. Le prix
+par certificat de cogénération en Flandre s’élève à 24,85€. Pc est garanti pendant un an. Ces coûts sont adaptés en fonction des modifications légales
+et des conditions de marché, et sont repris séparément sur la facture.
+* Le graphique basé sur une consommation moyenne de 10500 kWh/an, d'une famille ayant un compteur mono-horaire et résidant à Liège
+(gestionnaire de réseau RESA).
+2
+/
+3
+Power Online SA
+ 
+| 
+Rue Natalis, 2 - 4020 Liège 
+| 
+TVA BE0535.615.192 
+| 
+IBAN BE96 3631 2058 6905 
+| 
+info@mega.be 
+| 
+04 268
+20 00
+www.mega.be
+ 
+ 
+Electricité
+Carte tarifaire
+Prix de la distribution et du transport (3)
+Votre intercommunale
+Distribution
+Transport
+(c€/kWh)
+Tarif standard
+ (c€/kWh)
+Tarif impact
+ (c€/kWh)
+Mono-horaire
+Jour
+Nuit
+Exclusif nuit
+Terme fixe
+(€/an)
+Pic
+Medium
+Eco
+AIEG
+10.87
+12.05
+6.66
+6.66
+19.49
+15.08
+9.82
+4.56
+2.74
+AIESH
+13.64
+15.16
+8.21
+8.21
+17.92
+19.07
+12.28
+5.5
+2.74
+ORES (Brabant wallon)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Est)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Hainaut Elec)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Luxembourg)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Mouscron)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Namur)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+ORES (Verviers)
+11.98
+13.27
+7.39
+7.39
+14.1
+16.57
+10.83
+5.09
+2.74
+Régie de Wavre
+12.47
+13.78
+7.83
+7.83
+26.44
+17.11
+11.32
+5.52
+2.74
+RESA
+11.06
+12.2
+7.01
+7.01
+26.5
+15.11
+10.05
+4.99
+2.74
+Taxes, redevances, cotisations et surcharges (4)
+c€/kWh
+Redevance de raccordement
+0,075
+Accise spéciale
+Cotisation sur
+l'énergie
+(c€/kWh)
+(c€/kWh)
+Consommation entre 0 et 3000 kWh
+5.03288
+0.20417
+Consommation entre 3000 et
+20.000 kWh
+5.03288
+0.20417
+Consommation entre 20.000 et
+50.000 kWh
+4.81876
+0.20417
+Consommation entre 50.000 et
+1.000.000 kWh
+4.74668
+0.20417
+*
+ Le droit d'accise spécial est d'application à partir du 01/01/2022. Ce droit
+remplace les contributions pour les obligations de service public fédéral
+et la cotisation fédérale. Il est calculé suivant un tarif dégressif par tranche
+de consommation, calculé sur une base annuelle. Le tarif peut être
+recalculé par le SPF Finances chaque trimestre à partir du 01/07/2023.
+Votre intercommunale
+Tarif Prosumer
+(€/kW/an)
+AIEG
+81.03
+AIESH
+99.3
+ORES (Brabant wallon)
+85.8
+ORES (Est)
+85.8
+ORES (Hainaut Elec)
+85.8
+ORES (Luxembourg)
+85.8
+ORES (Mouscron)
+85.8
+ORES (Namur)
+85.8
+ORES (Verviers)
+85.8
+Régie de Wavre
+93
+RESA
+84.2
+(3) Versés à votre Gestionnaire du Réseau de Distribution (GRD). Tous les frais liés à l’utilisation des réseaux, tout comme les
+taxes, redevances et surcharges, sont variables, modifiables et sont intégralement répercutés au client, même
+rétroactivement. Ces éléments du prix sont ceux approuvés par les Régulateurs au moment de l’élaboration de la carte
+tarifaire pour un compteur à relevé annuel. En cas de contradiction entre les tarifs de Mega d'une part et ceux des
+Régulateurs d'autre part, ce sont ces derniers qui prévalent.
+(4) Les contributions, taxes et surcharges telles qu'en vigueur à la date de l'établissement de cette carte tarifaire. Toute
+modification des taxes, cotisations ou contributions sera répercutée au client sans majoration. NB: - La redevance
+raccordement n'est pas soumise à la TVA. Forfait de 0.075 € pour les 100 premiers kWh.
+Mega a signé l’accord du consommateur dans le marché libéralisé de l’électricité et du gaz. Un contrat conclu sur base de
+cette carte tarifaire tombera par conséquent dans le champ d'application de l’accord du consommateur dans le marché
+libéralisé de l’électricité et du gaz. Vous trouverez plus d’informations sur 
+https://www.mega.be/fr/energie/a-propos-de-
+mega/accord-consommateur-energie.
+Des frais administratifs sont facturés en cas de non-paiement des factures: 7,5€ pour une lettre de rappel envoyée 5 jours
+après l'échéance de la facture, 15€ pour une mise en demeure envoyée 15 jours après l'échéance de la facture, le tout à
+majorer des intérêts de retard (au taux d’intérêt légal) exigibles de plein droit à compter de la date d'échéance des factures.
+Pour plus de renseignements sur l’ensemble de nos produits actifs, rendez-vous sur:
+https://www.mega.be/fr/energie/cartes-tarifaires
+. Pour vérifier la compétitivité de nos tarifs, rendez-vous sur le
+comparateur régional de votre région (
+https://www.compacwape.be
+) et sur le comparateur fédéral
+(
+https://www.creg.be/fr/cregscan
+)
+Prix du 
+mois 06/2026
+ - 
+TVA 6% incluse - Publié le 28-05-2026
+3
+/
+3
+Power Online SA
+ 
+| 
+Rue Natalis, 2 - 4020 Liège 
+| 
+TVA BE0535.615.192 
+| 
+IBAN BE96 3631 2058 6905 
+| 
+info@mega.be 
+| 
+04 268
+20 00
+www.mega.be
+ 
