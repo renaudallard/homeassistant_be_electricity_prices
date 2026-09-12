@@ -1089,12 +1089,35 @@ every page or document that parse read under `texts/<YYYY-MM>/`, so a card
 can be re-read or checked by hand later. A manual run of the same workflow
 can also mirror past months from the supplier archives onto the branch,
 which keeps them readable should a supplier drop its archive, as DATS 24 did.
-A `coverage.md` at the branch root says, per contract and region, which
-months the branch holds and whether each was captured live or mirrored,
-and links each month to the PDF it was parsed from; `pdfs.md` lists every
-kept PDF with the cards it was read for, since the releases name files by
-digest only. To get the original card of a contract and month, open
-`coverage.md`, find the row, click the month. A card is filed under the month its
+**Finding a stored card by hand.** Everything is addressed by the same
+three ids the integration uses, which are the directory names on the
+branch: the supplier (`totalenergies`, `bolt`, ...), the contract
+(`totalenergies_electricite_fixe`, `bolt_fix`, ...) and the region
+(`flanders`, `wallonia`, `brussels`). Browse the branch to see them.
+
+1. **The parsed card** is one JSON per month at
+   `<supplier>/<contract>/<region>/<YYYY-MM>.json`, for example
+   [`totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json).
+   It holds the energy, DSO, tax and injection figures exactly as the
+   integration stores them, plus `_seen_on` (the day it was captured),
+   `_via` (`live` for a card captured while it was current, `archive`
+   for one mirrored from the supplier's archive) and `_sources`: every
+   page or document the parse read, each with its text file under
+   `texts/` and, for a PDF, the digest of the file.
+2. **The original PDF** is easiest through
+   [`coverage.md`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/coverage.md)
+   at the branch root: one table per supplier, a row per contract and
+   region, a column per month; click the month and the PDF downloads
+   from the cards repository's releases. The other way round,
+   [`pdfs.md`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/pdfs.md)
+   lists every kept file by release with each card it was read for, and
+   each release's notes point at its section, so a file seen on the
+   releases page can be named too. Behind both is `pdfs.json`, which maps
+   a digest to `cards-<YYYY-MM>/<digest>.pdf` in those releases; the
+   digest in a JSON's `_sources` is the same key.
+3. **The text the parser read** is under `texts/<YYYY-MM>/`, named by the
+   digest of the text itself and listed in the JSON's `_sources`, for
+   checking a figure against the card without opening the PDF. A card is filed under the month its
 own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
 changed, and months older than three years are dropped.
