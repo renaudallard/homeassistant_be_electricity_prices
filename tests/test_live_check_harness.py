@@ -841,6 +841,12 @@ def test_label_month_reads_every_shape_the_cards_print(
     assert lc.label_month(label) == expect
 
 
+def test_the_texts_option_names_the_archive_checkout() -> None:
+    """--texts is the only option; without it every card is rendered."""
+    assert lc._parse_args([]).texts is None
+    assert lc._parse_args(["--texts", "tmp/archive"]).texts == Path("tmp/archive")
+
+
 def test_a_card_from_a_past_month_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     lc._expect_card_period(
         "octaplus/octaplus_fixed", "octaplus_fixed", _snap("Juin 2026")

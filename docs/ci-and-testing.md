@@ -274,22 +274,33 @@ main()                       scripts/live_check.py:3108  asyncio.run(_run()); rc
     _render_report(...)      scripts/live_check.py:2704  markdown pass/fail report
 ```
 
+### Rendering only what changed
+
+With the archive branch checked out beside it (`--texts DIR`, `scripts/live_check.py:3227`),
+the harness installs the branch's texts as the readers' render cache (`scripts/card_texts.py`,
+the same `StoredTexts` the archiver builds on): a card whose bytes the archive walked an hour
+earlier and still holds is downloaded, timed, counted and parsed as before, but its text comes
+from the branch instead of a pdfplumber pass. Only a card that changed since is rendered. The
+report ends with how many cards were served that way and how many rendered, and the retry loop's
+seven attempts on a bad morning no longer cost seven full renders. A fork's pull request has no
+archive branch to read and renders everything, which is the behaviour before the cache existed.
+
 ### Card freshness
 
-`_check_card_freshness` (`scripts/live_check.py:1881`) asks a question no other check here asks:
+`_check_card_freshness` (`scripts/live_check.py:1895`) asks a question no other check here asks:
 not "did the fetch work" but "is this the card the supplier is currently advertising". A superseded
 card downloads, parses and validates exactly like a current one, so a stale URL reads as a green
 run -- Bolt billed June's variable formula for ten weeks behind a passing board, and Ecopower served
 January's tax block for eleven days after renaming its dynamic card to `YYYYMMDD`.
 
-The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py:1487`) scans
+The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py:1501`) scans
 the same listing page the extractor does, but with a **looser** pattern. When a supplier changes the
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
 
 ### The keyless day-ahead fallback
 
-`_check_spot_fallback` (`scripts/live_check.py:1836`) asks whether energy-charts still serves the
+`_check_spot_fallback` (`scripts/live_check.py:1850`) asks whether energy-charts still serves the
 Belgian day-ahead. It is the one source that has to work on the day ENTSO-E does not, so leaving it
 unexercised until then is how it rots unnoticed -- the same reasoning as the freshness gate above,
 applied to a source rather than a card.
@@ -480,13 +491,13 @@ asserts the publication label is non-empty, the expected DSO keys for the region
 positive, and then calls `_validate_snapshot`.
 
 The federal energy contribution is the exception to "taxes are positive". It is bounds-checked by
-`_expect_energy_contribution` (`scripts/live_check.py:680`) instead, which accepts
+`_expect_energy_contribution` (`scripts/live_check.py:694`) instead, which accepts
 `[0, 0.01]` EUR/kWh. A `> 0` gate on four suppliers used to enforce it, but the levy was abolished
 on 2026-08-01: EBEM's August card failed CI three times over for reporting the zero it actually
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2734`) runs four gates:
+`_validate_snapshot` (`scripts/live_check.py:2748`) runs four gates:
 
 - `_expect_month_indexed_registry` holds the parsed energy's `month_indexed` against the
   registry's `Contract.month_indexed_energy`. The flow offers the optional ENTSO-E key from
@@ -502,7 +513,7 @@ that reads the value 100x too large — and that part still holds.
   `formula_factor` (Bolt): losing those coefficients silently disables the box, and the entry
   keeps billing the printed monthly rate.
 
-- `_validate_energy` (`scripts/live_check.py:2899`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2913`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -517,7 +528,7 @@ that reads the value 100x too large — and that part still holds.
   nineteen consecutive months, so a flattened card is normal publishing and must not gate CI.
   Only Energy Knights Essentia prints those pairs today; energie.be Variabel and the custom
   supplier publish one formula for every meter and are unaffected.
-- `_validate_injection` (`scripts/live_check.py:2146`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:2160`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
@@ -563,12 +574,12 @@ Reading a row correctly needs three facts about which hook feeds which column:
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
   its final response headers, after the redirect chain and **before** the body is read. So the
   latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
-- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:324`)
+- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:338`)
   rather than read from `Content-Length`, because that header is None on chunked responses and
   would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
   so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
   then stalled mid-body.
-- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:348`), which is the
+- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:362`), which is the
   only hook a request that never produced a response fires. Failures are kept out of the success
   columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
   this counter existed a supplier whose every attempt timed out reported 0 fetches and 0 s and read
@@ -586,10 +597,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2836`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:3464`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:3499`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2923`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3341`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3376`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:2970`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
 Luminus, which are slow per fetch rather than large. That last group is the
@@ -606,7 +617,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:3067`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3451`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3486`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -620,7 +631,7 @@ rerun.
 ### The catalog baseline only counts what the listing shows
 
 `_check_catalogs` diffs each supplier's `discover()` output against
-`_CATALOG_BASELINES` (`scripts/live_check.py:1417`), one lambda per supplier deriving the
+`_CATALOG_BASELINES` (`scripts/live_check.py:1431`), one lambda per supplier deriving the
 registered identifier set from the provider module, so the baseline cannot drift away from
 the code. The rule is that it must cover exactly what that supplier's discovery surface
 enumerates, no more.
@@ -668,7 +679,7 @@ each time the previous one was closed (issues #53, #56 and #58 all carried the s
 rows). It also handed every other supplier seven rolls of the dice at a transient timeout, which
 is where the collateral rows in those issues came from.
 
-`_record` (`scripts/live_check.py:530`) marks such a check `expected`, and `_extractor_regressions`
+`_record` (`scripts/live_check.py:544`) marks such a check `expected`, and `_extractor_regressions`
 (`scripts/live_check.py:3010`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
 (`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
@@ -752,15 +763,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:163`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:165`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:524`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:466`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:568`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:510`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
@@ -780,13 +791,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:431`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:387`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:347`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:303`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -890,7 +901,9 @@ automatically, so the day's check has to be dispatched by hand:
 `gh workflow run live_check.yml --ref main`.
 
 The single `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
-`homeassistant.util.dt`) and runs `scripts/live_check.py` inside a two-tier retry loop
+`homeassistant.util.dt`), checks the `archive` branch out under `tmp/archive` when the repository
+has one so the harness can take its renders from there (`Rendering only what changed` above), and
+runs `scripts/live_check.py` inside a two-tier retry loop
 (`.github/workflows/live_check.yml:56`). The retry exists so an issue is filed only when a supplier
 is still broken roughly an hour after first detection, not for a transient CDN blip (issue #30):
 seven attempts with delays `10 30 60 120 300 3000` seconds, bounded by a 5400s wall-clock deadline
@@ -993,7 +1006,7 @@ same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:122`) and skips the rest of its
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:124`) and skips the rest of its
 cards, live and backfill alike, because every further card would cost the same three timeouts and
 two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
 failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is

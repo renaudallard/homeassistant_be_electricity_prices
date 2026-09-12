@@ -106,7 +106,9 @@ from custom_components.be_electricity_prices.snapshot_store import (  # noqa: E4
 from homeassistant.helpers.json import json_dumps  # noqa: E402
 
 # scripts/ is not a package; the line above puts it on sys.path so the card
-# month is read by the same function the live check's freshness gate uses.
+# month is read by the same function the live check's freshness gate uses,
+# and the render cache is the one the live check reads too.
+from card_texts import StoredTexts, digest_of, read_text  # type: ignore[import-not-found]  # noqa: E402
 from live_check import label_month  # type: ignore[import-not-found]  # noqa: E402
 
 _T = TypeVar("_T")
@@ -225,16 +227,14 @@ class _Patience:
 _MANIFEST = "pdfs.json"
 
 
-class _Cards:
-    """What the run knows about card bytes.
+class _Cards(StoredTexts):
+    """What the run knows about card bytes, plus where they are kept.
 
-    Seeded from the branch: ``pdfs.json`` maps every digest already uploaded
-    to where it lives, and each row's ``_sources`` maps a (variant, digest)
-    pair to the text it rendered to. Installed as the readers'
-    render hook, so a downloaded card whose bytes the branch has already
-    seen is served that stored text instead of being rendered again, which
-    is what makes a daily walk over 250 cards cheap: the download is
-    seconds, the render is the cost. Bytes the branch has not recorded yet
+    The render cache is the shared one (``card_texts.StoredTexts``): a
+    downloaded card whose bytes the branch has already seen is served the
+    stored text instead of being rendered again, which is what makes a
+    daily walk over 250 cards cheap. On top of it, ``pdfs.json`` says which
+    digests are already uploaded, and bytes the branch has not recorded yet
     are written under ``pdf_dir`` for the workflow to upload.
     """
 
@@ -246,68 +246,24 @@ class _Cards:
         *,
         serve_texts: bool = True,
     ) -> None:
+        super().__init__(out, serve=serve_texts)
         self.out = out
         self.pdf_dir = pdf_dir
         self.seen_month = seen_month
-        # False under --rerender: every card is rendered afresh, which is
-        # how a reader upgrade reaches the stored months.
-        self.serve_texts = serve_texts
         self.kept: dict[str, str] = {}
         manifest = out / _MANIFEST
         if manifest.exists():
             self.kept = json.loads(manifest.read_text(encoding="utf-8"))
-        # (variant, digest) -> text path on the branch, from every stored row.
-        self.texts: dict[tuple[str, str], str] = {}
-        for row in out.glob("*/*/*/????-??.json"):
-            try:
-                sources = json.loads(row.read_text(encoding="utf-8")).get(
-                    "_sources", []
-                )
-            except ValueError:
-                continue
-            for source in sources:
-                if "pdf" in source:
-                    self.texts[(source["variant"], _digest_of(source["pdf"]))] = source[
-                        "text"
-                    ]
-        self.fresh: dict[tuple[str, str], str] = {}
-        self.digests: dict[str, str] = {}
         self.saved: dict[str, str] = {}
-        self.rendered = 0
-        self.unrendered = 0
 
-    def digest_for(self, url: str) -> str | None:
-        """The digest of the PDF behind ``url``, once its bytes were seen."""
-        return self.digests.get(url)
-
-    async def render(
-        self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
-    ) -> str:
-        digest = hashlib.sha256(payload).hexdigest()
-        self.digests[url] = digest
-        if (
-            self.pdf_dir is not None
-            and digest not in self.kept
-            and digest not in self.saved
-        ):
-            rel = f"cards-{self.seen_month}/{digest}.pdf"
-            path = self.pdf_dir / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(payload)
-            self.saved[digest] = rel
-        key = (variant, digest)
-        text = self.fresh.get(key)
-        if text is None and self.serve_texts:
-            stored = self.texts.get(key)
-            if stored is not None and (self.out / stored).exists():
-                text = _read_text(self.out / stored)
-        if text is not None:
-            self.unrendered += 1
-            return text
-        text = await asyncio.to_thread(renderer, payload)
-        self.rendered += 1
-        self.fresh[key] = text
-        return text
+    def keep(self, digest: str, payload: bytes) -> None:
+        if self.pdf_dir is None or digest in self.kept or digest in self.saved:
+            return
+        rel = f"cards-{self.seen_month}/{digest}.pdf"
+        path = self.pdf_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        self.saved[digest] = rel
 
 
 class _KeptResponse:
@@ -457,13 +413,6 @@ def _card_month(snap: SupplierSnapshot, today: date) -> str:
     return _month_id(*named)
 
 
-def _digest_of(pdf: str) -> str:
-    """The digest a row names its PDF by. Rows written before the manifest
-    existed carry the release path instead; the file name is the digest
-    either way."""
-    return Path(pdf).stem
-
-
 def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     """Describe one memo entry: the PDF helpers key a rendered document as
     ``<variant>\\0<url>`` and a plain text fetch by its URL alone. A
@@ -477,13 +426,6 @@ def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     if digest is not None:
         entry["pdf"] = digest
     return entry
-
-
-def _read_text(path: Path) -> str:
-    """A stored text exactly as it was fetched: no newline translation, so
-    a replay hands the parser the very bytes it read the first time."""
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return handle.read()
 
 
 def _write_text(out: Path, seen_month: str, text: str) -> str:
@@ -724,9 +666,9 @@ async def _replay_row(
             else f"{source['variant']}\0{source['url']}"
         )
         # Seeded, not touched: only what the parse actually reads counts.
-        dict.__setitem__(memo, key, _read_text(text_path))
+        dict.__setitem__(memo, key, read_text(text_path))
     replay.pdfs = {
-        s["url"]: _digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
+        s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
     }
     cards.digests.update(replay.pdfs)
     try:

@@ -118,7 +118,7 @@ async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
     saw, and every replay would rewrite the row for nothing."""
     text = "line one\r\nline two\rline three"
     rel = ac._write_text(tmp_path, "2026-09", text)
-    assert ac._read_text(tmp_path / rel) == text
+    assert ac.read_text(tmp_path / rel) == text
     assert hashlib.sha256(text.encode()).hexdigest() in rel
 
 

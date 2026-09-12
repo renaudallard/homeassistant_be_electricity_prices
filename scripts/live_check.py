@@ -38,6 +38,7 @@ the workflow opens or updates a GitHub issue with this report attached.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import importlib.util as iu
 import re
@@ -46,7 +47,7 @@ import time
 import traceback
 import types
 from collections.abc import Awaitable, Callable, Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -57,6 +58,11 @@ from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiohttp
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# scripts/ is not a package, so it is put on sys.path above rather than
+# imported by dotted path; mypy cannot follow that.
+from card_texts import StoredTexts  # type: ignore[import-not-found]  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "be_electricity_prices"
@@ -137,7 +143,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _RATE_IMPACT = base.ImpactRates
     _RATE_SPOT_MONTHLY = base.SpotMonthlyRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
-    global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR
+    global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR, _render_through
+    # The readers' render seam, from the copy of _pdf the providers loaded
+    # here actually consult; the real package's would be a different
+    # ContextVar and the hook would never be seen.
+    _render_through = pdf.render_through
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
     _EXTRACTOR_ERROR = base.ExtractorError
@@ -234,6 +244,10 @@ _RATE_DYNAMIC: type = object
 _RATE_TOU: type = object
 _RATE_IMPACT: type = object
 _RATE_SPOT_MONTHLY: type = object
+
+
+# Bound by _load_providers to providers/_pdf.render_through; a no-op until then.
+_render_through: Any = None
 
 
 # Bound by _load_providers to providers/_pdf.is_transient_fetch_error so
@@ -3210,8 +3224,20 @@ assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
 )
 
 
-async def _run() -> int:
+async def _run(texts: Path | None = None) -> int:
     modules = _load_providers()
+    # With the archive branch checked out, a card whose bytes the branch
+    # already holds is served its stored text instead of being rendered: the
+    # download, its timing, its bytes and the freshness gate all stay, and
+    # the twenty minutes of pdfplumber go only to cards that changed since
+    # the archive walked them an hour earlier. Entered here and left at the
+    # end of the run rather than around the session block, so the block
+    # below keeps its shape.
+    hooks = ExitStack()
+    cache: StoredTexts | None = None
+    if texts is not None:
+        cache = StoredTexts(texts)
+        hooks.enter_context(_render_through(cache.render))
     # Index every contract so _expected_injection_shape can derive a shape
     # for cards not explicitly listed in _INJECTION_SHAPE.
     for _mod in modules.values():
@@ -3283,6 +3309,15 @@ async def _run() -> int:
     # Metrics piggyback on the extractor report so silent slowdowns and
     # PDF-size jumps surface daily without a separate pipeline.
     print(_render_report(extractor_checks, METRICS))
+    hooks.close()
+    if cache is not None:
+        rendered = cache.rendered
+        served = cache.unrendered
+        print(
+            f"\n_{served} of {served + rendered} cards were served from the archive's"
+            f" texts; {rendered} were rendered._"
+        )
+        print(f"archive texts: {served} served, {rendered} rendered", file=sys.stderr)
     # Side-channel: catalog report goes to a known file the workflow
     # picks up to open / update its own issue, separate from the
     # extractor-broken issue so the two failure modes don't conflate.
@@ -3516,9 +3551,24 @@ def _render_drift(warnings: list[str]) -> str:
     return "\n".join(rows) + "\n"
 
 
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fetch every supplier's live card and check it."
+    )
+    parser.add_argument(
+        "--texts",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="a checkout of the archive branch; cards it already holds are not rendered again",
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> int:
+    args = _parse_args(sys.argv[1:])
     try:
-        return asyncio.run(_run())
+        return asyncio.run(_run(args.texts))
     except Exception:
         # Harness crash. Use rc=8 (outside the documented 1/2/4 bit
         # space) so the workflow doesn't open a "supplier extractor

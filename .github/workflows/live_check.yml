@@ -59,10 +59,24 @@ jobs:
           pip install -c requirements-dev.txt \
             pypdf pdfplumber aiohttp defusedxml homeassistant
 
+      - name: Check out the archive branch's texts
+        # A card the archive walked an hour earlier and still holds is not
+        # rendered again: the check downloads it, measures it and parses
+        # it, and takes the render from the branch. A fork's pull request
+        # has no such branch and renders everything, as before.
+        run: |
+          if git fetch --depth=1 origin archive 2>/dev/null; then
+            git worktree add --detach tmp/archive FETCH_HEAD
+          else
+            echo "no archive branch to read texts from; every card is rendered"
+          fi
+
       - name: Run live check (retries up to ~1 h on extractor failure)
         id: check
         run: |
           set +e
+          texts=''
+          [ -d tmp/archive ] && texts='--texts tmp/archive'
           # Two-tier retry: the fast early gaps clear brief blips within
           # ~9 min, then one ~50-min wait means an issue is only filed
           # when a supplier is STILL broken ~1 h after first detection,
@@ -97,7 +111,7 @@ jobs:
             # skips writing it can never be intersected as if it were
             # this attempt's result.
             rm -f extractor_failures.txt
-            python scripts/live_check.py > report.md
+            python scripts/live_check.py $texts > report.md
             rc=$?
             cat report.md
             echo "::endgroup::"

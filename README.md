@@ -1042,7 +1042,9 @@ parsers, and must not be refreshed.
 
 A daily GitHub Actions workflow
 ([`.github/workflows/live_check.yml`](./.github/workflows/live_check.yml))
-runs three phases against the live supplier endpoints:
+runs three phases against the live supplier endpoints, taking the text of
+any card the archive branch already holds from there so only a card that
+changed since the morning's archive walk is rendered again:
 
 - **Extractor phase** — every (contract, region) tuple is fetched and
   parsed; each fetch retries transient network errors up to three times,
