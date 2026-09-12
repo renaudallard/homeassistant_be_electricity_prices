@@ -959,15 +959,9 @@ the branch's `pdfs.json` before the commit step runs. GitHub caps a release at a
 (the first backfill found out: 1142 new PDFs on top of the 214 the month already held), so the
 step looks at every shard of the month that exists, uploads into the last one while it has room
 and opens `cards-YYYY-MM-2` and on when it does not; a file already present in any shard is not
-uploaded again, only recorded. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
-(214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
-of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
-The step needs a fine-grained personal access token with contents read and write on the cards
-repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
-empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
-cards and their texts still land on the branch, and the PDFs of that day are offered again by the
-next run that has the token. Releases older than the retention are deleted on the same cutoff the
-script uses for the rows.
+uploaded again, only recorded. Where each file landed is merged into the manifest once per month
+directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
+whole manifest for each took longer than some of the uploads.
 
 The archive lives on its own branch on purpose: three years of daily commits would bury
 `main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes

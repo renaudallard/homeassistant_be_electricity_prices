@@ -151,6 +151,11 @@ jobs:
               n=$((n + 1)); tag=$next
             done
             ensure_release "$tag" "$month"
+            # Where each file landed, merged into the manifest once per
+            # month rather than once per file: a backfill day uploads a
+            # thousand files, and rewriting the whole manifest for each
+            # took longer than some of the uploads.
+            : > landed.txt
             for pdf in "$dir"*.pdf; do
               name=$(basename "$pdf")
               where=$(awk -v f="$name" '$1 == f {print $2; exit}' have.txt)
@@ -163,8 +168,12 @@ jobs:
                 count=$((count + 1))
                 where=$tag
               fi
-              jq --arg d "${name%.pdf}" --arg p "$where/$name" '. + {($d): $p}' "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
+              echo "${name%.pdf} $where/$name" >> landed.txt
             done
+            if [ -s landed.txt ]; then
+              jq -Rn '[inputs | split(" ") | {(.[0]): .[1]}] | add // {}' landed.txt > landed.json
+              jq -s '.[0] + .[1]' "$manifest" landed.json > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
+            fi
           done
           # Same retention as the branch: a month older than three years goes.
           cutoff="cards-$(date -u -d '-36 months' +%Y-%m)"
