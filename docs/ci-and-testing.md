@@ -963,6 +963,21 @@ uploaded again, only recorded. Where each file landed is merged into the manifes
 directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
 whole manifest for each took longer than some of the uploads.
 
+The `Warn before the upload token expires` step asks GitHub for the token's expiry (a fine-grained
+token reports it in the `github-authentication-token-expiration` response header) and, from two
+weeks before it, files an issue under the same `archive-cards` label through
+`scripts/file_ci_issue.sh`, fingerprinted on the expiry date so it repeats once a week until the
+secret is replaced. A token that reports no expiry, or none at all, files nothing; the failure
+issue still covers a token that has already expired. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
+(214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
+of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
+The step needs a fine-grained personal access token with contents read and write on the cards
+repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
+empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
+cards and their texts still land on the branch, and the PDFs of that day are offered again by the
+next run that has the token. Releases older than the retention are deleted on the same cutoff the
+script uses for the rows.
+
 The archive lives on its own branch on purpose: three years of daily commits would bury
 `main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
 made with the workflow's `GITHUB_TOKEN` start no other workflow, and `test.yml`, `validate.yml`

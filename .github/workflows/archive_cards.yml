@@ -184,6 +184,43 @@ jobs:
               fi
             done
 
+      - name: Warn before the upload token expires
+        # A fine-grained token lives a year at most, and the first sign of
+        # its expiry would otherwise be the failure issue on the morning
+        # after. GitHub reports a fine-grained token's expiry in a response
+        # header, so ask, and file an issue while there are still two weeks
+        # to make a new one and update the secret. Runs even when an earlier
+        # step failed: the warning is worth having either way.
+        if: always()
+        env:
+          CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CARDS_TOKEN" ] || exit 0
+          expires=$(GH_TOKEN=$CARDS_TOKEN gh api -i /user 2>/dev/null | tr -d '\r' | awk -F': ' 'tolower($1) == "github-authentication-token-expiration" {print $2}')
+          if [ -z "$expires" ]; then
+            echo "the upload token reports no expiry"
+            exit 0
+          fi
+          left=$(( ( $(date -u -d "$expires" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "the upload token expires on $expires ($left days left)"
+          [ "$left" -le 14 ] || exit 0
+          {
+            echo "## The upload token expires on $expires"
+            echo
+            echo "$left day(s) left. Create a new fine-grained token with contents read and"
+            echo "write on the cards repository and store it as the BE_ELECTRICITY_CARDS"
+            echo "secret; until then the PDFs of each day are offered again by the next run"
+            echo "that has a working token."
+          } > token_body.md
+          echo "token expires $expires" > token_fingerprint.txt
+          bash scripts/file_ci_issue.sh \
+            --label archive-cards \
+            --title "[archive-cards] the upload token expires soon" \
+            --body token_body.md \
+            --fingerprint token_fingerprint.txt \
+            --workflow .github/workflows/archive_cards.yml
+
       - name: Commit and push what changed
         id: push
         run: |
