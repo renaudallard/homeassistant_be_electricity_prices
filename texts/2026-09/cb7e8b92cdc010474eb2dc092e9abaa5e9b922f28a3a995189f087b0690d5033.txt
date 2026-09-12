@@ -1,0 +1,91 @@
+ENERGREEN by Trevion Particulier
+Geldig voor particuliere contracten afgesloten in
+mei 2026 – Incl. 6% BTW
+Contract van onbepaalde duur
+1. Energie
+Afname (c€/kWh) Injectie (c€/kWh) (1) Kostprijs groene
+Kostprijs WKK Abonnement
+Type meter stroom (c€/kWh)
+(c€/kWh) (2) (€/jaar)
+Geschatte variabele prijs (2)
+SMR3 11,61 7,69 1,1660 0,4452 26,50
+Kostprijs energiedelen €120/jaar
+De energieprijs bij dynamische contracten schommelt elk kwartier. De indexatieparameter is de Belpex 15 MTU,
+welke gebaseerd is op de kwartier notering van de Day Ahead Belpex Baseload in de maand van levering en welke
+raadpleegbaar zijn via www.epexspot.be. De kwartierprijzen zijn uiterlijk raadpleegbaar 1 dag op voorhand.
+Voor deze berekening werd een simulatie gedaan op basis van de geschatte waarde door de VREG van Belpex 15
+MTU voor het komende jaar, de laatst gekende waarde is deze van april 2026 (96,48 €/MWh). De tariefformule
+,elektriciteit is (0,1* Belpex 15 MTU+1,3) *1,06.
+De terugleveringsvergoeding gebruikt ook de Belpex 15 MTU notering zoals hierboven uitgelegd. Voor deze
+berekening werd een simulatie gedaan op basis van de geschatte waarde door de VREG van Belpex 15 MTU voor
+het komende jaar, de laatst gekende waarde is deze van april 2026 (89,87 €/MWh). De tariefformule voor
+teruglevering is 0,1 x Belpex 15 MTU – 1,3.
+2. Heffingen en toeslagen
+Bijdrage op de energie (c€/kWh) 0,20417
+Bijzondere accijns (c€/kWh)
+0-3 MWh 5,03288
+3-20 MWh 5,03288
+20-50 MWh 4,81876
+50-1000 MWh 4,74668
+Bijdrage energiefonds met domicilie (€/maand) (1) 0
+Bijdrage energiefonds zonder domicilie (€/maand) (1) 10,07
+(1) BTW is niet van toepassing
+(2) De certificaten worden aan 100,00 EUR/GSC en 30,00 EUR/WKK doorgerekend. De kostprijs en de quota zijn onderhevig aan wettelijke veranderingen.
+Alle kosten verbonden aan het gebruik van de netten, zoals taksen, vergoedingen, bijdragen en toeslagen, blijven variabel, aanpasbaar en volledig doorrekenbaar
+aan de klant, zelfs retroactief. Deze prijsonderdelen zijn degene die de Regulatoren hebben goedgekeurd op het moment van opmaak van deze tariefkaart voor een
+jaarlijks/maandelijks gelezen meter. In het geval dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bijdragen en nettarieven
+anderzijds, zijn het deze laatste die gelden.
+Deze formule is geldig voor particuliere contracten afgesloten gedurende de maand mei 2026 voor aansluitingen met een aansluitingsvermogen van < 56 KVA in
+Vlaanderen. Voor iedere wijziging of elk nieuw element in de kosten die het gevolg is van een wetgeving of van een bevoegde instantie, behoudt Trevion zich het
+recht voor om haar prijzen aan te passen. Elk nieuw wettelijk supplement wordt 1 op 1 aan de klant doorgerekend. In het geval dat er een verschil zou zijn tussen
+de tarieven van Trevion enerzijds en de wettelijke bedragen en nettarieven anderzijds, zijn het deze laatste die gelden.
+Trevio n nv | Dulle-Grietlaan 17/17, 9050 Gentbrugge | BTW BE 0839.663.969 I 09/255.70.10 | info@trevion.be | IBAN BE08 0016 9476 5913 | BIC GEBABEBB
+Trevion Groene Energie Dynamisch Plus
+ENERGREEN by Trevion Particulier
+Particulier
+3. Netwerkkosten
+Digitale Meter
+Netbeheerder
+Capaciteitstarief
+Afnametarief Afnametarief Excl. nacht Tarief databeheer
+gemiddelde maandpiek (*)
+(€/kW/jaar)
+(c€/kWh) (c€/kWh) (€/jaar)
+Fluvius Antwerpen 52,37 5,35 4,81 18,92
+Fluvius Halle-Vilvoorde 59,41 5,64 5,12 18,92
+Fluvius Imewo 57,45 5,54 5,01 18,92
+Fluvius Kempen 59,58 6,33 5,66 18,92
+Fluvius Limburg 51,99 5,75 5,19 18,92
+Fluvius Midden-Vlaanderen 53,13 5,28 4,78 18,92
+Fluvius West 60,53 6,70 5,99 18,92
+Fluvius Zenne-Dijle 59,49 5,87 5,31 18,92
+(*) Ingeval uw « maandpiek » lager is dan 2,5 kW zal u in ieder geval minimum 2,5 kW gefactureerd worden volgens de regels van VREG
+(https://www.vreg.be/nl/veelgestelde-vragen/hoeveel-capaciteitstariefbetaalt-u-voor-een-kilowatt).
+4. Robin netbalancering
+Bij afname van het dynamisch contract in combinatie met een actief Robin EMS systeem kan de klant een extra
+vergoeding ontvangen voor het flexibel inzetten van zijn thuisinstallaties (zonnepanelen en batterij). Deze
+flexibiliteitsvergoeding wordt toegekend op basis van de beschikbaarheid en/of effectieve aansturing van installaties
+tijdens momenten van hoge marktvraag of netbehoefte.
+De vergoeding is afhankelijk van:
+• de marktomstandigheden (zoals onbalansprijzen en flexibiliteitsaanvragen),
+• de hoeveelheid en aard van de flexibiliteit die door de klant beschikbaar wordt gesteld,
+• de afspraken die in het individuele contract of de EMS-partnerovereenkomst zijn vastgelegd.
+De vergoeding wordt maandelijks afgerekend en transparant weergegeven op de factuur.
+Er zal nooit sturing plaatsvinden zonder het medeweten of de voorafgaande toestemming van de klant. De klant
+behoudt op elk moment de mogelijkheid om uit te schrijven voor het ENERGREEN by Trevion product door een mail te
+sturen naar info@trevion.be. Deze klant zal dan automatisch worden overgezet naar ons standaard dynamisch product.
+Let op: de EMS-vergoeding staat los van de energieprijzen en terugleveringsvergoedingen. Voor deelname is een
+compatibel EMS vereist en zijn aanvullende technische voorwaarden van toepassing. Trevion behoudt zich op elk
+moment het recht om het contract vroegtijdig stop te zetten als blijkt dat de installaties/sturing ondermaats presteren.
+Mits een opzegtermijn van 30 dagen. De klant wordt dan automatisch overgezet naar het standaard dynamisch contract.
+Indien er géén compatibel EMS-systeem aanwezig is, zijn er extra kosten verbonden aan de aankoop en installatie van
+een Robin EMS.
+Alle kosten verbonden aan het gebruik van de netten, zoals taksen, vergoedingen, bijdragen en toeslagen, blijven variabel, aanpasbaar en volledig doorrekenbaar
+aan de klant, zelfs retroactief. Deze prijsonderdelen zijn degene die de Regulatoren hebben goedgekeurd op het moment van opmaak van deze tariefkaart voor een
+jaarlijks/maandelijks gelezen meter. In het geval dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bijdragen en nettarieven
+anderzijds, zijn het deze laatste die gelden.
+Deze formule is geldig voor particuliere contracten afgesloten gedurende de maand mei 2026 voor aansluitingen met een aansluitingsvermogen van < 56 KVA in
+Vlaanderen. Voor iedere wijziging of elk nieuw element in de kosten die het gevolg is van een wetgeving of van een bevoegde instantie, behoudt Trevion zich het
+recht voor om haar prijzen aan te passen. Elk nieuw wettelijk supplement wordt 1 op 1 aan de klant doorgerekend. In h et geval dat er een verschil zou zijn tussen
+de tarieven van Trevion enerzijds en de wettelijke bedragen en nettarieven anderzijds, zijn het deze laatste die gelden.
+Trevion nv | Dulle-Grietlaan 17/17, 9050 Gentbrugge | BTW BE 0839.663.969 I 09/255.70.10 | info@trevion.be | IBAN BE08 0016 9476 5913 | BIC GEBABEBB

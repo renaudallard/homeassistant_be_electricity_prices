@@ -22,3 +22,4 @@ captured while it was current; a blank cell is a month the branch does not hold.
 - [mega](coverage/mega.md): 61 rows, 2026-01 to 2026-09
 - [octaplus](coverage/octaplus.md): 15 rows, 2026-01 to 2026-09
 - [totalenergies](coverage/totalenergies.md): 25 rows, 2026-09 to 2026-09
+- [trevion](coverage/trevion.md): 6 rows, 2026-02 to 2026-09

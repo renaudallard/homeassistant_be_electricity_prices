@@ -1,0 +1,87 @@
+Trevion Groene Energie Vast Particulier
+Geldig voor particuliere contracten in
+juni 2026 – Incl. 6% BTW
+Duurtijd contract: 1 jaar
+1. Energiekost
+Afname (c€/kWh) Injectie (c€/kWh)
+Kostprijs groene Kostprijs WKK Abonnement
+Type meter
+stroom (c€/kWh) (1) (c€/kWh) (1) (€/jaar)
+1 jaar vast
+Enkelvoudig 15,8038 4,3300
+Piekuren 17,3981 4,7805
+Tweevoudig 1,1660 0,4452 39
+Daluren 14,4546 3,2040
+Exclusief Nacht 14,4546
+1,5 €/kVA per maand
+Dit is een vergoeding aangerekend voor alle aansluitingspunten met een analoge meter met een
+Forfait zonnepanelen
+fotovoltaïsche installatie. Het aantal kVA krijgen wij door van je netbeheerder en is het vermogen van
+je omvormer.
+Kostprijs energiedelen €120/jaar
+2. Heffingen en toeslagen
+Bijdrage op de energie (c€/kWh) 0,20417
+Bijzondere accijns (c€/kWh)
+0-3 MWh 5,03288
+3-20 MWh 5,03288
+20-50 MWh 4,81876
+50-1000 MWh 4,74668
+Bijdrage energiefonds met domicilie (€/maand) (2) 0
+Bijdrage energiefonds zonder domicilie (€/maand) (2) 10,07
+(1) De certificaten worden aan 100,00 EUR/GSC en 30,00 EUR/WKC doorgerekend. De kostprijs en de quota zijn onderhevig aan wettelijke veranderingen.
+Alle kosten verbonden aan het gebruik van de netten, zoals taksen, vergoedingen, bijdragen en toeslagen, blijven variabel, aanpasbaar en volledig doorrekenbaar
+aan de klant, zelfs retroactief. Deze prijsonderdelen zijn degene die de Regulatoren hebben goedgekeurd op het moment van opmaak van deze tariefkaart voor een
+jaarlijks/maandelijks gelezen meter. In het geval dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bijdragen en nettarieven
+anderzijds, zijn het deze laatste die gelden.
+Deze prijzen zijn geldig voor de intekenperiode juni 2026 en moeten ten laatste 6 maand na intekenperiode gestart zijn en gelden voor particuliere aansluitingen met
+een vermogen van < 56 KVA in Vlaanderen. Voor iedere wijziging of elk nieuw element in de kosten die het gevolg is van een wetgeving of van een bevoegde
+instantie, behoudt Trevion zich het recht voor om haar prijzen aan te passen. Elk nieuw wettelijk supplement wordt 1 op 1 aan de klant doorgerekend. In het geval
+dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bedragen en nettarieven anderzijds, zijn het deze laatste die gelden.
+Trevio n nv | Dulle-Grietlaan 17/17, 9050 Gentbrugge | BTW BE 0839.663.969 I 09/255.70.10 | info@trevion.be | IBAN BE08 0016 9476 5913 | BIC GEBABEBB
+Trevion Groene Energie Vast Particulier
+3. Netwerkkosten
+Digitale Meter
+Netbeheerder
+Capaciteitstarief
+Afnametarief Afnametarief Excl. nacht Tarief databeheer
+gemiddelde maandpiek (*)
+(€/kW/jaar)
+(c€/kWh) (c€/kWh) (€/jaar)
+Fluvius Antwerpen 52,37 5,35 4,81 18,92
+Fluvius Halle-Vilvoorde 59,41 5,64 5,12 18,92
+Fluvius Imewo 57,45 5,54 5,01 18,92
+Fluvius Kempen 59,58 6,33 5,66 18,92
+Fluvius Limburg 51,99 5,75 5,19 18,92
+Fluvius Midden-Vlaanderen 53,13 5,28 4,78 18,92
+Fluvius West 60,53 6,70 5,99 18,92
+Fluvius Zenne-Dijle
+59,49 5,87 5,31 18,92
+(*) Ingeval uw « maandpiek » lager is dan 2,5 kW zal u in ieder geval minimum 2,5 kW gefactureerd worden volgens de regels van VREG
+(https://www.vreg.be/nl/veelgestelde-vragen/hoeveel-capaciteitstariefbetaalt-u-voor-een-kilowatt).
+Analoge Meter
+Netbeheerder
+Capaciteitstarief Afnametarief
+Afnametarief Tarief databeheer Prosumententarief
+vaste term Excl. nacht
+(€/jaar)
+(c€/kWh)
+(c€/kWh)
+(€/jaar) (€/kW/jaar)
+Fluvius Antwerpen 130,92 8,09 7,55 18,92 54,63
+Fluvius Halle-Vilvoorde 148,52 9,28 8,76 18,92 62,66
+Fluvius Imewo 143,63 8,90 8,37 18,92 60,12
+Fluvius Kempen 148,95 10,03 9,36 18,92 67,79
+Fluvius Limburg 129,98 9,23 8,67 18,92 62,38
+Fluvius Midden-Vlaanderen 132,83 8,77 8,27 18,92 59,23
+Fluvius West 151,32 10,30 9,60 18,92 69,56
+Fluvius Zenne-Dijle 148,73 9,70 9,14 18,92 65,51
+(2) BTW is niet van toepassing
+Alle kosten verbonden aan het gebruik van de netten, zoals taksen, vergoedingen, bijdragen en toeslagen, blijven variabel, aanpasbaar en volledig doorrekenbaar
+aan de klant, zelfs retroactief. Deze prijsonderdelen zijn degene die de Regulatoren hebben goedgekeurd op het moment van opmaak van deze tariefkaart voor een
+jaarlijks/maandelijks gelezen meter. In het geval dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bijdragen en nettarieven
+anderzijds, zijn het deze laatste die gelden.
+Deze prijzen zijn geldig voor de intekenperiode juni 2026 en moeten ten laatste 6 maand na intekenperiode gestart zijn en gelden voor particuliere aansluitingen met
+een vermogen van < 56 KVA in Vlaanderen. Voor iedere wijziging of elk nieuw element in de kosten die het gevolg is van een wetgeving of van een bevoegde
+instantie, behoudt Trevion zich het recht voor om haar prijzen aan te passen. Elk nieuw wettelijk supplement wordt 1 op 1 aan de klant doorgerekend. In het geval
+dat er een verschil zou zijn tussen de tarieven van Trevion enerzijds en de wettelijke bedragen en nettarieven anderzijds, zijn het deze laatste die gelden.
+Trevion nv | Dulle-Grietlaan 17/17, 9050 Gentbrugge | BTW BE 0839.663.969 I 09/255.70.10 | info@trevion.be | IBAN BE08 0016 9476 5913 | BIC GEBABEBB
