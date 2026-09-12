@@ -821,6 +821,7 @@ async def _replay_row(
         s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
     }
     cards.digests.update(replay.pdfs)
+    cards.calls.clear()
     try:
         seen_on = date.fromisoformat(row["_seen_on"])
     except (KeyError, ValueError):
@@ -845,10 +846,10 @@ async def _replay_row(
         summary.unreplayable.append(f"{label}: the archive path no longer settles it")
         return
     seen_month = _month_id(seen_on.year, seen_on.month)
-    sources = [
-        _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
-        for key in sorted(memo.touched)
-    ]
+    sources = _sources_of(memo, cards, out, seen_month)
+    # A card the row had never named (OCTA+'s, before its archive path went
+    # through the seam) is kept now, under this row's month.
+    cards.file(path.stem, (s["pdf"] for s in sources if "pdf" in s))
     summary.replayed += 1
     if _write_card(
         out,
@@ -986,12 +987,7 @@ async def archive(
                         # estimate: leave the month for a later backfill.
                         summary.absent += 1
                         continue
-                    sources = [
-                        _source_entry(
-                            key, _write_text(out, seen_month, memo[key]), cards
-                        )
-                        for key in sorted(memo.touched)
-                    ]
+                    sources = _sources_of(memo, cards, out, seen_month)
                     _write_card(
                         out,
                         ex.id,
