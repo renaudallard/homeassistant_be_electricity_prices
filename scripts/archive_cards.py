@@ -19,11 +19,12 @@ removed on every run.
 
 The cards themselves are kept too. With ``--pdfs DIR`` every PDF whose
 bytes the branch has not recorded yet is written to
-``DIR/cards-<YYYY-MM>/<sha256>.pdf``, and the workflow uploads that
-directory as release assets of a separate cards repository (releases
-named by the capture month, at most a thousand files each, since a month
-of cards is about 100 MB and three years of them no git branch can hold),
-then records where each one landed in ``<out>/pdfs.json``. A card's
+``DIR/electricity-<YYYY-MM>/<sha256>.pdf``, and the workflow uploads that
+directory as release assets of the cards repository shared with
+be_water_prices (releases named by this integration's namespace and the
+capture month, at most a thousand files each, since a month of cards is
+about 100 MB and three years of them no git branch can hold), then
+records where each one landed in ``<out>/pdfs.json``. A card's
 ``_sources`` entry names its PDF by digest alone; the manifest is the one
 place that says where it lives. The same digest is what keeps a daily run
 cheap: a card whose bytes have not changed is served the text the branch
@@ -68,6 +69,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -131,6 +133,10 @@ _CARD_TIMEOUT_S = 300
 _VOLATILE_KEYS = ("_cached_at", "_seen_on")
 # The digest of the parser sources the branch was last replayed with.
 _PARSER_STAMP = "parser.txt"
+# This integration's namespace in the cards repository, which it shares
+# with be_water_prices: its releases are electricity-<YYYY-MM>[-n], its
+# listings live under electricity/ in that repository's tree.
+_RELEASE_PREFIX = "electricity"
 # One table per supplier of which months the branch holds, for the reader
 # who wants to know whether a given month of a given contract is covered
 # without listing directories, each month linking to the PDF it was
@@ -156,7 +162,8 @@ Written daily by `.github/workflows/archive_cards.yml` running
   month, stored once and shared between the cards that read it. Each card
   lists its own under `_sources`, and names the PDF it read by SHA-256.
 - `pdfs.json`: where each PDF is kept, as `<release tag>/<sha256>.pdf` in
-  the cards repository's releases.
+  the releases of the cards repository (`be_price_cards`, shared with
+  be_water_prices; this integration's releases are `electricity-<YYYY-MM>`).
 - `coverage.md`: which months the branch holds for each contract and
   region, whether each was captured live or mirrored from the supplier's
   archive, and a link from each month to the PDF it was parsed from.
@@ -264,7 +271,7 @@ class _Cards(StoredTexts):
     def keep(self, digest: str, payload: bytes) -> None:
         if self.pdf_dir is None or digest in self.kept or digest in self.saved:
             return
-        rel = f"cards-{self.seen_month}/{digest}.pdf"
+        rel = f"{_RELEASE_PREFIX}-{self.seen_month}/{digest}.pdf"
         path = self.pdf_dir / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
@@ -404,6 +411,12 @@ def _month_id(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
 
 
+def _release_month(path: str) -> str:
+    """The month a release path was captured in, from its tag."""
+    found = re.search(r"(\d{4}-\d{2})", path.split("/")[0])
+    return found.group(1) if found else ""
+
+
 def _months_before(today: date, months: int) -> str:
     """The month id ``months`` before ``today``'s month."""
     index = today.year * 12 + today.month - 1 - months
@@ -533,9 +546,9 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     manifest = out / _MANIFEST
     if manifest.exists():
         kept = json.loads(manifest.read_text(encoding="utf-8"))
-        # A release path is cards-<YYYY-MM>/<digest>.pdf; the workflow
+        # A release path is <prefix>-<YYYY-MM>[-n]/<digest>.pdf; the workflow
         # deletes the release itself on the same cutoff.
-        current = {d: p for d, p in kept.items() if p[len("cards-") :][:7] >= cutoff}
+        current = {d: p for d, p in kept.items() if _release_month(p) >= cutoff}
         if len(current) != len(kept):
             removed += len(kept) - len(current)
             manifest.write_text(

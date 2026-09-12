@@ -394,7 +394,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     )
     assert (summary.rendered, summary.unrendered, summary.pdfs_saved) == (1, 0, 1)
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
-    assert (pdfs / f"cards-2026-09/{digest}.pdf").read_bytes() == b"%PDF v1"
+    assert (pdfs / f"electricity-2026-09/{digest}.pdf").read_bytes() == b"%PDF v1"
     card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
     [source] = card["_sources"]
     assert source["pdf"] == digest
@@ -416,7 +416,9 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     assert renders == [b"%PDF v1"]
 
     # Once the manifest records the upload it is neither written nor rendered.
-    (out / "pdfs.json").write_text(json.dumps({digest: f"cards-2026-09/{digest}.pdf"}))
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
+    )
     shutil.rmtree(pdfs)
     summary = await ac.archive(
         out,
@@ -439,7 +441,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     )
     assert (summary.rendered, summary.pdfs_saved, summary.stored) == (1, 1, 1)
     digest2 = hashlib.sha256(b"%PDF v2").hexdigest()
-    assert (pdfs / f"cards-2026-09/{digest2}.pdf").exists()
+    assert (pdfs / f"electricity-2026-09/{digest2}.pdf").exists()
     card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["_sources"][0]["pdf"] == digest2
     assert card["energy"]["single"] == 0.3
@@ -772,8 +774,8 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
     with pytest.raises(aiohttp.ClientConnectionError):
         asyncio.run(run())
     # A kept copy is found by digest under any release directory.
-    (tmp_path / "cards-2026-09-2").mkdir()
-    (tmp_path / "cards-2026-09-2/abc.pdf").write_bytes(b"%PDF kept")
+    (tmp_path / "electricity-2026-09-2").mkdir()
+    (tmp_path / "electricity-2026-09-2/abc.pdf").write_bytes(b"%PDF kept")
     replay.pdfs = {"https://acme.test/card.pdf": "abc"}
     assert asyncio.run(run()) == b"%PDF kept"
     # Without a local copy and without a manifest entry there is nowhere to go.
@@ -785,11 +787,16 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
 
 def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:
     (tmp_path / "pdfs.json").write_text(
-        json.dumps({"old": "cards-2023-08/old.pdf", "kept": "cards-2023-09/kept.pdf"})
+        json.dumps(
+            {
+                "old": "electricity-2023-08/old.pdf",
+                "kept": "electricity-2023-09-2/kept.pdf",
+            }
+        )
     )
     assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 1
     assert json.loads((tmp_path / "pdfs.json").read_text()) == {
-        "kept": "cards-2023-09/kept.pdf"
+        "kept": "electricity-2023-09-2/kept.pdf"
     }
 
 
@@ -931,13 +938,15 @@ async def test_a_person_can_get_from_a_month_to_its_pdf(tmp_path: Path) -> None:
         in index
     )
     # The upload step recorded it; the index-only pass links everything up.
-    (out / "pdfs.json").write_text(json.dumps({digest: f"cards-2026-09/{digest}.pdf"}))
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
+    )
     ac._write_coverage(out, base)
     ac._write_pdf_index(out, base)
-    url = f"{base}/cards-2026-09/{digest}.pdf"
+    url = f"{base}/electricity-2026-09/{digest}.pdf"
     assert f"| a | wallonia | [live]({url}) |" in (out / "coverage.md").read_text()
     index = (out / "pdfs.md").read_text()
-    assert "## cards-2026-09" in index
+    assert "## electricity-2026-09" in index
     assert (
         f"| [{digest[:12]}….pdf]({url}) | acme / a / wallonia / 2026-09<br>acme / b / wallonia / 2026-09 |"
         in index

@@ -83,7 +83,7 @@ jobs:
       - name: Store today's cards
         id: store
         env:
-          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
+          CARDS_REPO: renaudallard/be_price_cards
         run: >-
           python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs
           --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
@@ -93,19 +93,21 @@ jobs:
 
       - name: Keep the cards themselves
         id: keep
-        # The PDFs go to a separate repository's releases, named by the
-        # month they were captured in and by their SHA-256: a month of cards
-        # is about 100 MB, which no git branch of this repository should
-        # carry and which HACS would mistake for a release if it lived here.
-        # GitHub caps a release at a thousand assets, so a month that
-        # overflows (a backfill does) spills into cards-YYYY-MM-2 and on;
-        # the manifest on the branch says which one holds each file. Needs a
+        # The PDFs go to the releases of be_price_cards, a repository shared
+        # with be_water_prices: this integration's releases are named
+        # electricity-<YYYY-MM> after the month they were captured in, the
+        # files by their SHA-256. A month of cards is about 100 MB, which no
+        # git branch of this repository should carry and which HACS would
+        # mistake for a release if it lived here. GitHub caps a release at a
+        # thousand assets, so a month that overflows (a backfill does)
+        # spills into electricity-YYYY-MM-2 and on; the manifest on the
+        # branch says which one holds each file. Needs a
         # fine-grained token with contents read and write on that repository
         # in the BE_ELECTRICITY_CARDS secret; without it the step says so and
         # the branch still gets the parsed cards and their texts.
         env:
           GH_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
-          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
+          CARDS_REPO: renaudallard/be_price_cards
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "BE_ELECTRICITY_CARDS is not set: today's PDFs are not kept" >&2
@@ -117,11 +119,11 @@ jobs:
           if [ -z "$(git ls-remote --heads "$cards_url" 2>/dev/null)" ]; then
             seed=$(mktemp -d)
             printf '%s\n' \
-              "# Tariff cards" \
+              "# Price cards" \
               "" \
-              "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices" \
-              "refers to, one release per month, each file named by its SHA-256. Written by" \
-              "its archive_cards.yml workflow; nothing here is edited by hand." \
+              "The original tariff cards the Belgian price integrations refer to, kept as" \
+              "release assets named by their SHA-256, one namespace per integration." \
+              "Nothing here is edited by hand." \
               > "$seed/README.md"
             git -C "$seed" init -q -b main
             git -C "$seed" add README.md
@@ -134,12 +136,12 @@ jobs:
           [ -s "$manifest" ] || echo '{}' > "$manifest"
           ensure_release() {
             gh release view "$1" --repo "$CARDS_REPO" >/dev/null 2>&1 && return 0
-            gh release create "$1" --repo "$CARDS_REPO" --title "Tariff cards $1" --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to, captured in $2, each named by its SHA-256. Which card each file is: https://github.com/${GITHUB_REPOSITORY}/blob/archive/pdfs.md#$1 (and coverage.md there links each contract and month to its file)."
+            gh release create "$1" --repo "$CARDS_REPO" --title "Electricity cards $1" --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to, captured in $2, each named by its SHA-256. Which card each file is: https://github.com/${CARDS_REPO}/blob/main/electricity/pdfs.md#$1 (and coverage.md beside it links each contract and month to its file)."
           }
-          for dir in tmp/pdfs/cards-*/; do
+          for dir in tmp/pdfs/electricity-*/; do
             [ -d "$dir" ] || continue
             base=$(basename "$dir")
-            month=${base#cards-}
+            month=${base#electricity-}
             # Every shard of this month that exists: which file is where,
             # and how full the last one is.
             : > have.txt
@@ -176,9 +178,10 @@ jobs:
             fi
           done
           # Same retention as the branch: a month older than three years goes.
-          cutoff="cards-$(date -u -d '-36 months' +%Y-%m)"
+          # Only this integration's releases; the water ones are not ours.
+          cutoff="electricity-$(date -u -d '-36 months' +%Y-%m)"
           gh release list --repo "$CARDS_REPO" --json tagName --jq '.[].tagName'             | while read -r tag; do
-              case "$tag" in cards-*) ;; *) continue ;; esac
+              case "$tag" in electricity-*) ;; *) continue ;; esac
               if [ "$tag" \< "$cutoff" ]; then
                 gh release delete "$tag" --repo "$CARDS_REPO" --yes --cleanup-tag
               fi
@@ -189,10 +192,59 @@ jobs:
         # in the manifest; rewrite them now so every month links to a file
         # that exists. No fetch, a second or two.
         env:
-          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
+          CARDS_REPO: renaudallard/be_price_cards
         run: >-
           python scripts/archive_cards.py --out tmp/archive --index-only
           --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
+
+      - name: Publish the listings in the cards repository
+        # The releases name files by digest; the listings that name the
+        # cards live beside them, under this integration's own directory
+        # of the shared repository, so a person on the releases page is one
+        # click from the names. A commit only when a listing changed.
+        env:
+          CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
+          CARDS_REPO: renaudallard/be_price_cards
+        run: |
+          [ -n "$CARDS_TOKEN" ] || exit 0
+          cards_url="https://x-access-token:${CARDS_TOKEN}@github.com/${CARDS_REPO}.git"
+          git clone -q --depth=1 "$cards_url" tmp/cards
+          mkdir -p tmp/cards/electricity
+          printf '%s\n' \
+            "# Price cards" \
+            "" \
+            "The original tariff cards the Belgian price integrations refer to, kept as" \
+            "release assets named by their SHA-256, one namespace per integration:" \
+            "" \
+            "- \`electricity/\`: homeassistant_be_electricity_prices, releases \`electricity-<YYYY-MM>\`." \
+            "- \`water/\`: be_water_prices, releases \`water-<YYYY-MM>\`." \
+            "" \
+            "Each directory holds the listings that name the files: which contract and month" \
+            "a card is, and where to download it. Nothing here is edited by hand." \
+            > tmp/cards/README.md
+          printf '%s\n' \
+            "# Electricity cards" \
+            "" \
+            "The tariff cards homeassistant_be_electricity_prices parsed, kept as the assets of" \
+            "the \`electricity-<YYYY-MM>\` releases of this repository and named by their SHA-256." \
+            "" \
+            "- \`coverage.md\`: per contract and region, the months held, each linking to its card." \
+            "- \`pdfs.md\`: every kept card by release, with the contracts and months it was read for." \
+            "" \
+            "The parsed cards themselves are the \`archive\` branch of" \
+            "https://github.com/renaudallard/homeassistant_be_electricity_prices." \
+            > tmp/cards/electricity/README.md
+          cp tmp/archive/coverage.md tmp/archive/pdfs.md tmp/cards/electricity/
+          cd tmp/cards
+          git add -A
+          if git diff --cached --quiet; then
+            echo "listings unchanged"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Electricity listings of $(date -u +%Y-%m-%d)"
+          git push -q origin HEAD:main
 
       - name: Warn before the upload token expires
         # A fine-grained token lives a year at most, and the first sign of

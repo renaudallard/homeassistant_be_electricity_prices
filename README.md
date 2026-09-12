@@ -1110,11 +1110,13 @@ branch: the supplier (`totalenergies`, `bolt`, ...), the contract
    region, a column per month; click the month and the PDF downloads
    from the cards repository's releases. The other way round,
    [`pdfs.md`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/pdfs.md)
-   lists every kept file by release with each card it was read for, and
-   each release's notes point at its section, so a file seen on the
-   releases page can be named too. Behind both is `pdfs.json`, which maps
-   a digest to `cards-<YYYY-MM>/<digest>.pdf` in those releases; the
-   digest in a JSON's `_sources` is the same key.
+   lists every kept file by release with each card it was read for. Both
+   listings are also published under
+   [`electricity/`](https://github.com/renaudallard/be_price_cards/tree/main/electricity)
+   in the cards repository itself, and each release's notes point there,
+   so a file seen on the releases page can be named too. Behind both is
+   `pdfs.json`, which maps a digest to `electricity-<YYYY-MM>/<digest>.pdf`
+   in those releases; the digest in a JSON's `_sources` is the same key.
 3. **The text the parser read** is under `texts/<YYYY-MM>/`, named by the
    digest of the text itself and listed in the JSON's `_sources`, for
    checking a figure against the card without opening the PDF. A card is filed under the month its
@@ -1124,9 +1126,10 @@ changed, and months older than three years are dropped.
 
 The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the branch has not seen before is uploaded
-to a release of a separate repository,
-[`homeassistant_be_electricity_prices_cards`](https://github.com/renaudallard/homeassistant_be_electricity_prices_cards),
-named by the month it was captured in and holding at most a thousand files
+to a release of [`be_price_cards`](https://github.com/renaudallard/be_price_cards),
+a repository shared with be_water_prices in which this integration owns the
+`electricity-<YYYY-MM>` releases and the `electricity/` directory; a release
+is named by the month it was captured in and holds at most a thousand files
 (GitHub's limit per release; a backfill spills into a second one), each
 file named by its SHA-256. Each card on the branch names its PDF by that
 digest under `_sources`, and the branch's `pdfs.json` says which release
