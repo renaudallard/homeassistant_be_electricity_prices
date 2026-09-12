@@ -118,8 +118,9 @@ column already represents the network rate surfaced by Trevion.
 - green certificate and WKK costs from `_meter_shared_values`;
 - the domiciled Energiefonds row in EUR/month.
 
-Residential card values are already VAT-inclusive, so `vat_rate=0.0` and
-`published_vat_rate=0.06`. Feed-in remains VAT-exempt.
+Residential card values are already VAT-inclusive, so `vat_rate=0.0`, as on
+every other residential card; `published_vat_rate` is left at its default for
+the professional path to fill. Feed-in remains VAT-exempt.
 
 ## Validity
 

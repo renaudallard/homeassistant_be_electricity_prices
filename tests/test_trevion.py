@@ -243,7 +243,7 @@ def test_every_card_parses_regulated_flemish_costs(fixture: str) -> None:
     assert snap.taxes.flanders_renewables == pytest.approx(0.016112)
     assert snap.taxes.energy_fund_eur_per_month == pytest.approx(0.0)
     assert snap.taxes.vat_rate == pytest.approx(0.0)
-    assert snap.taxes.published_vat_rate == pytest.approx(0.06)
+    assert snap.taxes.published_vat_rate == pytest.approx(0.0)
 
 
 async def test_listing_resolves_all_cards_without_confusing_dynamic_plus() -> None:

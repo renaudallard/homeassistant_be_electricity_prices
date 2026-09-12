@@ -387,7 +387,6 @@ def _extract_taxes(text: str) -> TaxOverlay:
         flanders_renewables=(green + chp) / 100.0,
         energy_fund_eur_per_month=_number(fund.group(1)),
         vat_rate=0.0,
-        published_vat_rate=0.06,
     )
 
 
