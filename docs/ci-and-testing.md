@@ -749,9 +749,9 @@ answer: it walks the same registry, fetches every (supplier, contract, region) c
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
-`archive` branch (see `archive_cards.yml` below) and the month cache reads the result for any
-month a supplier's own archive cannot serve (`snapshot_store._archived_card_from_github`, see
-[coordinator.md](coordinator.md)).
+`archive` branch (see `archive_cards.yml` below) and the month cache reads the result first for
+any closed month, before the supplier's own archive (`snapshot_store._archived_card_from_github`,
+see [coordinator.md](coordinator.md)).
 
 Three design points:
 

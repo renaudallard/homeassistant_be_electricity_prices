@@ -461,10 +461,11 @@ first and last UTC hour, keeping the query window aligned with the backfill's
 
 Both backfill passes cache one `SupplierSnapshot` per month via
 `_month_snapshot_cache` (`cohort.py:725`, called at `backfill.py:431`), so a 365-day window
-touches at most 12 archive fetches. `_snapshot_for_month` asks the extractor's
-`fetch_for_month` archive first (see [provider-framework.md](provider-framework.md)), then the
-repository's own card archive (`_archived_card_from_github`, the `archive` branch that
-`.github/workflows/archive_cards.yml` writes daily), and falls back to the current live
+touches at most 12 archive fetches. `_snapshot_for_month` asks the
+repository's own card archive first for a closed month (`_archived_card_from_github`, the
+`archive` branch that `.github/workflows/archive_cards.yml` writes daily and mirrors the supplier
+archives onto), then the extractor's `fetch_for_month` archive for a month the branch does not
+hold (see [provider-framework.md](provider-framework.md)), and falls back to the current live
 snapshot only when neither holds the month.
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
