@@ -1128,10 +1128,9 @@ The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the branch has not seen before is uploaded
 to a release of [`be_price_cards`](https://github.com/renaudallard/be_price_cards),
 a repository shared with be_water_prices in which this integration owns the
-`electricity-<YYYY-MM>` releases and the `electricity/` directory; a release
-is named by the month it was captured in and holds at most a thousand files
-(GitHub's limit per release; a backfill spills into a second one), each
-file named by its SHA-256. Each card on the branch names its PDF by that
+`electricity-<YYYY-MM>` releases and the `electricity/` directory. A release
+holds the cards for one month, whatever day each was captured or mirrored
+on, about two hundred files named by their SHA-256. Each card on the branch names its PDF by that
 digest under `_sources`, and the branch's `pdfs.json` says which release
 holds it. A month of cards is about 100 MB, which is why they live in
 releases rather than on a branch. That

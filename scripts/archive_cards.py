@@ -19,12 +19,13 @@ removed on every run.
 
 The cards themselves are kept too. With ``--pdfs DIR`` every PDF whose
 bytes the branch has not recorded yet is written to
-``DIR/electricity-<YYYY-MM>/<sha256>.pdf``, and the workflow uploads that
-directory as release assets of the cards repository shared with
-be_water_prices (releases named by this integration's namespace and the
-capture month, at most a thousand files each, since a month of cards is
-about 100 MB and three years of them no git branch can hold), then
-records where each one landed in ``<out>/pdfs.json``. A card's
+``DIR/electricity-<YYYY-MM>/<sha256>.pdf``, where the month is the one the
+card is for (the month of the row that read it, so a mirrored March card
+goes to March), and the workflow uploads each directory as the assets of
+the release of that name in the cards repository shared with
+be_water_prices: one release per month of cards, about two hundred files,
+since a month of cards is about 100 MB and three years of them no git
+branch can hold. Where each one landed is recorded in ``<out>/pdfs.json``. A card's
 ``_sources`` entry names its PDF by digest alone; the manifest is the one
 place that says where it lives. The same digest is what keeps a daily run
 cheap: a card whose bytes have not changed is served the text the branch
@@ -134,8 +135,9 @@ _VOLATILE_KEYS = ("_cached_at", "_seen_on")
 # The digest of the parser sources the branch was last replayed with.
 _PARSER_STAMP = "parser.txt"
 # This integration's namespace in the cards repository, which it shares
-# with be_water_prices: its releases are electricity-<YYYY-MM>[-n], its
-# listings live under electricity/ in that repository's tree.
+# with be_water_prices: its releases are electricity-<YYYY-MM>, one per
+# month of cards, its listings live under electricity/ in that
+# repository's tree.
 _RELEASE_PREFIX = "electricity"
 # One table per supplier of which months the branch holds, for the reader
 # who wants to know whether a given month of a given contract is covered
@@ -163,7 +165,8 @@ Written daily by `.github/workflows/archive_cards.yml` running
   lists its own under `_sources`, and names the PDF it read by SHA-256.
 - `pdfs.json`: where each PDF is kept, as `<release tag>/<sha256>.pdf` in
   the releases of the cards repository (`be_price_cards`, shared with
-  be_water_prices; this integration's releases are `electricity-<YYYY-MM>`).
+  be_water_prices; this integration's releases are `electricity-<YYYY-MM>`,
+  one per month of cards, whatever day the card was captured on).
 - `coverage.md`: which months the branch holds for each contract and
   region, whether each was captured live or mirrored from the supplier's
   archive, and a link from each month to the PDF it was parsed from.
@@ -247,7 +250,9 @@ class _Cards(StoredTexts):
     stored text instead of being rendered again, which is what makes a
     daily walk over 250 cards cheap. On top of it, ``pdfs.json`` says which
     digests are already uploaded, and bytes the branch has not recorded yet
-    are written under ``pdf_dir`` for the workflow to upload.
+    are held until a row names them and then written under ``pdf_dir`` in
+    the directory of that row's month, for the workflow to upload to the
+    release of that month.
     """
 
     def __init__(
@@ -267,15 +272,34 @@ class _Cards(StoredTexts):
         if manifest.exists():
             self.kept = json.loads(manifest.read_text(encoding="utf-8"))
         self.saved: dict[str, str] = {}
+        # Downloaded, not recorded anywhere yet, waiting for the row that
+        # names it to say which month it is for.
+        self.pending: dict[str, bytes] = {}
 
     def keep(self, digest: str, payload: bytes) -> None:
         if self.pdf_dir is None or digest in self.kept or digest in self.saved:
             return
-        rel = f"{_RELEASE_PREFIX}-{self.seen_month}/{digest}.pdf"
-        path = self.pdf_dir / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(payload)
-        self.saved[digest] = rel
+        self.pending[digest] = payload
+
+    def file(self, month_id: str, digests: Iterable[str]) -> None:
+        """Write the pending bytes a row read under that row's month."""
+        if self.pdf_dir is None:
+            return
+        for digest in digests:
+            payload = self.pending.pop(digest, None)
+            if payload is None:
+                continue
+            rel = f"{_RELEASE_PREFIX}-{month_id}/{digest}.pdf"
+            path = self.pdf_dir / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            self.saved[digest] = rel
+
+    def file_the_rest(self) -> None:
+        """Bytes no row ever named, a card whose parse failed (Ecofix's page
+        images), go under the month they were captured in: kept, findable
+        by digest, just without a row to say what they are."""
+        self.file(self.seen_month, list(self.pending))
 
 
 class _KeptResponse:
@@ -902,6 +926,7 @@ async def archive(
                     summary.stored += 1
                 else:
                     summary.unchanged += 1
+                cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
             for ex, contract, region in targets:
                 fetch_for_month = ex.fetch_for_month
                 if fetch_for_month is None or ex.id in patience.given_up:
@@ -949,6 +974,7 @@ async def archive(
                         "archive",
                     )
                     summary.backfilled += 1
+                    cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
         # A fresh archive holds nothing older than this parser, so the first
         # run only stamps it; from then on a changed digest replays the rows.
         stamp = out / _PARSER_STAMP
@@ -968,6 +994,7 @@ async def archive(
                 rerender=rerender,
             )
         stamp.write_text(parser + "\n", encoding="utf-8")
+    cards.file_the_rest()
     summary.rendered = cards.rendered
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)

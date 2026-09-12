@@ -785,6 +785,89 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
         asyncio.run(run())
 
 
+async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
+    tmp_path: Path,
+) -> None:
+    """A card labelled August and captured in September goes to August's
+    release directory, a mirrored month to its own month, and bytes no row
+    names (a card whose parse failed) to the month they were captured in."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession(
+        {
+            PDF_URL: b"%PDF august",
+            "https://acme.test/july.pdf": b"%PDF july",
+            "https://acme.test/broken.pdf": b"%PDF broken",
+        }
+    )
+
+    def render(payload: bytes) -> str:
+        return payload.decode()
+
+    async def read(url: str) -> str:
+        return await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            url,
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await read(PDF_URL)
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label="augustus 2026"
+        )
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 7:
+            return None
+        await read("https://acme.test/july.pdf")
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label="2026-07"
+        )
+
+    async def broken(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await read("https://acme.test/broken.pdf")
+        raise ExtractorError("could not parse the card")
+
+    acme = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        fetch_for_month=fetch_for_month,
+    )
+    summary = await ac.archive(
+        out,
+        extractors=[acme, _extractor(broken, sid="beta")],
+        pdf_dir=pdfs,
+        backfill_months=2,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert summary.pdfs_saved == 3
+    august = hashlib.sha256(b"%PDF august").hexdigest()
+    july = hashlib.sha256(b"%PDF july").hexdigest()
+    broken_digest = hashlib.sha256(b"%PDF broken").hexdigest()
+    assert (pdfs / f"electricity-2026-08/{august}.pdf").exists()
+    assert (pdfs / f"electricity-2026-07/{july}.pdf").exists()
+    assert (pdfs / f"electricity-2026-09/{broken_digest}.pdf").exists()
+    assert sorted(p.name for p in pdfs.iterdir()) == [
+        "electricity-2026-07",
+        "electricity-2026-08",
+        "electricity-2026-09",
+    ]
+
+
 def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:
     (tmp_path / "pdfs.json").write_text(
         json.dumps(
