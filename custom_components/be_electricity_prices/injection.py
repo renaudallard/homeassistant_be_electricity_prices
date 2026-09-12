@@ -45,15 +45,18 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .pricing import (
+    is_offpeak,
     tou_slot,
 )
 from .providers.base import (
     DynamicRates,
     EnergyRates,
+    FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierSnapshot,
     TimeOfUseRates,
+    VariableRates,
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
@@ -277,8 +280,12 @@ def _tou_injection_rate(
     coordinator has already baked the triplet for the tick.
     """
     rule = _tou_weekend_rule(energy)
-    if rule is None or inj.peak is None:
+    if inj.peak is None:
         return None
+    if rule is None:
+        if not isinstance(energy, (FixedRates, VariableRates)):
+            return None
+        return inj.offpeak if is_offpeak(when) else inj.peak
     slot = tou_slot(when, rule)
     if month_mean is not None and inj.month_indexed:
         coefs = _slot_coefficients(inj)
@@ -497,7 +504,10 @@ def _injection_varies_intraday(inj: InjectionRates, energy: EnergyRates) -> bool
     (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
     array is worth emitting for it. Mirrors the branch conditions of
     ``_injection_price_for_slot``."""
-    if _tou_weekend_rule(energy) is not None and inj.peak is not None:
+    if inj.peak is not None and (
+        _tou_weekend_rule(energy) is not None
+        or isinstance(energy, (FixedRates, VariableRates))
+    ):
         return True
     return _injection_is_spot_formula(inj, energy)
 

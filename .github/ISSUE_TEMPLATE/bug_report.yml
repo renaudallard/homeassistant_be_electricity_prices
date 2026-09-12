@@ -125,6 +125,7 @@ body:
         - EnergyVision
         - Frank Energie
         - OCTA+
+        - Trevion
         - "Expert: custom formula (no public card)"
     validations:
       required: true

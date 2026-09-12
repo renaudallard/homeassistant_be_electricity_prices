@@ -1230,6 +1230,17 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
         "these contracts index injection on a monthly mean but no flow step "
         f"offers them an ENTSO-E key, so the formula can never resolve: {missing}"
     )
+    redundant = sorted(
+        f"{extractor.id}/{contract.id}"
+        for extractor in EXTRACTORS.values()
+        for contract in extractor.contracts
+        if contract.kind in SPOT_PRICED_CONTRACT_KINDS
+        and contract.spot_indexed_injection
+    )
+    assert redundant == [], (
+        "these contracts already collect an ENTSO-E key through their energy "
+        f"kind and must not advertise a second injection-key path: {redundant}"
+    )
 
 
 def test_a_month_indexed_card_losing_its_flag_fails() -> None:

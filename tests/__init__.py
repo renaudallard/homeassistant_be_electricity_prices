@@ -62,7 +62,7 @@ def fixture_text(name: str, *, layout: bool = False) -> str:
 
     ``layout=True`` routes through ``extract_pdf_text_layout`` for
     suppliers whose tariff cards rely on column positions (Bolt,
-    DATS 24, Ecopower, TotalEnergies). Default is ``extract_pdf_text``
+    DATS 24, Ecopower, TotalEnergies, Trevion). Default is ``extract_pdf_text``
     (pypdf), which is fine for the rest.
 
     Cached for the lifetime of the Python process: PDF extraction is

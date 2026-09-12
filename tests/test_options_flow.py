@@ -5045,7 +5045,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
     from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
 
     expected = {
-        ("flanders", "static", False): 53,
+        # Trevion adds one fixed card and five dynamic/monthly-indexed cards,
+        # all residential and Flanders-only.
+        ("flanders", "static", False): 54,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -5057,7 +5059,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # dynamic settlement, in all three regions. Cheap to re-cost: a
         # sibling reads the same document as the variable contract beside it,
         # so the pair is one download and one parse.
-        ("flanders", "spot", False): 32,
+        ("flanders", "spot", False): 37,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

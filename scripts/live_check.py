@@ -86,6 +86,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "luminus",
     "mega",
     "totalenergies",
+    "trevion",
     "bolt",
     "octaplus",
     "frank",
@@ -917,6 +918,25 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
         )
         _expect_energy_contribution(prefix, snap.taxes)
         _validate_snapshot(prefix, cid, snap)
+
+
+async def _check_trevion(
+    session: aiohttp.ClientSession, trevion: types.ModuleType
+) -> None:
+    for contract in trevion.EXTRACTOR.contracts:
+        cid = contract.id
+        prefix = f"trevion/{cid}/flanders"
+        try:
+            snap = await _fetch_with_retry(
+                partial(trevion.fetch, session, cid, "flanders")
+            )
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        _expect_region_basics(prefix, "flanders", snap)
+        _expect_energy_contribution(prefix, snap.taxes)
+        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
 async def _check_two_region_supplier(
@@ -2182,6 +2202,8 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         (``month_indexed``). Eneco's Belpex-injectie is the case. The flag
         carries the same weight: without it the coefficients read as a
         per-hour formula and the credit follows the current slot's spot.
+      * ``"bihourly"`` - a static current / peak / offpeak credit with no
+        transition slot or index formula. Trevion Vast is the case.
       * ``"triplet"`` - a per-slot peak / transition / offpeak credit whose
         three slots are each a month formula: the printed triplet, the three
         coefficient pairs AND ``month_indexed``. Engie Empower Flextime is the
@@ -2222,6 +2244,21 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             f"{prefix}: spot-indexed injection (factor + base present)",
             factor is not None and base is not None,
             detail=f"factor={factor}, base={base}",
+        )
+    elif shape == "bihourly":
+        peak = getattr(injection, "peak", None)
+        transition = getattr(injection, "transition", None)
+        offpeak = getattr(injection, "offpeak", None)
+        _expect(
+            f"{prefix}: static bi-hourly injection rates present",
+            current is not None
+            and peak is not None
+            and offpeak is not None
+            and transition is None
+            and factor is None
+            and base is None,
+            detail=f"current={current}, peak={peak}, transition={transition}, "
+            f"offpeak={offpeak}, factor={factor}, base={base}",
         )
     elif shape in ("spp", "month"):
         # Both shapes are month coefficients plus the card's printed
@@ -2331,6 +2368,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     # EBEM indexes on SPP0, the solar-weighted mean, same reasoning.
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
+    # Trevion Vast publishes a day/night feed-in pair beside its fixed
+    # commodity rates. Flex and LifePowr settle feed-in on Belpex_SPP_BE.
+    "groene_energie_vast": "bihourly",
+    "groene_stroom_flex": "spp",
+    "lifepowr": "spp",
     # Ecofix Flexy states "Injectie: (BELPEX-SPP-M * 0,0884) - 0,5000" and
     # settles on the billed period's index. Its printed Maandprijs runs two
     # months behind: the Mei 2026 card's 4,32 inverts to an index of 54,52,
@@ -3211,6 +3253,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "luminus": _check_luminus,
     "mega": _check_mega,
     "totalenergies": _check_totalenergies,
+    "trevion": _check_trevion,
     "bolt": _check_bolt,
     "octaplus": _check_octaplus,
     "frank": _check_frank,

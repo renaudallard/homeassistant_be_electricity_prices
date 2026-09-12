@@ -621,10 +621,14 @@ def test_historical_injection_rate_picks_tou_slot() -> None:
     )
     # No energy/when context -> single-rate fallback.
     assert _historical_injection_rate(inj) == pytest.approx(0.05)
-    # A non-TOU contract ignores the per-slot fields entirely.
+    # Fixed and variable bi-hourly cards use the standard Belgian off-peak
+    # schedule even though they do not carry a three-band TOU rule.
     assert _historical_injection_rate(
         inj, energy=FixedRates(single=0.20), when=peak_h
-    ) == pytest.approx(0.05)
+    ) == pytest.approx(0.084)
+    assert _historical_injection_rate(
+        inj, energy=FixedRates(single=0.20), when=off_h
+    ) == pytest.approx(0.015)
 
 
 def test_injection_price_dynamic_returns_none_without_spot() -> None:
@@ -866,6 +870,11 @@ def test_injection_varies_intraday_true_for_spot_and_tou() -> None:
         TimeOfUseRates(
             peak=0.2, transition=0.15, offpeak=0.1, weekend_rule="weekend_no_peak"
         ),
+    )
+    # Trevion Vast publishes a peak/off-peak injection pair on fixed energy.
+    assert _injection_varies_intraday(
+        InjectionRates(current=0.05, peak=0.08, offpeak=0.02),
+        FixedRates(single=0.2, peak=0.22, offpeak=0.18),
     )
 
 
