@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-12T14:58:47.180440+00:00",
+ "_cached_at": "2026-09-12T16:09:47.552693+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -162,6 +162,7 @@
   "base_offpeak": null,
   "base_peak": null,
   "base_transition": null,
+  "bi_hourly": true,
   "current": 0.028104,
   "factor": null,
   "factor_offpeak": null,
@@ -189,7 +190,7 @@
   "federal_excise": 0.047466799999999996,
   "federal_excise_bands": null,
   "flanders_renewables": 0.016112,
-  "published_vat_rate": 0.06,
+  "published_vat_rate": 0.0,
   "region_connection_fee": 0.0,
   "region_connection_fee_unavailable": false,
   "vat_rate": 0.0,

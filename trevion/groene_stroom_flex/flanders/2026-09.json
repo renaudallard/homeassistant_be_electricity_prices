@@ -1,11 +1,11 @@
 {
- "_cached_at": "2026-09-12T14:58:47.180440+00:00",
+ "_cached_at": "2026-09-12T16:09:47.552693+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
  "_sources": [
   {
-   "text": "texts/2026-09/585bf8b1ec319fb4896ba0ff59c2a1e83d854a6316844a81c13a6b28e896d34c.txt",
+   "text": "texts/2026-09/988a6db9a400795a15a290f67b8da2bf197112cd5dde7343e0fa793fb6013898.txt",
    "url": "https://trevion.be/tariefkaarten/",
    "variant": "text"
   },
@@ -214,7 +214,7 @@
   "federal_excise": 0.048760000000000005,
   "federal_excise_bands": null,
   "flanders_renewables": 0.016112,
-  "published_vat_rate": 0.06,
+  "published_vat_rate": 0.0,
   "region_connection_fee": 0.0,
   "region_connection_fee_unavailable": false,
   "vat_rate": 0.0,
