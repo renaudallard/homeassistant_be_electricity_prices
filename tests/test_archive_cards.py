@@ -355,8 +355,11 @@ def _pdf_fetch(session: _PdfSession, renders: list[bytes]) -> Fetch:
         return f"card text for {payload.decode()}"
 
     async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        # The canned session while it holds the card; once the test empties
+        # it, the session handed in, which in a replay is the kept copy.
+        reader = session if PDF_URL in session.pdfs else _session
         text = await _pdf._pdf_text(
-            session,  # type: ignore[arg-type]
+            reader,  # type: ignore[arg-type]
             PDF_URL,
             variant="plain",
             timeout=5,
@@ -678,6 +681,72 @@ async def test_an_archive_row_replays_through_the_supplier_archive_path(
     )
     assert summary.replayed == 2
     assert calls == [("live", None), ("archive", date(2026, 8, 1)), ("live", None)]
+
+
+async def test_a_rerender_reads_every_card_back_from_the_kept_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Under --rerender a stored month's PDF text is not seeded: the card is
+    fetched back from the kept copy and rendered again, which is how a reader
+    upgrade reaches the branch; an unchanged parse is not rewritten."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, renders))],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=5),
+        sleep=_no_sleep,
+    )
+    assert renders == [b"%PDF v1"]
+    row = out / "acme/acme_fix/wallonia/2026-09.json"
+    before = json.loads(row.read_text())
+    session.pdfs.clear()  # the supplier is gone; only the kept copy is left
+    summary = await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, renders))],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=6),
+        rerender=True,
+        sleep=_no_sleep,
+    )
+    assert (summary.replayed, summary.reparsed, summary.unreplayable) == (1, 0, [])
+    assert renders == [b"%PDF v1", b"%PDF v1"]
+    after = json.loads(row.read_text())
+    assert after["energy"] == before["energy"]
+    assert after["_seen_on"] == "2026-09-05"
+
+
+def test_a_probe_in_a_replay_finds_only_the_card_the_row_read(tmp_path: Path) -> None:
+    """An extractor that HEADs candidate URLs before choosing one lands on
+    the kept card and nowhere else."""
+    from custom_components.be_electricity_prices.providers._pdf import head_ok
+
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    replay.pdfs = {"https://acme.test/2026-08.pdf": "abc"}
+    assert asyncio.run(head_ok(replay, "https://acme.test/2026-08.pdf"))  # type: ignore[arg-type]
+    assert not asyncio.run(head_ok(replay, "https://acme.test/2026-07.pdf"))  # type: ignore[arg-type]
+
+
+def test_a_text_that_changed_bytes_but_not_its_parse_is_not_a_new_card() -> None:
+    """A listing page with a nonce, or a render that is not byte-stable, gives
+    a new text file every day; the row is rewritten only when what a source
+    was or what it parsed to changed."""
+    source = {"url": "u", "variant": "text", "text": "texts/2026-09/a.txt"}
+    card: dict[str, Any] = {
+        "_cached_at": "x",
+        "_seen_on": "2026-09-11",
+        "energy": {"single": 0.2},
+        "_sources": [source],
+    }
+    same_parse = {**card, "_sources": [{**source, "text": "texts/2026-09/b.txt"}]}
+    assert ac._same_card(card, same_parse)
+    other_variant = {**card, "_sources": [{**source, "variant": "layout"}]}
+    assert not ac._same_card(card, other_variant)
+    other_parse = {**card, "energy": {"single": 0.3}}
+    assert not ac._same_card(card, other_parse)
 
 
 def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:

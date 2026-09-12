@@ -70,6 +70,7 @@ import hashlib
 import json
 import shutil
 import sys
+import tempfile
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -302,13 +303,15 @@ class _Cards:
 
 
 class _KeptResponse:
-    """The response shape the readers use, over bytes already in hand."""
+    """The response shape the readers use, over bytes already in hand; a
+    probe with nothing behind it answers 404."""
 
-    status = 200
     content_length = None
+    headers: dict[str, str] = {}
 
-    def __init__(self, payload: bytes) -> None:
-        self._payload = payload
+    def __init__(self, payload: bytes | None) -> None:
+        self._payload = payload or b""
+        self.status = 200 if payload is not None else 404
 
     async def read(self) -> bytes:
         return self._payload
@@ -329,11 +332,15 @@ class _ReplaySession:
     Every text the row read is seeded into the memo before the parse runs,
     so the readers never reach this session for those. The one request
     that can still arrive is a card the parser now wants read with another
-    PDF reader (a variant the row has no text for), and that is served
-    from the kept PDF, the local copy first and the cards releases
-    otherwise. Anything else is refused as a network error, which the
-    readers wrap the way they wrap a real one, and the row is left as it
-    was and reported.
+    PDF reader (a variant the row has no text for, or every PDF under
+    ``--rerender``), and that is served from the kept PDF: the local copy
+    first, the cards releases otherwise, with a download kept on disk for
+    the sibling rows that read the same card. A HEAD answers 200 for a
+    kept card and 404 for anything else, so an extractor that probes
+    candidate URLs before choosing one (Eneco's archive walks issue
+    numbers) lands on the card the row was parsed from. Anything else is
+    refused as a network error, which the readers wrap the way they wrap
+    a real one, and the row is left as it was and reported.
     """
 
     def __init__(
@@ -350,9 +357,16 @@ class _ReplaySession:
         self._kept = kept or {}
         # url -> digest for the row being replayed.
         self.pdfs: dict[str, str] = {}
+        self._cache = Path(tempfile.mkdtemp(prefix="cards-replay-"))
 
     def get(self, url: str, **_kw: Any) -> Any:
         return self._get(url)
+
+    def head(self, url: str, **_kw: Any) -> Any:
+        return self._Pending(self._probe(url))
+
+    async def _probe(self, url: str) -> bytes | None:
+        return b"" if url in self.pdfs else None
 
     async def _fetch(self, url: str) -> bytes:
         digest = self.pdfs.get(url)
@@ -362,6 +376,9 @@ class _ReplaySession:
             local = next(self._pdf_dir.glob(f"*/{digest}.pdf"), None)
             if local is not None:
                 return local.read_bytes()
+        cached = self._cache / f"{digest}.pdf"
+        if cached.exists():
+            return cached.read_bytes()
         path = self._kept.get(digest)
         if self._pdf_base_url is None or path is None:
             raise aiohttp.ClientConnectionError(f"no kept copy of {url} to replay from")
@@ -372,12 +389,14 @@ class _ReplaySession:
                 raise aiohttp.ClientConnectionError(
                     f"HTTP {resp.status} fetching the kept copy of {url}"
                 )
-            return await resp.read()
+            payload = await resp.read()
+        cached.write_bytes(payload)
+        return payload
 
     class _Pending:
         """An awaitable-and-enterable stand-in for aiohttp's request context."""
 
-        def __init__(self, fetch: Awaitable[bytes]) -> None:
+        def __init__(self, fetch: Awaitable[bytes | None]) -> None:
             self._fetch = fetch
 
         async def __aenter__(self) -> _KeptResponse:
@@ -461,11 +480,24 @@ def _write_text(out: Path, seen_month: str, text: str) -> str:
 
 
 def _same_card(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> bool:
+    """Whether two rows hold the same card.
+
+    The timestamps are not the card, and neither is the path of a text a
+    source was read from: a listing page that carries a nonce or a render
+    that is not byte-stable gives a new text file every day while the parse,
+    the URL, the reader variant and the PDF are all the same. What a source
+    was and what it parsed to is what counts.
+    """
     if existing is None:
         return False
 
     def settled(card: dict[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in card.items() if k not in _VOLATILE_KEYS}
+        out = {k: v for k, v in card.items() if k not in _VOLATILE_KEYS}
+        out["_sources"] = [
+            {k: v for k, v in source.items() if k != "text"}
+            for source in card.get("_sources", [])
+        ]
+        return out
 
     return settled(existing) == settled(fresh)
 
@@ -597,8 +629,15 @@ async def _replay_row(
     replay: _ReplaySession,
     now: datetime,
     summary: _Summary,
+    *,
+    rerender: bool = False,
 ) -> None:
-    """Re-run one stored row through the current parser, offline."""
+    """Re-run one stored row through the current parser, offline.
+
+    Under ``rerender`` the PDF texts are not seeded, so every card is
+    fetched back from the kept copy and rendered afresh; the listing pages
+    still come from the branch, since there is nothing to re-render there.
+    """
     out = cards.out
     supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
     label = f"{supplier}/{contract}/{region}/{path.stem}"
@@ -617,6 +656,8 @@ async def _replay_row(
         if not text_path.exists():
             summary.unreplayable.append(f"{label}: {source['text']} is missing")
             return
+        if rerender and source["variant"] != "text":
+            continue
         key = (
             source["url"]
             if source["variant"] == "text"
@@ -679,6 +720,8 @@ async def _replay_all(
     replay: _ReplaySession,
     now: datetime,
     summary: _Summary,
+    *,
+    rerender: bool = False,
 ) -> None:
     """Every stored row, grouped by capture day so the clock is pinned
     once per day rather than once per row."""
@@ -692,13 +735,17 @@ async def _replay_all(
     for day, paths in sorted(by_day.items()):
         if not day:
             for path in paths:
-                await _replay_row(path, extractors, cards, replay, now, summary)
+                await _replay_row(
+                    path, extractors, cards, replay, now, summary, rerender=rerender
+                )
             continue
         # Ticking, so the loop's own timers and the render threads keep
         # working; the date stays the capture day for the seconds this takes.
         with freeze_time(f"{day}T12:00:00+02:00", tick=True):
             for path in paths:
-                await _replay_row(path, extractors, cards, replay, now, summary)
+                await _replay_row(
+                    path, extractors, cards, replay, now, summary, rerender=rerender
+                )
 
 
 async def archive(
@@ -815,7 +862,13 @@ async def archive(
         if reparse or rerender or stamped != parser:
             replay = _ReplaySession(session, pdf_dir, pdf_base_url, cards.kept)
             await _replay_all(
-                out, {ex.id: ex for ex in registry}, cards, replay, now, summary
+                out,
+                {ex.id: ex for ex in registry},
+                cards,
+                replay,
+                now,
+                summary,
+                rerender=rerender,
             )
         stamp.write_text(parser + "\n", encoding="utf-8")
     summary.rendered = cards.rendered
