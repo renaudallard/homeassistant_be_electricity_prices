@@ -1106,17 +1106,18 @@ branch: the supplier (`totalenergies`, `bolt`, ...), the contract
    `texts/` and, for a PDF, the digest of the file.
 2. **The original PDF** is easiest through
    [`coverage.md`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/coverage.md)
-   at the branch root: one table per supplier, a row per contract and
-   region, a column per month. Each month cell carries two links: `pdf`
+   at the branch root, which names one sheet per supplier under
+   `coverage/`: a row per contract and region, a column per month. Each
+   month cell carries two links: `pdf`
    downloads the card from the cards repository's releases (`page` opens
    the text of the page instead, for a card parsed from a page) and
    `json` opens the parsed card above; a month marked `(mirror)` was
-   copied from the supplier's own archive. The same table is published
+   copied from the supplier's own archive. The same sheets are published
    under
    [`electricity/`](https://github.com/renaudallard/be_price_cards/tree/main/electricity)
    in the cards repository itself, and each release's notes point there,
-   so a file seen on the releases page can be named too: search the table
-   for the file's name. Behind it is `pdfs.json`, which maps a digest to
+   so a file seen on the releases page can be named too: search that
+   repository for the file's name. Behind them is `pdfs.json`, which maps a digest to
    `electricity-<YYYY-MM>/<digest>.pdf` in those releases; the digest in a
    JSON's `_sources` is the same key.
 3. **The text the parser read** is under `texts/<YYYY-MM>/`, named by the

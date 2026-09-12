@@ -763,15 +763,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:180`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:190`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:536`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:546`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:580`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:590`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:631`): inside that
@@ -797,13 +797,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:423`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:433`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:339`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:349`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -823,20 +823,22 @@ otherwise rewrite the row every day for nothing. A fresh archive only stamps the
 than the parser that wrote it.
 
 Every run also rewrites the listing for people at the branch root, in a fixed order so a day
-that changed nothing rewrites it to the same bytes. `coverage.md` (`_write_coverage`,
-`scripts/archive_cards.py:583`) is one table per supplier with a row per contract and region and
-a column per month the branch holds. Each cell links what the month was parsed from and what
+that changed nothing rewrites it to the same bytes. `_write_coverage`
+(`scripts/archive_cards.py:583`) writes one sheet per supplier under `coverage/`, a table with a
+row per contract and region and a column per month the branch holds, and `coverage.md`, the index
+naming the sheets; a sheet whose supplier has no rows left is removed. Each cell links what the month was parsed from and what
 came out of it: `pdf` is the card in the cards repository's releases, once the manifest says
 where it landed (until then the bare word), `page` the text of the page a page-parsed row read,
 on the branch, and `json` the row itself; a month copied from the supplier's archive carries
 `(mirror)`. That is the answer to "is my month covered, where is the card, and what did we read
-off it". `_write_listings` writes the table, refreshes the branch README when its text changed
-and removes the `pdfs.md` index earlier versions wrote, since the table links every file now.
-The workflow rewrites it once more after the upload step (`--index-only`, no fetch) so the day's
-new files are linked the day they are uploaded, then publishes it under `electricity/` in the
-cards repository's own tree (`Publish the listings in the cards repository`), with a README
-naming the namespaces, so a person on that repository's releases page is one click from the
-names; each release's notes point there, and the file's digest is in the link.
+off it". `_write_listings` writes the sheets, refreshes the branch README when its text changed
+and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
+The workflow rewrites them once more after the upload step (`--index-only`, no fetch) so the
+day's new files are linked the day they are uploaded, then publishes them under `electricity/`
+in the cards repository's own tree (`Publish the listings in the cards repository`), with a
+README naming the namespaces, so a person on that repository's releases page is one click from
+the names; each release's notes point there, and a search of that repository for a file's digest
+finds its sheet.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed

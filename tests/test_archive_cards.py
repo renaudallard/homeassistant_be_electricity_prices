@@ -908,7 +908,7 @@ async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
     assert sheet["pdf"] == digest
     assert (out / sheet["text"]).read_text() == "sheet text"
     assert ("text", CARD_URL) in kinds
-    coverage = (out / "coverage.md").read_text()
+    coverage = (out / "coverage/acme.md").read_text()
     assert "| acme_fix | wallonia | pdf json |" in coverage
 
 
@@ -932,10 +932,11 @@ async def test_a_row_that_read_no_pdf_links_its_page_and_its_json(
     assert (
         f"| acme_fix | wallonia | [page]({branch}/{text})"
         f" [json]({branch}/acme/acme_fix/wallonia/2026-09.json) |"
-    ) in (tmp_path / "coverage.md").read_text()
+    ) in (tmp_path / "coverage/acme.md").read_text()
     ac._write_coverage(tmp_path)
     assert (
-        "| acme_fix | wallonia | page json |" in (tmp_path / "coverage.md").read_text()
+        "| acme_fix | wallonia | page json |"
+        in (tmp_path / "coverage/acme.md").read_text()
     )
 
 
@@ -1128,16 +1129,18 @@ async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> 
     await ac.archive(
         tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
     )
-    coverage = (tmp_path / "coverage.md").read_text()
-    assert "## acme" in coverage
+    coverage = (tmp_path / "coverage/acme.md").read_text()
+    assert "# acme" in coverage
     assert "| contract | region | 2026-08 | 2026-09 |" in coverage
+    index = (tmp_path / "coverage.md").read_text()
+    assert "- [acme](coverage/acme.md): 1 rows, 2026-08 to 2026-09" in index
     # August came from the supplier archive without reading a page.
     assert "| acme_fix | wallonia | json (mirror) | page json |" in coverage
     again = await ac.archive(
         tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
     )
     assert again.unchanged == 1
-    assert (tmp_path / "coverage.md").read_text() == coverage
+    assert (tmp_path / "coverage/acme.md").read_text() == coverage
 
 
 async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
@@ -1163,7 +1166,7 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
     )
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
     # Not uploaded yet: the PDF is named without a link, the JSON is linked.
-    coverage = (out / "coverage.md").read_text()
+    coverage = (out / "coverage/acme.md").read_text()
     assert (
         f"| a | wallonia | pdf [json]({branch}/acme/a/wallonia/2026-09.json) |"
         in coverage
@@ -1176,7 +1179,7 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
     (out / "README.md").write_text("stale readme")
     ac._write_listings(out, base, branch)
     url = f"{base}/electricity-2026-09/{digest}.pdf"
-    coverage = (out / "coverage.md").read_text()
+    coverage = (out / "coverage/acme.md").read_text()
     assert (
         f"| a | wallonia | [pdf]({url}) [json]({branch}/acme/a/wallonia/2026-09.json) |"
         in coverage
@@ -1203,6 +1206,19 @@ def test_index_only_touches_nothing_but_the_listing(
     assert (tmp_path / "coverage.md").exists()
     assert (tmp_path / "README.md").exists()
     assert not (tmp_path / "pdfs.md").exists()
+
+
+def test_a_supplier_that_left_the_branch_loses_its_sheet(tmp_path: Path) -> None:
+    (tmp_path / "coverage").mkdir()
+    (tmp_path / "coverage/gone.md").write_text("stale sheet")
+    row = tmp_path / "acme/acme_fix/wallonia/2026-09.json"
+    row.parent.mkdir(parents=True)
+    row.write_text(json.dumps({"_sources": []}))
+    ac._write_coverage(tmp_path)
+    assert sorted(p.name for p in (tmp_path / "coverage").iterdir()) == ["acme.md"]
+    assert (
+        "| acme_fix | wallonia | json |" in (tmp_path / "coverage/acme.md").read_text()
+    )
 
 
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:

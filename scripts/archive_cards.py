@@ -140,12 +140,21 @@ _PARSER_STAMP = "parser.txt"
 # month of cards, its listings live under electricity/ in that
 # repository's tree.
 _RELEASE_PREFIX = "electricity"
-# One table per supplier of which months the branch holds, for the reader
+# One sheet per supplier of which months the branch holds, for the reader
 # who wants to know whether a given month of a given contract is covered
 # without listing directories, each month linking to the PDF it was
 # parsed from (a release lists them by digest only), to the page it read
-# and to the JSON it produced.
+# and to the JSON it produced; and an index of the sheets, since one
+# table of every supplier grows by a column a month.
 _COVERAGE = "coverage.md"
+_COVERAGE_DIR = "coverage"
+_LEGEND = (
+    "Each month links to what it was parsed from and to what came out of it: `pdf` is the",
+    "card itself, in the cards repository's releases, `page` the text of a page as it",
+    "was read, and `json` the card as the integration parsed it, both on this branch.",
+    "A month marked `(mirror)` was copied from the supplier's own archive rather than",
+    "captured while it was current; a blank cell is a month the branch does not hold.",
+)
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
 # rows are written with.
@@ -166,14 +175,15 @@ Written daily by `.github/workflows/archive_cards.yml` running
   the releases of the cards repository (`be_price_cards`, shared with
   be_water_prices; this integration's releases are `electricity-<YYYY-MM>`,
   one per month of cards, whatever day the card was captured on).
-- `coverage.md`: which months the branch holds for each contract and
-  region, whether each was captured live or mirrored from the supplier's
-  archive, and links from each month to the PDF it was parsed from, to the
-  page text it read and to the JSON above.
+- `coverage.md` and `coverage/<supplier>.md`: which months the branch
+  holds for each contract and region, whether each was captured live or
+  mirrored from the supplier's archive, and links from each month to the
+  PDF it was parsed from, to the page text it read and to the JSON above;
+  one sheet per supplier, the index naming them.
 
-To get the original card of a contract and month: open `coverage.md`, find
-the row, click `pdf` (or `page`); `json` is what the integration parsed out
-of it. Months older than three years are removed.
+To get the original card of a contract and month: open `coverage.md`, open
+the supplier's sheet, find the row, click `pdf` (or `page`); `json` is what
+the integration parsed out of it. Months older than three years are removed.
 """
 
 
@@ -697,48 +707,60 @@ def _cell(
 def _write_coverage(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
-    """Rewrite the coverage table from the rows on disk.
+    """Rewrite the coverage sheets from the rows on disk: one per supplier
+    under ``coverage/`` and an index naming them.
 
-    Deterministic in its order, so a day that changed nothing rewrites the
-    file to the same bytes and the branch gets no commit for it.
+    Deterministic in their order, so a day that changed nothing rewrites
+    them to the same bytes and the branch gets no commit for it. A sheet
+    whose supplier has no rows any more is removed.
     """
     held, kept = _kept_rows(out)
-    months = sorted(
-        {m for rows in held.values() for have in rows.values() for m in have}
-    )
-    lines = [
+    folder = out / _COVERAGE_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    index = [
         "# Coverage",
         "",
-        "One row per contract and region, one column per month the branch holds. Each",
-        "month links to what it was parsed from and to what came out of it: `pdf` is the",
-        "card itself, in the cards repository's releases, `page` the text of a page as it",
-        "was read, and `json` the card as the integration parsed it, both on this branch.",
-        "A month marked `(mirror)` was copied from the supplier's own archive rather than",
-        "captured while it was current; a blank cell is a month the branch does not hold.",
+        "One sheet per supplier, each a table with a row per contract and region and a",
+        "column per month the branch holds.",
+        *_LEGEND,
         "",
     ]
     for supplier in sorted(held):
-        lines += [
-            f"## {supplier}",
+        rows = held[supplier]
+        months = sorted({m for have in rows.values() for m in have})
+        lines = [
+            f"# {supplier}",
+            "",
+            "One row per contract and region, one column per month the branch holds.",
+            *_LEGEND,
             "",
             "| contract | region | " + " | ".join(months) + " |",
             "| --- | --- | " + " | ".join("---" for _ in months) + " |",
         ]
-        for (contract, region), have in sorted(held[supplier].items()):
+        for (contract, region), have in sorted(rows.items()):
             cells = [
                 _cell(have.get(m), kept, pdf_base_url, archive_base_url) for m in months
             ]
             lines.append(f"| {contract} | {region} | " + " | ".join(cells) + " |")
         lines.append("")
-    (out / _COVERAGE).write_text("\n".join(lines), encoding="utf-8")
+        (folder / f"{supplier}.md").write_text("\n".join(lines), encoding="utf-8")
+        index.append(
+            f"- [{supplier}]({_COVERAGE_DIR}/{supplier}.md): {len(rows)} rows,"
+            f" {months[0]} to {months[-1]}"
+        )
+    for stale in folder.glob("*.md"):
+        if stale.stem not in held:
+            stale.unlink()
+    index.append("")
+    (out / _COVERAGE).write_text("\n".join(index), encoding="utf-8")
 
 
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
-    """The coverage table and the branch README, rewritten when out of date.
+    """The coverage sheets and the branch README, rewritten when out of date.
     The index of PDFs by release that earlier versions wrote is removed, the
-    coverage table having taken it over."""
+    coverage sheets having taken it over."""
     _write_coverage(out, pdf_base_url, archive_base_url)
     readme = out / "README.md"
     if not readme.exists() or readme.read_text(encoding="utf-8") != _README:
@@ -1106,7 +1128,7 @@ def main() -> int:
     parser.add_argument(
         "--index-only",
         action="store_true",
-        help="only rewrite coverage.md from what is on disk; no fetch",
+        help="only rewrite the coverage sheets from what is on disk; no fetch",
     )
     args = parser.parse_args()
     if args.index_only:

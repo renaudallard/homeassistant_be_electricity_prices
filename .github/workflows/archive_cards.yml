@@ -137,7 +137,7 @@ jobs:
           [ -s "$manifest" ] || echo '{}' > "$manifest"
           ensure_release() {
             gh release view "$1" --repo "$CARDS_REPO" >/dev/null 2>&1 && return 0
-            gh release create "$1" --repo "$CARDS_REPO" --title "Electricity cards $2" --notes "The PDF tariff cards for $2 that the archive branch of homeassistant_be_electricity_prices refers to, each named by its SHA-256. Which card each file is: search for the file name in https://github.com/${CARDS_REPO}/blob/main/electricity/coverage.md, which links every contract and month to its card and to what was parsed out of it."
+            gh release create "$1" --repo "$CARDS_REPO" --title "Electricity cards $2" --notes "The PDF tariff cards for $2 that the archive branch of homeassistant_be_electricity_prices refers to, each named by its SHA-256. Which card each file is: search this repository for the file name; the sheets under https://github.com/${CARDS_REPO}/tree/main/electricity/coverage link every contract and month to its card and to what was parsed out of it."
           }
           for dir in tmp/pdfs/electricity-*/; do
             [ -d "$dir" ] || continue
@@ -190,9 +190,9 @@ jobs:
             done
 
       - name: Index the kept cards for people
-        # The walk wrote coverage.md before today's uploads were in the
-        # manifest; rewrite it now so every month links to a file that
-        # exists. No fetch, a second or two.
+        # The walk wrote the coverage sheets before today's uploads were
+        # in the manifest; rewrite them now so every month links to a file
+        # that exists. No fetch, a second or two.
         env:
           CARDS_REPO: renaudallard/be_price_cards
         run: >-
@@ -201,10 +201,10 @@ jobs:
           --archive-base-url "${{ github.server_url }}/${{ github.repository }}/blob/archive"
 
       - name: Publish the listings in the cards repository
-        # The releases name files by digest; the listing that names the
-        # cards lives beside them, under this integration's own directory
+        # The releases name files by digest; the sheets that name the
+        # cards live beside them, under this integration's own directory
         # of the shared repository, so a person on the releases page is one
-        # click from the names. A commit only when the listing changed.
+        # click from the names. A commit only when a sheet changed.
         env:
           CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           CARDS_REPO: renaudallard/be_price_cards
@@ -231,14 +231,16 @@ jobs:
             "The tariff cards homeassistant_be_electricity_prices parsed, kept as the assets of" \
             "the \`electricity-<YYYY-MM>\` releases of this repository and named by their SHA-256." \
             "" \
-            "- \`coverage.md\`: per contract and region, the months held, each linking to its card" \
-            "  (or to the page it was read from) and to the card as the integration parsed it." \
+            "- \`coverage.md\`: the index of one sheet per supplier under \`coverage/\`; each sheet" \
+            "  lists per contract and region the months held, each linking to its card (or to the" \
+            "  page it was read from) and to the card as the integration parsed it." \
             "" \
             "The parsed cards themselves are the \`archive\` branch of" \
             "https://github.com/renaudallard/homeassistant_be_electricity_prices." \
             > tmp/cards/electricity/README.md
           cp tmp/archive/coverage.md tmp/cards/electricity/
-          rm -f tmp/cards/electricity/pdfs.md
+          rm -rf tmp/cards/electricity/coverage tmp/cards/electricity/pdfs.md
+          cp -r tmp/archive/coverage tmp/cards/electricity/
           cd tmp/cards
           git add -A
           if git diff --cached --quiet; then
