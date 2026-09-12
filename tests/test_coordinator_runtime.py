@@ -5300,3 +5300,114 @@ async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
         await coord3._ensure_annual_volume()
         coord3._reresolve_snapshot()
     assert coord3._snapshot.energy == _want(7000.0)
+
+
+async def test_a_month_billed_per_quarter_hour_is_fetched_on_that_grid(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An entry on a monthly product whose archived January card bills per
+    quarter-hour (Trevion LifePowr before June 2026) fetches January on the
+    15-minute product and the rest of the window on the hourly one; a January
+    day cached off the hourly product before the card was known is fetched
+    again on the right one, and a day already on it costs nothing."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+
+    freezer.move_to("2026-03-10 12:00:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "trevion",
+            "contract": "lifepowr",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=SpotMonthlyRates(factor=0.11, base=0.001))
+    _monthly_snapshots(hass)[("trevion", "lifepowr", "flanders", "2026-01")] = (
+        make_snapshot(energy=DynamicRates(factor=0.1, base=0.0, quarter_hourly=True))
+    )
+    calls: list[tuple[datetime, datetime, bool]] = []
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        calls.append((start, end, quarter_hourly))
+        hours = int((end - start).total_seconds() // 3600)
+        return {start + timedelta(hours=h): 0.1 for h in range(hours)}
+
+    def midnight(day: date) -> datetime:
+        return dt_util.start_of_local_day(day).astimezone(UTC)
+
+    with _patch_spot_fetch(_fake_fetch):
+        await coord._ensure_historical_spots(date(2026, 1, 26), date(2026, 2, 4))
+    assert calls == [
+        (midnight(date(2026, 1, 26)), midnight(date(2026, 2, 1)), True),
+        (midnight(date(2026, 2, 1)), midnight(date(2026, 2, 5)), False),
+    ]
+    assert coord._quarter_grid_days == {
+        date(2026, 1, 26) + timedelta(days=i) for i in range(6)
+    }
+    calls.clear()
+    with _patch_spot_fetch(_fake_fetch):
+        await coord._ensure_historical_spots(date(2026, 1, 26), date(2026, 2, 4))
+    assert calls == []
+    coord._quarter_grid_days.clear()
+    with _patch_spot_fetch(_fake_fetch):
+        await coord._ensure_historical_spots(date(2026, 1, 26), date(2026, 1, 31))
+    assert calls == [(midnight(date(2026, 1, 26)), midnight(date(2026, 2, 1)), True)]
+
+
+async def test_the_grid_marker_round_trips_through_the_store(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The days fetched on the 15-minute product are persisted with the spot
+    cache, so a restart does not fetch a widened month again."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+    )
+    coord._historical_spots = {
+        datetime(2026, 1, 1, 10, 0, tzinfo=UTC): 0.20,
+        datetime(2026, 1, 2, 10, 0, tzinfo=UTC): 0.21,
+    }
+    coord._quarter_grid_days = {date(2026, 1, 1)}
+    saved: dict[str, object] = {}
+
+    async def _fake_save(payload: dict[str, object]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert saved["historical_spot_quarter_days"] == ["2026-01-01"]
+
+    async def _fake_load() -> dict[str, object]:
+        return saved
+
+    restored = BePricesCoordinator(hass, entry)
+    with patch.object(restored._store, "async_load", new=_fake_load):
+        await restored.async_load_persistent()
+    assert restored._quarter_grid_days == {date(2026, 1, 1)}

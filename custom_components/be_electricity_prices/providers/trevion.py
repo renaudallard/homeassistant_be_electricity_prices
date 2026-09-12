@@ -431,9 +431,13 @@ def parse_snapshot(
     injection: InjectionRates
     if contract.kind == "fixed":
         energy, injection = _extract_fixed(text)
-    elif contract.kind == "spot_monthly":
+    elif contract.kind == "spot_monthly" and "Belpex_RLP_VL" in text:
         energy, injection = _extract_monthly(text)
     else:
+        # The dynamic products, and LifePowr's cards up to May 2026: it
+        # billed per quarter-hour on Belpex 15 MTU before it became a monthly
+        # Belpex_RLP_VL product in June, and a past month is stored as the
+        # product it was.
         energy, injection = _extract_dynamic(text)
     return SupplierSnapshot(
         supplier="trevion",

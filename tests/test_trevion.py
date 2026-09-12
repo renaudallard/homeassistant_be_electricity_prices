@@ -331,6 +331,23 @@ def test_may_flex_card_writes_its_feed_in_formula_with_an_x() -> None:
     assert snap.valid_until == date(2026, 5, 31)
 
 
+def test_lifepowr_cards_before_june_are_the_dynamic_product() -> None:
+    """LifePowr billed per quarter-hour on Belpex 15 MTU until May 2026 and
+    became a monthly Belpex_RLP_VL product in June. The May card is read as
+    the dynamic product it was, under the contract's monthly kind, so the
+    year-to-date walk bills those months on the grid they were billed on."""
+    snap = parse_snapshot("lifepowr", _layout("trevion_lifepowr_2026-05.pdf"))
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
+    assert snap.energy.factor == pytest.approx(0.106)
+    assert snap.energy.base == pytest.approx(0.001378)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(26.5)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert snap.injection.base == pytest.approx(-0.013)
+    assert snap.valid_until == date(2026, 5, 31)
+
+
 def test_validity_parses_dutch_month_name() -> None:
     assert _extract_validity("geldig in september 2026") == date(2026, 9, 30)
     assert _extract_validity("geen periode") is None

@@ -495,6 +495,15 @@ def _monthly_snapshots(
     return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
 
 
+def cached_month_card(
+    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+) -> "SupplierSnapshot | None":
+    """The archived card the cache holds for that month, without fetching;
+    None when the month was never resolved or resolved to nothing."""
+    key = (supplier, contract, region, f"{year_month:%Y-%m}")
+    return _monthly_snapshots(hass).get(key)
+
+
 def _monthly_fetched_at(
     hass: HomeAssistant,
 ) -> dict[tuple[str, str, str, str], datetime]:

@@ -344,7 +344,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:77`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:583`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:664`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -360,7 +360,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:77`,
   `_spot_cache_day` stays `None` across a restart, so the first tick still
   fetches, and slots that no longer cover today or tomorrow are dropped on load.
   `_fallback_spots` is what reads it when a fetch fails.
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:276`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:292`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the
@@ -727,7 +727,7 @@ weights in the entry's Store blob so a restart does not force a fresh download.
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of
 download and parse on a Raspberry Pi while every compensation entry wants it,
-so the tick schedules `_fill_profiles` (`coordinator.py:1314`) and prices the
+so the tick schedules `_fill_profiles` (`coordinator.py:1328`) and prices the
 plain arithmetic mean meanwhile -- the same degradation a failed fetch already
 has. **And one file serves every entry**: `_shared_profile`
 (`coordinator_spots.py:731`) keys a process-wide row by `(kind, year, blend)`

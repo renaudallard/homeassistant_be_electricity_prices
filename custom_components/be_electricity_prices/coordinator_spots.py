@@ -69,7 +69,7 @@ from .synergrid import (
 )
 
 import asyncio
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 import aiohttp
@@ -78,6 +78,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .providers.base import SupplierSnapshot
+from .snapshot_store import cached_month_card
 
 
 # Some past days genuinely have < 20 of 24 hourly day-ahead points at
@@ -132,6 +133,20 @@ def _spots_for_local_days(
         for slot, value in spots.items()
         if dt_util.as_local(slot).date() in days
     }
+
+
+def _grid_runs(
+    start: date, end: date, grid_of: Callable[[date], bool]
+) -> Iterator[tuple[date, date, bool]]:
+    """Split ``[start, end)`` into runs of days fetched on the same grid."""
+    run_start, run_grid = start, grid_of(start)
+    for day in _dates_in(start + timedelta(days=1), end):
+        grid = grid_of(day)
+        if grid != run_grid:
+            yield run_start, day, run_grid
+            run_start, run_grid = day, grid
+    if run_start < end:
+        yield run_start, end, run_grid
 
 
 def _dates_in(start: date, end: date) -> Iterator[date]:
@@ -238,6 +253,7 @@ class _SpotsMixin:
     _rlp_weights_year: int | None
     _rlp_blend: str
     _complete_spot_days: set[date]
+    _quarter_grid_days: set[date]
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
     _snapshot_raw: SupplierSnapshot | None
@@ -340,17 +356,50 @@ class _SpotsMixin:
         if not api_key:
             return
         now = dt_util.utcnow()
+        today_local = dt_util.now().date()
         # Days older than this are stable enough that a short fetch means
         # a genuine source gap, not data still being published; only those
         # get the "attempted, still short" skip marker. Today and yesterday
         # are always re-fetched so their hours fill in promptly.
-        stable_before = dt_util.now().date() - timedelta(days=1)
+        stable_before = today_local - timedelta(days=1)
+
+        def grid_of(day: date) -> bool:
+            """Whether ``day`` is fetched on the 15-minute product.
+
+            The entry's own grid, widened for a closed month whose archived
+            card bills per quarter-hour while the current card does not: a
+            product that changed grid mid-year (Trevion LifePowr, quarter-
+            hourly until May 2026) is replayed for those months off the
+            auction it was billed on. Never narrowed: a quarter-hourly entry
+            fetches every month that way, as the live tick does.
+            """
+            if quarter_hourly or (day.year, day.month) >= (
+                today_local.year,
+                today_local.month,
+            ):
+                return quarter_hourly
+            card = cached_month_card(
+                self.hass, *self._supplier_tuple, day.replace(day=1)
+            )
+            return card is not None and _energy_is_quarter_hourly(card.energy)
+
         # Collect contiguous date ranges where the cache is sparse.
         missing_ranges: list[tuple[date, date]] = []
         range_start: date | None = None
         cur = start
         while cur <= end:
-            if cur in self._complete_spot_days:
+            # A widened month's day cached off the hourly product (before the
+            # month's card was known) is not present: it is fetched again on
+            # the 15-minute one. An entry on that grid itself never fetched
+            # any other way, so its cache is trusted as it always was.
+            wrong_product = (
+                not quarter_hourly
+                and grid_of(cur)
+                and cur not in self._quarter_grid_days
+            )
+            if wrong_product:
+                present = 0
+            elif cur in self._complete_spot_days:
                 # Confirmed fully covered on an earlier tick. Treat as present
                 # (so it closes any open missing range) without redoing the tz
                 # conversion and 24 dict lookups.
@@ -393,68 +442,80 @@ class _SpotsMixin:
         # 33 HTTP 429s. That endpoint windows on plain dates with no length
         # limit, so the whole year is one request either way.
         entsoe = EntsoeClient(api_key, self._session)
-        unanswered: list[tuple[date, date]] = []
+        unanswered: list[tuple[date, date, bool]] = []
         primary: EntsoeError | None = None
         for r_start, r_end in missing_ranges:
-            chunk_start = r_start
-            while chunk_start < r_end:
-                # Week-sized chunks: trade off per-request latency
-                # against total round-trips for a 365-day backfill.
-                chunk_end = min(chunk_start + timedelta(days=7), r_end)
-                # Local-midnight anchors (in UTC) so the fetched window
-                # lines up with the local-day grid the recorder and the
-                # present-check above use.
-                start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
-                end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
-                try:
-                    prices = await entsoe.fetch_day_ahead(
-                        start_utc, end_utc, quarter_hourly=quarter_hourly
-                    )
-                except EntsoeAuthError as err:
-                    # This class covers a rejected key, an exhausted daily
-                    # quota, and a window ENTSO-E acknowledges with no
-                    # matching data, which for a PAST chunk can simply mean
-                    # the data does not exist. None of the three is fixed
-                    # by asking again in an hour, and a failed fetch leaves
-                    # each day exactly as short as it was, so with no marker
-                    # the whole year is re-pulled on every hourly tick and
-                    # logs a warning per chunk for as long as the entry
-                    # exists. Mark this chunk's stable past days so the TTL
-                    # backs that off to twice a day. Today and yesterday
-                    # stay unmarked, their data is still landing.
-                    #
-                    # No fallback either: a credential the owner has to renew
-                    # must keep raising its Repairs card rather than being
-                    # quietly papered over by a keyless source.
-                    _LOGGER.warning(
-                        "ENTSO-E historical fetch failed for %s..%s: %s",
-                        chunk_start,
-                        chunk_end,
-                        err,
-                    )
-                    self._defer_spot_days(
-                        [(chunk_start, chunk_end)],
-                        stable_before,
-                        now + _SHORT_SPOT_DAY_TTL,
-                    )
-                except EntsoeError as err:
-                    # A timeout or a 5xx. Not logged and not marked per chunk:
-                    # one warning naming the whole span replaces up to 52
-                    # identical ones, and the fallback below may well answer
-                    # for it. Only a chunk NEITHER source could serve is held
-                    # back, and by the shorter outage TTL.
-                    primary = err
-                    unanswered.append((chunk_start, chunk_end))
-                else:
-                    self._merge_spot_window(prices, want_quarters)
-                    self._remark_spot_days(
-                        chunk_start, chunk_end, want_quarters, now, stable_before
-                    )
-                chunk_start = chunk_end
+            # One run per grid, so a month billed per quarter-hour inside an
+            # hourly year is asked for on its own product.
+            for run_start, run_end, on_quarters in _grid_runs(r_start, r_end, grid_of):
+                chunk_start = run_start
+                while chunk_start < run_end:
+                    # Week-sized chunks: trade off per-request latency
+                    # against total round-trips for a 365-day backfill.
+                    chunk_end = min(chunk_start + timedelta(days=7), run_end)
+                    # Local-midnight anchors (in UTC) so the fetched window
+                    # lines up with the local-day grid the recorder and the
+                    # present-check above use.
+                    start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
+                    end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
+                    try:
+                        prices = await entsoe.fetch_day_ahead(
+                            start_utc, end_utc, quarter_hourly=on_quarters
+                        )
+                    except EntsoeAuthError as err:
+                        # This class covers a rejected key, an exhausted daily
+                        # quota, and a window ENTSO-E acknowledges with no
+                        # matching data, which for a PAST chunk can simply mean
+                        # the data does not exist. None of the three is fixed
+                        # by asking again in an hour, and a failed fetch leaves
+                        # each day exactly as short as it was, so with no marker
+                        # the whole year is re-pulled on every hourly tick and
+                        # logs a warning per chunk for as long as the entry
+                        # exists. Mark this chunk's stable past days so the TTL
+                        # backs that off to twice a day. Today and yesterday
+                        # stay unmarked, their data is still landing.
+                        #
+                        # No fallback either: a credential the owner has to renew
+                        # must keep raising its Repairs card rather than being
+                        # quietly papered over by a keyless source.
+                        _LOGGER.warning(
+                            "ENTSO-E historical fetch failed for %s..%s: %s",
+                            chunk_start,
+                            chunk_end,
+                            err,
+                        )
+                        self._defer_spot_days(
+                            [(chunk_start, chunk_end)],
+                            stable_before,
+                            now + _SHORT_SPOT_DAY_TTL,
+                        )
+                    except EntsoeError as err:
+                        # A timeout or a 5xx. Not logged and not marked per chunk:
+                        # one warning naming the whole span replaces up to 52
+                        # identical ones, and the fallback below may well answer
+                        # for it. Only a chunk NEITHER source could serve is held
+                        # back, and by the shorter outage TTL.
+                        primary = err
+                        unanswered.append((chunk_start, chunk_end, on_quarters))
+                    else:
+                        self._merge_spot_window(prices, want_quarters)
+                        self._note_spot_grid(chunk_start, chunk_end, on_quarters)
+                        self._remark_spot_days(
+                            chunk_start, chunk_end, want_quarters, now, stable_before
+                        )
+                    chunk_start = chunk_end
         if unanswered:
             await self._fill_spots_from_fallback(
-                unanswered, primary, want_quarters, quarter_hourly, now, stable_before
+                unanswered, primary, want_quarters, now, stable_before
             )
+
+    def _note_spot_grid(self, start: date, end: date, on_quarters: bool) -> None:
+        """Remember which product the days of ``[start, end)`` came from."""
+        for day in _dates_in(start, end):
+            if on_quarters:
+                self._quarter_grid_days.add(day)
+            else:
+                self._quarter_grid_days.discard(day)
 
     def _merge_spot_window(
         self, prices: dict[datetime, float], want_quarters: bool
@@ -511,6 +572,24 @@ class _SpotsMixin:
                     self._spot_day_retry_at[day] = until
 
     async def _fill_spots_from_fallback(
+        self,
+        unanswered: list[tuple[date, date, bool]],
+        primary: EntsoeError | None,
+        want_quarters: bool,
+        now: datetime,
+        stable_before: date,
+    ) -> None:
+        """Fill the chunks ENTSO-E could not answer, one keyless request per
+        grid: the chunks of a year are on one grid but for a month billed on
+        the other, which gets its own request."""
+        for on_quarters in (False, True):
+            chunks = [(s, e) for s, e, grid in unanswered if grid == on_quarters]
+            if chunks:
+                await self._fill_spots_from_fallback_on(
+                    chunks, primary, want_quarters, on_quarters, now, stable_before
+                )
+
+    async def _fill_spots_from_fallback_on(
         self,
         unanswered: list[tuple[date, date]],
         primary: EntsoeError | None,
@@ -575,6 +654,8 @@ class _SpotsMixin:
         self._merge_spot_window(
             _spots_for_local_days(prices, failed_days), want_quarters
         )
+        for chunk_start, chunk_end in unanswered:
+            self._note_spot_grid(chunk_start, chunk_end, quarter_hourly)
         for chunk_start, chunk_end in unanswered:
             self._remark_spot_days(
                 chunk_start, chunk_end, want_quarters, now, stable_before
@@ -921,6 +1002,9 @@ class _SpotsMixin:
         if min(self._historical_spots) >= keep_after:
             return
         _drop_hours_before(self._historical_spots, keep_after)
+        self._quarter_grid_days = {
+            d for d in self._quarter_grid_days if d >= date(today.year, 1, 1)
+        }
         # The quarter cache is only ever written beside the hourly one, so it
         # holds no hour the hourly cache does not and the two early returns
         # above answer for it too.

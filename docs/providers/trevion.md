@@ -35,7 +35,7 @@ and passes the parsed result through `archive_validity_check`.
 | `groene_stroom_flex` | Groene Stroom Flex | `spot_monthly` | Belpex_RLP_VL | Belpex_SPP_BE |
 | `groene_energie_dynamisch` | Groene Energie Dynamisch | `dynamic` | Belpex 15 MTU | Belpex 15 MTU |
 | `groene_energie_dynamisch_plus` | Groene Energie Dynamisch Plus | `dynamic` | Belpex 15 MTU | Belpex 15 MTU |
-| `lifepowr` | LifePowr by Trevion | `spot_monthly` | Belpex_RLP_VL | Belpex_SPP_BE |
+| `lifepowr` | LifePowr by Trevion | `spot_monthly` | Belpex_RLP_VL (Belpex 15 MTU until May 2026) | Belpex_SPP_BE (Belpex 15 MTU until May 2026) |
 | `energreen` | Energreen by Trevion | `dynamic` | Belpex 15 MTU | Belpex 15 MTU |
 
 The two RLP products use `SpotMonthlyRates` with `rlp_indexed=True` and
@@ -141,5 +141,6 @@ different month from the requested filename.
 | `trevion_flex_2026-09.pdf` | RLP consumption and SPP injection |
 | `trevion_dynamic_2026-09.pdf` | Quarter-hourly dynamic product |
 | `trevion_dynamic_plus_2026-09.pdf` | Dynamic Plus catalog disambiguation |
+| `trevion_lifepowr_2026-05.pdf` | LifePowr while it was a quarter-hourly Belpex 15 MTU product |
 | `trevion_lifepowr_2026-09.pdf` | LifePowr monthly product |
 | `trevion_energreen_2026-09.pdf` | Energreen dynamic coefficients |

@@ -508,6 +508,12 @@ class BePricesCoordinator(
         # timezone conversion and 24 dict lookups for every settled day. Prior
         # year entries are dropped in _prune_historical_spots at the boundary.
         self._complete_spot_days: set[date] = set()
+        # Local days whose cached spots came from ENTSO-E's 15-minute product,
+        # for an entry billed hourly whose archived month card bills per
+        # quarter-hour: the walk fetches such a month on that product, and a
+        # day of it fetched on the hourly one before the card was known is
+        # fetched again once the card says otherwise.
+        self._quarter_grid_days: set[date] = set()
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         # Completed months' peaks, keyed by their ISO first-of-month, capped at
@@ -683,6 +689,14 @@ class BePricesCoordinator(
                     dropped_spots += 1
                     continue
                 self._historical_spot_quarters[when] = [float(q) for q in v]
+        grid_days = stored.get("historical_spot_quarter_days")
+        if isinstance(grid_days, list) and not tuple_mismatch:
+            for k in grid_days:
+                if isinstance(k, str):
+                    try:
+                        self._quarter_grid_days.add(date.fromisoformat(k))
+                    except ValueError:
+                        continue
         # Today's (and tomorrow's) day-ahead curve, so an ENTSO-E outage that
         # spans a restart still has something to price with. _historical_spots
         # above cannot stand in for it: it is only ever filled up to today, so
@@ -1433,6 +1447,7 @@ class BePricesCoordinator(
             self._historical_spot_quarters.clear()
             self._complete_spot_days.clear()
             self._spot_day_retry_at.clear()
+            self._quarter_grid_days.clear()
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
@@ -1672,6 +1687,10 @@ class BePricesCoordinator(
             payload["historical_spot_quarters"] = {
                 h.isoformat(): v for h, v in self._historical_spot_quarters.items()
             }
+        if self._quarter_grid_days:
+            payload["historical_spot_quarter_days"] = sorted(
+                d.isoformat() for d in self._quarter_grid_days
+            )
         if self._spot_cache:
             payload["spot_cache"] = {
                 h.isoformat(): v for h, v in self._spot_cache.items()
