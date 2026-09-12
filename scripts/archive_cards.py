@@ -62,6 +62,7 @@ Usage:
     python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs [--only mega ...]
         [--backfill 12] [--reparse] [--rerender]
         [--pdf-base-url https://github.com/<owner>/<cards repo>/releases/download]
+        [--archive-base-url https://github.com/<owner>/<this repo>/blob/archive]
 """
 
 from __future__ import annotations
@@ -142,11 +143,9 @@ _RELEASE_PREFIX = "electricity"
 # One table per supplier of which months the branch holds, for the reader
 # who wants to know whether a given month of a given contract is covered
 # without listing directories, each month linking to the PDF it was
-# parsed from; and the kept PDFs the other way round, each with the cards
-# it was read for, since a release lists them by digest only.
+# parsed from (a release lists them by digest only), to the page it read
+# and to the JSON it produced.
 _COVERAGE = "coverage.md"
-_PDF_INDEX = "pdfs.md"
-_VIA_LABELS = {"live": "live", "archive": "mirror"}
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
 # rows are written with.
@@ -169,11 +168,12 @@ Written daily by `.github/workflows/archive_cards.yml` running
   one per month of cards, whatever day the card was captured on).
 - `coverage.md`: which months the branch holds for each contract and
   region, whether each was captured live or mirrored from the supplier's
-  archive, and a link from each month to the PDF it was parsed from.
-- `pdfs.md`: every kept PDF, by release, with each card it was read for.
+  archive, and links from each month to the PDF it was parsed from, to the
+  page text it read and to the JSON above.
 
 To get the original card of a contract and month: open `coverage.md`, find
-the row, click the month. Months older than three years are removed.
+the row, click `pdf` (or `page`); `json` is what the integration parsed out
+of it. Months older than three years are removed.
 """
 
 
@@ -609,24 +609,38 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     return removed
 
 
+@dataclass
+class _Held:
+    """One stored month, as the coverage table needs it."""
+
+    via: str
+    digests: list[str]
+    page: str | None
+    path: str
+
+
 def _kept_rows(
     out: Path,
-) -> tuple[
-    dict[str, dict[tuple[str, str], dict[str, tuple[str, list[str]]]]], dict[str, str]
-]:
+) -> tuple[dict[str, dict[tuple[str, str], dict[str, _Held]]], dict[str, str]]:
     """Every row on disk, by supplier, contract and region, then month: how
-    it was captured and the digests of the PDFs it read; and the manifest."""
-    held: dict[str, dict[tuple[str, str], dict[str, tuple[str, list[str]]]]] = {}
+    it was captured, the digests of the PDFs it read, the first page it read
+    and its own path; and the manifest."""
+    held: dict[str, dict[tuple[str, str], dict[str, _Held]]] = {}
     for path in sorted(out.glob("*/*/*/????-??.json")):
         supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
         try:
             row = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
-        digests = [digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s]
+        sources = row.get("_sources", [])
+        pages = [s["text"] for s in sources if s.get("variant") == "text"]
         held.setdefault(supplier, {}).setdefault((contract, region), {})[path.stem] = (
-            row.get("_via", "live"),
-            digests,
+            _Held(
+                row.get("_via", "live"),
+                [digest_of(s["pdf"]) for s in sources if "pdf" in s],
+                pages[0] if pages else None,
+                path.relative_to(out).as_posix(),
+            )
         )
     manifest = out / _MANIFEST
     kept: dict[str, str] = (
@@ -645,13 +659,48 @@ def _pdf_link(
     return f"{pdf_base_url}/{path}"
 
 
-def _write_coverage(out: Path, pdf_base_url: str | None = None) -> None:
+def _link(label: str, base: str | None, rel: str) -> str:
+    """A link into the branch, or the bare label with nowhere to link to."""
+    return f"[{label}]({base}/{rel})" if base else label
+
+
+def _cell(
+    held: _Held | None,
+    kept: dict[str, str],
+    pdf_base_url: str | None,
+    archive_base_url: str | None,
+) -> str:
+    """What a month links to: the card when one was read (once it is
+    uploaded), the page it was parsed from otherwise, and the JSON the
+    parse produced; a mirrored month says so."""
+    if held is None:
+        return ""
+    links = [
+        link
+        for link in (_pdf_link(d, kept, pdf_base_url) for d in held.digests)
+        if link
+    ]
+    if links:
+        parts = [f"[pdf]({links[0]})"]
+    elif held.digests:
+        parts = ["pdf"]
+    elif held.page is not None:
+        parts = [_link("page", archive_base_url, held.page)]
+    else:
+        parts = []
+    parts.append(_link("json", archive_base_url, held.path))
+    if held.via == "archive":
+        parts.append("(mirror)")
+    return " ".join(parts)
+
+
+def _write_coverage(
+    out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
+) -> None:
     """Rewrite the coverage table from the rows on disk.
 
-    Each cell links to the PDF the month was parsed from, once that PDF is
-    in the manifest. Deterministic in its order, so a day that changed
-    nothing rewrites the file to the same bytes and the branch gets no
-    commit for it.
+    Deterministic in its order, so a day that changed nothing rewrites the
+    file to the same bytes and the branch gets no commit for it.
     """
     held, kept = _kept_rows(out)
     months = sorted(
@@ -660,12 +709,12 @@ def _write_coverage(out: Path, pdf_base_url: str | None = None) -> None:
     lines = [
         "# Coverage",
         "",
-        "One row per contract and region, one column per month the branch holds.",
-        "`live` is a card captured while it was current, `mirror` one copied from the",
-        "supplier's own archive; a blank cell is a month the branch does not hold, and",
-        "`no card` a row parsed from something that was not a PDF, so there is nothing to",
-        "download for it. Each month links to the PDF it was parsed from, in the cards",
-        "repository's releases; `pdfs.md` lists those files the other way round.",
+        "One row per contract and region, one column per month the branch holds. Each",
+        "month links to what it was parsed from and to what came out of it: `pdf` is the",
+        "card itself, in the cards repository's releases, `page` the text of a page as it",
+        "was read, and `json` the card as the integration parsed it, both on this branch.",
+        "A month marked `(mirror)` was copied from the supplier's own archive rather than",
+        "captured while it was current; a blank cell is a month the branch does not hold.",
         "",
     ]
     for supplier in sorted(held):
@@ -676,58 +725,25 @@ def _write_coverage(out: Path, pdf_base_url: str | None = None) -> None:
             "| --- | --- | " + " | ".join("---" for _ in months) + " |",
         ]
         for (contract, region), have in sorted(held[supplier].items()):
-            cells = []
-            for month in months:
-                via, digests = have.get(month, ("", []))
-                label = _VIA_LABELS.get(via, "")
-                if label and not digests:
-                    label = "no card"
-                links = [
-                    link
-                    for link in (_pdf_link(d, kept, pdf_base_url) for d in digests)
-                    if link is not None
-                ]
-                cells.append(f"[{label}]({links[0]})" if label and links else label)
+            cells = [
+                _cell(have.get(m), kept, pdf_base_url, archive_base_url) for m in months
+            ]
             lines.append(f"| {contract} | {region} | " + " | ".join(cells) + " |")
         lines.append("")
     (out / _COVERAGE).write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_pdf_index(out: Path, pdf_base_url: str | None = None) -> None:
-    """Rewrite the list of kept PDFs: by release, each file with every card
-    it was read for, since the release itself lists digests only."""
-    held, kept = _kept_rows(out)
-    readers: dict[str, list[str]] = {}
-    for supplier, rows in held.items():
-        for (contract, region), have in rows.items():
-            for month, (_via, digests) in have.items():
-                for digest in digests:
-                    readers.setdefault(digest, []).append(
-                        f"{supplier} / {contract} / {region} / {month}"
-                    )
-    by_release: dict[str, list[str]] = {}
-    for digest in readers:
-        path = kept.get(digest)
-        tag = path.split("/")[0] if path else "not uploaded yet"
-        by_release.setdefault(tag, []).append(digest)
-    lines = [
-        "# Kept cards",
-        "",
-        "Every PDF kept in the cards repository's releases, named by its SHA-256,",
-        "with each card it was read for. `coverage.md` is the same index from the",
-        "contract's side.",
-        "",
-    ]
-    for tag in sorted(by_release, key=lambda t: (t == "not uploaded yet", t)):
-        lines += [f"## {tag}", "", "| file | read for |", "| --- | --- |"]
-        for digest in sorted(by_release[tag]):
-            link = _pdf_link(digest, kept, pdf_base_url)
-            name = f"{digest[:12]}….pdf"
-            cell = f"[{name}]({link})" if link else name
-            used = "<br>".join(sorted(readers[digest]))
-            lines.append(f"| {cell} | {used} |")
-        lines.append("")
-    (out / _PDF_INDEX).write_text("\n".join(lines), encoding="utf-8")
+def _write_listings(
+    out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
+) -> None:
+    """The coverage table and the branch README, rewritten when out of date.
+    The index of PDFs by release that earlier versions wrote is removed, the
+    coverage table having taken it over."""
+    _write_coverage(out, pdf_base_url, archive_base_url)
+    readme = out / "README.md"
+    if not readme.exists() or readme.read_text(encoding="utf-8") != _README:
+        readme.write_text(_README, encoding="utf-8")
+    (out / "pdfs.md").unlink(missing_ok=True)
 
 
 def _transient(err: BaseException) -> bool:
@@ -909,6 +925,7 @@ async def archive(
     backfill_months: int = 0,
     pdf_dir: Path | None = None,
     pdf_base_url: str | None = None,
+    archive_base_url: str | None = None,
     reparse: bool = False,
     rerender: bool = False,
     extractors: Iterable[SupplierExtractor] | None = None,
@@ -921,9 +938,6 @@ async def archive(
     today = now.astimezone(_BRUSSELS).date()
     seen_month = _month_id(today.year, today.month)
     out.mkdir(parents=True, exist_ok=True)
-    readme = out / "README.md"
-    if not readme.exists():
-        readme.write_text(_README, encoding="utf-8")
     summary = _Summary()
     memo = _RecordingMemo()
     patience = _Patience()
@@ -1025,8 +1039,7 @@ async def archive(
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)
     removed = _prune(out, keep_months, today)
-    _write_coverage(out, pdf_base_url)
-    _write_pdf_index(out, pdf_base_url)
+    _write_listings(out, pdf_base_url, archive_base_url)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.absent} absent, "
@@ -1068,6 +1081,12 @@ def main() -> int:
         help="where the kept PDFs are served from, for a replay that needs one",
     )
     parser.add_argument(
+        "--archive-base-url",
+        default=None,
+        metavar="URL",
+        help="where the branch is browsed, for the listing's links to rows and pages",
+    )
+    parser.add_argument(
         "--reparse",
         action="store_true",
         help="replay every stored row through the parser even if it did not change",
@@ -1087,14 +1106,13 @@ def main() -> int:
     parser.add_argument(
         "--index-only",
         action="store_true",
-        help="only rewrite coverage.md and pdfs.md from what is on disk; no fetch",
+        help="only rewrite coverage.md from what is on disk; no fetch",
     )
     args = parser.parse_args()
     if args.index_only:
         # After the workflow's upload step has extended the manifest, so the
         # links written by the walk before it point at files that now exist.
-        _write_coverage(args.out, args.pdf_base_url)
-        _write_pdf_index(args.out, args.pdf_base_url)
+        _write_listings(args.out, args.pdf_base_url, args.archive_base_url)
         return 0
     summary = asyncio.run(
         archive(
@@ -1104,6 +1122,7 @@ def main() -> int:
             backfill_months=args.backfill,
             pdf_dir=args.pdfs,
             pdf_base_url=args.pdf_base_url,
+            archive_base_url=args.archive_base_url,
             reparse=args.reparse,
             rerender=args.rerender,
         )

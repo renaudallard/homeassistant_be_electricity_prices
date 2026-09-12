@@ -909,20 +909,34 @@ async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
     assert (out / sheet["text"]).read_text() == "sheet text"
     assert ("text", CARD_URL) in kinds
     coverage = (out / "coverage.md").read_text()
-    assert "| acme_fix | wallonia | live |" in coverage
+    assert "| acme_fix | wallonia | pdf json |" in coverage
 
 
-async def test_a_row_that_read_no_pdf_says_so_in_the_coverage_table(
+async def test_a_row_that_read_no_pdf_links_its_page_and_its_json(
     tmp_path: Path,
 ) -> None:
+    """A card parsed from a page links the text of that page on the branch
+    where a PDF row links its card, and every month links what the parse
+    produced; without a branch URL the cells still say which is which."""
+    branch = "https://github.test/repo/blob/archive"
     summary = await ac.archive(
         tmp_path,
         extractors=[_extractor(_card_fetch("september 2026"))],
+        archive_base_url=branch,
         now=NOW,
         sleep=_no_sleep,
     )
     assert summary.stored == 1
-    assert "| acme_fix | wallonia | no card |" in (tmp_path / "coverage.md").read_text()
+    row = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    text = row["_sources"][0]["text"]
+    assert (
+        f"| acme_fix | wallonia | [page]({branch}/{text})"
+        f" [json]({branch}/acme/acme_fix/wallonia/2026-09.json) |"
+    ) in (tmp_path / "coverage.md").read_text()
+    ac._write_coverage(tmp_path)
+    assert (
+        "| acme_fix | wallonia | page json |" in (tmp_path / "coverage.md").read_text()
+    )
 
 
 async def test_a_replay_names_and_keeps_a_card_the_row_never_had(
@@ -1117,7 +1131,8 @@ async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> 
     coverage = (tmp_path / "coverage.md").read_text()
     assert "## acme" in coverage
     assert "| contract | region | 2026-08 | 2026-09 |" in coverage
-    assert "| acme_fix | wallonia | no card | no card |" in coverage
+    # August came from the supplier archive without reading a page.
+    assert "| acme_fix | wallonia | json (mirror) | page json |" in coverage
     again = await ac.archive(
         tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
     )
@@ -1125,49 +1140,56 @@ async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> 
     assert (tmp_path / "coverage.md").read_text() == coverage
 
 
-async def test_a_person_can_get_from_a_month_to_its_pdf(tmp_path: Path) -> None:
+async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
+    tmp_path: Path,
+) -> None:
     """Once the manifest says where a card's PDF landed, the coverage cell
-    links to it and pdfs.md lists the file with every card it was read
-    for; --index-only rewrites both without fetching anything."""
+    links to it beside the row's JSON; --index-only rewrites the table
+    without fetching anything, refreshes a stale branch README and drops
+    the PDF index earlier versions wrote."""
     out, pdfs = tmp_path / "out", tmp_path / "pdfs"
     session = _PdfSession({PDF_URL: b"%PDF v1"})
     extractor = _extractor(_pdf_fetch(session, []), contracts=("a", "b"))
     base = "https://cards.test/releases/download"
+    branch = "https://github.test/repo/blob/archive"
     await ac.archive(
         out,
         extractors=[extractor],
         pdf_dir=pdfs,
         pdf_base_url=base,
+        archive_base_url=branch,
         now=NOW,
         sleep=_no_sleep,
     )
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
-    # Not uploaded yet: the cells are plain and the file is listed as such.
+    # Not uploaded yet: the PDF is named without a link, the JSON is linked.
     coverage = (out / "coverage.md").read_text()
-    assert "| a | wallonia | live |" in coverage
-    index = (out / "pdfs.md").read_text()
-    assert "## not uploaded yet" in index
     assert (
-        f"| {digest[:12]}….pdf | acme / a / wallonia / 2026-09<br>acme / b / wallonia / 2026-09 |"
-        in index
+        f"| a | wallonia | pdf [json]({branch}/acme/a/wallonia/2026-09.json) |"
+        in coverage
     )
     # The upload step recorded it; the index-only pass links everything up.
     (out / "pdfs.json").write_text(
         json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
     )
-    ac._write_coverage(out, base)
-    ac._write_pdf_index(out, base)
+    (out / "pdfs.md").write_text("stale index")
+    (out / "README.md").write_text("stale readme")
+    ac._write_listings(out, base, branch)
     url = f"{base}/electricity-2026-09/{digest}.pdf"
-    assert f"| a | wallonia | [live]({url}) |" in (out / "coverage.md").read_text()
-    index = (out / "pdfs.md").read_text()
-    assert "## electricity-2026-09" in index
+    coverage = (out / "coverage.md").read_text()
     assert (
-        f"| [{digest[:12]}….pdf]({url}) | acme / a / wallonia / 2026-09<br>acme / b / wallonia / 2026-09 |"
-        in index
+        f"| a | wallonia | [pdf]({url}) [json]({branch}/acme/a/wallonia/2026-09.json) |"
+        in coverage
     )
+    assert (
+        f"| b | wallonia | [pdf]({url}) [json]({branch}/acme/b/wallonia/2026-09.json) |"
+        in coverage
+    )
+    assert not (out / "pdfs.md").exists()
+    assert (out / "README.md").read_text() == ac._README
 
 
-def test_index_only_touches_nothing_but_the_two_listings(
+def test_index_only_touches_nothing_but_the_listing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -1176,9 +1198,11 @@ def test_index_only_touches_nothing_but_the_two_listings(
     monkeypatch.setattr(
         ac, "all_extractors", lambda: (_ for _ in ()).throw(AssertionError("fetched"))
     )
+    (tmp_path / "pdfs.md").write_text("stale index")
     assert ac.main() == 0
     assert (tmp_path / "coverage.md").exists()
-    assert (tmp_path / "pdfs.md").exists()
+    assert (tmp_path / "README.md").exists()
+    assert not (tmp_path / "pdfs.md").exists()
 
 
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:

@@ -822,22 +822,21 @@ not compared, because a listing page with a nonce or a render that is not byte-s
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
 than the parser that wrote it.
 
-Every run also rewrites two listings for people at the branch root, in a fixed order so a day
-that changed nothing rewrites them to the same bytes. `coverage.md` (`_write_coverage`,
+Every run also rewrites the listing for people at the branch root, in a fixed order so a day
+that changed nothing rewrites it to the same bytes. `coverage.md` (`_write_coverage`,
 `scripts/archive_cards.py:583`) is one table per supplier with a row per contract and region and
-a column per month the branch holds, each cell `live` or `mirror` by the row's `_via` and, once
-the PDF that month was parsed from is in the manifest, a link to it in the cards repository's
-releases: the answer to "is my month covered, and where is the card". A row whose sources hold
-no PDF at all reads `no card` instead, so the table never suggests a download that does not
-exist. `pdfs.md`
-(`_write_pdf_index`) is the same index from the file's side, by release: every kept PDF, named by
-its digest as the release names it, with each card it was read for, so the release's list of
-digests is readable after all. The workflow rewrites both once more after the upload step
-(`--index-only`, no fetch) so the day's new files are linked the day they are uploaded, then
-publishes them under `electricity/` in the cards repository's own tree (`Publish the listings in
-the cards repository`), with a README naming the namespaces, so a person on that repository's
-releases page is one click from the names; each release's notes point at the `pdfs.md` section
-for that release there.
+a column per month the branch holds. Each cell links what the month was parsed from and what
+came out of it: `pdf` is the card in the cards repository's releases, once the manifest says
+where it landed (until then the bare word), `page` the text of the page a page-parsed row read,
+on the branch, and `json` the row itself; a month copied from the supplier's archive carries
+`(mirror)`. That is the answer to "is my month covered, where is the card, and what did we read
+off it". `_write_listings` writes the table, refreshes the branch README when its text changed
+and removes the `pdfs.md` index earlier versions wrote, since the table links every file now.
+The workflow rewrites it once more after the upload step (`--index-only`, no fetch) so the day's
+new files are linked the day they are uploaded, then publishes it under `electricity/` in the
+cards repository's own tree (`Publish the listings in the cards repository`), with a README
+naming the namespaces, so a person on that repository's releases page is one click from the
+names; each release's notes point there, and the file's digest is in the link.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
@@ -1026,7 +1025,7 @@ same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:127`) and skips the rest of its
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:128`) and skips the rest of its
 cards, live and backfill alike, because every further card would cost the same three timeouts and
 two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
 failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
