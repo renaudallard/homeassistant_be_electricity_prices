@@ -36,12 +36,14 @@ from .base import (
     Contract,
     DsoOverlay,
     DynamicRates,
+    EnergyRates,
     ExtractorError,
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
+    TariffKind,
     TaxOverlay,
 )
 
@@ -66,7 +68,7 @@ _DSOS = {
 class _ContractDef:
     id: str
     label: str
-    kind: str
+    kind: TariffKind
     card_re: str
 
 
@@ -220,7 +222,8 @@ def _meter_shared_values(text: str) -> tuple[float, float, float]:
         re.IGNORECASE,
     )
     if reordered:
-        return tuple(_number(value) for value in reordered.groups())
+        green, chp, fee = (_number(value) for value in reordered.groups())
+        return green, chp, fee
     raise ExtractorError("Trevion: shared meter costs not found")
 
 
@@ -396,6 +399,8 @@ def parse_snapshot(
     contract = _BY_ID.get(contract_id)
     if contract is None:
         raise ExtractorError(f"unknown Trevion contract {contract_id!r}")
+    energy: EnergyRates
+    injection: InjectionRates
     if contract.kind == "fixed":
         energy, injection = _extract_fixed(text)
     elif contract.kind == "spot_monthly":

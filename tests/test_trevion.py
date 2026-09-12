@@ -304,10 +304,10 @@ async def test_unsupported_contracts_and_regions_do_not_fetch(
         await fetch(None, "groene_energie_vast", "wallonia")  # type: ignore[arg-type]
     assert (
         await fetch_for_month(
-            None,
+            None,  # type: ignore[arg-type]
             "unknown",
             REGION_FLANDERS,
-            date(2026, 9, 1),  # type: ignore[arg-type]
+            date(2026, 9, 1),
         )
         is None
     )
