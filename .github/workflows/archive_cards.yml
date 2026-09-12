@@ -134,7 +134,7 @@ jobs:
           [ -s "$manifest" ] || echo '{}' > "$manifest"
           ensure_release() {
             gh release view "$1" --repo "$CARDS_REPO" >/dev/null 2>&1 && return 0
-            gh release create "$1" --repo "$CARDS_REPO" --title "Tariff cards $1" --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to, captured in $2, each named by its SHA-256."
+            gh release create "$1" --repo "$CARDS_REPO" --title "Tariff cards $1" --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to, captured in $2, each named by its SHA-256. Which card each file is: https://github.com/${GITHUB_REPOSITORY}/blob/archive/pdfs.md#$1 (and coverage.md there links each contract and month to its file)."
           }
           for dir in tmp/pdfs/cards-*/; do
             [ -d "$dir" ] || continue
@@ -183,6 +183,16 @@ jobs:
                 gh release delete "$tag" --repo "$CARDS_REPO" --yes --cleanup-tag
               fi
             done
+
+      - name: Index the kept cards for people
+        # The walk wrote coverage.md and pdfs.md before today's uploads were
+        # in the manifest; rewrite them now so every month links to a file
+        # that exists. No fetch, a second or two.
+        env:
+          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
+        run: >-
+          python scripts/archive_cards.py --out tmp/archive --index-only
+          --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
 
       - name: Warn before the upload token expires
         # A fine-grained token lives a year at most, and the first sign of

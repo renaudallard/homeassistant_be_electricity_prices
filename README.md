@@ -1090,7 +1090,11 @@ can be re-read or checked by hand later. A manual run of the same workflow
 can also mirror past months from the supplier archives onto the branch,
 which keeps them readable should a supplier drop its archive, as DATS 24 did.
 A `coverage.md` at the branch root says, per contract and region, which
-months the branch holds and whether each was captured live or mirrored. A card is filed under the month its
+months the branch holds and whether each was captured live or mirrored,
+and links each month to the PDF it was parsed from; `pdfs.md` lists every
+kept PDF with the cards it was read for, since the releases name files by
+digest only. To get the original card of a contract and month, open
+`coverage.md`, find the row, click the month. A card is filed under the month its
 own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
 changed, and months older than three years are dropped.

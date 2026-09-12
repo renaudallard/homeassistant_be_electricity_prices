@@ -904,6 +904,60 @@ async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> 
     assert (tmp_path / "coverage.md").read_text() == coverage
 
 
+async def test_a_person_can_get_from_a_month_to_its_pdf(tmp_path: Path) -> None:
+    """Once the manifest says where a card's PDF landed, the coverage cell
+    links to it and pdfs.md lists the file with every card it was read
+    for; --index-only rewrites both without fetching anything."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    extractor = _extractor(_pdf_fetch(session, []), contracts=("a", "b"))
+    base = "https://cards.test/releases/download"
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    digest = hashlib.sha256(b"%PDF v1").hexdigest()
+    # Not uploaded yet: the cells are plain and the file is listed as such.
+    coverage = (out / "coverage.md").read_text()
+    assert "| a | wallonia | live |" in coverage
+    index = (out / "pdfs.md").read_text()
+    assert "## not uploaded yet" in index
+    assert (
+        f"| {digest[:12]}….pdf | acme / a / wallonia / 2026-09<br>acme / b / wallonia / 2026-09 |"
+        in index
+    )
+    # The upload step recorded it; the index-only pass links everything up.
+    (out / "pdfs.json").write_text(json.dumps({digest: f"cards-2026-09/{digest}.pdf"}))
+    ac._write_coverage(out, base)
+    ac._write_pdf_index(out, base)
+    url = f"{base}/cards-2026-09/{digest}.pdf"
+    assert f"| a | wallonia | [live]({url}) |" in (out / "coverage.md").read_text()
+    index = (out / "pdfs.md").read_text()
+    assert "## cards-2026-09" in index
+    assert (
+        f"| [{digest[:12]}….pdf]({url}) | acme / a / wallonia / 2026-09<br>acme / b / wallonia / 2026-09 |"
+        in index
+    )
+
+
+def test_index_only_touches_nothing_but_the_two_listings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        sys, "argv", ["archive_cards.py", "--out", str(tmp_path), "--index-only"]
+    )
+    monkeypatch.setattr(
+        ac, "all_extractors", lambda: (_ for _ in ()).throw(AssertionError("fetched"))
+    )
+    assert ac.main() == 0
+    assert (tmp_path / "coverage.md").exists()
+    assert (tmp_path / "pdfs.md").exists()
+
+
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
     live = _extractor(_card_fetch("x"))
     gone = _extractor(
