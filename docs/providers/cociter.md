@@ -320,7 +320,7 @@ number, while distribution rates still parse. The variable DSO test
 0.1087`, `distribution_peak 0.1205`, `distribution_offpeak 0.0666`, `transport
 0.0274252`, `data_management_per_year 19.49`, `prosumer_eur_per_kva_year 81.03`.
 
-Each row produces a `DsoOverlay` (`base.py:588-638`) with the four distribution
+Each row produces a `DsoOverlay` (`base.py:642-692`) with the four distribution
 rates, the shared transport rate, `data_management_per_year` (column 1, not
 divided), the optional prosumer forfait, and the optional Impact triplet.
 

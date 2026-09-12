@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:783-799`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:801`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:810`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1107`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1116`)
 resolves it against the entry's yearly volume (`entry_annual_kwh`) and writes
 one rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -778,7 +778,7 @@ same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:837-837`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:846-846`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
@@ -801,7 +801,7 @@ convex and the two orders give different money:
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
-  number. `_bake_monthly_injection` (`injection.py:104`) produces it and the floor
+  number. `_bake_monthly_injection` (`injection.py:110`) produces it and the floor
   lands on the flat `current` path. Every quote path calls that one helper: the
   compare estimate used to resolve only the Belpex_SPP cards and leave the rest
   to the live helper, which answers the card's printed figure on a snapshot
@@ -936,7 +936,7 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`injection.py:162`) and `_compute_injection_price`
+`_injection_needs_spot` (`injection.py:168`) and `_compute_injection_price`
 (`injection.py:169`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`injection.py:167-170`). A latent mis-price
