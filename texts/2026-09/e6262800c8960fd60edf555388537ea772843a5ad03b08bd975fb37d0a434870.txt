@@ -1,0 +1,687 @@
+
+
+<!doctype html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="Content-Style-Type" content="text/css">
+    <meta http-equiv="Copyright" content="© 2016 Tobania">
+    <meta name="author" content="Ebem">
+    <meta name="robots" content="all">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta property="og:image" content="https://www.ebem.be/css/Ebem/images/logo.png">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<title>Tarieven</title>
+<!--
+<meta name="description" content="" />
+<meta name="keywords" content="" />
+
+<!-- Facebook and Twitter integration
+<meta property="og:title" content="Tarieven" />
+<meta property="og:image" content="" />
+<meta property="og:url" content="/tarieven/tarieven/" />
+<meta property="og:site_name" content="EBEM" />
+<meta property="og:description" content="" />
+<meta name="twitter:title" content="Tarieven" />
+<meta name="twitter:image" content="" />
+<meta name="twitter:url" content="/tarieven/tarieven/" />
+<meta name="twitter:card" content="summary_large_image" />-->
+
+<link rel="canonical" href="/tarieven/tarieven/">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tarieven - Umbraco Sample Site</title>
+    <meta name="language" content="nl">
+    <link href="/css/Ebem/images/favicon.ico" rel="shortcut icon">
+    <link href="/css/bootstrap.min.css?ver=1.3" rel="stylesheet" type="text/css" media="screen">
+    <link href="/css/Ebem/master.min.css" rel="stylesheet" type="text/css" media="screen,print" title="style1">
+    <link href="/css/Ebem/masterXL.min.css?ver=1.3" rel="alternate stylesheet" type="text/css" media="screen" title="style2" disabled="">
+    <link href="/css/Ebem/print.min.css?ver=1.3" rel="stylesheet" type="text/css" media="print">
+
+    <link href="/css/Ebem/js-image-slider.css" rel="stylesheet">
+    
+    <link rel="shortcut icon" href="/css/Ebem/images/favicon.ico" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:500,700" rel="stylesheet" type="text/css">
+    <link href="https://use.fontawesome.com/releases/v5.0.10/css/all.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha256-cCueBR6CsyA4/9szpPfrX3s49M9vUU5BgtiJj06wt/s=" crossorigin="anonymous"></script>
+
+    
+
+    </head>
+
+<body id="homepage" class="detail">
+
+    <form name="aspnetForm" method="post" id="aspnetForm">
+        <div id="wrapper">
+            <div id="header-wrapper">
+                <div class="container">
+                    <div class="cols span12">
+                        <div id="logo" class="cols span3 alpha"> <a href="/#" title="Ebem" class="sitelogo"><img alt="Ebem" src="/css/Ebem/images/logo.png"></a> </div>
+                        <div id="headertools" class="cols span9 omega">
+                            <div class="customtools">
+
+
+                                <span id="ctl01_StyleSwitcher" class="styleswitcher"><a href="?style=style1" rel="style1" class="style1 sel">A</a><a href="?style=style2" rel="style2" class="style2">A</a></span>
+                                <a href="/" title="Afdrukken" target="_blank" onclick="window.print();return false;" class="print"></a>
+                                
+                            </div>
+                            <div id="ctl01_SearchInput_pnlSearch" class="search" onkeypress="searchFunction(event)">
+                                <span class="span-search-textbox">
+                                    <input name="ctl01$SearchInput$txtSearch" type="text" value="Geef hier uw zoekterm in" id="ctl01_SearchInput_txtSearch" class="search-textbox" alt="Geef hier uw zoekterm in" onfocus="ClearValue(this);" onblur="ResetValue(this);">
+                                </span>
+                                <input type="image" name="ctl01$SearchInput$btnSearch" id="ctl01_SearchInput_btnSearch" class="search-button" src="/css/Ebem/Images/btn-search.png" alt="Zoeken" style="border-width:0px;" onclick="searchClickFunction(event)">
+                            </div>
+                            
+
+
+
+    <ul class="main-navigation">
+
+        <li class="home"><a href="/"></a></li>
+
+                <li >
+                    <a href="/tarieven/">Tarieven</a>
+                    <ul>
+
+                                <li><a href="/tarieven/tarieven/" class=" ">Tarieven</a></li>
+                                <li><a href="/tarieven/prijs-berekenen/" class="alt ">Prijs berekenen</a></li>
+                                <li><a href="/media/gq1jjtws/ebem_algemene-voorwaarden_2026.pdf" class="  lastchild" target="_self" download>Algemene voorwaarden</a></li>
+
+                    </ul>
+                </li>
+                <li class=alt>
+                    <a href="/klanten/">Klanten</a>
+                    <ul>
+
+                                <li><a href="/klanten/klant-worden-particulier/" class=" ">Klant worden: Particulier</a></li>
+                                <li><a href="/klanten/klant-worden-klein-zakelijke-gebruiker/" class="alt ">Klant worden: Klein-zakelijke gebruiker</a></li>
+                                <li><a href="/klanten/klant-worden-zakelijke-gebruiker/" class=" ">Klant worden: Zakelijke gebruiker</a></li>
+                                <li><a href="/klanten/verhuizen/" class="alt ">Verhuizen</a></li>
+                                <li><a href="/klanten/nieuwbouw/" class="  lastchild">Nieuwbouw</a></li>
+
+                    </ul>
+                </li>
+                <li >
+                    <a href="/over-ebem/">Over EBEM</a>
+                    <ul>
+
+                                <li><a href="/over-ebem/wie-zijn-we/" class=" ">Wie zijn we?</a></li>
+                                <li><a href="/over-ebem/projecten/" class="alt ">Projecten</a></li>
+                                <li><a href="/over-ebem/vrije-energiemarkt/" class=" ">Vrije energiemarkt</a></li>
+                                <li><a href="/over-ebem/consumentenbescherming/" class="alt  lastchild">Consumentenbescherming</a></li>
+
+                    </ul>
+                </li>
+                <li class=alt>
+                    <a href="/faq/">FAQ</a>
+                    <ul>
+
+                                <li><a href="/faq/meest-gestelde-vragen/" class=" ">Meest gestelde vragen</a></li>
+                                <li><a href="/faq/glossarium/" class="alt  lastchild">Glossarium</a></li>
+
+                    </ul>
+                </li>
+                <li >
+                    <a href="/contact/">Contact</a>
+                </li>
+                <li class=alt>
+                    <a href="/info/">Info</a>
+                    <ul>
+
+                                <li><a href="/info/informatie-variabele-tarieven/" class=" ">Informatie variabele tarieven</a></li>
+                                <li><a href="/info/informatie-injectietarief/" class="alt ">Informatie Injectietarief</a></li>
+                                <li><a href="/info/informatie-zes/" class=" ">Informatie ZES</a></li>
+                                <li><a href="/info/informatie-slimme-thermostaat/" class="alt ">Informatie slimme thermostaat</a></li>
+                                <li><a href="/info/informatie-voorschot/" class=" ">Informatie voorschot</a></li>
+                                <li><a href="/info/informatie-smr3/" class="alt ">Informatie SMR3</a></li>
+                                <li><a href="/info/informatie-energiedelen/" class=" ">Informatie energiedelen</a></li>
+                                <li><a href="/info/zonnepanelen-aanmelden-voortaan-verplicht/" class="alt ">Zonnepanelen aanmelden voortaan verplicht</a></li>
+                                <li><a href="/info/nieuwe-tarieven-voor-injectie-vanaf-1-januari-2025/" class="  lastchild">Nieuwe tarieven voor injectie vanaf 1 januari 2025</a></li>
+
+                    </ul>
+                </li>
+                <li class= lastchild>
+                    <a href="/mijn-ebem/">Mijn EBEM</a>
+                    <ul>
+
+                                <li><a href="/mijn-ebem/facturen/" class=" ">Facturen</a></li>
+                                <li><a href="/mijn-ebem/gegevens/" class="alt ">Gegevens</a></li>
+                                <li><a href="/mijn-ebem/verbruik/" class=" ">Verbruik</a></li>
+                                <li><a href="/mijn-ebem/contract/" class="alt ">Contract</a></li>
+                                <li><a href="/mijn-ebem/domicilieren/" class=" ">Domicilieren</a></li>
+                                <li><a href="/mijn-ebem/nuttige-nummers/" class="alt ">Nuttige nummers</a></li>
+                                <li><a href="/mijn-ebem/dynamische-tarieven/" class="  lastchild">Dynamische tarieven</a></li>
+
+                    </ul>
+                </li>
+
+    </ul>
+
+
+
+<nav  class="navbar navbar-default main-navigation-mobile-container">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+        </button>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+        <ul id="ctl01_MainNavigationMobile" class="main-navigation-mobile nav navbar-nav">
+            <li class="home"><a href="/">Home</a></li>
+
+                    <li class=" ">
+                        <a href="/tarieven/">Tarieven</a>
+                        
+                    </li>
+                    <li class="alt ">
+                        <a href="/klanten/">Klanten</a>
+                        
+                    </li>
+                    <li class=" ">
+                        <a href="/over-ebem/">Over EBEM</a>
+                        
+                    </li>
+                    <li class="alt ">
+                        <a href="/faq/">FAQ</a>
+                        
+                    </li>
+                    <li class="alt  ">
+                        <a href="/contact/">Contact</a>
+                    </li>
+                    <li class="alt ">
+                        <a href="/info/">Info</a>
+                        
+                    </li>
+                    <li class="  lastchild">
+                        <a href="/mijn-ebem/">Mijn EBEM</a>
+                        
+                    </li>
+        </ul>
+    </div>
+</nav>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div id="breadcrumb-wrapper">
+                <div class="container">
+                    
+        <div class="breadcrumbtrail cols span12">
+                <a href="/" title="Home">
+                    Home
+                </a>
+                    <span> &gt; </span>
+                <a href="/tarieven/" title="Tarieven">
+                    Tarieven
+                </a>
+                    <span> &gt; </span>
+                <a href="/tarieven/tarieven/" title="Tarieven">
+                    Tarieven
+                </a>
+        </div>
+
+
+                </div>
+            </div>
+
+                <div id="content-wrapper">
+                    <div class="container">
+
+                        <div id="ctl01_divLeft" class="cols span3 print">
+                            		<ul id="ctl01_SubNavigation" class="sub-navigation treeview">
+						<li class="open-li">
+							<a href="/tarieven/tarieven/" class="open-a">Tarieven</a>
+						</li>
+					    <li>
+                            <a href="/tarieven/prijs-berekenen/">Prijs berekenen</a>
+                        </li>
+					    <li>
+                            <a href="/tarieven/algemene-voorwaarden/">Algemene voorwaarden</a>
+                        </li>
+		</ul>
+	<ul class="extra-navigation">
+		<li class="alt0"><a href="/tarieven/prijs-berekenen/" target="_self" title="Prijs berekenen"><span class="image" style="background-image: url('/css/ebem/images/buttons/price-small.png');">&nbsp;</span><span class="title">Prijs berekenen</span></a></li>
+		<li class="alt1"><a href="/klanten/" target="_self" title="Klant worden"><span class="image" style="background-image: url('/css/ebem/images/buttons/client-small.png');">&nbsp;</span><span class="title">Klant worden</span></a></li>
+        <li class="alt0"><a href="https://mijn.ebem.be/tarieven/dynamic.aspx" target="_self" title="Dynamische tarieven"><span class="image" style="background-image: url('/css/ebem/images/buttons/dynamic_rate-small.png');">&nbsp;</span><span class="title">Dynamische tarieven</span></a></li>
+		<li class="alt1"><a href="/ebem-en-de-singer-een-geslaagd-huwelijk/" target="_self" title="Ebem Cultuurt"><span class="image" style="background-image: url('/css/ebem/images/buttons/cultuur-small.png');">&nbsp;</span><span class="title">Ebem Cultuurt</span></a></li>
+	</ul>
+
+
+                        </div>
+                        <div id="ctl01_divCenter" class="cols span9 print">
+                            <div id="content">
+                                
+<section class="section">
+    <div>
+        <h1><font size=5 color="#3c99d6">Tarieven</font></h1>
+    </div>
+
+    <br/>
+    
+    <div>
+        <p>
+            
+
+
+    <div class="umb-grid">
+                <div class="grid-section">
+    <div >
+        <div class="row clearfix">
+            <div class="col-md-12 column">
+                <div >
+                            
+    
+<h2>Huidige tarieven</h2>
+<p>Klik op een link hieronder om de tariefkaarten te downloaden. Onze tarieventabel verschijnt op uw scherm in <br />een overzichtelijke en printervriendelijke opmaak.</p>
+<p>Meer uitleg en details over de vaste en variabele tarieven vindt u onder de rubriek "Info" in de menubalk.</p>
+<p><a rel="noopener" href="/media/rb2bzwop/ebem_tariefkaart-elek-09-2026.pdf" target="_blank" title="September 2026">Download Ebem Tariefkaarten Elektriciteit</a><br /><a rel="noopener" href="/media/4fgnxtwr/ebem_tariefkaart-dynamic-09-2026.pdf" target="_blank" title="September 2026 Dyn">Download Ebem Tariefkaarten Elektriciteit Dynamisch</a><br /><a rel="noopener" href="/media/y3vfcgeh/ebem_tariefkaart-gas-09-2026.pdf" target="_blank" title="September 2026">Download Ebem Tariefkaarten Gas</a><br /><a rel="noopener" href="/media/v35p3zj2/ebem_parameters_indexen-09-2026.pdf" target="_blank" title="EBEM Parameters Indexen 09 2026">Download uitleg en waarden parameters en indexen</a></p>
+<h2>Algemene voorwaarden</h2>
+<p>Door te klikken op onderstaande link kan u de algemene voorwaarden lezen. Onderaan de pagina vindt u een overzicht van onze historische algemene voorwaarden.</p>
+<p><a rel="noopener" href="/media/eywgk3eq/ebem_algemene-voorwaarden_2026.pdf" target="_blank" title="Juli 2026">Download Algemene voorwaarden</a></p>
+
+
+                </div>
+            </div>        </div>
+    </div>
+                </div>
+    </div>
+
+
+
+        </p>
+    </div>
+
+    <div>
+        <h2>Historische tarieven</h2><br/>
+    </div>
+    <div class="sidebyside-container">
+        <div class="sidebyside-row">
+            <table class="table table-condensed">
+                <tr><th class="center" style="text-align: center;"><h3>Elektriciteitstarieven</h3></th></tr>
+                <tr>
+                    <td>
+                                <a href="/media/rb2bzwop/ebem_tariefkaart-elek-09-2026.pdf">September 2026</a><br/>
+                                <a href="/media/4fgnxtwr/ebem_tariefkaart-dynamic-09-2026.pdf">September 2026 Dyn</a><br/>
+                                <a href="/media/d1ijmoxe/ebem_tariefkaart-elek-08-2026.pdf">Augustus 2026</a><br/>
+                                <a href="/media/yzeb4d05/ebem_tariefkaart-dynamic-08-2026.pdf">Augustus 2026 Dyn</a><br/>
+                                <a href="/media/xt4hptgi/ebem_tariefkaart-elek-07-2026.pdf">Juli 2026</a><br/>
+                                <a href="/media/q0yfpqws/ebem_tariefkaart-dynamic-07-2026.pdf">Juli 2026 Dyn</a><br/>
+                                <a href="/media/bu2jdlml/ebem_tariefkaart-elek-06-2026.pdf">Juni 2026</a><br/>
+                                <a href="/media/wllpnqsr/ebem_tariefkaart-dynamic-06-2026.pdf">Juni 2026 Dyn</a><br/>
+                                <a href="/media/sjheln3w/ebem_tariefkaart-elek-05-2026.pdf">Mei 2026</a><br/>
+                                <a href="/media/rvpl3slt/ebem_tariefkaart-dynamic-05-2026.pdf">Mei 2026 Dyn</a><br/>
+                                <a href="/media/jyelj5wy/ebem_tariefkaart-elek-04-2026.pdf">April 2026</a><br/>
+                                <a href="/media/qcgcyipl/ebem_tariefkaart-dynamic-04-2026.pdf">April 2026 Dyn</a><br/>
+                                <a href="/media/fvkllx5b/ebem_tariefkaart-elek-03-2026.pdf">Maart 2026</a><br/>
+                                <a href="/media/o3tg4ekz/ebem_tariefkaart-dynamic-03-2026.pdf">Maart 2026 Dyn</a><br/>
+                                <a href="/media/mupnelkr/ebem_tariefkaart-elek-02-2026.pdf">Februari 2026</a><br/>
+                                <a href="/media/wvplgeyk/ebem_tariefkaart-dynamic-02-2026.pdf">Februari 2026 Dyn</a><br/>
+                                <a href="/media/jowa3fwy/ebem_tariefkaart-elek-01-2026.pdf">Januari 2026</a><br/>
+                                <a href="/media/f25p4bav/ebem_tariefkaart-dynamic_01-2026.pdf">Januari 2026 Dyn</a><br/>
+                                <a href="/media/nfyht134/ebem_tariefkaart-elek-12-2025.pdf">December 2025</a><br/>
+                                <a href="/media/jbhnammn/ebem_tariefkaart-dynamic_12-2025.pdf">December 2025 Dyn</a><br/>
+                                <a href="/media/nebfalwq/ebem_tariefkaart-elek-11-2025.pdf">November 2025</a><br/>
+                                <a href="/media/mghkdk5i/ebem_tariefkaart-dynamic_11-2025.pdf">November 2025 Dyn</a><br/>
+                                <a href="/media/20mbm2es/ebem_tariefkaart-elek-10-2025.pdf">Oktober 2025</a><br/>
+                                <a href="/media/yrpjasal/ebem_tariefkaart-dynamic_10-2025.pdf">Oktober 2025 Dyn</a><br/>
+                                <a href="/media/jpwnf5l1/ebem_tariefkaart-elek-09-2025.pdf">September 2025</a><br/>
+                                <a href="/media/avcndgw2/ebem_tariefkaart-dynamic_09-2025.pdf">September 2025 Dyn</a><br/>
+                                <a href="/media/24kmpwar/ebem_tariefkaart-elek-08-2025.pdf">Augustus 2025</a><br/>
+                                <a href="/media/kionybzv/ebem_tariefkaart-dynamic_08-2025.pdf">Augustus 2025 Dyn</a><br/>
+                                <a href="/media/acfhpaax/ebem_tariefkaart-elek-07-2025.pdf">Juli 2025</a><br/>
+                                <a href="/media/ognp2g2q/ebem_tariefkaart-dynamic_07-2025.pdf">Juli 2025 Dyn</a><br/>
+                                <a href="/media/3pajbbcb/ebem_tariefkaart-elek-06-2025.pdf">Juni 2025</a><br/>
+                                <a href="/media/ffcjnapt/ebem_tariefkaart-dynamic_06-2025.pdf">Juni 2025 Dyn</a><br/>
+                                <a href="/media/vqvd0eed/ebem_tariefkaart-elek-05-2025.pdf">Mei 2025</a><br/>
+                                <a href="/media/szxofenf/ebem_tariefkaart-dynamic_05-2025.pdf">Mei 2025 Dyn</a><br/>
+                                <a href="/media/0wwdhldx/ebem_tariefkaart-elek-04-2025.pdf">April 2025</a><br/>
+                                <a href="/media/ulqpcpkm/ebem_tariefkaart-dynamic_04-2025.pdf">April 2025 Dyn</a><br/>
+                                <a href="/media/2zmdvyfz/ebem_tariefkaart-elek-03-2025.pdf">Maart 2025</a><br/>
+                                <a href="/media/0azodxrk/ebem_tariefkaart-dynamic_03-2025.pdf">Maart 2025 Dyn</a><br/>
+                                <a href="/media/gosirbmu/ebem_tariefkaart-elek-02-2025.pdf">Februari 2025</a><br/>
+                                <a href="/media/bqrj5wag/ebem_tariefkaart-dynamic_02-2025.pdf">Februari 2025 Dyn</a><br/>
+                                <a href="/media/hzymg2uq/ebem_tariefkaart-elek-01-2025.pdf">Januari 2025</a><br/>
+                                <a href="/media/oqehcbcp/ebem_tariefkaart-dynamic_01-2025.pdf">Januari 2025 Dyn</a><br/>
+                                <a href="/media/e4bbqaw1/ebem_tariefkaart-elek-12-2024_web.pdf">December 2024</a><br/>
+                                <a href="/media/klfnwvrf/ebem_tariefkaart-dynamic-12-2024_web.pdf">December 2024 Dyn</a><br/>
+                                <a href="/media/z4gnkojl/ebem_tariefkaart-elek-11-2024_web.pdf">November 2024</a><br/>
+                                <a href="/media/3jfbqf0k/ebem_tariefkaart-dynamic-11-2024_web.pdf">November 2024 Dyn</a><br/>
+                                <a href="/media/vaklotpr/ebem_tariefkaart-elek-10-2024_web2.pdf">Oktober 2024</a><br/>
+                                <a href="/media/nvpfujsb/ebem_tariefkaart-dynamic-10-2024_web.pdf">Oktober 2024 Dyn</a><br/>
+                                <a href="/media/wdofebhl/ebem_tariefkaart-elek-09-2024_web.pdf">September 2024</a><br/>
+                                <a href="/media/zitnyqha/ebem_tariefkaart-dynamic-09-2024_web.pdf">September 2024 Dyn</a><br/>
+                                <a href="/media/tgcliysa/ebem_tariefkaart-elek-08-2024_web.pdf">Augustus 2024</a><br/>
+                                <a href="/media/d5ukeogi/ebem_tariefkaart-dynamic-08-2024_web.pdf">Augustus 2024 Dyn</a><br/>
+                                <a href="/media/4vudox3n/ebem_tariefkaart-elek-07-2024_web.pdf">Juli 2024</a><br/>
+                                <a href="/media/tnihfrvm/ebem_tariefkaart-dynamic-07-2024_web.pdf">Juli 2024 Dyn</a><br/>
+                                <a href="/media/nqybs5gl/ebem_tariefkaart-elek-06-2024_web.pdf">Juni 2024</a><br/>
+                                <a href="/media/plhbgk4p/ebem_tariefkaart-dynamic-06-2024_web.pdf">Juni 2024 Dyn</a><br/>
+                                <a href="/media/3gkmp4ze/ebem_tariefkaart-elek-05-2024_web.pdf">Mei 2024</a><br/>
+                                <a href="/media/f4zj2thi/ebem_tariefkaart-dynamic-05-2024_web.pdf">Mei 2024 Dyn</a><br/>
+                                <a href="/media/xqxpjhcw/ebem_tariefkaart-elek-04-2024_web.pdf">April 2024</a><br/>
+                                <a href="/media/c5taxuly/ebem_tariefkaart-dynamic-04-2024_web.pdf">April 2024 Dyn</a><br/>
+                                <a href="/media/vhubuidh/ebem_tariefkaart-elek-03-2024_web.pdf">Maart 2024</a><br/>
+                                <a href="/media/t13ps1uy/ebem_tariefkaart-dynamic-03-2024_web.pdf">Maart 2024 Dyn</a><br/>
+                                <a href="/media/hnfphvy2/ebem_tariefkaart-elek-02-2024_web.pdf">Februari 2024</a><br/>
+                                <a href="/media/z10kldnv/ebem_tariefkaart-dynamic-02-2024_web.pdf">Februari 2024 Dyn</a><br/>
+                                <a href="/media/4wta4dxs/ebem_tariefkaart-elek-01-2024_web.pdf">Januari 2024</a><br/>
+                                <a href="/media/yxyndbos/ebem_tariefkaart-dynamic-01-2024_web.pdf">Januari 2024 Dyn</a><br/>
+                                <a href="/media/atkjcpuc/ebem_tariefkaart-elek-12-2023_web.pdf">December 2023</a><br/>
+                                <a href="/media/fnoo2joj/ebem_tariefkaart-dynamic-12-2023_web.pdf">December 2023 Dyn</a><br/>
+                                <a href="/media/lpojkftx/ebem_tariefkaart-elek-11-2023_web.pdf">November 2023</a><br/>
+                                <a href="/media/4cxk30ot/ebem_tariefkaart-dynamic-11-2023_web.pdf">November 2023 Dyn</a><br/>
+                                <a href="/media/bg1lf5ku/ebem_tariefkaart-elek-10-2023_web.pdf">Oktober 2023</a><br/>
+                                <a href="/media/r5ypbbds/ebem_tariefkaart-dynamic-10-2023_web.pdf">Oktober 2023 Dyn</a><br/>
+                                <a href="/media/am1dxaon/ebem_tariefkaart-elek-09-2023_web.pdf">September 2023</a><br/>
+                                <a href="/media/cealfgp0/ebem_tariefkaart-dynamic-09-2023_web.pdf">September 2023 Dyn</a><br/>
+                                <a href="/media/b0vnpiwh/ebem_tariefkaart-dynamic-08-2023_web.pdf">Augustus 2023 Dyn</a><br/>
+                                <a href="/media/cf4jfu5m/ebem_tariefkaart-elek-08-2023_web.pdf">Augustus 2023</a><br/>
+                                <a href="/media/k0yfajat/ebem_tariefkaart-dynamic-07-2023_web.pdf">Juli 2023 Dyn</a><br/>
+                                <a href="/media/csdbps1h/ebem_tariefkaart-elek-07-2023_web.pdf">Juli 2023</a><br/>
+                                <a href="/media/3s2eqtns/ebem_tariefkaart-dynamic_elek-juni-2023.pdf">Juni 2023 Dyn</a><br/>
+                                <a href="/media/sjrnwlbc/ebem_tariefkaart-elek-juni-2023_web.pdf">Juni 2023</a><br/>
+                                <a href="/media/c54plcnn/ebem_tariefkaart-dynamic_elek-mei-2023.pdf">Mei 2023 Dyn</a><br/>
+                                <a href="/media/jfxnggeb/ebem_tariefkaart-elek-mei-2023_web.pdf">Mei 2023</a><br/>
+                                <a href="/media/nwpdu4xc/ebem_tariefkaart-dynamic_elek-april-2023.pdf">April 2023 Dyn</a><br/>
+                                <a href="/media/m1jdm2oy/ebem_tariefkaart-elek-april-2023_web.pdf">April 2023</a><br/>
+                                <a href="/media/w0hfi0hw/ebem_tariefkaart-elek-maa_2023-web.pdf">Maart 2023</a><br/>
+                                <a href="/media/k4flumja/ebem_tariefkaart-elek-feb-2023_v2_web.pdf">Februari 2023</a><br/>
+                                <a href="/media/owzbmz3r/ebem_tariefkaart-elek-jan-2023_web_v2.pdf">Januari 2023</a><br/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div class="sidebyside-row">
+            <table class="table table-condensed">
+                <tr><th class="center" style="text-align: center;"><h3>Gastarieven</h3></th></tr>
+                <tr>
+                    <td>
+                                <a href="/media/y3vfcgeh/ebem_tariefkaart-gas-09-2026.pdf">September 2026</a><br/>
+                                <a href="/media/ugwfbd1t/ebem_tariefkaart-gas-08-2026.pdf">Augustus 2026</a><br/>
+                                <a href="/media/hnnblkqb/ebem_tariefkaart-gas-07-2026.pdf">Juli 2026</a><br/>
+                                <a href="/media/amwj3sv5/ebem_tariefkaart-gas-06-2026.pdf">Juni 2026</a><br/>
+                                <a href="/media/el3hb0zo/ebem_tariefkaart-gas-05-2026.pdf">Mei 2026</a><br/>
+                                <a href="/media/qf4lgkxd/ebem_tariefkaart-gas-04-2026.pdf">April 2026</a><br/>
+                                <a href="/media/1rlny0zq/ebem_tariefkaart-gas-03-2026.pdf">Maart 2026</a><br/>
+                                <a href="/media/zcgh4mwe/ebem_tariefkaart-gas-02-2026.pdf">Februari 2026</a><br/>
+                                <a href="/media/fxibbvor/ebem_tariefkaart-gas-01-2026.pdf">Januari 2026</a><br/>
+                                <a href="/media/vz0g5e5w/ebem_tariefkaart-gas-12-2025.pdf">December 2025</a><br/>
+                                <a href="/media/moopntaa/ebem_tariefkaart-gas-11-2025.pdf">November 2025</a><br/>
+                                <a href="/media/febgvyvi/ebem_tariefkaart-gas-10-2025.pdf">Oktober 2025</a><br/>
+                                <a href="/media/uogjqn13/ebem_tariefkaart-gas-09-2025.pdf">September 2025</a><br/>
+                                <a href="/media/kr2bpe4c/ebem_tariefkaart-gas-08-2025.pdf">Augustus 2025</a><br/>
+                                <a href="/media/ykenep4f/ebem_tariefkaart-gas-07-2025.pdf">Juli 2025</a><br/>
+                                <a href="/media/qxld3yzv/ebem_tariefkaart-gas-06-2025.pdf">Juni 2025</a><br/>
+                                <a href="/media/piqcjupx/ebem_tariefkaart-gas-05-2025.pdf">Mei 2025</a><br/>
+                                <a href="/media/qy1nrtho/ebem_tariefkaart-gas-04-2025.pdf">April 2025</a><br/>
+                                <a href="/media/55sbedq5/ebem_tariefkaart-gas-03-2025.pdf">Maart 2025</a><br/>
+                                <a href="/media/g0yhn0h1/ebem_tariefkaart-gas-02-2025.pdf">Februari 2025</a><br/>
+                                <a href="/media/ypcfqzuk/ebem_tariefkaart-gas-01-2025.pdf">Januari 2025</a><br/>
+                                <a href="/media/xf0bk1rn/ebem_tariefkaart-gas-12-2024_web.pdf">December 2024</a><br/>
+                                <a href="/media/fivdlq20/ebem_tariefkaart-gas-11-2024_web.pdf">November 2024</a><br/>
+                                <a href="/media/sjsnn4cx/ebem_tariefkaart-gas-10-2024_web2.pdf">Oktober 2024</a><br/>
+                                <a href="/media/r5zj0qxb/ebem_tariefkaart-gas-09-20244_web.pdf">September 2024</a><br/>
+                                <a href="/media/gxkbzxvk/ebem_tariefkaart-gas-08-2024_web.pdf">Augustus 2024</a><br/>
+                                <a href="/media/gszprj1y/ebem_tariefkaart-gas-07-2024_web.pdf">Juli 2024</a><br/>
+                                <a href="/media/asjc0cqi/ebem_tariefkaart-gas-06-2024_web.pdf">Juni 2024</a><br/>
+                                <a href="/media/bpxhhhl1/ebem_tariefkaart-gas-05-2024_web.pdf">Mei 2024</a><br/>
+                                <a href="/media/natnumy3/ebem_tariefkaart-gas-04-2024_web.pdf">April 2024</a><br/>
+                                <a href="/media/ru2dk3sv/ebem_tariefkaart-gas-03-2024_web.pdf">Maart 2024</a><br/>
+                                <a href="/media/k0wd2ovo/ebem_tariefkaart-gas-02-2024_web.pdf">Februari 2024</a><br/>
+                                <a href="/media/44pjvbxe/ebem_tariefkaart-gas-01-2024_web.pdf">Januari 2024</a><br/>
+                                <a href="/media/yiacmbig/ebem_tariefkaart-gas-12-2023_web.pdf">December 2023</a><br/>
+                                <a href="/media/ovnjemgj/ebem_tariefkaart-gas-11-2023_web.pdf">November 2023</a><br/>
+                                <a href="/media/0fjhx3pa/ebem_tariefkaart-gas-10-2023_web.pdf">Oktober 2023</a><br/>
+                                <a href="/media/2raamoqe/ebem_tariefkaart-gas-09-2023_web.pdf">September 2023</a><br/>
+                                <a href="/media/i1teiv5e/ebem_tariefkaart-gas-08-2023_web.pdf">augustus 2023</a><br/>
+                                <a href="/media/ztxgjzov/ebem_tariefkaart-gas-07-2023_web.pdf">Juli 2023</a><br/>
+                                <a href="/media/nkgh1jps/ebem_tariefkaart-gas-juni-2023_web.pdf">Juni 2023</a><br/>
+                                <a href="/media/50zi230d/ebem_tariefkaart-gas-mei-2023_web.pdf">Mei 2023</a><br/>
+                                <a href="/media/l5rdur3p/ebem_tariefkaart-gas-april-2023_web.pdf">April 2023</a><br/>
+                                <a href="/media/ncfe1hjj/ebem_tariefkaart-gas-maa-2023_web.pdf">Maart 2023</a><br/>
+                                <a href="/media/pkijidym/ebem_tariefkaart-gas-feb-2023_web.pdf">Februari 2023</a><br/>
+                                <a href="/media/usrd4fcs/ebem_tariefkaart-gas-jan-2023_web_v2.pdf">Januari 2023</a><br/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div>
+        <h2>Historische algemene voorwaarden</h2><br/>
+    </div>
+    <div class="sidebyside-container">
+        <div class="sidebyside-row">
+            <table class="table table-condensed">
+                <tr><th class="center" style="text-align: center;"><h3>Algemene voorwaarden</h3></th></tr>
+                <tr>
+                    <td>
+                            <a href="/media/gq1jjtws/ebem_algemene-voorwaarden_2026.pdf">November 2023</a><br />
+                            <a href="/media/eywgk3eq/ebem_algemene-voorwaarden_2026.pdf">Juli 2026</a><br />
+                            <a href="/media/fipdr3jm/ebem_algemene-voorwaarden_07-2023_v3.pdf">Juli 2023</a><br />
+                            <a href="/media/qofjlp1k/ebem_algemene-voorwaarden_01012023.pdf">Januari 2023</a><br />
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</section>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            <div id="contact-wrapper">
+                <div class="container">
+                    <div id="address" class="cols span3"> <h3>Contacteer ons</h3> <ul><li><span><strong>T</strong> 014 43 10 31</span></li><li><a href="mailto:info@ebem.be" target="_self" title="info@ebem.be" class="lastchild">info@ebem.be</a></li></ul><ul><li><span><strong>Ebem BV</strong></span></li><li><span>Leopoldstraat 10 bus 001</span></li><li><span>2330 Merksplas</span></li><li><span class="lastchild">BTW BE 0477.065.004</span></li></ul> </div>
+                    <div id="highlights" class="cols span3">
+                        <h3>Interessante links</h3>
+                        <ul><li><a href="https://www.vlaamsenutsregulator.be" target="_new" title="www.vlaamsenutsregulator.be">www.vlaamsenutsregulator.be</a></li><li><a href="https://www.vtest.be/" target="_new" title="Prijsvergelijking V-Test">Prijsvergelijking V-Test</a></li><li><a href="https://www.creg.be" target="_new" title="www.creg.be">www.creg.be</a></li><li><a href="https://www.energiesparen.be" target="_new" title="www.energiesparen.be">www.energiesparen.be</a></li><li><a href="https://www.ombudsmanenergie.be" target="_new" title="www.ombudsmanenergie.be" class="lastchild">www.ombudsmanenergie.be</a></li></ul>
+                    </div>
+                    <div id="newssubscribe" class="cols span3">
+                        <h3>Nieuwsbrief</h3>
+                        <div id="ctl01_Subscribe_pnlSubscribe">
+                            <div id="ctl01_Subscribe_pnlSubscribeFields">
+                                <p>Schrijf je in voor onze nieuwsbrief</p>
+                                <input type="text" value="Geef hier uw emailadres in" id="txtMailNewsSubscribe" onblur="resetNewsSubscribe(this)" onfocus="clearNewsSubscribe(this)"> <span id="ctl01_Subscribe_reqMail" style="color:Red;display:none;">*</span> <span id="ctl01_Subscribe_valMail" style="color:Red;visibility:hidden;">*</span>
+                                <a class="button" onclick="submitNewsSubscribe()">Inschrijven</a>
+                            </div>
+                            <script type="text/javascript">
+					function clearNewsSubscribe(obj) { if (obj.value == "Geef hier uw emailadres in") { obj.value = ""; } }
+					function resetNewsSubscribe(obj) { if (obj.value == "") { obj.value = "Geef hier uw emailadres in"; } }
+                    function submitNewsSubscribe() {
+                        var mail = $("#txtMailNewsSubscribe").val();
+						var check = "0857569fdec0d1b74e5507488205a9a9caf53a1a";
+						window.location.href = "https://mijn.ebem.be/Subscribe.aspx?mail=" + mail + "&check=" + encodeURIComponent(check);
+                    }
+                            </script>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div id="footer-wrapper">
+                <div class="container">
+                    <div id="footer-links" class="cols span8">
+                        <ul>
+                            <li><a href="/algemenevoorwaarden/" target="_blank" title="Algemene voorwaarden">Algemene voorwaarden</a></li>
+                            <li><a href="/privacypolicy/" title="Privacy Policy">Privacy Policy</a></li>
+                            <li><a href="/cookiepolicy/" title="Cookie Policy">Cookie Policy</a></li>
+                            <li><a href="/contact/" title="Contact" class="lastchild">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div id="footer-created" class="cols span4">
+                        <a href="http://www.tobania.be" target="_blank"><span id="ctl01_lblCreated">Made by Tobania</span></a>
+                    </div>
+                </div>
+            </div>
+                <div id="ctl01_SiteCookiePopup" class="cookiepopup">
+                    <h2>Wij maken gebruik van cookies</h2>
+                    <p>
+                        Onze website maakt gebruik van cookies. De essentiële en functionele cookies zijn nodig voor het goed functioneren
+                        van de website en kunnen niet worden geweigerd. Andere cookies worden gebruikt voor statistische doeleinden
+                        (analytische cookies) om informatie te verzamelen over hoe u en anderen onze website gebruiken.
+                        Wij maken ook gebruik van sociale media plugins, waarvoor ook cookies worden gebruikt. Voor alle niet-essentiële
+                        of niet-functionele cookies vragen wij steeds uw toestemming alvorens deze te plaatsen. U kan uw keuze hieronder meedelen.
+                        Als u hier eerst meer informatie over wilt, verwijzen wij u door naar onze
+                        <a href="/cookiepolicy/">cookieverklaring</a>.
+                    </p>
+                    <span>
+                        <a href="#" onclick="document.cookie = 'acceptCookies=1; expires=' + new Date(new Date().getTime() + 31536000000).toUTCString() + '; path=/';$(this).parent().parent().hide();return false;" class="accept">Alle cookies aanvaarden</a>
+                        <a href="#" onclick="document.cookie = 'acceptCookies=0; expires=' + new Date(new Date().getTime() + 31536000000).toUTCString() + '; path=/';$(this).parent().parent().hide();return false;" class="accept">Alle cookies weigeren</a>
+                        <a href="#" id="SpecificCookie" class="accept">Voorkeuren instellen</a>
+                    </span>
+                    <span class="cookiedetail" hidden="hidden">
+                        <a href="#" id="EssentiëleCookie" class="detail">Essentiële en noodzakelijke cookies +</a>
+                        <input type="checkbox" class="detail" onclick="return false;" checked />
+                        <p class="ECookie" hidden="hidden">
+                            Stellen u in staat om door de website te navigeren en de essentiële functies
+                            ervan te gebruiken. De cookies maken het mogelijk een dienst of functionaliteit
+                            te leveren waar de gebruiker uitdrukkelijk om heeft gevraagd. Deze cookies
+                            kunnen zonder uw toestemming worden geplaatst. We raden u dan ook aan deze
+                            cookies niet uit te schakelen omdat dit ervoor kan zorgen dat de
+                            basisfunctionaliteiten of de toegang tot bepaalde delen van de website worden verstoord.
+                        </p>
+                        <a href="#" id="AnalyCookie" class="detail">Analytische cookies +</a>
+                        <input type="checkbox" id="ChckAnalCookie" class="detail" />
+                        <p class="ACookie" hidden="hidden">
+                            Deze cookies zorgen voor informatie over hoe en wanneer je de website gebruikt.
+                            Zo kunnen we bijvoorbeeld zien hoe vaak een bepaalde pagina wordt gelezen.
+                            Deze informatie gebruiken we enkel om onze website te verbeteren en
+                            gebruiksvriendelijker te maken. Het weigeren van deze cookies heeft geen
+                            invloed op het gebruik en de functionaliteit van de website.
+                        </p>
+                        <a href="#" id="AdCookie" class="detail">Advertentiecookies +</a>
+                        <input type="checkbox" id="ChckAdCookie" class="detail" />
+                        <p class="AdCookie" hidden="hidden">
+                            Deze cookies zorgen ervoor dat derde partijen informtaie krijgen over
+                            je bezoek aan onze website en verzamelen informatie over je surfgedrag
+                            op onze website. Derde partijen kunnen dit combineren met andere
+                            informatie die jij hen gegeven hebt of die zij hebben verzameld op
+                            basis van het gebruik van hun diensten, met als doel om jou relevante
+                            advertenties te tonen op andere websites of sociale media.
+                        </p>
+                        <a href="#" id="SaveCookiePref" class="accept">Voorkeuren opslaan</a>
+                    </span>
+                </div>
+        </div>
+    </form>
+
+    <script src="/scripts/jquery/modernizr.min.js" type="text/javascript"></script>
+    <script src="/scripts/jquery/bootstrap.min.js" type="text/javascript"></script>
+    <script src="/scripts/jquery/jquery.treeview.js" type="text/javascript"></script>
+    <script src="/scripts/jquery/jquery.stylesheetToggle.js" type="text/javascript"></script>
+    <script src="/scripts/jquery/jquery-textslide.js" type="text/javascript"></script>
+    <script src="/scripts/App_Scripts/jquery/js-image-slider.js" type="text/javascript"></script>
+    <script src="/scripts/CookieHandler.js" type="text/javascript"></script>
+
+    <script type="text/javascript">
+        //<![CDATA[
+        $(function () {
+            $.stylesheetInit();
+            $("#ctl01_StyleSwitcher a").bind("click", function (e) {
+                $.stylesheetSwitch(this.getAttribute("rel"));
+                return false;
+            });
+            $("#ctl01_SubNavigation").treeview({
+                collapsed: true,
+                animated: "fast",
+                speed: 1,
+                toggle: function () {
+                    if (!$(this).hasClass('expandable')) {
+                        var hyp = $(this).children('a:first')[0];
+                        if (hyp && $(hyp).attr('href') && ($(hyp).attr('target') == '' || $(hyp).attr('target') == '_self' || $(hyp).attr('target') == null)) {
+                            window.location = $(hyp).attr('href');
+                        }
+                    }
+                },
+                persist: "cookie"
+            });
+        })
+        //]]>
+    </script>
+    <script type="text/javascript">
+        function searchFunction(e) {
+            if (e.keyCode === 13) {
+                e.preventDefault();
+                $('#ctl01_SearchInput_btnSearch').click();
+            }
+        }
+        function searchClickFunction(e) {
+            e.preventDefault();
+            var searchCriterias = $("#ctl01_SearchInput_txtSearch").val();
+            var url = "/Search" + "?searchQuery=" + searchCriterias;
+            window.location.href = url;
+        }
+        function ClearValue(obj) { if (obj.value == "Geef hier uw zoekterm in") { obj.value = ""; } }
+        function ResetValue(obj) { if (obj.value == "") { obj.value = "Geef hier uw zoekterm in"; } }
+
+        var sliderOptions = { sliderId: "ctl01_Slider_Slider_slider", effect: "9", pauseTime: 7000, transitionTime: 250, slices: 11, boxes: 7, hoverPause: 2, autoAdvance: true, captionOpacity: 1, captionEffect: "fade" };
+        var imageSlider = new mcImgSlider(sliderOptions);
+        var browser_resize = false;
+        var firstWidth, newWidth, device;
+        $(document).ready(function () {
+            firstWidth = $("#header").width();
+        });
+
+        $("#SpecificCookie").click(function () {
+            $(".cookiedetail").toggle();
+        });
+
+        function toggleCookieDetails(buttonId, showText, hideText, detailClass) {
+            $(buttonId).click(function () {
+                var $button = $(this);
+                if ($button.text() === showText) {
+                    $button.text(hideText);
+                    $(detailClass).show();
+                } else {
+                    $button.text(showText);
+                    $(detailClass).hide();
+                }
+            });
+        }
+
+        toggleCookieDetails("#EssentiëleCookie", "Essentiële en noodzakelijke cookies +", "Essentiële en noodzakelijke cookies -", ".ECookie");
+        toggleCookieDetails("#AnalyCookie", "Analytische cookies +", "Analytische cookies -", ".ACookie");
+        toggleCookieDetails("#AdCookie", "Advertentiecookies +", "Advertentiecookies -", ".AdCookie");
+
+
+        $('#SaveCookiePref').click(function () {
+            var oneYearFromNow = new Date(new Date().getTime() + 31536000000).toUTCString();
+            var isAnalyticalChecked = $('input#ChckAnalCookie').is(':checked');
+            var isAdChecked = $('input#ChckAdCookie').is(':checked');
+
+            if (isAnalyticalChecked && isAdChecked) {
+                document.cookie = 'acceptCookies=1; expires=' + oneYearFromNow + '; path=/';
+            } else if (!isAnalyticalChecked && !isAdChecked) {
+                document.cookie = 'acceptCookies=0; expires=' + oneYearFromNow + '; path=/';
+            } else {
+                document.cookie = 'analyticalCookie=' + (isAnalyticalChecked ? 1 : 0) + '; expires=' + oneYearFromNow + '; path=/';
+                document.cookie = 'adCookie=' + (isAdChecked ? 1 : 0) + '; expires=' + oneYearFromNow + '; path=/';
+                document.cookie = 'acceptCookies=0; expires=' + oneYearFromNow + '; path=/';
+            }
+
+            $(this).parent().parent().hide();
+        });
+
+        $(window).resize(function () {
+            if (browser_resize) {
+                clearTimeout(browser_resize);
+            }
+            browser_resize = setTimeout(function () {
+                newWidth = $("#header").width();
+                if (firstWidth != newWidth) {
+                    imageSlider.reload();
+                }
+                firstWidth = newWidth;
+            }, 500);
+        });
+    </script>
+    <script type="text/javascript">
+        $("#telex-wrapper").textslide({ time: 3000 });
+    </script>
+</body>
+</html>
