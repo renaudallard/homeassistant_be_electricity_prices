@@ -752,15 +752,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:151`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:154`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:462`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:473`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:506`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:517`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
@@ -771,21 +771,22 @@ branch instead of rendering, so a card that has not changed since it was last st
 download and no pdfplumber pass; on a Raspberry Pi the render is the 20 minutes of the walk, the
 downloads are seconds. Bytes the branch has not recorded yet are written to
 `--pdfs DIR/cards-<YYYY-MM>/<sha256>.pdf`, and the row's `_sources` entry names its PDF by that
-release path. The workflow uploads the directory as release assets of the separate cards
-repository (see `archive_cards.yml` below) and appends each upload to `<out>/pdfs.json`, the
-manifest the next run seeds `_Cards` from: a digest the manifest does not list is written again
-until an upload succeeds, so a day without the token loses nothing for good. `_prune` drops
-manifest entries older than the retention alongside the rows.
+digest alone. The workflow uploads the directory as release assets of the separate cards
+repository (see `archive_cards.yml` below) and records where each one landed in
+`<out>/pdfs.json`, the manifest the next run seeds `_Cards` from and the one place that maps a
+digest to a release path: a digest the manifest does not list is written again until an upload
+succeeds, so a day without the token loses nothing for good. `_prune` drops manifest entries
+older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:389`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:393`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:329`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:326`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`); anything else is refused as a network error, and the row is
@@ -941,14 +942,18 @@ backfill is one archived card per supplier, contract, region and month, a re-ren
 and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and the `archive` branch as a worktree under
 `tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
 `git worktree add --orphan`, so nothing has to be pushed by hand
-(`.github/workflows/archive_cards.yml:46`). It then runs `scripts/archive_cards.py --out
+(`.github/workflows/archive_cards.yml:70`). It then runs `scripts/archive_cards.py --out
 tmp/archive`, and commits and pushes only when the tree changed.
 
-The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml:74`) uploads the
+The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml:94`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of a separate repository,
-`renaudallard/homeassistant_be_electricity_prices_cards`, one release per month (`cards-YYYY-MM`) with each
-file named by its SHA-256, then records every upload in the branch's `pdfs.json` before the commit
-step runs. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
+`renaudallard/homeassistant_be_electricity_prices_cards`, named by the capture month
+(`cards-YYYY-MM`) with each file named by its SHA-256, then records where every file landed in
+the branch's `pdfs.json` before the commit step runs. GitHub caps a release at a thousand assets
+(the first backfill found out: 1142 new PDFs on top of the 214 the month already held), so the
+step looks at every shard of the month that exists, uploads into the last one while it has room
+and opens `cards-YYYY-MM-2` and on when it does not; a file already present in any shard is not
+uploaded again, only recorded. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
 (214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
@@ -967,14 +972,14 @@ same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:120`) and skips the rest of its
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:121`) and skips the rest of its
 cards, live and backfill alike, because every further card would cost the same three timeouts and
 two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
 failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
 not permanent; either way Mega has its own archive and the month cache rarely needs the
 repository's copy for it.
 
-A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:170`),
+A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:192`),
 which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
 stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
 most) would otherwise end the archive quietly. The same `scripts/file_ci_issue.sh` the live check

@@ -1095,9 +1095,12 @@ The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the branch has not seen before is uploaded
 to a release of a separate repository,
 [`homeassistant_be_electricity_prices_cards`](https://github.com/renaudallard/homeassistant_be_electricity_prices_cards),
-one release per month, each file named by its SHA-256, and each card on the
-branch names its PDF that way under `_sources`. A month of cards is about
-100 MB, which is why they live in releases rather than on a branch. That
+named by the month it was captured in and holding at most a thousand files
+(GitHub's limit per release; a backfill spills into a second one), each
+file named by its SHA-256. Each card on the branch names its PDF by that
+digest under `_sources`, and the branch's `pdfs.json` says which release
+holds it. A month of cards is about 100 MB, which is why they live in
+releases rather than on a branch. That
 digest also keeps the daily run cheap: a card whose bytes have not changed
 is served the text the branch already holds instead of being rendered
 again. And a parser fix reaches the stored months on its own: when the

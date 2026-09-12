@@ -93,13 +93,16 @@ jobs:
 
       - name: Keep the cards themselves
         id: keep
-        # The PDFs go to a separate repository's releases, one per month,
-        # named by their SHA-256: a month of cards is about 100 MB, which
-        # no git branch of this repository should carry and which HACS
-        # would mistake for a release if it lived here. Needs a fine-grained
-        # token with contents read and write on that repository in the
-        # BE_ELECTRICITY_CARDS secret; without it the step says so and the branch
-        # still gets the parsed cards and their texts.
+        # The PDFs go to a separate repository's releases, named by the
+        # month they were captured in and by their SHA-256: a month of cards
+        # is about 100 MB, which no git branch of this repository should
+        # carry and which HACS would mistake for a release if it lived here.
+        # GitHub caps a release at a thousand assets, so a month that
+        # overflows (a backfill does) spills into cards-YYYY-MM-2 and on;
+        # the manifest on the branch says which one holds each file. Needs a
+        # fine-grained token with contents read and write on that repository
+        # in the BE_ELECTRICITY_CARDS secret; without it the step says so and
+        # the branch still gets the parsed cards and their texts.
         env:
           GH_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
@@ -129,19 +132,38 @@ jobs:
           fi
           manifest=tmp/archive/pdfs.json
           [ -s "$manifest" ] || echo '{}' > "$manifest"
+          ensure_release() {
+            gh release view "$1" --repo "$CARDS_REPO" >/dev/null 2>&1 && return 0
+            gh release create "$1" --repo "$CARDS_REPO" --title "Tariff cards $1" --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to, captured in $2, each named by its SHA-256."
+          }
           for dir in tmp/pdfs/cards-*/; do
             [ -d "$dir" ] || continue
-            tag=$(basename "$dir")
-            if ! gh release view "$tag" --repo "$CARDS_REPO" >/dev/null 2>&1; then
-              gh release create "$tag" --repo "$CARDS_REPO"                 --title "Tariff cards $tag"                 --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to for ${tag#cards-}, each named by its SHA-256."
-            fi
-            have=$(gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq '.assets[].name')
+            base=$(basename "$dir")
+            month=${base#cards-}
+            # Every shard of this month that exists: which file is where,
+            # and how full the last one is.
+            : > have.txt
+            n=1; tag=$base; count=0
+            while gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq ".assets[].name | \"\(.) $tag\"" >> have.txt 2>/dev/null; do
+              count=$(gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq '.assets | length')
+              next="$base-$((n + 1))"
+              gh release view "$next" --repo "$CARDS_REPO" >/dev/null 2>&1 || break
+              n=$((n + 1)); tag=$next
+            done
+            ensure_release "$tag" "$month"
             for pdf in "$dir"*.pdf; do
               name=$(basename "$pdf")
-              if ! grep -qx "$name" <<<"$have"; then
+              where=$(awk -v f="$name" '$1 == f {print $2; exit}' have.txt)
+              if [ -z "$where" ]; then
+                if [ "$count" -ge 1000 ]; then
+                  n=$((n + 1)); tag="$base-$n"; count=0
+                  ensure_release "$tag" "$month"
+                fi
                 gh release upload "$tag" "$pdf" --repo "$CARDS_REPO"
+                count=$((count + 1))
+                where=$tag
               fi
-              jq --arg d "${name%.pdf}" --arg p "$tag/$name" '. + {($d): $p}'                 "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
+              jq --arg d "${name%.pdf}" --arg p "$where/$name" '. + {($d): $p}' "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
             done
           done
           # Same retention as the branch: a month older than three years goes.

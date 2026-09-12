@@ -394,7 +394,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     assert (pdfs / f"cards-2026-09/{digest}.pdf").read_bytes() == b"%PDF v1"
     card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
     [source] = card["_sources"]
-    assert source["pdf"] == f"cards-2026-09/{digest}.pdf"
+    assert source["pdf"] == digest
     assert source["variant"] == "plain"
     assert card["energy"]["single"] == 0.2
 
@@ -438,7 +438,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     digest2 = hashlib.sha256(b"%PDF v2").hexdigest()
     assert (pdfs / f"cards-2026-09/{digest2}.pdf").exists()
     card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
-    assert card["_sources"][0]["pdf"] == f"cards-2026-09/{digest2}.pdf"
+    assert card["_sources"][0]["pdf"] == digest2
     assert card["energy"]["single"] == 0.3
 
 
@@ -625,7 +625,7 @@ async def test_a_reader_that_changed_variant_gets_the_kept_pdf_back(
     assert card["energy"]["single"] == 0.5
     assert card["_sources"][0]["variant"] == "layout"
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
-    assert card["_sources"][0]["pdf"] == f"cards-2026-09/{digest}.pdf"
+    assert card["_sources"][0]["pdf"] == digest
 
 
 async def test_an_archive_row_replays_through_the_supplier_archive_path(
@@ -689,10 +689,16 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
 
     with pytest.raises(aiohttp.ClientConnectionError):
         asyncio.run(run())
-    (tmp_path / "cards-2026-09").mkdir()
-    (tmp_path / "cards-2026-09/abc.pdf").write_bytes(b"%PDF kept")
-    replay.pdfs = {"https://acme.test/card.pdf": "cards-2026-09/abc.pdf"}
+    # A kept copy is found by digest under any release directory.
+    (tmp_path / "cards-2026-09-2").mkdir()
+    (tmp_path / "cards-2026-09-2/abc.pdf").write_bytes(b"%PDF kept")
+    replay.pdfs = {"https://acme.test/card.pdf": "abc"}
     assert asyncio.run(run()) == b"%PDF kept"
+    # Without a local copy and without a manifest entry there is nowhere to go.
+    replay = ac._ReplaySession(None, None, "https://cards.test/download", {})  # type: ignore[arg-type]
+    replay.pdfs = {"https://acme.test/card.pdf": "abc"}
+    with pytest.raises(aiohttp.ClientConnectionError):
+        asyncio.run(run())
 
 
 def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:

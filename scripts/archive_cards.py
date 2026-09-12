@@ -20,13 +20,14 @@ removed on every run.
 The cards themselves are kept too. With ``--pdfs DIR`` every PDF whose
 bytes the branch has not recorded yet is written to
 ``DIR/cards-<YYYY-MM>/<sha256>.pdf``, and the workflow uploads that
-directory as release assets of a separate cards repository (one release per
-month, since a month of cards is about 100 MB and three years of them no
-git branch can hold), then records each upload in ``<out>/pdfs.json``. A
-card's ``_sources`` entry names its PDF by that release path. The same
-digest is what keeps a daily run cheap: a card whose bytes have not
-changed is served the text the branch already holds for it instead of
-being rendered again.
+directory as release assets of a separate cards repository (releases
+named by the capture month, at most a thousand files each, since a month
+of cards is about 100 MB and three years of them no git branch can hold),
+then records where each one landed in ``<out>/pdfs.json``. A card's
+``_sources`` entry names its PDF by digest alone; the manifest is the one
+place that says where it lives. The same digest is what keeps a daily run
+cheap: a card whose bytes have not changed is served the text the branch
+already holds for it instead of being rendered again.
 
 A parser fix reaches the stored months on its own. Every row carries the
 texts its parse read, so the run replays each row through the current
@@ -142,7 +143,9 @@ Written daily by `.github/workflows/archive_cards.yml` running
   the month it was seen in when it names none.
 - `texts/<YYYY-MM>/<sha256>.txt`: every document text a parse read that
   month, stored once and shared between the cards that read it. Each card
-  lists its own under `_sources`.
+  lists its own under `_sources`, and names the PDF it read by SHA-256.
+- `pdfs.json`: where each PDF is kept, as `<release tag>/<sha256>.pdf` in
+  the cards repository's releases.
 
 Months older than three years are removed.
 """
@@ -217,8 +220,8 @@ class _Cards:
     """What the run knows about card bytes.
 
     Seeded from the branch: ``pdfs.json`` maps every digest already uploaded
-    to its release path, and each row's ``_sources`` maps a (variant,
-    digest) pair to the text it rendered to. Installed as the readers'
+    to where it lives, and each row's ``_sources`` maps a (variant, digest)
+    pair to the text it rendered to. Installed as the readers'
     render hook, so a downloaded card whose bytes the branch has already
     seen is served that stored text instead of being rendered again, which
     is what makes a daily walk over 250 cards cheap: the download is
@@ -244,11 +247,8 @@ class _Cards:
         manifest = out / _MANIFEST
         if manifest.exists():
             self.kept = json.loads(manifest.read_text(encoding="utf-8"))
-        # (variant, digest) -> text path on the branch, and digest -> release
-        # path, from every stored row: the second is how a replayed row keeps
-        # naming its PDF when the memo served the text and no download ran.
+        # (variant, digest) -> text path on the branch, from every stored row.
         self.texts: dict[tuple[str, str], str] = {}
-        self.known: dict[str, str] = {}
         for row in out.glob("*/*/*/????-??.json"):
             try:
                 sources = json.loads(row.read_text(encoding="utf-8")).get(
@@ -258,21 +258,18 @@ class _Cards:
                 continue
             for source in sources:
                 if "pdf" in source:
-                    digest = Path(source["pdf"]).stem
-                    self.texts[(source["variant"], digest)] = source["text"]
-                    self.known[digest] = source["pdf"]
+                    self.texts[(source["variant"], _digest_of(source["pdf"]))] = source[
+                        "text"
+                    ]
         self.fresh: dict[tuple[str, str], str] = {}
         self.digests: dict[str, str] = {}
         self.saved: dict[str, str] = {}
         self.rendered = 0
         self.unrendered = 0
 
-    def path_for(self, url: str) -> str | None:
-        """Where the PDF behind ``url`` is, or will be once uploaded."""
-        digest = self.digests.get(url)
-        if digest is None:
-            return None
-        return self.kept.get(digest) or self.saved.get(digest) or self.known.get(digest)
+    def digest_for(self, url: str) -> str | None:
+        """The digest of the PDF behind ``url``, once its bytes were seen."""
+        return self.digests.get(url)
 
     async def render(
         self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
@@ -344,22 +341,29 @@ class _ReplaySession:
         session: aiohttp.ClientSession,
         pdf_dir: Path | None,
         pdf_base_url: str | None,
+        kept: dict[str, str] | None = None,
     ) -> None:
         self._session = session
         self._pdf_dir = pdf_dir
         self._pdf_base_url = pdf_base_url
+        # digest -> release path, the manifest; where a kept card is served from.
+        self._kept = kept or {}
+        # url -> digest for the row being replayed.
         self.pdfs: dict[str, str] = {}
 
     def get(self, url: str, **_kw: Any) -> Any:
         return self._get(url)
 
     async def _fetch(self, url: str) -> bytes:
-        path = self.pdfs.get(url)
-        if path is None:
+        digest = self.pdfs.get(url)
+        if digest is None:
             raise aiohttp.ClientConnectionError(f"offline replay has nothing for {url}")
-        if self._pdf_dir is not None and (self._pdf_dir / path).exists():
-            return (self._pdf_dir / path).read_bytes()
-        if self._pdf_base_url is None:
+        if self._pdf_dir is not None:
+            local = next(self._pdf_dir.glob(f"*/{digest}.pdf"), None)
+            if local is not None:
+                return local.read_bytes()
+        path = self._kept.get(digest)
+        if self._pdf_base_url is None or path is None:
             raise aiohttp.ClientConnectionError(f"no kept copy of {url} to replay from")
         async with self._session.get(
             f"{self._pdf_base_url}/{path}", timeout=aiohttp.ClientTimeout(total=60)
@@ -415,18 +419,25 @@ def _card_month(snap: SupplierSnapshot, today: date) -> str:
     return _month_id(*named)
 
 
+def _digest_of(pdf: str) -> str:
+    """The digest a row names its PDF by. Rows written before the manifest
+    existed carry the release path instead; the file name is the digest
+    either way."""
+    return Path(pdf).stem
+
+
 def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     """Describe one memo entry: the PDF helpers key a rendered document as
     ``<variant>\\0<url>`` and a plain text fetch by its URL alone. A
-    rendered document also names its PDF's release path when the bytes
-    were seen."""
+    rendered document also names its PDF by digest when the bytes were
+    seen; ``pdfs.json`` says where that digest lives."""
     variant, sep, url = key.partition("\0")
     if not sep:
         return {"url": key, "variant": "text", "text": path}
     entry = {"url": url, "variant": variant, "text": path}
-    pdf = cards.path_for(url)
-    if pdf is not None:
-        entry["pdf"] = pdf
+    digest = cards.digest_for(url)
+    if digest is not None:
+        entry["pdf"] = digest
     return entry
 
 
@@ -613,9 +624,10 @@ async def _replay_row(
         )
         # Seeded, not touched: only what the parse actually reads counts.
         dict.__setitem__(memo, key, _read_text(text_path))
-    replay.pdfs = {s["url"]: s["pdf"] for s in row.get("_sources", []) if "pdf" in s}
-    for url, pdf in replay.pdfs.items():
-        cards.digests[url] = Path(pdf).stem
+    replay.pdfs = {
+        s["url"]: _digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
+    }
+    cards.digests.update(replay.pdfs)
     try:
         seen_on = date.fromisoformat(row["_seen_on"])
     except (KeyError, ValueError):
@@ -801,7 +813,7 @@ async def archive(
             stamp.read_text(encoding="utf-8").strip() if stamp.exists() else parser
         )
         if reparse or rerender or stamped != parser:
-            replay = _ReplaySession(session, pdf_dir, pdf_base_url)
+            replay = _ReplaySession(session, pdf_dir, pdf_base_url, cards.kept)
             await _replay_all(
                 out, {ex.id: ex for ex in registry}, cards, replay, now, summary
             )
