@@ -640,6 +640,44 @@ async def test_archive_resolves_the_months_card_by_its_listed_name(
     assert len(snap.dsos) > 0
 
 
+async def test_archive_renders_the_base64_card_through_the_render_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The card arrives base64 inside JSON, never through a reader, so it is
+    rendered through render_pdf: the card archiver listens there and keeps
+    every card that passes, and this one must pass too."""
+    from custom_components.be_electricity_prices.providers import _pdf, octaplus
+
+    asked: list[str] = []
+    listing = [
+        {
+            "NomProduitFR": "ELECTRICITE - DYNAMIC",
+            "NomPdf": "2026-04 E OCTA+DYNAMIC RE WL FR.pdf",
+        }
+    ]
+    sheet = (FIXTURES / "octaplus_dynamic_w.pdf").read_bytes()
+    monkeypatch.setattr(octaplus, "fetch_text", _archive_router(listing, sheet, asked))
+    seen: list[tuple[str, str, int]] = []
+
+    async def hook(variant: str, url: str, payload: bytes, renderer: object) -> str:
+        seen.append((variant, url, len(payload)))
+        return octaplus.extract_pdf_text_aligned(payload, 3, 1.0)
+
+    with _pdf.render_through(hook):
+        snap = await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_dynamic",
+            "wallonia",
+            date(2026, 4, 12),
+        )
+    assert snap is not None
+    [(variant, url, size)] = seen
+    assert variant == "aligned"
+    assert url.startswith(octaplus._ARCHIVE_SHEET_URL)
+    assert "2026-04 E OCTA+DYNAMIC RE WL FR.pdf" in url
+    assert size == len(sheet)
+
+
 async def test_archive_answers_none_without_the_card_or_for_another_month(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

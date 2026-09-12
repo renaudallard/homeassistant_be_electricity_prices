@@ -101,7 +101,7 @@ The `x_join_threshold=1.0` is load-bearing. OCTA+'s tax block renders each glyph
 as its own pdfplumber word with sub-point gaps (`"5 ,0 3 2 9 0 ,2 0 4 2"`); a
 1.0pt merge threshold reassembles them into `"5,0329 0,2042"` while keeping real
 inter-word spacing intact (`octaplus.py:202-205`,
-`extract_pdf_text_aligned` at `_pdf.py:335-384`, exercised by
+`extract_pdf_text_aligned` at `_pdf.py:349-398`, exercised by
 `test_federal_taxes_use_first_tier`). The aligned extractor also exists because
 pdfplumber's default text extractor returns OCTA+'s DSO block in column-major
 order (one number per line); bucketing words by y coordinate reassembles each
@@ -170,7 +170,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:516`) | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:501`) | Wallonia only |
 | `dsos` | `_extract_flanders_dsos` (`:609`) or `_extract_wallonia_dsos` (`:557`) | region-branched |
-| `valid_until` | `parse_valid_until` (`_pdf.py:1083`) | shared helper |
+| `valid_until` | `parse_valid_until` (`_pdf.py:1097`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:239`) | PV forfait, annualised |
 
 ### Energy block (`_extract_energy`, `octaplus.py:459-527`)
@@ -209,7 +209,7 @@ By kind:
   stays nullable (separate optional circuit). `fixed` returns `FixedRates`,
   `variable` returns `VariableRates`.
 
-### Publication month (`_extract_publication_month`, `octaplus.py:610-631`)
+### Publication month (`_extract_publication_month`, `octaplus.py:618-639`)
 
 Two layouts are handled. Pre-2026 cards print `Clients résidentiels en <region>
 - MM/YYYY - Tarifs N% TVAC`; the regex anchors on that prose so a footer
@@ -482,3 +482,6 @@ fetch path.
 - Publication banner reworded: `_extract_publication_month` (`:407-428`) and
   `_FRENCH_MONTHS` (`:402-404`).
 - PV forfait wording change: `_extract_supplier_prosumer` (`:239-261`).
+
+
+The archived card arrives base64 inside the sheet endpoint's JSON rather than through a reader, so `fetch_for_month` renders the decoded bytes through `render_pdf` (`providers/_pdf.py`), the readers' render seam: the card archiver keeps every card that passes there, and the 112 mirrored OCTA+ months that predated this had no kept PDF.

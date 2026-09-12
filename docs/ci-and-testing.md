@@ -769,12 +769,12 @@ Three design points:
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:508`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:536`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:552`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:580`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
-The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
+The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:631`): inside that
 block a downloaded card's validated bytes go to a hook instead of straight to the renderer. The
 archiver installs `_Cards.render` (`scripts/archive_cards.py:247`) there. It hashes the bytes, and
 for a (variant, digest) pair some stored row already names it serves that row's text from the
@@ -784,7 +784,11 @@ downloads are seconds. Bytes the branch has not recorded yet are written to
 `--pdfs DIR/electricity-<YYYY-MM>/<sha256>.pdf`, the month being the one the row that read it is
 for (so a mirrored March card is filed under March, and bytes no row names, a card whose parse
 failed, under the month of the run), and the row's `_sources` entry names its PDF by that digest
-alone. The workflow uploads the directory as release assets of the separate cards
+alone. A card that never passed through a reader is seen there too: OCTA+'s archive hands the
+card over base64 inside a JSON answer and renders it through `render_pdf`, the same seam, so the
+cache records the call and the archiver adds the card to the row's sources with its text and
+digest (`_sources_of`). The 112 OCTA+ months mirrored before that seam existed had no kept card
+and no link; the replay that followed the change kept them. The workflow uploads the directory as release assets of the separate cards
 repository (see `archive_cards.yml` below) and records where each one landed in
 `<out>/pdfs.json`, the manifest the next run seeds `_Cards` from and the one place that maps a
 digest to a release path: a digest the manifest does not list is written again until an upload
@@ -823,7 +827,9 @@ that changed nothing rewrites them to the same bytes. `coverage.md` (`_write_cov
 `scripts/archive_cards.py:583`) is one table per supplier with a row per contract and region and
 a column per month the branch holds, each cell `live` or `mirror` by the row's `_via` and, once
 the PDF that month was parsed from is in the manifest, a link to it in the cards repository's
-releases: the answer to "is my month covered, and where is the card". `pdfs.md`
+releases: the answer to "is my month covered, and where is the card". A row whose sources hold
+no PDF at all reads `no card` instead, so the table never suggests a download that does not
+exist. `pdfs.md`
 (`_write_pdf_index`) is the same index from the file's side, by release: every kept PDF, named by
 its digest as the release names it, with each card it was read for, so the release's list of
 digests is readable after all. The workflow rewrites both once more after the upload step
