@@ -722,12 +722,25 @@ async def test_a_rerender_reads_every_card_back_from_the_kept_copy(
 def test_a_probe_in_a_replay_finds_only_the_card_the_row_read(tmp_path: Path) -> None:
     """An extractor that HEADs candidate URLs before choosing one lands on
     the kept card and nowhere else."""
-    from custom_components.be_electricity_prices.providers._pdf import head_ok
+    from custom_components.be_electricity_prices.providers._pdf import (
+        head_freshness_key,
+        head_ok,
+    )
 
     replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
     replay.pdfs = {"https://acme.test/2026-08.pdf": "abc"}
     assert asyncio.run(head_ok(replay, "https://acme.test/2026-08.pdf"))  # type: ignore[arg-type]
     assert not asyncio.run(head_ok(replay, "https://acme.test/2026-07.pdf"))  # type: ignore[arg-type]
+    # A probe that wants a freshness header gets one for a kept card only:
+    # Eneco's archive walk skips a candidate with neither ETag nor
+    # Last-Modified, so a bare 200 would still read as a missing card.
+    assert (
+        asyncio.run(head_freshness_key(replay, "https://acme.test/2026-08.pdf"))  # type: ignore[arg-type]
+        is not None
+    )
+    assert (
+        asyncio.run(head_freshness_key(replay, "https://acme.test/2026-07.pdf")) is None
+    )  # type: ignore[arg-type]
 
 
 def test_a_text_that_changed_bytes_but_not_its_parse_is_not_a_new_card() -> None:

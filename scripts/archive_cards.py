@@ -304,14 +304,24 @@ class _Cards:
 
 class _KeptResponse:
     """The response shape the readers use, over bytes already in hand; a
-    probe with nothing behind it answers 404."""
+    probe with nothing behind it answers 404.
+
+    A kept card also answers the freshness headers a probe may ask for:
+    Eneco's archive walks issue numbers with ``head_freshness_key`` and
+    skips a candidate that carries neither an ETag nor a Last-Modified,
+    so a bare 200 would still look like a missing card.
+    """
 
     content_length = None
-    headers: dict[str, str] = {}
 
-    def __init__(self, payload: bytes | None) -> None:
+    def __init__(self, payload: bytes | None, etag: str = "") -> None:
         self._payload = payload or b""
         self.status = 200 if payload is not None else 404
+        self.headers: dict[str, str] = (
+            {"ETag": f'"{etag}"', "Last-Modified": "Thu, 01 Jan 2026 00:00:00 GMT"}
+            if payload is not None
+            else {}
+        )
 
     async def read(self) -> bytes:
         return self._payload
@@ -363,7 +373,7 @@ class _ReplaySession:
         return self._get(url)
 
     def head(self, url: str, **_kw: Any) -> Any:
-        return self._Pending(self._probe(url))
+        return self._Pending(self._probe(url), self.pdfs.get(url, ""))
 
     async def _probe(self, url: str) -> bytes | None:
         return b"" if url in self.pdfs else None
@@ -396,17 +406,18 @@ class _ReplaySession:
     class _Pending:
         """An awaitable-and-enterable stand-in for aiohttp's request context."""
 
-        def __init__(self, fetch: Awaitable[bytes | None]) -> None:
+        def __init__(self, fetch: Awaitable[bytes | None], etag: str = "") -> None:
             self._fetch = fetch
+            self._etag = etag
 
         async def __aenter__(self) -> _KeptResponse:
-            return _KeptResponse(await self._fetch)
+            return _KeptResponse(await self._fetch, self._etag)
 
         async def __aexit__(self, *_exc: object) -> None:
             return None
 
     def _get(self, url: str) -> _Pending:
-        return self._Pending(self._fetch(url))
+        return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
 
 
 def _parser_digest() -> str:

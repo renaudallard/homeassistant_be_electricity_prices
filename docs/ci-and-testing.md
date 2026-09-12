@@ -758,9 +758,9 @@ Three design points:
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:505`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:516`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:549`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:560`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
@@ -780,13 +780,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:412`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:423`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:329`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:339`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
