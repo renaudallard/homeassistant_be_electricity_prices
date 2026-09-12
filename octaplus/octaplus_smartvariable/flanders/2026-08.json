@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_cached_at": "2026-09-12T10:28:02.283413+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -13,6 +13,12 @@
    "text": "texts/2026-09/e115d093f0e4d16a3788002b31edd3c49a0da44fe5df2a64ce55f254597a11d3.txt",
    "url": "https://srv.octaplus.be/websiterest/getTariffSheet?Canal=website&RequestedPDF=2026-08+E+OCTA%2BSMARTVARIABLE+RE+VL+FR.pdf",
    "variant": "text"
+  },
+  {
+   "pdf": "2779c15ad3009712cd093bed2bb7ad6305c257326614946c9dff71ee47ef508f",
+   "text": "texts/2026-09/793aff995f9330b7e56b986439c6d7249790d3c400f183ea3b80d478d8494c75.txt",
+   "url": "https://srv.octaplus.be/websiterest/getTariffSheet?RequestedPDF=2026-08 E OCTA+SMARTVARIABLE RE VL FR.pdf",
+   "variant": "aligned"
   }
  ],
  "_via": "archive",

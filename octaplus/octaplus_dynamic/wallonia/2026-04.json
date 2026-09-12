@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_cached_at": "2026-09-12T10:28:02.283413+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -13,6 +13,12 @@
    "text": "texts/2026-09/feff445c77f3b844022529038ebc7ec2ac8021f327833bf1395c038b48b9e354.txt",
    "url": "https://srv.octaplus.be/websiterest/getTariffSheet?Canal=website&RequestedPDF=2026-04+E+OCTA%2BDYNAMIC+RE+WL+FR.pdf",
    "variant": "text"
+  },
+  {
+   "pdf": "24a43569187d553bb20d53cd5101858c47c3f3e434ad8492ce32065ba76b9252",
+   "text": "texts/2026-09/e9c5785cdd6cb5eae3a96f7934bfe68aeeae31d115168b2633ffecd41da91146.txt",
+   "url": "https://srv.octaplus.be/websiterest/getTariffSheet?RequestedPDF=2026-04 E OCTA+DYNAMIC RE WL FR.pdf",
+   "variant": "aligned"
   }
  ],
  "_via": "archive",

@@ -1,0 +1,137 @@
+Tarif : Eco Flux
+Clients résidentiels en Wallonie - 03/2026 - Tarifs 6% TVAC
+Votre facture d'énergie
+Votre facture d'électricité se compose de plusieurs parties*:
+Coût de l'énergie OCTA+
+Coûts de Réseaux
+OCTA
+Taxes et surcharges fixées par les pouvoirs publics
+Coûts énergie verte
+TVA
+* Basé sur une consommation moyenne de 3.500 kWh/an d'une famille (ayant un compteur
+monohoraire), et le prix moyen des gestionnaires de réseaux.
+Le coût de l'énergie 100% belge
+(c€/kWh)
+Le coût de l’énergie se compose d’une redevance fixe annuelle et du prix de l’énergie.
+Consommation Injection
+Le prix de l'énergie est indexé mensuellement et suit les prix du marché
+Durée Indéterminé
+Redevance fixe (€/an) 130,00 Gratuit
+Tarifs Prix estimés Prix estimés
+Compteur monohoraire 12,75 2,93
+Heures pleines 14,67 2,93
+Compteur
+bihoraire
+Heures creuses 11,32 2,93
+Compteur exclusif nuit 12,06 -
+Impact Eco 10,68 2,93
+Impact Medium 13,41 2,93
+Impact Pic 15,37 2,93
+Si votre gestionnaire de réseau nous informe que vous avez de l’Injection sur votre Point de
+Injection raccordement, qui ne vient pas directement en compensation de votre prélèvement, nous
+achèterons votre Injection sur base de nos prix d’Injection.
++ 4,77 €/kVA par mois
+S’applique uniquement pour des points de raccordement avec une installation
+Forfait panneaux solaires
+photovoltaïque et un régime de compensation*. Le nombre de kVA correspond à la puissance
+de l’onduleur, telle que communiquée par votre gestionnaire de réseau.
+Vous pouvez recevoir vos factures gratuitement par e-mail ou via Zoomit.
+Pour des factures papier, nous facturons 2 € par envoi.
+Facturation
+Le saviez-vous ? Si vous avez un compteur communicant, vous pouvez nous demander
+gratuitement de vous envoyer chaque mois une facture de consommation.
+Paiement Par domiciliation, virement ou Zoomit.
+Vous choississez votre mode de gestion : dans nos bureaux auprès de notre service clientèle,
+Service 5 étoiles
+via téléphone ou Online (e-mail, site internet, Facebook, Twitter, Whatsapp).
+100% belge et électricité Si vous optez pour ce tarif vous choisissez non seulement un fournisseur 100% belge mais
+100% verte aussi de l’électricité qui provient exclusivement de sources d’énergie renouvelables.
+Si vous participez à un système de partage d’énergie, que ce soit en tant que producteur ou
+en tant qu’utilisateur d’énergie partagée, nous facturerons la composante « Partage de
+l’énergie » de 8 €/mois (21% TVAC) par EAN. Ce coût administratif permet de couvrir nos
+coûts supplémentaires générés par la complexité de la facturation liée à ce système.
+Partage de l'énergie
+Par « Partage de l’énergie » nous faisons référence à toutes les formes de participation à un
+système de partage de l’énergie. Sont considérés comme des formes de partage d’énergie : le
+partage d’énergie simple, la vente de pair à pair, les communautés d’énergie, le partage au
+sein d’une copropriété, …
+La colonne « Prix estimés » contient les moyennes des prix estimés pour les douze mois à venir. Celles-ci proviennent d’un modèle de calcul du régulateur flamand (Vlaamse
+Nutsregulator) et vous permettent de mieux anticiper le montant de votre future facture énergétique.
+OCTA+ Energie s.a.
+1/2
+Schaarbeeklei 600 1800 Vilvoorde T. 0800/43.002 (appel gratuit) energie@octaplus.be www.octaplus.beLes tarifs des réseaux
+(c€/kWh)
+Ces surcharges sont intégralement reversées aux gestionnaires de réseaux de distribution et de transport.
+Gestionnaire du réseau Distribution Terme fixe Tarifprosumer
+Transport
+de distribution Monohoraire Bihoraire jour Bihoraire nuit PIC MEDIUM ECO Exclusif nuit (€/an) (€/kVA/an)
+AIEG 10,87 12,05 6,67 15,07 9,82 4,56 6,67 19,49 81,04 2,75
+AIESH 13,64 15,17 8,22 19,07 12,29 5,50 8,22 17,92 99,29 2,75
+ORES (Brabant wallon) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Est) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Hainaut) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Luxembourg) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Mouscron) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Namur) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+ORES (Verviers) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 85,84 2,75
+REGIE DE WAVRE 12,48 13,78 7,83 17,12 11,31 5,51 7,83 26,44 93,00 2,75
+TECTEO - RESA 11,07 12,20 7,02 15,12 10,05 4,99 7,02 26,50 84,22 2,75
+Les surcharges
+(c€/kWh)
+Ces surcharges sont intégralement reversées aux autorités publiques.
+Droits d'accise Cotisation sur
+Accise fédérale (c€/kWh)
+spéciaux l'énergie
+CCCConsommation entre 0 & 3.000 kWh 5,0329 0,2042
+onsommation entre 3.000 & 20.000 kWhW 5,0329 0,2042
+onsommation entre 20.000 & 50.000 k h 4,8188 0,2042
+onsommation entre 50.000 & 1.000.000 kWh 4,7467 0,2042
+Redevance raccordement Wallonie (c€/kWh) 0,075
+Coûts énergie verte
+(c€/kWh)
+Les coûts énergie verte couvrent les dépenses liées à la production d'énergie renouvelable. Ces tarifs sont déterminés et fluctueront selon les quotas
+fixés par les Régions .
+Région wallonne
+Coûts énergie verte 3,095
+Les prix affichés du coût de l'énergie sont d'application pour les points de raccordement résidentiels qui disposent d’un compteur avec relevé mensuel ou annuel et un raccordement basse tension. Ils
+sont valables pour tout contrat signé entre le 01/03/2026 et le 31/03/2026 par un client résidentiel.
+Le prix de l'électricité OCTA+ Flux est indexé mensuellement. Il est basé sur la moyenne pondérée des cotations journalières Day Ahead Epex Baseload par le profil RLP (publié par Synergrid) durant le mois
+de fourniture. Selon le type de compteur, la formule tarifaire est la suivante, appliquée en €/MWh HTVA: compteur monohoraire : Epex RLP * 1,055 + 33,15 ; compteur bihoraire heures pleines : Epex RLP *
+1,274 + 33,15 ; compteur bihoraire heures creuses : Epex RLP * 0,892 + 33,15 ; compteur exclusif nuit : Epex RLP * 0,976 +33,15 ; Impact Eco : Epex RLP * 0,819 +33,15 ; Impact Medium : Epex RLP * 1,131
++33,15; Impact Pic : Epex RLP * 1,355 +33,15
+S’il s’avère que votre compteur soit ou devienne un compteur AMR (télé-relevé automatique quart-horaire) ou un compteur digital configuré en SMR3 (compteur intelligent avec l’option de lecture quart-
+horaire à distance activée)) en mode de comptage simple, bi-horaire ou exclusif nuit, nous nous réserverons le droit de modifier les tarifs au kWh du Coût de l’énergie. Dans ce cas, nous vous facturerons
+sur base des volumes et cotations horaires suivant la formule Epex H * 1,02 + 14,80 €/MWh HTVA pour l’électricité que vous prélevez, et suivant la formule Epex H * 1 – 9,59 €/MWh HTVA pour l’électricité
+que vous injectez et qui est soumise à nos conditions d’achat de votre Injection mentionnées sur cette carte tarifaire. Toutes les autres composantes du Coût de l’énergie restent d’application.
+Si votre Point de raccordement est muni d’un compteur AMR ainsi qu’une unité de production d’énergie solaire, nous facturerons le coût « Forfait Panneaux solaires AMR » de 1,50 €/kVA HTVA par mois,
+où le nombre de kVA correspondra à la puissance de votre unité de production selon votre gestionnaire de réseau.
+La redevance fixe est facturée au prorata du nombre de jours livrés, sauf si le contrat prend fin endéans les 6 premiers mois qui suivent son commencement, auquel cas la redevance est facturée pour une
+période de 6 mois.
+Tous les frais liés à l’utilisation des réseaux, tout comme les taxes, les redevances, les surcharges, sont variables, modifiables et sont intégralement répercutés au client, même rétroactivement. Ces
+éléments du prix sont ceux approuvés par les Régulateurs au moment de l’élaboration de la carte tarifaire pour un compteur à relevé annuel. En cas de contradiction entre les tarifs d'OCTA+ d'une part et
+ceux des Régulateurs d'autre part, ce sont ces derniers qui prévalent.
+Conditions relatives à l’Injection
+1. L’Injection correspond à l’électricité que vous injectez dans le réseau, et ce, au Point de raccordement pour lequel vous avez un Contrat de livraison d’électricité. L’Injection est l’électricité produite au
+moyen d’une installation de production décentralisée raccordée en basse tension, déduction faite de l’électricité immédiatement consommée sur place.
+2. L’Injection est mesurée par un compteur double-flux ou intelligent, et nous est transmise par votre gestionnaire de réseau.
+3. Nous achetons votre Injection à condition que votre installation soit conforme à toutes les dispositions légales et réglementaires applicables.
+4. Si vous avez marqué votre accord vis-à-vis d’OCTA+ et/ou vis-à-vis de votre Gestionnaire de réseau que vous souhaitez vendre votre Injection à OCTA+, nous ferons la demande auprès de votre
+Gestionnaire de réseau pour que votre Injection nous soit allouée. Cependant, si, en raison de manquements dans le chef du Gestionnaire de réseau, votre Injection ne nous est pas allouée, nous ne
+pourrons vous la racheter.
+5. L’Injection n’est pas soumise à la TVA.
+6. Si vous bénéficiez d’un régime de compensation avec un compteur double-flux en Wallonie et que vous avez de l’Injection excédentaire que vous souhaitez nous vendre, vous pouvez nous en faire la
+demande par écrit.
+Le prix de votre injection est indexé mensuellement sur base du paramètre d’indexation de la Epex SPP. Selon la configuration de votre compteur, la formule tarifaire est la suivante (en €/MWh) :
+monohoraire : Epex SPP x 0,852 - 13,39 ; bihoraire heures pleines : Epex SPP x 0,852 - 13,39 ; bihoraire heures creuses : Epex SPP x 0,852 - 13,39. La valeur de la Epex du mois en cours ne sera connue
+qu'en fin de mois. Les valeurs historiques de la Epex peuvent être consultées sur notre site www.octaplus.be > tarifs & docs > Paramètres électricité tarifs variables.
+*Régime de compensation : système de facturation où l’électricité injectée est directement déduite de l’électricité prélevée. Sauf disposition légale ou information du gestionnaire de réseau contraire, la
+compensation est applicable (a) en Wallonie : jusqu’au 31 décembre 2030 pour les Points de raccordement avec une unité de production mise en service avant le 1er janvier 2024, et pour les Points de
+raccordement avec une unité de production et un compteur mécanique, et (b) en Flandre : pour les Points de raccordement avec une unité de production et un compteur mécanique.
+Mode de comptage Impact
+Le mode de comptage "Impact" nécessite un compteur communicant configuré en SMR3. Si vous choisissez ce mode de comptage, nous demanderons la configuration SMR3 à votre gestionnaire de réseau.
+Au cas où la configuration SMR3 ne serait pas (ou plus) disponible, ou au cas où vous seriez dans une situation incompatible avec Impact (à savoir : le prépaiement, le tarif social, le partage d'énergie,
+l'adhérence à une communauté d'énergie, tout raccordement ≥ 56 kVA ou en dehors de la région Wallonne) nous vous facturerons sur base de la formule "Simple", "Bi-horaire" ou "Exclusif Nuit" en
+fonction du mode de comptage qui nous sera communiqué par votre gestionnaire de réseau.
+NosOCTA+conditionsEnergiegénéraless.a.de vente s’appliquent. Elles sont disponibles sur www.octaplus.be – Tarifs & documents.
+2/2
+Schaarbeeklei 600 1800 Vilvoorde T. 0800/43.002 (appel gratuit) energie@octaplus.be www.octaplus.be

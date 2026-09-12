@@ -1,0 +1,158 @@
+Tarif : Fixed
+Clients résidentiels en Flandre - 04/2026 - Tarifs 6% TVAC
+Votre facture d'énergie
+Votre facture d'électricité se compose de plusieurs parties*:
+Coût de l'énergie OCTA+
+Coûts de Réseaux
+OCTA
+Taxes et surcharges fixées par les pouvoirs publics
+Coûts énergie verte
+TVA
+* Basé sur une consommation moyenne de 3.500 kWh/an d'une famille (ayant un compteur
+monohoraire), et le prix moyen des gestionnaires de réseaux.
+Le coût de l'énergie
+(c€/kWh)
+Le coût de l’énergie se compose d’une redevance fixe annuelle et du prix de l’énergie.
+Consommation Injection
+Durée du contrat Indéterminée
+Durée du tarif 1 an garanti
+Redevance fixe (€/an)
+65,00 Gratuit
+Variable
+Tarifs Fixe
+Prix estimés
+Compteur monohoraire 15,89 4,72
+Heures pleines 17,67 4,72
+Compteur
+bihoraire
+Heures creuses 14,30 4,72
+Compteur exclusif nuit 14,83 -
+Si vous souscrivez un nouveau contrat Fixed, vous recevrez une réduction (*) de 60 € TVA
+incluse, que vous soyez un nouveau client ou un client existant choisissant ce nouveau contrat
+Promotion
+Si votre gestionnaire de réseau nous informe que vous avez de l’Injection sur votre Point de
+Injection raccordement, qui ne vient pas directement en compensation de votre prélèvement, nous
+achèterons votre Injection sur base de nos prix d’Injection.
++ 4,77 €/kVA par mois
+S’applique uniquement pour des points de raccordement avec une installation photovoltaïque et
+Forfait panneaux solaires
+un régime de compensation*. Le nombre de kVA correspond à la puissance de l’onduleur, telle
+que communiquée par votre gestionnaire de réseau.
+Vous pouvez recevoir vos factures gratuitement par e-mail ou via Zoomit.
+Pour des factures papier, nous facturons 2 € par envoi.
+Facturation
+Le saviez-vous ? Si vous avez un compteur communicant, vous pouvez nous demander
+gratuitement de vous envoyer chaque mois une facture de consommation.
+Paiement Par domiciliation, virement ou Zoomit.
+Vous choississez votre mode de gestion : dans nos bureaux auprès de notre service clientèle, via
+Service 5 étoiles
+téléphone ou Online (e-mail, site internet, Facebook, Twitter, Whatsapp).
+Si vous participez à un système de partage d’énergie, que ce soit en tant que producteur ou en
+tant qu’utilisateur d’énergie partagée, nous facturerons la composante « Partage de l’énergie »
+de 8 €/mois (21% TVAC) par EAN. Ce coût administratif permet de couvrir nos coûts
+supplémentaires générés par la complexité de la facturation liée à ce système.
+Partage de l'énergie
+Par « Partage de l’énergie » nous faisons référence à toutes les formes de participation à un
+système de partage de l’énergie. Sont considérés comme des formes de partage d’énergie : le
+partage d’énergie simple, la vente de pair à pair, les communautés d’énergie, le partage au sein
+d’une copropriété, …
+La colonne « Prix estimés » contient les moyennes des prix estimés pour les douze mois à venir. Celles-ci proviennent d’un modèle de calcul du régulateur flamand
+(Vlaamse Nutsregulator) et vous permettent de mieux anticiper le montant de votre future facture énergétique.
+Dans les centres de conseil indépendants pour les consommateurs du régulateur flamand (Vlaamse Nutsregulator) et de la VEKA, vous pouvez obtenir des conseils
+sur les mesures d’efficacité énergétique disponibles, les profils de référence de votre consommation d’énergie et les détails techniques des appareils
+consommateurs d’énergie.
+OCTA+ Energie s.a.
+Schaarbeeklei 600 1800 Vilvoorde T. 0800/43.002 (appel gratuit) energie@octaplus.be www.octaplus.be 1/2Les tarifs des réseaux
+(c€/kWh)
+Ces surcharges sont intégralement reversées aux gestionnaires de réseaux de distribution et de transport.
+Tarif de prélèvement Tarif gestion de données
+Gestionnaire du réseau de Régime de Tarif capacitaire Tarif capacitaire Tarifprosumer
+Total tarif- Total tarif-kWh Régime de mesure
+distribution mesure quart- (€/kW/an) (€/an) (€/kVA/an)
+kWh excl. nuit mensuel/annuel (€/an)
+horaire (€/an)
+Compteur digital
+Fluvius Antwerpen 5,35 4,81 61,11 18,92 52,37 - -
+Fluvius Halle-Vilvoorde 5,64 5,12 61,11 18,92 59,41 - -
+Fluvius Imewo 5,54 5,01 61,11 18,92 57,45 - -
+Fluvius Kempen 6,34 5,66 61,11 18,92 59,58 - -
+Fluvius Limburg 5,75 5,19 61,11 18,92 51,99 - -
+Fluvius Midden-Vlaanderen 5,28 4,78 61,11 18,92 53,13 - -
+Fluvius West 6,70 5,99 61,11 18,92 60,53 - -
+Fluvius Zenne-Dijle 5,87 5,32 61,11 18,92 59,49 - -
+Compteur analogique
+Fluvius Antwerpen 8,09 7,55 18,92 - - 130,92 54,63
+Fluvius Halle-Vilvoorde 9,28 8,76 18,92 - - 148,52 62,66
+Fluvius Imewo 8,90 8,37 18,92 - - 141,51 60,12
+Fluvius Kempen 10,03 9,36 18,92 - - 148,95 67,79
+Fluvius Limburg 9,23 8,67 18,92 - - 129,98 62,38
+Fluvius Midden-Vlaanderen 8,77 8,27 18,92 - - 132,83 59,23
+Fluvius West 10,30 9,60 18,92 - - 151,32 69,59
+Fluvius Zenne-Dijle 9,70 9,14 18,92 - - 148,73 65,51
+Les surcharges
+(c€/kWh)
+Ces surcharges sont intégralement reversées aux autorités publiques.
+CBBMHotisation Fonds Energie (Région flamande) €/mois Droits d'accise Cotisation sur
+Accise fédérale (c€/kWh)
+spéciaux l'énergie
+asse tension : client domicilié 0,00
+asse tension : client non domicilié 10,07 CCCConsommaaaation entre 0 & 3.000 kWh 5,0329 0,2042
+onsomm tion entre 3.000 & 20.000 kWh 5,0329 0,2042
+oyenne tension 192,11
+onsomm tion entre 20.000 & 50.000 kWh 4,8188 0,2042
+aute tension 1.120,66 onsomm tion entre 50.000 & 1.000.000 kWh 4,7467 0,2042
+Coûts énergie verte
+(c€/kWh)
+Les coûts « énergie verte » et « cogénération » peuvent être adaptés en cours d’exécution du contrat en cas de changement des quotas imposés par les
+Régions. Une telle adaptation ne porte pas atteinte au respect des articles 3.2.18 8°/4 et 8°/5 de l’Arrêté Energie du Gouvernement flamand.
+Région flamande
+Coûts énergie verte 1,166
+Coûts cogénération 0,430
+INFORMATIONS SUR VOTRE TARIF
+Les montants mentionnés sont arrondis. Nous nous engageons à appliquer les prix de l’énergie fournie par OCTA+ mentionnés dans les présentes Conditions particulières pendant au minimum les 12
+premiers mois de livraison. Après cette période, nous pourrons modifier votre tarif conformément à l’article 6 des Conditions générales, sans préjudice des droits du client décrits dans ce même article.
+Ce produit est valable pour les clients non professionnels raccordés en basse tension durant le mois en cours indiqué au recto de cette carte tarifaire, et, cumulativement, tant qu'il est activement proposé
+sur www.octaplus.be > Tarifs & Documents. En effet, afin de garantir la disponibilité de nos offres , les volumes disponibles à prix fixes sont limités. Dans le cas où cette limite serait atteinte, ce produit ne
+sera plus disponible à la souscription et vous pourrez découvrir nos autres solutions en ligne.
+S’il s’avère que votre compteur soit ou devienne un compteur AMR (télé-relevé automatique quart-horaire) ou un compteur digital configuré en SMR3 (compteur intelligent avec l’option de lecture
+quarthoraire à distance activée), nous nous réserverons le droit de facturer l’électricité de la composante « Coût de l’énergie » sure base d’un prix dynamique suivant la formule Epex 15' * 1,02 + 11,60
+€/MWh HTVA pour l’électricité que vous prélevez, et suivant la formule Epex 15' * 1 – 9,59 €/MWh HTVA pour l’électricité que vous injectez et qui est soumise à nos conditions d’achat de votre Injection
+mentionnées sur cette carte tarifaire. Nous vous informons préalablement de ces modifications conformément à l’article 3.2.18, 8°/3 – 5 de l’arrêté du gouvernement flamand « Energiebesluit ».
+Si votre site de consommation est muni d’un compteur AMR ainsi qu’une unité de production d’énergie solaire, nous facturerons le coût « Forfait Panneaux solaires AMR » de 1,50 €/kVA HTVA par mois,
+où le nombre de kVA correspondra à la puissance de votre unité de production selon votre gestionnaire de réseau.
+La redevance fixe est une redevance annuelle forfaitaire par Point de raccordement qui est facturée par année entamée. L’année est entamée lors de l’entrée en application de cette carte tarifaire, et une
+nouvelle année est entamée après chaque cycle de 12 mois qui suit l’entrée en application. Si vous changez de tarif ou si votre contrat est résilié en cours d’année, vous serez redevable de l’intégralité de la
+redevance fixe pour l’année entamée, indépendamment de l’éventuelle redevance liée à votre nouveau tarif.
+Tous les frais liés à l’utilisation des réseaux, tout comme les taxes, les redevances, les surcharges, sont variables, modifiables et sont intégralement répercutés au client, même rétroactivement. Ces
+éléments du prix sont ceux approuvés par les Régulateurs au moment de l’élaboration de la carte tarifaire pour un compteur à relevé annuel. En cas de contradiction entre les tarifs d'OCTA+ d'une part et
+ceux des Régulateurs d'autre part, ce sont ces derniers qui prévalent.
+Toutes les mentions sur cette carte tarifaire concernent des coûts dont vous nous êtes redevable, sauf les composantes dans la colonne « Injection » que nous déduirons de votre facture (voir conditions ci-
+dessous). Ces composantes de prix ne sont pas soumises à la TVA.
+Conditions relatives à l’Injection
+1. L’Injection correspond à l’électricité que vous injectez dans le réseau, et ce, au Point de raccordement pour lequel vous avez un Contrat de livraison d’électricité. L’Injection est l’électricité produite au
+moyen d’une installation de production décentralisée raccordée en basse tension, déduction faite de l’électricité immédiatement consommée sur place.
+2. L’Injection est mesurée par un compteur double-flux ou intelligent, et nous est transmise par votre gestionnaire de réseau.
+3. Nous achetons votre Injection à condition que votre installation soit conforme à toutes les dispositions légales et réglementaires applicables.
+4. Si vous avez marqué votre accord vis-à-vis d’OCTA+ et/ou vis-à-vis de votre Gestionnaire de réseau que vous souhaitez vendre votre Injection à OCTA+, nous ferons la demande auprès de votre
+Gestionnaire de réseau pour que votre Injection nous soit allouée. Cependant, si, en raison de manquements dans le chef du Gestionnaire de réseau, votre Injection ne nous est pas allouée, nous ne
+pourrons vous la racheter.
+5. L’Injection n’est pas soumise à la TVA.
+6. Si vous bénéficiez d’un régime de compensation avec un compteur double-flux en Wallonie et que vous avez de l’Injection excédentaire que vous souhaitez nous vendre, vous pouvez nous en faire la
+demande par écrit.
+Le prix de votre injection est indexé mensuellement sur base du paramètre d’indexation de la Epex SPP. Selon la configuration de votre compteur, la formule tarifaire est la suivante (en €/MWh) :
+monohoraire : Epex SPP x 0,852 - 13,39 ; bihoraire heures pleines : Epex SPP x 0,852 - 13,39 ; bihoraire heures creuses : Epex SPP x 0,852 - 13,39. La valeur de la Epex du mois en cours ne sera connue
+qu'en fin de mois. Les valeurs historiques de la Epex peuvent être consultées sur notre site www.octaplus.be > tarifs & docs > Paramètres électricité tarifs variables.
+*Régime de compensation : système de facturation où l’électricité injectée est directement déduite de l’électricité prélevée. Sauf disposition légale ou information du gestionnaire de réseau contraire, la
+compensation est applicable (a) en Wallonie : jusqu’au 31 décembre 2030 pour les Points de raccordement avec une unité de production mise en service avant le 1er janvier 2024, et pour les Points de
+raccordement avec une unité de production et un compteur mécanique, et (b) en Flandre : pour les Points de raccordement avec une unité de production et un compteur mécanique.
+DUREE DE VOTRE CONTRAT
+OCTA+ Fixed est un contrat à durée indéterminée. La fourniture d’énergie dans le cadre ce contrat doit débuter dans les 4 mois qui suivent votre souscription. Si tel n’est pas le cas, nous nous réservons le
+droit d’annuler votre contrat ou de vous faire une nouvelle proposition de contrat.
+Conditions particulières pour ce tarif : En raison des incertitudes affectant actuellement le marché de l'énergie, les volumes pour les tarifs fixes seront mensuellement limités et donc le nombre
+d'inscriptions par mois pour des contrats fixe le sera aussi. Dans le cas, où cette limite serait atteinte, OCTA+ se réserve le droit de ne plus offrir à la souscription le contrat "Fixed" pour le mois en cours
+ainsi que de refuser votre demande d’inscription ou de vous faire une nouvelle proposition.
+(*) La ristourne vous est uniquement accordée après douze mois ininterrompus de consommation et octroyée sur une note de crédit diverse après cette période. Cette ristourne ne peut être cumulée avec
+d'autres promotions ou réductions.
+Nos conditions générales de vente s’appliquent. Elles sont disponibles sur www.octaplus.be – Tarifs & documents.
+OCTA+ Energie s.a.
+Schaarbeeklei 600 1800 Vilvoorde T. 0800/43.002 (appel gratuit) energie@octaplus.be www.octaplus.be 2/2

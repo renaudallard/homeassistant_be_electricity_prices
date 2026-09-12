@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_cached_at": "2026-09-12T10:28:02.283413+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -13,6 +13,12 @@
    "text": "texts/2026-09/f86a0b143dd867c6a43a893f221eab424830cac482417f343d8e3d2ccd270c84.txt",
    "url": "https://srv.octaplus.be/websiterest/getTariffSheet?Canal=website&RequestedPDF=2026-02+E+OCTA%2BECOFLUX+RE+WL+FR.pdf",
    "variant": "text"
+  },
+  {
+   "pdf": "37089dca5b19daf2dc6449b56cf0b38483bdd0a54fe8b7435ffa08907804a8b4",
+   "text": "texts/2026-09/3bd8605e77c989db1f05a9619632b148bd79a173f59efed5efa35a2956b7bb9b.txt",
+   "url": "https://srv.octaplus.be/websiterest/getTariffSheet?RequestedPDF=2026-02 E OCTA+ECOFLUX RE WL FR.pdf",
+   "variant": "aligned"
   }
  ],
  "_via": "archive",

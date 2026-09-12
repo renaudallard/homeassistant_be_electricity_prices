@@ -1,5 +1,5 @@
 {
- "_cached_at": "2026-09-12T00:16:44.505808+00:00",
+ "_cached_at": "2026-09-12T10:28:02.283413+00:00",
  "_probe_key": null,
  "_schema_version": 59,
  "_seen_on": "2026-09-12",
@@ -13,6 +13,12 @@
    "text": "texts/2026-09/4e39ac490e2198c7234ce047062d6e15d62ca3e54b5fb5c1f41a2f6cbdc6df0e.txt",
    "url": "https://srv.octaplus.be/websiterest/getTariffSheet?Canal=website&RequestedPDF=2026-01+E+OCTA%2BECOFIXED+RE+WL+FR.pdf",
    "variant": "text"
+  },
+  {
+   "pdf": "f130088ac0d14a963cfea311574d9330a00c5f56d728cff6fc395507f32b262e",
+   "text": "texts/2026-09/99258a025198240e6d5f89eea8a356a890cabc9281e01b6caeed6cd9e9bae728.txt",
+   "url": "https://srv.octaplus.be/websiterest/getTariffSheet?RequestedPDF=2026-01 E OCTA+ECOFIXED RE WL FR.pdf",
+   "variant": "aligned"
   }
  ],
  "_via": "archive",
