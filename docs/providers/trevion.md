@@ -137,6 +137,7 @@ different month from the requested filename.
 | --- | --- |
 | `trevion_vast_2026-04.pdf` | Older tiered excise and both PDF text orders |
 | `trevion_vast_2026-09.pdf` | Fixed consumption and day/night feed-in |
+| `trevion_flex_2026-05.pdf` | The older Flex layout, feed-in formula written with an `x` |
 | `trevion_flex_2026-09.pdf` | RLP consumption and SPP injection |
 | `trevion_dynamic_2026-09.pdf` | Quarter-hourly dynamic product |
 | `trevion_dynamic_plus_2026-09.pdf` | Dynamic Plus catalog disambiguation |

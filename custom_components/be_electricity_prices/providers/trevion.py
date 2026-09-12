@@ -302,8 +302,10 @@ def _extract_formula(text: str, marker: str) -> tuple[float, float]:
 def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     marker = "Belpex_RLP_VL"
     factor, base = _extract_formula(text, marker)
+    # The multiplication sign moved from "x" to "*" between the May and the
+    # June 2026 cards; both are read.
     injection = re.search(
-        rf"teruglevering.*?formule.*?({_NUM})\s*\*\s*Belpex_SPP_BE\s*([{SIGN_CHARS}])\s*({_NUM})",
+        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*Belpex_SPP_BE\s*([{SIGN_CHARS}])\s*({_NUM})",
         text,
         re.IGNORECASE | re.DOTALL,
     )
@@ -337,7 +339,7 @@ def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
 def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
     factor, base = _extract_formula(text, "Belpex 15 MTU")
     injection = re.search(
-        rf"teruglevering.*?formule.*?({_NUM})\s*x\s*Belpex 15 MTU\s*([{SIGN_CHARS}])\s*({_NUM})",
+        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*Belpex 15 MTU\s*([{SIGN_CHARS}])\s*({_NUM})",
         text,
         re.IGNORECASE | re.DOTALL,
     )

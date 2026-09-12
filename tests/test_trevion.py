@@ -316,6 +316,21 @@ async def test_unsupported_contracts_and_regions_do_not_fetch(
     freshness.assert_not_awaited()
 
 
+def test_may_flex_card_writes_its_feed_in_formula_with_an_x() -> None:
+    """The March to May 2026 Flex cards print the feed-in formula as
+    "0,095 x Belpex_SPP_BE", the later ones with an asterisk; the backfill
+    left those months absent until both signs were read."""
+    snap = parse_snapshot("groene_stroom_flex", _layout("trevion_flex_2026-05.pdf"))
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.factor == pytest.approx(0.11342)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.95)
+    assert snap.injection.base == pytest.approx(-0.025)
+    # 0,095 x 29,17 EUR/MWh - 2,5 c/kWh, the April index the card names.
+    assert snap.injection.current == pytest.approx(0.95 * 0.02917 - 0.025)
+    assert snap.valid_until == date(2026, 5, 31)
+
+
 def test_validity_parses_dutch_month_name() -> None:
     assert _extract_validity("geldig in september 2026") == date(2026, 9, 30)
     assert _extract_validity("geen periode") is None
