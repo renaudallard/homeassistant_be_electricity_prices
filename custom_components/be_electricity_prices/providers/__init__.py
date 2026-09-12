@@ -62,11 +62,13 @@ from .luminus import EXTRACTOR as _LUMINUS
 from .mega import EXTRACTOR as _MEGA
 from .octaplus import EXTRACTOR as _OCTAPLUS
 from .totalenergies import EXTRACTOR as _TOTALENERGIES
+from .trevion import EXTRACTOR as _TREVION
 
 EXTRACTORS: dict[str, SupplierExtractor] = {
     _ENECO.id: _ENECO,
     _ENGIE.id: _ENGIE,
     _TOTALENERGIES.id: _TOTALENERGIES,
+    _TREVION.id: _TREVION,
     _LUMINUS.id: _LUMINUS,
     _MEGA.id: _MEGA,
     _BOLT.id: _BOLT,

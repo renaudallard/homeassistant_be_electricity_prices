@@ -60,6 +60,7 @@ machinery.
 | `tests/test_mega.py` | Mega extractor |
 | `tests/test_octaplus.py` | OCTA+ extractor |
 | `tests/test_totalenergies.py` | TotalEnergies extractor |
+| `tests/test_trevion.py` | Trevion extractor |
 | `tests/test_pricing.py` | `pricing.compute_breakdown` and its helpers (energy, network, taxes, TOU/offpeak, holidays, impact bands, meter fixed fee) |
 | `tests/test_coordinator_runtime.py` | `BePricesCoordinator` force-refresh, stale-snapshot Repairs issue, shared caches |
 | `tests/test_coordinator_helpers.py` | Coordinator helper functions in isolation |

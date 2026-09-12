@@ -697,6 +697,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
         "luminus": "Luminus",
         "mega": "Mega",
         "octaplus": "OCTA+",
+        "trevion": "Trevion",
     }
     archived = sorted(
         labels[e.id] for e in all_extractors() if e.fetch_for_month is not None
