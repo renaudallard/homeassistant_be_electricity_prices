@@ -129,6 +129,11 @@ _CARD_TIMEOUT_S = 300
 _VOLATILE_KEYS = ("_cached_at", "_seen_on")
 # The digest of the parser sources the branch was last replayed with.
 _PARSER_STAMP = "parser.txt"
+# One table per supplier of which months the branch holds, for the reader
+# who wants to know whether a given month of a given contract is covered
+# without listing directories.
+_COVERAGE = "coverage.md"
+_VIA_LABELS = {"live": "live", "archive": "mirror"}
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
 # rows are written with.
@@ -147,6 +152,9 @@ Written daily by `.github/workflows/archive_cards.yml` running
   lists its own under `_sources`, and names the PDF it read by SHA-256.
 - `pdfs.json`: where each PDF is kept, as `<release tag>/<sha256>.pdf` in
   the cards repository's releases.
+- `coverage.md`: which months the branch holds for each contract and
+  region, and whether each was captured live or mirrored from the
+  supplier's archive.
 
 Months older than three years are removed.
 """
@@ -589,6 +597,47 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     return removed
 
 
+def _write_coverage(out: Path) -> None:
+    """Rewrite the coverage table from the rows on disk.
+
+    Deterministic in its order, so a day that changed nothing rewrites the
+    file to the same bytes and the branch gets no commit for it.
+    """
+    held: dict[str, dict[tuple[str, str], dict[str, str]]] = {}
+    months: set[str] = set()
+    for path in sorted(out.glob("*/*/*/????-??.json")):
+        supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
+        try:
+            via = json.loads(path.read_text(encoding="utf-8")).get("_via", "live")
+        except ValueError:
+            continue
+        held.setdefault(supplier, {}).setdefault((contract, region), {})[path.stem] = (
+            via
+        )
+        months.add(path.stem)
+    ordered = sorted(months)
+    lines = [
+        "# Coverage",
+        "",
+        "One row per contract and region, one column per month the branch holds.",
+        "`live` is a card captured while it was current, `mirror` one copied from the",
+        "supplier's own archive; a blank cell is a month the branch does not hold.",
+        "",
+    ]
+    for supplier in sorted(held):
+        lines += [
+            f"## {supplier}",
+            "",
+            "| contract | region | " + " | ".join(ordered) + " |",
+            "| --- | --- | " + " | ".join("---" for _ in ordered) + " |",
+        ]
+        for (contract, region), have in sorted(held[supplier].items()):
+            cells = [_VIA_LABELS.get(have.get(month, ""), "") for month in ordered]
+            lines.append(f"| {contract} | {region} | " + " | ".join(cells) + " |")
+        lines.append("")
+    (out / _COVERAGE).write_text("\n".join(lines), encoding="utf-8")
+
+
 def _transient(err: BaseException) -> bool:
     return isinstance(err, TimeoutError) or is_transient_fetch_error(str(err))
 
@@ -886,6 +935,7 @@ async def archive(
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)
     removed = _prune(out, keep_months, today)
+    _write_coverage(out)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.absent} absent, "

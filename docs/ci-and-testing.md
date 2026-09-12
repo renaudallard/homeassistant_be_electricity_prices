@@ -752,15 +752,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:155`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:163`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:516`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:524`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:560`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:568`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
@@ -780,13 +780,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:423`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:431`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:339`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:347`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -804,6 +804,12 @@ when what a source was or what it parsed to changed: the path of the text it was
 not compared, because a listing page with a nonce or a render that is not byte-stable would
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
 than the parser that wrote it.
+
+Every run also rewrites `coverage.md` at the branch root (`_write_coverage`,
+`scripts/archive_cards.py:600`): one table per supplier with a row per contract and region and a
+column per month the branch holds, each cell `live` or `mirror` by the row's `_via`. It is the
+answer to "is my month covered" without listing directories, and it is written in a fixed order
+so a day that changed nothing rewrites it to the same bytes.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed

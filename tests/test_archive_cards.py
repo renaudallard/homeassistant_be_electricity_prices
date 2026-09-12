@@ -857,6 +857,53 @@ async def test_a_supplier_not_answering_is_given_up_on_for_the_day(
     assert summary.given_up == []
 
 
+async def test_the_coverage_table_says_what_the_branch_holds(tmp_path: Path) -> None:
+    """One table per supplier, one column per month on the branch, and each
+    cell says how the month was captured; rewritten to the same bytes when
+    nothing changed."""
+    settled = {(2026, 8): 0.21}
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        price = settled.get((month.year, month.month))
+        if price is None:
+            return None
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price),
+            publication_label=f"{month:%Y-%m}",
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_card_fetch("september 2026"),
+        fetch_for_month=fetch_for_month,
+    )
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
+    )
+    coverage = (tmp_path / "coverage.md").read_text()
+    assert "## acme" in coverage
+    assert "| contract | region | 2026-08 | 2026-09 |" in coverage
+    assert "| acme_fix | wallonia | mirror | live |" in coverage
+    again = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
+    )
+    assert again.unchanged == 1
+    assert (tmp_path / "coverage.md").read_text() == coverage
+
+
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
     live = _extractor(_card_fetch("x"))
     gone = _extractor(

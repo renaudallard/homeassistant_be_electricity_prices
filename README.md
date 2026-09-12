@@ -1086,7 +1086,9 @@ branch as `<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the text of
 every page or document that parse read under `texts/<YYYY-MM>/`, so a card
 can be re-read or checked by hand later. A manual run of the same workflow
 can also mirror past months from the supplier archives onto the branch,
-which keeps them readable should a supplier drop its archive, as DATS 24 did. A card is filed under the month its
+which keeps them readable should a supplier drop its archive, as DATS 24 did.
+A `coverage.md` at the branch root says, per contract and region, which
+months the branch holds and whether each was captured live or mirrored. A card is filed under the month its
 own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
 changed, and months older than three years are dropped.
