@@ -39,7 +39,7 @@ from __future__ import annotations
 import json
 import logging
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from collections.abc import Sequence
 from datetime import date
 from datetime import datetime
@@ -1375,6 +1375,36 @@ _SNAPSHOT_SCHEMA_VERSION = 59
 _DEGRADED_MIN_SCHEMA_VERSION = 16
 
 
+# InjectionRates fields added after the card archive went live (0.20.13),
+# in the order they came. Every installed version reads the branch, and one
+# that does not know a field cannot decode a row carrying it and falls back
+# to the supplier tier for that month; a row rewritten with such a field at
+# its default is not a changed card either, and would have cost a commit
+# per row. So a field at its default is left out, and only a card that sets
+# it carries it: those rows are new cards no earlier version asks for.
+_INJECTION_OPTIONAL_KEYS = ("bi_hourly",)
+_INJECTION_FIELDS = frozenset(f.name for f in fields(InjectionRates))
+
+
+def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
+    data = dict(inj.__dict__)
+    for key in _INJECTION_OPTIONAL_KEYS:
+        if not data.get(key):
+            data.pop(key, None)
+    return data
+
+
+def _injection_from_dict(data: dict[str, Any]) -> InjectionRates:
+    """Rebuild the injection leg, dropping a field this version does not
+    know: a row written by a later version is still a card."""
+    unknown = sorted(set(data) - _INJECTION_FIELDS)
+    if unknown:
+        _LOGGER.debug(
+            "injection carries fields this version does not know: %s", unknown
+        )
+    return InjectionRates(**{k: v for k, v in data.items() if k in _INJECTION_FIELDS})
+
+
 def _snapshot_to_dict(
     snap: SupplierSnapshot,
     fetched_at: datetime,
@@ -1405,7 +1435,7 @@ def _snapshot_to_dict(
         "source_url": snap.source_url,
         "publication_label": snap.publication_label,
         "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
-        "injection": snap.injection.__dict__ if snap.injection else None,
+        "injection": _injection_to_dict(snap.injection) if snap.injection else None,
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
         "welcome_credit_eur": snap.welcome_credit_eur,
         "welcome_credit_kind": snap.welcome_credit_kind,
@@ -1476,7 +1506,7 @@ def _snapshot_from_dict(
         source_url=data["source_url"],
         publication_label=data.get("publication_label", ""),
         valid_until=valid_until,
-        injection=InjectionRates(**injection_data) if injection_data else None,
+        injection=_injection_from_dict(injection_data) if injection_data else None,
         supplier_prosumer_eur_per_kva_year=data.get(
             "supplier_prosumer_eur_per_kva_year"
         ),
