@@ -36,6 +36,7 @@ import unicodedata
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
+from difflib import SequenceMatcher
 from typing import TypeVar
 from datetime import date
 from io import BytesIO
@@ -801,6 +802,73 @@ _NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
 # Named for that constraint on purpose: a card whose values run into four
 # digits needs eneco's wider pattern instead, and reusing this one there
 # truncates the value to its first digits (recorded at eneco.py:140).
+# A Belgian figure carries a thousands separator AND a decimal comma, so a
+# pattern allowing only one of them reads 1.234,56 as two columns and makes
+# a row look wider than it is. The cards print 20.000 and 1.000.000 (see
+# tier_bound_kwh), so this is not hypothetical.
+_ROW_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def _row_label(line: str) -> str:
+    """A row's leading text, up to where its figures start."""
+    found = _ROW_NUMBER.search(line)
+    return (line[: found.start()] if found else line).strip().rstrip(":").strip()
+
+
+def numeric_row(
+    text: str,
+    label: str,
+    columns: int | None = None,
+    *,
+    after: str | None = None,
+    before: str | None = None,
+    threshold: float = 0.82,
+) -> list[str] | None:
+    r"""The figures of the table row whose label reads as ``label``.
+
+    A literal ``label\s+(num)\s+(num)...`` says two things it does not mean.
+    That the label is spelled exactly so, when a card rendered as a page image
+    and read back drops a character now and then. And, because ``\s`` matches
+    a newline, that four figures anywhere after the label will do, including
+    four belonging to the row below. Both were measured on Ecofix's Flexy card:
+    its consumption row came back as ``Maandprjs``, one letter short, so the
+    anchor walked past it to the Injectie block's ``Maandprijs`` and billed a
+    household's consumption at 0,0432 where the card says 0,1181, a clean parse
+    and a wrong bill.
+
+    So this reads a row the way a person does. The label is matched by
+    similarity, not spelling. A row is ONE line, because that is what a row is.
+    The column count, where the caller knows it from the card's own headings,
+    has to match. ``after`` and ``before`` bound the search to the block the
+    row belongs to, which is what keeps a consumption lookup away from an
+    injection row carrying the same word.
+
+    Returns the figures as they are printed, for :func:`to_float`, or ``None``
+    when nothing matches well enough. Refusing is the point: a wrong row is
+    worse than no row, and the caller raises where the card promises one.
+    """
+    body = text
+    if after is not None:
+        start = body.find(after)
+        if start < 0:
+            return None
+        body = body[start + len(after) :]
+    if before is not None:
+        end = body.find(before)
+        if end >= 0:
+            body = body[:end]
+
+    best: tuple[float, list[str]] | None = None
+    for line in body.splitlines():
+        numbers = _ROW_NUMBER.findall(line)
+        if not numbers or (columns is not None and len(numbers) != columns):
+            continue
+        score = SequenceMatcher(None, _row_label(line).lower(), label.lower()).ratio()
+        if score >= threshold and (best is None or score > best[0]):
+            best = (score, numbers)
+    return None if best is None else best[1]
+
+
 NUM_NO_THOUSANDS = r"([\d]+(?:[.,][\d]+)?)"
 
 SIGN_CHARS = r"+\-‐‑‒–—−"

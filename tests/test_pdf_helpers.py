@@ -52,6 +52,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     text_mentions_month,
@@ -740,3 +741,104 @@ async def test_a_pdf_without_a_bom_is_returned_untouched() -> None:
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
         == body
     )
+
+
+# ---- numeric_row: reading a table row rather than matching a literal --------
+
+# The Ecofix Flexy card, as a page image read back by OCR. The consumption
+# row's label lost a letter; every figure on the card was read exactly.
+_FLEXY_OCR = """Verbruik 1,60
+Maandprjs: 11,81 11,81 11,81 11,81
+Wallonie
+Verwachte jaarprijs: 12,16 12,16 12,16 12,16
+Injectie (E cent/kWh)
+Maandprijs: 4,32 4,32 4,32
+"""
+
+
+def test_numeric_row_reads_a_row_whose_label_lost_a_letter() -> None:
+    """The measured failure: `Maandprjs` for `Maandprijs`.
+
+    The literal this replaces walked past the row and took four figures off
+    the Injectie block, which parses clean and bills consumption at the
+    feed-in rate: 0,0432 where the card says 0,1181.
+    """
+    assert numeric_row(
+        _FLEXY_OCR, "Maandprijs", 4, after="Verbruik", before="Injectie"
+    ) == ["11,81", "11,81", "11,81", "11,81"]
+
+
+def test_numeric_row_will_not_cross_into_the_next_block() -> None:
+    """With the row gone, the answer is nothing, never the neighbouring row.
+
+    This is the whole point. `\\s` matches a newline, so the literal was free
+    to collect its four figures from wherever it landed.
+    """
+    gutted = _FLEXY_OCR.replace("Maandprjs: 11,81 11,81 11,81 11,81\n", "")
+    assert (
+        numeric_row(gutted, "Maandprijs", 4, after="Verbruik", before="Injectie")
+        is None
+    )
+
+
+def test_numeric_row_holds_the_caller_to_the_column_count() -> None:
+    """A row offering three figures is not the four-column row the card
+    prints, whatever its label says."""
+    short = _FLEXY_OCR.replace(
+        "Maandprjs: 11,81 11,81 11,81 11,81", "Maandprijs: 11,81 11,81 11,81"
+    )
+    assert (
+        numeric_row(short, "Maandprijs", 4, after="Verbruik", before="Injectie") is None
+    )
+
+
+def test_numeric_row_keeps_the_blocks_apart() -> None:
+    """Both blocks carry a Maandprijs row; each lookup gets its own."""
+    assert numeric_row(_FLEXY_OCR, "Maandprijs", after="Injectie") == [
+        "4,32",
+        "4,32",
+        "4,32",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("Maandprijs", True),
+        ("Maandprjs", True),
+        ("Maandpris", True),
+        ("Mandprjs", True),
+        # Two edits and a digit substituted for a letter is not a reading,
+        # it is a guess, and a guess is what must not reach a bill.
+        ("M4andprij5", False),
+        ("Toeslagen", False),
+    ],
+)
+def test_numeric_row_tolerates_damage_but_not_invention(
+    label: str, expected: bool
+) -> None:
+    text = _FLEXY_OCR.replace("Maandprjs", label)
+    got = numeric_row(text, "Maandprijs", 4, after="Verbruik", before="Injectie")
+    assert (got is not None) is expected
+
+
+@pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        ("Tarief 11,81 4,32", ["11,81", "4,32"]),
+        # A thousands separator and a decimal comma in the same figure. Read
+        # as two columns, this row would look three wide and be refused.
+        ("Tarief 1.234,56 4,32", ["1.234,56", "4,32"]),
+        ("Tarief 1.000.000 20.000", ["1.000.000", "20.000"]),
+    ],
+)
+def test_numeric_row_reads_a_belgian_figure_as_one_column(
+    printed: str, expected: list[str]
+) -> None:
+    assert numeric_row(printed, "Tarief", len(expected)) == expected
+
+
+def test_numeric_row_without_a_column_count_still_needs_one_row() -> None:
+    """Leaving the count open is for cards that vary it; it never licenses
+    a match that spans two rows."""
+    assert numeric_row("Label: 1,0 2,0\nOther: 3,0", "Label") == ["1,0", "2,0"]

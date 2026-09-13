@@ -776,7 +776,7 @@ Three design points:
   (36) are removed on every run (`_prune`, `scripts/archive_cards.py:590`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
-The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:631`): inside that
+The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:632`): inside that
 block a downloaded card's validated bytes go to a hook instead of straight to the renderer. The
 archiver installs `_Cards.render` (`scripts/archive_cards.py:247`) there. It hashes the bytes, and
 for a (variant, digest) pair some stored row already names it serves that row's text from the

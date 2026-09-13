@@ -71,6 +71,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    numeric_row,
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
@@ -665,22 +666,13 @@ def _energy_contribution_from_table(text: str, region: str) -> float | None:
     all-in price silently drops the contribution (~0.20 c€/kWh).
     """
     if region == REGION_BRUSSELS:
-        match = re.search(
-            r"SIBELGA\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-            r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-            text,
-        )
-        return to_float(match.group(7)) / 100.0 if match else None
+        row = numeric_row(text, "SIBELGA", 7)
+        return to_float(row[6]) / 100.0 if row else None
     if region == REGION_FLANDERS:
         for label in _FLANDERS_LABELS:
-            match = re.search(
-                rf"{re.escape(label)}\s+"
-                rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-                rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-                text,
-            )
-            if match:
-                return to_float(match.group(8)) / 100.0
+            row = numeric_row(text, label, 9)
+            if row:
+                return to_float(row[7]) / 100.0
     return None
 
 
@@ -731,18 +723,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
-        match = re.search(
-            rf"{re.escape(label)}\s+"
-            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-            text,
-        )
-        if not match:
+        row = numeric_row(text, label, 9)
+        if not row:
             continue
-        dist_digital = to_float(match.group(1))
-        capacity = to_float(match.group(2))
-        data_mgmt = to_float(match.group(6))  # digital meter column
-        prosumer = to_float(match.group(9))
+        dist_digital = to_float(row[0])
+        capacity = to_float(row[1])
+        data_mgmt = to_float(row[5])  # digital meter column
+        prosumer = to_float(row[8])
         out[key] = DsoOverlay(
             distribution_single=dist_digital / 100.0,
             transport=0.0,
@@ -772,25 +759,24 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
-        match = re.search(
-            rf"{re.escape(label)}\s+"
-            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-            text,
-        )
-        if not match:
+        # Twelve columns, not the ten this reads: every Walloon row ends in
+        # two more the card prints and nothing here uses, measured 0,00 on
+        # all five DSOs of all three Walloon fixtures. The regex this
+        # replaces took the first ten and never noticed the rest, so it
+        # would have matched just as happily on a row that had lost one.
+        row = numeric_row(text, label, 12)
+        if not row:
             continue
-        mono = to_float(match.group(1))
-        peak = to_float(match.group(2))
-        offpeak = to_float(match.group(3))
-        excl_night = to_float(match.group(4))
-        pic = to_float(match.group(5))
-        medium = to_float(match.group(6))
-        eco = to_float(match.group(7))
-        terme_fixe = to_float(match.group(8))
-        transport = to_float(match.group(9))
-        prosumer = to_float(match.group(10))
+        mono = to_float(row[0])
+        peak = to_float(row[1])
+        offpeak = to_float(row[2])
+        excl_night = to_float(row[3])
+        pic = to_float(row[4])
+        medium = to_float(row[5])
+        eco = to_float(row[6])
+        terme_fixe = to_float(row[7])
+        transport = to_float(row[8])
+        prosumer = to_float(row[9])
         out[key] = walloon_dso_overlay(
             mono=mono,
             peak=peak,
@@ -814,19 +800,15 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     The Sibelga <=13kVA fixed power term is printed on its own
     "Terme de puissance mise a disposition" line, not in this row.
     """
-    match = re.search(
-        r"SIBELGA\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-        r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-        text,
-    )
-    if not match:
+    row = numeric_row(text, "SIBELGA", 7)
+    if not row:
         return {}
-    mono = to_float(match.group(1))
-    peak = to_float(match.group(2))
-    offpeak = to_float(match.group(3))
-    excl_night = to_float(match.group(4))
-    mesure = to_float(match.group(5))
-    transport = to_float(match.group(6))
+    mono = to_float(row[0])
+    peak = to_float(row[1])
+    offpeak = to_float(row[2])
+    excl_night = to_float(row[3])
+    mesure = to_float(row[4])
+    transport = to_float(row[5])
     # A Brussels connection also pays the Sibelga power term, printed on a
     # separate "Terme de puissance mise a disposition" line with a band at or
     # below 13 kVA and one above it. Brussels has no separate capacity charge
