@@ -451,7 +451,7 @@ def _cohort_card(
     archived: "SupplierSnapshot | None",
     current: "SupplierSnapshot",
 ) -> str:
-    """Which card a contract with a start date ends up billing on.
+    """Which card a contract that names a cohort month ends up billing on.
 
     The price a cohort entry publishes says nothing about where it came
     from: ``snapshot_publication`` names the card that was fetched today
@@ -479,7 +479,7 @@ class _CohortLegs(NamedTuple):
 
     ``None`` on either means "no override, keep the current card's leg".
     ``card`` names the card they were read off, for the sensor attribute;
-    empty when the entry carries no start date and nothing was resolved.
+    empty when the entry names no cohort month and nothing was resolved.
     """
 
     energy: EnergyRates | None
@@ -502,7 +502,7 @@ async def _cohort_legs(
     locked in at signing, not today's card. This returns the signing-month
     card's energy leg so the caller can splice it onto the current
     delivery-month DSO / tax overlays; ``None`` means "no cohort override,
-    keep the current energy" (no start date set, or nothing to re-price with:
+    keep the current energy" (no cohort month, or nothing to re-price with:
     no signing rate typed and no archived card, or a variable cohort with no
     ENTSO-E key to resolve its monthly mean).
 
@@ -510,7 +510,7 @@ async def _cohort_legs(
     locked in at signing, not today's card. This returns the signing-month
     card's energy leg so the caller can splice it onto the current
     delivery-month DSO / tax overlays; ``None`` means "no cohort override,
-    keep the current energy" (no start date set, or nothing to re-price with:
+    keep the current energy" (no cohort month, or nothing to re-price with:
     no signing rate typed and no archived card, or a variable cohort with no
     ENTSO-E key to resolve its monthly mean).
 
@@ -677,9 +677,10 @@ async def signing_month_snapshot(
     March cohort 200 EUR where its own card promised 300.
 
     The current snapshot comes back unchanged where there is nothing to
-    retrieve: a contract that is not the entry's own, no start date, a start
-    inside the running month, or a supplier that keeps no archive. Identity in
-    those cases, so a caller can use the result unconditionally.
+    retrieve: a contract that is not the entry's own, no cohort month, a
+    cohort month inside the running month, or a supplier that keeps no
+    archive. Identity in those cases, so a caller can use the result
+    unconditionally.
 
     The own-contract gate is the same one :func:`_cohort_legs` opens with, and
     for a sharper reason here. The compare sweep walks the year-to-date engine

@@ -336,11 +336,11 @@ async def _ensure_dynamic_spots(
         return {}, {}
     # A variable contract with a contract start date re-prices to a
     # SpotMonthlyRates cohort, which needs spots for its monthly mean just like
-    # a dynamic contract. Resolve the effective (cohort) energy only when a
-    # start date is set (the common path never fetches), so the backfill fetches
-    # spots for the cohort too, matching the live coordinator (which gates the
-    # historical-spot fetch on ``priced.energy``); otherwise the cohort hours
-    # get no spot and are dropped, leaving a fees-only backfill.
+    # a dynamic contract. Resolve the effective (cohort) energy here as well,
+    # so the backfill fetches spots for the cohort too, matching the live
+    # coordinator (which gates the historical-spot fetch on ``priced.energy``);
+    # otherwise the cohort hours get no spot and are dropped, leaving a
+    # fees-only backfill.
     # Resolved unconditionally rather than only for an entry with a start
     # date. Cociter Variable's month-indexed re-price fires for ANY entry
     # holding an ENTSO-E key, through _month_indexed_leg, so gating on the
@@ -350,8 +350,9 @@ async def _ensure_dynamic_spots(
     # instead of 0,34578, its energy term zeroed outright, and the persisted
     # year-to-date ran 36,6% low without ever self-healing.
     #
-    # The common path still never fetches: with no start date
-    # _cohort_energy_leg returns through _month_indexed_leg before any I/O.
+    # The common path still never fetches: with no cohort month at all, which
+    # means neither a tariff card month nor a start date, _cohort_energy_leg
+    # returns through _month_indexed_leg before any I/O.
     eff_energy = snap.energy
     cohort = await _cohort_energy_leg(
         coordinator.hass,

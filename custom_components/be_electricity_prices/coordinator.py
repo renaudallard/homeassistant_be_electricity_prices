@@ -204,9 +204,9 @@ class CoordinatorData:
     # cheapest-window service.
     resolution: str = RESOLUTION_HOURLY
     snapshot_publication: str = ""
-    # Which card a contract with a start date bills on, once the signing
-    # cohort has been resolved. Empty when no start date is set, so the
-    # attribute appears only where it has something to say.
+    # Which card a contract that names a cohort month bills on, once the
+    # signing cohort has been resolved. Empty when the entry names none, so
+    # the attribute appears only where it has something to say.
     signing_card: str = ""
     snapshot_age_hours: float = 0.0
     snapshot_stale: bool = False
@@ -818,16 +818,19 @@ class BePricesCoordinator(
                 f"no supplier snapshot available: {self._last_error or 'cold start'}"
             )
 
-        # Resolve the signing-cohort energy leg for a contract with a start
-        # date: a fixed / dynamic contract signed months ago bills at the rate
-        # it locked in, not today's card. ``priced`` splices that leg onto the
-        # current delivery-month DSO / tax / injection overlays and is read at
-        # every energy-pricing site below. ``self._snapshot`` is never mutated:
-        # it is persisted and seeds the shared (supplier, contract, region)
-        # cache row that sibling entries with a different start date adopt, so
-        # baking cohort energy into it would mis-price co-tenants; ``priced`` is
-        # a per-tick local. A no-op (``priced is self._snapshot``) when no start
-        # date is set.
+        # Resolve the signing-cohort energy leg for a contract that names a
+        # cohort month: a fixed / dynamic contract signed months ago bills at
+        # the rate it locked in, not today's card. ``priced`` splices that leg
+        # onto the current delivery-month DSO / tax / injection overlays and is
+        # read at every energy-pricing site below. ``self._snapshot`` is never
+        # mutated: it is persisted and seeds the shared (supplier, contract,
+        # region) cache row that sibling entries on a different cohort month
+        # adopt, so baking cohort energy into it would mis-price co-tenants;
+        # ``priced`` is a per-tick local. A no-op (``priced is self._snapshot``)
+        # only when the entry names neither a tariff card month nor a start
+        # date: the card month decides and the start date is its fallback
+        # (_tariff_card_month), so an entry carrying just the card month is on
+        # a cohort like any other (issue #96).
         cohort = await _cohort_legs(
             self.hass,
             self._session,
