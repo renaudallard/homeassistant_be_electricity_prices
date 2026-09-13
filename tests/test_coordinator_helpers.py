@@ -5429,6 +5429,97 @@ async def test_cohort_asks_for_the_tariff_card_month_not_the_start_month(
     assert legs.card == "juni 2026"
 
 
+async def test_cohort_reads_a_card_month_with_no_start_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The card month alone puts an entry on a cohort, with no start date.
+
+    The configuration the reporter on issue #96 came back with: tariff card
+    month set to June, contract start date left blank, because the month the
+    card names is the one thing they knew. The tests written when the field
+    shipped all set both dates, so the one combination anybody actually
+    reported was the one nothing covered.
+
+    The start date is the FALLBACK, not the gate. Reading it as a gate would
+    leave this entry on the current card, which for energie.be in September is
+    a different coefficient and a 10 EUR/yr cheaper standing charge.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-13 12:00:00+02:00")
+    current = make_snapshot(
+        energy=FixedRates(single=0.30), publication_label="september 2026"
+    )
+    cards = {
+        date(2026, 6, 1): make_snapshot(
+            energy=FixedRates(single=0.1681), publication_label="juni 2026"
+        ),
+        date(2026, 8, 1): make_snapshot(
+            energy=FixedRates(single=0.2028), publication_label="augustus 2026"
+        ),
+    }
+    asked: list[date] = []
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(year_month)
+        return cards.get(year_month)
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", tariff_card_date="2026-06-01")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert asked == [date(2026, 6, 1)]
+    assert legs.energy == FixedRates(single=0.1681)
+    assert legs.card == "juni 2026"
+
+
+async def test_cohort_locks_both_legs_from_a_card_month_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Issue #96 as reported: a dynamic contract, card month and nothing else.
+
+    energie.be Dynamisch, where the price alone can never show whether the
+    field took effect: the May, June, July and August cards all print the same
+    1,04 x Belpex + 0,50 and the same 25 EUR/jaar, so a June entry and an
+    August entry are obliged to publish the same number. September is the one
+    that differs, so landing on June rather than on the current card is what
+    has to be asserted, and the feed-in leg has to come from the same card as
+    the offtake one (issue #85).
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-13 12:00:00+02:00")
+    june_energy = DynamicRates(factor=1.1024, base=0.0053, yearly_fixed_fee=25.0)
+    current = make_snapshot(
+        energy=DynamicRates(factor=1.0812, base=0.005194, yearly_fixed_fee=15.0),
+        publication_label="september 2026",
+        injection=InjectionRates(factor=1.01, base=-0.0098),
+    )
+    june = make_snapshot(
+        energy=june_energy,
+        publication_label="juni 2026",
+        injection=InjectionRates(factor=1.0, base=-0.0098),
+    )
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot | None:
+        return june if year_month == date(2026, 6, 1) else None
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", region="flanders", tariff_card_date="2026-06-01")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "flanders", entry, current
+    )
+    assert legs.energy == june_energy
+    assert legs.card == "juni 2026"
+    assert legs.injection is not None
+    assert legs.injection.factor == 1.0
+
+
 async def test_cohort_card_says_which_month_the_archive_could_not_serve(
     hass: HomeAssistant, freezer: Any
 ) -> None:
