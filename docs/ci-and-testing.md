@@ -4,9 +4,10 @@ This document covers how the Belgian Electricity Prices integration is tested an
 fixture-driven pytest suite (`tests/`), the daily live extractor harness
 (`scripts/live_check.py`) that fetches every supplier's real tariff card and asserts the
 extractors still parse, the daily card archiver (`scripts/archive_cards.py`) that stores what
-every extractor parsed on the `archive` branch, the five GitHub Actions workflows (`test.yml`,
-`validate.yml`, `live_check.yml`, `archive_cards.yml`, `autorelease.yml`), and the exact local
-commands a contributor runs before committing. It also spells out the version-bump policy that gates a release.
+every extractor parsed on the `archive` branch, the six GitHub Actions workflows (`test.yml`,
+`validate.yml`, `live_check.yml`, `archive_cards.yml`, `endpoint_probe.yml`, `autorelease.yml`),
+and the exact local commands a contributor runs before committing. It also spells out the
+version-bump policy that gates a release.
 
 Related docs:
 
@@ -868,7 +869,7 @@ backfill's absent and provisional months, the retention and the exit code.
 
 ## GitHub workflows
 
-Five workflows live under `.github/workflows/`.
+Six workflows live under `.github/workflows/`.
 
 ### test.yml - Tests
 
@@ -973,6 +974,18 @@ check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new
 informational, not a regression (`.github/workflows/live_check.yml:361`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
 ending green (`.github/workflows/live_check.yml:375`).
+
+### endpoint_probe.yml - Endpoint probe
+
+Manual dispatch only (`.github/workflows/endpoint_probe.yml:20`), with `urls`, `attempts` and
+`timeout` inputs; an empty `urls` probes the suppliers that have timed out in recent live runs. It
+runs `scripts/probe_endpoint.py` from a runner and prints the runner's egress address beside the
+timings, so the same command run on a workstation answers the question the live-check report cannot:
+whether a supplier is slow or the runner is being treated differently (see *Telling a slow supplier
+from a blocked runner* above for how to read the two against each other).
+
+Nothing gates on it, and it is deliberately not scheduled. It answers a question someone is asking,
+and a supplier being slow today is not a reason to fail a workflow.
 
 ### archive_cards.yml - Archive tariff cards
 
