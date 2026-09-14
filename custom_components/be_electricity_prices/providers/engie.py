@@ -84,6 +84,7 @@ from ._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    numeric_row,
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
@@ -1171,17 +1172,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     block_text = digital_block.group(1) if digital_block else text
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
-        row = re.search(
-            rf"{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
-            block_text,
-            re.IGNORECASE,
-        )
+        row = numeric_row(block_text, label, 5)
         if not row:
             continue
-        capacity = to_float(row.group(1))
-        dist_normal = to_float(row.group(2))
-        dist_excl = to_float(row.group(3))
-        data_qh = to_float(row.group(4))
+        capacity = to_float(row[0])
+        dist_normal = to_float(row[1])
+        dist_excl = to_float(row[2])
+        data_qh = to_float(row[3])
         out[key] = DsoOverlay(
             distribution_single=dist_normal / 100.0,
             # Group 3 is the "tarif-kWh exclusif nuit" column, lower than
@@ -1281,15 +1278,10 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             Activité de mesure (€/an) | Puissance ≤13kVA (€/an) |
             Puissance >13kVA (€/an) | Transport (c€/kWh)
     """
-    row = re.search(
-        r"^SIBELGA\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
-        r"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
-        text,
-        re.MULTILINE,
-    )
+    row = numeric_row(text, "SIBELGA", 8)
     if not row:
         return {}
-    nums = [to_float(row.group(i)) for i in range(1, 9)]
+    nums = [to_float(value) for value in row]
     # A residential <=13kVA Brussels connection is billed both the metering
     # fee (Activite de mesure, nums[4]) and the Sibelga <=13kVA power term
     # (nums[5]). Brussels has no separate capacity charge (capacity is
