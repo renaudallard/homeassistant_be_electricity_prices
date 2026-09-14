@@ -24,15 +24,15 @@ Related reading:
 
 | Field | Value | Source |
 | --- | --- | --- |
-| Extractor id | `eneco` | `eneco.py:713` |
-| Label | `Eneco` | `eneco.py:714` |
-| Regions served | Flanders and Wallonia (no Brussels) | `eneco.py:709`, module docstring `eneco.py:38` |
-| Publication | one PDF per contract on the Eneco CDN | `eneco.py:28-36` |
-| VAT convention | prices are VAT-inclusive (6 %), so `TaxOverlay.vat_rate = 0.0` | `eneco.py:36`, `eneco.py:605` |
-| Probe | listing scrape returning the resolved PDF URL | `eneco.py:220-238` |
-| Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py:174-217` |
+| Extractor id | `eneco` | `eneco.py` |
+| Label | `Eneco` | `eneco.py` |
+| Regions served | Flanders and Wallonia (no Brussels) | `eneco.py`, module docstring `eneco.py` |
+| Publication | one PDF per contract on the Eneco CDN | `eneco.py` |
+| VAT convention | prices are VAT-inclusive (6 %), so `TaxOverlay.vat_rate = 0.0` | `eneco.py` |
+| Probe | listing scrape returning the resolved PDF URL | `eneco.py` |
+| Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py` |
 
-`EXTRACTOR.regions()` (the union over its contracts, `base.py:590`) is
+`EXTRACTOR.regions()` (the union over its contracts, `base.py`) is
 `{flanders, wallonia}`. Power Fix and Power Flex cover both regions; Power Dynamic
 is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, so
 `TaxOverlay.brussels_renewables` stays 0 and no Sibelga overlay is emitted.
@@ -40,16 +40,16 @@ is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, 
 ### Source URL pattern
 
 Cards live under a fixed CDN base with a rotating 6-digit issue number
-(`eneco.py:30-34`, `eneco.py:91`):
+(`eneco.py`):
 
 ```
 https://cdn.eneco.be/downloads/nl/general/tk/BC_032_<ISSUE>_NL_ENECO_POWER_<NAME>.pdf
 ```
 
-`<NAME>` is the product slug (`FIX`, `FLEX`, `DYNAMIC`, `eneco.py:102-107`).
+`<NAME>` is the product slug (`FIX`, `FLEX`, `DYNAMIC`, `eneco.py`).
 `<ISSUE>` is `<VOL><YY><MM>`: a 2-digit volume (usually `01`, higher on re-issues)
 followed by the 2-digit year and month. Stale issues stay served, so the live URL
-is never hardcoded; it is resolved from the listing page (`eneco.py:33-35`):
+is never hardcoded; it is resolved from the listing page (`eneco.py`):
 
 ```
 https://eneco.be/nl/elektriciteit-gas/tariefkaarten
@@ -59,10 +59,10 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 
 | id | label | kind | regions | source line |
 | --- | --- | --- | --- | --- |
-| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py:818-826` |
-| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py:827-833` |
-| `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py:826-854` |
-| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:834-859` |
+| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py` |
+| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py` |
+| `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py` |
+| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py` |
 
 Flex and Flex One carry `month_indexed_energy`, the registry twin of the parsed
 `month_indexed`, which offers the optional ENTSO-E key on every solar regime.
@@ -71,10 +71,10 @@ Notes:
 
 - **Power Fix** is a fixed contract with a single rate plus a bi-hourly (day /
   night) split and a dedicated exclusive-night circuit rate (`_extract_fixed`,
-  `eneco.py:334-352`).
+  `eneco.py`).
 - **Power Flex** is a variable (monthly-indexed) contract: the card prints the
   current month's effective rate and a monthly Belpex indexation formula
-  (`_extract_variable`, `eneco.py:448-509`).
+  (`_extract_variable`, `eneco.py`).
 - **Power Flex One** is the second variable card, and a distinct SKU rather
   than a relabel: its own text sells a "contract van 1 jaar" against Flex's
   "contract van onbepaalde duur". Same layout, same 0,102 factor and the same
@@ -86,13 +86,13 @@ Notes:
   (Belpex-H). It is Flanders-only: the card reads "voor Vlaanderen" / "in
   Vlaanderen" and requires a Flemish SMR3 digital meter, whereas Fix, Flex and Flex
   One cover both regions. The Walloon DSO rows on the Dynamic card are vestigial
-  reference and must not be offered in Wallonia (`eneco.py:733-758`, enforced by
-  `test_power_dynamic_offered_in_flanders_only`, `tests/test_eneco.py:59-66`).
+  reference and must not be offered in Wallonia (`eneco.py`, enforced by
+  `test_power_dynamic_offered_in_flanders_only`, `tests/test_eneco.py`).
 - `DynamicRates.quarter_hourly` is left at its default `False` (`_extract_dynamic`
-  returns a `DynamicRates` without setting it, `eneco.py:549-553`). Eneco Dynamic
+  returns a `DynamicRates` without setting it, `eneco.py`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
-  to hourly (`base.py:140-154`).
-- Fix, Flex and Flex One all set `spot_indexed_injection` (`base.py:110`), so the
+  to hourly (`base.py`).
+- Fix, Flex and Flex One all set `spot_indexed_injection` (`base.py`), so the
   flow offers them the ENTSO-E key their month-indexed credit needs; Power
   Dynamic leaves it `False` because its energy leg collects the key already.
   This bullet claimed the opposite ("it stays `False` on all three") for as long
@@ -103,22 +103,22 @@ Notes:
 
 ### `fetch` (current card)
 
-`fetch` (`eneco.py:156-171`) validates the contract id, scrapes the listing,
+`fetch` (`eneco.py`) validates the contract id, scrapes the listing,
 resolves the live PDF URL, downloads and extracts its text, then delegates to
 `parse_snapshot`. One PDF per contract still covers every region the contract is
 sold in, so `region` never selects the card; it is forwarded into the parse
-(`eneco.py:169`) and reaches the tax overlay alone (`eneco.py:301`), where it
-gates the Flemish energy fund out of Wallonia (`eneco.py:581-598`).
+(`eneco.py`) and reaches the tax overlay alone (`eneco.py`), where it
+gates the Flemish energy fund out of Wallonia (`eneco.py`).
 
 ```
 fetch(session, contract_id, region)
-  |-> _fetch_listing            GET the tariefkaarten HTML  (eneco.py:264-265)
-  |-> _resolve_url              regex the live PDF URL      (eneco.py:268-290)
-  |-> fetch_pdf_text            download + pypdf text       (_pdf.py:179-186)
-  '-> parse_snapshot            build the SupplierSnapshot  (eneco.py:293-314)
+  |-> _fetch_listing            GET the tariefkaarten HTML  (eneco.py)
+  |-> _resolve_url              regex the live PDF URL      (eneco.py)
+  |-> fetch_pdf_text            download + pypdf text       (_pdf.py)
+  '-> parse_snapshot            build the SupplierSnapshot  (eneco.py)
 ```
 
-`_resolve_url` (`eneco.py:361-383`) accepts either a full href
+`_resolve_url` (`eneco.py`) accepts either a full href
 (`https://.../BC_..._NL_ENECO_POWER_FLEX.pdf`) or a bare filename in the listing
 HTML, reconstructing the absolute URL from `_BASE_URL` when only the filename is
 present. It keeps the first match: the listing only advertises one issue at a
@@ -127,9 +127,9 @@ selecting a stale revision.
 
 ### `probe` (freshness)
 
-`probe` (`eneco.py:220-238`) returns the resolved current PDF URL as the freshness
+`probe` (`eneco.py`) returns the resolved current PDF URL as the freshness
 key. A header-only (HEAD) probe is unusable here because the listing returns a
-per-request ETag under `Cache-Control: no-store` (`eneco.py:227-231`). Because the
+per-request ETag under `Cache-Control: no-store` (`eneco.py`). Because the
 issue number is embedded in the filename and rotates monthly, the URL itself is
 the freshness signal: when it changes, the coordinator refetches. Any
 `ExtractorError` while scraping the listing is swallowed and returns `None`, in
@@ -137,7 +137,7 @@ which case the coordinator's time-based TTL takes over.
 
 ### `fetch_for_month` (historical billing)
 
-`fetch_for_month` (`eneco.py:174-217`) supports the time-correct yearly-cost flow
+`fetch_for_month` (`eneco.py`) supports the time-correct yearly-cost flow
 by fetching the card that was in force for a past `(year, month)`. The CDN keeps
 every monthly issue indefinitely, so the archive is real (not overwrite-in-place).
 The URL is reconstructed directly from the pattern rather than scraped:
@@ -146,28 +146,28 @@ The URL is reconstructed directly from the pattern rather than scraped:
 BC_032_<VOL><YY><MM>_NL_ENECO_POWER_<slug>.pdf
 ```
 
-For the requested month it walks volumes `01`..`05` (`eneco.py:193`). For each
+For the requested month it walks volumes `01`..`05` (`eneco.py`). For each
 candidate:
 
-1. `head_freshness_key` HEAD-probes the URL first (`eneco.py:202`). A missing
+1. `head_freshness_key` HEAD-probes the URL first (`eneco.py`). A missing
    volume returns inside the 10 s HEAD budget instead of stalling on the 30 s GET
    timeout, dropping worst-case missing-month latency from `5 x 30s` to about
    `5 x 10s` under sustained CDN issues. A `None` (404 or no header) skips the
    volume.
 2. `fetch_pdf_text` downloads and extracts; an `ExtractorError` skips the volume
-   (`eneco.py:206-209`).
+   (`eneco.py`).
 3. `parse_snapshot` parses; an `ExtractorError` skips the volume
-   (`eneco.py:210-213`).
-4. `archive_validity_check` (`_pdf.py:1139-1175`) confirms the snapshot actually
-   covers `year_month`, passing `month_names=_NL_MONTHS` (`eneco.py:212`). This
+   (`eneco.py`).
+4. `archive_validity_check` (`_pdf.py`) confirms the snapshot actually
+   covers `year_month`, passing `month_names=_NL_MONTHS` (`eneco.py`). This
    guards against the CDN silently substituting the current card at a historical
    URL: when `valid_until` parses, it must fall in the requested month; when it is
    missing, a textual mention of the month is required.
 
 Returns `None` when no volume in the range yields a covering snapshot
-(`eneco.py:215`) or when the contract id is unknown (`eneco.py:191-193`); the
+(`eneco.py`) or when the contract id is unknown (`eneco.py`); the
 coordinator then falls back to the current snapshot as a proxy. This behaviour is
-pinned by `test_fetch_for_month_*` (`tests/test_eneco.py:471-565`): a match
+pinned by `test_fetch_for_month_*` (`tests/test_eneco.py`): a match
 returns the snapshot, a validity mismatch returns `None`, a 404 for every volume
 returns `None`, an unknown contract returns `None` rather than raising, and a
 Walloon caller gets the Flemish energy fund zeroed on the archived card too.
@@ -189,13 +189,13 @@ Walloon caller gets the Flemish energy fund zeroed on the archived card too.
 
 ### `discover`
 
-`discover` (`eneco.py:334-354`) returns the set of `power_<name>` slugs advertised
+`discover` (`eneco.py`) returns the set of `power_<name>` slugs advertised
 on the listing, extracted from every `BC_..._NL_ENECO_POWER_<NAME>.pdf` link and
 lower-cased to match the registry contract ids.
 
 ## Parsing
 
-`parse_snapshot` (`eneco.py:386-407`) assembles the snapshot from six extractors.
+`parse_snapshot` (`eneco.py`) assembles the snapshot from six extractors.
 It is exposed at module level so the tests can drive it with fixture text without
 touching the network.
 
@@ -203,19 +203,19 @@ touching the network.
 SupplierSnapshot(
     supplier="eneco",
     contract=contract_id,
-    energy=_extract_energy(text, contract_id),      # eneco.py:322-331
-    dsos=_extract_dsos(text),                        # eneco.py:455-467
-    taxes=_extract_taxes(text, region),              # eneco.py:543-611
+    energy=_extract_energy(text, contract_id),      # eneco.py
+    dsos=_extract_dsos(text),                        # eneco.py
+    taxes=_extract_taxes(text, region),              # eneco.py
     source_url=source_url,
-    publication_label=_extract_publication_month(text),  # eneco.py:317-319
-    valid_until=parse_valid_until(text),             # _pdf.py:794
-    injection=_extract_injection(text, contract_id), # eneco.py:614-707
+    publication_label=_extract_publication_month(text),  # eneco.py
+    valid_until=parse_valid_until(text),             # _pdf.py
+    injection=_extract_injection(text, contract_id), # eneco.py
 )
 ```
 
 ### The `_NUM` numeric token
 
-The shared numeric token (`eneco.py:142`) is the parsing linchpin. It matches
+The shared numeric token (`eneco.py`) is the parsing linchpin. It matches
 either a thousands-grouped Belgian number using a non-breaking / thin /
 narrow-no-break space (`\xa0`, ` `, ` `), or an ungrouped run of digits
 with an optional comma-decimal:
@@ -229,49 +229,49 @@ spaces is unambiguous. The comment records a historical bug: the previous
 `\d{1,3}...` form capped the integer part at three digits, so any value of 1000 or
 more (for example a four-digit yearly fee) was truncated to its first `1.xxx` and
 mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
-(`tests/test_eneco.py:327-340`) locks both the NBSP-grouped and ungrouped
-four-digit round-trips. `_WS` (`eneco.py:153`) matches ASCII whitespace or NBSP
+(`tests/test_eneco.py`) locks both the NBSP-grouped and ungrouped
+four-digit round-trips. `_WS` (`eneco.py`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
-`to_float` (`_pdf.py:744-756`), which strips every Unicode space variant before
+`to_float` (`_pdf.py`), which strips every Unicode space variant before
 swapping comma for dot.
 
 ### Publication label and validity
 
-`_extract_publication_month` (`eneco.py:410-412`) captures `Tariefkaart <month>
+`_extract_publication_month` (`eneco.py`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:1178`), which reads the "Geldig van ... t.e.m. ..."
-line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:381-395`)
+`parse_valid_until` (`_pdf.py`), which reads the "Geldig van ... t.e.m. ..."
+line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
 
 ### Energy formula per kind
 
-`_extract_energy` (`eneco.py:415-424`) dispatches on the contract id.
+`_extract_energy` (`eneco.py`) dispatches on the contract id.
 
 | kind | helper | fields returned | key anchors |
 | --- | --- | --- | --- |
-| fixed | `_extract_fixed` (`eneco.py:334-352`) | `single`, `peak` (day), `offpeak` (night), `exclusive_night`, `yearly_fixed_fee` | `DAG NACHT` header then five `_NUM` |
-| variable | `_extract_variable` (`eneco.py:448-509`) | `current`, `yearly_fixed_fee`, `formula`, `formula_factor` / `formula_base`, `month_indexed`, `rlp_indexed` | `(€/jaar)` + `Geschatte jaarprijs`; `Maandprijs`; Belpex formula |
-| dynamic | `_extract_dynamic` (`eneco.py:419-452`) | `factor`, `base`, `yearly_fixed_fee` | `Enkelvoudige meter`; `(f X BELPEX-H +- base) X vat` |
+| fixed | `_extract_fixed` (`eneco.py`) | `single`, `peak` (day), `offpeak` (night), `exclusive_night`, `yearly_fixed_fee` | `DAG NACHT` header then five `_NUM` |
+| variable | `_extract_variable` (`eneco.py`) | `current`, `yearly_fixed_fee`, `formula`, `formula_factor` / `formula_base`, `month_indexed`, `rlp_indexed` | `(€/jaar)` + `Geschatte jaarprijs`; `Maandprijs`; Belpex formula |
+| dynamic | `_extract_dynamic` (`eneco.py`) | `factor`, `base`, `yearly_fixed_fee` | `Enkelvoudige meter`; `(f X BELPEX-H +- base) X vat` |
 
 Fixed (`_extract_fixed`) reads a five-number row (yearly fee, single, day, night,
 exclusive-night) after the `DAG NACHT` header, converting the four rates from
 cents to EUR/kWh (`/ 100.0`) and keeping the yearly fee in EUR. Illustrative pinned
-values from `test_fix_extracts_energy_block` (`tests/test_eneco.py:69-78`):
+values from `test_fix_extracts_energy_block` (`tests/test_eneco.py`):
 `single = 0.1865`, `peak = 0.2055`, `offpeak = 0.1699`, `exclusive_night = 0.1699`,
 `yearly_fixed_fee = 65.0`.
 
 Variable (`_extract_variable`) anchors the yearly fee on the `(€/jaar)` header and
 the `Geschatte jaarprijs` row rather than counting newlines. The comment records
-the reason (`eneco.py:356-361`): a single extra header line on a future card broke
+the reason (`eneco.py`): a single extra header line on a future card broke
 the earlier rigid four-newline skip and took Power Flex offline.
-`test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py:315-324`)
+`test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py`)
 injects an extra header line to guard the anchor. The current rate is the first of
 four numbers before `Maandprijs`; the formula string accepts any sign character
-between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:887`) so a polarity
+between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py`) so a polarity
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
-(`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:241-248`).
+(`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py`).
 
 The formula's coefficients are parsed to the EUR/kWh basis (`x 10` on the
 factor, `/ 100` on the base, both times the card's VAT multiplier) and the card
@@ -287,10 +287,10 @@ Belpex-injectie is the arithmetic one. `test_flex_is_month_indexed_on_the_rlp_we
 pins the flags and the re-price.
 
 Dynamic (`_extract_dynamic`) captures the full PDF formula including the VAT
-multiplier the card actually prints (`eneco.py:429-432`): `(f X BELPEX-H +- base)
+multiplier the card actually prints (`eneco.py`): `(f X BELPEX-H +- base)
 X vat`. It reads the multiplier from the card (for example `1,06` for 6 % VAT,
 `1,21` if Belgium reverts to 21 %) rather than assuming a constant. The unit
-conversion (`eneco.py:440-447`) turns the PDF's cents-per-kWh-from-EUR-per-MWh form
+conversion (`eneco.py`) turns the PDF's cents-per-kWh-from-EUR-per-MWh form
 into the integration's `energy_eur_per_kwh = factor * spot_eur_per_kwh + base`:
 
 ```
@@ -299,18 +299,18 @@ base   = base_cents * vat_mult / 100
 ```
 
 Illustrative, from `test_dynamic_extracts_factor_and_base`
-(`tests/test_eneco.py:343-358`): PDF `(0.102 X BELPEX-H + 1) X 1.06` yields
+(`tests/test_eneco.py`): PDF `(0.102 X BELPEX-H + 1) X 1.06` yields
 `factor = 1.0812` (`0.102 * 10.6`), `base = 0.0106`, `yearly_fixed_fee = 100.0`.
 The literal `1.0812` is pinned deliberately to catch a unit-conversion bug that
 would otherwise cancel.
 
 ### DSO overlay
 
-`_extract_dsos` (`eneco.py:548-560`) walks two label maps and emits a `DsoOverlay`
+`_extract_dsos` (`eneco.py`) walks two label maps and emits a `DsoOverlay`
 per matched row.
 
-Wallonia (`_WALLONIA_LABELS`, `eneco.py:112-118`), via `_find_wallonia_row`
-(`eneco.py:470-506`):
+Wallonia (`_WALLONIA_LABELS`, `eneco.py`), via `_find_wallonia_row`
+(`eneco.py`):
 
 | PDF label | canonical key |
 | --- | --- |
@@ -321,22 +321,22 @@ Wallonia (`_WALLONIA_LABELS`, `eneco.py:112-118`), via `_find_wallonia_row`
 | TECTEO RESA | `resa` |
 
 ORES sub-zones share a uniform rate, so only the first ORES row encountered is
-kept as the canonical `ores` (`eneco.py:110-112`, dedup guard at `eneco.py:448`).
+kept as the canonical `ores` (`eneco.py`, dedup guard at `eneco.py`).
 A Wallonia row carries 7 numbers on Power Dynamic or 10 on Power Fix. The optional
 middle triplet is the Tarif Impact (CWaPE 3-band) set, and Eneco's column order is
 `MEDIUM | PIC | ECO`, which differs from OCTA+ / Bolt (`PIC | MEDIUM | ECO`); the
-code maps groups 4/5/6 to `medium`/`pic`/`eco` accordingly (`eneco.py:583-590`).
+code maps groups 4/5/6 to `medium`/`pic`/`eco` accordingly (`eneco.py`).
 Layout: Enkelvoudig, Dag, Nacht, Uitsl. nacht, `[MEDIUM PIC ECO]`, Transport,
 Databeheer (EUR/year), Prosument (EUR/kVA/year). The trailing three columns are
 read positionally from the end (`groups[-3:]`), so the optional Impact triplet does
 not shift them. Illustrative AIEG values from `test_fix_extracts_dso_overlay`
-(`tests/test_eneco.py:81-98`): `distribution_single = 0.1087`,
+(`tests/test_eneco.py`): `distribution_single = 0.1087`,
 `distribution_peak = 0.1205`, `distribution_offpeak = 0.0666`,
 `distribution_exclusive_night = 0.0666`, `transport = 0.0274`,
 `data_management_per_year = 19.49`, `prosumer_eur_per_kva_year = 81.04`.
 
-Flanders (`_FLUVIUS_LABELS`, `eneco.py:126-135`), via `_find_fluvius_row`
-(`eneco.py:509-540`):
+Flanders (`_FLUVIUS_LABELS`, `eneco.py`), via `_find_fluvius_row`
+(`eneco.py`):
 
 | PDF label | canonical key |
 | --- | --- |
@@ -352,9 +352,9 @@ Flanders (`_FLUVIUS_LABELS`, `eneco.py:126-135`), via `_find_fluvius_row`
 Fluvius rows carry 5 numbers plus two `-` placeholders: Normaal, Uitsl. nacht,
 SMR1 databeheer (EUR/year), SMR3 databeheer (EUR/year), Capaciteitstarief
 (EUR/kW/year). The lookup is bounded at both ends of the `DIGITALE METER`
-section (`eneco.py:522-526`): the analogue-meter table below repeats every label
+section (`eneco.py`): the analogue-meter table below repeats every label
 and is the same five figures wide, so nothing else tells the two apart.
-Key modelling decisions (`eneco.py:509-540`):
+Key modelling decisions (`eneco.py`):
 
 - `transport = 0.0`: the Flemish Afnametarief already bundles Elia transmission, so
   no separate transport applies here (same convention as Engie and Luminus
@@ -367,10 +367,10 @@ Key modelling decisions (`eneco.py:509-540`):
   `capacity_eur_per_kw_year` the fifth.
 - `prosumer_eur_per_kva_year` stays `None`: SMR3 connections do not sit under the
   compensation regime (`test_fix_fluvius_has_no_prosumer_rate`,
-  `tests/test_eneco.py:101-107`).
+  `tests/test_eneco.py`).
 
 `test_fix_extracts_all_fluvius_sub_areas` and
-`test_fix_fluvius_sub_areas_have_distinct_rates` (`tests/test_eneco.py:110-147`)
+`test_fix_fluvius_sub_areas_have_distinct_rates` (`tests/test_eneco.py`)
 assert all eight sub-areas are present with materially different rates.
 Illustrative Antwerpen values: `distribution_single = 0.0535`,
 `distribution_exclusive_night = 0.0481`, `data_management_per_year = 18.92`,
@@ -378,39 +378,39 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 
 ### Tax overlay
 
-`_extract_taxes` (`eneco.py:627-700`) builds a `TaxOverlay` with
-`vat_rate = 0.0` (prices are already VAT-incl, `eneco.py:605`). Fields:
+`_extract_taxes` (`eneco.py`) builds a `TaxOverlay` with
+`vat_rate = 0.0` (prices are already VAT-incl, `eneco.py`). Fields:
 
 | field | source token | line |
 | --- | --- | --- |
-| `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py:695-698` |
-| `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py:697-699` |
-| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py:698-700`, `606` |
-| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:658-662`, `607-611` |
-| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py:703-706`, `612` |
-| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py:705-707`, `613` |
+| `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py` |
+| `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py` |
+| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py`, `606` |
+| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py`, `607-611` |
+| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py`, `612` |
+| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py`, `613` |
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
-footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py:649-652`).
+footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py`).
 Both regional renewables are populated from every card; the pricing engine selects
-the right one per region (`tests/test_eneco.py:206-210`). Illustrative values from
-`test_fix_extracts_taxes` (`tests/test_eneco.py:200-227`):
+the right one per region (`tests/test_eneco.py`). Illustrative values from
+`test_fix_extracts_taxes` (`tests/test_eneco.py`):
 `federal_excise = 0.050329`, `energy_contribution = 0.002042`,
 `flanders_renewables = 0.0152`, `wallonia_renewables = 0.0313`,
 `region_connection_fee = 0.00075`.
 
 The excise tier and the Walloon connection fee are the two **fail-loud** anchors: a
 regex miss raises `ExtractorError` rather than defaulting to `0.0`
-(`eneco.py:552-553`, `eneco.py:577-580`). The connection fee is a mandatory all-in
+(`eneco.py`). The connection fee is a mandatory all-in
 component for Walloon customers with no `live_check` gate, so a silent zero would
 under-bill; the renewables, by contrast, are gated in `live_check` and default to
 `0.0` when absent. `test_missing_connection_fee_is_fatal`
-(`tests/test_eneco.py:150-157`) removes the label and asserts the raise.
+(`tests/test_eneco.py`) removes the label and asserts the raise.
 
 ### Injection
 
-`_extract_injection` (`eneco.py:615-715`) is the most delicate block. Layout on
+`_extract_injection` (`eneco.py`) is the most delicate block. Layout on
 every contract:
 
 ```
@@ -422,24 +422,24 @@ AFNAME EN INJECTIE [/ VALORISATIE]
   <factor> X BELPEX[-H] [+-] <base> Tariefformule
 ```
 
-Steps (`eneco.py:630-703`):
+Steps (`eneco.py`):
 
-1. Anchor on the stable `AFNAME EN INJECTIE` prefix (`eneco.py:629`), then cut the
+1. Anchor on the stable `AFNAME EN INJECTIE` prefix (`eneco.py`), then cut the
    section at the next ALL-CAPS heading (`ENERGIEDELEN`, `BELASTINGEN`, ...) so
-   unrelated blocks do not pollute the matches (`eneco.py:636-640`).
+   unrelated blocks do not pollute the matches (`eneco.py`).
 2. Read the monthly indicative (`Maandprijs`), falling back to the yearly estimate
-   (`Geschatte jaarprijs`) when no `Maandprijs` prints (`eneco.py:737-754`). Both
+   (`Geschatte jaarprijs`) when no `Maandprijs` prints (`eneco.py`). Both
    patterns use a numeric-prefix-only capture to dodge the `Zie afname Geschatte
    jaarprijs` recap line on Power Dynamic.
 3. Only for `power_dynamic`, parse the Belpex-H formula into hourly-spot
-   coefficients (`eneco.py:689-697`): `factor = factor_pdf * 10`,
+   coefficients (`eneco.py`): `factor = factor_pdf * 10`,
    `base = base_cents / 100` (VAT-exempt for residential, so no VAT scaling).
 
-Injection taxonomy (the three-shape rule, `base.py:268-306`):
+Injection taxonomy (the three-shape rule, `base.py`):
 
 - **Power Fix and Power Flex are MONTH-indexed**: the extractor surfaces the
   `Maandprijs` as `current` AND the card's Belpex-injectie coefficients, with
-  `month_indexed=True` (`eneco.py:679-695`). The flag is what makes surfacing
+  `month_indexed=True` (`eneco.py`). The flag is what makes surfacing
   them safe: the engine resolves them against the delivery month's mean and
   `_injection_is_spot_formula` refuses them to the per-hour path outright, so
   monthly coefficients can never reach the hourly spot even if the `Maandprijs`
@@ -447,14 +447,14 @@ Injection taxonomy (the three-shape rule, `base.py:268-306`):
   card computes from the LAST KNOWN (previous) month's index: on the August 2026
   card, 6,38 c/kWh against the 8,0649 August settles at, a 20,9% under-credit.
   Illustrative: `current = 0.0476`, `factor = 0.8`, `base = -0.0265`
-  (`tests/test_eneco.py:398-428`).
+  (`tests/test_eneco.py`).
 - **Power Dynamic is hourly `factor * spot + base`**: it indexes on Belpex-H, so it
   is the only contract that surfaces spot coefficients. Illustrative, from
-  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:431-441`): formula
+  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py`): formula
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via
-  `parse_sign` (`_pdf.py:754-765`).
+  `parse_sign` (`_pdf.py`).
 
 No Eneco contract is the spot-indexed-variable shape (Cociter Variable), but
 that is not what the flag means: Fix, Flex and Flex One all set
@@ -469,23 +469,23 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 ## Quirks and historical bugs
 
 - **VAT-inclusive cards**: all prices are 6 % VAT-incl, so `vat_rate = 0.0` and the
-  pricing engine does not rescale (`eneco.py:36`, `eneco.py:605`, `base.py:479-482`).
+  pricing engine does not rescale (`eneco.py`, `base.py`).
   Dynamic is the exception where a VAT multiplier is read from the card and folded
-  into `factor` / `base` (`eneco.py:518-540`).
+  into `factor` / `base` (`eneco.py`).
 - **`AFNAME EN INJECTIE / VALORISATIE` rename (issue #35)**: the July 2026 cards
   dropped the `/ VALORISATIE` suffix from the injection heading. The old anchor
   keyed off that suffix, which zeroed every Eneco injection credit. The anchor now
-  keys off the stable `AFNAME EN INJECTIE` prefix (`eneco.py:626-629`), guarded by
-  `test_injection_survives_valorisatie_suffix_drop` (`tests/test_eneco.py:444-461`).
+  keys off the stable `AFNAME EN INJECTIE` prefix (`eneco.py`), guarded by
+  `test_injection_survives_valorisatie_suffix_drop` (`tests/test_eneco.py`).
 - **`>` bullet before every row label until June 2025**: the cards printed
   `10,67 10,67 10,67 10,67 > Maandprijs`, and the July 2025 redesign dropped the
   bullet. The anchors demanded the bare label, so `fetch_for_month` rejected the
   27 Flex issues from April 2023 to June 2025 outright (their energy block never
   parsed) and `_extract_injection` returned `current=None` on 26 Fix and 23
   Dynamic issues that `archive_validity_check` accepted anyway. Both anchors now
-  take the optional `_BULLET` (`eneco.py:161`), guarded by
+  take the optional `_BULLET` (`eneco.py`), guarded by
   `test_flex_reads_the_bullet_prefixed_archive_card`
-  (`tests/test_eneco.py:636-653`). 26 of the 27 Flex issues come back: the
+  (`tests/test_eneco.py`). 26 of the 27 Flex issues come back: the
   October 2023 card still stops on the federal excise anchor, because its text
   layer splits the anchor word across a line break as `V\nerbruik tussen`. Flex
   issues before April 2023 stay unreadable on purpose: they price a
@@ -494,40 +494,40 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   page, which prints the same row shape: on the June 2021 Flex card the only
   four figure `> Maandprijs` row in the document is the injection one, and
   reading it would bill an injection credit as the consumption price.
-  `_extract_variable` now reads the consumption side alone (`eneco.py:460-474`),
+  `_extract_variable` now reads the consumption side alone (`eneco.py`),
   cutting the text at whichever injection heading the card prints. Measured over
   the 143 archived cards the cut moves no match and drops only that one. It is
   guarded by `test_energy_anchor_does_not_reach_the_injection_page`, which
   reshapes the June 2025 card into the 2021 layout and asserts that
-  `parse_snapshot` raises (`tests/test_eneco.py:669-691`).
+  `parse_snapshot` raises (`tests/test_eneco.py`).
 - **An injection row we cannot read is fatal**: a numeric row ending in
   `Maandprijs` or `Geschatte jaarprijs` that neither anchor matched raises rather
-  than storing a snapshot with an empty leg (`eneco.py:674-677`, guarded at
-  `tests/test_eneco.py:656-666`). The bullet is why: the archive check passes a
+  than storing a snapshot with an empty leg (`eneco.py`, guarded at
+  `tests/test_eneco.py`). The bullet is why: the archive check passes a
   card whose credit silently went missing, and a keyless entry then credits
   nothing at all for those months. The `Zie afname` recap rows carry the same two
   labels with no figure, so the guard keys on a row that starts with a number.
 - **`_NUM` four-digit truncation**: the previous integer-part cap of three digits
   silently truncated any yearly fee of 1000 or more; the token now handles grouped
-  and ungrouped four-digit values (`eneco.py:138-144`, guarded at
-  `tests/test_eneco.py:327-340`).
+  and ungrouped four-digit values (`eneco.py`, guarded at
+  `tests/test_eneco.py`).
 - **Rigid newline skip broke Power Flex**: the variable yearly-fee parser used to
   count a fixed number of header lines; a single extra header line on a future card
   took the product offline. It now anchors on the `(€/jaar)` and
-  `Geschatte jaarprijs` tokens (`eneco.py:356-366`, guarded at
-  `tests/test_eneco.py:315-324`).
+  `Geschatte jaarprijs` tokens (`eneco.py`, guarded at
+  `tests/test_eneco.py`).
 - **Energiefonds is billed in Flanders only**: the table is headed "Bijdrage
   Energiefonds (Vlaanderen)" but rides on the one card Eneco serves to both
   regions, and `fees.py` bills 12 x the field with no region check of its own
-  (`fees.py:219`). `region` is therefore forwarded to `_extract_taxes`
-  (`eneco.py:301`), which zeroes the field outside Flanders (`eneco.py:581-598`);
-  both callers pass it, the live card (`eneco.py:169`) and the archive walk
-  (`eneco.py:209`). Every issue since January 2025 prints 0,00 in the domiciled
+  (`fees.py`). `region` is therefore forwarded to `_extract_taxes`
+  (`eneco.py`), which zeroes the field outside Flanders (`eneco.py`);
+  both callers pass it, the live card (`eneco.py`) and the archive walk
+  (`eneco.py`). Every issue since January 2025 prints 0,00 in the domiciled
   low-voltage cell, so nothing is mis-billed today; the gate is what keeps a
   Walloon entry right the month that changes. Guarded by
-  `test_energy_fund_is_flanders_only` (`tests/test_eneco.py:160-174`) on the live
+  `test_energy_fund_is_flanders_only` (`tests/test_eneco.py`) on the live
   path and `test_fetch_for_month_gates_the_energy_fund_by_region`
-  (`tests/test_eneco.py:532-565`) on the archive path, both of which patch a
+  (`tests/test_eneco.py`) on the archive path, both of which patch a
   non-zero rate into the fixture to have anything to assert.
 - **`Standaard tarief (domicilieadres)` label wrap**: the January 2026 template gave
   the Wallonia DSO table ten numeric columns instead of seven, narrowing the tax
@@ -536,32 +536,32 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   Dynamic issue prints the label whole. The pattern required that newline, so 45 of
   the 63 cards published since January 2025 read the `0.0` default instead, hidden
   because every one of them prints 0,00 in that cell. `_WS` already matches a
-  newline, so the pattern no longer demands one (`eneco.py:587-595`), guarded by
-  `test_energy_fund_is_read_on_every_card_layout` (`tests/test_eneco.py:177-197`).
+  newline, so the pattern no longer demands one (`eneco.py`), guarded by
+  `test_energy_fund_is_read_on_every_card_layout` (`tests/test_eneco.py`).
 - **Fail-loud excise and connection fee**: unlike the gated renewables, these two
-  raise on a regex miss to avoid silent under-billing (`eneco.py:552-553`,
+  raise on a regex miss to avoid silent under-billing (`eneco.py`,
   `576-583`).
 - **Eneco Impact column order is `MEDIUM | PIC | ECO`**, not `PIC | MEDIUM | ECO`
   like OCTA+ / Bolt; mapping the wrong order swaps the CWaPE bands
-  (`eneco.py:487-494`).
+  (`eneco.py`).
 - **Fluvius transport is 0**: the Flemish Afnametarief bundles Elia transmission;
-  do not add a transport term (`eneco.py:123-125`, `514-516`).
+  do not add a transport term (`eneco.py`, `514-516`).
 - **Flemish digital meters have no peak / offpeak split and no prosumer rate**
-  (`eneco.py:532-540`, `tests/test_eneco.py:101-107`).
+  (`eneco.py`, `tests/test_eneco.py`).
 - **`fetch_for_month` HEAD-before-GET budget**: HEAD-probing each volume keeps the
   missing-month path inside the 10 s probe budget instead of stalling on 30 s GET
-  timeouts (`eneco.py:198-204`).
+  timeouts (`eneco.py`).
 - **Archive substitution guard**: `archive_validity_check` rejects a snapshot whose
   `valid_until` does not fall in the requested month, so a CDN that overwrites a
   historical URL with the current card cannot mis-bill past consumption
-  (`_pdf.py:756-793`, `tests/test_eneco.py:491-509`).
+  (`_pdf.py`, `tests/test_eneco.py`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
-  not silently drop the formula or the base (`eneco.py:387-389`, `428-431`,
+  not silently drop the formula or the base (`eneco.py`, `428-431`,
   `656-659`).
 - **Power Dynamic is Flanders-only**: its Walloon DSO rows are vestigial reference;
-  do not offer the product in Wallonia (`eneco.py:733-758`,
-  `tests/test_eneco.py:59-66`).
+  do not offer the product in Wallonia (`eneco.py`,
+  `tests/test_eneco.py`).
 
 ## Test fixtures
 
@@ -581,13 +581,13 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 
 | symptom | first suspect | line |
 | --- | --- | --- |
-| every snapshot fails to fetch | `_resolve_url` / `_fetch_listing` (listing HTML or URL pattern changed) | `eneco.py:357-383` |
-| fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py:427-445` |
-| variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py:448-509` |
-| dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py:419-452` |
-| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py:112-135`, `469-539` |
-| Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py:577-582` |
-| tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py:627-700` |
-| injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py:723-744` |
-| four-digit fee truncated | `_NUM` token | `eneco.py:145` |
-| historical month mis-billed | `fetch_for_month` volume walk or `archive_validity_check` | `eneco.py:174-217` |
+| every snapshot fails to fetch | `_resolve_url` / `_fetch_listing` (listing HTML or URL pattern changed) | `eneco.py` |
+| fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py` |
+| variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py` |
+| dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py` |
+| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py`, `469-539` |
+| Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py` |
+| tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py` |
+| injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py` |
+| four-digit fee truncated | `_NUM` token | `eneco.py` |
+| historical month mis-billed | `fetch_for_month` volume walk or `archive_validity_check` | `eneco.py` |

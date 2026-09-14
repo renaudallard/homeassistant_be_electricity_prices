@@ -27,16 +27,16 @@ Related docs:
 
 Tests live under `tests/` and run with `pytest`. Configuration is in `pyproject.toml`: pytest is
 in `asyncio_mode = "auto"` with `asyncio_default_fixture_loop_scope = "function"`
-(`pyproject.toml:1`), so `async def test_*` functions run without an explicit `@pytest.mark.asyncio`
+(`pyproject.toml`), so `async def test_*` functions run without an explicit `@pytest.mark.asyncio`
 decorator and each test gets a fresh event loop.
 
 The integration is a Home Assistant custom component, so the suite depends on
 `pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)
 and, for time-pinned tests, `pytest-freezer` (the `freezer` fixture). `tests/conftest.py`
-inserts the repo root onto `sys.path` (`tests/conftest.py:40`) so
+inserts the repo root onto `sys.path` (`tests/conftest.py`) so
 `custom_components.be_electricity_prices` imports without an installed package, and an autouse
 fixture enables custom-component loading for every test that requests `hass`
-(`tests/conftest.py:44`).
+(`tests/conftest.py`).
 
 ### Layout: one module per provider plus cross-cutting modules
 
@@ -81,11 +81,11 @@ Shared helpers live in `tests/__init__.py`:
 
 - `make_snapshot(...)` builds a `SupplierSnapshot` with sensible defaults (a canonical Wallonia
   fixed-rate snapshot under ORES) so a pricing or coordinator test can override just the one field
-  it cares about (`tests/__init__.py:85`).
+  it cares about (`tests/__init__.py`).
 - `fixture_text(name, *, layout=False)` reads a fixture PDF and runs it through the real
   extractor, `extract_pdf_text` (pypdf) by default or `extract_pdf_text_layout` (pdfplumber) when
   `layout=True` for the column-positional cards (Bolt, DATS 24, Ecopower, TotalEnergies)
-  (`tests/__init__.py:57`). It is `lru_cache`d for the process lifetime because PDF extraction
+  (`tests/__init__.py`). It is `lru_cache`d for the process lifetime because PDF extraction
   dominates suite runtime (the comment notes roughly 10s per fixture, and the cache cuts a full
   run from about 190s to about 30s). The cache is process-scoped, so if you rewrite a fixture
   mid-session call `fixture_text.cache_clear()` or restart pytest.
@@ -109,27 +109,27 @@ publication label). This is why the tests are deterministic and fast while the e
 still exercised end-to-end against genuine supplier output.
 
 `tests/test_discover.py` drives each supplier's `discover()` against its saved listing snippet
-through a minimal `aiohttp.ClientResponse` stand-in, `_FakeResponse` (`tests/test_discover.py:71`),
+through a minimal `aiohttp.ClientResponse` stand-in, `_FakeResponse` (`tests/test_discover.py`),
 and asserts the discovered product set matches the registry exactly. A regex regression that drops
 a product, or a fixture refresh that grows the catalogue, fails fast.
 
 ### Europe/Brussels timezone pin
 
 `tests/conftest.py` has an autouse fixture `_force_brussels_timezone` that pins every test to
-`Europe/Brussels` (`tests/conftest.py:52`). This is load-bearing, not cosmetic. The
+`Europe/Brussels` (`tests/conftest.py`). This is load-bearing, not cosmetic. The
 `pytest-homeassistant-custom-component` `hass` fixture defaults to `US/Pacific`; for a
 Belgian-electricity integration that default hides DST transitions, off-peak window boundaries,
 and per-month archive bugs that would surface in production. The fixture has two branches:
 
 - If the test requests `hass`, it sets the timezone on the running Home Assistant instance via
   `hass.config.async_set_time_zone("Europe/Brussels")` on the loop `hass` owns
-  (`tests/conftest.py:68`).
+  (`tests/conftest.py`).
 - Otherwise it swaps `homeassistant.util.dt`'s default timezone for the duration of the test and
-  restores it afterwards (`tests/conftest.py:71`).
+  restores it afterwards (`tests/conftest.py`).
 
 The fixture stays synchronous on purpose: pytest-asyncio auto mode would otherwise wrap an async
 autouse fixture in a second `asyncio.Runner` that cannot run while the `hass` loop is already up.
-The comment at `tests/conftest.py:58` documents this constraint. When you write time-sensitive
+The comment at `tests/conftest.py` documents this constraint. When you write time-sensitive
 tests (offpeak windows, YTD backfill boundaries, monthly archive keys), assume Brussels local
 time and do not reintroduce a US default.
 
@@ -156,87 +156,41 @@ Production code is type-checked with `mypy --strict`, but tests and helper scrip
 non-strict (see the workflows below). Several entity and coordinator tests substitute a
 `types.SimpleNamespace` for the real coordinator or config entry when only a couple of attributes
 are read (for example `entry.runtime_data = SimpleNamespace(data=...)` in
-`tests/test_diagnostics.py:81`). That stub does not match the production signature, so the call
+`tests/test_diagnostics.py`). That stub does not match the production signature, so the call
 site is annotated with `# type: ignore[arg-type]` to keep the non-strict mypy pass clean, as in
-`tests/test_button.py:62` and `tests/test_ecopower.py:409`. The convention is to suppress at the
+`tests/test_button.py` and `tests/test_ecopower.py`. The convention is to suppress at the
 call site with `# type: ignore[arg-type]`, never to relax the production function signature to
-accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml:12`) so
+accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots
 (neither carries a root `__init__.py`), matching how pytest collects them, and it silences
 missing stubs for `pypdf`, `pdfplumber`, `pyxlsb`, and `pytest_homeassistant_custom_component`
-(`pyproject.toml:14`).
+(`pyproject.toml`).
 
 ## scripts/doc_ref_check.py
 
-The docs pin roughly 760 `file.py:line` references. They rot whenever a module grows, and a
-stale pin is worse than no pin: it sends a reader to a line that now says something else.
-`scripts/doc_ref_check.py` resolves each one by CONTENT, never by offset arithmetic. The docs
-almost always name the symbol a reference points at, in backticks, on the same line
-(``_extract_energy`` (`_mega_cards.py:257`)), so the checker resolves that symbol's real definition
-line from an AST index and, with `--write`, repins it.
+The docs name files and the symbols inside them. They used to pin a line number as well, and a
+line number is wrong the moment anything above it moves, which is most commits: 2630 of them
+had to be re-derived on any branch that touched code, the sweep that did it went wrong more
+than once in a single day, and a stale pin is worse than no pin because it sends a reader to a
+line that now says something else. The numbers are gone. A file path and a symbol name are what
+a reader greps for, and neither moves when a function grows.
 
-It runs in the `test` job (`.github/workflows/test.yml:54`), before the suite, and needs no
-network or fixtures.
+What is left is what a RENAME breaks, which is the only way these can still rot:
 
-**It fails the build on a reference that is provably broken** (past the end of the file it
-names, or landing on a line that holds nothing) **and on any rise in the rewritable or
-unanchored-markdown counts**. The rest is printed and left to a human, because each has a
-legitimate form the checker cannot distinguish:
-
-| Report | Fails CI | Why not automatic |
+| Check | Fails CI | Why |
 | --- | --- | --- |
-| past EOF (plain, range, continuation, or markdown) | yes | the file has no such line; nothing to argue about |
-| `markdown BROKEN` | yes | the pin lands on a blank line, a bare fence, or a table rule, so it points at nothing whatever the prose claims |
-| `anchored+rewritable` | only above the baseline | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
-| `markdown unanchored` | only above the baseline | a markdown target has no symbol to resolve, so the word score is a smoke test rather than a proof; a claim can also have no good passage to point at |
-| `range pins unanchored` | only above the baseline | the span holds none of the identifiers its sentence names, which is usually rot but is also how a deliberate cross-file or sub-region pin looks |
-| `moved-symbol suspects` | no | the same shape is also a correct reference to a USE site (`CONF_CONTRACT` (`config_flow.py:163`) is where the flow reads it, not where `const` defines it). ~63 of these are expected; `--verbose` lists them |
+| a file a doc names does not exist | yes | the name is provably wrong: it was renamed or removed and the prose did not follow |
+| a `file.md#anchor` names no heading | yes | same, for the pins into README the glossary carries |
+| a symbol named beside a file that this tree does not define | no | printed for a human; most are prose words, Home Assistant's own names and service ids, and no rule separates those from a rename |
 
-No single rewritable reference is provably stale, so none can gate on its own: four of the five
-on `main` sit on a line that does not even mention the symbol the prose names, being deliberate
-pins at the code implementing the behaviour. The COUNT still gates, because it is stable for
-that class - an ambiguous pin stays ambiguous however the file moves - and rises only when pins
-that used to resolve stop resolving. `_REWRITABLE_BASELINE` (`scripts/doc_ref_check.py:55`)
-freezes it. Without this, a branch that inserted three import lines shifted 98 pins (764 correct
-down to 666) and the checker still exited 0. Raise the baseline only for a pin deliberately
-aimed at an implementation site, naming it in the commit message; lower it when one is resolved,
-which the checker prints a note asking for.
+The third is deliberately not gated. Gating a count of it would put the docs back to needing an
+edit whenever they grow, which is the thing this replaced.
 
-Five reference forms exist and all five are checked. That matters because for a long time only
-the first was, and the other four rotted invisibly behind a clean run: 28 stale ranges (21 of
-them predating the refactor that exposed them), 4 stale continuations, 31 references to a
-symbol that had moved module while its old line still landed inside the now-shorter file, and
-12 of the glossary's 15 `README.md:line` pins, some off by over 100 lines. Ranges
-and continuations are never auto-rewritten: the end of a span is not derivable from an anchor
-symbol, and inventing one is worse than leaving a visible stale pin.
-
-Markdown pins are the fifth form, and they need a different anchor: `README.md` has no symbols
-to index, so `MDREF` (`scripts/doc_ref_check.py:81`) scores each pin on the DISTINCTIVE words its
-claim shares with the passage it lands on. A word is distinctive when it appears on at most 3% of
-the target file's lines, which drops "the" and "energy" and keeps "energiefonds" and "picker";
-the passage is the paragraph or list item around the pinned line
-(`_md_passage` (`scripts/doc_ref_check.py:277`)), because README prose is hard-wrapped and the
-claim rarely fits on one line. Fewer than
-`_MD_MIN_SHARED` (`scripts/doc_ref_check.py:100`) shared words is reported, never rewritten: there
-is no AST truth to rewrite to. The threshold was measured against the pins as they stood before
-the 2026-08-17 repin, where all 12 stale ones scored 3 or less and the three that still resolved
-scored 4, 7 and 14.
-`_MD_UNANCHORED_BASELINE` (`scripts/doc_ref_check.py:107`) tolerates the one pin on `main` with no
-better target: the glossary's TSO row defines Elia and the transmission charge, which README never
-states.
-
-`_RANGE_UNANCHORED_BASELINE` covers the 36 range pins whose span legitimately holds none of
-the identifiers around them. Two shapes account for all of them: a pin that crosses files on
-purpose (the prose names a function in one module and points the reader at the constants it
-reads in another, as `_resolve_daily_kwh` does with the wiring block in `const.py`), and a pin
-that targets part of a block rather than the whole definition. Until the 2026-08 sweep the only
-thing checked about a range was that neither end ran past EOF, so a span could sit on entirely
-unrelated code and pass: 154 of 676 did, including five of the eight into `const.py`. The sweep
-repinned 154 of them, 113 mechanically where the sentence's symbol had exactly one definition
-and 41 by hand.
-
-A table row whose reference is a bare number in a "Line" column (`| `_store` | ... | 859 |`)
-is invisible to all of this. Those are checked by hand when the file they point into changes.
+It runs in the `test` job (`.github/workflows/test.yml`), before the suite, needs no network or
+fixtures, and reports in under a second. `NOT_OURS` lists the names that are not files of this
+repository and never will be: what a workflow writes on the archive branch or as a job
+artefact, the framework doc's `providers/foo.py` placeholder, and Home Assistant's own
+`sensor/recorder.py`. A doc naming one of those is correct, and resolving it is not the point.
 
 ## scripts/live_check.py
 
@@ -246,39 +200,39 @@ registered `(supplier, contract, region)` tuple, fetches the supplier's real pub
 network, parses it, and asserts the resulting snapshot is structurally sane (energy populated,
 expected DSO keys present, taxes populated, rates inside loose plausibility bounds). It prints a
 markdown report to stdout and encodes the outcome in its exit code. It is run daily by
-`.github/workflows/live_check.yml` (`scripts/live_check.py:35`).
+`.github/workflows/live_check.yml` (`scripts/live_check.py`).
 
 The script deliberately does not import Home Assistant. `_load_providers()`
-(`scripts/live_check.py:92`) synthesises a `be_pkg.providers` package and loads each provider
+(`scripts/live_check.py`) synthesises a `be_pkg.providers` package and loads each provider
 module by file path, so it can import `providers/*.py` and `providers/base.py` without pulling HA
 into scope. It binds the base rate classes (`FixedRates`, `VariableRates`, `DynamicRates`,
 `TimeOfUseRates`, `ImpactRates`) for the `isinstance`-based energy validation
-(`scripts/live_check.py:92`); class identity matches because every provider imports from the same
+(`scripts/live_check.py`); class identity matches because every provider imports from the same
 loaded `base` module.
 
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:3108  asyncio.run(_run()); rc=8 on harness crash
-  _run()                     scripts/live_check.py:2829  load providers, gather checks, render, exit code
-    _load_providers()        scripts/live_check.py:92    file-path import of every provider (no HA)
-    _attributed_check(...)   scripts/live_check.py:408   per-supplier wait_for + trace attribution
-      _check_eneco ...       scripts/live_check.py:661   one _check_<supplier> per registered extractor
+main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on harness crash
+  _run()                     scripts/live_check.py  load providers, gather checks, render, exit code
+    _load_providers()        scripts/live_check.py    file-path import of every provider (no HA)
+    _attributed_check(...)   scripts/live_check.py   per-supplier wait_for + trace attribution
+      _check_eneco ...       scripts/live_check.py   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights)
-    _check_catalogs(...)     scripts/live_check.py:1258   run each discover(), flag new product ids
-    _check_card_freshness()  scripts/live_check.py:1716   resolved card == newest advertised
-    _fetch_with_retry(...)   scripts/live_check.py:622   transient-only retry with backoff
-    _validate_snapshot(...)  scripts/live_check.py:2486  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:3092  latency / byte budget checks
-    _render_report(...)      scripts/live_check.py:2704  markdown pass/fail report
+    _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new product ids
+    _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
+    _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff
+    _validate_snapshot(...)  scripts/live_check.py  energy + injection shape gates
+    _drift_warnings(...)     scripts/live_check.py  latency / byte budget checks
+    _render_report(...)      scripts/live_check.py  markdown pass/fail report
 ```
 
 ### Rendering only what changed
 
-With the archive branch checked out beside it (`--texts DIR`, `scripts/live_check.py:3227`),
+With the archive branch checked out beside it (`--texts DIR`, `scripts/live_check.py`),
 the harness installs the branch's texts as the readers' render cache (`scripts/card_texts.py`,
 the same `StoredTexts` the archiver builds on): a card whose bytes the archive walked an hour
 earlier and still holds is downloaded, timed, counted and parsed as before, but its text comes
@@ -289,20 +243,20 @@ archive branch to read and renders everything, which is the behaviour before the
 
 ### Card freshness
 
-`_check_card_freshness` (`scripts/live_check.py:1915`) asks a question no other check here asks:
+`_check_card_freshness` (`scripts/live_check.py`) asks a question no other check here asks:
 not "did the fetch work" but "is this the card the supplier is currently advertising". A superseded
 card downloads, parses and validates exactly like a current one, so a stale URL reads as a green
 run -- Bolt billed June's variable formula for ten weeks behind a passing board, and Ecopower served
 January's tax block for eleven days after renaming its dynamic card to `YYYYMMDD`.
 
-The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py:1521`) scans
+The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py`) scans
 the same listing page the extractor does, but with a **looser** pattern. When a supplier changes the
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
 
 ### The keyless day-ahead fallback
 
-`_check_spot_fallback` (`scripts/live_check.py:1870`) asks whether energy-charts still serves the
+`_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts still serves the
 Belgian day-ahead. It is the one source that has to work on the day ENTSO-E does not, so leaving it
 unexercised until then is how it rots unnoticed -- the same reasoning as the freshness gate above,
 applied to a source rather than a card.
@@ -407,7 +361,7 @@ supplier, and this check reads it:
 That allowance used to cover the staleness question only, and everything else still filed. DATS 24
 left residential on 2026-08-31 and its August card 404ed the next morning, which opened an
 extractor-broken issue naming a supplier that no longer sells electricity (issue #78). `_record`
-(`scripts/live_check.py:530`) now applies the marker to **any** failing check whose supplier is past
+(`scripts/live_check.py`) now applies the marker to **any** failing check whose supplier is past
 its date, so the rule lives in one place rather than at each of the six fetch call sites. It keys on
 the supplier segment of the label, so a check with no supplier prefix is untouched, and the day of
 the date itself still fails normally, since the supplier is trading until the end of it.
@@ -445,7 +399,7 @@ is in use, and that is fine for now.
 ### The stamps do not sort
 
 Every one of the eight formats fails a naive `max()`, each at a different boundary, so each has its
-own key (`scripts/live_check.py:1430` onwards): Mega's `MMYYYY` is month-major (`122026` outranks
+own key (`scripts/live_check.py` onwards): Mega's `MMYYYY` is month-major (`122026` outranks
 `012027`), Eneco's issue is volume-major (an April re-issue `022604` outranks May's first issue
 `012605`), EBEM's `MM-YYYY` sorts lexically wrong (`12-2025` over `08-2026`) and may be a Dutch
 month *name*, Frank names its cards with a month word (`December 2026` over `April 2027`), and
@@ -486,20 +440,20 @@ renamed symbol, a changed signature -- propagates and is recorded as a failure, 
 those made the gate report green in exactly the case where it had stopped working.
 
 Each `_check_<supplier>` derives its contract list from the runtime registry (for example
-`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:665`) so adding a
+`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py`) so adding a
 product to `EXTRACTOR.contracts` gets it validated here without editing the harness. Every check
 asserts the publication label is non-empty, the expected DSO keys for the region are present
 (`_FLUVIUS_KEYS`, `_WALLONIA_DSO_KEYS`, or `sibelga` for Brussels), the relevant taxes are
 positive, and then calls `_validate_snapshot`.
 
 The federal energy contribution is the exception to "taxes are positive". It is bounds-checked by
-`_expect_energy_contribution` (`scripts/live_check.py:695`) instead, which accepts
+`_expect_energy_contribution` (`scripts/live_check.py`) instead, which accepts
 `[0, 0.01]` EUR/kWh. A `> 0` gate on four suppliers used to enforce it, but the levy was abolished
 on 2026-08-01: EBEM's August card failed CI three times over for reporting the zero it actually
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2794`) runs four gates:
+`_validate_snapshot` (`scripts/live_check.py`) runs four gates:
 
 - `_expect_month_indexed_registry` holds the parsed energy's `month_indexed` against the
   registry's `Contract.month_indexed_energy`. The flow offers the optional ENTSO-E key from
@@ -515,7 +469,7 @@ that reads the value 100x too large — and that part still holds.
   `formula_factor` (Bolt): losing those coefficients silently disables the box, and the entry
   keeps billing the printed monthly rate.
 
-- `_validate_energy` (`scripts/live_check.py:2959`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -530,7 +484,7 @@ that reads the value 100x too large — and that part still holds.
   nineteen consecutive months, so a flattened card is normal publishing and must not gate CI.
   Only Energy Knights Essentia prints those pairs today; energie.be Variabel and the custom
   supplier publish one formula for every meter and are unaffected.
-- `_validate_injection` (`scripts/live_check.py:2180`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
@@ -563,25 +517,25 @@ that reads the value 100x too large — and that part still holds.
 
 ### Per-supplier byte and wallclock budgets, and drift issues
 
-An aiohttp `TraceConfig` (`scripts/live_check.py:367`) tags every request with the supplier
+An aiohttp `TraceConfig` (`scripts/live_check.py`) tags every request with the supplier
 currently being checked (via a `ContextVar` set by the `_attributed()` context manager,
-`scripts/live_check.py:285`) and accumulates per-supplier fetch count, summed request duration,
+`scripts/live_check.py`) and accumulates per-supplier fetch count, summed request duration,
 body bytes, and failed-attempt count / duration into `METRICS`. These metrics
 surface silent slowdowns and PDF-size jumps, both leading indicators that a supplier reworked its
 publication, and are appended to the daily report by `_render_metrics`
-(`scripts/live_check.py:2656`).
+(`scripts/live_check.py`).
 
 Reading a row correctly needs three facts about which hook feeds which column:
 
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
   its final response headers, after the redirect chain and **before** the body is read. So the
   latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
-- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:339`)
+- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py`)
   rather than read from `Content-Length`, because that header is None on chunked responses and
   would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
   so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
   then stalled mid-body.
-- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:363`), which is the
+- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py`), which is the
   only hook a request that never produced a response fires. Failures are kept out of the success
   columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
   this counter existed a supplier whose every attempt timed out reported 0 fetches and 0 s and read
@@ -591,20 +545,20 @@ Reading a row correctly needs three facts about which hook feeds which column:
   that first url whichever hop died.
 
 Two safety caps bound runtime. Each supplier check runs under
-`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` (`scripts/live_check.py:405`) with a 600s
-hard cap (`scripts/live_check.py:405`, raised from 240s when the professional editions roughly
+`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` (`scripts/live_check.py`) with a 600s
+hard cap (`scripts/live_check.py`, raised from 240s when the professional editions roughly
 doubled Engie's and Mega's sequential fetch counts), recorded as an extractor failure rather than
 propagating so one hung supplier cannot starve the `gather()`. Every latency budget below must stay
 under that cap, or the supplier is killed before it can report the drift the budget exists to catch.
-The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2836`) bounds individual
+The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:3546`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2923`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3423`) for the known-large catalogues (Bolt,
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:2970`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
+(`scripts/live_check.py`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
 Luminus, which are slow per fetch rather than large. That last group is the
 recurring one: each answers a residential line in seconds and a GitHub runner
 in minutes, for a byte-identical payload, so the alert reports where the run
@@ -612,14 +566,14 @@ executed rather than anything about the cards. Energy Knights joined it on
 2026-08-31 (issue #75) purely because it was added after the others and
 inherited the 90s default. Note that `elapsed_s` is the sum of per-request
 durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
-with `asyncio.gather`, `scripts/live_check.py:1100`) records the sum of its parallel fetches; the
+with `asyncio.gather`, `scripts/live_check.py`) records the sum of its parallel fetches; the
 budgets are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because
-it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1848`). When a
+it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:3067`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3533`). The
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py`,
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -633,7 +587,7 @@ rerun.
 ### The catalog baseline only counts what the listing shows
 
 `_check_catalogs` diffs each supplier's `discover()` output against
-`_CATALOG_BASELINES` (`scripts/live_check.py:1451`), one lambda per supplier deriving the
+`_CATALOG_BASELINES` (`scripts/live_check.py`), one lambda per supplier deriving the
 registered identifier set from the provider module, so the baseline cannot drift away from
 the code. The rule is that it must cover exactly what that supplier's discovery surface
 enumerates, no more.
@@ -648,19 +602,19 @@ time. Engie is deliberately not filtered: its surface is the public sitemap, whi
 split by segment.
 
 `test_catalog_baseline_ignores_editions_the_listing_never_shows`
-(`tests/test_live_check_harness.py:750`) pins the rule against stub contracts rather than the
+(`tests/test_live_check_harness.py`) pins the rule against stub contracts rather than the
 registry, because every product Mega sells to businesses it also sells residentially today --
 the two baselines are identical until the day they are not.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py:2829`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:2896`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
-The exit code is bit-encoded (`scripts/live_check.py:2906`):
+The exit code is bit-encoded (`scripts/live_check.py`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
@@ -669,7 +623,7 @@ The exit code is bit-encoded (`scripts/live_check.py:2906`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:3116`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### Unreadable cards do not gate bit 0
@@ -681,8 +635,8 @@ each time the previous one was closed (issues #53, #56 and #58 all carried the s
 rows). It also handed every other supplier seven rolls of the dice at a transient timeout, which
 is where the collateral rows in those issues came from.
 
-`_record` (`scripts/live_check.py:545`) marks such a check `expected`, and `_extractor_regressions`
-(`scripts/live_check.py:3010`) is the single definition of what gates CI. The classification reads
+`_record` (`scripts/live_check.py`) marks such a check `expected`, and `_extractor_regressions`
+(`scripts/live_check.py`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
 (`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
 published rather than a hardcoded supplier list: a supplier that goes back to publishing text
@@ -719,7 +673,7 @@ someone ran to find out whether it is.
 
 ### The transient-only retry helper
 
-`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:622`) calls `factory()`, and on
+`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py`) calls `factory()`, and on
 a transient network failure retries with a short backoff (`_RETRY_BACKOFF_S = (1.0, 3.0)`). A
 failure is "transient" only if it is a bare `TimeoutError` or an `ExtractorError` whose message the
 shared `providers/_pdf.is_transient_fetch_error` predicate classifies as transient (a wrapped
@@ -728,7 +682,7 @@ HTTP 5xx/408/429/403). A 404/410 (card renamed or withdrawn) or any parse error 
 immediately so a real regression is not masked by retries. A fresh awaitable
 is built via `factory()` per attempt (awaitables are single-use), which is why callers pass
 `functools.partial(...)` rather than a pre-created coroutine. The transient predicate is imported
-from `providers/_pdf.py` (`scripts/live_check.py:135`) so the harness and the coordinator classify
+from `providers/_pdf.py` (`scripts/live_check.py`) so the harness and the coordinator classify
 errors identically and cannot drift apart.
 
 This retry helper is CI-only. Do not port it into `coordinator.py`: the coordinator has its own
@@ -747,7 +701,7 @@ green does not mean covered.
 The live check asks whether today's card still parses. `scripts/archive_cards.py` keeps the
 answer: it walks the same registry, fetches every (supplier, contract, region) card through
 `extractor.fetch` exactly as the coordinator does, and writes the parsed snapshot to
-`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py:432`). The
+`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py`). The
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
@@ -758,27 +712,27 @@ see [coordinator.md](coordinator.md)).
 Three design points:
 
 - **A card is filed under the month its label names**, read by `label_month`
-  (`scripts/live_check.py:2621`), the same function the freshness gate uses. Filing by
+  (`scripts/live_check.py`), the same function the freshness gate uses. Filing by
   capture date would put Ecopower's definitive card, which lands at the end of the month it
   covers, under the wrong month, and a supplier publishing ahead would overwrite the running
   month with next month's card. Only a label the function cannot read files under the day's
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:205`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:643`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:693`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
-The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:632`): inside that
+The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py`): inside that
 block a downloaded card's validated bytes go to a hook instead of straight to the renderer. The
-archiver installs `_Cards.render` (`scripts/archive_cards.py:247`) there. It hashes the bytes, and
+archiver installs `_Cards.render` (`scripts/archive_cards.py`) there. It hashes the bytes, and
 for a (variant, digest) pair some stored row already names it serves that row's text from the
 branch instead of rendering, so a card that has not changed since it was last stored costs one
 download and no pdfplumber pass; on a Raspberry Pi the render is the 20 minutes of the walk, the
@@ -799,13 +753,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:525`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
-`scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
+`scripts/archive_cards.py`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:441`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -826,7 +780,7 @@ than the parser that wrote it.
 
 Every run also rewrites the listing for people at the branch root, in a fixed order so a day
 that changed nothing rewrites it to the same bytes. `_write_coverage`
-(`scripts/archive_cards.py:775`) writes one sheet per supplier under `coverage/`, a table with a
+(`scripts/archive_cards.py`) writes one sheet per supplier under `coverage/`, a table with a
 row per contract and region and a column per month the branch holds, and `coverage.md`, the index
 naming the sheets; a sheet whose supplier has no rows left is removed. Each cell links what the month was parsed from and what
 came out of it: `pdf` is the card in the cards repository's releases, once the manifest says
@@ -849,7 +803,7 @@ the names; each release's notes point there, and a search of that repository for
 finds its sheet.
 
 A card whose reader refuses it -- a supplier publishing page images, which Ecofix has done
-since August 2026 -- is handed to `ocr_price_cards` (`_ocr_text`, `scripts/archive_cards.py:270`)
+since August 2026 -- is handed to `ocr_price_cards` (`_ocr_text`, `scripts/archive_cards.py`)
 before it is given up on. That engine knows the fonts those cards are set in glyph by glyph and
 refuses a mark it cannot place; the reading is taken from `trusted_text`, which drops any line
 carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
@@ -886,7 +840,7 @@ Per card, transient failures are retried three times with the live check's own c
 (`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
 skipped, so one supplier never stops the walk. The custom supplier has no card and a supplier
 past its `deprecated_until` has left the market, so neither is asked (`_targets`,
-`scripts/archive_cards.py:531`). The script exits 0 when at least one card was stored or
+`scripts/archive_cards.py`). The script exits 0 when at least one card was stored or
 confirmed unchanged and 1 when none was, which is a runner-wide problem rather than a
 supplier's; it files no issues, the live check already does that.
 
@@ -902,9 +856,9 @@ Six workflows live under `.github/workflows/`.
 
 ### test.yml - Tests
 
-Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml:3`).
+Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml`).
 It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
-(`.github/workflows/test.yml:33`), where every version is pinned: `homeassistant==2026.2.3`,
+(`.github/workflows/test.yml`), where every version is pinned: `homeassistant==2026.2.3`,
 `pytest-homeassistant-custom-component==0.13.316`, `ruff==0.16.0`, `pytest-freezer==0.4.9`,
 `pypdf`, `pdfplumber`, `defusedxml` and `pyxlsb`, so an upstream HA-core, test-shim or linter
 release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
@@ -915,19 +869,19 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 
 | Step | Command | Notes |
 | --- | --- | --- |
-| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:36` |
-| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:39`) |
-| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml:47`) |
-| Tests | `pytest tests/ -q` | `.github/workflows/test.yml:56` |
+| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml` |
+| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml`) |
+| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml`) |
+| Tests | `pytest tests/ -q` | `.github/workflows/test.yml` |
 
-`concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml:17`).
+`concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml`).
 The non-strict pass over `tests/` and `scripts/` is why the `# type: ignore[arg-type]` convention
 described above exists.
 
 ### validate.yml - Validate
 
 Runs on push to `main`, on pull requests, on a daily `cron: "17 6 * * *"`, and on manual dispatch
-(`.github/workflows/validate.yml:3`). Two independent jobs:
+(`.github/workflows/validate.yml`). Two independent jobs:
 
 - `hacs` runs `hacs/action@main` with `category: integration` (HACS repository requirements).
 - `hassfest` runs `home-assistant/actions/hassfest@master` (Home Assistant's manifest/brands/services
@@ -939,10 +893,10 @@ These validate packaging and manifest conformance, not runtime behaviour.
 
 Runs on the daily `cron: "17 6 * * *"` (06:17 UTC is 07:17/08:17 Belgian local, after suppliers'
 overnight publication), on manual dispatch, and on pull requests that touch `providers/**`,
-`scripts/live_check.py`, or the workflow itself (`.github/workflows/live_check.yml:3`). It needs
-`issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml:18`).
+`scripts/live_check.py`, or the workflow itself (`.github/workflows/live_check.yml`). It needs
+`issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml`).
 
-The `:17` is deliberate. GitHub documents the start of every hour as a high-load slot for the
+The  is deliberate. GitHub documents the start of every hour as a high-load slot for the
 `schedule` event and says queued runs may be dropped when the load is high enough, which is exactly
 what happened on 2026-08-27: neither this workflow nor `validate.yml` produced a run from the 06:00
 slot, no delayed run and no `startup_failure`, just nothing. A dropped slot is not recovered
@@ -953,7 +907,7 @@ The single `check` job installs the pinned HA version (needed because `providers
 `homeassistant.util.dt`), checks the `archive` branch out under `tmp/archive` when the repository
 has one so the harness can take its renders from there (`Rendering only what changed` above), and
 runs `scripts/live_check.py` inside a two-tier retry loop
-(`.github/workflows/live_check.yml:56`). The retry exists so an issue is filed only when a supplier
+(`.github/workflows/live_check.yml`). The retry exists so an issue is filed only when a supplier
 is still broken roughly an hour after first detection, not for a transient CDN blip (issue #30):
 seven attempts with delays `10 30 60 120 300 3000` seconds, bounded by a 5400s wall-clock deadline
 so the job always reaches the issue-creation steps before the 120-minute job timeout. Only a bit-0
@@ -994,19 +948,19 @@ the script through a fake `gh`.
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
-which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:192`). A
+which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
 
 On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
-informational, not a regression (`.github/workflows/live_check.yml:361`). A separate step fails the
+informational, not a regression (`.github/workflows/live_check.yml`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml:375`).
+ending green (`.github/workflows/live_check.yml`).
 
 ### endpoint_probe.yml - Endpoint probe
 
-Manual dispatch only (`.github/workflows/endpoint_probe.yml:20`), with `urls`, `attempts` and
+Manual dispatch only (`.github/workflows/endpoint_probe.yml`), with `urls`, `attempts` and
 `timeout` inputs; an empty `urls` probes the suppliers that have timed out in recent live runs. It
 runs `scripts/probe_endpoint.py` from a runner and prints the runner's egress address beside the
 timings, so the same command run on a workstation answers the question the live-check report cannot:
@@ -1019,7 +973,7 @@ and a supplier being slow today is not a reason to fail a workflow.
 ### archive_cards.yml - Archive tariff cards
 
 Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
-and on manual dispatch (`.github/workflows/archive_cards.yml:3`), with `contents: write` because
+and on manual dispatch (`.github/workflows/archive_cards.yml`), with `contents: write` because
 it pushes. The dispatch takes three inputs: `backfill_months`, passed to the script as `--backfill`, and
 the two booleans `reparse` and `rerender`, passed as the flags of the same names. The schedule
 runs with none of them. A dispatch asking for a backfill or a re-render gets a six-hour job
@@ -1028,10 +982,10 @@ backfill is one archived card per supplier, contract, region and month, a re-ren
 and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and the `archive` branch as a worktree under
 `tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
 `git worktree add --orphan`, so nothing has to be pushed by hand
-(`.github/workflows/archive_cards.yml:70`). It then runs `scripts/archive_cards.py --out
+(`.github/workflows/archive_cards.yml`). It then runs `scripts/archive_cards.py --out
 tmp/archive`, and commits and pushes only when the tree changed.
 
-The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml:94`) uploads the
+The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
 shared with be_water_prices in which this integration owns the `electricity-` namespace: one
 release per month of cards (`electricity-YYYY-MM`, the month the card is for, whatever day it
@@ -1070,14 +1024,14 @@ same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:130`) and skips the rest of its
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py`) and skips the rest of its
 cards, live and backfill alike, because every further card would cost the same three timeouts and
 two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
 failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
 not permanent; either way Mega has its own archive and the month cache rarely needs the
 repository's copy for it.
 
-A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:192`),
+A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml`),
 which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
 stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
 most) would otherwise end the archive quietly. The same `scripts/file_ci_issue.sh` the live check
@@ -1089,27 +1043,27 @@ by its timeout runs no further step, which is what the give-up rule above is for
 ### autorelease.yml - Autorelease
 
 Runs only on push to `main` that changes
-`custom_components/be_electricity_prices/manifest.json` (`.github/workflows/autorelease.yml:3`),
+`custom_components/be_electricity_prices/manifest.json` (`.github/workflows/autorelease.yml`),
 with `contents: write`. It gates on the Tests + Validate checks so a manifest bump on a red branch
 can never publish: the `verify` job **calls** `test.yml` via `workflow_call`
-(`.github/workflows/autorelease.yml:25`), and separate `hacs`/`hassfest` jobs mirror `validate.yml`.
+(`.github/workflows/autorelease.yml`), and separate `hacs`/`hassfest` jobs mirror `validate.yml`.
 `verify` used to be a hand-copy of `test.yml` carrying a note that the two must be kept in sync;
 calling it removes the chance to forget. `test.yml`'s concurrency group includes `github.workflow`
 (the **caller's** name) for that reason — without it the standalone Tests run and the one
 autorelease calls would share a group on a push to `main` and `cancel-in-progress` would kill the
 release's own gate. The `release` job needs all three
-(`.github/workflows/autorelease.yml:44`), then:
+(`.github/workflows/autorelease.yml`), then:
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
-   (`.github/workflows/autorelease.yml:51`).
-2. Skips if the tag already exists (`.github/workflows/autorelease.yml:62`), making the workflow
+   (`.github/workflows/autorelease.yml`).
+2. Skips if the tag already exists (`.github/workflows/autorelease.yml`), making the workflow
    idempotent against re-pushes.
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
-   `__pycache__` (`.github/workflows/autorelease.yml:71`).
+   `__pycache__` (`.github/workflows/autorelease.yml`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
    from GitHub's REST API) and treating an already-created release as success
-   (`.github/workflows/autorelease.yml:81`).
+   (`.github/workflows/autorelease.yml`).
 
 The practical consequence: tagging and publishing a GitHub release is fully automatic once a
 manifest version bump lands on `main`. Do not tag or create releases by hand.

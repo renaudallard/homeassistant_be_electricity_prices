@@ -41,11 +41,11 @@ PDFs, one slug each); the only thing separating them in the parsed snapshot is
 `DynamicRates.quarter_hourly`.
 
 That flag and the `index` token are independent fields, and only the card decides which
-is right. `_extract_rows` (`energyknights.py:654`) already refuses a card whose printed
+is right. `_extract_rows` (`energyknights.py`) already refuses a card whose printed
 index differs from the declared one, but nothing tied that to the flag the coordinator
 actually bills on, so a product declared on `Belpex_15` with the flag left off would
 parse clean and silently price a 15-minute contract on hourly slots. A module-level
-assertion (`energyknights.py:327`) now pins the pairing against
+assertion (`energyknights.py`) now pins the pairing against
 `_QUARTER_HOURLY_INDICES`. It fails on an unknown token paired with the flag as well as
 on a mismatched pair: a new 15-minute index has to be classified by someone who has read
 the card, since defaulting it either way is the same mistake facing in one direction or
@@ -112,7 +112,7 @@ default. The result is a 200 carrying about 480 KB of HTML, which is the same or
 magnitude as the 334 KB card, so no size heuristic can tell them apart.
 
 Nothing in this module inspects the payload, because it does not have to:
-`_fetch_validated_pdf_bytes` (`providers/_pdf.py:181`) checks the `%PDF` magic bytes and
+`_fetch_validated_pdf_bytes` (`providers/_pdf.py`) checks the `%PDF` magic bytes and
 raises `expected a PDF at <url>`, which `is_transient_fetch_error` correctly classes as
 **permanent**. Never add a size check here.
 
@@ -230,8 +230,8 @@ Synergrid's profile instead, which reproduces all eight BelpexRLP values Energy 
 published for 2026 to 0,01 EUR/MWh. Energy Knights sells in Flanders only, so the
 customer's DSO curve is always that one.
 
-`spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py:280`), which routes the
-config flow through `async_step_api_key` (`config_flow.py:447`) with a `vol.Required`
+`spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py`), which routes the
+config flow through `async_step_api_key` (`config_flow.py`) with a `vol.Required`
 field validated live against ENTSO-E. So the coefficients always resolve, at the cost
 that a user without a key cannot add this contract at all: they reach a password field
 with no skip and the only exit is closing the dialog. That is exactly energie.be
@@ -311,7 +311,7 @@ Two fields the card does not supply:
   floor, so the practical impact is small, but it is a regulated rule that applies
   whether or not the card prints it.
 - `prosumer_eur_per_kva_year` - the card **does** print it (54,63 EUR/kVA/jaar for
-  Antwerpen, in the classic-meter table), but `fees.py:258` gates the prosumer fee to
+  Antwerpen, in the classic-meter table), but `fees.py` gates the prosumer fee to
   Wallonia and this is a Flanders-only supplier, so it is left `None`.
 
 ## Taxes
@@ -431,7 +431,7 @@ databeheer columns differ there (13,95 SMR1 against 15,14 SMR3) where every late
 has them equal. Their ENERGY block parses perfectly well, which is exactly the danger, so
 the month is refused before any fetch rather than left to the DSO table failing.
 
-Everything else is the shape `providers/ebem.py:153` already uses. An out-of-range month
+Everything else is the shape `providers/ebem.py` already uses. An out-of-range month
 or a retired slug answers 302 to the marketing homepage, which aiohttp follows, so the
 payload is a few hundred bytes of HTML rather than an error status; nothing here inspects
 it, because `_fetch_validated_pdf_bytes` rejects it on the magic bytes. Every failure

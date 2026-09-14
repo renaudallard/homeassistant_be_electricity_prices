@@ -27,7 +27,7 @@ exactly one device carrying every entity below. Names come from
 
 ## Platform registration
 
-`const.py:37` lists the three entity platforms HA forwards the entry to:
+`const.py` lists the three entity platforms HA forwards the entry to:
 
 ```python
 PLATFORMS = ("sensor", "binary_sensor", "button")
@@ -40,8 +40,8 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:608`) instance driven by a
-frozen `BePriceSensorDescription` (`sensor.py:81`), which extends HA's
+Every sensor is one `BePriceSensor` (`sensor.py`) instance driven by a
+frozen `BePriceSensorDescription` (`sensor.py`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
 ```python
@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:674`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -59,21 +59,21 @@ would otherwise persist and chart, because `suggested_display_precision` only
 affects the displayed string, not the stored `native_value`.
 
 Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
-(`sensor.py:363`), which stamps `state_class=MEASUREMENT`,
+(`sensor.py`), which stamps `state_class=MEASUREMENT`,
 `native_unit_of_measurement="EUR/kWh"` and `suggested_display_precision=4`.
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:567`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
-| `SENSORS` (11 core price sensors) | `sensor.py:389` | always |
-| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:448` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:533` | `CONF_REGION == REGION_FLANDERS` |
-| `PROSUMER_SENSORS` (1) | `sensor.py:424` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
-| `INJECTION_SENSORS` (1) | `sensor.py:435` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:766` | `CONF_CONTRACT_END_DATE` is set |
+| `SENSORS` (11 core price sensors) | `sensor.py` | always |
+| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py` | always |
+| `CAPACITY_SENSORS` (2) | `sensor.py` | `CONF_REGION == REGION_FLANDERS` |
+| `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
+| `INJECTION_SENSORS` (1) | `sensor.py` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
+| `ContractEndDateSensor` (1) | `sensor.py` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -87,7 +87,7 @@ post-2024 injection tariff yields a per-kWh injection credit sensor.
 `unique_id suffix` is the description `key`; the full unique id is
 `{entry_id}_{key}`. `device_class` is blank where none is set. Unit is
 `EUR/kWh` unless noted. "Reads" is the `CoordinatorData` field the `value_fn`
-pulls (all fields defined at `coordinator.py:763`).
+pulls (all fields defined at `coordinator.py`).
 
 | Name | key / suffix | device_class | state_class | unit | Reads (`CoordinatorData` field) |
 | --- | --- | --- | --- | --- | --- |
@@ -120,21 +120,21 @@ pulls (all fields defined at `coordinator.py:763`).
 
 ### Current-slot selection and the nearest-slot guard
 
-`_current_slot_value` (`sensor.py:91`) looks a per-slot table up at
+`_current_slot_value` (`sensor.py`) looks a per-slot table up at
 `slot_start(utcnow, resolution)`. On an exact miss it falls back to the
 temporally nearest slot but only within one billing slot of "now": `max_gap` is
 3600 s on an hourly contract and 900 s on a quarter-hourly one
-(`sensor.py:104`). This bound stops a stale spot cache from surfacing
+(`sensor.py`). This bound stops a stale spot cache from surfacing
 yesterday's last slot as "current"; a fixed 1 h window used to let a
 quarter-hourly sensor present an up-to-45-min-stale slot as current. The 1 h
 hourly window also absorbs the DST seam.
 
-Two sensors read the clock through it: `_current` (`sensor.py:122`) over
+Two sensors read the clock through it: `_current` (`sensor.py`) over
 `data.hourly` for the price sensors, and `_current_injection`
-(`sensor.py:114`) over `data.injection_hourly` for `injection_price`. Reading
+(`sensor.py`) over `data.injection_hourly` for `injection_price`. Reading
 the clock at state time rather than at refresh time is what keeps them on the
 slot the user is billed for, since the coordinator's own tick is a plain
-60-minute interval anchored on setup (`__init__.py:186`). `injection_price`
+60-minute interval anchored on setup (`__init__.py`). `injection_price`
 used to publish a scalar resolved at that tick and so lagged the boundary by
 however far the tick had drifted, which is what issue #44 reported on Engie
 Empower Flextime. A slot the coordinator could not price (a hole in the
@@ -143,16 +143,16 @@ use, so the state shows an adjacent slot's rate; the tick's scalar survives
 only as the last resort, for the flat contracts that emit no array at all and
 for a table with nothing inside the window.
 
-`_next_hour` (`sensor.py:147`) targets `slot_start(now) + 1h`. On a 15-minute
+`_next_hour` (`sensor.py`) targets `slot_start(now) + 1h`. On a 15-minute
 contract that deliberately stays the same quarter one hour later, so the sensor
 keeps its "next hour" meaning rather than becoming "next 15 minutes". If that
 exact slot is absent the sensor is `None` (no nearest-slot fallback).
 
-The today/tomorrow scalar sensors (`_bucket`, `sensor.py:157`) reduce over every
+The today/tomorrow scalar sensors (`_bucket`, `sensor.py`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
-The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py:223`),
+The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py`),
 which returns `None` unless `_has_tomorrow(data)` holds. Reusing the binary
 sensor's own predicate rather than repeating its `snapshot_valid_until` check
 makes the invariant exact: a `tomorrow_*` sensor has a value precisely when
@@ -167,7 +167,7 @@ issue.
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, and `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:312`);
+`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py`);
 every other sensor returns `{}`.
 
 #### `current_price`
@@ -187,13 +187,13 @@ The payload:
 | `tomorrow` | `_split_today_tomorrow(data)[1]` | per-hour breakdown rows for tomorrow |
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
-rounded to 6 decimals, `pricing.py:400`). `cheapest_4h_today` /
-`most_expensive_4h_today` rows are `{start, price}` (`sensor.py:276`).
+rounded to 6 decimals, `pricing.py`). `cheapest_4h_today` /
+`most_expensive_4h_today` rows are `{start, price}` (`sensor.py`).
 
 Quarter-hourly vs hourly payloads: `today` and `tomorrow` carry the grid the
 contract settles on, 96 rows a day on a quarter-hourly one. `cheapest_4h_today`
 and `most_expensive_4h_today` stay hourly through `_hourly_view`
-(`sensor.py:175`), which averages each hour's four slots into one breakdown --
+(`sensor.py`), which averages each hour's four slots into one breakdown --
 they are counted in HOURS, and ranking the native slots and taking four would
 turn "the cheapest four hours" into the cheapest one.
 
@@ -208,12 +208,12 @@ the recorded remainder, which runs about 6 KB; a test measures both halves so
 a future attribute added without excluding it fails loudly rather than costing
 every other attribute its history (an over-cap state stores none of them).
 
-`_today_ranked` (`sensor.py:258`) guarantees the cheapest and dearest lists are
+`_today_ranked` (`sensor.py`) guarantees the cheapest and dearest lists are
 disjoint (cheapest take their share first) and breaks price ties on the hour so
 the result is deterministic across reloads. Gotcha for automation authors: on a
 flat tariff where every hour rounds to the same all-in price the tie-break makes
 "cheapest" simply the first N hours and "most expensive" the last N; the source
-comment (`sensor.py:255`) says to treat the output as undefined when prices do
+comment (`sensor.py`) says to treat the output as undefined when prices do
 not actually vary across the day.
 
 #### `injection_price`
@@ -247,7 +247,7 @@ scalar while the array had moved on (issue #44).
 
 ### Unrecorded attributes
 
-`BePriceSensor._unrecorded_attributes` (`sensor.py:555`) is a class-level
+`BePriceSensor._unrecorded_attributes` (`sensor.py`) is a class-level
 frozenset shared by every key the class produces. It excludes the live display
 helpers (`today`, `tomorrow`, `cheapest_4h_today`, `most_expensive_4h_today`),
 the diagnostic fields behind `current_year_cost`, and every attribute the
@@ -273,7 +273,7 @@ entity, drops its recorded history and breaks dashboard references.
 
 ### `current_year_cost`: state class and last_reset
 
-`current_year_cost` (`sensor.py:435`) is the only sensor with a non-trivial
+`current_year_cost` (`sensor.py`) is the only sensor with a non-trivial
 statistics setup, documented in its source comment:
 
 - `device_class=MONETARY` so HA's Energy dashboard auto-suggests it in the
@@ -281,7 +281,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:669`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
@@ -318,7 +318,7 @@ this month cost, on its own".
 
 ### `monthly_peak_kw`: why MEASUREMENT
 
-`monthly_peak_kw` (`sensor.py:472`) must use `state_class=MEASUREMENT` because
+`monthly_peak_kw` (`sensor.py`) must use `state_class=MEASUREMENT` because
 that is the only class HA accepts under the `POWER` device class
 (`DEVICE_CLASS_STATE_CLASSES[POWER] == {MEASUREMENT}`); `TOTAL` would log a
 "state class is impossible" warning on setup. The statistics graph defaults to
@@ -328,10 +328,10 @@ statistics view's per-hour MAX to read the true running monthly peak.
 ## Binary sensor (`binary_sensor.py`)
 
 One binary sensor per entry: `TomorrowPricesAvailable`
-(`binary_sensor.py:86`), key `tomorrow_prices_available`, unique id
+(`binary_sensor.py`), key `tomorrow_prices_available`, unique id
 `{entry_id}_tomorrow_prices_available`.
 
-Its truth value is `_has_tomorrow(data)` (`binary_sensor.py:45`), which is ON
+Its truth value is `_has_tomorrow(data)` (`binary_sensor.py`), which is ON
 only when both gates hold:
 
 1. The price table contains at least one slot whose local date is tomorrow
@@ -365,46 +365,46 @@ tying this sensor directly to `SupplierSnapshot.valid_until`.
 ## Button (`button.py`)
 
 One button, and only in Flanders: `ResetMonthlyPeakButton`
-(`button.py:65`), key `reset_monthly_peak`, `entity_category=DIAGNOSTIC`,
+(`button.py`), key `reset_monthly_peak`, `entity_category=DIAGNOSTIC`,
 unique id `{entry_id}_reset_monthly_peak`.
 
-`async_setup_entry` (`button.py:47`) returns early unless
+`async_setup_entry` (`button.py`) returns early unless
 `CONF_REGION == REGION_FLANDERS`, because outside Flanders the capacity tariff
 is not billed and `_track_monthly_peak` forces `_peak_kw` to 0 every tick, so a
 reset would do nothing.
 
 Pressing it calls `await self.coordinator.reset_monthly_peak()`
-(`button.py:76`), which drops the persisted monthly peak so the next coordinator
+(`button.py`), which drops the persisted monthly peak so the next coordinator
 tick rebuilds it from the live peak source. This is the manual escape hatch for
 a spurious peak spike that would otherwise inflate `capacity_cost` for the rest
 of the month.
 
 ## Services
 
-Registered once in `async_setup` (`__init__.py:120`), so they exist even before
+Registered once in `async_setup` (`__init__.py`), so they exist even before
 any entry finishes loading. Names and field descriptions are declared in
 `services.yaml` and localized under `services.*` in `strings.json`.
 
 | Service | Handler | Response mode | Targets an entry? |
 | --- | --- | --- | --- |
-| `refresh` | `_async_refresh_service` (`__init__.py:525`) | none | no, hits every loaded entry |
-| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py:752`) | `ONLY` | optional `entry_id` |
-| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py:760`) | `ONLY` | optional `entry_id` |
-| `backfill_statistics` | `_async_backfill_service` (`__init__.py:768`) | `OPTIONAL` | optional `entry_id` |
+| `refresh` | `_async_refresh_service` (`__init__.py`) | none | no, hits every loaded entry |
+| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
+| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
+| `backfill_statistics` | `_async_backfill_service` (`__init__.py`) | `OPTIONAL` | optional `entry_id` |
 
 ### `refresh`
 
 No fields. Iterates `async_loaded_entries(DOMAIN)` and calls
 `coordinator.async_force_refresh()` on each, skipping any entry whose
 `runtime_data` is still the `UNDEFINED` sentinel mid-reload
-(`__init__.py:357`). It drops the cached supplier snapshot and the ENTSO-E spot
+(`__init__.py`). It drops the cached supplier snapshot and the ENTSO-E spot
 cache and re-fetches both immediately, clearing a transient fetch error without
 waiting for the next hourly tick.
 
 ### `cheapest_window` and `most_expensive_window`
 
 Same shape; one minimizes the window average, the other maximizes. Fields
-(`services.yaml:17`, `services.yaml:116`):
+(`services.yaml`):
 
 | Field | Required | Selector | Meaning |
 | --- | --- | --- | --- |
@@ -413,25 +413,25 @@ Same shape; one minimizes the window average, the other maximizes. Fields
 | `earliest_start` | no | datetime | earliest window start; defaults to now |
 | `latest_end` | no | datetime | latest window end; defaults to the end of the cached table |
 
-Both call `_resolve_window_inputs` (`__init__.py:698`) then `_find_window`
-(`__init__.py:408`). Key behaviors:
+Both call `_resolve_window_inputs` (`__init__.py`) then `_find_window`
+(`__init__.py`). Key behaviors:
 
 - `duration_hours` is rounded half-up and scaled to the table's slot grid:
   `duration_slots = int(duration_hours + 0.5) * slots_per_hour(resolution)`
-  (`__init__.py:546`). A 2-hour window is 2 slots on an hourly table, 8 on a
+  (`__init__.py`). A 2-hour window is 2 slots on an hourly table, 8 on a
   quarter-hourly one, so on a 15-minute (Engie Dynamic) contract the window can
   start on any quarter-hour boundary.
 - `earliest_start` is truncated down to its slot boundary
-  (`slot_start`, `__init__.py:410`), so 14:30 still considers the 14:00 slot
+  (`slot_start`, `__init__.py`), so 14:30 still considers the 14:00 slot
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
-  (`_to_utc`, `__init__.py:735`).
+  (`_to_utc`, `__init__.py`).
 - `latest_end` filters out any slot whose end (`slot + width`) falls after it.
 - Only strictly time-contiguous runs are considered: a run must span exactly
   `delta * (duration_slots - 1)` so a gap ENTSO-E omitted cannot let the window
-  silently drop an interior hour from its average (`__init__.py:421`).
+  silently drop an interior hour from its average (`__init__.py`).
 
-Return value (`ServiceResponse`, `__init__.py:458`):
+Return value (`ServiceResponse`, `__init__.py`):
 
 ```python
 {
@@ -447,15 +447,15 @@ Return value (`ServiceResponse`, `__init__.py:458`):
 `resolution` is exposed so the caller can tell that each `hours` row is a
 quarter-hour rather than an hour on a 15-minute contract. When too few slots
 match, the handler raises `ServiceValidationError` with translation_key
-`not_enough_hours` (`__init__.py:402`), or, when slots exist but none form a
+`not_enough_hours` (`__init__.py`), or, when slots exist but none form a
 contiguous run of the needed length, reports the longest available contiguous
-run in the same error (`__init__.py:445`).
+run in the same error (`__init__.py`).
 
 ### `backfill_statistics`
 
 Populates the recorder's long-term statistics for this entry's price sensors and
 `current_year_cost` over a date range, so the Energy dashboard can show history
-predating the entry's first live tick. Fields (`services.yaml:65`):
+predating the entry's first live tick. Fields (`services.yaml`):
 
 | Field | Required | Selector | Default |
 | --- | --- | --- | --- |
@@ -464,11 +464,11 @@ predating the entry's first live tick. Fields (`services.yaml:65`):
 | `end` | no | datetime (exclusive) | the current hour |
 | `clear` | no | boolean | false |
 
-The handler `_async_backfill_service` (`__init__.py:768`) resolves the target
+The handler `_async_backfill_service` (`__init__.py`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns
-(`backfill.py:855`):
+(`backfill.py`):
 
 ```python
 { "rows_written": <int>, "sensors": { "<statistic_id>": <int>, ... },
@@ -488,7 +488,7 @@ changed; for a narrower window leave `clear` off and rely on the upsert.
 ### Service exceptions
 
 All handlers raise localized `ServiceValidationError`s keyed under
-`exceptions.*` in `strings.json` (`strings.json:514`):
+`exceptions.*` in `strings.json` (`strings.json`):
 
 | translation_key | Raised when |
 | --- | --- |
@@ -502,11 +502,11 @@ All handlers raise localized `ServiceValidationError`s keyed under
 
 ## Diagnostics (`diagnostics.py`)
 
-`async_get_config_entry_diagnostics` (`diagnostics.py:100`) returns a single
+`async_get_config_entry_diagnostics` (`diagnostics.py`) returns a single
 dict a contributor downloads via "Download diagnostics" on the entry. If the
 entry is mid-reload (`runtime_data` is HA's `UNDEFINED` singleton, detected by
 type name to avoid importing a HA-private symbol) it returns
-`{"status": "coordinator_not_ready"}` instead of raising (`diagnostics.py:106`).
+`{"status": "coordinator_not_ready"}` instead of raising (`diagnostics.py`).
 An entry that is loaded but holds no snapshot, because its supplier's card
 cannot be read and no cached one could stand in, returns
 `{"status": "no_snapshot", "last_error": ...}` for the same reason: raising
@@ -524,7 +524,7 @@ Top-level dump keys:
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `shared_failure` | sibling-coordinator negative-fetch marker, or null |
 
-The `coordinator` block (`diagnostics.py:112`) mirrors the current-price
+The `coordinator` block (`diagnostics.py`) mirrors the current-price
 attributes plus every scalar `CoordinatorData` field:
 `snapshot_publication`, `signing_card`, `snapshot_age_hours`, `snapshot_stale`,
 `snapshot_valid_until`, `last_error`, `monthly_peak_kw`, `monthly_peak_month`,
@@ -544,10 +544,10 @@ the user is looking at.
 
 ### Redaction
 
-`TO_REDACT = {CONF_API_KEY}` (`diagnostics.py:54`). `async_redact_data` masks
+`TO_REDACT = {CONF_API_KEY}` (`diagnostics.py`). `async_redact_data` masks
 only known config keys, so free-text error fields (`last_error`,
 `shared_failure.error`) get a second scrub via `_scrub_secret`
-(`diagnostics.py:57`), which replaces the API key literal anywhere it appears
+(`diagnostics.py`), which replaces the API key literal anywhere it appears
 with `**REDACTED**`. This is defence-in-depth: an ENTSO-E transport error string
 can, in narrow cases, embed the request URL and thus the `securityToken`.
 
@@ -563,9 +563,9 @@ can, in narrow cases, embed the request URL and thus the `securityToken`.
    months (relevant to the YTD `current_year_cost` path).
 5. `consumption` / `injection` roll-ups show whether the user's kWh sensors are
    wired: `null` means no sensor configured for that side, `0.0` means a wired
-   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py:76`), which
+   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py`), which
    tells apart an unconfigured sensor from a zero-reading one.
-6. `shared_failure` (`diagnostics.py:141`) shows whether sibling coordinators
+6. `shared_failure` (`diagnostics.py`) shows whether sibling coordinators
    for the same (supplier, contract, region) backed off, with the scrubbed error
    and consecutive-failure count, without the reporter having to grep logs.
 
@@ -592,6 +592,6 @@ Top-level keys in `strings.json`:
 
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under
-`entity.sensor.<key>.name` (`strings.json:564`) or HA falls back to the raw key.
+`entity.sensor.<key>.name` (`strings.json`) or HA falls back to the raw key.
 The `entity.sensor` block lists all twenty possible sensors even though a given
 entry only instantiates the subset its region and solar regime allow.

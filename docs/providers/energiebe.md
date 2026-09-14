@@ -24,9 +24,9 @@ energie.be sells three residential electricity products, all tracked and all
 Flanders-only: "Elektriciteit dynamisch tarief particulier online" (spot-indexed per
 quarter-hour), "Elektriciteit particulier online" (indexed to a monthly average) and
 "Elektriciteit vast particulier online" (a flat rate).
-The module docstring (`providers/energiebe.py:26`) and `_ENERGIEBE_REGIONS`
-(`providers/energiebe.py:120`) fix the region to `REGION_FLANDERS`; `fetch` rejects any
-other region with "energie.be only operates in Flanders" (`providers/energiebe.py:232`).
+The module docstring (`providers/energiebe.py`) and `_ENERGIEBE_REGIONS`
+(`providers/energiebe.py`) fix the region to `REGION_FLANDERS`; `fetch` rejects any
+other region with "energie.be only operates in Flanders" (`providers/energiebe.py`).
 All eight Fluvius sub-areas are covered (see the DSO section). The dynamic card also
 carries a professional block; only the residential rows are parsed (see
 [Residential scoping]).
@@ -94,7 +94,7 @@ network tariffs, and a re-template would arm exactly the silent mis-billing this
 about. Hence no fallback, by design.
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
-from the residential card header by `_publication_label` (`providers/energiebe.py:428`).
+from the residential card header by `_publication_label` (`providers/energiebe.py`).
 
 ## Contracts
 
@@ -108,10 +108,10 @@ Three contracts are declared in the `EXTRACTOR`:
 
 `quarter_hourly=True` on the dynamic contract: the card bills "op kwartierbasis" on
 the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table, next-slot sensor
-and cheapest-window service keep the native 15-minute slots (`base.py:174`). YTD billing
+and cheapest-window service keep the native 15-minute slots (`base.py`). YTD billing
 stays hourly. `spot_indexed_injection` is left at its default `False` on both: a `dynamic`
 or `spot_monthly` contract already collects the ENTSO-E key via its energy kind, so the
-injection regime does not need to gate it (`base.py:71`).
+injection regime does not need to gate it (`base.py`).
 
 ### Why the variable product is `spot_monthly`, not `variable`
 
@@ -124,7 +124,7 @@ realised Belpex_RLP of 11,42 - a true rate of 14,41 c€/kWh, nearly 10% higher.
 would ship a knowingly wrong rate that no later tick corrects, the 0.6.7 mispricing class.
 
 `spot_monthly` instead stores the coefficients and lets the coordinator resolve
-`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py:640`),
+`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py`),
 which firms up as the month fills in. That mean is RLP-weighted, on the `columns` blend:
 the card defines Belpex_RLP as the mean "van de verschillende distributienetbeheerders",
 and energie.be publishes the literal column reading of it, every DSO sub-area counting
@@ -134,18 +134,18 @@ plain arithmetic mean it used before ran a few percent low - 0,59 c€/kWh on Ju
 about 20 EUR/year at 3500 kWh. Eneco reads the same phrase as the mean of the three
 distinct curves; each supplier's own published table settles which.
 The kind is also what makes the config flow collect an ENTSO-E key
-(`config_flow.py:488`) - without one this contract cannot be priced at all.
+(`config_flow.py`) - without one this contract cannot be priced at all.
 
 ## Fetch strategy
 
 ### Download (`fetch`)
 
-`fetch` (`providers/energiebe.py:253`) validates the contract id and region, resolves the
+`fetch` (`providers/energiebe.py`) validates the contract id and region, resolves the
 card URL for the contract (`_CARD_URL` for the dynamic one, the contracts API for the
 variable one), calls `fetch_pdf_text_layout` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
 `parse_snapshot`. Validation is by `%PDF` magic bytes in the shared helper
-(`_pdf.py:126`), not Content-Type, so the JSON-style API URL and its blob redirect work.
+(`_pdf.py`), not Content-Type, so the JSON-style API URL and its blob redirect work.
 
 ### Probe and archive
 
@@ -186,9 +186,9 @@ around.
 The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a professional
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
-EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:422`) slices the
+EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py`) slices the
 text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
-(`providers/energiebe.py:138`) so no professional row can leak into a residential snapshot.
+(`providers/energiebe.py`) so no professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
 renewables and every DSO databeheer come from the residential rows.
 
@@ -228,12 +228,12 @@ the formula as `(1,04 x Belpex + 0,50) c€/kWh` with **Belpex in c€/kWh**, ve
 the card's own printed price: the shown 11,93 c€/kWh (incl. VAT) equals
 `(1,04 x 10,34 + 0,50) x 1,06`. So the spot coefficient is NOT scaled by 10 - getting this
 wrong would 10x the energy leg. See the conversion in `_extract_energy`
-(`providers/energiebe.py:321`).
+(`providers/energiebe.py`).
 
 ## Energy formula
 
-`_extract_energy` (`providers/energiebe.py:433`) parses the formula row with `_ENERGY_RE`
-(`providers/energiebe.py:170`), anchored on "formule (excl. BTW):" so it binds the energy
+`_extract_energy` (`providers/energiebe.py`) parses the formula row with `_ENERGY_RE`
+(`providers/energiebe.py`), anchored on "formule (excl. BTW):" so it binds the energy
 formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
 
 ```
@@ -242,14 +242,14 @@ de formule (excl. BTW): (<factor_pdf> x Belpex <sign> <base_cents>) c€/kWh
 
 The stored `DynamicRates` feeds `energy_eur_per_kwh = factor * spot + base` where the spot
 is ENTSO-E BE day-ahead in EUR/kWh. With Belpex in c€/kWh and the formula quoted ex-VAT
-(`providers/energiebe.py:321`):
+(`providers/energiebe.py`):
 
 ```
 factor = factor_pdf * _VAT_MULT           # no * 10: Belpex already c€/kWh
 base   = base_cents / 100.0 * _VAT_MULT
 ```
 
-`_VAT_MULT = 1.06` (`providers/energiebe.py:133`) is the Belgian residential rate. It is a
+`_VAT_MULT = 1.06` (`providers/energiebe.py`) is the Belgian residential rate. It is a
 constant, not scraped: the formula is stated ex-VAT while every other card value is
 VAT-inclusive, and the card's only printed percentage (21% on energiedelen) is unrelated.
 Scaling the energy leg to the VAT-inclusive basis keeps `TaxOverlay.vat_rate=0.0`, the same
@@ -257,7 +257,7 @@ convention as Frank. `test_energy_formula_factor` pins `1.04 * 1.06` and
 `test_energy_formula_base` pins `0.50 / 100 * 1.06`.
 
 The yearly fixed fee ("vaste vergoeding") is parsed by `_FEE_RE` matching
-`Vaste vergoeding <num> (.../jaar)` (`providers/energiebe.py:210`). Unlike Frank's
+`Vaste vergoeding <num> (.../jaar)` (`providers/energiebe.py`). Unlike Frank's
 per-month "Abonnementskost", energie.be quotes it already annual (25 EUR/jaar), so it is
 carried through unscaled - no x12 (`test_yearly_fixed_fee_is_already_annual`). A missing row
 is fatal: "energie.be: vaste vergoeding row not found" (`test_missing_fee_is_fatal`).
@@ -344,8 +344,8 @@ meter, so there is no day/night split to apply on either leg.
 Injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)); on a dynamic card it prices off the live spot
 the energy path already fetches, so `current` stays `None`. `_extract_injection`
-(`providers/energiebe.py:501`) parses the `terugleveringsvergoeding` row with
-`_INJECTION_RE` (`providers/energiebe.py:201`):
+(`providers/energiebe.py`) parses the `terugleveringsvergoeding` row with
+`_INJECTION_RE` (`providers/energiebe.py`):
 
 ```
 Terugleveringsvergoeding ... (<factor_pdf> x Belpex <sign> <base_cents>)
@@ -355,8 +355,8 @@ The regex skips with `.*?` (DOTALL) to the first `(factor x Belpex +/- base)` af
 anchor, because the card interleaves the unit label "(c€/kWh)" between "de formule:" and
 the parenthesised formula. The anchor sits below the energy formula, which guarantees the
 injection formula is matched and not the energy one. Injection is VAT-exempt
-(`base.py:268`) and Belpex is in c€/kWh, so
-(`providers/energiebe.py:410`):
+(`base.py`) and Belpex is in c€/kWh, so
+(`providers/energiebe.py`):
 
 ```
 factor = factor_pdf          # no * 10, no VAT
@@ -425,16 +425,16 @@ had no archive wired up the same frozen number reached every past month of
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:619`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
-| `federal_excise` | Bijzondere accijns op Energie (c€/kWh) | `_EXCISE_RE` (`:215`) | yes |
-| `energy_contribution` | Bijdrage op de Energie (c€/kWh) | `_CONTRIB_RE` (`:218`) | yes |
-| `flanders_renewables` | GSC + WKK (c€/kWh) | `_GSC_RE` (`:213`), `_WKK_RE` (`:214`) | yes (both) |
-| `energy_fund_eur_per_month` | Bijdrage Energiefonds Residentieel (EUR/maand) | `_FUND_RE` (`:221`) | no (0.0 default) |
+| `federal_excise` | Bijzondere accijns op Energie (c€/kWh) | `_EXCISE_RE` | yes |
+| `energy_contribution` | Bijdrage op de Energie (c€/kWh) | `_CONTRIB_RE` | yes |
+| `flanders_renewables` | GSC + WKK (c€/kWh) | `_GSC_RE`, `_WKK_RE` | yes (both) |
+| `energy_fund_eur_per_month` | Bijdrage Energiefonds Residentieel (EUR/maand) | `_FUND_RE` | no (0.0 default) |
 
 Note the label differences from Frank: energie.be prints the unit as `(c€/kWh)` (Frank uses
 `(EURct/kWh)`) and the contribution as "Bijdrage op **de** Energie" (Frank omits "de"). The
@@ -450,8 +450,8 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:637`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energiebe.py:165`), which maps each card label prefix to the
+`_extract_dsos` (`providers/energiebe.py`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energiebe.py`), which maps each card label prefix to the
 canonical DSO key:
 
 | card label | canonical key |
@@ -494,7 +494,7 @@ that does not match is skipped (not fatal); the eight-sub-area test is the safet
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:1178`) is the shared best-effort validity parser. energie.be's
+`parse_valid_until` (`_pdf.py`) is the shared best-effort validity parser. energie.be's
 card carries no month name inside a validity-keyword window (the "juli 2026" sits in the
 page header, not after "geldig"), so `valid_until` resolves to `None`. That is the
 documented "treat as available" fallback and is correct for a dynamic contract, whose
@@ -503,19 +503,19 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
 ## Quirks and historical bugs (land mines)
 
 - **Belpex is c€/kWh, not EUR/MWh.** The energy and injection factors are NOT scaled by 10,
-  unlike Frank / Bolt (`providers/energiebe.py:321`, `:410`). Verified against the printed
+  unlike Frank / Bolt (`providers/energiebe.py`). Verified against the printed
   11,93 c€/kWh incl. VAT.
 - **Two blocks in one PDF.** `_residential` must run before any parsing or the professional
-  GSC/WKK, taxes and DSO rows leak in (`providers/energiebe.py:329`).
+  GSC/WKK, taxes and DSO rows leak in (`providers/energiebe.py`).
 - **Injection unit label interleaved.** "(c€/kWh)" sits between "de formule:" and the
   injection formula, so `_INJECTION_RE` anchors on the "Terugleveringsvergoeding" section
-  header and skips to the first parenthesised formula (`providers/energiebe.py:180`). The
+  header and skips to the first parenthesised formula (`providers/energiebe.py`). The
   header, not the body wording: the cards word that row differently.
 - **Yearly fee is already annual.** No x12, unlike Frank's per-month Abonnementskost
-  (`providers/energiebe.py:381`).
+  (`providers/energiebe.py`).
 - **Wrapped DSO labels.** Halle-Vilvoorde and Midden-Vlaanderen wrap onto a line of
   their own above the figures; `numeric_row` reads the two lines as one row
-  (`providers/energiebe.py:443`).
+  (`providers/energiebe.py`).
 - **Label differences from Frank.** Unit `(c€/kWh)` not `(EURct/kWh)`; "Bijdrage op de
   Energie" not "Bijdrage op Energie"; the tax regexes are energie.be-specific.
 - **No probe; the archive is a separate listing.** HEAD is 405 and both card URLs
@@ -576,12 +576,12 @@ contribution 0), so the pair covers both sides of that change.
 | "energie.be contracts API parse error" | `_resolve_variable_card_url` | the endpoint stopped returning JSON (an HTML error page, a login wall) |
 | "energie.be: injection indicative row not found" | `_INJECTION_CURRENT_RE` | the variable card's "Zonnestroom" column label changed |
 | Variable price plausible but consistently off | the `spot_monthly` mean, not the parser | the month is still filling in, or the ENTSO-E cache has gaps; the rate firms up as the month completes |
-| Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` (`:361`) | energie.be switched Belpex units (to EUR/MWh) or the VAT treatment changed |
-| "energie.be: vaste vergoeding row not found" | `_FEE_RE` (`:210`) | the "Vaste vergoeding ... (€/jaar)" label reworded |
+| Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` | energie.be switched Belpex units (to EUR/MWh) or the VAT treatment changed |
+| "energie.be: vaste vergoeding row not found" | `_FEE_RE` | the "Vaste vergoeding ... (€/jaar)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | the "Terugleveringsvergoeding" section header reworded, or the sign dropped |
 | Solar credit roughly double on the variable contract | `spp_indexed` / `_spp_weighting_enabled` | the flag was dropped, or the Synergrid profile silently stopped being fetched, so the formula resolves against the energy leg's Belpex_RLP mean instead of Belpex_SPP |
 | Solar credit slightly off (a few tenths of a cent) on the variable contract | expected while the Synergrid profile is unavailable | the card's printed indicative is a VNR forecast; it is the deliberate fallback, and the credit firms up once the profile loads |
-| Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (`:213`-221) | a levy row label or unit changed; energy fund is the only optional one |
-| Professional rows leaking into the snapshot | `_PROF_MARKER` / `_residential` (`:138`, `:332`) | the professional section header wording changed |
-| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (`:144`, `:551`); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
+| Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (-221) | a levy row label or unit changed; energy fund is the only optional one |
+| Professional rows leaking into the snapshot | `_PROF_MARKER` / `_residential` () | the professional section header wording changed |
+| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
 | Coordinator never refreshes | none - there is no probe; the time-based TTL drives refetch | expected for this supplier |

@@ -112,122 +112,24 @@ Each of these has a section of its own further down; this is the scan.
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
 
 > [!WARNING]
-> **Ecofix: the cards have carried no text layer since August 2026.** Nothing
-> in the integration can parse them; they are read once a day in CI instead,
-> and an entry priced that way says so. Ecofix
-> regenerated its tariff PDFs as page images: every page of every product is one full-page
-> image covering 99.9% of the sheet, in both the NL and FR editions. The pages
-> carrying the **DSO network tables and the tax block hold no text at all** —
-> only the month name. Those are most of a Belgian all-in price, so no snapshot
-> can be assembled and the extractor fails loud rather than billing an
-> incomplete figure. `current/` is overwrite-in-place and Ecofix publishes no
-> dated archive, so there is no text-era card to fall back to.
+> **Ecofix publishes its cards as page images, and has since August 2026.**
+> Nothing in the integration can parse a document with no text in it, so the
+> prices come from this project's own reading of the card's pixels: the card
+> archive runs a reader built for these cards once a day, files what it read,
+> and your entry uses that. It says so — a Repairs card, and a
+> `card_read_by_ocr` attribute on `current_price` — and both clear by
+> themselves when Ecofix publishes a readable card again.
 >
-> **The September 2026 cards repeat it.** All were republished on 31
-> August 2026 at 11:19 GMT and are still page images, so this has now survived a
-> month boundary and looks like a change to their publishing pipeline rather
-> than a one-off accident. Measured on the same three files, against the copies
-> committed here when Ecofix was added in May:
+> **Worth checking against your own card.** The energy formula and the
+> standing charge are still live text and are read exactly; the DSO tables and
+> the tax block are the image, and Ecofix's image is stale, so those figures
+> run a couple of months behind. A figure the reader could not read whole is
+> left out rather than guessed. If you would rather type the numbers in
+> yourself, the **Expert: custom formula** supplier takes them.
 >
-> | Card | 2 May 2026 | 31 August 2026 |
-> | --- | ---: | ---: |
-> | `EL_Ecofix_Flexy_NL.pdf` | 5 pages, 11 851 chars | 5 pages, 344 chars |
-> | `EL_Ecofix_Motion_NL.pdf` | 5 pages, 11 406 chars | 5 pages, 174 chars |
-> | `EL_Ecofix_Motion_Online_NL.pdf` | 4 pages, 8 400 chars | 4 pages, 158 chars |
-> | `EL_Ecofix_Flexy_Online_NL.pdf` | not committed in May | 4 pages, 325 chars |
->
-> The page counts are unchanged and only the text layer is gone. The PDF
-> metadata shows the producing tool changed from Canva to pypdf, which is what a
-> rasterise-and-reassemble step in a publishing pipeline looks like.
->
-> **Ecofix has confirmed the cause and is looking into it.** Their reply of
-> 11 September 2026: since August 2026 the cards are no longer laid out by hand
-> every month but generated automatically from the new indexes, formulas and
-> other variable figures, and that generator renders the blocks that do not
-> change from month to month as page images. Losing almost the whole text
-> layer was not intended. Going back to the manual layout is not an option for
-> them, but they will look at keeping the text layer within the automated
-> generation. No date was given.
-> Nothing here needs to change if they restore the text layer: the integration
-> decides from the card it just downloaded, so support resumes on the next
-> refresh with no update on your side.
->
-> **The cards are read, in CI, by an engine built for them.** Nothing in your
-> Home Assistant runs OCR: the objection to it stands, and a general OCR engine
-> reading dense Belgian comma decimals would mis-price a bill silently, which is
-> the opposite of how every extractor here behaves. What reads them is
-> [`ocr_price_cards`](https://github.com/renaudallard/ocr_price_cards), which is
-> not a general engine. It knows the fonts these cards are set in, glyph by
-> glyph, at the resolution they are rasterized at, and it reads a mark as the
-> one glyph it can be or refuses it. A line carrying any refused mark is
-> dropped whole, so a figure you are shown was read complete and a figure it
-> could not read is missing rather than wrong -- and a missing mandatory figure
-> fails the parse, exactly as it does on a card that still has its text.
->
-> It runs once a day in this repository's card-archive workflow, on the same
-> walk that files every supplier's card, and what reaches an installation is
-> the row it wrote: JSON, like every other month on the archive branch. So no
-> OCR engine is installed for one supplier, nothing is decoded on your machine,
-> and every installation reads the same reading rather than each making its own.
->
-> **You are told when a price came from a reading.** An entry priced this way
-> raises its own Repairs card saying so, and `current_price` carries a
-> `card_read_by_ocr` attribute while it lasts. Both clear by themselves the
-> moment Ecofix publishes a readable card again. The figures are worth checking
-> against your own card before you act on them, and the workaround below stays
-> available if you would rather type them in yourself -- which is also the only
-> option if the engine refuses a future card outright, since it will not guess.
->
-> **You do not have to do anything.** Since 0.23.0 an Ecofix entry prices
-> itself again, from the project's own reading of the card, and says so.
->
-> What it costs you to know: the energy formula and the standing charge are
-> still live text on that PDF and are read exactly. The DSO tables and the tax
-> block are the page image, and Ecofix's image is stale — the network figures
-> read back identical to the May card — so you are billed on correct energy
-> terms and network tariffs a couple of months old. That is Ecofix's
-> staleness, not the reader's, and it is why the Repairs card asks you to
-> check against your own card.
->
-> **If you would rather type the figures in yourself**, or you switched the
-> *Read past cards from the project's archive* box off, use the **Expert:
-> custom formula supplier**
-> ([`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py),
-> offered in the supplier picker). It collects exactly what went missing — the
-> whole DSO block and the whole tax block — and it supports quarter-hourly
-> billing, so Motion is reproduced faithfully rather than approximated. The
-> part that is easy to get wrong is still machine-readable: page 1 (page 4 for
-> the two Flexy cards) keeps the formulas and the standing charge as live
-> text, so you can copy them straight out of the PDF. The September 2026 cards
-> printed:
->
-> | product | energy | injection | standing charge |
-> | --- | --- | --- | --- |
-> | Motion | `(0,1000 x Belpex 15M) + 1,1020` | `(0,0884 x Belpex 15M) - 0,5000` | 60,00 €/yr |
-> | Motion Online | `(0,1010 x Belpex 15M) + 0,74` | `(0,0884 x Belpex 15M) - 0,5000` | 10,00 €/yr |
-> | Flexy | `(BELPEX-RLP-M * 0,1020) + 1,2000` | `(BELPEX-SPP-M * 0,0884) - 0,5000` | 60,00 €/yr |
-> | Flexy Online | `(BELPEX-RLP-M * 0,1010) + 0,74` | `(BELPEX-SPP-M * 0,0884) - 0,5000` | 10,00 €/yr |
->
-> The Online editions are separate products rather than the standard ones under
-> another name: their own energy coefficient and a 10,00 €/yr standing charge
-> against 60,00. Merging them into one row, as this table used to, hands an
-> Online customer the wrong figure on both counts.
->
-> Read the DSO and tax numbers off the card with your eyes — the image renders
-> fine for a human — and enter them once. Check the formulas against your own
-> current card rather than trusting the table above, which is a snapshot of one
-> month.
->
-> Both new and existing entries price off that reading, and a brand-new one
-> sets up normally rather than with every sensor unavailable. Should the
-> engine ever refuse a card outright — it reads a mark as the one glyph it can
-> be or not at all — the entry falls back to what it did before: the last card
-> it managed to parse, or the Custom (expert) route above.
->
-> July's card parsed normally, so this is an unintended regression in Ecofix's
-> document generator rather than a deliberate format change. The real fix is
-> still upstream, and the day they publish a text PDF again everything here
-> goes back to reading it directly, with no update needed on your side.
+> The full story — what changed in their generator, what Ecofix said about it,
+> the measurements, and the current formulas to copy — is in
+> [docs/providers/ecofix.md](./docs/providers/ecofix.md).
 
 Missing a supplier? Ask for it with the
 [supplier request](https://github.com/renaudallard/homeassistant_be_electricity_prices/issues/new?template=supplier_request.yml)

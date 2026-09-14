@@ -8,7 +8,7 @@ config flow read, and the shared PDF toolkit (`providers/_pdf.py`) that every
 card-parsing provider builds on. The guiding invariant of the whole layer is
 that no EUR value lives in Python source: every number in a `SupplierSnapshot`
 comes from a live fetch of the supplier's own published tariff card
-(`providers/base.py:38`).
+(`providers/base.py`).
 
 Related docs:
 
@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py:621`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py`, `SupplierProtocol`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one
@@ -54,7 +54,7 @@ integration uses.
 
 ### SupplierExtractor
 
-The registry entry for one supplier (`providers/base.py:531`). It is a frozen,
+The registry entry for one supplier (`providers/base.py`). It is a frozen,
 keyword-only dataclass.
 
 ```python
@@ -87,7 +87,7 @@ react. Do NOT filter withdrawn suppliers out of `EXTRACTORS` or
 `all_extractors()` -- that would also hide them from the live-check's registry
 diff and from every entry that still needs to price.
 
-`regions()` (`providers/base.py:560`) returns the union of `Contract.regions`
+`regions()` (`providers/base.py`) returns the union of `Contract.regions`
 across all this supplier's contracts. The config flow uses it to decide whether
 a supplier should be offered for the region the user picked.
 
@@ -109,9 +109,9 @@ SnapshotFetcher = Callable[
 ]
 ```
 
-Defined at `providers/base.py:509`. The mandatory current-card fetch. It must
+Defined at `providers/base.py`. The mandatory current-card fetch. It must
 return a fully populated `SupplierSnapshot` or raise `ExtractorError`
-(`providers/base.py:580`) on any fetch or parse failure. It never returns
+(`providers/base.py`) on any fetch or parse failure. It never returns
 `None`: a missing current card is an error, not an absence.
 
 #### SnapshotProbe
@@ -122,7 +122,7 @@ SnapshotProbe = Callable[
 ]
 ```
 
-Defined at `providers/base.py:570`. A cheap freshness key. The coordinator calls
+Defined at `providers/base.py`. A cheap freshness key. The coordinator calls
 it hourly and only re-runs `fetch` when the returned key changes from the cached
 one. Semantics of the return value:
 
@@ -145,7 +145,7 @@ ArchivedSnapshotFetcher = Callable[
 ]
 ```
 
-Defined at `providers/base.py:525`. Fetches the card that was published for a
+Defined at `providers/base.py`. Fetches the card that was published for a
 specific `(year, month)` (passed as a `datetime.date`), so the yearly-cost flow
 can bill each past month at its own historical rate rather than proxying every
 month at the current rate. Return-value semantics:
@@ -174,7 +174,7 @@ months.
 ## Contract and rate dataclasses
 
 A `SupplierSnapshot.energy` is one of six `EnergyRates` variants
-(`providers/base.py:257`) chosen by the contract's `kind`. All rate dataclasses
+(`providers/base.py`) chosen by the contract's `kind`. All rate dataclasses
 are `frozen=True, kw_only=True`. EUR values are always populated from a live
 fetch, never hardcoded — the one exception is the expert **custom** supplier
 (`providers/custom.py`), whose snapshot is built from the config entry the user
@@ -182,13 +182,13 @@ filled in rather than a scraped card.
 
 ### Contract
 
-`providers/base.py:61`. One product sold by a supplier.
+`providers/base.py`. One product sold by a supplier.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | `str` | required | Stable contract key, stored in the config entry. |
 | `label` | `str` | required | Human-facing product name. |
-| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py:58`). Selects which `EnergyRates` variant the snapshot carries. |
+| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py`). Selects which `EnergyRates` variant the snapshot carries. |
 | `regions` | `frozenset[str]` | all three | Regions the product is actually published in. Defaults to `{flanders, wallonia, brussels}`; extractors override per-contract for products that 404 outside their home region (for example TotalEnergies Impact is Wallonia-only). |
 | `spot_indexed_injection` | `bool` | `False` | `True` when a non-dynamic product's feed-in is index-linked and its energy leg fetches no spots, so pricing the injection needs an ENTSO-E key the energy side never asks for. Both index resolutions count: per hour (`_injection_needs_spot`) and a delivery-month mean (`_injection_needs_month_spot`). The config flow reads it to offer the API-key step on the injection regime. Dynamic contracts already collect the key via their energy formula and leave this `False`. The README states the current count and a test derives it from the registry, so it is not repeated here. |
 | `month_indexed_energy` | `bool` | `False` | `True` when a non-spot-priced product's ENERGY is indexed on the delivery month's mean and its card prints last month's figure, so the config flow offers the optional ENTSO-E key on every solar regime. The registry twin of the parser's `month_indexed`; the live check holds each fetched card to it (`_expect_month_indexed_registry`). |
@@ -202,7 +202,7 @@ so do not read it as a one-supplier edge case.
 
 ### FixedRates
 
-`providers/base.py:81`. Fixed energy contract: constant EUR/kWh, optionally
+`providers/base.py`. Fixed energy contract: constant EUR/kWh, optionally
 bi-hourly.
 
 | Field | Type | Default | Meaning |
@@ -216,7 +216,7 @@ bi-hourly.
 
 ### VariableRates
 
-`providers/base.py:103`. Variable energy contract: the current month's effective
+`providers/base.py`. Variable energy contract: the current month's effective
 EUR/kWh, re-published monthly.
 
 | Field | Type | Default | Meaning |
@@ -234,7 +234,7 @@ EUR/kWh, re-published monthly.
 
 ### DynamicRates
 
-`providers/base.py:140`. Dynamic energy contract: `factor * spot + base` per
+`providers/base.py`. Dynamic energy contract: `factor * spot + base` per
 price slot, against the ENTSO-E BE day-ahead spot.
 
 | Field | Type | Default | Meaning |
@@ -254,11 +254,11 @@ multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it
 `True`;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
-because HA only retains hourly long-term statistics (`providers/base.py:152`).
+because HA only retains hourly long-term statistics (`providers/base.py`).
 
 ### TimeOfUseRates and WeekendRule
 
-`providers/base.py:194`. Time-of-use energy contract: three slots by hour-of-day
+`providers/base.py`. Time-of-use energy contract: three slots by hour-of-day
 (`kind = "tou"`). Requires an SMR3 smart meter.
 
 The weekday schedule is shared across products:
@@ -269,7 +269,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:406`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -290,7 +290,7 @@ schedule:
 
 ### ImpactRates
 
-`providers/base.py:232`. Wallonia Tarif Impact energy contract: three slots on
+`providers/base.py`. Wallonia Tarif Impact energy contract: three slots on
 CWaPE bands (`kind = "tou_impact"`). Distinct from `TimeOfUseRates` because the
 schedule is the CWaPE-defined Impact one (every day, no weekend exception),
 matching the DSO Impact tariff that gates eligibility. Requires an SMR3
@@ -321,7 +321,7 @@ it has, and `None` means "not published" rather than zero.
 
 With `month_indexed` set they are what the contract bills. Cociter's trihoraire
 card prints its bands at the previous month's BELIX and its note (7) settles the
-delivery month on its own, so `_cohort_energy_from_archived` (`cohort.py:289`)
+delivery month on its own, so `_cohort_energy_from_archived` (`cohort.py`)
 turns the three pairs into a `SpotMonthlyRates` leg carrying `factor_pic` /
 `factor_medium` / `factor_eco` and the per-band ceilings, which `energy_eur_per_kwh`
 routes by `dso_impact_band`; every month-mean gate then prices it like the variable
@@ -332,7 +332,7 @@ not index monthly would pin the signing-month index, the exact bug it exists to 
 
 ### SpotMonthlyRates
 
-`providers/base.py:163`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
+`providers/base.py`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
 a single flat rate for the whole delivery month, `factor * monthly_mean(spot) +
 base`, where the mean is the arithmetic average of that month's hourly ENTSO-E
 day-ahead spots. Used by the expert **custom** monthly-average mode for
@@ -352,14 +352,14 @@ closes.
 
 ### InjectionRates
 
-`providers/base.py:268`. Solar feed-in compensation, in EUR/kWh. Belgian
+`providers/base.py`. Solar feed-in compensation, in EUR/kWh. Belgian
 residential injection is exempt from VAT, so these values are NEVER VAT-incl
 regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 `factor`+`base`) must be populated.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:180`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |
@@ -383,7 +383,7 @@ indicative prints.
 
 ### DsoOverlay
 
-`providers/base.py:310`. Network + capacity costs for one DSO sub-area, in
+`providers/base.py`. Network + capacity costs for one DSO sub-area, in
 EUR/kWh and EUR/kW/yr. One of these is keyed under each DSO in
 `SupplierSnapshot.dsos`.
 
@@ -407,12 +407,12 @@ Impact bands (`pic` 17:00-22:00, `medium` 07:00-11:00 + 22:00-01:00, `eco`
 01:00-07:00 + 11:00-17:00, every day). Wallonia DSOs publish all three on every
 supplier card; Brussels (Sibelga) and Flanders (Fluvius) do not, so they stay
 `None` there. The canonical DSO sub-area keys used to index `dsos` live in
-`const.py:49` onward (eight Fluvius keys, five Wallonia keys, Sibelga); they are
+`const.py` onward (eight Fluvius keys, five Wallonia keys, Sibelga); they are
 stable forever because they are stored verbatim in every user's `CONF_DSO`.
 
 ### TaxOverlay
 
-`providers/base.py:454`. Federal and regional levies, all in EUR/kWh except the
+`providers/base.py`. Federal and regional levies, all in EUR/kWh except the
 energy fund.
 
 | Field | Type | Default | Meaning |
@@ -423,7 +423,7 @@ energy fund.
 | `wallonia_renewables` | `float` | `0.0` | Wallonia green-energy contribution. |
 | `brussels_renewables` | `float` | `0.0` | Brussels green-energy levy. |
 | `region_connection_fee` | `float` | `0.0` | Regional connection fee. |
-| `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py:219`), so an extractor serving more than one region must return `0.0` outside Flanders. |
+| `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py`), so an extractor serving more than one region must return `0.0` outside Flanders. |
 | `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
 
 Regional renewables differ across the three regions; the pricing engine picks
@@ -433,7 +433,7 @@ gotcha: it does not mean "no VAT", it means "prices already include VAT".
 
 ### SupplierSnapshot
 
-`providers/base.py:478`. Everything extracted from one supplier's card, per
+`providers/base.py`. Everything extracted from one supplier's card, per
 `(supplier, contract)`. The coordinator combines it with the user's selected DSO
 to produce the all-in price.
 
@@ -469,12 +469,12 @@ class SupplierSnapshot:
 
 `valid_until` feeds the `tomorrow_prices_available` binary sensor, which checks
 `date.today() <= valid_until`; `None` means "we do not know", so callers fall
-back to treating tomorrow's rates as available (`providers/base.py:506`).
+back to treating tomorrow's rates as available (`providers/base.py`).
 
 ## The registry (providers/__init__.py)
 
 The registry is the single list of suppliers the integration knows about
-(`providers/__init__.py:65`).
+(`providers/__init__.py`).
 
 ```python
 EXTRACTORS: dict[str, SupplierExtractor] = {
@@ -498,7 +498,7 @@ Each value's `EXTRACTOR` is imported under a private alias and keyed by its own
 `.id`. The id is the stable key: it is what gets stored in every user's config
 entry, so it must never change after a supplier ships.
 
-Two lookups are exported (`providers/__init__.py:87` and `:96`):
+Two lookups are exported (`providers/__init__.py`):
 
 | Function | Signature | Behaviour |
 | --- | --- | --- |
@@ -527,13 +527,13 @@ consistent.
 
 | Symbol | Signature (async unless noted) | Solves |
 | --- | --- | --- |
-| `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py:70`). Sent on every request. |
-| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py:647`). |
-| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:284`). |
-| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:465`). |
-| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:446`). |
+| `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py`). Sent on every request. |
+| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py`). |
+| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py`). |
+| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py`). |
+| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py`). |
 | `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by energie.be, Energy Knights, EnergyVision and Frank. |
-| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:479`). |
+| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py`). |
 
 Internals worth knowing:
 
@@ -550,18 +550,18 @@ Internals worth knowing:
   payload; the key carries the variant (and the aligned threshold) because the
   same document read two ways is two different strings and handing one back for
   the other would feed a parser a shape it has no regexes for.
-- `_fetch_validated_pdf_bytes` (`_pdf.py:181`) is shared by the three
+- `_fetch_validated_pdf_bytes` (`_pdf.py`) is shared by the three
   `fetch_pdf_text*` variants. It catches both `aiohttp.ClientError` and
   `TimeoutError` (aiohttp's `ClientTimeout` fires `asyncio.TimeoutError`, which
   is not a `ClientError`) and wraps them with the exact prefix
   `network error fetching`. That prefix is load-bearing: `is_transient_fetch_error`
   keys on it. HTTP >= 400 is wrapped as `HTTP <status> fetching <url>`.
-- `error_text` (`_pdf.py:100`) renders the wrapped exception as `str(err)` or, when
+- `error_text` (`_pdf.py`) renders the wrapped exception as `str(err)` or, when
   that is empty, its class name. aiohttp raises its timeouts argless, so without
   it the message ended in a bare colon -- and that message is user-visible on the
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
-  diagnostics. The ENTSO-E client uses it for the same reason (`api.py:127`).
-- `_is_pdf_payload` (`_pdf.py:140`) validates by magic bytes (`%PDF`, allowing a
+  diagnostics. The ENTSO-E client uses it for the same reason (`api.py`).
+- `_is_pdf_payload` (`_pdf.py`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends), not Content-Type, because some CDNs
   return 200 + text/html for a missing PDF, and Engie's API returns
   octet-stream for valid PDFs. Tolerating the BOM is only half the job, so
@@ -570,7 +570,7 @@ Internals worth knowing:
   with `No /Root object! - Is this really a PDF?`, which reads like a corrupt
   card rather than three stray bytes. pypdf recovers on its own, so this is what
   keeps the `aligned` and `layout` variants working on such a card.
-- `_storage_error_code` (`_pdf.py:163`) splits one case back out of that
+- `_storage_error_code` (`_pdf.py`) splits one case back out of that
   catch-all. An object store refusing the read answers the proxy in front of it
   with its own XML error document, which the proxy passes through as a 200, so
   the payload is not a PDF and used to report as a permanent parse failure.
@@ -583,10 +583,10 @@ Internals worth knowing:
   as a 248-byte `PublicAccessNotPermitted` document, which raised the
   `extractor_failed` card on every Luminus entry, asking users to report a layout
   change that had not happened.
-- `_read_pdf_bytes` (`_pdf.py:123`) refuses a body whose declared Content-Length
+- `_read_pdf_bytes` (`_pdf.py`) refuses a body whose declared Content-Length
   exceeds `_MAX_PDF_BYTES` (64 MiB, about 12x the largest real card), bounding
   what a broken or hostile CDN can pull into coordinator memory.
-- `is_transient_fetch_error(message: str) -> bool` (`_pdf.py:70`) classifies an
+- `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
   `ExtractorError` message: `network error fetching` and `storage error fetching`
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient
   (Cloudflare-fronted suppliers intermittently answer with a 403 anti-bot
@@ -602,35 +602,35 @@ downstream regex would miss silently.
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py:311`). |
-| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py:370`). |
-| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py:394`). |
+| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py`). |
+| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py`). |
+| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py`). |
 
 ### Number, sign and VAT parsing
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py:766`). |
-| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py:891`). |
-| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py:887`). Supplier PDFs flip silently between these on re-renders. |
-| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py:709`). |
-| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py:766`). |
+| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py`). |
+| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py`). |
+| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py`). Supplier PDFs flip silently between these on re-renders. |
+| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py`). |
+| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py`). |
 
 ### Belgium-specific table and date parsers
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:921`). |
-| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:1178`). |
-| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:260`). |
-| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:1139`). |
+| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py`). |
+| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py`). |
+| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py`). |
+| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py`). |
 
-Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:1002`)
+Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py`)
 maps Dutch, French (with and without accents) and English month names to their
-1-12 index, and `_validity_windows` (`_pdf.py:1077`) returns the ~200-char
+1-12 index, and `_validity_windows` (`_pdf.py`) returns the ~200-char
 context after each validity keyword so a retrospective month mention elsewhere
 in the PDF does not masquerade as a validity statement. `_OSP_BOUND_TO_TIER`
-(`_pdf.py:545`) maps kVA upper bounds to the shared tier keys and is kept as
+(`_pdf.py`) maps kVA upper bounds to the shared tier keys and is kept as
 literals so this low-level helper stays decoupled from `const.py` (the keys must
 match `const.CONNECTION_KVA_TIER_*`).
 
