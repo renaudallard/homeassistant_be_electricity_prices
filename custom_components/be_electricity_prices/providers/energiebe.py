@@ -81,6 +81,7 @@ from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -654,18 +655,17 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     ceiling = to_float(ceiling_match.group(1)) if ceiling_match else None
     out: dict[str, DsoOverlay] = {}
     for prefix, key in _DSO_ROWS:
-        row = re.search(
-            rf"Fluvius\s*\(\s*{re.escape(prefix)}[^\d]*"
-            rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-            section,
-            re.IGNORECASE,
-        )
+        # Eight figures: the four digital-meter columns read here, then the
+        # four classic-meter ones. The label asked for stops at the area
+        # name, because the card wraps its two longest ones mid-word
+        # ("Fluvius (Halle-" sits on a line of its own above the figures).
+        row = numeric_row(section, f"Fluvius ({prefix}", 8)
         if not row:
             continue
-        databeheer = to_float(row.group(1))
-        capacity = to_float(row.group(2))
-        normal = to_float(row.group(3)) / 100.0
-        excl_night = to_float(row.group(4)) / 100.0
+        databeheer = to_float(row[0])
+        capacity = to_float(row[1])
+        normal = to_float(row[2]) / 100.0
+        excl_night = to_float(row[3]) / 100.0
         out[key] = DsoOverlay(
             distribution_single=normal,
             distribution_exclusive_night=excl_night,
