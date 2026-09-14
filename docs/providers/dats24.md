@@ -292,8 +292,9 @@ Iterates `_WALLONIA_DSOS` (`dats24.py:116-122`), an ordered tuple:
 The ORES collapse is the key gotcha: DATS 24 lists seven ORES sub-areas (Brabant
 Wallon, Est, Hainaut, Luxembourg, Mouscron, Namur, Verviers) with identical rates,
 but the integration has one `ores` key, so the extractor matches only the Brabant
-Wallon row (`dats24.py:127-130`, `359-365`). The regex is anchored at start of
-line with `re.escape(label)`, so `ORES (Brabant Wallon)` only matches that one row.
+Wallon row (`dats24.py:127-130`, `359-365`). The label is matched by similarity
+against the text a row starts with, and the other six sub-areas score well below
+the threshold, so `ORES (Brabant Wallon)` only picks up that one row.
 
 Ten columns per row (`dats24.py:344-345`):
 

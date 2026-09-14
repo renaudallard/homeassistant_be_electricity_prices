@@ -263,9 +263,10 @@ EBEM variable cards print four numeric columns per row after the formula:
 last month's Belpex; columns 3 + 4 use the VNR yearly-forecast Belpex. The
 extractor surfaces column 2 (incl-VAT per-kWh at last month's Belpex) as
 `current`, because it matches the value EBEM customers see on their bill more
-faithfully than recomputing against a placeholder spot. The regex accepts any
-`SIGN_CHARS` between `Belpex` and the offset: some months EBEM prints a
-U+2212 minus / negative offset, which a literal `+` missed and failed the whole
+faithfully than recomputing against a placeholder spot. The row is found by
+counting figures rather than by spelling the formula out, so the sign between
+`Belpex` and the offset never enters into it: some months EBEM prints a U+2212
+minus / negative offset, which a literal `+` missed and failed the whole
 snapshot on an otherwise valid card (`ebem.py:459`).
 
 Illustrative indicatives from the test (`tests/test_ebem.py:93`): mono
@@ -400,11 +401,11 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
   never VAT-scaled (`providers/base.py:271`).
 - **`MWH` vs `MWh` casing**: the residential federal-excise band is the only row
   with capital `MWH` (`ebem.py:592`).
-- **Sign flexibility everywhere**: every formula and indicative regex accepts
-  `SIGN_CHARS` (plus, hyphen, figure/en/em dash, U+2212) because supplier PDFs
-  flip silently between them on re-render (`_pdf.py:521`). A literal `+` in
-  `_indicative_from_row` previously failed valid cards that printed a negative
-  offset (`ebem.py:459`).
+- **Sign flexibility everywhere**: every formula regex accepts `SIGN_CHARS`
+  (plus, hyphen, figure/en/em dash, U+2212) because supplier PDFs flip silently
+  between them on re-render (`_pdf.py:521`). `_indicative_from_row` does not
+  read the sign at all any more: it counts the row's figures, after a literal
+  `+` there failed valid cards that printed a negative offset (`ebem.py:459`).
 - **Exclusive-night yearly fee**: both variable products surface a dedicated
   `yearly_fixed_fee_exclusive_night` billed instead of the standard fee on an
   exclusive-night meter, even B@sic+ which has no energy split (`ebem.py:378`).

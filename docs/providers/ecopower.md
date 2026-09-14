@@ -250,12 +250,12 @@ Digital row layout (comment `ecopower.py:488-498`):
 <label> | databeheer EUR/yr | capacity EUR/kW/yr | - | enkelvoudig EUR/kWh | uitsluitend_nacht EUR/kWh | [maximumtarief] | -
 ```
 
-Row regex, inside `_extract_dsos` (`ecopower.py:494-498`). The optional 7th `Maximumtarief` column slides in between the
-exclusive-night rate and the trailing dash on rows where Fluvius publishes a maximum (the Imewo
-April 2026 card has one, `test_ecopower.py:124-134`); the `(?:\s+[\d,]+)?` group skips it without
-mis-aligning the distribution rate.
+Row lookup, inside `_extract_dsos` (`ecopower.py:494-498`). The optional `Maximumtarief` column
+slides in between the exclusive-night rate and the trailing dash on rows where Fluvius publishes a
+maximum (the Imewo April 2026 card has one, `test_ecopower.py:124-134`), so the row is asked for at
+five figures and then at four; which one answers is what says whether the card printed a maximum.
 
-Captured columns map to `DsoOverlay` (`ecopower.py:522-529`):
+Columns map to `DsoOverlay` (`ecopower.py:522-529`):
 
 - `data_management_per_year` = databeheer (as printed, HTVA; `apply_vat` grosses it)
 - `capacity_eur_per_kw_year` = capacity (as printed, HTVA; `apply_vat` grosses it)
@@ -273,17 +273,18 @@ dynamic contract requires a smart meter), sliced `_slice_between(text, "Nettarie
 databeheer | capacity | afname enkelvoudig | afname uitsluitend-nacht | [maximumtarief] | injectietarief
 ```
 
-Row regex reads the first four numeric columns (`ecopower.py:567-571`) and ignores the optional
-maximumtarief and the trailing injection network tariff (`DsoOverlay` does not model them). Column
-mapping (`ecopower.py:574-582`): `distribution_single` = group 3, `distribution_exclusive_night` =
-group 4, `capacity_eur_per_kw_year` = group 2, `data_management_per_year` = group 1 (both as
-printed, HTVA; `apply_vat` grosses them), `transport = 0.0`.
+The row is asked for at six figures and then at five (`ecopower.py:567-571`); the four columns
+read lead the row either way, and the optional maximumtarief and the trailing injection network
+tariff are ignored (`DsoOverlay` does not model them). Column mapping (`ecopower.py:574-582`):
+`distribution_single` = column 3, `distribution_exclusive_night` = column 4,
+`capacity_eur_per_kw_year` = column 2, `data_management_per_year` = column 1 (both as printed,
+HTVA; `apply_vat` grosses them), `transport = 0.0`.
 
 The dbs DSO block has a wrapped-label hurdle: on the narrower dynamic card pdfplumber wraps the
 longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` /
 `<numbers>` / `Vlaanderen`). `_DBS_WRAPPED_LABEL_RE` (`ecopower.py:551`) plus the `.sub`
 (`ecopower.py:562-564`) stitches the two label fragments back around the rate row so the per-DSO
-row regex sees one line. Tests assert the stitched row keeps its real rates
+lookup sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py:336-343`).
 
 Both DSO parsers **fail loud** with `ExtractorError("Ecopower: no DSO rows parsed ...")` if the
@@ -479,7 +480,7 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    `_INJECTION_FIXED_RE`, `_fixed_note_in_effect` (`ecopower.py:645-715`). Injection is nullable,
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`ecopower.py:139-139`),
-   the gbs row regex (`ecopower.py:551-572`), the dbs row regex + `_DBS_WRAPPED_LABEL_RE`
+   the gbs row widths (`ecopower.py:551-572`), the dbs row widths + `_DBS_WRAPPED_LABEL_RE`
    (`ecopower.py:514`, `517-521`). Symptom: `Ecopower: no DSO rows parsed` or a missing sub-area.
 4. **Tax row relabelled** -> `_extract_taxes` regexes (`ecopower.py:618-646`). Symptom: `could not
    parse Ecopower federal tax block` or `GSC/WKK renewable surcharge`.

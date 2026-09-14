@@ -287,15 +287,16 @@ The three card layouts (`cociter.py:408-456`):
   405 to 496 EUR a year on a 5 kVA inverter.
 
 The trihoraire layout is picked out FIRST, by the card's own title (`prix
-variable trihoraire`, `_TRIHORAIRE_CARD_RE`), before anything counts columns.
-It has to be, because counting cannot tell it apart: the six-number pattern
-below matches a five-number row by running past the end of the line -- the last
-DSO row is followed by the `3.` of the taxes heading -- and when it does, it
-lands the PIC rate on `distribution_single` and reports one DSO instead of
-five. `test_trihoraire_layout_is_chosen_by_the_card_title` pins exactly that
-mis-parse against a card with its title taken away. `_extract_impact_dsos`
-anchors its row at both ends for the same reason, and raises when the table
-yields nothing, since an empty overlay bills the whole network leg at zero.
+variable trihoraire`, `_TRIHORAIRE_CARD_RE`), and the column counts agree with
+that choice rather than papering over a bad one. They did not always: the old
+six-number pattern read a five-number row by running past the end of the line --
+the last DSO row is followed by the `3.` of the taxes heading -- and when it did,
+it landed the PIC rate on `distribution_single` and reported one DSO instead of
+five. Rows are now read on one line at the width the layout prints, so that
+cannot happen; `test_trihoraire_layout_is_chosen_by_the_card_title` takes the
+title away and pins that the rows are refused rather than misread.
+`_extract_impact_dsos` raises when the table yields nothing, since an empty
+overlay bills the whole network leg at zero.
 
 `distribution_single` has no source on the trihoraire card and is filled with
 the PIC rate. Nothing reads it -- the contract is `tou_impact`, so the config

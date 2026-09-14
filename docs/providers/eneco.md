@@ -351,8 +351,9 @@ Flanders (`_FLUVIUS_LABELS`, `eneco.py:126-135`), via `_find_fluvius_row`
 
 Fluvius rows carry 5 numbers plus two `-` placeholders: Normaal, Uitsl. nacht,
 SMR1 databeheer (EUR/year), SMR3 databeheer (EUR/year), Capaciteitstarief
-(EUR/kW/year). The match anchors on the `DIGITALE METER` section
-(`eneco.py:522-526`) so it does not pick up the analogue-meter row further down.
+(EUR/kW/year). The lookup is bounded at both ends of the `DIGITALE METER`
+section (`eneco.py:522-526`): the analogue-meter table below repeats every label
+and is the same five figures wide, so nothing else tells the two apart.
 Key modelling decisions (`eneco.py:509-540`):
 
 - `transport = 0.0`: the Flemish Afnametarief already bundles Elia transmission, so
@@ -362,8 +363,8 @@ Key modelling decisions (`eneco.py:509-540`):
   Flemish digital meters bill at a single rate, so no day / night split.
 - `distribution_exclusive_night` is column 2 (Uitsl. nacht), the dedicated
   night-circuit rate, distinct from the single day rate.
-- `data_management_per_year` is the SMR3 column (group 4), `capacity_eur_per_kw_year`
-  is group 5.
+- `data_management_per_year` is the SMR3 column (the fourth),
+  `capacity_eur_per_kw_year` the fifth.
 - `prosumer_eur_per_kva_year` stays `None`: SMR3 connections do not sit under the
   compensation regime (`test_fix_fluvius_has_no_prosumer_rate`,
   `tests/test_eneco.py:101-107`).

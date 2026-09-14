@@ -479,11 +479,12 @@ normal      -> distribution_single         (c€/kWh /100)
 excl_night  -> distribution_exclusive_night (c€/kWh /100)
 ```
 
-The row regex uses `Fluvius\s*\(\s*<prefix>[^\d]*` then four `_NUM` columns, so it tolerates
-the card wrapping two long labels across the number row -
-`Fluvius (Halle-\n<numbers>\nVilvoorde)` and the Midden-Vlaanderen row -
-because the numbers still follow the leading fragment. `test_dso_wrapped_label_halle_vilvoorde`
-and `test_dso_wrapped_label_midden_vlaanderen` pin both wrapped rows.
+The row is asked for by label and width: `Fluvius (<prefix>` and eight figures.
+The label stops at the area name because the card wraps two of them mid-word -
+`Fluvius (Halle-` sits on a line of its own above its figures, and so does the
+Midden-Vlaanderen row - and `numeric_row` reads a label that wrapped that way as
+part of the row underneath it. `test_dso_wrapped_label_halle_vilvoorde` and
+`test_dso_wrapped_label_midden_vlaanderen` pin both wrapped rows.
 
 `transport` is always 0.0 (bundled into distribution, `test_dso_transport_is_zero`). The
 klassieke-meter and prosumer columns that follow on the card are ignored: a dynamic-contract
@@ -512,8 +513,9 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
   header, not the body wording: the cards word that row differently.
 - **Yearly fee is already annual.** No x12, unlike Frank's per-month Abonnementskost
   (`providers/energiebe.py:381`).
-- **Wrapped DSO labels.** Halle-Vilvoorde and Midden-Vlaanderen wrap across the number row;
-  the `[^\d]*` gap in the row regex absorbs it (`providers/energiebe.py:443`).
+- **Wrapped DSO labels.** Halle-Vilvoorde and Midden-Vlaanderen wrap onto a line of
+  their own above the figures; `numeric_row` reads the two lines as one row
+  (`providers/energiebe.py:443`).
 - **Label differences from Frank.** Unit `(c€/kWh)` not `(EURct/kWh)`; "Bijdrage op de
   Energie" not "Bijdrage op Energie"; the tax regexes are energie.be-specific.
 - **No probe; the archive is a separate listing.** HEAD is 405 and both card URLs

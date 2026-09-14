@@ -297,8 +297,9 @@ Notable parsing hurdles:
   `_FLANDERS_LABELS` (`ecofix.py:646`); note "Fluvius Kempen" maps to the
   integration's `fluvius_iveka` key and "Fluvius Midden-Vlaanderen" to
   `fluvius_intergem`. Wallonia labels map through `_WALLONIA_LABELS`
-  (`ecofix.py:660`), where `WAVRE` maps to `rew` and the regex `TECTEO\s*-\s*RESA`
-  maps to `resa`.
+  (`ecofix.py:660`), where `WAVRE` maps to `rew` and `TECTEO - RESA` to `resa`;
+  both are matched by similarity, so the spacing around the dash is the card's
+  to choose.
 
 ## Energy formula per TariffKind
 
@@ -324,7 +325,9 @@ A missing `Afname` formula is fatal (`ExtractorError`).
 `_extract_energy` with `kind == "variable"` (`ecofix.py:386`) reads the indicative
 `Maandprijs:` row, which carries four columns `(mono, peak, off-peak,
 exclusive_night)` that hold the same rate for every meter type today; all four are
-surfaced into a `VariableRates`. The `BELPEX-RLP-M` indexation expression is
+surfaced into a `VariableRates`. The lookup is bounded to the `Verbruik` block,
+because the `Injectie` block below prints a `Maandprijs` row of its own and a
+lookup that reaches it bills consumption at the feed-in credit. The `BELPEX-RLP-M` indexation expression is
 surfaced as the `formula` diagnostic string only (no cross-check against the rates;
 a miss just leaves `formula` None). Illustrative: `Maandprijs: 11,81 11,81 11,81
 11,81` gives `current = peak = offpeak = exclusive_night = 0.1181`
@@ -341,8 +344,8 @@ capacity (EUR/kW/jaar), kWh-tarief total (c/kWh), kWh-tarief excl. nacht (c/kWh)
 data-management per-kwartier (EUR/jaar), data-management monthly/yearly (EUR/jaar).
 
 The two data-management columns matter: `kind` selects which column is billed.
-Dynamic contracts meter quarter-hourly and read the per-kwartier column (group 4),
-Flexy meters monthly and reads the monthly/yearly column (group 5). They are equal
+Dynamic contracts meter quarter-hourly and read the per-kwartier column (the
+fourth), Flexy meters monthly and reads the monthly/yearly column (the fifth). They are equal
 on today's cards, so a single column had been masking the mismatch until Fluvius
 diverges the two regimes (`ecofix.py:642`,
 `test_flanders_data_management_column_follows_metering_regime`,
@@ -496,8 +499,8 @@ test in the source.
   directly and `valid_until` is set to the last day of that month for the monthly
   rotation binary sensor.
 - **Two data-management columns per Fluvius row.** Bill the column matching the
-  metering regime (dynamic = per-kwartier group 4, Flexy = monthly group 5); they
-  are equal today (`ecofix.py:642`).
+  metering regime (dynamic = per-kwartier, the fourth column; Flexy = monthly, the
+  fifth); they are equal today (`ecofix.py:642`).
 - **ORES sub-area drift is fatal.** Nine identical ORES rows collapse to one key;
   any numeric divergence raises so a silent sub-area split cannot mis-bill
   (`ecofix.py:718`).

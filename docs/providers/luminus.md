@@ -231,10 +231,11 @@ and `yearly_fixed_fee_exclusive_night` from `_extract_excl_night_fee`.
 ### tou (SmartFlex)
 
 Parses the three-rate `Énergie fournie (c€/kWh)` row (peak / transition /
-offpeak) with a negative lookahead `(?!\s+\d)` so it anchors on the first
-occurrence and not the second (`luminus.py:413-421`). The second occurrence later
-in the PDF is the bi-horaire fallback for non-SMR3 customers
-(`luminus.py:409-412`). Returns `TimeOfUseRates(peak, transition, offpeak,
+offpeak) by asking `numeric_row` for a row exactly three figures wide, which is
+what tells it from the four-figure row the other products print
+(`luminus.py:413-421`). The second occurrence later in the PDF is the bi-horaire
+fallback for non-SMR3 customers (`luminus.py:409-412`); it is also three wide,
+and the first match wins. Returns `TimeOfUseRates(peak, transition, offpeak,
 yearly_fixed_fee, weekend_rule="smartflex_seasonal")` (`luminus.py:428-434`).
 
 SmartFlex uses seasonal windows, not the generic CWaPE schedule: peak (pleines)
@@ -302,7 +303,8 @@ Eight Fluvius sub-areas mapped by printed label to canonical key
 | Fluvius West | `fluvius_west` |
 | Fluvius Zenne-Dijle | `fluvius_zenne_dijle` |
 
-Two column layouts are handled by the same row regex (`luminus.py:704-711`):
+Two column layouts are read by asking for each width in turn
+(`luminus.py:704-711`):
 
 - **Static (fixed/variable/tou) cards print 8 numbers**: data_mgmt €/an,
   capacity_digital €/kW/yr, dist_normal, dist_excl_night, capacity_classic,
@@ -481,8 +483,8 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   `test_luminus.py:180-188`; injection at `test_luminus.py:381-399`).
 - **SMR3 reduced data-management fee** from the `quart d'heure` footnote on
   dynamic Flanders cards, not the table's monthly column (`luminus.py:692-700`).
-- **Two DSO column widths** per region (static wide, dynamic narrow); the same
-  row regex must match both, with prosumer present only on static
+- **Two DSO column widths** per region (static wide, dynamic narrow); the row
+  is asked for at each width in turn, with prosumer present only on static
   (`luminus.py:674-725`, `630-683`).
 - **Wallonia Impact triplet is ECO/MEDIUM/PIC ascending**, opposite to OCTA+/Bolt
   (`luminus.py:762-765`).
@@ -493,9 +495,9 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   digit-anchored `_NUM` (`luminus.py:347-351`).
 - **Padded publication parens** on the May 2026 cards (`(mai 2026 )`),
   tolerated by optional whitespace (`luminus.py:480-490`).
-- **Numeric-token double-occurrence in the TOU row**: the negative lookahead
-  `(?!\s+\d)` anchors on the SMR3 three-band row, not the bi-horaire fallback
-  below (`luminus.py:413-421`).
+- **Numeric-token double-occurrence in the TOU row**: the three-figure width
+  picks the SMR3 three-band row over the four-figure rows around it, and the
+  first match wins over the bi-horaire fallback below (`luminus.py:413-421`).
 - **Fail-loud policy**: yearly fee, injection, per-kWh taxes, and both regional
   renewables all raise on a miss rather than defaulting to 0 and silently
   mispricing (`luminus.py:381`, `424`, `485-495`, `540-542`, `554-557`).

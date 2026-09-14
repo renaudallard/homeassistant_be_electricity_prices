@@ -488,5 +488,5 @@ regress either card generation.
 | Solar credit floored at the wrong value (fixed) | `_GUARANTEE_RE` | the "garanderen wij in elk geval ... €cent/kWh" clause reworded, so `minimum` goes unset |
 | "EnergyVision: vaste vergoeding row not found" | `_FEE_RE` (`:196`) | the "Vaste vergoeding ... €/jaar" label reworded |
 | Tax under/over-billing or "could not parse tax block" | `_extract_taxes` regexes (`:201`-209) | a levy row label or unit changed; energy fund is the only optional one |
-| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (`:287`, `:512`); the "Digitale Meter" anchor | a label renamed or the section header changed |
+| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row lookup in `_extract_dsos` (`:287`, `:512`); the "Digitale Meter" anchor | a label renamed or the section header changed |
 | "EnergyVision: no listing entry for card ..." | `_resolve_card_url` (`:350`) | the listing markup or the `EV-<MMYY>-<CODE>-nl` filename scheme changed |
