@@ -94,7 +94,7 @@ network tariffs, and a re-template would arm exactly the silent mis-billing this
 about. Hence no fallback, by design.
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
-from the residential card header by `_publication_label` (`providers/energiebe.py:427`).
+from the residential card header by `_publication_label` (`providers/energiebe.py:428`).
 
 ## Contracts
 
@@ -140,7 +140,7 @@ The kind is also what makes the config flow collect an ENTSO-E key
 
 ### Download (`fetch`)
 
-`fetch` (`providers/energiebe.py:252`) validates the contract id and region, resolves the
+`fetch` (`providers/energiebe.py:253`) validates the contract id and region, resolves the
 card URL for the contract (`_CARD_URL` for the dynamic one, the contracts API for the
 variable one), calls `fetch_pdf_text_layout` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
@@ -186,7 +186,7 @@ around.
 The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a professional
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
-EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:421`) slices the
+EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:422`) slices the
 text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
 (`providers/energiebe.py:138`) so no professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
@@ -232,7 +232,7 @@ wrong would 10x the energy leg. See the conversion in `_extract_energy`
 
 ## Energy formula
 
-`_extract_energy` (`providers/energiebe.py:432`) parses the formula row with `_ENERGY_RE`
+`_extract_energy` (`providers/energiebe.py:433`) parses the formula row with `_ENERGY_RE`
 (`providers/energiebe.py:170`), anchored on "formule (excl. BTW):" so it binds the energy
 formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
 
@@ -345,7 +345,7 @@ Injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)); on a dynamic card it prices off the live spot
 the energy path already fetches, so `current` stays `None`. `_extract_injection`
 (`providers/energiebe.py:501`) parses the `terugleveringsvergoeding` row with
-`_INJECTION_RE` (`providers/energiebe.py:200`):
+`_INJECTION_RE` (`providers/energiebe.py:201`):
 
 ```
 Terugleveringsvergoeding ... (<factor_pdf> x Belpex <sign> <base_cents>)
@@ -425,7 +425,7 @@ had no archive wired up the same frozen number reached every past month of
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:618`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:619`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -450,8 +450,8 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:636`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energiebe.py:164`), which maps each card label prefix to the
+`_extract_dsos` (`providers/energiebe.py:637`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energiebe.py:165`), which maps each card label prefix to the
 canonical DSO key:
 
 | card label | canonical key |
@@ -493,7 +493,7 @@ that does not match is skipped (not fatal); the eight-sub-area test is the safet
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:1165`) is the shared best-effort validity parser. energie.be's
+`parse_valid_until` (`_pdf.py:1178`) is the shared best-effort validity parser. energie.be's
 card carries no month name inside a validity-keyword window (the "juli 2026" sits in the
 page header, not after "geldig"), so `valid_until` resolves to `None`. That is the
 documented "treat as available" fallback and is correct for a dynamic contract, whose
