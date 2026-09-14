@@ -635,6 +635,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "most_expensive_4h_today",
             "snapshot_age_hours",
             "last_error",
+            "card_read_by_ocr",
             "consumption_ytd_kwh",
             "injection_ytd_kwh",
             "consumption_today_kwh",
@@ -699,6 +700,10 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "snapshot_age_hours": round(data.snapshot_age_hours, 2),
                 "snapshot_stale": data.snapshot_stale,
                 "last_error": data.last_error,
+                # Only while it is true, like the attribution below: a price
+                # read off a picture of the card has to say so wherever it is
+                # shown, and every other entry should carry nothing extra.
+                **({"card_read_by_ocr": True} if data.card_read_by_ocr else {}),
                 "spot_source": data.spot_source,
                 # CC BY 4.0 obliges us to credit the fallback's source
                 # wherever its data is shown, so the credit rides with the

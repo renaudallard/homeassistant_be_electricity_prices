@@ -229,6 +229,12 @@ class CoordinatorData:
     # fall back to "treat as valid".
     snapshot_valid_until: date | None = None
     last_error: str = ""
+    # True while these prices come from a card that had no text layer and was
+    # read off its pixels by the repository's archive walk. Not an error: the
+    # figures are the ones the engine read whole or did not read at all. The
+    # user is told because a price read off a picture of a card is not quite
+    # the same fact as a price read out of one.
+    card_read_by_ocr: bool = False
     # Which source supplied the day-ahead curve behind these prices:
     # "entsoe" (source of record) or "energy-charts" (the keyless fallback,
     # used only while ENTSO-E is unreachable). Not an error, so deliberately
@@ -456,6 +462,11 @@ class BePricesCoordinator(
         # card that carries no text layer. Set per fetch, never per supplier:
         # it stops being true the moment readable cards return.
         self._card_unreadable = False
+        # Whether the prices being served were read off a picture of the
+        # card rather than out of it: the archive walk's OCR reading,
+        # adopted because the supplier publishes page images. Set when
+        # that row is adopted and cleared by any readable card.
+        self._card_read_by_ocr = False
         # Set by async_force_refresh; cleared on the next successful
         # extractor fetch. Acts as an out-of-band signal to bypass both
         # the probe-based and TTL-based freshness paths in
@@ -546,6 +557,16 @@ class BePricesCoordinator(
         # a removal, which leaves entry.data unchanged), or contradict the
         # successor coordinator after a reload.
         self._unloaded = False
+
+    @property
+    def card_read_by_ocr(self) -> bool:
+        """Whether these prices come from an OCR reading of the card.
+
+        True from the moment such a row is adopted until a readable card
+        replaces it. A fact about the last card resolved, like
+        ``card_unreadable`` beside it, never a property of the supplier.
+        """
+        return self._card_read_by_ocr
 
     @property
     def card_unreadable(self) -> bool:
@@ -1317,6 +1338,7 @@ class BePricesCoordinator(
             snapshot_stale=stale,
             snapshot_valid_until=self._snapshot.valid_until,
             last_error=self._last_error,
+            card_read_by_ocr=self._card_read_by_ocr,
             spot_source=self._spot_source,
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,

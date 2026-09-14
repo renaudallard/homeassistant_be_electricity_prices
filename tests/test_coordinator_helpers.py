@@ -34,6 +34,7 @@ from custom_components.be_electricity_prices import ytd_cost
 from custom_components.be_electricity_prices import energy_meters
 
 import calendar
+import json
 from datetime import UTC, date, datetime, timedelta
 from dataclasses import replace
 from types import SimpleNamespace
@@ -96,6 +97,7 @@ from custom_components.be_electricity_prices.injection import (
     _injection_varies_intraday,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
+    ArchivedCard,
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
     _archived_card_from_github,
@@ -2276,6 +2278,39 @@ def _archive_snapshot(label: str) -> SupplierSnapshot:
     )
 
 
+def _archive_row(snapshot: SupplierSnapshot | None) -> ArchivedCard | None:
+    """What the archive reader hands back: the row, which carries the card's
+    snapshot and whether that month had to be read off the card's pixels."""
+    return (
+        None if snapshot is None else ArchivedCard(snapshot=snapshot, read_by_ocr=False)
+    )
+
+
+@pytest.mark.parametrize(
+    ("mark", "expected"),
+    [({"_ocr": True}, True), ({}, False), ({"_ocr": False}, False)],
+)
+async def test_an_archive_row_says_whether_its_card_was_read_by_ocr(
+    mark: dict[str, object], expected: bool
+) -> None:
+    """The archive walk marks a row whose card carried no text layer and had
+    to be read off its pixels. Reading that mark back is all an installation
+    does about OCR: the decoding happened in CI, this is JSON."""
+    row = _snapshot_to_dict(_archive_snapshot("2026-09"), dt_util.utcnow())
+    row.update(mark)
+
+    async def _body(*_args: object, **_kw: object) -> str:
+        return json.dumps(row)
+
+    with patch.object(snapshot_store, "fetch_text", _body):
+        card = await _archived_card_from_github(
+            MagicMock(), "ecofix", "ecofix_flexy", "flanders", date(2026, 9, 1)
+        )
+    assert card is not None
+    assert card.read_by_ocr is expected
+    assert card.snapshot.publication_label == "2026-09"
+
+
 async def test_snapshot_for_month_uses_archive_when_available(
     hass: HomeAssistant,
 ) -> None:
@@ -2450,7 +2485,7 @@ async def test_snapshot_for_month_reads_the_repository_archive(
         id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
     )
     _monthly_snapshots(hass).clear()
-    github = AsyncMock(return_value=stored)
+    github = AsyncMock(return_value=_archive_row(stored))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         for _ in range(2):
             snap = await _snapshot_for_month(
@@ -2495,7 +2530,7 @@ async def test_the_branch_is_asked_first_and_the_supplier_for_what_it_lacks(
     )
     _monthly_snapshots(hass).clear()
     held = {date(2026, 9, 1): stored}
-    github = AsyncMock(side_effect=lambda *a: held.get(a[4]))
+    github = AsyncMock(side_effect=lambda *a: _archive_row(held.get(a[4])))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
@@ -2599,7 +2634,7 @@ async def test_the_running_month_never_reaches_the_repository_archive(
     )
     _monthly_snapshots(hass).clear()
     _monthly_fetched_at(hass).clear()
-    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 10, 1), current
@@ -2609,7 +2644,7 @@ async def test_the_running_month_never_reaches_the_repository_archive(
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
-        assert snap is github.return_value
+        assert snap is github.return_value.snapshot
         github.assert_awaited_once_with(
             ANY, "test", "test", "wallonia", date(2026, 9, 1)
         )
@@ -2640,7 +2675,7 @@ async def test_months_before_the_captures_began_are_not_asked_for(
     )
     _monthly_snapshots(hass).clear()
     _monthly_fetched_at(hass).clear()
-    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), without, "test", "wallonia", date(2026, 8, 1), current
@@ -2651,7 +2686,7 @@ async def test_months_before_the_captures_began_are_not_asked_for(
         snap = await _snapshot_for_month(
             hass, MagicMock(), without, "test", "wallonia", date(2026, 9, 1), current
         )
-        assert snap is github.return_value
+        assert snap is github.return_value.snapshot
         github.assert_awaited_once_with(
             ANY, "test", "test", "wallonia", date(2026, 9, 1)
         )
@@ -2665,7 +2700,7 @@ async def test_months_before_the_captures_began_are_not_asked_for(
             date(2026, 8, 1),
             current,
         )
-        assert snap is github.return_value
+        assert snap is github.return_value.snapshot
         github.assert_awaited_once_with(
             ANY, "test2", "test", "wallonia", date(2026, 8, 1)
         )
@@ -2685,7 +2720,7 @@ async def test_an_entry_can_switch_the_repository_archive_off(
     )
     entry = MockConfigEntry(domain=DOMAIN, data={CONF_CARD_ARCHIVE: False})
     _monthly_snapshots(hass).clear()
-    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
@@ -2713,7 +2748,7 @@ async def test_cached_only_never_asks_the_repository_archive(
         id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
     )
     _monthly_snapshots(hass).clear()
-    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
@@ -2743,7 +2778,7 @@ async def test_custom_supplier_asks_no_archive(hass: HomeAssistant) -> None:
         fetch_for_month=None,
     )
     _monthly_snapshots(hass).clear()
-    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_store, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
@@ -2808,9 +2843,10 @@ async def test_archived_card_from_github_reads_down_to_the_degraded_schema() -> 
 
     async def _read(body: str) -> SupplierSnapshot | None:
         with patch.object(snapshot_store, "fetch_text", AsyncMock(return_value=body)):
-            return await _archived_card_from_github(
+            card = await _archived_card_from_github(
                 MagicMock(), "acme", "acme_fix", "wallonia", date(2026, 1, 1)
             )
+        return card.snapshot if card is not None else None
 
     floor = json_dumps(
         _snapshot_to_dict(snap, when, schema_version=_DEGRADED_MIN_SCHEMA_VERSION)

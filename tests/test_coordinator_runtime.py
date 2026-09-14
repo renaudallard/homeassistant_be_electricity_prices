@@ -1902,6 +1902,122 @@ async def test_a_textless_card_fetch_reaches_the_unreadable_repairs_card(
     )
 
 
+async def _refresh_with_unreadable_card(
+    hass: HomeAssistant, entry: Any, archived: Any
+) -> None:
+    """One tick whose card is page images, with ``archived`` on the branch."""
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+    )
+
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError("card has no text layer: 172 characters")
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=_textless_fetch),
+        ),
+        patch.object(
+            snapshot_store,
+            "_archived_card_from_github",
+            AsyncMock(return_value=archived),
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+    hass.data["_ocr_coord"] = coord
+
+
+async def test_an_unreadable_card_is_priced_off_the_archives_reading(
+    hass: HomeAssistant,
+) -> None:
+    """The last resort. Nothing here can read a card published as page
+    images, but the repository's daily walk reads one with OCR and files an
+    ordinary row; the entry is priced off that instead of going dark, and is
+    told plainly that is what happened."""
+    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    snap = make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+    await _refresh_with_unreadable_card(
+        hass, entry, ArchivedCard(snapshot=snap, read_by_ocr=True)
+    )
+    coord = hass.data["_ocr_coord"]
+
+    assert coord._snapshot is not None
+    assert coord.card_read_by_ocr is True
+    assert coord._last_error == ""
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"card_read_by_ocr_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_key == "card_read_by_ocr"
+    # And NOT the card that says this entry has no prices: it has prices.
+    assert (
+        registry.async_get_issue(
+            DOMAIN, f"extractor_unreadable_no_prices_{entry.entry_id}"
+        )
+        is None
+    )
+
+
+async def test_a_row_the_card_itself_was_read_from_raises_no_ocr_notice(
+    hass: HomeAssistant,
+) -> None:
+    """A month the branch holds from back when the card still had a text
+    layer is an ordinary card, and says nothing about OCR."""
+    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    snap = make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+    await _refresh_with_unreadable_card(
+        hass, entry, ArchivedCard(snapshot=snap, read_by_ocr=False)
+    )
+    coord = hass.data["_ocr_coord"]
+
+    assert coord._snapshot is not None
+    assert coord.card_read_by_ocr is False
+    assert (
+        ir.async_get(hass).async_get_issue(DOMAIN, f"card_read_by_ocr_{entry.entry_id}")
+        is None
+    )
+
+
+async def test_the_archive_is_not_asked_when_the_household_switched_it_off(
+    hass: HomeAssistant,
+) -> None:
+    """The card-archive box exists so a household can keep the integration
+    from contacting GitHub. A card nobody can read is not a reason to
+    override that: the entry gets the same card it got before."""
+    from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE
+    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+
+    entry = make_entry(**{CONF_CARD_ARCHIVE: False})  # type: ignore[arg-type]
+    entry.add_to_hass(hass)
+    snap = make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+    await _refresh_with_unreadable_card(
+        hass, entry, ArchivedCard(snapshot=snap, read_by_ocr=True)
+    )
+    coord = hass.data["_ocr_coord"]
+
+    assert coord._snapshot is None
+    assert coord.card_read_by_ocr is False
+    registry = ir.async_get(hass)
+    assert (
+        registry.async_get_issue(DOMAIN, f"card_read_by_ocr_{entry.entry_id}") is None
+    )
+    assert (
+        registry.async_get_issue(
+            DOMAIN, f"extractor_unreadable_no_prices_{entry.entry_id}"
+        )
+        is not None
+    )
+
+
 async def test_an_ordinary_parse_failure_still_reaches_the_failed_card(
     hass: HomeAssistant,
 ) -> None:
@@ -2216,6 +2332,7 @@ _REPAIR_ISSUE_KINDS = (
     "extractor_unreachable",
     "extractor_unreadable",
     "extractor_unreadable_no_prices",
+    "card_read_by_ocr",
     "entsoe_auth_failed",
     "supplier_deprecated",
     "exclusive_night_rate_missing",

@@ -747,13 +747,27 @@ def restore_monthly_rows(
     return restored
 
 
+@dataclass(frozen=True)
+class ArchivedCard:
+    """One month's row off the repository's card archive.
+
+    ``read_by_ocr`` is the row's own ``_ocr`` mark: the card that month
+    carried no text layer and the archive walk read it off its pixels. It
+    rides beside the snapshot because the figures are the same shape either
+    way and only the user needs to know the difference.
+    """
+
+    snapshot: SupplierSnapshot
+    read_by_ocr: bool
+
+
 async def _archived_card_from_github(
     session: aiohttp.ClientSession,
     supplier: str,
     contract: str,
     region: str,
     year_month: date,
-) -> SupplierSnapshot | None:
+) -> ArchivedCard | None:
     """The card the repository's own archive holds for this month, or None.
 
     ``archive_cards.yml`` stores what every extractor parsed, daily, on the
@@ -783,12 +797,50 @@ async def _archived_card_from_github(
             raise
         return None
     try:
-        return _snapshot_from_dict(
-            json.loads(body), min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
+        row = json.loads(body)
+        return ArchivedCard(
+            snapshot=_snapshot_from_dict(
+                row, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
+            ),
+            read_by_ocr=bool(row.get("_ocr")),
         )
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
         return None
+
+
+async def card_for_unreadable_month(
+    session: aiohttp.ClientSession,
+    supplier: str,
+    contract: str,
+    region: str,
+    today: date,
+    entry: ConfigEntry | None,
+) -> ArchivedCard | None:
+    """The archive's row for the RUNNING month, for a card nobody can read.
+
+    The last resort, and reached only on a card that downloaded fine and
+    carries no text layer. A supplier publishing page images leaves a parser
+    nothing to work with, but the repository's daily walk reads those with an
+    OCR engine and files what it gets, so the row is the one place a price
+    for this month exists at all.
+
+    Asking for the running month is exactly what ``_card_archive_may_hold``
+    refuses, and rightly: while a card can be read the live parse is the
+    better answer and the branch's copy is a day behind at best. That
+    reasoning runs out when the card cannot be read, which is the only door
+    into this function.
+
+    Honours the entry's card-archive box, which exists so a household can
+    keep the integration from contacting GitHub at all.
+    """
+    if entry is not None and not entry.data.get(
+        CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE
+    ):
+        return None
+    return await _archived_card_from_github(
+        session, supplier, contract, region, today.replace(day=1)
+    )
 
 
 def _card_archive_may_hold(
@@ -944,9 +996,10 @@ async def _snapshot_for_month(
         snap: SupplierSnapshot | None = None
         if _card_archive_may_hold(extractor, year_month, today, entry):
             try:
-                snap = await _archived_card_from_github(
+                archived = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )
+                snap = archived.snapshot if archived is not None else None
             except Exception as err:  # noqa: BLE001 - a blip on the branch must not cost the supplier tier
                 _LOGGER.debug(
                     "card archive read failed for %s/%s/%s/%s: %s",

@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:673`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:674`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -73,7 +73,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | `CAPACITY_SENSORS` (2) | `sensor.py:533` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py:424` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py:435` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:761` | `CONF_CONTRACT_END_DATE` is set |
+| `ContractEndDateSensor` (1) | `sensor.py:766` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -281,7 +281,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:668`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:669`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only

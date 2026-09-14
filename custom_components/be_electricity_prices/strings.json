@@ -689,6 +689,10 @@
       "title": "Could not reach the supplier for {supplier} ({contract})",
       "description": "The integration could not download the tariff card after several attempts: {error}. It is still serving the last successfully parsed prices. This is usually a temporary network or CDN problem that clears on the next refresh; run the be_electricity_prices.refresh service or check your network if it keeps happening."
     },
+    "card_read_by_ocr": {
+      "title": "Prices for {supplier} are read from pictures of its card",
+      "description": "{supplier} publishes its tariff card as page images with no text layer, so nothing can be read out of the document itself. These prices for {contract} come from the project's own reading of the card's pixels, done once a day and shared by every installation. It reads a figure as the one thing it can be or not at all, so what you see was read whole rather than guessed -- but it is a reading, and worth checking against your card before you act on it. This card clears by itself once {supplier} publishes a readable card again."
+    },
     "extractor_unreadable_no_prices": {
       "title": "No prices for {supplier}: its tariff card cannot be read",
       "description": "{supplier} publishes its tariff card as page images with no text layer, so the prices cannot be read from it, and this entry has no earlier card cached to fall back on. This one is not a bug in the integration and reporting it will not help: there is nothing in the document to read. Every sensor on this entry ({contract}) stays unavailable until {supplier} publishes a readable card again. To get prices now, add a Custom (expert) entry and type the values from your card in by hand. This card clears by itself if {supplier} goes back to publishing readable cards."

@@ -50,6 +50,7 @@ from .providers.base import (
     ExtractorError,
 )
 from .snapshot_store import (
+    card_for_unreadable_month,
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
     _SharedSnapshot,
@@ -106,6 +107,7 @@ class _SnapshotMixin:
     _snapshot_schema_version: int
     _stale_snapshot: dict[str, Any] | None
     _card_unreadable: bool
+    _card_read_by_ocr: bool
     _last_error: str | None
     _supplier_tuple: tuple[str, str, str]
 
@@ -125,6 +127,7 @@ class _SnapshotMixin:
             unreadable: bool = False,
         ) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
+        def _sync_card_read_by_ocr_issue(self, active: bool) -> None: ...
 
     def _refresh_custom_snapshot(self) -> None:
         """Build the snapshot locally for the expert custom supplier.
@@ -424,6 +427,8 @@ class _SnapshotMixin:
         # so it stops by itself when the supplier publishes text again.
         unreadable = isinstance(err, CardNotReadableError)
         self._card_unreadable = unreadable
+        if unreadable and await self._serve_card_read_by_ocr():
+            return
         if unreadable and self._snapshot is None:
             # Nothing left to keep serving. The blob the schema gate rejected
             # on load is the only card this entry will ever have, so replay it
@@ -446,6 +451,46 @@ class _SnapshotMixin:
         )
         if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
             raise err
+
+    async def _serve_card_read_by_ocr(self) -> bool:
+        """Price this month off the archive's reading of an unreadable card.
+
+        The supplier published its card as page images, so nothing here can
+        parse it. The repository's daily walk reads those with an OCR engine
+        and files the result as an ordinary row; this reads that row. True
+        when one was found and adopted, and the caller stops treating the
+        tick as a failure.
+
+        Deliberately not cached as a probe hit: the row is a fallback, not a
+        card this entry fetched, and the next tick should ask the supplier
+        again in case readable cards have come back.
+        """
+        try:
+            archived = await card_for_unreadable_month(
+                self._session,
+                self.entry.data[CONF_SUPPLIER],
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data[CONF_REGION],
+                dt_util.now().date(),
+                self.entry,
+            )
+        except Exception as err:  # noqa: BLE001 - a blip on the branch is not this tick's problem
+            _LOGGER.debug("card archive read failed for an unreadable card: %s", err)
+            return False
+        if archived is None:
+            return False
+        self._set_snapshot(archived.snapshot)
+        self._snapshot_fetched_at = dt_util.utcnow()
+        self._snapshot_probe_key = None
+        self._last_error = ""
+        self._card_read_by_ocr = archived.read_by_ocr
+        # The card is still one no reader here can read, so the Repairs card
+        # that says so would be true -- but the entry is being priced, which
+        # is the opposite of what it says. This one replaces it, and says
+        # where the figures came from instead.
+        self._sync_extractor_issue(None)
+        self._sync_card_read_by_ocr_issue(archived.read_by_ocr)
+        return True
 
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:

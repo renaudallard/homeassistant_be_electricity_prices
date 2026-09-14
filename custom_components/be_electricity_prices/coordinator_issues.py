@@ -390,6 +390,17 @@ class _IssuesMixin:
             },
         )
 
+    def _sync_card_read_by_ocr_issue(self, active: bool) -> None:
+        """Raise or clear the 'these prices were read off the card' notice.
+
+        The supplier publishes its tariff card as page images, and what is
+        being served is the repository's OCR reading of one. That is a price
+        rather than no price, so it is not a failure -- but it is a reading,
+        and the user is entitled to know before they act on the figures.
+        Cleared by the first readable card.
+        """
+        self._sync_issue("card_read_by_ocr", active)
+
     def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None:
         """Raise or clear the 'ENTSO-E rejected the API key' issue.
 

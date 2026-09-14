@@ -70,8 +70,7 @@ Related reading:
 > generator renders the parts that do not change from month to month as page
 > images. Losing nearly the whole text layer was not intended. They will not
 > return to the manual layout, but will look at keeping the text layer within
-> the automated generation, with no date given. They floated AI/OCR as a
-> stopgap for reading the current files, which is ruled out below. No change
+> the automated generation, with no date given. No change
 > here is needed if they restore the text layer: the unreadable signal is
 > derived per fetch, not from a stored flag, so support resumes on the next
 > refresh.
@@ -91,10 +90,15 @@ Related reading:
 > is overwrite-in-place and Ecofix publishes no dated archive (every archive URL
 > pattern probed returns 404).
 >
-> **Do not add OCR.** Dense numeric tables printed with Belgian comma decimals
-> are OCR's weakest case, and a misread digit mis-prices silently, which is the
-> failure mode every extractor here is built to avoid; it would also mean an OCR
-> engine as a runtime dependency for one supplier. **Do not cross-fill from a
+> **Do not add OCR to the integration.** That objection stands and is why the
+> engine is not here: dense numeric tables printed with Belgian comma decimals
+> are a general OCR's weakest case, a misread digit mis-prices silently, and it
+> would mean an OCR engine as a runtime dependency for one supplier. What reads
+> these cards is `ocr_price_cards`, in the card-archive workflow, once a day:
+> it knows the fonts they are set in glyph by glyph and refuses a mark it
+> cannot place, and `scripts/archive_cards.py` asks it only after a reader has
+> refused the card. The row it writes carries `"_ocr": true`, and an
+> installation reads that row like any other month's. **Do not cross-fill from a
 > sibling card either**: DSO distribution and transport tariffs genuinely are
 > regulated and identical per DSO, but the green-certificate quota cost is
 > supplier-specific (EnergyVision prints 3,00 c€/kWh where DATS 24 prints 2,860
@@ -209,11 +213,12 @@ constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
 consumption windows at the current snapshot's rates. The repository's own card
-archive (`.github/workflows/archive_cards.yml`) would cover past months from
-September 2026 on the way it does for TotalEnergies, but it stores what the
-extractor parsed, and while the cards are page images that is nothing. If Ecofix
-ever exposes a dated archive, add an `ArchivedSnapshotFetcher` (see
-`providers/base.py:1320`).
+archive (`.github/workflows/archive_cards.yml`) covers the months it has read,
+which since August 2026 means the months it read off the pixels: the walk hands
+a card its own reader refused to `ocr_price_cards` and files the result. A card
+that even that refuses is named in `unparsed.json` and shows on the coverage
+sheet with its PDF and no JSON. If Ecofix ever exposes a dated archive, add an
+`ArchivedSnapshotFetcher` (see `providers/base.py:1331`).
 
 ### discover()
 

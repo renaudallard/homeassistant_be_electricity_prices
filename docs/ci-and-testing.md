@@ -765,15 +765,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:203`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:205`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:559`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:642`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:603`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:692`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:632`): inside that
@@ -799,13 +799,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:446`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:524`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:362`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:440`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -847,6 +847,17 @@ in the cards repository's own tree (`Publish the listings in the cards repositor
 README naming the namespaces, so a person on that repository's releases page is one click from
 the names; each release's notes point there, and a search of that repository for a file's digest
 finds its sheet.
+
+A card whose reader refuses it -- a supplier publishing page images, which Ecofix has done
+since August 2026 -- is handed to `ocr_price_cards` (`_ocr_text`, `scripts/archive_cards.py:270`)
+before it is given up on. That engine knows the fonts those cards are set in glyph by glyph and
+refuses a mark it cannot place; the reading is taken from `trusted_text`, which drops any line
+carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
+so a mostly-refused page is no row rather than a row of silent misses. The row it produces
+carries `"_ocr": true`, which is how an installation knows to tell its user the figures came
+from a reading; the key is absent otherwise, so every row already on the branch is unchanged.
+The engine is installed by this workflow alone, which runs 3.13 for everything else and 3.14 for
+it: no installation ever decodes a card, it reads the row.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
@@ -1047,7 +1058,7 @@ same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:128`) and skips the rest of its
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:130`) and skips the rest of its
 cards, live and backfill alike, because every further card would cost the same three timeouts and
 two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
 failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
