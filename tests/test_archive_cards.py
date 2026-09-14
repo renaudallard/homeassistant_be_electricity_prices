@@ -896,8 +896,11 @@ def _page_image_fetch(session: _PdfSession) -> Fetch:
         raise CardNotReadableError("card has no text layer: 172 characters")
 
     async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        # The canned session while it holds the card; once the test empties
+        # it, the session handed in, which in a retry is the kept copy.
+        reader = session if PDF_URL in session.pdfs else _session
         text = await _pdf._pdf_text(
-            session,  # type: ignore[arg-type]
+            reader,  # type: ignore[arg-type]
             PDF_URL,
             variant="plain",
             timeout=5,
@@ -1005,6 +1008,58 @@ async def test_a_reading_too_thin_to_price_on_is_refused(tmp_path: Path) -> None
     )
 
 
+async def test_a_card_nobody_could_read_is_tried_again_when_the_reader_changes(
+    tmp_path: Path,
+) -> None:
+    """A card no reader could read cannot be fetched again: the supplier
+    serves one url and overwrites it next month, so the kept bytes are the
+    only copy there will ever be. The one thing that can change the answer
+    is the reader, which is what parser.txt already tracks, so the retry
+    runs on the same trigger the row replay does."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    base = "https://cards.test/releases/download"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    digest = hashlib.sha256(b"%PDF page images").hexdigest()
+
+    # Day one: no engine, so the card is kept and named, and there is no row.
+    await ac.archive(
+        out,
+        extractors=[_extractor(_page_image_fetch(session))],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert not (out / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert "acme/acme_fix/wallonia/2026-09" in json.loads(
+        (out / "unparsed.json").read_text()
+    )
+    # The upload step records where the bytes landed; that is what a retry
+    # fetches them back from.
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
+    )
+
+    # Day two: the reader learnt to read it. The card is not re-fetched --
+    # the session is empty -- it is read back from the kept copy.
+    read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 40
+    with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
+        summary = await ac.archive(
+            out,
+            extractors=[_extractor(_page_image_fetch(_PdfSession({})))],
+            pdf_dir=pdfs,
+            pdf_base_url=base,
+            reparse=True,
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert summary.reparsed == 1
+    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert row["_ocr"] is True
+    # Nothing left owing an explanation: the month has a row now.
+    assert not (out / "unparsed.json").exists()
+
+
 async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(
     tmp_path: Path,
 ) -> None:
@@ -1039,7 +1094,7 @@ async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(
     )
     digest = hashlib.sha256(b"%PDF page images").hexdigest()
     assert json.loads((out / "unparsed.json").read_text()) == {
-        "acme/acme_fix/wallonia/2026-09": [digest]
+        "acme/acme_fix/wallonia/2026-09": [{"url": PDF_URL, "pdf": digest}]
     }
     # The upload step records where it landed; the sheet then links to it.
     (out / "pdfs.json").write_text(

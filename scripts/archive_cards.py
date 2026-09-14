@@ -347,12 +347,13 @@ class _Cards(StoredTexts):
         # Digests of the cards this run had to read off their pixels, so the
         # rows they produced can say they were read that way.
         self.ocr: set[str] = set()
-        # Every card downloaded for the target being walked, whether or not
-        # it rendered. ``calls`` cannot answer this: it is appended to after
-        # the render, and a card published as page images raises there, which
-        # is precisely the card that has to be named. Cleared per target by
-        # the caller, beside ``calls``.
-        self.seen: list[str] = []
+        # Every card downloaded for the target being walked, as (url, digest),
+        # whether or not it rendered. ``calls`` cannot answer this: it is
+        # appended to after the render, and a card published as page images
+        # raises there, which is precisely the card that has to be named. The
+        # url is what lets a later run hand the kept bytes back to the
+        # extractor. Cleared per target by the caller, beside ``calls``.
+        self.seen: list[tuple[str, str]] = []
 
     async def render(
         self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
@@ -366,7 +367,7 @@ class _Cards(StoredTexts):
         the next day.
         """
         digest = hashlib.sha256(payload).hexdigest()
-        self.seen.append(digest)
+        self.seen.append((url, digest))
         try:
             return await super().render(variant, url, payload, renderer)
         except CardNotReadableError:
@@ -814,7 +815,18 @@ def _unparsed_key(supplier: str, contract: str, region: str, month: str) -> str:
     return f"{supplier}/{contract}/{region}/{month}"
 
 
-def _read_unparsed(out: Path) -> dict[str, list[str]]:
+def _unparsed_sources(cards: "_Cards") -> list[dict[str, str]]:
+    """The cards this target downloaded, shaped like a row's ``_sources``.
+
+    The url is the half that matters later: it is what lets a retry hand the
+    kept bytes back to the extractor, which asks for a card by url and
+    cannot be told to want a digest.
+    """
+    seen: dict[str, str] = dict(cards.seen)
+    return [{"url": url, "pdf": digest} for url, digest in sorted(seen.items())]
+
+
+def _read_unparsed(out: Path) -> dict[str, list[Any]]:
     """What earlier runs recorded as downloaded but unreadable."""
     path = out / _UNPARSED
     if not path.exists():
@@ -826,8 +838,19 @@ def _read_unparsed(out: Path) -> dict[str, list[str]]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _as_sources(value: list[Any]) -> list[dict[str, str]]:
+    """One entry's cards. The first version of this file held bare digests,
+    which name the bytes but not where they came from; those are kept as they
+    are and simply cannot be retried."""
+    return [
+        {"pdf": item} if isinstance(item, str) else item
+        for item in value
+        if isinstance(item, str | dict)
+    ]
+
+
 def _write_unparsed(
-    out: Path, seen: dict[str, list[str]], keep_months: int, today: date
+    out: Path, seen: dict[str, list[dict[str, str]]], keep_months: int, today: date
 ) -> None:
     """Merge this run's unreadable cards into the store and drop what no
     longer belongs there.
@@ -837,11 +860,11 @@ def _write_unparsed(
     that starts parsing leaves by itself; and the retention window is the
     same one the rows are pruned on.
     """
-    known = _read_unparsed(out)
+    known = {key: _as_sources(value) for key, value in _read_unparsed(out).items()}
     known.update(seen)
     held, _kept = _kept_rows(out)
     cutoff = _months_before(today, keep_months)
-    entries: dict[str, list[str]] = {}
+    entries: dict[str, list[dict[str, str]]] = {}
     for key, digests in known.items():
         parts = key.split("/")
         if len(parts) != 4:
@@ -851,7 +874,7 @@ def _write_unparsed(
             continue
         if month in held.get(supplier, {}).get((contract, region), {}):
             continue
-        entries[key] = sorted(set(digests))
+        entries[key] = sorted(_as_sources(digests), key=lambda s: s.get("url", ""))
     path = out / _UNPARSED
     if not entries:
         path.unlink(missing_ok=True)
@@ -872,10 +895,11 @@ def _write_coverage(
     whose supplier has no rows any more is removed.
     """
     held, kept = _kept_rows(out)
-    for key, digests in _read_unparsed(out).items():
+    for key, value in _read_unparsed(out).items():
         supplier, contract, region, month = key.split("/")
         by_month = held.setdefault(supplier, {}).setdefault((contract, region), {})
-        by_month.setdefault(month, _Held("live", digests, None, None))
+        pdfs = [s["pdf"] for s in _as_sources(value) if s.get("pdf")]
+        by_month.setdefault(month, _Held("live", pdfs, None, None))
     folder = out / _COVERAGE_DIR
     folder.mkdir(parents=True, exist_ok=True)
     index = [
@@ -1066,6 +1090,76 @@ async def _replay_row(
         summary.reparsed += 1
 
 
+async def _retry_unparsed(
+    out: Path,
+    extractors: dict[str, SupplierExtractor],
+    cards: _Cards,
+    replay: _ReplaySession,
+    now: datetime,
+    summary: _Summary,
+) -> None:
+    """Try the cards the branch holds but could not read, again.
+
+    A card that no reader could read is kept, uploaded and named in
+    ``unparsed.json``, and there it stays: it cannot be re-fetched, because
+    a supplier serving one url overwrites it the next month. The bytes are
+    the only copy there will ever be, so the one thing that can change the
+    answer is the reader -- which is exactly what ``parser.txt`` already
+    tracks. So this runs under the same condition the row replay does, and
+    the day a reader learns to read those cards they become rows.
+
+    The clock is pinned to the middle of the month the card was captured in,
+    the way a row's replay is pinned to its capture day: a parse that reads
+    "valid until" against today must not decide a card from two months ago
+    is expired.
+    """
+    entries = {key: _as_sources(value) for key, value in _read_unparsed(out).items()}
+    for key, sources in sorted(entries.items()):
+        supplier, contract, region, month = key.split("/")
+        label = f"{supplier}/{contract}/{region}/{month}"
+        extractor = extractors.get(supplier)
+        if extractor is None:
+            continue
+        pdfs = {s["url"]: s["pdf"] for s in sources if s.get("url") and s.get("pdf")}
+        if not pdfs:
+            summary.unreplayable.append(f"{label}: kept bytes name no url to replay")
+            continue
+        replay.pdfs = pdfs
+        cards.digests.update(pdfs)
+        cards.calls.clear()
+        cards.seen.clear()
+        memo = _RecordingMemo()
+        session: Any = replay
+        with (
+            freeze_time(f"{month}-15T12:00:00+02:00", tick=True),
+            memoise_text_fetches(memo),
+            render_through(cards.render),
+        ):
+            try:
+                snap = await extractor.fetch(session, contract, region)
+            except Exception as err:  # noqa: BLE001 - still unreadable is the normal answer
+                summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
+                continue
+        if snap is None or snap.provisional:
+            continue
+        read = _sources_of(memo, cards, out, month)
+        summary.replayed += 1
+        if _write_card(
+            out,
+            supplier,
+            contract,
+            region,
+            month,
+            snap,
+            read,
+            now,
+            "live",
+            date(int(month[:4]), int(month[5:]), 15),
+            ocr=_read_by_ocr(read, cards),
+        ):
+            summary.reparsed += 1
+
+
 async def _replay_all(
     out: Path,
     extractors: dict[str, SupplierExtractor],
@@ -1128,7 +1222,7 @@ async def archive(
     # A card that downloaded but did not parse, by the row it would have
     # become. A card that failed on the network read no bytes and leaves
     # nothing here.
-    unreadable: dict[str, list[str]] = {}
+    unreadable: dict[str, list[dict[str, str]]] = {}
     cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
@@ -1147,11 +1241,11 @@ async def archive(
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
-                    digests = sorted(set(cards.seen))
-                    if digests:
+                    read = _unparsed_sources(cards)
+                    if read:
                         unreadable[
                             _unparsed_key(ex.id, contract, region, seen_month)
-                        ] = digests
+                        ] = read
                     if patience.note(ex.id, err):
                         summary.given_up.append(ex.id)
                     continue
@@ -1196,11 +1290,11 @@ async def archive(
                         )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
                         summary.failed.append(f"{label}: {type(err).__name__}: {err}")
-                        digests = sorted(set(cards.seen))
-                        if digests:
+                        read = _unparsed_sources(cards)
+                        if read:
                             unreadable[
                                 _unparsed_key(ex.id, contract, region, month_id)
-                            ] = digests
+                            ] = read
                         if patience.note(ex.id, err):
                             summary.given_up.append(ex.id)
                         continue
@@ -1242,6 +1336,11 @@ async def archive(
                 now,
                 summary,
                 rerender=rerender,
+            )
+            # Same trigger, same reason: a reader that changed is the only
+            # thing that can turn a card nobody could read into a row.
+            await _retry_unparsed(
+                out, {ex.id: ex for ex in registry}, cards, replay, now, summary
             )
         stamp.write_text(parser + "\n", encoding="utf-8")
     cards.file_the_rest()

@@ -771,9 +771,9 @@ Three design points:
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:642`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:643`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:692`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:693`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:632`): inside that
@@ -799,13 +799,13 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:524`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:525`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:440`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:441`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
@@ -858,6 +858,18 @@ carries `"_ocr": true`, which is how an installation knows to tell its user the 
 from a reading; the key is absent otherwise, so every row already on the branch is unchanged.
 The engine is installed by this workflow alone, which runs 3.13 for everything else and 3.14 for
 it: no installation ever decodes a card, it reads the row.
+
+A card that even it cannot read is named in `unparsed.json`, by the row it would have become,
+with the url it was downloaded from beside each digest. That url is the half that matters later:
+an extractor asks for a card by url and cannot be told to want a digest, so it is what lets
+`_retry_unparsed` hand the kept bytes back. The retry runs on the same trigger the row replay
+does, a changed `parser.txt`, and for the same reason -- such a card cannot be fetched again,
+since a supplier serving one url overwrites it the next month, so the kept bytes are the only
+copy there will ever be and the reader is the one thing that can change the answer. The day a
+reader learns to read them they become rows and their entries disappear. The clock is pinned to
+the middle of the month the card was captured in, the way a row's replay is pinned to its
+capture day, so a parse that reads "valid until" against today does not decide a card from two
+months ago is expired.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
