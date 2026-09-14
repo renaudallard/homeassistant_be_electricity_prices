@@ -167,15 +167,28 @@ to the card, and the regions it is sold in.
 > available if you would rather type them in yourself -- which is also the only
 > option if the engine refuses a future card outright, since it will not guess.
 >
-> **Workaround: use the Expert: custom formula supplier**
+> **You do not have to do anything.** Since 0.23.0 an Ecofix entry prices
+> itself again, from the project's own reading of the card, and says so.
+>
+> What it costs you to know: the energy formula and the standing charge are
+> still live text on that PDF and are read exactly. The DSO tables and the tax
+> block are the page image, and Ecofix's image is stale — the network figures
+> read back identical to the May card — so you are billed on correct energy
+> terms and network tariffs a couple of months old. That is Ecofix's
+> staleness, not the reader's, and it is why the Repairs card asks you to
+> check against your own card.
+>
+> **If you would rather type the figures in yourself**, or you switched the
+> *Read past cards from the project's archive* box off, use the **Expert:
+> custom formula supplier**
 > ([`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py),
-> listed in the table above and offered in the supplier picker). It
-> collects exactly what went missing — the whole DSO block and the whole tax
-> block — and it supports quarter-hourly billing, so Motion is reproduced
-> faithfully rather than approximated. The part that is easy to get wrong is
-> still machine-readable: page 1 (page 4 for the two Flexy cards) keeps the
-> formulas and the standing charge as live text, so you can copy them straight
-> out of the PDF. The September 2026 cards printed:
+> offered in the supplier picker). It collects exactly what went missing — the
+> whole DSO block and the whole tax block — and it supports quarter-hourly
+> billing, so Motion is reproduced faithfully rather than approximated. The
+> part that is easy to get wrong is still machine-readable: page 1 (page 4 for
+> the two Flexy cards) keeps the formulas and the standing charge as live
+> text, so you can copy them straight out of the PDF. The September 2026 cards
+> printed:
 >
 > | product | energy | injection | standing charge |
 > | --- | --- | --- | --- |
@@ -194,23 +207,22 @@ to the card, and the regions it is sold in.
 > current card rather than trusting the table above, which is a snapshot of one
 > month.
 >
-> Existing Ecofix entries keep serving their last good snapshot and raise a
-> Repairs card; they simply cannot pick up new months. That state now survives
-> a restart and an upgrade: a cached card is normally discarded when a newer
-> release parses more out of it, which is how a parser fix reaches an existing
-> user, but for a supplier whose card can never be read again there is no next
-> fetch to heal with, so the rejected card is replayed rather than dropped. An
-> entry with no cached card at all, a brand-new one, still sets up, with every
-> sensor unavailable and a Repairs card pointing at the Custom (expert)
-> workaround. July's card parsed normally, so this is an unintended regression
-> in Ecofix's document generator rather than a deliberate format change, and
-> the real fix is upstream: nothing restores the automatic path until they
-> publish a text PDF again.
+> Both new and existing entries price off that reading, and a brand-new one
+> sets up normally rather than with every sensor unavailable. Should the
+> engine ever refuse a card outright — it reads a mark as the one glyph it can
+> be or not at all — the entry falls back to what it did before: the last card
+> it managed to parse, or the Custom (expert) route above.
+>
+> July's card parsed normally, so this is an unintended regression in Ecofix's
+> document generator rather than a deliberate format change. The real fix is
+> still upstream, and the day they publish a text PDF again everything here
+> goes back to reading it directly, with no update needed on your side.
 
-Adding another supplier is a self-contained PR: drop a new module under
-[`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),
-register it in [`providers/__init__.py`](./custom_components/be_electricity_prices/providers/__init__.py),
-and ship a fixture-based unit test. The Eneco module is the reference.
+Missing a supplier? Ask for it with the
+[supplier request](https://github.com/renaudallard/homeassistant_be_electricity_prices/issues/new?template=supplier_request.yml)
+form rather than sending a module — see the note at the top of this file for
+why. One module, its registration and a fixture-based test is all it takes to
+add one; what takes the time is reading the card correctly.
 
 **Why isn't a business-only supplier like Yuso listed?** Not because it is
 business-only — professional tariffs *are* supported, see below — but because
@@ -1189,8 +1201,10 @@ row is re-parsed from the texts the branch kept, so a fix reaches past
 months within a day. The archive has no PDF bytes (a
 month of cards is tens of megabytes, three years of them would not fit a
 repository), a supplier that blocks the GitHub runners for a day (Mega has,
-the live check's timeouts show) just misses that day's capture, and a card
-the parser cannot read (Ecofix's page images) is stored as a PDF only.
+the live check's timeouts show) just misses that day's capture, and and a card no
+parser can read (Ecofix's page images) is read by an OCR engine built for
+those cards and stored as an ordinary row; one even that refuses is kept as a
+PDF and named on the coverage sheet with no JSON beside it.
 
 ## License
 
