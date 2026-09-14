@@ -70,6 +70,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    numeric_row,
     parse_sign,
     scan_month_end,
     to_float,
@@ -472,21 +473,18 @@ def _indicative_from_row(text: str, label: str) -> float:
     matches the value EBEM customers see on their bill more faithfully
     than recomputing against a placeholder spot.
     """
-    # Accept any sign between Belpex and the offset, matching the
-    # formula-row regexes above: some months EBEM prints the offset
-    # with a U+2212 minus / negative value, which a literal '+' here
-    # missed -- failing the whole snapshot on an otherwise valid card
-    # even though _extract_energy parsed the formula fine.
-    match = re.search(
-        rf"{re.escape(label)}\s+[\d,.]+\s+Belpex\s*[{SIGN_CHARS}]\s*[\d,.]+\s+"
-        rf"[\d,.]+\s+([\d,.]+)\s+[\d,.]+\s+[\d,.]+",
-        text,
-    )
-    if not match:
+    # The row reads "<label> 0,110 Belpex + 2,2 11,6380 12,3363 13,2781
+    # 14,0748": the formula's coefficient and offset, then the four
+    # columns. Reading it by figure count rather than by a literal pattern
+    # sidesteps the sign EBEM prints between Belpex and the offset, which
+    # has been a U+2212 minus in some months, and keeps a short row from
+    # borrowing a column off the row below.
+    row = numeric_row(text, label, 6)
+    if not row:
         raise ExtractorError(
             f"EBEM Groen Variabel: indicative incl-VAT row for {label!r} not found"
         )
-    return to_float(match.group(1)) / 100.0
+    return to_float(row[3]) / 100.0
 
 
 def _extract_yearly_fee_variable(text: str) -> float:
@@ -495,13 +493,10 @@ def _extract_yearly_fee_variable(text: str) -> float:
     The card prints both ex-VAT and incl-VAT columns; the registry's
     convention is to store the incl-VAT value (the second number).
     """
-    match = re.search(
-        r"Vaste vergoeding\s*\(jaarlijkse[^)]*\)\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
-        text,
-    )
-    if not match:
+    row = numeric_row(text, "Vaste vergoeding (jaarlijkse vaste bijdrage)", 2)
+    if not row:
         raise ExtractorError("EBEM Groen Variabel: 'Vaste vergoeding' row not found")
-    return to_float(match.group(1))
+    return to_float(row[1])
 
 
 def _extract_excl_night_fee_variable(text: str) -> float | None:
@@ -513,22 +508,16 @@ def _extract_excl_night_fee_variable(text: str) -> float | None:
     Returns None when the card doesn't print it, so the standard fee
     applies.
     """
-    match = re.search(
-        r"Vaste vergoeding\s+exclusief\s+nacht\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
-        text,
-    )
-    return to_float(match.group(1)) if match else None
+    row = numeric_row(text, "Vaste vergoeding exclusief nacht", 2)
+    return to_float(row[1]) if row else None
 
 
 def _extract_yearly_fee_abonnement(text: str) -> float:
     """``Abonnement 66,04 €/jaar 70 €/jaar`` -- B@sic+ and Dyn@mic share the label."""
-    match = re.search(
-        r"Abonnement\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
-        text,
-    )
-    if not match:
+    row = numeric_row(text, "Abonnement", 2)
+    if not row:
         raise ExtractorError("EBEM: 'Abonnement' yearly fee row not found")
-    return to_float(match.group(1))
+    return to_float(row[1])
 
 
 def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | None:
@@ -700,17 +689,13 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
 
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
-        row = re.search(
-            rf"{re.escape(label)}\s+"
-            + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-            digital_section.group(1),
-        )
+        row = numeric_row(digital_section.group(1), label, 4)
         if not row:
             continue
-        capacity = to_float(row.group(1))
-        kwh_total = to_float(row.group(2)) / 100.0
-        kwh_excl_night = to_float(row.group(3)) / 100.0
-        data_mgmt_year = to_float(row.group(4))
+        capacity = to_float(row[0])
+        kwh_total = to_float(row[1]) / 100.0
+        kwh_excl_night = to_float(row[2]) / 100.0
+        data_mgmt_year = to_float(row[3])
         out[key] = DsoOverlay(
             distribution_single=kwh_total,
             distribution_exclusive_night=kwh_excl_night,
