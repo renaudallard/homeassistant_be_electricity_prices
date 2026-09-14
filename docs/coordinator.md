@@ -56,7 +56,7 @@ Never read `entry.runtime_data` as "this coordinator" during first refresh.
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
 - `self._supplier_tuple` (`coordinator.py:888`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:403`) and `_save_persistent` (`coordinator.py:1678`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
-- `self._entry_data_signature` (`coordinator.py:897`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:1558`). `_async_options_updated` (`__init__.py:500`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
+- `self._entry_data_signature` (`coordinator.py:897`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:1558`). `_async_options_updated` (`__init__.py:501`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
 
@@ -349,7 +349,7 @@ Widening the table to three local days would also have papered over the symptom,
 
 ### 5.2 Cheapest / most-expensive window
 
-The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:544`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:544`, `__init__.py:544`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:701`), and only considers strictly time-contiguous runs (`__init__.py:701`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
+The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:545`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:545`, `__init__.py:545`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:702`), and only considers strictly time-contiguous runs (`__init__.py:702`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
 
 ## 6. Monthly capacity peak (Flanders)
 
