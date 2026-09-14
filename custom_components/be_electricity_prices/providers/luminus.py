@@ -70,6 +70,7 @@ from ._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -476,15 +477,12 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # "Énergie fournie" row, e.g. "(c€/kWh) 15,54 13,29 6,72". The
         # second occurrence later in the PDF is the bi-horaire fallback
         # for non-SMR3 customers; we anchor on the first match.
-        tou_match = re.search(
-            rf"Énergie fournie\s*\(c€/kWh\)\s+({_NUM})\s+({_NUM})\s+({_NUM})(?!\s+\d)",
-            text,
-        )
-        if not tou_match:
+        tou_row = numeric_row(text, "Énergie fournie (c€/kWh)", 3)
+        if not tou_row:
             raise ExtractorError("could not parse Luminus TOU energy block")
-        peak = to_float(tou_match.group(1)) / 100.0
-        transition = to_float(tou_match.group(2)) / 100.0
-        offpeak = to_float(tou_match.group(3)) / 100.0
+        peak = to_float(tou_row[0]) / 100.0
+        transition = to_float(tou_row[1]) / 100.0
+        offpeak = to_float(tou_row[2]) / 100.0
         # SmartFlex's three bands (pleines / creuses / super-creuses) use
         # SEASONAL windows: peak (pleines) is 07-11 + 17-22 all year, the
         # cheapest super-creuses band applies 11-17 only in spring/summer
@@ -533,16 +531,13 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=fee,
         )
 
-    energy_match = re.search(
-        rf"Énergie fournie\s*\(c€/kWh\)\s+({_NUM})\s+({_NUM})\s+({_NUM})\s+({_NUM})",
-        text,
-    )
-    if not energy_match:
+    energy_row = numeric_row(text, "Énergie fournie (c€/kWh)", 4)
+    if not energy_row:
         raise ExtractorError(f"could not parse Luminus {kind} energy block")
-    mono = to_float(energy_match.group(1)) / 100.0
-    peak = to_float(energy_match.group(2)) / 100.0
-    offpeak = to_float(energy_match.group(3)) / 100.0
-    excl_night = to_float(energy_match.group(4)) / 100.0
+    mono = to_float(energy_row[0]) / 100.0
+    peak = to_float(energy_row[1]) / 100.0
+    offpeak = to_float(energy_row[2]) / 100.0
+    excl_night = to_float(energy_row[3]) / 100.0
 
     excl_night_fee = _extract_excl_night_fee(text)
     if kind == "fixed":
@@ -906,17 +901,13 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
 
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
-        row = re.search(
-            rf"{re.escape(label)}\s+((?:{_NUM}\s+){{3,}}{_NUM})",
-            text,
-            re.IGNORECASE,
-        )
+        # Eight figures on a static card, four on a dynamic one, which
+        # prints neither the analog-meter columns nor the prosumer rate.
+        row = numeric_row(text, label, 8) or numeric_row(text, label, 4)
         if not row:
             continue
-        nums = [to_float(n) for n in row.group(1).split()]
-        if len(nums) < 4:
-            continue
-        prosumer: float | None = nums[7] if len(nums) >= 8 else None
+        nums = [to_float(n) for n in row]
+        prosumer: float | None = nums[7] if len(nums) == 8 else None
         out[key] = DsoOverlay(
             distribution_single=nums[2] / 100.0,
             distribution_exclusive_night=nums[3] / 100.0,
@@ -953,16 +944,14 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
-        row = re.search(
-            rf"{re.escape(label)}\s+((?:{_NUM}\s+){{6,}}{_NUM})",
-            text,
-            re.IGNORECASE,
-        )
+        # Nine figures on a dynamic card, which carries the IMPACT triplet,
+        # seven on a static one, which carries the prosumer rate instead.
+        row = numeric_row(text, label, 9) or numeric_row(text, label, 7)
         if not row:
             continue
-        nums = [to_float(n) for n in row.group(1).split()]
+        nums = [to_float(n) for n in row]
         eco = medium = pic = None
-        if len(nums) >= 9:
+        if len(nums) == 9:
             mono, pleines, creuses = nums[0], nums[1], nums[2]
             # Luminus prints ECO | MEDIUM | PIC in ascending order
             # (different from OCTA+/Bolt where the columns are PIC
@@ -972,7 +961,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             transport = nums[7]
             data_mgmt = nums[8]
             prosumer: float | None = None
-        elif len(nums) >= 7:
+        elif len(nums) == 7:
             mono, pleines, creuses = nums[0], nums[1], nums[2]
             excl_night = nums[3]
             transport = nums[4]
