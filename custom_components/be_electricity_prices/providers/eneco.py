@@ -70,6 +70,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     head_freshness_key,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -573,16 +574,11 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
     Layout: Enkelvoudig | Dag | Nacht | Uitsl. nacht | [MEDIUM PIC ECO] |
             Transport | Databeheer (€/jaar) | Prosument (€/kVA/jaar)
     """
-    escaped = re.escape(label)
-    pattern = re.compile(
-        rf"{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}"
-        rf"(?:\s+{_NUM}\s+{_NUM}\s+{_NUM})?\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-        re.S | re.IGNORECASE,
-    )
-    match = pattern.search(text)
-    if not match:
+    # Ten figures where the card prints the Tarif Impact triplet (Power
+    # Fix), seven where it does not (Power Dynamic).
+    groups = numeric_row(text, label, 10) or numeric_row(text, label, 7)
+    if groups is None:
         return None
-    groups = [g for g in match.groups() if g is not None]
     # When Eneco prints the Tarif Impact triplet (Power Fix layout) the
     # row carries 10 columns; Power Dynamic only has 7. Eneco's column
     # order is MEDIUM | PIC | ECO (different from OCTA+/Bolt where it's
@@ -616,27 +612,23 @@ def _find_fluvius_row(text: str, label: str) -> DsoOverlay | None:
     transport is 0 here - same convention as the Engie and Luminus
     Flanders rows. The Wallonia "Transport-kosten" column does not apply.
     """
-    escaped = re.escape(label)
-    # Anchor on the digital-meter Fluvius section so we don't accidentally
-    # pick up the analoge meter row that follows further down.
-    digital_match = re.search(
-        rf"DIGITALE METER.*?{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-        text,
-        re.S | re.IGNORECASE,
-    )
-    if not digital_match:
+    # Bound to the digital-meter section: the analoge meter table below
+    # repeats every label and is the same five figures wide, so an unbounded
+    # lookup could bill a digital meter on the analog row.
+    row = numeric_row(text, label, 5, after="DIGITALE METER", before="ANALOGE METER")
+    if row is None:
         return None
     return DsoOverlay(
-        distribution_single=to_float(digital_match.group(1)) / 100.0,
+        distribution_single=to_float(row[0]) / 100.0,
         # Post-capacity-tariff Flemish meters bill at a single rate, so
-        # peak / off-peak don't apply; the Uitsl. nacht column (group 2)
+        # peak / off-peak don't apply; the Uitsl. nacht column (the second)
         # is the dedicated exclusive-night meter circuit rate.
         distribution_peak=None,
         distribution_offpeak=None,
-        distribution_exclusive_night=to_float(digital_match.group(2)) / 100.0,
+        distribution_exclusive_night=to_float(row[1]) / 100.0,
         transport=0.0,
-        data_management_per_year=to_float(digital_match.group(4)),
-        capacity_eur_per_kw_year=to_float(digital_match.group(5)),
+        data_management_per_year=to_float(row[3]),
+        capacity_eur_per_kw_year=to_float(row[4]),
     )
 
 
