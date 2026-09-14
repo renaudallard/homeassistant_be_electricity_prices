@@ -37,9 +37,16 @@ Belgian electricity, taking into account every component of a Belgian bill
 capacity tariff billed on the monthly peak.
 
 Energy prices are fetched **live** from each supplier's own published
-tariff card. **No EUR values are hardcoded in the source.** Add a supplier
-by writing one Python module that knows where to find that supplier's
-publication and how to parse it.
+tariff card. **No EUR values are hardcoded in the source.** A supplier is one
+Python module that knows where to find that supplier's publication and how to
+read it. If yours is missing, **open an issue asking for it** rather than
+writing the module: a tariff card carries a dozen things that are easy to read
+almost right -- which column a meter type bills on, whether a figure is per
+year or per month, whether a levy carries VAT -- and getting those wrong
+mis-prices a bill quietly. Reviewing that costs more than writing it. There is a
+[supplier request](https://github.com/renaudallard/homeassistant_be_electricity_prices/issues/new?template=supplier_request.yml)
+form that asks for the four things it takes: the supplier, the product, a link
+to the card, and the regions it is sold in.
 
 > Targets Home Assistant **2026.4 or newer** (the minimum declared in `hacs.json`).
 

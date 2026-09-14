@@ -1,0 +1,63 @@
+name: Supplier request
+description: Ask for a Belgian supplier or product that is not covered yet
+labels: [supplier]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask here rather than sending a pull request. A tariff card carries a
+        dozen things that are easy to read almost right - which column a meter
+        type bills on, whether a figure is per year or per month, whether a
+        levy carries VAT - and each of those mis-prices a bill quietly. What
+        takes the time is getting them right against the real card, so the
+        card is the useful thing to send.
+
+  - type: input
+    id: supplier
+    attributes:
+      label: Supplier
+      description: The company's name as it appears on the card.
+      placeholder: e.g. Elegant, Aspiravi Energy
+    validations:
+      required: true
+
+  - type: input
+    id: product
+    attributes:
+      label: Product
+      description: The contract you are on, named the way the supplier names it.
+      placeholder: e.g. Groen Vast, Dynamique
+    validations:
+      required: true
+
+  - type: input
+    id: card
+    attributes:
+      label: Link to the tariff card
+      description: >
+        The PDF or page the supplier publishes its prices on. This is the one
+        field that cannot be worked around: without the card there is nothing
+        to read prices from.
+      placeholder: https://...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regions
+    attributes:
+      label: Regions it is sold in
+      multiple: true
+      options:
+        - Flanders
+        - Wallonia
+        - Brussels
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything unusual about it
+      description: >
+        An index the card names but does not explain, a fee that only applies
+        online, a product sold only with solar. Optional, and useful.
