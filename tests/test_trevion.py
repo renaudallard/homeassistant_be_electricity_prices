@@ -405,7 +405,9 @@ def test_the_formula_reproduces_the_price_the_card_prints(
     want = float(printed.group(1).replace(",", "."))
 
     snap = parse_snapshot(contract_id, text)
-    assert snap.energy.factor is not None and snap.energy.base is not None
+    # Narrowed rather than guarded: energy is a union of six rate kinds and
+    # only the spot-indexed pair carries a factor at all.
+    assert isinstance(snap.energy, (DynamicRates, SpotMonthlyRates))
     got = (snap.energy.factor * spot + snap.energy.base) * 100.0
     # A centime: the card rounds its own printed figure to two decimals.
     assert got == pytest.approx(want, abs=0.01)
