@@ -69,6 +69,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import binascii
 import hashlib
 import json
 import re
@@ -383,6 +385,11 @@ class _Cards(StoredTexts):
             return
         self.pending[digest] = payload
 
+    def knows(self, digest: str) -> bool:
+        """Whether this card is kept, or about to be: only then may a text
+        that embeds it be folded down to a reference."""
+        return digest in self.kept or digest in self.saved or digest in self.pending
+
     def file(self, month_id: str, digests: Iterable[str]) -> None:
         """Write the pending bytes a row read under that row's month."""
         if self.pdf_dir is None:
@@ -518,6 +525,11 @@ class _ReplaySession:
         async def __aexit__(self, *_exc: object) -> None:
             return None
 
+    async def bytes_for(self, digest: str) -> bytes:
+        """The kept card with this digest, wherever it is held."""
+        self.pdfs.setdefault(f"card:{digest}", digest)
+        return await self._fetch(f"card:{digest}")
+
     def _get(self, url: str) -> _Pending:
         return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
 
@@ -557,6 +569,44 @@ def _card_month(snap: SupplierSnapshot, today: date) -> str:
     return _month_id(*named)
 
 
+# A card handed over inside a document rather than downloaded on its own:
+# OCTA+'s archive answers with {"TariffSheet":"data:application/pdf;base64,..."}.
+# The bytes are kept as a release asset like any other card, so storing the
+# base64 too is the same PDF a second time, a third larger for the encoding and
+# incompressible with it. 150 such texts held 80,9 MB of the branch's 111,5.
+# The envelope is what matters; the payload is folded to a reference and put
+# back from the kept copy when a replay needs it.
+_EMBEDDED_CARD = re.compile(r"(data:[\w/+.-]+;base64,)([A-Za-z0-9+/=]{512,})")
+_CARD_REF = re.compile(r"\{\{card:([0-9a-f]{64})\}\}")
+
+
+def _fold_embedded_cards(text: str, cards: "_Cards") -> str:
+    """Replace every embedded card this run keeps with a reference to it."""
+
+    def fold(match: re.Match[str]) -> str:
+        try:
+            payload = base64.b64decode(match.group(2), validate=True)
+        except (ValueError, binascii.Error):
+            return match.group(0)
+        digest = hashlib.sha256(payload).hexdigest()
+        if not cards.knows(digest):
+            # Nothing to put back from later, so keep it as it came.
+            return match.group(0)
+        return f"{match.group(1)}{{{{card:{digest}}}}}"
+
+    return _EMBEDDED_CARD.sub(fold, text)
+
+
+async def _unfold_embedded_cards(text: str, replay: "_ReplaySession") -> str:
+    """Put the kept cards back into a stored text, for a parse to read."""
+    for digest in dict.fromkeys(_CARD_REF.findall(text)):
+        payload = await replay.bytes_for(digest)
+        text = text.replace(
+            f"{{{{card:{digest}}}}}", base64.b64encode(payload).decode("ascii")
+        )
+    return text
+
+
 def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     """Describe one memo entry: the PDF helpers key a rendered document as
     ``<variant>\\0<url>`` and a plain text fetch by its URL alone. A
@@ -579,7 +629,11 @@ def _sources_of(
     the render hook saw that never passed through the memo (a card handed
     over inside a JSON answer), each with its text stored and its digest."""
     sources = [
-        _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
+        _source_entry(
+            key,
+            _write_text(out, seen_month, _fold_embedded_cards(memo[key], cards)),
+            cards,
+        )
         for key in sorted(memo.touched)
     ]
     named = {(s["variant"], s["url"]) for s in sources}
@@ -1039,7 +1093,14 @@ async def _replay_row(
             else f"{source['variant']}\0{source['url']}"
         )
         # Seeded, not touched: only what the parse actually reads counts.
-        dict.__setitem__(memo, key, read_text(text_path))
+        stored = read_text(text_path)
+        if _CARD_REF.search(stored):
+            try:
+                stored = await _unfold_embedded_cards(stored, replay)
+            except Exception as err:  # noqa: BLE001 - a card we cannot put back is a row we cannot replay
+                summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
+                return
+        dict.__setitem__(memo, key, stored)
     replay.pdfs = {
         s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
     }

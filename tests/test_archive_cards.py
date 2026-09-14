@@ -1124,6 +1124,110 @@ async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(
     assert "(not parsed) |" not in (out / "coverage/acme.md").read_text()
 
 
+async def test_a_card_inside_a_document_is_stored_once_not_twice(
+    tmp_path: Path,
+) -> None:
+    """OCTA+'s archive answers with the card base64'd inside JSON. The bytes
+    are kept as a release asset like any other card, so storing the base64 as
+    well is the same PDF a second time, a third larger for the encoding: 150
+    such texts held 80,9 MB of the branch's 111,5. The envelope is stored, the
+    payload is a reference, and a replay puts the kept copy back."""
+    import base64
+
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    card = b"%PDF inside json" + b"\0padding" * 200
+    envelope = (
+        '{"Response":{"Ok":"True","TariffSheet":"data:application/pdf;base64,'
+        + base64.b64encode(card).decode("ascii")
+        + '"}}'
+    )
+    api = "https://acme.test/api/card"
+    session = _Session({api: envelope})
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        body = await fetch_text(session, api)  # type: ignore[arg-type]
+        payload = base64.b64decode(body.split("base64,")[1].rstrip('"}'))
+        text = await _pdf.render_pdf(
+            "plain", api, payload, lambda b: b.decode("latin-1")
+        )
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.2 if "%PDF" in text else 0.0),
+            publication_label="september 2026",
+        )
+
+    await ac.archive(
+        out, extractors=[_extractor(fetch)], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    digest = hashlib.sha256(card).hexdigest()
+    # Two texts are stored for this row: the render of the card, and the
+    # envelope it arrived in. The envelope is the one under test.
+    body = next(
+        t.read_text()
+        for t in (out / "texts").rglob("*.txt")
+        if "TariffSheet" in t.read_text()
+    )
+    assert f"{{{{card:{digest}}}}}" in body, "the payload should be a reference"
+    assert base64.b64encode(card).decode("ascii") not in body
+    assert len(body) < len(envelope), "the stored text must be the smaller one"
+    # The card itself is kept, which is what makes the reference resolvable.
+    assert (pdfs / f"electricity-2026-09/{digest}.pdf").read_bytes() == card
+
+
+async def test_a_folded_card_is_put_back_when_the_row_is_replayed(
+    tmp_path: Path,
+) -> None:
+    """Folding is only safe because the unfolding works: a replay reads the
+    envelope back, puts the kept card into it, and the parse sees exactly
+    what it saw the first time -- without the supplier being reachable."""
+    import base64
+
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    card = b"%PDF inside json" + b"\0padding" * 200
+    envelope = (
+        '{"TariffSheet":"data:application/pdf;base64,'
+        + base64.b64encode(card).decode("ascii")
+        + '"}'
+    )
+    api = "https://acme.test/api/card"
+    session = _Session({api: envelope})
+    seen: list[str] = []
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        body = await fetch_text(session, api)  # type: ignore[arg-type]
+        seen.append(body)
+        payload = base64.b64decode(body.split("base64,")[1].rstrip('"}'))
+        await _pdf.render_pdf("plain", api, payload, lambda b: b.decode("latin-1"))
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label="september 2026"
+        )
+
+    await ac.archive(
+        out, extractors=[_extractor(fetch)], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    first = seen[-1]
+    # The upload step records where the card landed, which is where a replay
+    # fetches it back from.
+    digest = hashlib.sha256(card).hexdigest()
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
+    )
+
+    session.pages.clear()  # the supplier is gone; only the kept copy remains
+    summary = await ac.archive(
+        out,
+        extractors=[_extractor(fetch)],
+        pdf_dir=pdfs,
+        reparse=True,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert summary.unreplayable == []
+    assert summary.replayed == 1
+    assert seen[-1] == first, "the replayed parse must read the same bytes"
+
+
 async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
     tmp_path: Path,
 ) -> None:
