@@ -76,6 +76,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     head_ok,
+    numeric_row,
     parse_sign,
     scan_month_end,
     to_float,
@@ -418,16 +419,18 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
     #   "Maandprijs: 11,81 11,81 11,81 11,81"
     # The four columns are (mono, peak, off-peak, exclusive_night) at the
     # same rate for every meter type today, so we surface them all.
-    consumption = re.search(
-        r"Verbruik[\s\S]+?Maandprijs:\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
-        text,
+    # Bounded to the Verbruik block: the Injectie block below prints its own
+    # Maandprijs row, and a lookup that reaches it bills a household's
+    # consumption at the injection credit.
+    consumption = numeric_row(
+        text, "Maandprijs", 4, after="Verbruik", before="Injectie"
     )
     if not consumption:
         raise ExtractorError("Ecofix Flexy: consumption Maandprijs row not found")
-    mono = to_float(consumption.group(1)) / 100.0
-    peak = to_float(consumption.group(2)) / 100.0
-    offpeak = to_float(consumption.group(3)) / 100.0
-    excl = to_float(consumption.group(4)) / 100.0
+    mono = to_float(consumption[0]) / 100.0
+    peak = to_float(consumption[1]) / 100.0
+    offpeak = to_float(consumption[2]) / 100.0
+    excl = to_float(consumption[3]) / 100.0
 
     # Surface the BELPEX-RLP-M indexation formula as a diagnostic string
     # alongside the printed indicative rates. This is informational only
@@ -482,8 +485,8 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
         # Injection indicative rate ("Injectie 4,83") sits next to the
         # formula; surfaced as ``current`` so consumers without a live
         # spot still get a plausible value.
-        current_match = re.search(r"Injectie\s+([\d,]+)", text)
-        current = to_float(current_match.group(1)) / 100.0 if current_match else None
+        current_row = numeric_row(text, "Injectie", 1)
+        current = to_float(current_row[0]) / 100.0 if current_row else None
         return InjectionRates(
             current=current,
             factor=factor_pdf * 10.0,
@@ -506,10 +509,10 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
     # delivery month's own weighted mean and keeps them away from the hourly
     # spot. Emitting them without that flag is what the old comment feared,
     # and it was right to.
-    current_block = re.search(
-        r"Injectie[\s\S]+?Maandprijs:\s+([\d,]+)",
-        text,
-    )
+    # The injection row prints a "/" where the card has no exclusive-night
+    # credit, so its width is the card's to choose; only the first column is
+    # read. The block bound is what keeps this off the consumption row above.
+    current_block = numeric_row(text, "Maandprijs", after="Injectie")
     if not current_block:
         # Every Flexy card prints the monthly indicative; a miss is a
         # layout drift, not a fee-free contract. Fail loud rather than
@@ -533,7 +536,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
             / 100.0
         )
     return InjectionRates(
-        current=to_float(current_block.group(1)) / 100.0,
+        current=to_float(current_block[0]) / 100.0,
         factor=factor,
         base=base,
         spp_indexed=factor is not None,
@@ -650,9 +653,9 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
         Fluvius Antwerpen 52,3679 5,35329 4,81301 18,92 18,92
     The five numbers are: capacity (€/kW/jaar), kWh-tarief total (c€/kWh),
     kWh-tarief excl. nacht (c€/kWh), data-mgmt per-kwartier (€/jaar),
-    data-mgmt monthly/yearly (€/jaar). A handful of Fluvius West /
-    Zenne-Dijle rows are line-broken between label and numbers; ``\\s+``
-    matches the newline.
+    data-mgmt monthly/yearly (€/jaar). The Fluvius West and Zenne-Dijle
+    labels are too long for their column and wrap onto a line of their
+    own, which ``numeric_row`` reads back as the row underneath them.
 
     ``kind`` selects the data-management column: dynamic contracts meter
     quarter-hourly (the per-kwartier column), Flexy meters monthly (the
@@ -681,23 +684,19 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
         )
 
     for label, key in _FLANDERS_LABELS.items():
-        row = re.search(
-            rf"{re.escape(label)}\s+"
-            + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
-            digital_section.group(1),
-        )
+        row = numeric_row(digital_section.group(1), label, 5)
         if not row:
             continue
-        capacity = to_float(row.group(1))
-        kwh_total = to_float(row.group(2)) / 100.0
-        kwh_excl_night = to_float(row.group(3)) / 100.0
-        # The row carries two data-management columns: group 4 is the
-        # per-kwartier (quarter-hourly) regime, group 5 the monthly/yearly
+        capacity = to_float(row[0])
+        kwh_total = to_float(row[1]) / 100.0
+        kwh_excl_night = to_float(row[2]) / 100.0
+        # The row carries two data-management columns: the fourth is the
+        # per-kwartier (quarter-hourly) regime, the fifth the monthly/yearly
         # one. Bill the column matching the metering regime: dynamic
-        # contracts read quarter-hourly (group 4), Flexy reads monthly
-        # (group 5). They are equal today, so a single column was masking
-        # the mismatch until Fluvius diverges the two regimes.
-        data_mgmt_year = to_float(row.group(4 if kind == "dynamic" else 5))
+        # contracts read quarter-hourly, Flexy reads monthly. They are equal
+        # today, so a single column was masking the mismatch until Fluvius
+        # diverges the two regimes.
+        data_mgmt_year = to_float(row[3 if kind == "dynamic" else 4])
         out[key] = DsoOverlay(
             distribution_single=kwh_total,
             distribution_exclusive_night=kwh_excl_night,
@@ -713,8 +712,10 @@ _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
     ("AIEG", DSO_AIEG),
     ("AIESH", DSO_AIESH),
     ("WAVRE", DSO_REW),
-    (r"TECTEO\s*-\s*RESA", DSO_RESA),
+    ("TECTEO - RESA", DSO_RESA),
 )
+# The ORES rows keep a pattern of their own: every sub-area has to be read
+# and compared, and the sub-area names are not known ahead of the card.
 _ORES_PATTERN = re.compile(
     r"^ORES\s*\(([^)]+)\)\s+"
     + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
@@ -724,18 +725,11 @@ _ORES_PATTERN = re.compile(
 )
 
 
-def _wallonia_row(label_pattern: str, text: str) -> tuple[float, ...] | None:
-    row = re.search(
-        rf"^{label_pattern}\s+"
-        + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-        + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
-        + r"([\d.,]+)\s+([\d.,]+)\s*$",
-        text,
-        re.MULTILINE,
-    )
-    if not row:
+def _wallonia_row(label: str, text: str) -> tuple[float, ...] | None:
+    row = numeric_row(text, label, 10)
+    if row is None:
         return None
-    return tuple(to_float(g) for g in row.groups())
+    return tuple(to_float(value) for value in row)
 
 
 def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
@@ -755,8 +749,8 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
 
     # Non-ORES rows.
-    for label_pattern, key in _WALLONIA_LABELS:
-        nums = _wallonia_row(label_pattern, text)
+    for label, key in _WALLONIA_LABELS:
+        nums = _wallonia_row(label, text)
         if nums is None:
             continue
         out[key] = _build_wallonia_overlay(nums)
