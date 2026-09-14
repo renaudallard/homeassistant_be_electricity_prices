@@ -842,3 +842,30 @@ def test_numeric_row_without_a_column_count_still_needs_one_row() -> None:
     """Leaving the count open is for cards that vary it; it never licenses
     a match that spans two rows."""
     assert numeric_row("Label: 1,0 2,0\nOther: 3,0", "Label") == ["1,0", "2,0"]
+
+
+def test_numeric_row_reads_a_label_that_wrapped_above_its_figures() -> None:
+    """pdfplumber puts a label too long for its column on its own line and
+    leaves the row's figures alone on the next, which is what it does to
+    Ecofix's Fluvius West and Zenne-Dijle rows. Read as one row, the way it
+    prints on the card."""
+    card = (
+        "Fluvius Midden-Vlaanderen 53,1314 5,27945 4,77831 18,92 18,92\n"
+        "Fluvius West\n"
+        "60,5255 6,69853 5,99282 18,92 18,92\n"
+    )
+    assert numeric_row(card, "Fluvius West", 5) == [
+        "60,5255",
+        "6,69853",
+        "5,99282",
+        "18,92",
+        "18,92",
+    ]
+
+
+def test_a_bare_figure_line_borrows_no_label_from_a_row_above() -> None:
+    """Only a line carrying no figures of its own can be a wrapped label. A
+    row that already has its own label keeps it, so a stray figure line under
+    a real row cannot be read as that row repeated."""
+    card = "Fluvius West 60,5255 6,69853\n1,00 2,00\n"
+    assert numeric_row(card, "Fluvius West", 2) == ["60,5255", "6,69853"]

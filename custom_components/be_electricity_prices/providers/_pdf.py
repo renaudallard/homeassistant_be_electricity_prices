@@ -837,11 +837,13 @@ def numeric_row(
     and a wrong bill.
 
     So this reads a row the way a person does. The label is matched by
-    similarity, not spelling. A row is ONE line, because that is what a row is.
-    The column count, where the caller knows it from the card's own headings,
-    has to match. ``after`` and ``before`` bound the search to the block the
-    row belongs to, which is what keeps a consumption lookup away from an
-    injection row carrying the same word.
+    similarity, not spelling. A row's figures are all on ONE line, because that
+    is what a row is; the only line it will look past is a label too long for
+    its column, sitting alone above its own figures. The column count, where
+    the caller knows it from the card's own headings, has to match. ``after``
+    and ``before`` bound the search to the block the row belongs to, which is
+    what keeps a consumption lookup away from an injection row carrying the
+    same word.
 
     Returns the figures as they are printed, for :func:`to_float`, or ``None``
     when nothing matches well enough. Refusing is the point: a wrong row is
@@ -859,11 +861,22 @@ def numeric_row(
             body = body[:end]
 
     best: tuple[float, list[str]] | None = None
-    for line in body.splitlines():
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
         numbers = _ROW_NUMBER.findall(line)
         if not numbers or (columns is not None and len(numbers) != columns):
             continue
-        score = SequenceMatcher(None, _row_label(line).lower(), label.lower()).ratio()
+        row_label = _row_label(line)
+        if not row_label and index:
+            # A label too long for its column wraps onto its own line and
+            # leaves the figures alone on the next one -- pdfplumber does
+            # this to Ecofix's Fluvius West and Zenne-Dijle rows. A person
+            # reads those two lines as one row, so take the label from the
+            # line above when it carries no figures of its own.
+            previous = lines[index - 1]
+            if not _ROW_NUMBER.search(previous):
+                row_label = _row_label(previous)
+        score = SequenceMatcher(None, row_label.lower(), label.lower()).ratio()
         if score >= threshold and (best is None or score > best[0]):
             best = (score, numbers)
     return None if best is None else best[1]
