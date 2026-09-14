@@ -81,6 +81,7 @@ from ._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     head_ok,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -340,31 +341,25 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_DSOS.items():
-        row = re.search(
-            rf"^{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
-            rf"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
-            rf"([\d,.]+)\s+([\d,.]+)",
-            text,
-            re.MULTILINE,
-        )
+        row = numeric_row(text, label, 10)
         if not row:
             continue
         out[key] = DsoOverlay(
-            distribution_single=to_float(row.group(2)) / 100.0,
-            distribution_exclusive_night=to_float(row.group(3)) / 100.0,
+            distribution_single=to_float(row[1]) / 100.0,
+            distribution_exclusive_night=to_float(row[2]) / 100.0,
             transport=0.0,  # rolled into Fluvius distribution on this card
-            capacity_eur_per_kw_year=to_float(row.group(1)),
+            capacity_eur_per_kw_year=to_float(row[0]),
             # Column 8 is PROSUMENTEN-TARIEF (reverse-metering forfait);
             # parse it like the Wallonia block and the sibling Ecofix / EBEM
             # Flanders cards so the overlay is complete.
-            prosumer_eur_per_kva_year=to_float(row.group(8)),
-            data_management_per_year=to_float(row.group(10)),
+            prosumer_eur_per_kva_year=to_float(row[7]),
+            data_management_per_year=to_float(row[9]),
             # Column 4 is the VREG MAXIMUM-TARIEF, captured all along and then
             # discarded. The card's header reads "AFNAME AFNAME MAXIMUM-" over
             # units "c€/kWh c€/kWh c€/kWh", and the footer says "Alle prijzen
             # zijn inclusief 6% btw", so it is stored TVAC as printed like the
             # rest of this card.
-            network_ceiling_eur_per_kwh=to_float(row.group(4)) / 100.0,
+            network_ceiling_eur_per_kwh=to_float(row[3]) / 100.0,
         )
     return out
 
@@ -384,26 +379,20 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_DSOS:
-        row = re.search(
-            rf"^{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
-            rf"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
-            rf"([\d,.]+)\s+([\d,.]+)",
-            text,
-            re.MULTILINE,
-        )
+        row = numeric_row(text, label, 10)
         if not row:
             continue
         out[key] = walloon_dso_overlay(
-            mono=to_float(row.group(1)),
-            peak=to_float(row.group(2)),
-            offpeak=to_float(row.group(3)),
-            pic=to_float(row.group(4)),
-            medium=to_float(row.group(5)),
-            eco=to_float(row.group(6)),
-            excl_night=to_float(row.group(7)),
-            transport=to_float(row.group(8)),
-            terme_fixe=to_float(row.group(9)),
-            prosumer=to_float(row.group(10)),
+            mono=to_float(row[0]),
+            peak=to_float(row[1]),
+            offpeak=to_float(row[2]),
+            pic=to_float(row[3]),
+            medium=to_float(row[4]),
+            eco=to_float(row[5]),
+            excl_night=to_float(row[6]),
+            transport=to_float(row[7]),
+            terme_fixe=to_float(row[8]),
+            prosumer=to_float(row[9]),
         )
     return out
 
