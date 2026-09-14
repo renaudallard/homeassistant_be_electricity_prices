@@ -83,6 +83,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -488,15 +489,13 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         #   <label> | databeheer EUR/yr | capacity EUR/kW/yr | -
         #           | enkelvoudig EUR/kWh | uitsluitend_nacht EUR/kWh | -
         #
-        # An optional 7th column ("Maximumtarief") slides in between
+        # An optional Maximumtarief column slides in between
         # uitsluitend_nacht and the trailing dash on rows where
-        # Fluvius publishes a maximum (Imewo's Apr 2026 card has one).
-        row = re.search(
-            rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+-\s+([\d,]+)\s+([\d,]+)"
-            rf"(?:\s+([\d,]+))?\s+-",
-            section,
-            re.MULTILINE,
-        )
+        # Fluvius publishes a maximum (Imewo's Apr 2026 card has one),
+        # so a row carries either five figures or four. Ask for the wider
+        # shape first: the narrow count would also match the wide row's
+        # opening columns if the dashes ever moved.
+        row = numeric_row(section, label, 5) or numeric_row(section, label, 4)
         if not row:
             continue
         # Ecopower's card is HTVA and declares vat_rate=0.06, so store both
@@ -504,16 +503,16 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         # entry, alongside every other flat annual fee. The same Fluvius
         # databeheer prints 17,85 HTVA here vs 18,92 TVAC on the other
         # suppliers' cards, and apply_vat is what turns one into the other.
-        databeheer = to_float(row.group(1))
-        capacity = to_float(row.group(2))
-        single = to_float(row.group(3))
-        # Group 4 is the exclusive-night meter rate (separate circuit
+        databeheer = to_float(row[0])
+        capacity = to_float(row[1])
+        single = to_float(row[2])
+        # Column 4 is the exclusive-night meter rate (separate circuit
         # for an electric water heater / night-storage heater). It
         # used to be dropped because there was no DsoOverlay column
         # for it; now propagated for users on the exclusive_night
         # meter type. Same scaling as ``single``.
-        excl_night = to_float(row.group(4))
-        # Group 5 is the optional Maximumtarief. The card states the rule the
+        excl_night = to_float(row[3])
+        # Column 5 is the optional Maximumtarief. The card states the rule the
         # engine applies: "Zou u met het capaciteitstarief en het nettarief
         # per kWh meer nettarieven betalen dan met het maximumtarief? Dan
         # betaalt u het maximumtarief. U betaalt dus nooit meer dan dat. U
@@ -526,9 +525,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=0.0,  # rolled into distribution on Ecopower's card
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,
-            network_ceiling_eur_per_kwh=(
-                to_float(row.group(5)) if row.group(5) else None
-            ),
+            network_ceiling_eur_per_kwh=(to_float(row[4]) if len(row) > 4 else None),
         )
     if not out:
         # The section header matched but no DSO row did - a column-layout
@@ -575,21 +572,19 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
     )
     out: dict[str, DsoOverlay] = {}
     for label, key in _DSO_LABELS.items():
-        row = re.search(
-            rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
-            section,
-            re.MULTILINE,
-        )
+        # Six figures when the card prints a maximumtarief, five when it
+        # doesn't; the four we keep lead the row either way.
+        row = numeric_row(section, label, 6) or numeric_row(section, label, 5)
         if not row:
             continue
         out[key] = DsoOverlay(
-            distribution_single=to_float(row.group(3)),
-            distribution_exclusive_night=to_float(row.group(4)),
+            distribution_single=to_float(row[2]),
+            distribution_exclusive_night=to_float(row[3]),
             transport=0.0,  # rolled into distribution on Ecopower's card
             # HTVA card, stored as printed: base.apply_vat grosses both flat
             # fees once per entry (same as the gbs parser).
-            capacity_eur_per_kw_year=to_float(row.group(2)),
-            data_management_per_year=to_float(row.group(1)),
+            capacity_eur_per_kw_year=to_float(row[1]),
+            data_management_per_year=to_float(row[0]),
         )
     if not out:
         # Section header matched but no DSO row did - fail loud rather than
