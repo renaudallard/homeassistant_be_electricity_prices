@@ -290,10 +290,17 @@ def _extract_formula(text: str, marker: str) -> tuple[float, float]:
     )
     if not match:
         raise ExtractorError(f"Trevion: formula not found for {marker}")
-    factor = _number(match.group(1)) * 1.06
+    # The card prints its formula in c€/kWh against a Belpex quoted in
+    # EUR/MWh: "(0,107* Belpex 15 MTU+1,3) *1,06", and the table beside it
+    # reads 15,96 c€/kWh at the 128,55 EUR/MWh the card itself quotes. Against
+    # a spot in EUR/kWh the factor therefore carries x1000/100 = x10, and the
+    # base divides cents into EUR. Both were short by that ten, which priced
+    # the commodity leg of every Trevion dynamic and monthly contract at a
+    # tenth of the card: 1,5958 c€/kWh where the card says 15,96.
+    factor = _number(match.group(1)) * 10.0 * 1.06
     base = (
         (_number(match.group(3)) if match.group(2) == "+" else -_number(match.group(3)))
-        / 1000.0
+        / 100.0
         * 1.06
     )
     return factor, base

@@ -30,6 +30,8 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import AsyncMock
 
+import re
+
 import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
@@ -119,8 +121,8 @@ def test_april_fixed_card_parses_tiered_excise_fallback(layout: bool) -> None:
         (
             "groene_stroom_flex",
             "trevion_flex_2026-09.pdf",
-            0.11342,
-            0.00159,
+            1.1342,
+            0.0159,
             39.0,
             0.0501545,
             0.95,
@@ -129,8 +131,8 @@ def test_april_fixed_card_parses_tiered_excise_fallback(layout: bool) -> None:
         (
             "lifepowr",
             "trevion_lifepowr_2026-09.pdf",
-            0.11342,
-            0.00159,
+            1.1342,
+            0.0159,
             26.5,
             0.056199,
             0.90,
@@ -168,7 +170,7 @@ def test_monthly_contracts_parse_rlp_and_spp_formulas(
         (
             "groene_energie_dynamisch",
             "trevion_dynamic_2026-09.pdf",
-            0.11342,
+            1.1342,
             39.0,
             0.86,
             -0.005,
@@ -176,7 +178,7 @@ def test_monthly_contracts_parse_rlp_and_spp_formulas(
         (
             "groene_energie_dynamisch_plus",
             "trevion_dynamic_plus_2026-09.pdf",
-            0.11342,
+            1.1342,
             39.0,
             0.86,
             -0.005,
@@ -184,7 +186,7 @@ def test_monthly_contracts_parse_rlp_and_spp_formulas(
         (
             "energreen",
             "trevion_energreen_2026-09.pdf",
-            0.106,
+            1.06,
             26.5,
             1.0,
             -0.013,
@@ -202,7 +204,7 @@ def test_dynamic_contracts_parse_quarter_hourly_formulas(
     snap = parse_snapshot(contract_id, _layout(fixture))
     assert isinstance(snap.energy, DynamicRates)
     assert snap.energy.factor == pytest.approx(factor)
-    assert snap.energy.base == pytest.approx(0.001378)
+    assert snap.energy.base == pytest.approx(0.01378)
     assert snap.energy.yearly_fixed_fee == pytest.approx(fee)
     assert snap.energy.quarter_hourly is True
     assert snap.injection is not None
@@ -322,7 +324,7 @@ def test_may_flex_card_writes_its_feed_in_formula_with_an_x() -> None:
     left those months absent until both signs were read."""
     snap = parse_snapshot("groene_stroom_flex", _layout("trevion_flex_2026-05.pdf"))
     assert isinstance(snap.energy, SpotMonthlyRates)
-    assert snap.energy.factor == pytest.approx(0.11342)
+    assert snap.energy.factor == pytest.approx(1.1342)
     assert snap.injection is not None
     assert snap.injection.factor == pytest.approx(0.95)
     assert snap.injection.base == pytest.approx(-0.025)
@@ -339,8 +341,8 @@ def test_lifepowr_cards_before_june_are_the_dynamic_product() -> None:
     snap = parse_snapshot("lifepowr", _layout("trevion_lifepowr_2026-05.pdf"))
     assert isinstance(snap.energy, DynamicRates)
     assert snap.energy.quarter_hourly is True
-    assert snap.energy.factor == pytest.approx(0.106)
-    assert snap.energy.base == pytest.approx(0.001378)
+    assert snap.energy.factor == pytest.approx(1.06)
+    assert snap.energy.base == pytest.approx(0.01378)
     assert snap.energy.yearly_fixed_fee == pytest.approx(26.5)
     assert snap.injection is not None
     assert snap.injection.factor == pytest.approx(1.0)
@@ -364,3 +366,46 @@ def test_validity_parses_dutch_month_name() -> None:
 def test_missing_fixed_card_sections_fail_loudly(old: str, message: str) -> None:
     with pytest.raises(ExtractorError, match=message):
         parse_snapshot("groene_energie_vast", _layout(_VAST).replace(old, "missing"))
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "fixture"),
+    [
+        ("groene_energie_dynamisch", "trevion_dynamic_2026-09.pdf"),
+        ("groene_energie_dynamisch_plus", "trevion_dynamic_plus_2026-09.pdf"),
+        ("energreen", "trevion_energreen_2026-09.pdf"),
+    ],
+)
+def test_the_formula_reproduces_the_price_the_card_prints(
+    contract_id: str, fixture: str
+) -> None:
+    """Price the card's own formula at the card's own index and meet its own
+    figure.
+
+    A constant like ``factor == 0.11342`` says only that the parser still does
+    what it did yesterday. It cannot notice a missing unit conversion, which is
+    how every Trevion dynamic and monthly contract came to bill its commodity
+    leg at a tenth of the card: 1,5958 c€/kWh where the card, three lines from
+    the formula, prints 15,96. The daily live check caught it on a bound the
+    unit tests could not.
+
+    So this reads both figures off the card and checks they agree. The card
+    quotes the index its own simulation used ("de laatst gekende waarde is deze
+    van augustus 2026 (128,55 EUR/MWh)") and prints the resulting price in the
+    SMR3 row, so nothing here is hardcoded but the tolerance, and a future card
+    carries its own numbers with it.
+    """
+    text = _layout(fixture)
+    quoted = re.search(
+        r"laatst gekende waarde is deze van \w+ \d{4} \(([\d,]+)\s*€/MWh\)", text
+    )
+    printed = re.search(r"SMR3\s+([\d,]+)\s", text)
+    assert quoted and printed, "the card no longer quotes its own index or price"
+    spot = float(quoted.group(1).replace(",", ".")) / 1000.0
+    want = float(printed.group(1).replace(",", "."))
+
+    snap = parse_snapshot(contract_id, text)
+    assert snap.energy.factor is not None and snap.energy.base is not None
+    got = (snap.energy.factor * spot + snap.energy.base) * 100.0
+    # A centime: the card rounds its own printed figure to two decimals.
+    assert got == pytest.approx(want, abs=0.01)
