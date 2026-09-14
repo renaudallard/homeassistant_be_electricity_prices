@@ -148,12 +148,19 @@ _RELEASE_PREFIX = "electricity"
 # table of every supplier grows by a column a month.
 _COVERAGE = "coverage.md"
 _COVERAGE_DIR = "coverage"
+# Which cards were downloaded and could not be read, by the row they would
+# have become. Ecofix publishes page images some months and no reader can
+# read those; the bytes are kept and uploaded like any other card, and
+# without this nothing on the branch would say what they are.
+_UNPARSED = "unparsed.json"
 _LEGEND = (
     "Each month links to what it was parsed from and to what came out of it: `pdf` is the",
     "card itself, in the cards repository's releases, `page` the text of a page as it",
     "was read, and `json` the card as the integration parsed it, both on this branch.",
     "A month marked `(mirror)` was copied from the supplier's own archive rather than",
-    "captured while it was current; a blank cell is a month the branch does not hold.",
+    "captured while it was current; a month marked `(not parsed)` is a card the branch",
+    "holds but no reader could read, so there is no JSON to link; a blank cell is a",
+    "month the branch does not hold.",
 )
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
@@ -175,11 +182,17 @@ Written daily by `.github/workflows/archive_cards.yml` running
   the releases of the cards repository (`be_price_cards`, shared with
   be_water_prices; this integration's releases are `electricity-<YYYY-MM>`,
   one per month of cards, whatever day the card was captured on).
+- `unparsed.json`: the cards kept whose parse failed, by the row they
+  would have become. A supplier that publishes its card as page images
+  some months leaves the bytes readable by nobody; they are uploaded all
+  the same, and this is what says which card they are.
 - `coverage.md` and `coverage/<supplier>.md`: which months the branch
   holds for each contract and region, whether each was captured live or
   mirrored from the supplier's archive, and links from each month to the
   PDF it was parsed from, to the page text it read and to the JSON above;
-  one sheet per supplier, the index naming them.
+  one sheet per supplier, the index naming them. A month marked
+  `(not parsed)` is one of the cards above: the PDF is there, the JSON is
+  not.
 
 To get the original card of a contract and month: open `coverage.md`, open
 the supplier's sheet, find the row, click `pdf` (or `page`); `json` is what
@@ -626,7 +639,8 @@ class _Held:
     via: str
     digests: list[str]
     page: str | None
-    path: str
+    # None for a card the branch holds but could not parse: there is no row.
+    path: str | None
 
 
 def _kept_rows(
@@ -698,10 +712,64 @@ def _cell(
         parts = [_link("page", archive_base_url, held.page)]
     else:
         parts = []
+    if held.path is None:
+        parts.append("(not parsed)")
+        return " ".join(parts)
     parts.append(_link("json", archive_base_url, held.path))
     if held.via == "archive":
         parts.append("(mirror)")
     return " ".join(parts)
+
+
+def _unparsed_key(supplier: str, contract: str, region: str, month: str) -> str:
+    return f"{supplier}/{contract}/{region}/{month}"
+
+
+def _read_unparsed(out: Path) -> dict[str, list[str]]:
+    """What earlier runs recorded as downloaded but unreadable."""
+    path = out / _UNPARSED
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _write_unparsed(
+    out: Path, seen: dict[str, list[str]], keep_months: int, today: date
+) -> None:
+    """Merge this run's unreadable cards into the store and drop what no
+    longer belongs there.
+
+    Merged rather than replaced, so a run over one supplier does not forget
+    the others; an entry whose month now has a row is dropped, so a card
+    that starts parsing leaves by itself; and the retention window is the
+    same one the rows are pruned on.
+    """
+    known = _read_unparsed(out)
+    known.update(seen)
+    held, _kept = _kept_rows(out)
+    cutoff = _months_before(today, keep_months)
+    entries: dict[str, list[str]] = {}
+    for key, digests in known.items():
+        parts = key.split("/")
+        if len(parts) != 4:
+            continue
+        supplier, contract, region, month = parts
+        if month < cutoff:
+            continue
+        if month in held.get(supplier, {}).get((contract, region), {}):
+            continue
+        entries[key] = sorted(set(digests))
+    path = out / _UNPARSED
+    if not entries:
+        path.unlink(missing_ok=True)
+        return
+    path.write_text(
+        json.dumps(dict(sorted(entries.items())), indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _write_coverage(
@@ -715,6 +783,10 @@ def _write_coverage(
     whose supplier has no rows any more is removed.
     """
     held, kept = _kept_rows(out)
+    for key, digests in _read_unparsed(out).items():
+        supplier, contract, region, month = key.split("/")
+        by_month = held.setdefault(supplier, {}).setdefault((contract, region), {})
+        by_month.setdefault(month, _Held("live", digests, None, None))
     folder = out / _COVERAGE_DIR
     folder.mkdir(parents=True, exist_ok=True)
     index = [
@@ -963,6 +1035,10 @@ async def archive(
     summary = _Summary()
     memo = _RecordingMemo()
     patience = _Patience()
+    # A card that downloaded but did not parse, by the row it would have
+    # become. A card that failed on the network read no bytes and leaves
+    # nothing here.
+    unreadable: dict[str, list[str]] = {}
     cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
@@ -980,6 +1056,11 @@ async def archive(
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                    digests = sorted({d for _v, _u, d, _t in cards.calls})
+                    if digests:
+                        unreadable[
+                            _unparsed_key(ex.id, contract, region, seen_month)
+                        ] = digests
                     if patience.note(ex.id, err):
                         summary.given_up.append(ex.id)
                     continue
@@ -1014,6 +1095,11 @@ async def archive(
                         )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
                         summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                        digests = sorted({d for _v, _u, d, _t in cards.calls})
+                        if digests:
+                            unreadable[
+                                _unparsed_key(ex.id, contract, region, month_id)
+                            ] = digests
                         if patience.note(ex.id, err):
                             summary.given_up.append(ex.id)
                         continue
@@ -1057,6 +1143,7 @@ async def archive(
             )
         stamp.write_text(parser + "\n", encoding="utf-8")
     cards.file_the_rest()
+    _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)

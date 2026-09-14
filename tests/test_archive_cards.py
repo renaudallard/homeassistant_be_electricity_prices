@@ -868,6 +868,70 @@ async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
     ]
 
 
+async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(
+    tmp_path: Path,
+) -> None:
+    """Ecofix publishes page images some months and no reader can read them.
+    The bytes are kept and uploaded like any other card, so the sheet has to
+    say which card they are: a cell with the PDF and no JSON. The entry
+    leaves by itself once a month parses."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    base = "https://cards.test/releases/download"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+
+    def render(payload: bytes) -> str:
+        return payload.decode()
+
+    async def unreadable(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            PDF_URL,
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+        raise ExtractorError("the card is a page image")
+
+    await ac.archive(
+        out,
+        extractors=[_extractor(unreadable)],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    digest = hashlib.sha256(b"%PDF page images").hexdigest()
+    assert json.loads((out / "unparsed.json").read_text()) == {
+        "acme/acme_fix/wallonia/2026-09": [digest]
+    }
+    # The upload step records where it landed; the sheet then links to it.
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
+    )
+    ac._write_listings(out, base, None)
+    url = f"{base}/electricity-2026-09/{digest}.pdf"
+    coverage = (out / "coverage/acme.md").read_text()
+    assert f"| acme_fix | wallonia | [pdf]({url}) (not parsed) |" in coverage
+    assert (
+        "- [acme](coverage/acme.md): 1 rows, 2026-09 to 2026-09"
+        in (out / "coverage.md").read_text()
+    )
+
+    # A later run whose card parses leaves nothing behind to explain.
+    session.pdfs[PDF_URL] = b"%PDF v1"
+    await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, []))],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert not (out / "unparsed.json").exists()
+    # The legend still explains the mark; no cell carries it any more.
+    assert "(not parsed) |" not in (out / "coverage/acme.md").read_text()
+
+
 async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
     tmp_path: Path,
 ) -> None:
