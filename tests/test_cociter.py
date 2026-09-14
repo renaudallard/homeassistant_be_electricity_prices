@@ -191,12 +191,12 @@ def test_trihoraire_dso_row_is_five_columns() -> None:
 
 
 def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
-    """The five-number row is not distinguishable by counting: the six-number
-    pattern matches it by running past the end of the line, since the last row
-    is followed by the "3." of the taxes heading, and it lands PIC on the mono
-    rate. Take the title away and that is exactly what happens - which is why
-    the layout is chosen by the card's own "prix variable trihoraire" title
-    before anything counts columns.
+    """The card's own "prix variable trihoraire" title picks the five-column
+    layout, and the column count backs the choice up rather than papering over
+    a bad one. Take the title away and the variable and dynamic lookups both
+    refuse the five-figure rows, where the old pattern read the last one by
+    running past the end of the line onto the "3." of the taxes heading and
+    landing PIC on the mono rate.
     """
     from custom_components.be_electricity_prices.providers.cociter import (
         _extract_dsos,
@@ -207,9 +207,7 @@ def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
     assert proper["aieg"].distribution_pic == pytest.approx(0.1508)
 
     untitled = _extract_dsos(raw.replace("prix variable trihoraire", "prix variable"))
-    assert set(untitled) == {"rew"}
-    assert untitled["rew"].distribution_pic is None
-    assert untitled["rew"].distribution_single == pytest.approx(0.1711)
+    assert untitled == {}
 
 
 def test_trihoraire_injection_is_the_variable_card_formula() -> None:

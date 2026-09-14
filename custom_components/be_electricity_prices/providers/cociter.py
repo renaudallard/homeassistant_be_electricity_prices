@@ -62,6 +62,7 @@ from ._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -667,10 +668,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     extension of the others: it drops the mono/bi columns outright for
         yearly | pic | medium | eco | uitsl_nacht
     since an Impact customer is billed on the Impact network tariff and on
-    nothing else. It is picked out by the card's own title, before anything
-    counts columns -- the six-number pattern below MATCHES a trihoraire row
-    by running past the end of the line (the last row is followed by the "3."
-    of the taxes heading), and it maps PIC onto the mono rate when it does.
+    nothing else. It is picked out by the card's own title, which is the
+    clearer signal; the column counts below back that up, since a row is
+    read on one line and has to be exactly as wide as the layout asks.
 
     The first 6 columns are positionally identical between the variable and
     dynamic cards, but column 6 means different things. We discriminate by
@@ -687,30 +687,27 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     for label in _DSO_LABELS:
         # Variable card: 6 numbers (last column = prosumer).
         # Dynamic card: 8 numbers (last 3 columns = PIC | MEDIUM | ECO).
-        row = re.search(
-            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)"
-            rf"\s+([\d,]+)(?:\s+([\d,]+)\s+([\d,]+))?",
-            text,
-            re.MULTILINE,
-        )
+        # Ask for the dynamic width first: the variable count would also
+        # match the dynamic row's opening six columns.
+        row = numeric_row(text, label, 8) or numeric_row(text, label, 6)
         if not row:
             continue
-        prosumer_rate = to_float(row.group(6)) if has_prosumer_column else None
+        prosumer_rate = to_float(row[5]) if has_prosumer_column else None
         pic = medium = eco = None
-        if not has_prosumer_column and row.group(7) and row.group(8):
-            pic = to_float(row.group(6)) / 100.0
-            medium = to_float(row.group(7)) / 100.0
-            eco = to_float(row.group(8)) / 100.0
+        if not has_prosumer_column and len(row) == 8:
+            pic = to_float(row[5]) / 100.0
+            medium = to_float(row[6]) / 100.0
+            eco = to_float(row[7]) / 100.0
         out[_DSO_KEY[label]] = DsoOverlay(
-            distribution_single=to_float(row.group(2)) / 100.0,
-            distribution_peak=to_float(row.group(3)) / 100.0,
-            distribution_offpeak=to_float(row.group(4)) / 100.0,
-            distribution_exclusive_night=to_float(row.group(5)) / 100.0,
+            distribution_single=to_float(row[1]) / 100.0,
+            distribution_peak=to_float(row[2]) / 100.0,
+            distribution_offpeak=to_float(row[3]) / 100.0,
+            distribution_exclusive_night=to_float(row[4]) / 100.0,
             distribution_pic=pic,
             distribution_medium=medium,
             distribution_eco=eco,
             transport=transport,
-            data_management_per_year=to_float(row.group(1)),
+            data_management_per_year=to_float(row[0]),
             prosumer_eur_per_kva_year=prosumer_rate,
         )
     return out
@@ -719,10 +716,10 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 def _extract_impact_dsos(text: str, transport: float) -> dict[str, DsoOverlay]:
     """The trihoraire card's five-column distribution table.
 
-    Anchored at both ends of the line, unlike the other two layouts: a row of
-    exactly five numbers is what tells this table apart from the six the
-    variable card prints, so a loose tail would read the first number of
-    whatever follows as a sixth column.
+    A row of exactly five figures is what tells this table apart from the six
+    the variable card prints, so the width is asked for rather than assumed:
+    a loose tail would read the first number of whatever follows as a sixth
+    column.
 
     ``distribution_single`` has no source on this card and is filled with the
     PIC rate. Nothing reads it: the contract is registered ``tou_impact``, the
@@ -734,22 +731,18 @@ def _extract_impact_dsos(text: str, transport: float) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label in _DSO_LABELS:
-        row = re.search(
-            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s*$",
-            text,
-            re.MULTILINE,
-        )
+        row = numeric_row(text, label, 5)
         if not row:
             continue
-        pic = to_float(row.group(2)) / 100.0
+        pic = to_float(row[1]) / 100.0
         out[_DSO_KEY[label]] = DsoOverlay(
             distribution_single=pic,
-            distribution_exclusive_night=to_float(row.group(5)) / 100.0,
+            distribution_exclusive_night=to_float(row[4]) / 100.0,
             distribution_pic=pic,
-            distribution_medium=to_float(row.group(3)) / 100.0,
-            distribution_eco=to_float(row.group(4)) / 100.0,
+            distribution_medium=to_float(row[2]) / 100.0,
+            distribution_eco=to_float(row[3]) / 100.0,
             transport=transport,
-            data_management_per_year=to_float(row.group(1)),
+            data_management_per_year=to_float(row[0]),
         )
     if not out:
         # An empty overlay is not a soft failure: it bills the whole network
