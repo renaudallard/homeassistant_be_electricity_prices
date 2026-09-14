@@ -767,7 +767,13 @@
         "name": "Netwerkcomponent"
       },
       "taxes_component": {
-        "name": "Belastingcomponent"
+        "name": "Belastingencomponent"
+      },
+      "price_peak": {
+        "name": "Piekprijs (dag)"
+      },
+      "price_offpeak": {
+        "name": "Dalprijs (nacht)"
       },
       "capacity_cost": {
         "name": "Capaciteitskost"
@@ -780,6 +786,12 @@
       },
       "injection_price": {
         "name": "Injectieprijs"
+      },
+      "injection_price_peak": {
+        "name": "Injectieprijs piek (dag)"
+      },
+      "injection_price_offpeak": {
+        "name": "Injectieprijs dal (nacht)"
       },
       "fixed_fee_eur_per_year": {
         "name": "Vaste vergoeding per jaar"

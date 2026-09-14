@@ -40,7 +40,7 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:571`) instance driven by a
+Every sensor is one `BePriceSensor` (`sensor.py:600`) instance driven by a
 frozen `BePriceSensorDescription` (`sensor.py:79`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:636`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:665`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -64,16 +64,16 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:538`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py:565`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
 | `SENSORS` (11 core price sensors) | `sensor.py:387` | always |
-| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:419` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:504` | `CONF_REGION == REGION_FLANDERS` |
-| `PROSUMER_SENSORS` (1) | `sensor.py:404` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
-| `INJECTION_SENSORS` (1) | `sensor.py:415` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:724` | `CONF_CONTRACT_END_DATE` is set |
+| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:446` | always |
+| `CAPACITY_SENSORS` (2) | `sensor.py:531` | `CONF_REGION == REGION_FLANDERS` |
+| `PROSUMER_SENSORS` (1) | `sensor.py:422` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
+| `INJECTION_SENSORS` (1) | `sensor.py:433` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
+| `ContractEndDateSensor` (1) | `sensor.py:753` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -277,7 +277,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:631`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:660`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only

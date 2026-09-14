@@ -401,6 +401,24 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh("taxes_component", _current_field("taxes")),
 )
 
+# Static peak/offpeak prices for the Energy Dashboard. These do NOT vary with
+# the time of day - they represent the constant all-in rate for that tariff
+# band. Useful for bi-hourly meter configurations where the Energy Dashboard
+# needs separate price entities for tariff 1 (day) and tariff 2 (night).
+# Returns None for dynamic/TOU contracts or Wallonia impact tariff.
+BI_HOURLY_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    _eur_per_kwh(
+        "price_peak",
+        lambda d: None if d.static_peak_price is None else d.static_peak_price.all_in,
+    ),
+    _eur_per_kwh(
+        "price_offpeak",
+        lambda d: (
+            None if d.static_offpeak_price is None else d.static_offpeak_price.all_in
+        ),
+    ),
+)
+
 PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="prosumer_cost",
@@ -414,6 +432,15 @@ PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
 
 INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh("injection_price", _current_injection),
+)
+
+# Static injection (feed-in) rates for bi-hourly meter configurations.
+# These are the constant day and night feed-in rates for contracts that
+# print separate injection rates per register (e.g. Trevion Vast).
+# None for contracts with a single injection rate or spot-indexed formulas.
+BI_HOURLY_INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    _eur_per_kwh("injection_price_peak", lambda d: d.static_injection_peak),
+    _eur_per_kwh("injection_price_offpeak", lambda d: d.static_injection_offpeak),
 )
 
 FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
@@ -545,6 +572,7 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
+    descriptions.extend(BI_HOURLY_SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
     try:
@@ -556,6 +584,7 @@ async def async_setup_entry(
         descriptions.extend(PROSUMER_SENSORS)
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
+        descriptions.extend(BI_HOURLY_INJECTION_SENSORS)
 
     entities: list[SensorEntity] = [
         BePriceSensor(coordinator, desc) for desc in descriptions

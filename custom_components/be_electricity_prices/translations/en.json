@@ -769,6 +769,12 @@
       "taxes_component": {
         "name": "Taxes component"
       },
+      "price_peak": {
+        "name": "Peak price (day)"
+      },
+      "price_offpeak": {
+        "name": "Offpeak price (night)"
+      },
       "capacity_cost": {
         "name": "Capacity cost"
       },
@@ -780,6 +786,12 @@
       },
       "injection_price": {
         "name": "Injection price"
+      },
+      "injection_price_peak": {
+        "name": "Injection price peak (day)"
+      },
+      "injection_price_offpeak": {
+        "name": "Injection price offpeak (night)"
       },
       "fixed_fee_eur_per_year": {
         "name": "Fixed fee per year"

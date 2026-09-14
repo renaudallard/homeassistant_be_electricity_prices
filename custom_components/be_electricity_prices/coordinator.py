@@ -133,6 +133,7 @@ from .const import (
 from .pricing import (
     PriceBreakdown,
     compute_breakdown,
+    static_breakdown,
     yearly_fixed_fee_for_meter,
 )
 from .providers import (
@@ -197,6 +198,19 @@ class CoordinatorData:
     """Snapshot the coordinator hands to entities."""
 
     hourly: dict[datetime, PriceBreakdown] = field(default_factory=dict)
+    # Static all-in prices for peak and offpeak bands, used by the Energy
+    # Dashboard for bi-hourly meter configurations. These do NOT vary with the
+    # time of day - they represent the constant rate for that band. None when
+    # the contract has no static rate (dynamic, TOU) or on the Wallonia impact
+    # tariff. The Energy Dashboard needs these as separate sensors because it
+    # expects one price entity per grid source (tariff 1 = day, tariff 2 = night).
+    static_peak_price: PriceBreakdown | None = None
+    static_offpeak_price: PriceBreakdown | None = None
+    # Static injection (feed-in) rates for peak and offpeak, for bi-hourly
+    # meter configurations with separate day/night injection compensation.
+    # None when the contract has a single injection rate or spot-indexed.
+    static_injection_peak: float | None = None
+    static_injection_offpeak: float | None = None
     # Grid resolution of the keys in ``hourly``: RESOLUTION_HOURLY for
     # every static / hourly-billed contract, RESOLUTION_QUARTER for
     # dynamic suppliers that bill per quarter-hour (Engie). Consumers use
@@ -1253,6 +1267,34 @@ class BePricesCoordinator(
         self._sync_impact_gap_issue()
         self._sync_connection_fee_issue()
         self._sync_prosumer_gap_issue()
+
+        # Compute static peak/offpeak breakdowns for the Energy Dashboard.
+        # These are the constant all-in rates for day and night, independent
+        # of the current time. None for dynamic/TOU contracts or impact tariff.
+        dso_key = self.entry.data.get(CONF_DSO, "")
+        region = self.entry.data.get(CONF_REGION, "")
+        dso_mode = self.entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+        try:
+            static_peak = static_breakdown(priced, dso_key, region, "peak", dso_mode)
+            static_offpeak = static_breakdown(
+                priced, dso_key, region, "offpeak", dso_mode
+            )
+        except KeyError:
+            # DSO not in snapshot -- can happen for custom entries or incomplete
+            # cards. The sensors will be unavailable, which is correct.
+            static_peak = None
+            static_offpeak = None
+
+        # Static injection (feed-in) rates for bi-hourly meters. None when the
+        # contract has a single injection rate, is spot-indexed, or has TOU slots.
+        # Trevion Vast and similar cards print separate day/night injection rates.
+        inj = priced.injection
+        static_inj_peak: float | None = None
+        static_inj_offpeak: float | None = None
+        if inj is not None and inj.bi_hourly and inj.peak is not None:
+            static_inj_peak = inj.peak
+            static_inj_offpeak = inj.offpeak
+
         return CoordinatorData(
             hourly=hourly,
             resolution=(
@@ -1287,6 +1329,10 @@ class BePricesCoordinator(
             ytd_diagnostics=ytd_breakdown or None,
             projected_year_cost_eur=projected_year_cost,
             projection_diagnostics=projection_breakdown or None,
+            static_peak_price=static_peak,
+            static_offpeak_price=static_offpeak,
+            static_injection_peak=static_inj_peak,
+            static_injection_offpeak=static_inj_offpeak,
         )
 
     async def _fill_year_spots(self) -> None:

@@ -769,6 +769,12 @@
       "taxes_component": {
         "name": "Composante taxes"
       },
+      "price_peak": {
+        "name": "Prix heures pleines (jour)"
+      },
+      "price_offpeak": {
+        "name": "Prix heures creuses (nuit)"
+      },
       "capacity_cost": {
         "name": "Cout capacitaire"
       },
@@ -780,6 +786,12 @@
       },
       "injection_price": {
         "name": "Prix d'injection"
+      },
+      "injection_price_peak": {
+        "name": "Prix d'injection heures pleines (jour)"
+      },
+      "injection_price_offpeak": {
+        "name": "Prix d'injection heures creuses (nuit)"
       },
       "fixed_fee_eur_per_year": {
         "name": "Redevance fixe par an"

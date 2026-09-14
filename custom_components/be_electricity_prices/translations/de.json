@@ -769,6 +769,12 @@
       "taxes_component": {
         "name": "Abgabenkomponente"
       },
+      "price_peak": {
+        "name": "Hochtarifpreis (Tag)"
+      },
+      "price_offpeak": {
+        "name": "Niedertarifpreis (Nacht)"
+      },
       "capacity_cost": {
         "name": "Kapazitaetskosten"
       },
@@ -780,6 +786,12 @@
       },
       "injection_price": {
         "name": "Einspeisepreis"
+      },
+      "injection_price_peak": {
+        "name": "Einspeisepreis Hochtarif (Tag)"
+      },
+      "injection_price_offpeak": {
+        "name": "Einspeisepreis Niedertarif (Nacht)"
       },
       "fixed_fee_eur_per_year": {
         "name": "Feste Vergutung pro Jahr"
