@@ -7,10 +7,13 @@ import hashlib
 import json
 import shutil
 import sys
-from collections.abc import Awaitable, Callable
+import types
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import ANY
 
@@ -21,6 +24,7 @@ from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
 from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
     Contract,
     ExtractorError,
     FixedRates,
@@ -866,6 +870,139 @@ async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
         "electricity-2026-08",
         "electricity-2026-09",
     ]
+
+
+@contextmanager
+def _ocr_engine(read_pdf: object) -> Iterator[None]:
+    """Stand a fake ``ocr_price_cards`` in front of the archiver's import.
+
+    The real engine needs Python 3.14 and is installed by the card-archive
+    workflow alone; what these tests are about is what the archiver does
+    with its answer.
+    """
+    module = types.ModuleType("ocr_price_cards")
+    module.read_pdf = read_pdf  # type: ignore[attr-defined]
+    sys.modules["ocr_price_cards"] = module
+    try:
+        yield
+    finally:
+        del sys.modules["ocr_price_cards"]
+
+
+def _page_image_fetch(session: _PdfSession) -> Fetch:
+    """A supplier whose card carries no text layer, the way Ecofix's does."""
+
+    def render(_payload: bytes) -> str:
+        raise CardNotReadableError("card has no text layer: 172 characters")
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        text = await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            PDF_URL,
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.2 if "11,81" in text else 0.0),
+            publication_label="september 2026",
+            source_url=PDF_URL,
+        )
+
+    return fetch
+
+
+async def test_a_page_image_card_is_read_by_ocr_and_the_row_says_so(
+    tmp_path: Path,
+) -> None:
+    """The last resort. The card downloaded, carries no text layer and no
+    parser can read it; the engine reads one off its pixels, the supplier's
+    own extractor parses that, and the row records that it was read that
+    way so an installation reading the row can tell its user."""
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 40
+    with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
+        summary = await ac.archive(
+            out,
+            extractors=[_extractor(_page_image_fetch(session))],
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert summary.stored == 1
+    assert summary.failed == []
+    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert row["_ocr"] is True
+    assert row["energy"]["single"] == 0.2
+    # Nothing is left owing an explanation: the card parsed.
+    assert not (out / "unparsed.json").exists()
+
+
+async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
+    tmp_path: Path,
+) -> None:
+    """The key is written only when true, so every row already on the branch
+    stays byte-identical and a day that changed nothing still commits
+    nothing."""
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, []))],
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert "_ocr" not in row
+
+
+async def test_without_the_engine_a_page_image_card_is_refused_as_before(
+    tmp_path: Path,
+) -> None:
+    """The engine is installed by one workflow and nowhere else. Without it
+    the card fails exactly as it did, and is named on the sheet instead."""
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    assert "ocr_price_cards" not in sys.modules
+    summary = await ac.archive(
+        out,
+        extractors=[_extractor(_page_image_fetch(session))],
+        pdf_dir=tmp_path / "pdfs",
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert summary.stored == 0
+    assert len(summary.failed) == 1
+    assert not (out / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert "acme/acme_fix/wallonia/2026-09" in json.loads(
+        (out / "unparsed.json").read_text()
+    )
+
+
+async def test_a_reading_too_thin_to_price_on_is_refused(tmp_path: Path) -> None:
+    """``trusted_text`` drops every line carrying a mark the engine refused,
+    so a bad reading comes back short rather than wrong. Too short to price
+    on is held to the same floor a text layer is, and the card is named on
+    the sheet rather than written as a row of silent misses."""
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    with _ocr_engine(
+        lambda payload, strict: SimpleNamespace(trusted_text="Maandprijs:")
+    ):
+        summary = await ac.archive(
+            out,
+            extractors=[_extractor(_page_image_fetch(session))],
+            pdf_dir=tmp_path / "pdfs",
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert summary.stored == 0
+    assert "too little of a card to price on" in summary.failed[0]
+    assert "acme/acme_fix/wallonia/2026-09" in json.loads(
+        (out / "unparsed.json").read_text()
+    )
 
 
 async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(

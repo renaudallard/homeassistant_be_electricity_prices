@@ -52,7 +52,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          # 3.14 for ocr_price_cards, which needs it; the rest of the stack
+          # runs on both and the test suite gates on 3.13, which is what an
+          # installation runs. Only this job reads cards published as page
+          # images, and only this job needs the newer interpreter.
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |
@@ -66,6 +70,12 @@ jobs:
           # month is replayed through the current parser.
           pip install -c requirements-dev.txt \
             pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
+          # The reader for cards published as page images. Installed here and
+          # nowhere else: an installation never runs OCR, it reads the rows
+          # this walk writes. Unconstrained because its numpy and pypdfium2
+          # are its own business and the test suite pins neither.
+          pip install \
+            "ocr-price-cards @ git+https://github.com/renaudallard/ocr_price_cards@main"
 
       - name: Check out the archive branch
         # The archive lives on its own branch so three years of daily

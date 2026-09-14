@@ -20,6 +20,11 @@ module = [
     # pyxlsb (the Synergrid RLP workbook reader) ships no stubs either.
     "pyxlsb",
     "pyxlsb.*",
+    # ocr_price_cards reads the cards published as page images. It runs in
+    # the card-archive workflow only, never in an installation, so it is
+    # absent here and mypy cannot see the py.typed it does ship.
+    "ocr_price_cards",
+    "ocr_price_cards.*",
     # pytest-homeassistant-custom-component ships without py.typed; mypy
     # would otherwise emit one 'missing library stubs' note per test file
     # that imports its MockConfigEntry.

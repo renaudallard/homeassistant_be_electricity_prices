@@ -96,11 +96,13 @@ from custom_components.be_electricity_prices.providers import (  # noqa: E402
     all_extractors,
 )
 from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
+    _MIN_TEXT_LAYER_CHARS,
     is_transient_fetch_error,
     memoise_text_fetches,
     render_through,
 )
 from custom_components.be_electricity_prices.providers.base import (  # noqa: E402
+    CardNotReadableError,
     SupplierExtractor,
     SupplierSnapshot,
 )
@@ -265,6 +267,50 @@ class _Patience:
 _MANIFEST = "pdfs.json"
 
 
+def _ocr_text(payload: bytes) -> str:
+    """What an OCR engine reads off a card that carries no text layer.
+
+    The last thing tried, and only here. Ecofix has published its cards as
+    page images since August, and a document with nothing in it is the end
+    of the road for a parser -- but not for a reader that knows the fonts
+    these cards are set in. ``ocr_price_cards`` returns text shaped exactly
+    like pdfplumber's, so the supplier's own extractor parses it without
+    knowing anything happened.
+
+    This runs in CI, never in anyone's Home Assistant: the engine needs
+    Python 3.14 where Home Assistant still allows 3.13, and it carries a
+    17 MB glyph library. What reaches an installation is the row this walk
+    writes, which is JSON like every other row.
+
+    Read with ``strict=False`` and taken from ``trusted_text``: a line
+    carrying a mark the engine refused is left out of it, so a figure that
+    is there was read whole, and one it could not read is missing rather
+    than wrong -- a missing mandatory figure fails the parse, which is the
+    bargain the extractors already make. Anything it cannot deliver raises
+    the error the renderer raised, so the card falls to ``unparsed.json``
+    exactly as it did before.
+    """
+    try:
+        from ocr_price_cards import read_pdf
+    except ImportError as err:
+        raise CardNotReadableError(
+            "card has no text layer and ocr_price_cards is not installed"
+        ) from err
+    try:
+        text = str(read_pdf(payload, strict=False).trusted_text)
+    except Exception as err:
+        raise CardNotReadableError(f"OCR could not read the card: {err}") from err
+    # A reading is held to the floor a text layer is held to, for the reason
+    # that floor exists: one that refused most of the page leaves a row full
+    # of silent misses, and no row at all is the better answer.
+    if len(text.strip()) < _MIN_TEXT_LAYER_CHARS:
+        raise CardNotReadableError(
+            f"OCR read only {len(text.strip())} characters it was sure of, "
+            "which is too little of a card to price on"
+        )
+    return text
+
+
 class _Cards(StoredTexts):
     """What the run knows about card bytes, plus where they are kept.
 
@@ -298,6 +344,38 @@ class _Cards(StoredTexts):
         # Downloaded, not recorded anywhere yet, waiting for the row that
         # names it to say which month it is for.
         self.pending: dict[str, bytes] = {}
+        # Digests of the cards this run had to read off their pixels, so the
+        # rows they produced can say they were read that way.
+        self.ocr: set[str] = set()
+        # Every card downloaded for the target being walked, whether or not
+        # it rendered. ``calls`` cannot answer this: it is appended to after
+        # the render, and a card published as page images raises there, which
+        # is precisely the card that has to be named. Cleared per target by
+        # the caller, beside ``calls``.
+        self.seen: list[str] = []
+
+    async def render(
+        self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        """The card's text, or what OCR reads off it when it carries none.
+
+        Wraps the cache rather than replacing it: a card whose bytes the
+        branch has already read is still served its stored text, OCR or not,
+        and only a card the renderer refuses reaches the engine. The stored
+        text is the row's own, so a card read by OCR once is not read again
+        the next day.
+        """
+        digest = hashlib.sha256(payload).hexdigest()
+        self.seen.append(digest)
+        try:
+            return await super().render(variant, url, payload, renderer)
+        except CardNotReadableError:
+            text = await asyncio.to_thread(_ocr_text, payload)
+        self.rendered += 1
+        self.fresh[(variant, digest)] = text
+        self.calls.append((variant, url, digest, text))
+        self.ocr.add(digest)
+        return text
 
     def keep(self, digest: str, payload: bytes) -> None:
         if self.pdf_dir is None or digest in self.kept or digest in self.saved:
@@ -556,6 +634,11 @@ def _same_card(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> bool:
     return settled(existing) == settled(fresh)
 
 
+def _read_by_ocr(sources: list[dict[str, str]], cards: "_Cards") -> bool:
+    """Whether any card this row read had to be read off its pixels."""
+    return any(source.get("pdf") in cards.ocr for source in sources)
+
+
 def _write_card(
     out: Path,
     supplier: str,
@@ -567,6 +650,7 @@ def _write_card(
     now: datetime,
     via: str,
     seen_on: date | None = None,
+    ocr: bool = False,
 ) -> bool:
     """Write the card's month file; True when the file changed.
 
@@ -577,12 +661,17 @@ def _write_card(
     path produced it, ``live`` (today's card, filed by its label) or
     ``archive`` (the supplier's own archive, filed by the month asked for).
     A replay passes the day the row was first captured as ``seen_on``.
+    ``ocr`` marks a row whose card carried no text layer and was read off its
+    pixels; the key is written only when true, so every other row on the
+    branch stays byte-identical to what it already holds.
     """
     today = seen_on or now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
     card["_seen_on"] = today.isoformat()
     card["_sources"] = sources
     card["_via"] = via
+    if ocr:
+        card["_ocr"] = True
     path = out / supplier / contract / region / f"{month_id}.json"
     existing: dict[str, Any] | None = None
     if path.exists():
@@ -972,6 +1061,7 @@ async def _replay_row(
         now,
         row.get("_via", "live"),
         seen_on,
+        ocr=_read_by_ocr(sources, cards),
     ):
         summary.reparsed += 1
 
@@ -1050,13 +1140,14 @@ async def archive(
                 label = f"{ex.id}/{contract}/{region}"
                 memo.touched.clear()
                 cards.calls.clear()
+                cards.seen.clear()
                 try:
                     snap = await _fetch_card(
                         lambda: ex.fetch(session, contract, region), sleep
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
-                    digests = sorted({d for _v, _u, d, _t in cards.calls})
+                    digests = sorted(set(cards.seen))
                     if digests:
                         unreadable[
                             _unparsed_key(ex.id, contract, region, seen_month)
@@ -1068,7 +1159,16 @@ async def archive(
                 sources = _sources_of(memo, cards, out, seen_month)
                 month_id = _card_month(snap, today)
                 if _write_card(
-                    out, ex.id, contract, region, month_id, snap, sources, now, "live"
+                    out,
+                    ex.id,
+                    contract,
+                    region,
+                    month_id,
+                    snap,
+                    sources,
+                    now,
+                    "live",
+                    ocr=_read_by_ocr(sources, cards),
                 ):
                     summary.stored += 1
                 else:
@@ -1088,6 +1188,7 @@ async def archive(
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
                     memo.touched.clear()
                     cards.calls.clear()
+                    cards.seen.clear()
                     try:
                         past = await _fetch_card(
                             lambda: fetch_for_month(session, contract, region, first),
@@ -1095,7 +1196,7 @@ async def archive(
                         )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
                         summary.failed.append(f"{label}: {type(err).__name__}: {err}")
-                        digests = sorted({d for _v, _u, d, _t in cards.calls})
+                        digests = sorted(set(cards.seen))
                         if digests:
                             unreadable[
                                 _unparsed_key(ex.id, contract, region, month_id)
@@ -1120,6 +1221,7 @@ async def archive(
                         sources,
                         now,
                         "archive",
+                        ocr=_read_by_ocr(sources, cards),
                     )
                     summary.backfilled += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
