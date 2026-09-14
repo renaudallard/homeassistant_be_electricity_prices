@@ -137,7 +137,9 @@ async def test_a_card_is_filed_under_the_month_its_label_names(tmp_path: Path) -
         sleep=_no_sleep,
     )
     assert (summary.stored, summary.unchanged, summary.failed) == (1, 0, [])
-    card = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-08.json").read_text())
+    card = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json").read_text()
+    )
     assert card["publication_label"] == "augustus 2026"
     assert card["_seen_on"] == "2026-09-11"
     assert card["energy"]["single"] == 0.2
@@ -155,7 +157,7 @@ async def test_an_unreadable_label_files_under_the_month_seen(tmp_path: Path) ->
         now=NOW,
         sleep=_no_sleep,
     )
-    assert (tmp_path / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert (tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json").exists()
 
 
 async def test_a_shared_page_is_read_once_and_credited_to_every_card(
@@ -173,7 +175,7 @@ async def test_a_shared_page_is_read_once_and_credited_to_every_card(
     assert summary.stored == 2
     assert session.hits == 1
     texts = {
-        json.loads((tmp_path / f"acme/{c}/wallonia/2026-09.json").read_text())[
+        json.loads((tmp_path / f"cards/acme/{c}/wallonia/2026-09.json").read_text())[
             "_sources"
         ][0]["text"]
         for c in ("a", "b")
@@ -186,7 +188,7 @@ async def test_a_repeat_run_keeps_the_first_capture(tmp_path: Path) -> None:
     has nothing to commit; a changed parse is a new capture."""
     extractors = [_extractor(_card_fetch("september 2026"))]
     await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
-    path = tmp_path / "acme/acme_fix/wallonia/2026-09.json"
+    path = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
     first = path.read_text()
     later = NOW.replace(day=12)
     summary = await ac.archive(
@@ -302,14 +304,18 @@ async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
         date(2026, 6, 1),
         date(2026, 5, 1),
     ]
-    july = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-07.json").read_text())
+    july = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-07.json").read_text()
+    )
     assert july["_via"] == "archive"
     assert july["energy"]["single"] == 0.21
-    assert (tmp_path / "acme/acme_fix/wallonia/2026-06.json").exists()
-    assert not (tmp_path / "acme/acme_fix/wallonia/2026-08.json").exists()
-    assert not (tmp_path / "acme/acme_fix/wallonia/2026-05.json").exists()
-    assert not (tmp_path / "beta/acme_fix/wallonia/2026-08.json").exists()
-    live = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert (tmp_path / "cards/acme/acme_fix/wallonia/2026-06.json").exists()
+    assert not (tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json").exists()
+    assert not (tmp_path / "cards/acme/acme_fix/wallonia/2026-05.json").exists()
+    assert not (tmp_path / "cards/beta/acme_fix/wallonia/2026-08.json").exists()
+    live = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json").read_text()
+    )
     assert live["_via"] == "live"
     # A second run asks only for the months still missing.
     asked.clear()
@@ -399,7 +405,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     assert (summary.rendered, summary.unrendered, summary.pdfs_saved) == (1, 0, 1)
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
     assert (pdfs / f"electricity-2026-09/{digest}.pdf").read_bytes() == b"%PDF v1"
-    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    card = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     [source] = card["_sources"]
     assert source["pdf"] == digest
     assert source["variant"] == "plain"
@@ -446,7 +452,7 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     assert (summary.rendered, summary.pdfs_saved, summary.stored) == (1, 1, 1)
     digest2 = hashlib.sha256(b"%PDF v2").hexdigest()
     assert (pdfs / f"electricity-2026-09/{digest2}.pdf").exists()
-    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    card = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["_sources"][0]["pdf"] == digest2
     assert card["energy"]["single"] == 0.3
 
@@ -486,7 +492,7 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
     await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
     assert (tmp_path / "parser.txt").read_text().strip() == "digest-a"
-    row = tmp_path / "acme/acme_fix/wallonia/2026-08.json"
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
     assert json.loads(row.read_text())["energy"]["single"] == 0.2
 
     # September, same parser: the live walk stores this month's card on the
@@ -499,7 +505,7 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     )
     assert (summary.replayed, summary.reparsed) == (0, 0)
     assert seen == [date.today()]
-    assert (tmp_path / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert (tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json").exists()
 
     # The parser changed: August is replayed from its stored text under
     # August's clock (the page itself is September's by now), and rewritten;
@@ -539,7 +545,7 @@ async def test_a_row_that_cannot_be_reproduced_offline_is_left_alone(
     monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
     august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
     await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
-    row = tmp_path / "acme/acme_fix/wallonia/2026-08.json"
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
     before = row.read_text()
 
     async def wants_more(_session: Any, contract: str, region: str) -> SupplierSnapshot:
@@ -630,7 +636,7 @@ async def test_a_reader_that_changed_variant_gets_the_kept_pdf_back(
     assert len(summary.failed) == 1
     assert (summary.replayed, summary.reparsed, summary.unreplayable) == (1, 1, [])
     assert layout_renders == [b"%PDF v1"]
-    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    card = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["energy"]["single"] == 0.5
     assert card["_sources"][0]["variant"] == "layout"
     digest = hashlib.sha256(b"%PDF v1").hexdigest()
@@ -707,7 +713,7 @@ async def test_a_rerender_reads_every_card_back_from_the_kept_copy(
         sleep=_no_sleep,
     )
     assert renders == [b"%PDF v1"]
-    row = out / "acme/acme_fix/wallonia/2026-09.json"
+    row = out / "cards/acme/acme_fix/wallonia/2026-09.json"
     before = json.loads(row.read_text())
     session.pdfs.clear()  # the supplier is gone; only the kept copy is left
     summary = await ac.archive(
@@ -936,7 +942,7 @@ async def test_a_page_image_card_is_read_by_ocr_and_the_row_says_so(
         )
     assert summary.stored == 1
     assert summary.failed == []
-    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert row["_ocr"] is True
     assert row["energy"]["single"] == 0.2
     # Nothing is left owing an explanation: the card parsed.
@@ -957,7 +963,7 @@ async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
         now=NOW,
         sleep=_no_sleep,
     )
-    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert "_ocr" not in row
 
 
@@ -978,7 +984,7 @@ async def test_without_the_engine_a_page_image_card_is_refused_as_before(
     )
     assert summary.stored == 0
     assert len(summary.failed) == 1
-    assert not (out / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert not (out / "cards/acme/acme_fix/wallonia/2026-09.json").exists()
     assert "acme/acme_fix/wallonia/2026-09" in json.loads(
         (out / "unparsed.json").read_text()
     )
@@ -1030,7 +1036,7 @@ async def test_a_card_nobody_could_read_is_tried_again_when_the_reader_changes(
         now=NOW,
         sleep=_no_sleep,
     )
-    assert not (out / "acme/acme_fix/wallonia/2026-09.json").exists()
+    assert not (out / "cards/acme/acme_fix/wallonia/2026-09.json").exists()
     assert "acme/acme_fix/wallonia/2026-09" in json.loads(
         (out / "unparsed.json").read_text()
     )
@@ -1054,7 +1060,7 @@ async def test_a_card_nobody_could_read_is_tried_again_when_the_reader_changes(
             sleep=_no_sleep,
         )
     assert summary.reparsed == 1
-    row = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert row["_ocr"] is True
     # Nothing left owing an explanation: the month has a row now.
     assert not (out / "unparsed.json").exists()
@@ -1261,7 +1267,7 @@ async def test_a_card_handed_over_inside_json_is_still_kept_and_named(
     assert (
         pdfs / f"electricity-2026-09/{digest}.pdf"
     ).read_bytes() == b"%PDF from json"
-    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    card = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["energy"]["single"] == 0.2
     kinds = {(s["variant"], s["url"]): s for s in card["_sources"]}
     sheet = kinds[("aligned", "https://acme.test/sheet?name=x")]
@@ -1287,11 +1293,13 @@ async def test_a_row_that_read_no_pdf_links_its_page_and_its_json(
         sleep=_no_sleep,
     )
     assert summary.stored == 1
-    row = json.loads((tmp_path / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    row = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json").read_text()
+    )
     text = row["_sources"][0]["text"]
     assert (
         f"| acme_fix | wallonia | [page]({branch}/{text})"
-        f" [json]({branch}/acme/acme_fix/wallonia/2026-09.json) |"
+        f" [json]({branch}/cards/acme/acme_fix/wallonia/2026-09.json) |"
     ) in (tmp_path / "coverage/acme.md").read_text()
     ac._write_coverage(tmp_path)
     assert (
@@ -1354,7 +1362,7 @@ async def test_a_replay_names_and_keeps_a_card_the_row_never_had(
         now=NOW,
         sleep=_no_sleep,
     )
-    row = out / "acme/acme_fix/wallonia/2026-07.json"
+    row = out / "cards/acme/acme_fix/wallonia/2026-07.json"
     card = json.loads(row.read_text())
     assert any("pdf" in s for s in card["_sources"])
     # Make it a row from before the seam: no card named, no bytes kept.
@@ -1528,7 +1536,7 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
     # Not uploaded yet: the PDF is named without a link, the JSON is linked.
     coverage = (out / "coverage/acme.md").read_text()
     assert (
-        f"| a | wallonia | pdf [json]({branch}/acme/a/wallonia/2026-09.json) |"
+        f"| a | wallonia | pdf [json]({branch}/cards/acme/a/wallonia/2026-09.json) |"
         in coverage
     )
     # The upload step recorded it; the index-only pass links everything up.
@@ -1541,11 +1549,11 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
     url = f"{base}/electricity-2026-09/{digest}.pdf"
     coverage = (out / "coverage/acme.md").read_text()
     assert (
-        f"| a | wallonia | [pdf]({url}) [json]({branch}/acme/a/wallonia/2026-09.json) |"
+        f"| a | wallonia | [pdf]({url}) [json]({branch}/cards/acme/a/wallonia/2026-09.json) |"
         in coverage
     )
     assert (
-        f"| b | wallonia | [pdf]({url}) [json]({branch}/acme/b/wallonia/2026-09.json) |"
+        f"| b | wallonia | [pdf]({url}) [json]({branch}/cards/acme/b/wallonia/2026-09.json) |"
         in coverage
     )
     assert not (out / "pdfs.md").exists()
@@ -1571,7 +1579,7 @@ def test_index_only_touches_nothing_but_the_listing(
 def test_a_supplier_that_left_the_branch_loses_its_sheet(tmp_path: Path) -> None:
     (tmp_path / "coverage").mkdir()
     (tmp_path / "coverage/gone.md").write_text("stale sheet")
-    row = tmp_path / "acme/acme_fix/wallonia/2026-09.json"
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
     row.parent.mkdir(parents=True)
     row.write_text(json.dumps({"_sources": []}))
     ac._write_coverage(tmp_path)
@@ -1599,19 +1607,19 @@ def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
 
 def test_prune_removes_months_older_than_the_retention(tmp_path: Path) -> None:
     for month in ("2023-08", "2023-09", "2026-09"):
-        card = tmp_path / "acme/acme_fix/wallonia" / f"{month}.json"
+        card = tmp_path / "cards/acme/acme_fix/wallonia" / f"{month}.json"
         card.parent.mkdir(parents=True, exist_ok=True)
         card.write_text("{}")
         text = tmp_path / "texts" / month / "abc.txt"
         text.parent.mkdir(parents=True, exist_ok=True)
         text.write_text("x")
-    old = tmp_path / "old/old_fix/wallonia/2023-01.json"
+    old = tmp_path / "cards/old/old_fix/wallonia/2023-01.json"
     old.parent.mkdir(parents=True)
     old.write_text("{}")
     assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 3
     assert not (tmp_path / "old").exists()
-    assert not (tmp_path / "acme/acme_fix/wallonia/2023-08.json").exists()
-    assert (tmp_path / "acme/acme_fix/wallonia/2023-09.json").exists()
+    assert not (tmp_path / "cards/acme/acme_fix/wallonia/2023-08.json").exists()
+    assert (tmp_path / "cards/acme/acme_fix/wallonia/2023-09.json").exists()
     assert not (tmp_path / "texts/2023-08").exists()
     assert (tmp_path / "texts/2023-09/abc.txt").exists()
 

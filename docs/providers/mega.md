@@ -270,7 +270,7 @@ listing, so `fetch_for_month` builds the filename with `_pro_pdf_url` for the
 requested month exactly as `fetch` does (`mega.py`). Routing them through the
 listing matched the residential card of the same `product_name` (`Smart Fixed` is
 shared by `mega_smart_fixed` and `mega_pro_smart_fixed`) and billed a B2B contract
-at residential rates on every archived month. Unlike `fetch`, the archive branch has
+at residential rates on every archived month. Unlike `fetch`, the card archive has
 **no previous-month retry**: a month Mega never published must return `None` so the
 caller falls back to the current-card proxy rather than billing the neighbouring
 month's card. `test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract`

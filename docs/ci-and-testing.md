@@ -188,7 +188,7 @@ edit whenever they grow, which is the thing this replaced.
 
 It runs in the `test` job (`.github/workflows/test.yml`), before the suite, needs no network or
 fixtures, and reports in under a second. `NOT_OURS` lists the names that are not files of this
-repository and never will be: what a workflow writes on the archive branch or as a job
+repository and never will be: what a workflow writes into the cards repository or as a job
 artefact, the framework doc's `providers/foo.py` placeholder, and Home Assistant's own
 `sensor/recorder.py`. A doc naming one of those is correct, and resolving it is not the point.
 
@@ -232,14 +232,14 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
 
 ### Rendering only what changed
 
-With the archive branch checked out beside it (`--texts DIR`, `scripts/live_check.py`),
+With the cards repository checked out beside it (`--texts DIR`, `scripts/live_check.py`),
 the harness installs the branch's texts as the readers' render cache (`scripts/card_texts.py`,
 the same `StoredTexts` the archiver builds on): a card whose bytes the archive walked an hour
 earlier and still holds is downloaded, timed, counted and parsed as before, but its text comes
 from the branch instead of a pdfplumber pass. Only a card that changed since is rendered. The
 report ends with how many cards were served that way and how many rendered, and the retry loop's
 seven attempts on a bad morning no longer cost seven full renders. A fork's pull request has no
-archive branch to read and renders everything, which is the behaviour before the cache existed.
+stored text to read and renders everything, which is the behaviour before the cache existed.
 
 ### Card freshness
 
@@ -1005,7 +1005,7 @@ token reports it in the `github-authentication-token-expiration` response header
 weeks before it, files an issue under the same `archive-cards` label through
 `scripts/file_ci_issue.sh`, fingerprinted on the expiry date so it repeats once a week until the
 secret is replaced. A token that reports no expiry, or none at all, files nothing; the failure
-issue still covers a token that has already expired. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
+issue still covers a token that has already expired. They cannot live in the cards repository's tree: one walk downloads about 100 MB of PDFs
 (214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards

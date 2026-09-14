@@ -267,6 +267,9 @@ class _Patience:
 
 
 _MANIFEST = "pdfs.json"
+# The rows sit under their own directory of the cards repository, so the
+# texts, the manifest and the sheets keep the top of it readable.
+_ROWS = "cards"
 
 
 def _ocr_text(payload: bytes) -> str:
@@ -727,7 +730,7 @@ def _write_card(
     card["_via"] = via
     if ocr:
         card["_ocr"] = True
-    path = out / supplier / contract / region / f"{month_id}.json"
+    path = out / _ROWS / supplier / contract / region / f"{month_id}.json"
     existing: dict[str, Any] | None = None
     if path.exists():
         try:
@@ -748,7 +751,7 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     """Remove months more than ``keep_months`` before today's; count them."""
     cutoff = _months_before(today, keep_months)
     removed = 0
-    for path in out.glob("*/*/*/????-??.json"):
+    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
         if path.stem < cutoff:
             path.unlink()
             removed += 1
@@ -794,7 +797,7 @@ def _kept_rows(
     it was captured, the digests of the PDFs it read, the first page it read
     and its own path; and the manifest."""
     held: dict[str, dict[tuple[str, str], dict[str, _Held]]] = {}
-    for path in sorted(out.glob("*/*/*/????-??.json")):
+    for path in sorted(out.glob(f"{_ROWS}/*/*/*/????-??.json")):
         supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
         try:
             row = json.loads(path.read_text(encoding="utf-8"))
@@ -1234,7 +1237,7 @@ async def _replay_all(
     """Every stored row, grouped by capture day so the clock is pinned
     once per day rather than once per row."""
     by_day: dict[str, list[Path]] = {}
-    for path in sorted(out.glob("*/*/*/????-??.json")):
+    for path in sorted(out.glob(f"{_ROWS}/*/*/*/????-??.json")):
         try:
             day = json.loads(path.read_text(encoding="utf-8")).get("_seen_on", "")
         except ValueError:
@@ -1337,7 +1340,9 @@ async def archive(
                     if ex.id in patience.given_up:
                         break
                     month_id = _months_before(today, back)
-                    if (out / ex.id / contract / region / f"{month_id}.json").exists():
+                    if (
+                        out / _ROWS / ex.id / contract / region / f"{month_id}.json"
+                    ).exists():
                         continue
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     label = f"{ex.id}/{contract}/{region}/{month_id}"

@@ -1016,7 +1016,7 @@ parsers, and must not be refreshed.
 A daily GitHub Actions workflow
 ([`.github/workflows/live_check.yml`](./.github/workflows/live_check.yml))
 runs three phases against the live supplier endpoints, taking the text of
-any card the archive branch already holds from there so only a card that
+any card the cards repository already holds from there so only a card that
 changed since the morning's archive walk is rendered again:
 
 - **Extractor phase** — every (contract, region) tuple is fetched and
@@ -1057,20 +1057,20 @@ gap from September 2026 on. Every morning it fetches every registered
 (supplier, contract, region) card exactly as the integration would, and
 commits what it parsed to the repository's
 [`archive`](https://github.com/renaudallard/homeassistant_be_electricity_prices/tree/archive)
-branch as `<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the text of
+cards repository as `cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the text of
 every page or document that parse read under `texts/<YYYY-MM>/`, so a card
 can be re-read or checked by hand later. A manual run of the same workflow
-can also mirror past months from the supplier archives onto the branch,
+can also mirror past months from the supplier archives into it,
 which keeps them readable should a supplier drop its archive, as DATS 24 did.
 **Finding a stored card by hand.** Everything is addressed by the same
-three ids the integration uses, which are the directory names on the
-branch: the supplier (`totalenergies`, `bolt`, ...), the contract
+three ids the integration uses, which are the directory names under
+`electricity/cards/`: the supplier (`totalenergies`, `bolt`, ...), the contract
 (`totalenergies_electricite_fixe`, `bolt_fix`, ...) and the region
-(`flanders`, `wallonia`, `brussels`). Browse the branch to see them.
+(`flanders`, `wallonia`, `brussels`). Browse the repository to see them.
 
 1. **The parsed card** is one JSON per month at
-   `<supplier>/<contract>/<region>/<YYYY-MM>.json`, for example
-   [`totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json).
+   `electricity/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, for example
+   [`totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json`](https://github.com/renaudallard/be_price_cards/blob/main/electricity/cards/totalenergies/totalenergies_electricite_fixe/wallonia/2026-09.json).
    It holds the energy, DSO, tax and injection figures exactly as the
    integration stores them, plus `_seen_on` (the day it was captured),
    `_via` (`live` for a card captured while it was current, `archive`
@@ -1078,8 +1078,8 @@ branch: the supplier (`totalenergies`, `bolt`, ...), the contract
    page or document the parse read, each with its text file under
    `texts/` and, for a PDF, the digest of the file.
 2. **The original PDF** is easiest through
-   [`coverage.md`](https://github.com/renaudallard/homeassistant_be_electricity_prices/blob/archive/coverage.md)
-   at the branch root, which names one sheet per supplier under
+   [`coverage.md`](https://github.com/renaudallard/be_price_cards/blob/main/electricity/coverage.md)
+   in that repository, which names one sheet per supplier under
    `coverage/`: a row per contract and region, a column per month. Each
    month cell carries two links: `pdf`
    downloads the card from the cards repository's releases (`page` opens

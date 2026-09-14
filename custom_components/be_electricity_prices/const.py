@@ -467,13 +467,14 @@ ENERGY_CHARTS_ATTRIBUTION: Final = (
     "Bundesnetzagentur | SMARD.de"
 )
 
-# The repository's own card archive. .github/workflows/archive_cards.yml
-# stores what every extractor parsed, daily, on the ``archive`` branch, and
-# the month cache reads it for any month a supplier's own archive cannot
-# serve: one small JSON per (supplier, contract, region, month).
+# The card archive. .github/workflows/archive_cards.yml stores what every
+# extractor parsed, daily, in the be_price_cards repository beside the cards
+# themselves, and the month cache reads it for any month a supplier's own
+# archive cannot serve: one small JSON per (supplier, contract, region,
+# month). Nothing card-derived lives in this repository.
 CARD_ARCHIVE_URL: Final = (
-    "https://raw.githubusercontent.com/renaudallard/"
-    "homeassistant_be_electricity_prices/archive"
+    "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
+    "electricity/cards"
 )
 # The month the daily captures began. A supplier with no archive of its own
 # has nothing on the branch before it, since a backfill can only mirror a

@@ -21,7 +21,8 @@ def _branch(tmp_path: Path, payload: bytes, variant: str, text: str) -> Path:
     text_path = tmp_path / "texts/2026-09/abc.txt"
     text_path.parent.mkdir(parents=True)
     text_path.write_text(text)
-    row = tmp_path / "acme/acme_fix/wallonia/2026-09.json"
+    # Rows live under cards/ in the cards repository; see _ROWS there.
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
     row.parent.mkdir(parents=True)
     row.write_text(
         json.dumps(

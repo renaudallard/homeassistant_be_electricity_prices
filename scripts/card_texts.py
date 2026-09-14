@@ -48,7 +48,8 @@ class StoredTexts:
         self.serve = serve
         # (variant, digest) -> text path on the branch, from every stored row.
         self.texts: dict[tuple[str, str], str] = {}
-        for row in archive.glob("*/*/*/????-??.json"):
+        # The rows sit under cards/ in the cards repository; see _ROWS there.
+        for row in archive.glob("cards/*/*/*/????-??.json"):
             try:
                 sources = json.loads(row.read_text(encoding="utf-8")).get(
                     "_sources", []
