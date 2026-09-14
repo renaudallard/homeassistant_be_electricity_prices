@@ -49,9 +49,11 @@ from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
+    CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
+    METER_BI,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
@@ -572,7 +574,12 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
-    descriptions.extend(BI_HOURLY_SENSORS)
+    # Only where the two bands are a thing the household is billed on. On a
+    # single-rate or dynamic meter these have no constant to report and would
+    # sit unavailable for good, which is two dead entities per entry.
+    bi_hourly = entry.data.get(CONF_METER) == METER_BI
+    if bi_hourly:
+        descriptions.extend(BI_HOURLY_SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
     try:
@@ -584,7 +591,8 @@ async def async_setup_entry(
         descriptions.extend(PROSUMER_SENSORS)
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
-        descriptions.extend(BI_HOURLY_INJECTION_SENSORS)
+        if bi_hourly:
+            descriptions.extend(BI_HOURLY_INJECTION_SENSORS)
 
     entities: list[SensorEntity] = [
         BePriceSensor(coordinator, desc) for desc in descriptions

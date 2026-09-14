@@ -1291,7 +1291,16 @@ class BePricesCoordinator(
         inj = priced.injection
         static_inj_peak: float | None = None
         static_inj_offpeak: float | None = None
-        if inj is not None and inj.bi_hourly and inj.peak is not None:
+        # Both or neither. A card that printed one of the pair would
+        # otherwise publish a day rate and leave the night one unavailable,
+        # which reads as a broken sensor rather than as a card that does not
+        # carry the split.
+        if (
+            inj is not None
+            and inj.bi_hourly
+            and inj.peak is not None
+            and inj.offpeak is not None
+        ):
             static_inj_peak = inj.peak
             static_inj_offpeak = inj.offpeak
 
