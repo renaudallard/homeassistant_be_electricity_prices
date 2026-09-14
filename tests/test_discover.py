@@ -673,10 +673,14 @@ def test_issue_form_offers_every_dso() -> None:
 
 
 def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
-    """The README names the archive suppliers in three places, and these lists
-    drift: EnergyVision gained an archive and none of them said so, while one
-    had been missing DATS 24 since before that. Pin them to the registry so a
-    supplier that gains or loses ``fetch_for_month`` cannot leave them stale."""
+    """The README names the archive suppliers, and that list drifts:
+    EnergyVision gained an archive and the README did not say so, while it had
+    been missing DATS 24 since before that. Pin it to the registry so a
+    supplier that gains or loses ``fetch_for_month`` cannot leave it stale.
+
+    There used to be three copies of the list, which is how they came to
+    disagree with each other as well as with the registry. There is one now,
+    under ``current_year_cost``; everything else points at it."""
     import re
     from pathlib import Path
 
@@ -711,6 +715,6 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
     found = re.findall(
         r"(?:archive past cards|archives historical cards) \(([^)]*)\)", readme
     )
-    assert len(found) == 3, f"expected three archive lists, found {len(found)}"
+    assert len(found) == 1, f"expected one archive list, found {len(found)}"
     for listed in found:
         assert sorted(x.strip() for x in listed.split("/")) == archived, listed
