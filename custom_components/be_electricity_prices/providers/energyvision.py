@@ -90,6 +90,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    numeric_row,
     parse_sign,
     parse_valid_until,
     tier_bound_kwh,
@@ -737,21 +738,16 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     section = text[start:end] if end > start else text[start:]
     out: dict[str, DsoOverlay] = {}
     for area, key in _DSO_ROWS:
-        row = re.search(
-            rf"FLUVIUS\s+{re.escape(area)}\s+"
-            rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-            section,
-            re.IGNORECASE,
-        )
+        row = numeric_row(section, f"FLUVIUS {area}", 5)
         if not row:
             continue
         out[key] = DsoOverlay(
-            distribution_single=to_float(row.group(2)) / 100.0,
-            distribution_exclusive_night=to_float(row.group(3)) / 100.0,
+            distribution_single=to_float(row[1]) / 100.0,
+            distribution_exclusive_night=to_float(row[2]) / 100.0,
             transport=0.0,
-            capacity_eur_per_kw_year=to_float(row.group(1)),
-            data_management_per_year=to_float(row.group(4)),
-            network_ceiling_eur_per_kwh=to_float(row.group(5)) / 100.0,
+            capacity_eur_per_kw_year=to_float(row[0]),
+            data_management_per_year=to_float(row[3]),
+            network_ceiling_eur_per_kwh=to_float(row[4]) / 100.0,
         )
     return out
 
