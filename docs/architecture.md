@@ -280,7 +280,9 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py`).
+  `coordinator.py`). That file is rewritten whole on every tick, so what goes in it has to be
+  worth writing hourly: the two Synergrid profiles are national and change monthly, and live in
+  one installation-wide store instead (`_profile_store`, `coordinator_spots.py`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`

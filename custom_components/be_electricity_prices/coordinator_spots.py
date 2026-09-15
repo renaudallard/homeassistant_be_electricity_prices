@@ -64,7 +64,6 @@ from .spot_stats import (
 from .synergrid import (
     RLP_BLENDS,
     RlpWeights,
-    SppWeights,
     fetch_rlp_blends,
     fetch_spp_weights,
 )
@@ -76,6 +75,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .providers.base import SupplierSnapshot
@@ -208,6 +208,11 @@ _LOGGER = logging.getLogger(__name__)
 # row and a stale one is not handed on.
 _PROFILE_CACHE_KEY = "synergrid_profile_cache"
 _PROFILE_LOCKS_KEY = "synergrid_profile_locks"
+_PROFILE_STORE_KEY = "synergrid_profile_store"
+_PROFILE_LOADED_KEY = "synergrid_profile_loaded"
+# Bumped only if the row shape below changes; a blob from another version is
+# dropped and the profiles are downloaded again, which costs one file.
+_PROFILE_STORE_VERSION = 1
 
 
 def _profile_cache(
@@ -226,6 +231,133 @@ def _profile_lock(hass: HomeAssistant, key: tuple[str, int, str]) -> asyncio.Loc
     if key not in locks:
         locks[key] = asyncio.Lock()
     return locks[key]
+
+
+def _profile_store(hass: HomeAssistant) -> Store[dict[str, Any]]:
+    """The one file both Synergrid profiles are kept in.
+
+    Per HASS, not per entry, because the curves are national: every entry that
+    wants one wants the same bytes. They used to ride the per-entry cache, which
+    is rewritten whole on every hourly tick, so a 193 KB curve that changes once
+    a month was written 24 times a day, once per entry that held it. With three
+    RLP blends kept for the compare page that had reached 771 KB a tick and 18 MB
+    a day on hardware that is usually a Raspberry Pi writing to an SD card.
+
+    Here it is written only when a profile is actually fetched, which is monthly,
+    and shared rather than copied per entry.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    store = bucket.get(_PROFILE_STORE_KEY)
+    if store is None:
+        store = Store(hass, _PROFILE_STORE_VERSION, f"{DOMAIN}_profiles")
+        bucket[_PROFILE_STORE_KEY] = store
+    return store
+
+
+async def _load_profile_cache(hass: HomeAssistant) -> None:
+    """Fill the in-process cache from the shared store, once per HASS.
+
+    Under a lock, because entries load in parallel: without it the second entry
+    reads the flag before the first has finished reading the file, finds an
+    empty cache, and seeds its own legacy blob over rows the store was about to
+    supply. The same curve either way, but the stamps differ.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    async with _profile_lock(hass, ("store", 0, "")):
+        if bucket.get(_PROFILE_LOADED_KEY):
+            return
+        bucket[_PROFILE_LOADED_KEY] = True
+        blob = await _profile_store(hass).async_load()
+        if not blob:
+            return
+        cache = _profile_cache(hass)
+        for row in blob.get("profiles", []):
+            try:
+                key = (str(row["kind"]), int(row["year"]), str(row["blend"]))
+                fetched = datetime.fromisoformat(str(row["fetched_at"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            weights = _parse_curve(row.get("weights"))
+            if weights and key not in cache:
+                cache[key] = (weights, fetched)
+
+
+async def _save_profile_cache(hass: HomeAssistant) -> None:
+    """Write the cache back. Called after a fetch, so monthly rather than
+    hourly; the rows are national and there is one file for all entries."""
+    cache = _profile_cache(hass)
+    await _profile_store(hass).async_save(
+        {
+            "profiles": [
+                {
+                    "kind": kind,
+                    "year": year,
+                    "blend": blend,
+                    "fetched_at": fetched.isoformat(),
+                    "weights": {
+                        ",".join(str(x) for x in slot): value
+                        for slot, value in weights.items()
+                    },
+                }
+                for (kind, year, blend), (weights, fetched) in cache.items()
+                if weights
+            ]
+        }
+    )
+
+
+def _parse_curve(raw: Any) -> dict[tuple[int, ...], float]:
+    """One persisted curve back into slot-keyed weights, skipping bad rows."""
+    out: dict[tuple[int, ...], float] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, (int, float)):
+            continue
+        try:
+            out[tuple(int(x) for x in key.split(","))] = float(value)
+        except ValueError:
+            continue
+    return out
+
+
+def _seed_profile_cache(hass: HomeAssistant, kind: str, blob: dict[str, Any]) -> bool:
+    """Adopt a profile from a per-entry blob written before the shared store.
+
+    Carried for one release so an upgrade does not re-download what the entry
+    already had. Two shapes have been written: one curve under ``weights``, and
+    from 0.23.2 one per blend under ``blends``. Nothing writes either any more.
+
+    A curve already in the cache wins, since that one came from the shared store
+    and is what the whole installation agreed on; several entries seed this from
+    their own blobs. Returns whether anything was added, so the caller can write
+    the shared store once and stop the next restart from downloading again.
+    """
+    year = blob.get("year")
+    fetched = blob.get("fetched_at")
+    if not isinstance(year, int):
+        return False
+    try:
+        stamp = datetime.fromisoformat(str(fetched))
+    except (TypeError, ValueError):
+        return False
+    curves: dict[str, Any] = {}
+    blends = blob.get("blends")
+    if isinstance(blends, dict):
+        curves = blends
+    else:
+        blend = blob.get("blend")
+        curves = {blend if isinstance(blend, str) else "": blob.get("weights")}
+    cache = _profile_cache(hass)
+    seeded = False
+    for blend, raw in curves.items():
+        if not isinstance(blend, str):
+            continue
+        weights = _parse_curve(raw)
+        if weights and (kind, year, blend) not in cache:
+            cache[(kind, year, blend)] = (weights, stamp)
+            seeded = True
+    return seeded
 
 
 class _SpotsMixin:
@@ -785,32 +917,6 @@ class _SpotsMixin:
         """
         return _mean_of_month(self._billable_spots(extra_spots), year, month)
 
-    def _restore_spp_weights(self, blob: dict[str, Any]) -> None:
-        """Rehydrate the persisted SPP profile blob into ``_spp_weights``."""
-        year = blob.get("year")
-        raw = blob.get("weights")
-        if not isinstance(year, int) or not isinstance(raw, dict):
-            return
-        parsed: SppWeights = {}
-        for key, value in raw.items():
-            if not isinstance(key, str) or not isinstance(value, (int, float)):
-                continue
-            try:
-                month, day, hour = (int(x) for x in key.split(","))
-            except ValueError:
-                continue
-            parsed[(month, day, hour)] = float(value)
-        if not parsed:
-            return
-        self._spp_weights = parsed
-        self._spp_weights_year = year
-        fetched = blob.get("fetched_at")
-        if isinstance(fetched, str):
-            try:
-                self._spp_fetched_at = datetime.fromisoformat(fetched)
-            except ValueError:
-                self._spp_fetched_at = None
-
     async def _shared_profile(
         self,
         kind: str,
@@ -842,6 +948,7 @@ class _SpotsMixin:
             weights = await fetch(self._session, *args)
             if weights:
                 cache[key] = (weights, now)
+                await _save_profile_cache(self.hass)
             return weights
 
     async def _ensure_spp_weights(self) -> None:
@@ -880,52 +987,6 @@ class _SpotsMixin:
         else:
             self._spp_failed_at = now
 
-    def _restore_rlp_weights(self, blob: dict[str, Any]) -> None:
-        """Rehydrate the persisted RLP profile blob into the held blends."""
-        year = blob.get("year")
-        if not isinstance(year, int):
-            return
-        stored_blend = blob.get("blend")
-        own = stored_blend if isinstance(stored_blend, str) else "distinct"
-        # Blobs written before the profile became blend-addressed carry one
-        # curve under "weights", which is the entry's own blend.
-        raw_blends = blob.get("blends")
-        if not isinstance(raw_blends, dict):
-            raw_blends = {own: blob.get("weights")}
-        held: dict[str, RlpWeights] = {}
-        for name, raw in raw_blends.items():
-            if not isinstance(name, str) or not isinstance(raw, dict):
-                continue
-            parsed: RlpWeights = {}
-            for key, value in raw.items():
-                if not isinstance(key, str) or not isinstance(value, (int, float)):
-                    continue
-                try:
-                    month, day, hour = (int(x) for x in key.split(","))
-                except ValueError:
-                    continue
-                parsed[(month, day, hour)] = float(value)
-            if parsed:
-                held[name] = parsed
-        if own not in held:
-            return
-        self._rlp_blend_weights = held
-        self._rlp_weights = held[own]
-        self._rlp_weights_year = year
-        self._rlp_blend = own
-        if not isinstance(blob.get("blends"), dict):
-            # Written before the profile became blend-addressed: the entry's own
-            # curve is all there is. Leave the fetch stamp unset so the next
-            # tick reads the others rather than leaving the compare page on the
-            # plain mean until the monthly refresh comes round.
-            return
-        fetched = blob.get("fetched_at")
-        if isinstance(fetched, str):
-            try:
-                self._rlp_fetched_at = datetime.fromisoformat(fetched)
-            except ValueError:
-                self._rlp_fetched_at = None
-
     async def _shared_rlp_blends(self, year: int) -> dict[str, RlpWeights]:
         """Every RLP blend for ``year``, downloaded at most once per process.
 
@@ -957,6 +1018,8 @@ class _SpotsMixin:
                 for blend, weights in fetched.items():
                     cache[("rlp", year, blend)] = (weights, now)
                     held[blend] = weights
+                if fetched:
+                    await _save_profile_cache(self.hass)
             return held
 
     async def _ensure_rlp_weights(self, blend: str = "distinct") -> None:

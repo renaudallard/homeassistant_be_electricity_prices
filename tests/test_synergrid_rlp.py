@@ -28,6 +28,9 @@ from custom_components.be_electricity_prices.spot_stats import (
     _rlp_weighted_month_mean,
 )
 from custom_components.be_electricity_prices.providers.base import RlpBlend
+from custom_components.be_electricity_prices.coordinator_spots import (
+    _profile_store,
+)
 from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
 
 
@@ -479,78 +482,138 @@ async def test_ensure_rlp_weights_backs_off_after_failure(
     assert coord._rlp_weighted_month_mean(2026, 9, {}) is None
 
 
-async def test_rlp_weights_survive_persist_round_trip(hass: HomeAssistant) -> None:
+async def test_the_profiles_are_not_in_the_hourly_blob(hass: HomeAssistant) -> None:
+    """The per-entry cache is rewritten whole on every tick, and the Synergrid
+    curves change once a month, so they do not belong in it. At 193 KB a curve
+    and three RLP blends, carrying them cost 771 KB a tick, 18 MB a day per
+    entry, on hardware that is usually a Raspberry Pi writing to an SD card."""
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._rlp_weights = {(9, 15, 10): 2.0, (1, 1, 12): 1.5}
+    coord._spp_weights = {(9, 15, 10): 1.0}
+    coord._spp_weights_year = 2026
+    coord._spp_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
+    coord._rlp_blend_weights = {b: {(9, 15, 10): 1.0} for b in RLP_BLENDS}
+    coord._rlp_weights = coord._rlp_blend_weights["distinct"]
     coord._rlp_weights_year = 2026
-    coord._rlp_blend = "flanders"
     coord._rlp_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
     entry.runtime_data = coord
     await coord._save_persistent()
 
-    reloaded = BePricesCoordinator(hass, entry)
-    await reloaded.async_load_persistent()
-    assert reloaded._rlp_weights == coord._rlp_weights
-    assert reloaded._rlp_weights_year == 2026
-    assert reloaded._rlp_blend == "flanders"
+    blob = await coord._store.async_load()
+    assert blob is not None
+    assert "rlp_weights" not in blob
+    assert "spp_weights" not in blob
 
 
-async def test_every_held_blend_survives_the_persist_round_trip(
-    hass: HomeAssistant,
+async def test_the_shared_store_carries_the_profiles_across_a_restart(
+    hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Not just the entry's own. Persisting one curve left the compare page
-    pricing foreign cards on the plain mean after every restart until the
-    profile next refreshed, which is a month away."""
+    """One file for the whole installation, written when a profile is fetched
+    rather than on every tick. A second entry, and the same entry after a
+    restart, must find every blend in it and download nothing."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._rlp_blend_weights = {
-        "distinct": {(9, 15, 10): 1.0},
-        "columns": {(9, 15, 10): 2.0},
-        "flanders": {(9, 15, 10): 3.0},
-    }
-    coord._rlp_weights = coord._rlp_blend_weights["flanders"]
-    coord._rlp_weights_year = 2026
-    coord._rlp_blend = "flanders"
-    coord._rlp_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
-    entry.runtime_data = coord
-    await coord._save_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(distinct=1.0, columns=2.0, flanders=3.0),
+    ) as mock:
+        await coord._ensure_rlp_weights("flanders")
+    assert mock.await_count == 1
 
+    # Drop everything this process holds, as a restart does.
+    hass.data.pop(const.DOMAIN, None)
     reloaded = BePricesCoordinator(hass, entry)
     await reloaded.async_load_persistent()
-    assert reloaded._rlp_blend == "flanders"
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
+    ) as mock:
+        await reloaded._ensure_rlp_weights("flanders")
+    assert mock.await_count == 0, "the shared store should have answered"
     assert reloaded._rlp_weights == {(9, 15, 10): 3.0}
     for blend, value in (("distinct", 1.0), ("columns", 2.0), ("flanders", 3.0)):
         assert reloaded.rlp_weights_for_blend(blend) == {(9, 15, 10): value}
 
 
-async def test_a_blob_written_before_blends_still_restores(
-    hass: HomeAssistant,
+async def test_a_blob_written_before_the_shared_store_is_adopted(
+    hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The old shape carried one curve under "weights" and the blend beside it.
-    It has to keep restoring as that entry's own blend."""
+    """Upgrading from 0.23.2, whose blob already carried every blend, must not
+    re-download them. Seeding writes the shared store too, so the curves are
+    still there on the restart after, when the blob no longer carries them."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._restore_rlp_weights(
+    await coord._store.async_save(
         {
-            "year": 2026,
-            "blend": "columns",
-            "fetched_at": "2026-09-01T00:00:00+00:00",
-            "weights": {"9,15,10": 2.0},
+            "entry_supplier": "eneco",
+            "entry_contract": "power_flex",
+            "entry_region": const.REGION_WALLONIA,
+            "rlp_weights": {
+                "year": 2026,
+                "blend": "columns",
+                "fetched_at": "2026-09-01T00:00:00+00:00",
+                "blends": {b: {"9,15,10": 2.0} for b in RLP_BLENDS},
+            },
         }
     )
-    assert coord._rlp_blend == "columns"
-    assert coord._rlp_weights == {(9, 15, 10): 2.0}
+    await coord.async_load_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
+    ) as mock:
+        await coord._ensure_rlp_weights("columns")
+    assert mock.await_count == 0, "the 0.23.2 blob should have been adopted"
     assert coord.rlp_weights_for_blend("columns") == {(9, 15, 10): 2.0}
-    # Nothing was stored for the others, so the caller keeps the plain mean.
-    assert coord.rlp_weights_for_blend("flanders") is None
-    # And the entry does not look fresh, so the next tick reads the rest rather
-    # than leaving the compare page on the plain mean for a month after an
-    # upgrade. Restoring the fetch stamp here would do exactly that.
-    assert coord._rlp_fetched_at is None
+    blob = await _profile_store(hass).async_load()
+    assert blob is not None
+    assert {r["blend"] for r in blob["profiles"]} == set(RLP_BLENDS)
+
+
+async def test_the_older_one_curve_blob_is_adopted_for_the_blend_it_names(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Before 0.23.2 the blob held one curve under "weights" with its blend
+    beside it. That one blend is adopted; the other two were never on disk, so
+    they are still fetched, which is the one file the old code would have paid
+    for a blend change anyway."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    await coord._store.async_save(
+        {
+            "entry_supplier": "eneco",
+            "entry_contract": "power_flex",
+            "entry_region": const.REGION_WALLONIA,
+            "rlp_weights": {
+                "year": 2026,
+                "blend": "columns",
+                "fetched_at": "2026-09-01T00:00:00+00:00",
+                "weights": {"9,15,10": 2.0},
+            },
+        }
+    )
+    await coord.async_load_persistent()
+    from custom_components.be_electricity_prices.coordinator_spots import (
+        _profile_cache,
+    )
+
+    assert _profile_cache(hass)[("rlp", 2026, "columns")][0] == {(9, 15, 10): 2.0}
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
+    ) as mock:
+        await coord._ensure_rlp_weights("columns")
+    # The adopted curve is kept; only what was missing is asked for.
+    assert mock.await_count == 1
+    assert mock.await_args is not None
+    assert sorted(mock.await_args.args[2]) == ["distinct", "flanders"]
+    assert coord.rlp_weights_for_blend("columns") == {(9, 15, 10): 2.0}
 
 
 async def test_the_compare_page_weights_a_card_on_its_own_blend(

@@ -86,7 +86,13 @@ from .spot_stats import (
 from .projected_cost import (
     _compute_projected_year_cost,
 )
-from .coordinator_spots import _spot_is_sane, _spots_for_local_days
+from .coordinator_spots import (
+    _load_profile_cache,
+    _save_profile_cache,
+    _seed_profile_cache,
+    _spot_is_sane,
+    _spots_for_local_days,
+)
 from .ytd_cost import (
     _compute_current_year_cost,
 )
@@ -584,6 +590,12 @@ class BePricesCoordinator(
 
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""
+        # Before the entry's own blob is even looked at, and whether or not it
+        # has one: the Synergrid curves live in a store shared by the whole
+        # installation, so a new entry, or one whose blob was discarded, still
+        # finds what another entry already downloaded rather than fetching the
+        # file again.
+        await _load_profile_cache(self.hass)
         stored = await self._store.async_load()
         if not stored:
             return
@@ -788,14 +800,21 @@ class BePricesCoordinator(
         stored_compare = stored.get("daily_compare")
         if isinstance(stored_compare, dict) and not tuple_mismatch:
             self.daily_compare = _daily_compare_from_dict(stored_compare)
-        # The SPP profile is the same national curve regardless of supplier, so
-        # it is restored irrespective of the entry-tuple gate above.
-        spp = stored.get("spp_weights")
-        if isinstance(spp, dict):
-            self._restore_spp_weights(spp)
-        rlp = stored.get("rlp_weights")
-        if isinstance(rlp, dict):
-            self._restore_rlp_weights(rlp)
+        # A blob written before the profiles moved to the shared store carries
+        # them still, and adopting those is what keeps an upgrade from
+        # downloading again what this entry already had. Irrespective of the
+        # entry-tuple gate above, since a national curve does not depend on a
+        # supplier. The store itself was read at the top of this method.
+        seeded = False
+        for kind in ("spp", "rlp"):
+            legacy = stored.get(f"{kind}_weights")
+            if isinstance(legacy, dict):
+                seeded |= _seed_profile_cache(self.hass, kind, legacy)
+        if seeded:
+            # Write what the legacy blob gave us into the shared store now. The
+            # blob is not rewritten with these keys, so without this the curve
+            # would be gone by the next restart and downloaded again.
+            await _save_profile_cache(self.hass)
         # Older persisted blobs may carry kwh_buckets / kwh_baselines /
         # year_start / year_start_register_baselines from a previous
         # release that tracked monthly accumulation in-process. Those
@@ -1787,33 +1806,6 @@ class BePricesCoordinator(
             }
         if self.daily_compare is not None:
             payload["daily_compare"] = _daily_compare_to_dict(self.daily_compare)
-        if self._spp_weights and self._spp_weights_year is not None:
-            payload["spp_weights"] = {
-                "year": self._spp_weights_year,
-                "fetched_at": (
-                    self._spp_fetched_at.isoformat() if self._spp_fetched_at else None
-                ),
-                "weights": {
-                    f"{m},{d},{h}": v for (m, d, h), v in self._spp_weights.items()
-                },
-            }
-        if self._rlp_weights and self._rlp_weights_year is not None:
-            # Every held blend, not only the entry's own: without the others a
-            # restart leaves the compare page pricing foreign cards on the
-            # plain mean until the profile next refreshes, a month away.
-            payload["rlp_weights"] = {
-                "year": self._rlp_weights_year,
-                "blend": self._rlp_blend,
-                "fetched_at": (
-                    self._rlp_fetched_at.isoformat() if self._rlp_fetched_at else None
-                ),
-                "blends": {
-                    blend: {f"{m},{d},{h}": v for (m, d, h), v in weights.items()}
-                    for blend, weights in (
-                        self._rlp_blend_weights or {self._rlp_blend: self._rlp_weights}
-                    ).items()
-                },
-            }
         await self._store.async_save(payload)
 
 

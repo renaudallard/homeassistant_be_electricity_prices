@@ -683,9 +683,27 @@ an entry whose energy leg carries `rlp_indexed` (Eneco Zon & Wind Flex and Flex
 One, Energy Knights Essentia, energie.be Variabel) and holds an ENTSO-E key, and
 for every entry on the compensation regime, whose yearly net it spreads over the
 year by that profile (`_NetAllocation`, see the pricing model). It refreshes the
-profile monthly, persists it beside the SPP weights, and `_energy_month_spot`
-picks the weighted mean over the plain one for an RLP-indexed leg in the live
-tick, the year-to-date walk, the backfill and the compare page.
+profile monthly and `_energy_month_spot` picks the weighted mean over the plain
+one for an RLP-indexed leg in the live tick, the year-to-date walk, the backfill
+and the compare page.
+
+### Where the profiles are kept
+
+Both curves live in one store shared by the whole installation
+(`{DOMAIN}_profiles`, `_profile_store`), not in the per-entry cache. They are
+national: every entry that wants one wants the same bytes. The per-entry cache is
+rewritten whole on every hourly tick, so carrying a 193 KB curve there wrote it
+24 times a day, once per entry holding it, for something that changes monthly.
+With the three RLP blends kept for the compare page that had reached 771 KB a
+tick and 18 MB a day per entry, on hardware that is usually a Raspberry Pi
+writing to an SD card. The shared store is written only when a profile is
+actually fetched, and `_load_profile_cache` fills the in-process cache from it
+once per HASS, before the entry's own blob is read, so a new entry or one whose
+blob was discarded finds what another entry downloaded rather than fetching
+again. A blob written before this carries the curves still and
+`_seed_profile_cache` adopts both shapes it ever had, one curve under `weights`
+and one per blend under `blends`, writing them through to the shared store so the
+restart after an upgrade still has them.
 
 Every blend comes out of one download. The three are reductions of the same
 sheet and the read is the expensive half (16 s against 2 s apiece on a Raspberry

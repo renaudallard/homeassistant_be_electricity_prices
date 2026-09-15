@@ -571,20 +571,67 @@ async def test_ensure_spp_weights_backs_off_after_failure(
     assert coord._spp_failed_at is not None
 
 
-async def test_spp_weights_survive_persist_round_trip(hass: HomeAssistant) -> None:
+async def test_the_spp_profile_survives_a_restart_through_the_shared_store(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The curve is national and changes monthly, so it lives in the store
+    shared by the whole installation rather than in the per-entry blob, which is
+    rewritten on every hourly tick. A restart must find it there and not
+    download the 52 MB workbook again."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._spp_weights = {(6, 15, 10): 2.0, (1, 1, 12): 1.5}
-    coord._spp_weights_year = 2026
-    coord._spp_fetched_at = datetime(2026, 7, 1, tzinfo=UTC)
-    entry.runtime_data = coord
-    await coord._save_persistent()
+    fake = {(6, 15, 10): 2.0, (1, 1, 12): 1.5}
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
+        new=AsyncMock(return_value=fake),
+    ) as mock:
+        await coord._ensure_spp_weights()
+    assert mock.await_count == 1
 
+    # Drop everything this process holds, as a restart does.
+    hass.data.pop(const.DOMAIN, None)
     reloaded = BePricesCoordinator(hass, entry)
     await reloaded.async_load_persistent()
-    assert reloaded._spp_weights == coord._spp_weights
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
+        new=AsyncMock(return_value={}),
+    ) as mock:
+        await reloaded._ensure_spp_weights()
+    assert mock.await_count == 0, "the shared store should have answered"
+    assert reloaded._spp_weights == fake
     assert reloaded._spp_weights_year == 2026
+
+
+async def test_an_spp_blob_written_before_the_shared_store_is_adopted(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Upgrading must not re-download the workbook the entry already had."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    await coord._store.async_save(
+        {
+            "entry_supplier": entry.data[const.CONF_SUPPLIER],
+            "entry_contract": entry.data[const.CONF_CONTRACT],
+            "entry_region": entry.data[const.CONF_REGION],
+            "spp_weights": {
+                "year": 2026,
+                "fetched_at": "2026-07-01T00:00:00+00:00",
+                "weights": {"6,15,10": 2.0},
+            },
+        }
+    )
+    await coord.async_load_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
+        new=AsyncMock(return_value={}),
+    ) as mock:
+        await coord._ensure_spp_weights()
+    assert mock.await_count == 0, "the legacy blob should have been adopted"
+    assert coord._spp_weights == {(6, 15, 10): 2.0}
 
 
 # ---- fixed-fee VAT gross-up --------------------------------------------------
