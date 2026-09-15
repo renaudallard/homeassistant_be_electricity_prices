@@ -55,6 +55,13 @@ base product can bind the Dynamic Plus PDF when both have the same month.
 Tests construct a listing containing all six real filename shapes and assert
 that every contract resolves its own card.
 
+The six digits the expression captures are read as `YYYYMM`, and nothing on the
+listing guarantees they are one: a file named for an id rather than a month
+matches just as well. Such an entry is skipped rather than allowed to raise, and
+a listing where none of the matches names a month fails as a plain
+`ExtractorError` like any other miss, so the Repairs card the user sees is the
+one that fits.
+
 ## Parsing
 
 `parse_snapshot` selects one of three commodity parsers and then applies the

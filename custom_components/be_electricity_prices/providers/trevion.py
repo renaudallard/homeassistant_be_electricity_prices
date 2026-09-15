@@ -148,10 +148,22 @@ async def _find_card(
     matches = _archive_re(contract).findall(html)
     if not matches:
         raise ExtractorError(f"Trevion: no card found for {contract.id}")
-    parsed = [
-        (path, stamp, date(int(stamp[:4]), int(stamp[4:]), 1))
-        for path, stamp in matches
-    ]
+    # The listing's six digits are read as YYYYMM. Nothing guarantees they are
+    # one: a file named for an id rather than a month matches the pattern just
+    # as well, and date() then raises a bare ValueError that reaches the user as
+    # "month must be in 1..12" on the Repairs card that asks them to report a
+    # layout change. Skip what does not parse and say so if none does.
+    parsed = []
+    for path, stamp in matches:
+        try:
+            parsed.append((path, stamp, date(int(stamp[:4]), int(stamp[4:]), 1)))
+        except ValueError:
+            continue
+    if not parsed:
+        raise ExtractorError(
+            f"Trevion: no card found for {contract.id}; the listing's "
+            f"{len(matches)} match(es) name no month"
+        )
     if month is not None:
         parsed = [
             item for item in parsed if item[2] == date(month.year, month.month, 1)

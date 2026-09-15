@@ -31,6 +31,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import re
+from typing import Any
 
 import pytest
 
@@ -268,6 +269,30 @@ async def test_listing_resolves_all_cards_without_confusing_dynamic_plus() -> No
     assert "Dynamisch-Particulier" in resolved["groene_energie_dynamisch"][0]
     assert "Dynamisch-Plus-Particulier" in resolved["groene_energie_dynamisch_plus"][0]
     assert all(label == "2026-09" for _, label in resolved.values())
+
+
+async def test_listing_entry_that_is_not_a_month_is_skipped_not_raised() -> None:
+    """The six digits are read as YYYYMM, and a file named for something else
+    matches the pattern just as well. Building a date out of it raised a bare
+    ValueError, which reached the user as "month must be in 1..12" on the card
+    that asks them to report a layout change."""
+    contract = _BY_ID["groene_energie_vast"]
+    good = "Trevion-tariefkaart-Groene-energie-VAST-particulier-202609.pdf"
+    junk = "Trevion-tariefkaart-Groene-energie-VAST-particulier-202699.pdf"
+
+    def _listing(*names: str) -> Any:
+        return make_text_session(
+            "\n".join(f'<a href="/tariefkaarten/{n}">{n}</a>' for n in names)
+        )
+
+    # The unparseable entry is skipped and the real card still resolves.
+    url, label = await _find_card(_listing(junk, good), contract)
+    assert label == "2026-09"
+    assert good in url
+    # With nothing left, the caller gets an ExtractorError like any other miss.
+    with pytest.raises(ExtractorError) as err:
+        await _find_card(_listing(junk), contract)
+    assert "name no month" in str(err.value)
 
 
 async def test_fetch_for_month_parses_archive_and_rejects_missing_month(
