@@ -6761,6 +6761,12 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     through and the solar profile was not, at all four call sites. Read the
     source rather than any one flow, so a fifth call site added later is held
     to the same list.
+
+    ``rlp_index_weights`` is on the list for the same reason even though it
+    defaults to ``rlp_weights``, which is right for the household's own row:
+    the default is wrong for every other row, and reading the entry's own blend
+    for a card that names a different one is the mispricing this argument was
+    added to fix.
     """
     import ast
     import inspect
@@ -6772,6 +6778,7 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
         "spot_quarters",
         "billed_peak_kw",
         "rlp_weights",
+        "rlp_index_weights",
         "spp_weights",
     }
     tree = ast.parse(inspect.getsource(compare_flow))

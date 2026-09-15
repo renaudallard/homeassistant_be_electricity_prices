@@ -394,14 +394,20 @@ def _coordinator_rlp_index_weights(
     same fallback an entry with no profile at all gets. Never downloaded from
     the dialog: the coordinator reduces every blend from the one workbook read
     it already performs.
+
+    Reads the leg with ``getattr`` rather than an attribute, like its sibling
+    reads the coordinator: the caller wraps the whole year-to-date in
+    ``suppress(Exception)``, so anything raised here does not surface as a fault
+    but as the entire column quietly going blank.
     """
-    if snapshot is None or not _energy_is_rlp_indexed(snapshot.energy):
+    energy = getattr(snapshot, "energy", None)
+    if not _energy_is_rlp_indexed(energy):
         return None
     coord = getattr(entry, "runtime_data", None)
     getter = getattr(coord, "rlp_weights_for_blend", None)
     if getter is None:
         return None
-    weights: RlpWeights | None = getter(_rlp_blend_for(snapshot.energy))
+    weights: RlpWeights | None = getter(_rlp_blend_for(energy))
     return weights or None
 
 
@@ -815,6 +821,13 @@ class _SweepEngine:
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    # The entry's own blend, so this says the same thing as the
+                    # default it would fall back to. Passed anyway, because the
+                    # rule every call site is held to is what stops the next one
+                    # from pricing a foreign card on the household's index.
+                    rlp_index_weights=_coordinator_rlp_index_weights(
+                        self.config_entry, hh.current_snapshot
+                    ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, hh.current_snapshot, own=True
                     ),
@@ -2698,6 +2711,9 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    rlp_index_weights=_coordinator_rlp_index_weights(
+                        self.config_entry, current_snapshot
+                    ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, current_snapshot, own=True
                     ),
@@ -2713,7 +2729,14 @@ class _CompareStepsMixin(OptionsFlow):
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
+                    # The household's profile for the load shape, the quoted
+                    # card's own blend for the index it settles on. This pair
+                    # is the whole point of the argument: the two rows sit side
+                    # by side and the delta between them is what the page says.
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    rlp_index_weights=_coordinator_rlp_index_weights(
+                        self.config_entry, other_snap
+                    ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, other_snap, own=False
                     ),

@@ -729,6 +729,14 @@ day split by, and only the entry's own bill wants the same curve for both. A
 blend this process has not loaded falls back to the plain arithmetic mean, the
 same answer an entry with no profile at all gets; the dialog never downloads.
 
+All four `_compute_current_year_cost` call sites in `compare_flow.py` pass it,
+the household's own rows included, where it says the same thing as the default
+it would fall back to. That uniformity is the guard:
+`test_every_compare_year_to_date_call_passes_the_profiles` reads the source and
+holds every call to the list, and it is what caught the one-off quote page still
+pricing its target row on the household's blend after the ranking page had been
+fixed.
+
 ### The SPP profile
 
 ### Why it exists
