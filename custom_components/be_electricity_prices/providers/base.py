@@ -389,7 +389,7 @@ class SpotMonthlyRates:
     # slot and cannot know where in the year's cumulative volume an hour sits.
     # ``resolve_volume_tier`` folds the pair into the coefficients above
     # against the entry's annual volume, so nothing downstream learns the word
-    # tier -- the same arrangement ``federal_excise_bands`` has with
+    # tier: the same arrangement ``federal_excise_bands`` has with
     # ``resolve_excise_band``. Both are None on every card that prices its
     # whole volume one way, which is all of them but that range.
     tier_kwh: float | None = None
@@ -790,9 +790,9 @@ def brussels_sibelga_overlay(
     The distribution and transport rates print in c€/kWh and scale to
     EUR/kWh (``/ 100``). ``data_management_per_year`` (databeheer / terme
     fixe) and ``osp_by_tier`` (the Brugel OSP table from
-    :func:`_pdf.parse_brussels_osp`) are supplier-specific -- some cards
+    :func:`_pdf.parse_brussels_osp`) are supplier-specific: some cards
     print a single databeheer line, others sum a measurement and a
-    fixed-term charge -- so the caller computes them and passes them in.
+    fixed-term charge, so the caller computes them and passes them in.
     """
     return DsoOverlay(
         distribution_single=mono / 100.0,
@@ -846,7 +846,7 @@ class TaxOverlay:
     vat_rate: float = 0.0
     # The rate the CARD was published at, preserved across ``apply_vat``.
     # ``vat_rate`` above is the rate the pricing engine should still apply, so
-    # it is zeroed for an entry that deducts VAT -- which loses the only
+    # it is zeroed for an entry that deducts VAT, which loses the only
     # record of what basis the card used. Anything that has to put a
     # hand-entered figure onto the entry's basis needs that, and it must
     # travel WITH the snapshot: threading it through the eight functions that

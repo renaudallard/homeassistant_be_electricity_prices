@@ -201,7 +201,7 @@ def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
     Supplier and region are picked on the SAME step, so the mismatch can only
     be judged once both are in. Detecting it a step later and aborting ends
     the flow, and in the options flow that discards every other change made in
-    the same run -- the user re-opens the dialog to find their edits gone. The
+    the same run: the user re-opens the dialog to find their edits gone. The
     abort text even says "go back and pick a different combination", which HA
     gives no way to do from an abort.
 
@@ -362,7 +362,7 @@ def _sweep_candidates(
     * the same professional segment, for the reason
       ``_compare_contract_schema`` gives at length;
     * the same kind group, which is the one condition the 1:1 page does NOT
-      apply -- see ``KIND_GROUP``.
+      apply: see ``KIND_GROUP``.
 
     ``own_contract`` is dropped because a ranking is a list of alternatives.
     That is the opposite of the 1:1 page, which keeps it on purpose so a
@@ -430,7 +430,7 @@ def _contract_group(
     answer '' here too and let the caller say so, rather than raising out of a
     registry lookup or inventing a group the household is not on.
 
-    The stale SUPPLIER is a second case ``_contract_kind`` does not cover -- it
+    The stale SUPPLIER is a second case ``_contract_kind`` does not cover: it
     resolves the extractor first, and that raises for an id this build no
     longer ships. Caught here rather than there, because widening
     ``_contract_kind`` would change what every other caller sees for an entry
@@ -499,7 +499,7 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
 
     Pre-filled with the stored value as a *suggestion* (not a default) on the
     options / reconfigure pass, so blanking the picker truly omits the key from
-    ``user_input`` -- the step handler then pops it, which is how a date is
+    ``user_input``: the step handler then pops it, which is how a date is
     cleared. A ``default`` would re-inject the stored value on a blank submit,
     making the date unclearable.
     """
@@ -570,7 +570,7 @@ _MANUAL_RATE_KEYS: tuple[str, ...] = (
 # and ``_network_rate`` fall back to the single rate when these are None, so a
 # stored 0.0 is a different answer, not an empty box. Their steps have to pop a
 # blanked one exactly like the signing-rate step does, or the value can be set
-# but never cleared -- and 0.11.40/0.11.41 briefly shipped these boxes with a
+# but never cleared, and 0.11.40/0.11.41 briefly shipped these boxes with a
 # 0.0 default, so entries edited in that window hold a billed zero with no
 # route out of it.
 _CUSTOM_FALLBACK_KEYS: tuple[str, ...] = (
@@ -969,7 +969,7 @@ def _meter_schema(
     # step accordingly and restrict the choice list. Picking 'bi' on a
     # TOU contract would make compute_breakdown route distribution
     # through the bi-horaire DSO peak/offpeak split while the supplier
-    # still billed energy by TOU slot -- two billing modes that don't
+    # still billed energy by TOU slot: two billing modes that don't
     # mix. Off-peak Impact additionally requires the user to have the
     # CWaPE Tarif réseau IMPACT subscription on the DSO side.
     #

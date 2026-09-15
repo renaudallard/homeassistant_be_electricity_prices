@@ -26,7 +26,7 @@
 """The snapshot state machine: fetch, freshness, and the shared cache.
 
 Split out of coordinator.py. Owns when a snapshot is refetched, when a
-sibling entry's fetch can be adopted instead, and what counts as fresh --
+sibling entry's fetch can be adopted instead, and what counts as fresh,
 a probe key match where the supplier offers one, a TTL otherwise."""
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class _SnapshotMixin:
         # rather than inheritance: a mixin inheriting
         # DataUpdateCoordinator[CoordinatorData] would need CoordinatorData,
         # which lives in coordinator.py and is imported from there by sensor,
-        # binary_sensor and diagnostics -- a cycle.
+        # binary_sensor and diagnostics: a cycle.
         hass: HomeAssistant
 
         def _sync_extractor_issue(
@@ -322,12 +322,12 @@ class _SnapshotMixin:
 
         Two paths depending on what the supplier exposes:
 
-          * **Probe available** — call ``extractor.probe`` (HEAD or small
+          * **Probe available**: call ``extractor.probe`` (HEAD or small
             listing GET). If the returned key matches what we last saved,
             the snapshot is still valid; just stamp ``_snapshot_fetched_at``
             and return. If the key changed, fall through to a real fetch.
 
-          * **No probe** — fall back to the time-based TTL: only refetch
+          * **No probe**: fall back to the time-based TTL, refetching
             when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h).
             DATS 24, Engie and Luminus take this path.
 
@@ -375,7 +375,7 @@ class _SnapshotMixin:
             # Our own row stood. Nothing to re-resolve: the snapshot already IS
             # this entry's, and putting it back through _set_snapshot would
             # resolve VAT a second time on every quiet tick. Only the clock
-            # moves, and only when a probe actually answered -- stamping it on
+            # moves, and only when a probe actually answered: stamping it on
             # a TTL match would push the expiry out every tick and the supplier
             # would never be re-fetched at all.
             self._snapshot_fetched_at = result.row.fetched_at
@@ -485,7 +485,7 @@ class _SnapshotMixin:
         self._last_error = ""
         self._card_read_by_ocr = archived.read_by_ocr
         # The card is still one no reader here can read, so the Repairs card
-        # that says so would be true -- but the entry is being priced, which
+        # that says so would be true, but the entry is being priced, which
         # is the opposite of what it says. This one replaces it, and says
         # where the figures came from instead.
         self._sync_extractor_issue(None)

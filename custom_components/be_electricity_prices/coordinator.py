@@ -225,7 +225,7 @@ class CoordinatorData:
     snapshot_age_hours: float = 0.0
     snapshot_stale: bool = False
     # Last calendar day the snapshot's rates apply to. ``None`` means
-    # the extractor couldn't parse a validity end -- callers should
+    # the extractor couldn't parse a validity end: callers should
     # fall back to "treat as valid".
     snapshot_valid_until: date | None = None
     last_error: str = ""
@@ -470,7 +470,7 @@ class BePricesCoordinator(
         # Set by async_force_refresh; cleared on the next successful
         # extractor fetch. Acts as an out-of-band signal to bypass both
         # the probe-based and TTL-based freshness paths in
-        # _self_is_fresh without having to lie about fetched_at -- the
+        # _self_is_fresh without having to lie about fetched_at: the
         # latter would block _save_persistent from writing the cached
         # snapshot until the next successful fetch lands.
         self._force_refresh = False
@@ -493,7 +493,7 @@ class BePricesCoordinator(
         # is what keeps the persisted blob the size it always was.
         self._historical_spot_quarters: dict[datetime, list[float]] = {}
         # Serialises the historical spot walk. Two callers reach it from
-        # outside the tick -- the statistics backfill and the compare page --
+        # outside the tick: the statistics backfill and the compare page,
         # and on a fresh install the deferred year-fill below runs beside
         # them. Without this they walk the same empty cache at the same time
         # and each fetches what the other is already fetching, which is how a
@@ -528,7 +528,7 @@ class BePricesCoordinator(
         # Stable past days the spot walk should not ask for again yet, each
         # holding the instant it may be retried at. Written when a fetch left
         # the day short of 20 hours (_SHORT_SPOT_DAY_TTL) and when both
-        # sources refused the window outright (_SPOT_OUTAGE_TTL, shorter --
+        # sources refused the window outright (_SPOT_OUTAGE_TTL, shorter,
         # the data exists, the servers were down).
         self._spot_day_retry_at: dict[date, datetime] = {}
         # Local days already confirmed to hold >= 20 cached spot hours. Within
@@ -660,7 +660,7 @@ class BePricesCoordinator(
         # snapshot: they are one contract's published rates, and serving them
         # for another one would bill the year-to-date off a card the household
         # never had. Restoring them is what keeps a restart from re-fetching a
-        # PDF per elapsed month -- 226 s of it on a Raspberry Pi with Frank
+        # PDF per elapsed month: 226 s of it on a Raspberry Pi with Frank
         # Energie, which is what cancelled setup in issue #88.
         stored_months = stored.get("monthly_cards")
         if isinstance(stored_months, dict) and not tuple_mismatch:
@@ -742,7 +742,7 @@ class BePricesCoordinator(
         # it never holds tomorrow, and it is bucketed to the hour, so it cannot
         # give a quarter-hourly contract its own slots back.
         #
-        # Restored as a FALLBACK only -- _spot_cache_day deliberately stays
+        # Restored as a FALLBACK only: _spot_cache_day deliberately stays
         # None, so the first tick still fetches from ENTSO-E as it always did
         # and this is consulted only when that fetch fails. That also avoids
         # adopting a partially-written curve as authoritative for the day.
@@ -921,7 +921,7 @@ class BePricesCoordinator(
                 # last good day-ahead curve is still usable for breakdown
                 # computation, whether this session fetched it or it came
                 # back from the Store after a restart. Only fail when nothing
-                # on hand actually covers today -- _fallback_spots refuses a
+                # on hand actually covers today: _fallback_spots refuses a
                 # curve from an earlier day rather than pricing today off it.
                 self._last_error = f"ENTSO-E: {err}"
                 _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
@@ -935,7 +935,7 @@ class BePricesCoordinator(
             # Cociter Variable per hour, energie.be Vast on the month's
             # Belpex_SPP. The energy is priced without a spot, so
             # a spot failure (missing key, ENTSO-E outage) must NOT tear
-            # the entry down -- only the
+            # the entry down: only the
             # injection credit goes unavailable. Fetch softly, falling
             # back to the cached curve, then to no injection price.
             try:
@@ -1021,7 +1021,7 @@ class BePricesCoordinator(
                 # FIRST tick only, and it is the one the user is watching:
                 # async_config_entry_first_refresh runs inside setup, which the
                 # config flow's final step waits on, so a cold cache spent that
-                # step fetching 35 week-chunks -- minutes of a spinner on a
+                # step fetching 35 week-chunks: minutes of a spinner on a
                 # fresh install, and far longer while ENTSO-E was down.
                 #
                 # Fetch the current month here, because the monthly mean below
@@ -1039,7 +1039,7 @@ class BePricesCoordinator(
                 # fallback: about 180 s against a supplier that hangs rather
                 # than refuses, inside the same 300 s bootstrap budget issue
                 # #88 was cancelled by. On the deadline this keeps whatever
-                # chunks did land -- they are merged per chunk -- and the fill
+                # chunks did land: they are merged per chunk, and the fill
                 # below asks for the rest, which is the arrangement the year
                 # already had.
                 try:
@@ -1081,7 +1081,7 @@ class BePricesCoordinator(
             # against None and wipe the credit instead of resolving it. Asked
             # of the EFFECTIVE leg, and of the injection's own flags, so a
             # month-indexed credit is resolved whatever the energy is priced
-            # on -- a dynamic energy leg fetches its own spots and used to
+            # on: a dynamic energy leg fetches its own spots and used to
             # take the credit out of this question with them.
             now_local = dt_util.now()
             plain_mean = self._monthly_spot_mean(
@@ -1099,7 +1099,7 @@ class BePricesCoordinator(
             hourly = self._build_hourly(priced, spot_prices, energy_mean)
         except KeyError as err:
             # The fresh snapshot does not contain the user's configured
-            # DSO -- typically a regex drift on a new card. Surface a
+            # DSO: typically a regex drift on a new card. Surface a
             # clean UpdateFailed instead of bubbling KeyError through HA
             # core; the coordinator keeps serving the last good data.
             # Read CONF_DSO defensively: a corrupt entry that lost the
@@ -1194,7 +1194,7 @@ class BePricesCoordinator(
         # deferred above: this one runs inside config-entry setup. The
         # year-to-date walk bills each past month with that month's own
         # archived card, one PDF apiece, and a Frank Energie card takes about
-        # 25 s to lay out on a Raspberry Pi -- 226 s for a September start,
+        # 25 s to lay out on a Raspberry Pi: 226 s for a September start,
         # against the 300 s Home Assistant allows the whole of bootstrap
         # stage 2. That is what cancelled setup in issue #88.
         #
@@ -1301,7 +1301,7 @@ class BePricesCoordinator(
                 priced, dso_key, region, "offpeak", dso_mode
             )
         except KeyError:
-            # DSO not in snapshot -- can happen for custom entries or incomplete
+            # DSO not in snapshot, which happens for custom entries or incomplete
             # cards. The sensors will be unavailable, which is correct.
             static_peak = None
             static_offpeak = None
@@ -1370,7 +1370,7 @@ class BePricesCoordinator(
         """Fetch the rest of the year's spots, off the setup path.
 
         Scheduled by the first tick, which fetched only the current month so
-        that setup -- and with it the config flow's final step -- did not wait
+        that setup, and with it the config flow's final step, did not wait
         on 35 week-chunks. Runs as an entry-tied background task, so unloading
         the entry cancels it and the user can walk away from a fresh install
         mid-backfill without leaving a fetch running.
@@ -1381,7 +1381,7 @@ class BePricesCoordinator(
 
         The refresh is what puts the year-to-date's past hours back into the
         sensor, since the tick that scheduled this one priced them without
-        their energy term -- so it is only asked for when the walk actually
+        their energy term, so it is only asked for when the walk actually
         found something. A restart runs this too, and there the persisted
         cache already covers the year: nothing is fetched, nothing changed,
         and an extra full tick per entry per restart would buy nothing.
@@ -1400,7 +1400,7 @@ class BePricesCoordinator(
         The year-to-date window, plus the month of the card the entry is
         billed on when it names one, whether through its own tariff card month
         or through its start date. That one is not part of the walk, it can be
-        years back -- but ``_cohort_legs`` resolves it on every tick to freeze
+        years back, but ``_cohort_legs`` resolves it on every tick to freeze
         the rate the customer signed for, and it does so INSIDE config-entry
         setup, because the live price table is built from it. One row on disk
         is what keeps that from being a card fetch on every restart.
@@ -1421,7 +1421,7 @@ class BePricesCoordinator(
 
         Failures need no handling here: both ensures soft-fail, keep whatever
         is held and back off, and the caller then prices the plain arithmetic
-        mean -- which is what every RLP-indexed card was billed on before the
+        mean, which is what every RLP-indexed card was billed on before the
         profile existed, and what a compensation entry falls back to when its
         allocation cannot be weighted.
 
@@ -1650,7 +1650,7 @@ class BePricesCoordinator(
         scalar, so no array is emitted. ``injection_snapshot`` is the possibly
         mean-baked snapshot and ``energy`` the effective (cohort) energy, so a
         spot-monthly / Cociter-cohort contract is treated as flat and gated
-        out -- keeping the array consistent with the live scalar and the YTD
+        out: keeping the array consistent with the live scalar and the YTD
         credit. Slots with no spot (tomorrow before the day-ahead publishes)
         are dropped, exactly like the consumption tomorrow array.
         """
@@ -1690,7 +1690,7 @@ class BePricesCoordinator(
         # and the next HA restart would serve the wrong supplier's
         # rates against the new entry. ``runtime_data`` is unset (or
         # UNDEFINED on recent HA cores) during the very first refresh
-        # that runs from ``async_config_entry_first_refresh`` -- only
+        # that runs from ``async_config_entry_first_refresh``: only
         # skip the save when it has been explicitly assigned to a
         # *different* coordinator.
         runtime = getattr(self.entry, "runtime_data", None)

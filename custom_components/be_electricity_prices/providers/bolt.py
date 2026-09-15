@@ -36,7 +36,7 @@ revises the formula, on no fixed schedule; the superseded files stay
 served, so pinning a version reads a stale card that still answers 200
 and still parses. The version is therefore read from the listing page,
 per (slug, segment), never hardcoded and never as one version across the
-whole family -- a pinned ``_11`` kept billing June's formula for ten
+whole family: a pinned ``_11`` kept billing June's formula for ten
 weeks after ``_13`` shipped, and a global maximum would 404 any slug
 whose counter lagged.
 Each PDF covers all three regions in one document - same convention as
@@ -182,7 +182,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # valeur Belpex correspondante pour ce meme quart d'heure. En optant pour
     # une facturation variable, nous redistribuerons la consommation ponderee
     # RLP." One printed formula, two ways of settling it, and the card cannot
-    # say which one a given account is on -- so the entry answers, and
+    # say which one a given account is on, so the entry answers, and
     # ``quarter_hourly_option`` is what puts the question in the flow.
     _ContractDef(
         "bolt_variable", "Bolt Variable", "variable", "var", "bolt", settlement=True
@@ -290,7 +290,7 @@ async def _resolve_variable_suffix(
     counter lagged at a file that does not exist, turning a stale card
     into a 404 for that product.
 
-    Compared numerically, not lexically -- ``"9"`` must not outrank
+    Compared numerically, not lexically: ``"9"`` must not outrank
     ``"13"``. Falls back to :data:`_VARIABLE_SUFFIX_FALLBACK` when the
     listing is unreachable or does not advertise this card, so a listing
     outage degrades to a known version instead of failing every Bolt
@@ -311,7 +311,7 @@ async def _resolve_variable_suffix(
         for folder, slug, segment, version in _CARD_URL_RE.findall(html)
         # isdigit(): the URL builder and max(key=int) below both need a
         # number. A non-numeric suffix means Bolt reshaped the filename, so
-        # fall back rather than crash -- and the live-check freshness gate,
+        # fall back rather than crash, and the live-check freshness gate,
         # which scans with \w+, fails the run so the reshape gets noticed.
         if folder.lower() == "var"
         and slug.lower() == contract.slug
@@ -379,7 +379,7 @@ async def _fetch_pdf_text(
 
     Lifted out of :func:`fetch` so the live-check script can fetch
     once per contract and parse three region-specific snapshots from
-    the same text -- Bolt's PDFs cover all regions, so doing it
+    the same text: Bolt's PDFs cover all regions, so doing it
     per-(contract, region) wastes a 5+ MB round-trip twice.
     """
     # Bolt's tariff PDFs are ~5 MB each and the CDN occasionally needs
@@ -471,7 +471,7 @@ async def fetch_for_month(
     back to 2024-01, and that is the whole folder: ``fix`` and ``plenty_fix``,
     residential and professional alike, all four address their current card by
     month too. The variable folder uses a stable version-number suffix
-    (``bolt_res_el_fr_13.pdf``), so older months can't be addressed there --
+    (``bolt_res_el_fr_13.pdf``), so older months can't be addressed there,
     those return ``None`` and the YTD path falls back to the current snapshot
     as a proxy.
     """
@@ -734,7 +734,7 @@ def _extract_energy(
     mono = to_float(numbers[0]) / 100.0
     excl = to_float(numbers[3] if inline_bihourly else numbers[1]) / 100.0
     # The "Prix de l'électricité verte" block prints two "Jour Nuit"
-    # subheads -- the first is for consumption (with our bi-horaire
+    # subheads: the first is for consumption (with our bi-horaire
     # row), the second is for injection. The bi-horaire row is always
     # the LAST same-line adjacent-number pair between them. pdfplumber
     # sometimes renders the annual-estimate column vertically above
@@ -952,7 +952,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     # Belpex row above them uses the same three. The VL/WAL/BX headers on that
     # page govern the TAX rows only. Reading them as regions credited Wallonia
     # the Jour rate and Brussels the Nuit one, which is why the first column
-    # is taken here regardless of region -- exactly what the current card's
+    # is taken here regardless of region: exactly what the current card's
     # "Prix mensuel" branch above does with its own Simple / Exclusif-nuit
     # pair. peak / offpeak stay None: they are consulted only for a
     # TimeOfUseRates energy leg, and these are fixed and variable cards.
@@ -1129,7 +1129,7 @@ def _extract_energy_fund(text: str, *, professional: bool = False) -> float:
     again: a bare ``Cotisation Fond énergie (€/mois) (*)`` heading, then
     ``Résidentiel`` and ``Non-résidentiel 10,07 - -`` as their own rows. The
     professional editions walk that archive too, so matching only the current
-    single-line label billed 0,00 where the card says 10,07 -- re-opening,
+    single-line label billed 0,00 where the card says 10,07: re-opening,
     for those months, the bug the non-residential row was added to fix.
     """
     if professional:
@@ -1308,7 +1308,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # remain strictly cheaper than REW's (regulator pattern that holds
     # for every Walloon tariff card we've parsed). If the inequality
     # ever flips, Bolt almost certainly fixed the upstream layout and
-    # our compensating swap now inverts correct values -- log a
+    # our compensating swap now inverts correct values: log a
     # warning so the maintainer can drop the swap from
     # _WALLONIA_LABELS instead of silently mis-billing.
     global _RESA_REW_LOGGED
@@ -1320,7 +1320,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # here.
         return out
     if resa is None or rew is None:
-        # Only one of the two parsed -- the more dangerous case for
+        # Only one of the two parsed: the more dangerous case for
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
         # against. Log at ERROR (once per process) so it surfaces in

@@ -137,7 +137,7 @@ _FLUVIUS_LABELS: dict[str, str] = {
 
 # A Belgian decimal number. Two forms: a thousands-grouped value using a
 # non-breaking / thin / narrow-no-break space (the separators to_float
-# strips, and the only ones Eneco's PDFs use for grouping -- columns are
+# strips, and the only ones Eneco's PDFs use for grouping: columns are
 # separated by ordinary spaces, so grouping on those is unambiguous), or
 # an ungrouped run of digits. The previous (\d{1,3}...) capped the
 # integer part at three digits, so any value >= 1000 (e.g. a four-digit

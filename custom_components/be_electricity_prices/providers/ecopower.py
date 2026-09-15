@@ -27,7 +27,7 @@
 
 Ecopower sells two residential electricity products in Flanders only:
 
-1. "Groene burgerstroom" (green citizen power) -- a half-fixed,
+1. "Groene burgerstroom" (green citizen power): a half-fixed,
    half-indexed tariff against the monthly RLP-weighted Belpex
    Day-Ahead average:
 
@@ -40,7 +40,7 @@ Ecopower sells two residential electricity products in Flanders only:
    definitive card (Ecopower also publishes a *next-month* "inschatting"
    / estimation card that we deliberately ignore until it's finalized).
 
-2. "Dynamische burgerstroom" -- a quarter-hourly EPEX Day-Ahead dynamic
+2. "Dynamische burgerstroom": a quarter-hourly EPEX Day-Ahead dynamic
    tariff (quarter-hourly since the SDAC 15-minute market switch of
    2025-10-01). The card prints the consumer formula directly:
 
@@ -52,7 +52,7 @@ Ecopower sells two residential electricity products in Flanders only:
    ``<YYYYMM>_dbs_tariefkaart.pdf``, or ``<YYYYMMDD>_...`` from the
    August 2026 card onwards. Unlike the monthly gbs card, the dynamic
    card is republished only when the formula, DSO or tax rates change,
-   so the latest card is the one in effect today -- which is why a
+   so the latest card is the one in effect today, which is why a
    pattern that cannot see the newer filename goes unnoticed: the older
    card it keeps resolving is a real card that still parses.
 
@@ -129,8 +129,8 @@ def _card_stamp_keys(stamp: str) -> tuple[str, str]:
     pattern silently skips the eight-digit ones: that is how the January
     card kept billing after the August one shipped. Padding the
     month-only form to eight digits sorts it before a dated card in the
-    same month, which is the right precedence -- a card dated the 1st
-    supersedes a bare month card for that month -- while the month key
+    same month, which is the right precedence: a card dated the 1st
+    supersedes a bare month card for that month, while the month key
     stays the first six digits for either form.
     """
     return stamp.ljust(8, "0"), stamp[:6]
@@ -150,7 +150,7 @@ _DBS_PAGE = f"{_BASE_URL}/groene-stroom/dynamische-burgerstroom"
 # variants carrying a letter suffix (202501b_dbs_tariefkaart.pdf) or a
 # trailing brand token (202406_dbs_tariefkaart_ecopower.pdf), and from the
 # August 2026 card a full date (20260801_dbs_tariefkaart.pdf). The stamp
-# group captures six or eight digits -- pinned at six, this pattern could
+# group captures six or eight digits: pinned at six, this pattern could
 # not see the dated card and kept resolving January's; the optional letter
 # is consumed but not captured so ordering stays numeric.
 _DBS_CARD_RE = re.compile(
@@ -475,7 +475,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     meter rates (capacity tariff per kW/yr, lower per-kWh distribution)
     and analog meter rates (yearly fixed fee, higher distribution,
     spinning-back prosumer fee). The integration only models the
-    digital path -- which is what the vast majority of Flemish
+    digital path, which is what the vast majority of Flemish
     residential is on post-2024-mandatory-rollout. Analog-meter users
     can still see realistic prices because Ecopower bills them at the
     SAME ENERGY rate, only the network costs differ.
@@ -544,7 +544,7 @@ def _slice_between(text: str, start: str, end: str) -> str | None:
 
 
 # pdfplumber wraps the longest DSO label across its data row on the
-# narrower dynamic card -- "Fluvius Midden-" / "<numbers>" / "Vlaanderen"
+# narrower dynamic card: "Fluvius Midden-" / "<numbers>" / "Vlaanderen"
 # on three lines. Stitch the two label fragments back together around the
 # rate row so the per-DSO row regex sees one line. [ \t] (not \s) keeps
 # the regex from swallowing the row's trailing newline.
@@ -555,13 +555,13 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
     """Read the digital-meter network tariffs from the dynamic card.
 
     The dynamic card carries only digital (meetregime 3 / SMR3) meter
-    rows -- there's no analog block, since a dynamic contract requires a
+    rows: there's no analog block, since a dynamic contract requires a
     smart meter. The row layout differs from the gbs card: the columns
     are ``databeheer (EUR/yr) | capacity (EUR/kW/yr) | afname
     enkelvoudig (EUR/kWh) | afname uitsluitend-nacht (EUR/kWh) |
     [maximumtarief] | injectietarief``, with no separating dashes. We
-    read the first four numeric columns -- the same four the gbs parser
-    keeps -- and ignore the optional maximumtarief and the injection
+    read the first four numeric columns: the same four the gbs parser
+    keeps, and ignore the optional maximumtarief and the injection
     network tariff, which ``DsoOverlay`` does not model.
     """
     section = _slice_between(text, "Nettarieven", "Heffingen")
@@ -619,7 +619,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
     """Parse the federal/regional tax block.
 
     Ecopower prints all values HTVA. ``vat_rate=0.06`` tells the
-    pricing engine to scale up to TVAC for residential customers --
+    pricing engine to scale up to TVAC for residential customers,
     every other supplier publishes TVAC and uses ``vat_rate=0.0``, but
     Ecopower is the cooperative outlier.
 
@@ -779,9 +779,9 @@ def _extract_injection(text: str) -> InjectionRates | None:
         return None
     # The credit is never negative (Ecopower states this); the card merely
     # prints it in the energy/cost column as a negative figure. Strip any
-    # leading sign glyph -- the regex admits every SIGN_CHARS minus, so the
+    # leading sign glyph: the regex admits every SIGN_CHARS minus, so the
     # hand-rolled variant list missed U+2010 / U+2011 and to_float raised
-    # ValueError on them -- and take the magnitude.
+    # ValueError on them, and take the magnitude.
     raw = match.group(1).replace(" ", "").lstrip(SIGN_CHARS)
     current = abs(to_float(raw))
     # From the July 2026 card the credit is half fixed and half indexed on the
@@ -905,7 +905,7 @@ async def _fetch_dbs_for_month(
     Dynamic cards don't rotate monthly; Ecopower republishes one only
     when the formula, DSO or tax rates change (typically at a year
     boundary). Pick the most recent card whose YYYYMM prefix is not after
-    the requested month -- that's the card that was billing then. Falls
+    the requested month: that's the card that was billing then. Falls
     back to None (coordinator uses the proxy snapshot) when the page omits
     the month or the PDF doesn't parse.
     """

@@ -372,7 +372,7 @@ def _dynamic_formula_match(text: str, label: str) -> re.Match[str] | None:
     into a document-order ``findall`` keeps consumption and injection from
     silently swapping if Ecofix reorders the two blocks. The fill between
     the label and its formula is tempered so it can't cross the
-    ``Injectie`` label -- otherwise a reworded/absent ``Afname`` formula
+    ``Injectie`` label, otherwise a reworded/absent ``Afname`` formula
     would let the Afname anchor reach forward and bind the injection
     formula to consumption.
     """
@@ -640,7 +640,7 @@ def _extract_wallonia_renewables(text: str) -> float:
 
 
 # Ecofix prints the eight Fluvius areas exactly as the shared map spells them,
-# so alias it rather than restating it -- the spelling belongs to the card, and
+# so alias it rather than restating it: the spelling belongs to the card, and
 # a supplier that abbreviates ("Fluvius Midden-Vl") keeps its own map instead.
 # Same form luminus, mega, octaplus and ecopower already use.
 _FLANDERS_LABELS = FLUVIUS_CARD_LABELS
@@ -741,7 +741,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         Prosumenten tarief (€/kWe/jaar) | Transport (c€/kWh)
 
     The card lists 9 ORES sub-areas (Brab. Wal., Est, Hainaut,
-    Luxembourg, Mouscron, Namur, Verviers + Mouscron) — every row is
+    Luxembourg, Mouscron, Namur, Verviers + Mouscron): every row is
     numerically identical. ``_extract_ores`` collapses them to a single
     ``ores`` key and raises on numeric drift between rows so a future
     sub-area split doesn't silently bill at the first sub-area's rates.

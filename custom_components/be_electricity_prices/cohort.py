@@ -29,7 +29,7 @@ Split out of coordinator.py. A fixed or dynamic contract is billed at the rate
 it locked in at signing, not today's card; a variable one re-prices its own
 coefficients against the current month's index. Resolution order is a
 hand-entered signing rate, then the archived signing-month card, then the
-current card -- per field, because only the user knows whether they signed at
+current card: per field, because only the user knows whether they signed at
 the card rate or a negotiated one."""
 
 from __future__ import annotations
@@ -601,7 +601,7 @@ async def _cohort_legs(
     # billing as before.
     # The card's published rate travels ON the snapshot, so every caller of
     # this function gets it without threading a parameter through eight
-    # signatures -- which is how the conversion previously reached the live
+    # signatures, which is how the conversion previously reached the live
     # tick only, leaving the year-to-date and monthly paths 21 EUR/yr adrift
     # on the same entry. Fall back to vat_rate for a raw (unresolved) card.
     taxes = current_snapshot.taxes

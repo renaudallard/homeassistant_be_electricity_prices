@@ -96,7 +96,7 @@ _PDF_BASE = "https://www.ebem.be"
 # EBEM links each monthly PDF as ``/media/<hash>/ebem_tariefkaart-{kind}-MM-YYYY.pdf``
 # from the listing page. Captures (path, kind, MM, YYYY). The 2026-01 dynamic
 # file is named ``ebem_tariefkaart-dynamic_01-2026.pdf`` (underscore between
-# kind and MM) -- accept either separator so the archive walker doesn't lose
+# kind and MM): accept either separator so the archive walker doesn't lose
 # that month silently. The kind group is open-ended so a future third
 # PDF kind (e.g. ``fix`` if Ebem revives fixed contracts) surfaces in
 # ``discover()`` even though only ``elek`` and ``dynamic`` map to contract ids.
@@ -161,7 +161,7 @@ async def fetch_for_month(
 
     Walks the same listing page, resolves the URL whose filename matches
     the requested ``MM-YYYY``, parses, and validates that the parsed
-    ``valid_until`` falls in the requested month -- a defensive check
+    ``valid_until`` falls in the requested month: a defensive check
     against a CDN-substituted current card mis-billing past consumption.
     Returns ``None`` when the month isn't published (or the validity
     cross-check rejects the served PDF).
@@ -218,7 +218,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 
     Non-electricity kinds on the listing (``gas`` / ``aardgas`` / etc.)
     are out of scope for this integration and dropped silently. A
-    future electricity PDF kind (e.g. ``fix`` for a fixed contract --
+    future electricity PDF kind (e.g. ``fix`` for a fixed contract,
     the variable card explicitly notes Ebem stopped selling those
     for now) surfaces verbatim so live_check files a tracking issue.
     """
@@ -469,7 +469,7 @@ def _indicative_from_row(text: str, label: str) -> float:
     JAARPRIJS EXCL.BTW``, ``GESCHATTE JAARPRIJS INCL.BTW 6%``. Columns
     1 + 2 are the per-kWh indicative at last-month's Belpex; columns 3 +
     4 use the VNR yearly-forecast Belpex. We surface column 2 (incl-VAT
-    per-kWh at last-month's Belpex) as the snapshot's ``current`` -- it
+    per-kWh at last-month's Belpex) as the snapshot's ``current``: it
     matches the value EBEM customers see on their bill more faithfully
     than recomputing against a placeholder spot.
     """
@@ -513,7 +513,7 @@ def _extract_excl_night_fee_variable(text: str) -> float | None:
 
 
 def _extract_yearly_fee_abonnement(text: str) -> float:
-    """``Abonnement 66,04 €/jaar 70 €/jaar`` -- B@sic+ and Dyn@mic share the label."""
+    """``Abonnement 66,04 €/jaar 70 €/jaar``: B@sic+ and Dyn@mic share the label."""
     row = numeric_row(text, "Abonnement", 2)
     if not row:
         raise ExtractorError("EBEM: 'Abonnement' yearly fee row not found")
@@ -604,7 +604,7 @@ def _extract_federal_taxes(text: str) -> tuple[float, float]:
 
     The card prints residential federal excise across four kWh bands;
     the 0-3 MWh tier is what residential customers pay (``0-3 MWH``,
-    capital "MWH" only on this row -- the others use lowercase "MWh").
+    capital "MWH" only on this row: the others use lowercase "MWh").
     Energy contribution sits next to the residential energy-fund row
     on a single visual line (``Beschermende ... €0 0,20417``).
     """

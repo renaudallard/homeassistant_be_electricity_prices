@@ -26,7 +26,7 @@
 """Mega card parsers: the energy leg, the injection leg and the card's dates.
 
 Split out of ``mega.py``, which was the largest module in the package. These
-are the parsers that read a Mega tariff card's own product figures -- the
+are the parsers that read a Mega tariff card's own product figures: the
 formula coefficients, the realized-rate sentence, the per-meter rates, the
 yearly fee, the publication month and the validity date. The grid and levy
 overlays live in ``_mega_overlays.py``; ``mega.py`` keeps the URL resolution,
@@ -304,7 +304,7 @@ def _extract_energy(
             formula=formula,
             # All three bands or none. The re-priced leg prices each band off
             # its own pair, and a partial set would leave the engine falling
-            # back to the PIC formula for the two it could not read -- the
+            # back to the PIC formula for the two it could not read: the
             # dearest band applied to the cheapest hours.
             month_indexed=all(
                 coefficients[f"{band}_factor"] is not None
@@ -456,13 +456,13 @@ def _realized_rates(text: str) -> dict[str, float]:
         # A leading minus is part of the value: the May 2026 cards print
         # "Injection : -0.32", a month the customer PAYS to inject. Without
         # it the key went missing and the caller fell back to the 12-month
-        # simulation table, crediting +2,42 c€/kWh against a billed -0,32 --
+        # simulation table, crediting +2,42 c€/kWh against a billed -0,32,
         # the wrong sign, 82 EUR out over 3000 kWh injected. The soft-hyphen
         # join above has already run, so a minus left here is a real one.
         # The value needs a right-hand boundary as well. Without one the
         # pattern takes the first well-formed PREFIX of a malformed token, and
         # the June 2026 Flanders cards collide two runs in the text layer:
-        # "Compteur mono- horaire : 16.76.38". That yielded mono = 16,76 --
+        # "Compteur mono- horaire : 16.76.38". That yielded mono = 16,76,
         # which is the Jour value, so mono == peak while offpeak was 14,20, a
         # combination the card cannot print. Refusing the token drops the key
         # and the caller falls back to the headline table, which is honest;

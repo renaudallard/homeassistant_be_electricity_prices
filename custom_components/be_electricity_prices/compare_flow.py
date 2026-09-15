@@ -198,7 +198,7 @@ def _compare_supplier_options(
     """Suppliers that have at least one contract available in the
     user's region. ``current_kind`` is kept in the signature for
     callers that may want to pre-filter, but the compare flow now
-    accepts cross-kind quotes (static <-> dynamic) -- the dynamic
+    accepts cross-kind quotes (static <-> dynamic): the dynamic
     side is priced from the user's spot cache or a fresh ENTSO-E
     fetch when crossing into dynamic territory.
 
@@ -243,8 +243,8 @@ def _compare_contract_schema(
 
     It does NOT cross the residential/professional line. A professional card
     is published excluding VAT and bands the federal excise by annual volume,
-    so ``_resolve_snapshot`` grosses it at the entry's own rate -- 21% against
-    a residential 6% -- while its excise is a fifth of the residential one and
+    so ``_resolve_snapshot`` grosses it at the entry's own rate: 21% against
+    a residential 6%, while its excise is a fifth of the residential one and
     it carries a monthly energy-fund charge the residential card zeroes. The
     row that comes out is neither the price the household would pay nor a
     contract it could sign, and nothing on the page says so beyond the
@@ -425,8 +425,8 @@ def _credit_index_for(
 
     - a card that names the month itself (Eneco's Belpex-injectie, the EPEXDAM
       cards) carries ``month_indexed`` and is plain.
-    - a card that names no index because its ENERGY already does -- the expert
-      custom monthly contract's formula injection -- carries no flag at all,
+    - a card that names no index because its ENERGY already does (the expert
+      custom monthly contract's formula injection) carries no flag at all,
       and is still plain. Reading only the flag dropped it onto the two-day
       day-ahead window mean, which is not what such a contract bills and moves
       with the day the dialog was opened.
@@ -592,7 +592,7 @@ class _HouseholdQuote:
     Wide on purpose: these are the values the compare arithmetic reads, and
     naming them here is what lets a ranking resolve them once for a whole
     cell instead of once per row. Three of the fields are callables closed
-    over the rest -- the spot, SPP and export-rate resolvers -- because each
+    over the rest: the spot, SPP and export-rate resolvers, because each
     memoises a fetch that must happen at most once per page.
     """
 
@@ -681,9 +681,9 @@ async def async_run_daily_compare(
 class _SweepEngine:
     """The pricing engine behind both comparison pages.
 
-    Holds only what pricing needs -- the household's entry, the hass it reads
+    Holds only what pricing needs: the household's entry, the hass it reads
     its meters and recorder through, and the what-if overrides the dialog
-    collects -- so the same code prices a sweep the user is watching and one
+    collects, so the same code prices a sweep the user is watching and one
     running on a schedule with nobody watching. It is deliberately not a flow:
     a scheduled sweep has no steps, no progress and no abort, and reaching
     into ``OptionsFlow`` for ``config_entry`` would tie a background job to
@@ -736,8 +736,8 @@ class _SweepEngine:
         cannot price honestly comes back exactly as it went in.
         """
         # One meter read for the whole pass. The household's metered kWh is
-        # the same for every candidate -- it depends on the entry and the
-        # window, never on the supplier being priced -- but
+        # the same for every candidate: it depends on the entry and the
+        # window, never on the supplier being priced, but
         # _compute_current_year_cost reads it afresh on every call, so the
         # pass was making N+1 identical recorder queries over the whole year,
         # nightly and unattended on hardware that is often a Pi.
@@ -828,8 +828,8 @@ class _SweepEngine:
             # one-to-one page excludes them: the archive engine bills each
             # past hour at factor*spot+base and needs a historical spot for
             # every hour of the year, which the cache below is not required
-            # to hold. Called without it the energy leg silently vanishes --
-            # measured 33,7% low on a dynamic card -- in a column the table
+            # to hold. Called without it the energy leg silently vanishes,
+            # measured 33,7% low on a dynamic card: in a column the table
             # sorts.
             if (
                 _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
@@ -1048,8 +1048,8 @@ class _SweepEngine:
         the measured hour shapes and the day-ahead window are all O(1) in the
         number of contracts being compared.
 
-        ``candidates`` is read for one decision only -- whether any row will
-        need day-ahead spots -- because that window is fetched here and shared.
+        ``candidates`` is read for one decision only: whether any row will
+        need day-ahead spots, because that window is fetched here and shared.
 
         ``meter`` is the target's, not the household's: it lands in the
         rendered ``meter_used`` token, and a dynamic or slot contract forces
@@ -1087,8 +1087,8 @@ class _SweepEngine:
         # The same window current_year_cost accumulates over: 1 January, or the
         # contract start date on an entry that bills from it. The archive path
         # below runs _compute_current_year_cost, which resolves this itself off
-        # entry.data, so reading it here is what keeps the simple model -- and
-        # the kWh figure printed beside both -- telling the same story as the
+        # entry.data, so reading it here is what keeps the simple model, and
+        # the kWh figure printed beside both: telling the same story as the
         # sensor on the page rather than a January one.
         ytd_from = ytd_window_start(self.config_entry, today_local)
         # 364, not 365: energy_meters._recorder_rows anchors end_dt on the next
@@ -1108,7 +1108,7 @@ class _SweepEngine:
         # prorated by its OWN days), not by the uniform days_in_year fraction,
         # so mirror that: sum each month's billed days over its own length.
         # _ytd_prosumer and _ytd_capacity sum exactly this, which is why one
-        # number serves both -- and summing it rather than counting whole
+        # number serves both, and summing it rather than counting whole
         # months is what carries a window that starts mid-month.
         month_proration = _months_billed(ytd_from, today_local)
         spot_dict: dict[datetime, float] = (
@@ -1627,7 +1627,7 @@ class _SweepEngine:
         # sold both ways the alternatives beside it carry the marker, and a
         # bare name would read as the monthly settlement while the row below
         # it prices the same card per quarter-hour. Its label is never looked
-        # up in the sweep's map -- the own row is handled before that -- so
+        # up in the sweep's map: the own row is handled before that, so
         # sharing the helper costs nothing but keeps the column readable.
         label = _candidate_label(
             current[CONF_SUPPLIER],
@@ -1957,7 +1957,7 @@ class _CompareStepsMixin(OptionsFlow):
         """Optionally override the meter type for the comparison.
 
         Static contracts (fixed / variable) can be quoted at mono or
-        bi-hourly billing -- some users want to know "what would I pay
+        bi-hourly billing: some users want to know "what would I pay
         if I switched billing mode AND supplier". Dynamic / TOU
         contracts skip this step: their distribution requires a smart
         meter, picking bi-hourly would route distribution one way and
@@ -1972,7 +1972,7 @@ class _CompareStepsMixin(OptionsFlow):
             quarter_hourly=_settlement_of(self._compare),
         )
         # Dynamic, TOU and TOU-Impact contracts all require a smart
-        # meter, so don't offer mono/bi for them -- matching the install
+        # meter, so don't offer mono/bi for them: matching the install
         # flow's _meter_schema, which gates the same three kinds. (Mega
         # Off-peak Impact is "tou_impact"; omitting it here let the
         # compare flow show an impossible mono/bi meter for it.)
@@ -2060,9 +2060,9 @@ class _CompareStepsMixin(OptionsFlow):
         when either side needs spot data the user's current entry doesn't
         already carry: a spot-priced target (dynamic per slot, spot-monthly
         per delivery month), or (on the injection regime) a
-        spot-indexed-injection contract on EITHER side -- the target like
-        Cociter Variable, or the user's own keyless Cociter Variable entry
-        -- whose feed-in credit is priced off the hourly day-ahead. Keep
+        spot-indexed-injection contract on EITHER side: the target like
+        Cociter Variable, or the user's own keyless Cociter Variable entry,
+        whose feed-in credit is priced off the hourly day-ahead. Keep
         this symmetric with the compare_spot_injection check in
         _build_compare_placeholders, which values both sides."""
         current = self.config_entry.data
@@ -2585,7 +2585,7 @@ class _CompareStepsMixin(OptionsFlow):
         # Exclude spot-priced sides from the archive engine: it bills each
         # past hour at factor*spot+base (or the month's mean) and needs the
         # historical spot cache, which _compute_current_year_cost only
-        # receives on the live coordinator path -- called without it here it
+        # receives on the live coordinator path: called without it here it
         # returns the fees-only floor (zero energy), so a fixed-vs-dynamic
         # compare would show the dynamic side missing its entire energy bill.
         # The simple per-kwh model below prices both sides off the same
@@ -2866,7 +2866,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
         The progress step used to be the only way in, so it owned this. A
         ranking served from the schedule skips that step entirely, which left
         the year-to-date pass as the first thing to read a household nobody
-        had resolved -- a KeyError on the one page whose whole job is to be
+        had resolved: a KeyError on the one page whose whole job is to be
         slow but correct.
 
         Resolved once for the whole sweep whoever asks. This is the half that

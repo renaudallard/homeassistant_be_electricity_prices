@@ -54,7 +54,7 @@ def _has_tomorrow(data: CoordinatorData) -> bool:
       2. The supplier snapshot's published validity period covers
          tomorrow. For monthly variable cards (Eneco, Mega...) the
          month-end rollover invalidates the previously-extrapolated
-         "tomorrow" hours -- the supplier hasn't published the new
+         "tomorrow" hours: the supplier hasn't published the new
          month's rates yet, so we shouldn't claim they're available.
          When the extractor couldn't parse a validity end (None), we
          skip this gate and trust the price table alone.

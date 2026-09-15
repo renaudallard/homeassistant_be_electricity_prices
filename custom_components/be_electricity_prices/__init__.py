@@ -162,7 +162,7 @@ def _migrate_current_year_cost_unique_id(
 
     The sensor's key changed ``yearly_cost`` -> ``current_year_cost`` in
     0.5.2, which changed its unique_id (``{entry_id}_{key}``) and orphaned
-    the existing entity on the upgrade that crossed it -- dropping its
+    the existing entity on the upgrade that crossed it: dropping its
     recorded history, its name and any dashboard references, while a fresh
     entity took over under the new id. Rename the registry entry so the
     sensor keeps its identity across that boundary. Runs before the sensor
@@ -211,7 +211,7 @@ def _migrate_bolt_dynamic_contract(
     Without this the entry holds a contract the registry no longer knows, and
     the coordinator has no card to fetch at all.
 
-    The unique id embeds the contract, so it moves too -- but only when it is
+    The unique id embeds the contract, so it moves too, but only when it is
     free. A household that deliberately ran the variable and the dynamic
     reading as two entries would otherwise have the second one claim the
     first's key; the data migration still happens for both, and a stale unique

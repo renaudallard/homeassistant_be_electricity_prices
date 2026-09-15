@@ -202,7 +202,7 @@ class Check:
     # A failure that is real but KNOWN and unactionable: the supplier
     # publishes its card as page images, so no parser change can read it.
     # Still reported, still visibly failing in the table, but it does not
-    # set the extractor bit -- otherwise one such supplier fails every run
+    # set the extractor bit, otherwise one such supplier fails every run
     # forever, exhausts the workflow's retry loop, and refiles a fresh
     # issue each time the last one is closed. Set by _record from the
     # exception type, so it tracks the current card rather than a
@@ -224,7 +224,7 @@ _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # The DSO set and the renewables field a region's card must carry. Seven
 # checks each restated these as local literals, in two arity groups, and the
 # only thing separating a two-region supplier's map from a three-region one
-# was whether the Brussels row was present -- so a supplier that gained
+# was whether the Brussels row was present, so a supplier that gained
 # Brussels had to have its map remembered as well as its region tuple.
 _EXPECTED_DSOS: dict[str, frozenset[str]] = {}
 _RENEWABLES_FIELD: dict[str, str] = {
@@ -350,7 +350,7 @@ async def _on_response_chunk_received(
 
     It is not one call per network chunk: `ClientResponse.read()` buffers
     the whole body and then fires this hook ONCE with all of it. So a
-    transfer that stalls halfway records zero bytes, not a partial count --
+    transfer that stalls halfway records zero bytes, not a partial count,
     which is why an all-or-nothing byte total plus a counted fetch means
     "headers arrived, body never finished".
     """
@@ -504,7 +504,7 @@ async def _attributed_check(
             # runs under asyncio.to_thread, and a thread cannot be
             # interrupted, so the CancelledError surfaces here instead. It
             # is a BaseException, so the clause below never saw it, and one
-            # slow supplier took the whole run down with it -- no report
+            # slow supplier took the whole run down with it: no report
             # printed at all, and the workflow filed an issue with an empty
             # body (2026-08-03, totalenergies at the 240 s cap).
             #
@@ -538,7 +538,7 @@ async def _attributed_check(
 _UNREADABLE_MARKER = "CardNotReadableError"
 # A supplier past its own deprecated_until has left the market; its final
 # card stays up and stays stale forever. Real, visible, and not actionable
-# by any change here -- the same class as an unreadable card.
+# by any change here: the same class as an unreadable card.
 _WITHDRAWN_MARKER = "SupplierWithdrawn"
 
 
@@ -724,7 +724,7 @@ async def _fetch_with_retry(
 
     A "transient" failure is either a bare ``TimeoutError`` or an
     ``ExtractorError``-shaped exception whose message starts with
-    ``"network error fetching"`` or ``"HTTP "`` -- the two strings the
+    ``"network error fetching"`` or ``"HTTP "``: the two strings the
     shared PDF helpers in ``providers/_pdf.py`` use to wrap aiohttp
     surface errors. Any other exception (parse error, regex miss, ...)
     propagates immediately so a real regression isn't masked by retries.
@@ -887,7 +887,7 @@ async def _check_dats24(
 async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) -> None:
     # EBEM only sells residential electricity in Flanders. The 'elek' card
     # carries both Groen Variabel and Groen B@sic+ in one PDF; the
-    # 'dynamic' card carries Groen Dyn@mic. Walk every contract — they
+    # 'dynamic' card carries Groen Dyn@mic. Walk every contract: they
     # all hit the same listing-page resolver but parse different blocks.
     expected_dsos = _FLUVIUS_KEYS
     for contract in ebem._CONTRACTS:
@@ -951,7 +951,7 @@ async def _check_two_region_supplier(
     parsed against it.
 
     That guard reads ``regions`` defensively because only OCTA+'s private
-    ``_ContractDef`` declares the field -- Ecofix's and Luminus's do not, so a
+    ``_ContractDef`` declares the field: Ecofix's and Luminus's do not, so a
     plain attribute access raises AttributeError. Their public registry
     ``Contract`` does have it, but that is a different object from the
     ``_CONTRACTS`` entries walked here.
@@ -1083,8 +1083,8 @@ async def _check_flanders_card(
     deliberately checks the default one, so iterating them would multiply
     Frank's wallclock and byte draw by five and trip the drift budgets.
 
-    Nothing here is dynamic-specific -- the energy leg is validated by shape in
-    _validate_energy -- so energie.be's spot-monthly variable card reuses it.
+    Nothing here is dynamic-specific: the energy leg is validated by shape in
+    _validate_energy, so energie.be's spot-monthly variable card reuses it.
     """
     prefix = f"{supplier}/{cid}"
     try:
@@ -1446,7 +1446,7 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
 # the diff stayed quiet through both because mega_pro_zen_fixed carried the
 # name the whole time. Mega's own ``advertised`` says which side a contract is
 # on, since its SME cards ARE linked from the listing and have to be counted or
-# they report as new every day. Engie is not filtered on purpose -- its surface
+# they report as new every day. Engie is not filtered on purpose: its surface
 # is the public sitemap, which does not split by segment.
 _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "mega": lambda m: {c.product_name for c in m._CONTRACTS if c.advertised},
@@ -1532,7 +1532,7 @@ def _expect_newest_card(
     ``pattern`` is deliberately looser than the extractor's own: that is
     the whole mechanism. When a supplier changes the filename SHAPE the
     strict pattern stops seeing the new file and keeps resolving the old
-    one, which still exists, still returns 200 and still parses -- so
+    one, which still exists, still returns 200 and still parses, so
     every other check in this script passes. The loose pattern still sees
     it, and the two disagree.
 
@@ -1699,7 +1699,7 @@ def _mmyy_key(stamp: str) -> int:
 def _yymm_key(stamp: str) -> int:
     """Order a Cociter ``YYMM`` stamp, ignoring any trailing tail.
 
-    Year-major, so the leading four digits do sort -- but the captured
+    Year-major, so the leading four digits do sort, but the captured
     stamp carries the language token and a WordPress duplicate counter
     ("2608-fr-1"), which must not join the comparison.
     """
@@ -1726,8 +1726,8 @@ async def _freshness_row(
     supplier that rolls one product's or one region's card ahead of its
     siblings then fails the row and gets named broken for its own
     publication schedule. Mega's listing is demonstrably not atomic. The
-    defect this gate exists for -- a resolver that cannot see the new
-    filename shape -- takes out every card in the family at once, so the
+    defect this gate exists for, a resolver that cannot see the new
+    filename shape, takes out every card in the family at once, so the
     newest resolved stamp still falls behind the newest advertised and the
     row still fails. Where a break really can hit one member at a time,
     the caller emits a row per member instead of collapsing them.
@@ -1782,7 +1782,7 @@ def _stamps_from(pattern: str, *urls: str | None) -> list[str | None]:
 
     The unreadable SENTINEL cannot be reused here. It sorts above every
     real stamp so an unknown ADVERTISED shape becomes the newest and fails
-    the comparison -- but applied to the SERVED side that same score reads
+    the comparison, but applied to the SERVED side that same score reads
     as "newer than anything advertised" and PASSES. The two sides need
     opposite treatment of the same unknown.
     """
@@ -1809,9 +1809,9 @@ async def _check_mega_professional(
 
     These cannot use a freshness ROW: Mega never links the professional
     cards from any page, so there is no advertised set to compare against.
-    The CDN answers for itself instead -- a published month returns
+    The CDN answers for itself instead: a published month returns
     ``application/pdf`` and an unpublished one a ``text/html`` stub under
-    the same 200 -- so HEAD is the whole check, and no card is downloaded.
+    the same 200, so HEAD is the whole check, and no card is downloaded.
 
     What makes this worth a check at all is that ``fetch`` silently rolls
     back one month when the current card is missing. Four of the nine
@@ -1821,7 +1821,7 @@ async def _check_mega_professional(
 
     Early in a month the rollback is correct behaviour, not a defect, so
     this only fails past :data:`_PRO_PUBLICATION_GRACE_DAYS`. Mega does not
-    publish ahead -- next month's URL is a stub today -- so failing without
+    publish ahead: next month's URL is a stub today, so failing without
     that grace would file an issue every month.
     """
     today = mega.dt_util.now().date()
@@ -2537,7 +2537,7 @@ def _expected_injection_shape(contract_id: str) -> str:
 
     Explicit _INJECTION_SHAPE entries win; otherwise derive from the
     contract's own metadata so a fixed/variable (monthly-indexed) card can't
-    silently gain a spot factor/base -- the 0.6.7-class latent mispricing --
+    silently gain a spot factor/base: the 0.6.7-class latent mispricing,
     without failing here. ``spot_indexed_injection`` marks the one variable
     card whose injection is a spot formula (Cociter Variable); dynamic and TOU
     cards carry factor/base or per-slot rates, so they stay presence-only."""
@@ -2567,9 +2567,9 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
     already fallen into two arity groups.
 
     Deliberately only these three. The publication-label assertion differs
-    between checks (some pass a detail=), and the per-supplier extras --
+    between checks (some pass a detail=), and the per-supplier extras,
     professional VAT basis, excise bands, energy contribution, the ORES band
-    ordering -- stay at their call sites where their reasons live.
+    ordering: stay at their call sites where their reasons live.
     """
     taxes = getattr(snap, "taxes", None)
     dsos = getattr(snap, "dsos", None) or {}
@@ -2598,7 +2598,7 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
 # was built for.
 # How many months behind the current one a contract's card may legitimately
 # be. Zero for almost everything: a supplier bills the month it is in. An
-# entry here is an ALLOWANCE WITH A CEILING, not a skip -- a card further
+# entry here is an ALLOWANCE WITH A CEILING, not a skip: a card further
 # behind than its entry still fails, so a supplier that stops publishing
 # altogether is caught even where some lag is expected.
 #
@@ -2683,7 +2683,7 @@ def label_month(label: str) -> tuple[int, int] | None:
 
     Every shape the suppliers actually print: ``08/2026``, ``2026-08`` and a
     French or Dutch month name with a year. The name match is unicode-aware
-    on purpose -- a class that forgets the ``u`` in ``août`` silently fails to
+    on purpose: a class that forgets the ``u`` in ``août`` silently fails to
     read 104 of the 236 live labels, and an unreadable label is skipped, so
     the check would have quietly covered almost nothing.
 
@@ -2718,7 +2718,7 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
     Two assertions, both from the snapshot the caller already fetched:
     ``valid_until`` must not have passed, and the publication label must not
     name a month earlier than this one. A label NEWER than the current month
-    passes -- publishing early is not staleness.
+    passes: publishing early is not staleness.
     """
     supplier = prefix.split("/", 1)[0]
     today = datetime.now(ZoneInfo("Europe/Brussels")).date()
@@ -3173,7 +3173,7 @@ def _render_report(
     # tell the reader to go looking for a text layer.
     unreadable = [c for c in expected if c.detail.startswith(_UNREADABLE_MARKER)]
     withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
-    headline = f"# Live extractor check — {pass_count} pass, {len(regressions)} fail"
+    headline = f"# Live extractor check: {pass_count} pass, {len(regressions)} fail"
     if unreadable:
         # Say it in the headline. A run that reads "0 fail" while the table
         # below lists failing rows reads like a bug in the harness.
@@ -3436,7 +3436,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s
 # is the SUM of per-request durations (accumulated in _on_request_end),
-# not true wallclock -- so a supplier that fetches concurrently records
+# not true wallclock, so a supplier that fetches concurrently records
 # the sum of its parallel fetches even though they overlap in real
 # time. Sized to "observed slow-day summed fetch time + ~20-25%
 # headroom" so the retry helper's per-PDF overhead (1-3s per fired
@@ -3591,8 +3591,8 @@ def _drift_warnings(
 
 def _render_drift(warnings: list[str]) -> str:
     if not warnings:
-        return "# Live-check drift — no warnings\n"
-    rows = ["# Live-check drift — alerts", ""]
+        return "# Live-check drift: no warnings\n"
+    rows = ["# Live-check drift: alerts", ""]
     for w in warnings:
         rows.append(f"- {w}")
     return "\n".join(rows) + "\n"

@@ -341,7 +341,7 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 # truly new residential electricity products surface as actionable
 # signal while these stay quiet.
 #
-#   * Prepaid Fixed / Prepaid Flex -- topup-card products with a
+#   * Prepaid Fixed / Prepaid Flex: topup-card products with a
 #     different billing model (no monthly invoice, no recorder-backed
 #     consumption sensors), out of scope for the Energy-dashboard
 #     integration.
@@ -509,7 +509,7 @@ async def fetch(
             # card, so it must surface rather than silently roll back a
             # month. Three of these professional contracts are variable
             # and one is dynamic, so last month's card carries last
-            # month's index -- the prices would be wrong, not just old.
+            # month's index: the prices would be wrong, not just old.
             raise
         except ExtractorError:
             # Early in a month Mega can lag a day or two before the new
@@ -542,8 +542,8 @@ async def _archive_pdf_url(
     Professional cards never appear in the public listing, so they take the
     same built filename ``fetch`` uses with the requested month. Residential
     ones resolve the current URL from the listing and rewrite BOTH month
-    placeholders -- the ``-MMYYYY-`` segment and the ``<MM>`` half of the
-    product's effective-date ``<DD><MM>`` suffix -- while preserving the
+    placeholders: the ``-MMYYYY-`` segment and the ``<MM>`` half of the
+    product's effective-date ``<DD><MM>`` suffix, while preserving the
     effective day, which is not the 1st for every product.
     """
     if contract.professional:
@@ -606,7 +606,7 @@ async def _realized_rates_for_month(
     the "derniers prix constates ... pour le mois de <month>" sentence that
     overrides it names the month BEFORE the card's own: the June card reports
     May's regularisation figures. That is the only choice on the live path,
-    where the current month's index does not exist yet -- but on the archive
+    where the current month's index does not exist yet, but on the archive
     path it shifted every past month of the year-to-date walk by one, billing
     June at May's rate while June's real rate sat unread on the July card.
 
@@ -651,8 +651,8 @@ async def fetch_for_month(
 
     Mega's CDN keeps every monthly issue under a stable URL pattern:
     ``Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<Product><DD><MM>[-<Variant>].pdf``.
-    The month appears twice -- the ``<MMYYYY>`` segment and the ``<MM>``
-    half of the product's effective-date ``<DD><MM>`` suffix -- and both
+    The month appears twice: the ``<MMYYYY>`` segment and the ``<MM>``
+    half of the product's effective-date ``<DD><MM>`` suffix, and both
     must rotate while the effective day ``<DD>`` is preserved (most
     products publish on the 1st, but some, e.g. Cosy, use another day).
     The suffix can sit mid-token before a ``-Fixed`` / ``-Green`` /
@@ -720,7 +720,7 @@ async def _apply_realized_for_month(
     Only the energy and injection legs move. The overlays, the yearly fee and
     the cohort coefficients stay M's, because those really are properties of
     M's card. When the M+1 card is not out yet, or is missing a label, the
-    mapping comes back empty and M keeps its own figures -- the behaviour
+    mapping comes back empty and M keeps its own figures: the behaviour
     before this, and still the best available for the newest month.
     """
     if contract.kind not in ("variable", "tou_impact"):
@@ -905,7 +905,7 @@ EXTRACTOR = SupplierExtractor(
             # Their cards print a formula per meter or per CWaPE band and,
             # beside it, "les derniers prix constates et utilises pour le
             # calcul de votre facture de regularisation pour le mois de
-            # <MONTH>" -- a month they name, and it is the one before the
+            # <MONTH>": a month they name, and it is the one before the
             # card's own: the April card settles March, the May card April.
             # Billing that figure bills last month's index, so the re-price
             # needs the optional key step on every solar regime.

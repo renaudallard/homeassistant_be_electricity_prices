@@ -459,7 +459,7 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="energy_fund_eur_per_month",
         translation_key="energy_fund_eur_per_month",
-        # Flemish Energiefonds — supplier-collected residential charge
+        # Flemish Energiefonds: supplier-collected residential charge
         # billed per month. Free for domiciliated customers (0,00) and
         # ~10 EUR/month otherwise depending on the supplier's card.
         state_class=SensorStateClass.MEASUREMENT,
@@ -474,8 +474,8 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # annual fees, with injection netted per regime. Always numeric;
         # missing meter inputs collapse to the fees-only floor so the
         # sensor never goes ``unknown``. ``TOTAL`` with ``last_reset``
-        # pinned to local midnight of the window start -- Jan 1, or the
-        # contract start date on an entry that bills from it -- lets the
+        # pinned to local midnight of the window start: Jan 1, or the
+        # contract start date on an entry that bills from it: lets the
         # long-term-statistics engine
         # bucket each calendar year as its own period; the value can
         # dip day-over-day on heavy-injection days under the
@@ -553,7 +553,7 @@ CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # would log a "state class is impossible considering device
         # class" warning on every entity setup. The Energy /
         # statistics graph defaults to the mean aggregation, which is
-        # not what the user wants here -- ask HA's developer-tools
+        # not what the user wants here: ask HA's developer-tools
         # statistics view for the per-hour MAX instead, which tracks
         # the true monthly running peak.
         state_class=SensorStateClass.MEASUREMENT,

@@ -100,7 +100,7 @@ def _utility_meter_day_night_children(
        HA installs). The source + tariff name come from the live
        state attributes set by the utility_meter component.
 
-    Bails on any ambiguity rather than guessing -- a wrong day/night
+    Bails on any ambiguity rather than guessing: a wrong day/night
     pick mis-bills the year cost.
     """
     from homeassistant.helpers import entity_registry as er
@@ -209,7 +209,7 @@ async def _apply_energy_manager_defaults(
     cumulative-kWh totals the coordinator reads via the recorder, so
     treating it as the default saves the user from picking the same
     sensor twice. For the day/night split we follow utility_meter
-    helpers rooted at the same source -- only when the tariff names
+    helpers rooted at the same source: only when the tariff names
     map unambiguously to day/night.
     """
     if any(

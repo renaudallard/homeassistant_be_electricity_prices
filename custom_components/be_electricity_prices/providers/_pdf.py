@@ -105,7 +105,7 @@ def error_text(err: BaseException) -> str:
     that produced a user-facing sentence trailing off after the colon, on
     all three surfaces that show ``last_error``: the ``snapshot_stale``
     Repairs card, the ``current_price`` sensor attribute, and diagnostics.
-    Naming the class is the smallest thing that stays informative -- the
+    Naming the class is the smallest thing that stays informative: the
     caller's own prefix already says what was being attempted.
 
     Also used by the ENTSO-E client, whose ``EntsoeError`` reaches the same
@@ -141,7 +141,7 @@ def _is_pdf_payload(payload: bytes) -> bool:
     """Return True if the bytes look like a PDF.
 
     PDFs start with the magic bytes ``%PDF``. Some publishers prepend
-    a UTF-8 BOM (\\ufeff = 3 bytes EF BB BF) — OCTA+'s tariff PDFs do
+    a UTF-8 BOM (\\ufeff = 3 bytes EF BB BF): OCTA+'s tariff PDFs do
     this. Allow the BOM as a one-time prefix.
     """
     if payload.startswith(b"%PDF"):
@@ -223,7 +223,7 @@ async def _fetch_validated_pdf_bytes(
         )
     # Strip the BOM the validator above deliberately tolerates. Accepting it
     # there only keeps the download from being rejected; the bytes still have
-    # to parse, and pdfplumber cannot read them -- it fails a BOM-prefixed
+    # to parse, and pdfplumber cannot read them: it fails a BOM-prefixed
     # file with "No /Root object! - Is this really a PDF?", which reads like a
     # corrupt card rather than three stray bytes. pypdf recovers on its own,
     # so the two aligned/layout variants are the ones this protects.
@@ -869,7 +869,7 @@ def numeric_row(
         row_label = _row_label(line)
         if not row_label and index:
             # A label too long for its column wraps onto its own line and
-            # leaves the figures alone on the next one -- pdfplumber does
+            # leaves the figures alone on the next one: pdfplumber does
             # this to Ecofix's Fluvius West and Zenne-Dijle rows. A person
             # reads those two lines as one row, so take the label from the
             # line above when it carries no figures of its own.
@@ -1108,7 +1108,7 @@ def text_mentions_month(
     tariff cards print ``Carte tarifaire <month> <year>`` /
     ``Tariefkaart <month> <year>``) plus 200-char windows after each
     validity keyword (``geldig``, ``valable``, ``validit``, ``valid``).
-    Both anchors run on every call -- either alone is enough to
+    Both anchors run on every call: either alone is enough to
     accept; together they catch the legitimate mention while excluding
     retrospective references buried in footers and comparison tables
     further down.
@@ -1179,7 +1179,7 @@ def parse_valid_until(text: str) -> date | None:
     """Best-effort parse of a "valid until" date from a tariff card.
 
     Anchored on a validity keyword (``geldig``, ``valable``,
-    ``validit``, ``valid``) -- the parser only considers dates that
+    ``validit``, ``valid``): the parser only considers dates that
     appear within a short window (~200 chars) **after** one of these
     keywords. This avoids picking up unrelated dates elsewhere in the
     document (contract end dates, regulatory dates, footer
@@ -1191,7 +1191,7 @@ def parse_valid_until(text: str) -> date | None:
          ("30 april 2026", "30 avril 2026").
       2. Numeric ``DD/MM/YYYY``.
       3. Bare ``<month-name> <year>``, returning the last day of that
-         month -- e.g. "Tariefkaart april 2026" implies "valid until
+         month: e.g. "Tariefkaart april 2026" implies "valid until
          the last day of April".
 
     Returns the latest matching date across all windows, or ``None``
@@ -1294,15 +1294,15 @@ def flanders_tax_overlay(
     which of them may be missing. Only the anchors differ, so the callers pass
     compiled patterns and this holds the policy:
 
-    * ``excise`` -- MANDATORY. Patterns are tried in order and the first match
+    * ``excise``: MANDATORY. Patterns are tried in order and the first match
       wins, so a card printing both the flat August-2026 row and the tiered
       one being phased out resolves to the flat rate.
-    * ``renewables`` -- MANDATORY, and ALL of them must match. Summed. Some
+    * ``renewables``: MANDATORY, and ALL of them must match. Summed. Some
       cards print GSC and WKK separately, others one pre-summed row.
-    * ``contribution`` -- OPTIONAL, absent means 0.0. The federal levy dropped
+    * ``contribution``: OPTIONAL, absent means 0.0. The federal levy dropped
       to zero on 2026-08-01 and suppliers answered by deleting the row, so an
       absent row is the abolished levy, not a layout drift.
-    * ``fund`` -- OPTIONAL, absent means 0.0, and it is EUR/month so it is NOT
+    * ``fund``: OPTIONAL, absent means 0.0, and it is EUR/month so it is NOT
       scaled by 100 like the c€/kWh rows.
 
     Sharing the policy is the point. It was written out three times and had

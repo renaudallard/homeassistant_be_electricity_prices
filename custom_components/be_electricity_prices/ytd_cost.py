@@ -30,8 +30,8 @@ that month's own archived card, and sums the energy, the standing charges, the
 capacity tariff, the prosumer forfait and the feed-in credit into the running
 bill the current_year_cost sensor publishes.
 
-The same figure is built by two other paths -- backfill.py per hour and the
-options flow's compare quote -- so a change here that is not mirrored there
+The same figure is built by two other paths: backfill.py per hour and the
+options flow's compare quote, so a change here that is not mirrored there
 shows up as a seam, not an exception."""
 
 from __future__ import annotations
@@ -166,8 +166,8 @@ async def _walk_ytd_months(
     The window starts at 1 January unless the entry bills from its contract
     start date, and the walk starts at whichever it is: ``days_in_ytd`` for
     the first month then counts from that day rather than from the 1st, so
-    every fee this feeds -- the annual standing charges, the Walloon prosumer
-    fee, the Flemish capacity term -- prorates over the days the contract
+    every fee this feeds (the annual standing charges, the Walloon prosumer
+    fee, the Flemish capacity term) prorates over the days the contract
     actually covers. Without that a contract signed on 30 June still billed
     twelve months of standing charges against six months of energy, which is
     a worse number than the one the option was turned on to fix.
@@ -407,7 +407,7 @@ async def _ytd_hourly_energy(
     distribution band from the user's DSO mode in one call. Reads from
     ``CONF_CONSUMPTION_KWH`` (single totals) when available, else sums
     the four day/night register sensors at hourly granularity. Each
-    side -- consumption, injection -- is resolved independently,
+    side (consumption, injection) is resolved independently,
     mirroring the static-path behaviour: a user with only injection
     wired (e.g. an inverter exposing solar export but no smart-meter
     consumption sensor) still gets the injection credit recognised.
@@ -689,7 +689,7 @@ async def _ytd_spot_injection_credit(
 
     Sums per-hour injected kWh * (factor*spot + base) from the recorder's
     hourly statistics and the persistent historical-spot cache, for
-    Cociter Variable -- a static-energy card that publishes an hourly
+    Cociter Variable: a static-energy card that publishes an hourly
     BELPEX injection formula but no fixed credit. The static per-day YTD
     path can't price these (no spot per
     day), so this isolated term replays the spots the same way the
@@ -1107,7 +1107,7 @@ async def _compute_current_year_cost(
     # per Impact band (PIC / MEDIUM / ECO change with hour-of-day), or
     # for an exclusive_night meter (its energy + distribution use the
     # dedicated exclusive-night rates, which the static per-day branch's
-    # single/peak/offpeak breakdowns don't carry -- so without this it
+    # single/peak/offpeak breakdowns don't carry, so without this it
     # would bill the YTD at the day rate while the live sensor uses the
     # cheaper exclusive-night rate). All go through the same hourly path,
     # which routes the meter through compute_breakdown.

@@ -183,7 +183,7 @@ CONF_TARIFF_CARD_DATE: Final = "tariff_card_date"
 # ytd_window_start), so this only changes the contract's FIRST calendar year.
 # Past that, "since the contract started" and "since 1 January" would diverge
 # by whole years, and the sensor is a TOTAL the recorder buckets per calendar
-# year -- a window reaching back into last year does not survive that.
+# year: a window reaching back into last year does not survive that.
 CONF_YTD_FROM_CONTRACT_START: Final = "ytd_from_contract_start"
 
 # Optional manual signing-rate override, offered on the config flow when a
@@ -262,7 +262,7 @@ METER_EXCLUSIVE_NIGHT: Final = "exclusive_night"
 # TariffKinds that can only be billed on an SMR3 (digital) meter: they price
 # by quarter-hour or by hour-of-day, and a mono/bi meter would route
 # distribution through the bi-horaire split while the supplier billed energy by
-# slot -- two billing modes that do not mix. Named here because both the
+# slot: two billing modes that do not mix. Named here because both the
 # install flow and the compare flow gate on it, and the copies had already
 # drifted once: tou_impact was missing from the compare side, which offered an
 # impossible mono/bi meter for Mega Off-peak Impact.

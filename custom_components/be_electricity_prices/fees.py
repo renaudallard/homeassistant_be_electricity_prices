@@ -26,7 +26,7 @@
 """Standing charges: the capacity tariff, the Brussels OSP fee, the prosumer
 forfait and the annual fixed fees.
 
-Split out of coordinator.py. A true leaf -- nothing here imports another module
+Split out of coordinator.py. A true leaf: nothing here imports another module
 of this package beyond const and providers, and the live sensor, the
 year-to-date walk, the backfill and the compare quote all read these, which is
 why they must not be duplicated per caller."""
@@ -320,7 +320,7 @@ def _compensation_kva(entry: ConfigEntry) -> float:
     """Inverter kVA this entry bills the prosumer fee on, else 0.0.
 
     The whole eligibility gate in one place: the compensation regime, Wallonia,
-    and a kVA that parses above zero. It was written out three times -- the
+    and a kVA that parses above zero. It was written out three times: the
     live tick, the year-to-date walk and the backfill, the last one with the
     kVA half in its own helper and the region half 580 lines away from it.
 

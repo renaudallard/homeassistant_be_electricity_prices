@@ -53,8 +53,8 @@ repo's April test fixture).
 Each PDF carries the current-month rates plus the year-estimate
 (jaarschatting) values, full Fluvius / Walloon DSO tables, the Flemish
 GSC + WKC certificate cost, the Walloon CV cost, and federal taxes. All
-printed amounts are TVAC except where the card explicitly notes otherwise
--- ``vat_rate=0.0`` matches the project's standard convention.
+printed amounts are TVAC except where the card explicitly notes otherwise,
+so ``vat_rate=0.0`` matches the project's standard convention.
 """
 
 from __future__ import annotations
@@ -241,7 +241,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Confirm DATS 24 still publishes a card.
 
     The catalog "drift" we want to detect is publication stopping
-    altogether -- which is now expected once the 2026-08-31 transfer to
+    altogether, which is now expected once the 2026-08-31 transfer to
     EnergyVision completes. A 200 from a HEAD probe on either candidate
     month is enough; if they ever add a second contract type ("vast",
     "tou", etc.) this check stays green and we'd notice via a separate
@@ -274,8 +274,8 @@ def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
 def _extract_energy(text: str) -> EnergyRates:
     """Parse the indicative TVAC c€/kWh values for the current month.
 
-    The card prints four values under "Afname1" -- single rate (mono),
-    bi-hourly day, bi-hourly night, and exclusive-night -- computed
+    The card prints four values under "Afname1": single rate (mono),
+    bi-hourly day, bi-hourly night, and exclusive-night: computed
     from the previous calendar month's BE_spotRLP applied to the
     contract's coefficients. We use those figures directly rather than
     re-solving the formula: spot data isn't available at parse time
@@ -374,7 +374,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
     All distribution rates are TVAC c€/kWh; transport is c€/kWh.
     DATS 24 lists seven ORES sub-areas (Brabant Wallon, Est, Hainaut,
-    Luxembourg, Mouscron, Namur, Verviers) with identical rates -- we
+    Luxembourg, Mouscron, Namur, Verviers) with identical rates: we
     collapse them onto the integration's single "ores" key.
     """
     out: dict[str, DsoOverlay] = {}

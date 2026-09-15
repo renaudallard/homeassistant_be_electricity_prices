@@ -175,7 +175,7 @@ def _month_mean(bucket: _SpotMonthBucket, year: int, month: int) -> float | None
 
 # A closed month must be this well covered before its mean is billable. The
 # mean of a sparsely cached month is applied to EVERY hour of it, so a thin
-# sample is not a slightly noisier number -- it is a confident wrong one. The
+# sample is not a slightly noisier number: it is a confident wrong one. The
 # threshold mirrors the day-level rule in _ensure_historical_spots (20 of 24
 # hours present); a month fetched in week-sized chunks is either nearly whole
 # or missing whole weeks, and missing weeks are seasonally biased.
@@ -211,8 +211,8 @@ def _covered_month_mean(
     applies that to every hour of the month. For the running month that is
     correct: it is partial by definition and the cached hours are the best
     estimate of it that exists. For a month that has already closed, a thin
-    cache means the average is drawn from an unrepresentative slice -- one
-    cached hour priced a whole January in testing -- and the result is a wrong
+    cache means the average is drawn from an unrepresentative slice: one
+    cached hour priced a whole January in testing, and the result is a wrong
     rate rather than a missing one.
 
     Returning ``None`` hands the hour to the network-and-taxes path, which
@@ -609,7 +609,7 @@ def _spp_injection_spot(
     ``monthly_mean`` says the INJECTION settles on a month mean, and when it
     does this returns a month mean or nothing. It never returns ``spot``,
     because a caller's ``spot`` is the hour's own price whenever the ENERGY
-    leg is not itself month-priced -- which is the shape of every card that
+    leg is not itself month-priced, which is the shape of every card that
     indexes only its credit monthly (Eneco Fix and Flex). Handing that to
     ``_historical_injection_rate`` resolves a month formula at one hour's
     spot: real backfilled August rows spanned -3,48 to +25,66 c/kWh for a

@@ -179,14 +179,14 @@ async def _recorder_rows(
 
     Wraps ``statistics_during_period`` via the recorder's executor so a
     SQLite query never runs on the event loop. Returns a (possibly
-    empty) list -- every failure mode (recorder not ready, no
+    empty) list: every failure mode (recorder not ready, no
     statistics, transient DB error) collapses to ``[]`` so callers can
     fall back to the fees-only floor without raising.
 
     Reads the ``change`` field, which the recorder defines as the delta
     of the cumulative ``sum`` between the bucket's first and last
     sample. Reading ``sum`` directly would yield the all-time running
-    total -- summing those would multiply the bill by however many
+    total: summing those would multiply the bill by however many
     years of statistics the meter has accumulated.
 
     Requests the ``change`` in kWh via ``units={"energy": "kWh"}`` so a
@@ -270,7 +270,7 @@ async def _live_today_kwh(
     state machine and the recorder's state history, bypassing the long-term
     daily statistics the past-day path relies on. This keeps the running year
     cost tracking today's consumption in real time and, crucially, keeps it
-    moving when statistics compilation lags or stalls -- states are still
+    moving when statistics compilation lags or stalls: states are still
     recorded regardless. ``None`` means "no reliable live reading": the meter
     is unavailable / non-numeric, has no reading at midnight yet, or carries a
     unit that can't be converted to kWh; the caller then keeps the daily
@@ -958,7 +958,7 @@ def _hourly_kwh_sensors(entry: ConfigEntry, side: str) -> list[str]:
     Both sides spelled this out separately while reading the same three keys
     ``_kwh_sensor_ids`` already returns, so the preference order existed in
     three places: here twice and in ``_side_is_half_wired``. The order is the
-    load-bearing part -- checking the total first bills the hourly path off a
+    load-bearing part: checking the total first bills the hourly path off a
     different meter than the static per-day path for a user who wired both,
     and the two figures then drift against each other.
     """

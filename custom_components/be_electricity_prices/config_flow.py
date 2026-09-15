@@ -182,7 +182,7 @@ class _WizardStepsMixin:
         """The supplier / region entry step, shared by both flows.
 
         The two spelled out the same handler, differing only in the seed and
-        the step id -- which is exactly what the mixin's own docstring says
+        the step id, which is exactly what the mixin's own docstring says
         distinguishes them.
         """
         if not hasattr(self, "_data"):
@@ -886,4 +886,4 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     # Walks supplier -> contract -> result. Region, DSO, meter, peak,
     # solar etc. all stay the same as the current entry so the quote is
     # apples-to-apples. The result step shows a side-by-side breakdown
-    # and exits via async_abort -- no entry, no options, nothing saved.
+    # and exits via async_abort: no entry, no options, nothing saved.

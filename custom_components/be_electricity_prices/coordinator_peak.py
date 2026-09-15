@@ -29,8 +29,8 @@ Split out of coordinator.py. Kept separate from the spot mixin: zero calls in
 either direction and zero shared state, and a module named for spot prices
 containing _billed_peak_kw would be actively misleading.
 
-This file holds the only back-edge to the concrete coordinator --
-reset_monthly_peak calls _save_persistent and async_request_refresh -- so both
+This file holds the only back-edge to the concrete coordinator,
+reset_monthly_peak calls _save_persistent and async_request_refresh, so both
 stubs live here, with signatures matching DataUpdateCoordinator exactly."""
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class _PeakMixin:
         # rather than inheritance: a mixin inheriting
         # DataUpdateCoordinator[CoordinatorData] would need CoordinatorData,
         # which lives in coordinator.py and is imported from there by sensor,
-        # binary_sensor and diagnostics -- a cycle.
+        # binary_sensor and diagnostics: a cycle.
         hass: HomeAssistant
 
         async def _save_persistent(self) -> None: ...

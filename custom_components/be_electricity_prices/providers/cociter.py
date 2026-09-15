@@ -113,7 +113,7 @@ _VAI_RE = re.compile(
 # Cociter prints one row per Wallonian DSO it serves; the labels are the
 # uppercase strings that anchor each row in the PDF (case-sensitive). The
 # registry key on the right is what the rest of the integration uses. The
-# set of keys must equal WALLONIA_DSO_KEYS — if Cociter starts (or stops)
+# set of keys must equal WALLONIA_DSO_KEYS: if Cociter starts (or stops)
 # serving a Wallonian DSO, update both this map and const.WALLONIA_DSO_KEYS
 # in lockstep so the snapshot's overlays cover every selectable DSO.
 _DSO_KEY: dict[str, str] = {
@@ -185,7 +185,7 @@ async def fetch_for_month(
     # to "15 MIN BELPEX", the meter labels dropped and the injection prose
     # moved BELOW its own formula. Taking only the newest lost that month from
     # the archive walk outright, and the walk then billed July at the current
-    # card's overlays -- while the original, which parses and agrees with the
+    # card's overlays, while the original, which parses and agrees with the
     # August card, was still served at its unsuffixed URL.
     # Last resort, after every LISTED edition has failed to parse: the
     # original the re-upload displaced. WordPress keeps it at the unsuffixed
@@ -245,7 +245,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 
     Cociter's listing publishes one PDF per (family, month). Map the
     family prefix (RCVar_YMR / RCDyn_SM3) back to our contract id and
-    surface anything else verbatim — that's the new-product signal.
+    surface anything else verbatim: that's the new-product signal.
     """
     try:
         html = await fetch_text(session, _INDEX_URL)
@@ -470,8 +470,8 @@ _IMPACT_BANDS: tuple[tuple[str, str], ...] = (
 def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
     """The trihoraire card: one BELIX formula per CWaPE Impact band.
 
-    Each row is the variable card's mono row three times over -- "Heures PIC
-    (0,1 x BELIX + 5) + 6% TVA 129,32 19,0079 c€/kWh" -- so the conversion is
+    Each row is the variable card's mono row three times over: "Heures PIC
+    (0,1 x BELIX + 5) + 6% TVA 129,32 19,0079 c€/kWh", so the conversion is
     the same: the coefficients print c€/kWh against a BELIX in EUR/MWh, giving
     the factor a x10 and the base a /100, with the VAT printed outside the
     parens landing on both.
@@ -834,7 +834,7 @@ async def _find_latest(
     # ties in listing order, so a month carrying both the original and a
     # correction resolved to whichever came last in the HTML. fetch_for_month
     # already ranked on the counter, so the live card and the archived one
-    # for the SAME month could be different files -- and when the index lists
+    # for the SAME month could be different files, and when the index lists
     # the newest first, the live path served the superseded one.
     matches.sort(key=lambda m: (m[1], _dedup_rank(m[0])))
     url, yymm = matches[-1]

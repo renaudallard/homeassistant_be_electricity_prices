@@ -278,7 +278,7 @@ def _ocr_text(payload: bytes) -> str:
 
     The last thing tried, and only here. Ecofix has published its cards as
     page images since August, and a document with nothing in it is the end
-    of the road for a parser -- but not for a reader that knows the fonts
+    of the road for a parser, but not for a reader that knows the fonts
     these cards are set in. ``ocr_price_cards`` returns text shaped exactly
     like pdfplumber's, so the supplier's own extractor parses it without
     knowing anything happened.
@@ -291,7 +291,7 @@ def _ocr_text(payload: bytes) -> str:
     Read with ``strict=False`` and taken from ``trusted_text``: a line
     carrying a mark the engine refused is left out of it, so a figure that
     is there was read whole, and one it could not read is missing rather
-    than wrong -- a missing mandatory figure fails the parse, which is the
+    than wrong: a missing mandatory figure fails the parse, which is the
     bargain the extractors already make. Anything it cannot deliver raises
     the error the renderer raised, so the card falls to ``unparsed.json``
     exactly as it did before.
@@ -1169,7 +1169,7 @@ async def _retry_unparsed(
     ``unparsed.json``, and there it stays: it cannot be re-fetched, because
     a supplier serving one url overwrites it the next month. The bytes are
     the only copy there will ever be, so the one thing that can change the
-    answer is the reader -- which is exactly what ``parser.txt`` already
+    answer is the reader, which is exactly what ``parser.txt`` already
     tracks. So this runs under the same condition the row replay does, and
     the day a reader learns to read those cards they become rows.
 

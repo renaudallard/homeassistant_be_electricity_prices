@@ -185,9 +185,8 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     settles on, and a month-indexed card that stops printing its indicative
     has both. Every one of eneco, engie, luminus and totalenergies can emit
     that shape: their extractors return the leg as long as EITHER the figure
-    or the formula parsed. It answered True here, so ``_injection_needs_spot``
-    -- the predicate that means "this credit carries a PER-HOUR index" --
-    claimed it, the coordinator skipped the month bake it gates, and the
+    or the formula parsed. It answered True here, so ``_injection_needs_spot``,
+    the predicate that means "this credit carries a PER-HOUR index", claimed it, the coordinator skipped the month bake it gates, and the
     injection_price sensor reported nothing at all while the running bill went
     on crediting the month formula.
     """
@@ -468,7 +467,7 @@ def _injection_price_for_slot(
 
     The spot branch fires only when the energy bills per hour (DynamicRates)
     OR the injection is a spot formula with no monthly indicative (``current``
-    is None) -- e.g. Cociter Variable. A static-energy contract whose injection
+    is None): e.g. Cociter Variable. A static-energy contract whose injection
     carries a MONTHLY index but also a printed ``current`` (Ecofix Flexy's
     BELPEX-SPP-M, EBEM Groen Variabel / B@sic+'s SPP0) uses that realized
     monthly rate instead, keeping the live sensor consistent with the YTD
@@ -520,7 +519,7 @@ def _compute_injection_price(
 def _injection_varies_intraday(
     inj: InjectionRates, energy: EnergyRates, *, meter: MeterType = METER_MONO
 ) -> bool:
-    """True when this contract's injection changes across the day -- a TOU
+    """True when this contract's injection changes across the day: a TOU
     schedule (Engie Empower Flextime), a day/night register pair on a meter
     with two registers (Trevion Vast) or a spot-indexed formula (every dynamic
     contract plus Cociter Tarif Variable). Flat monthly-indicative, fixed and

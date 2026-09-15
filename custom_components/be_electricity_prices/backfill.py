@@ -37,10 +37,10 @@ coordinator's persistent cache) and pushes ``mean`` rows through
 
 Two entry points:
 
-* :func:`backfill_range` -- service-call path. Always runs over the
+* :func:`backfill_range`: service-call path. Always runs over the
   requested range; with ``clear=True`` deletes the range first so a
   user who fixed their tariff card can redo a window.
-* :func:`backfill_if_missing` -- automatic one-shot called from
+* :func:`backfill_if_missing`: automatic one-shot called from
   ``async_setup_entry``. Probes the recorder for statistics at the Jan
   1 anchor and only runs when none exist, so we don't redo the work on
   every HA restart.
@@ -147,7 +147,7 @@ _LOGGER = logging.getLogger(__name__)
 # EUR/kWh price. Each one becomes one ``mean`` statistic id during
 # backfill. Kept in sync by hand with sensor.py (small, stable list);
 # pulling it from the SENSORS / INJECTION_SENSORS tuples would couple
-# this module to the entity-construction path for no real win -- the
+# this module to the entity-construction path for no real win: the
 # backfill values come straight out of compute_breakdown, not from the
 # live entities.
 _PRICE_SENSOR_KEYS: tuple[str, ...] = (
@@ -164,7 +164,7 @@ def _stat_id(hass: HomeAssistant, entry: ConfigEntry, key: str) -> str | None:
     """Resolve the entity id (== statistic id) for one of this entry's sensors.
 
     Looks up the entity registry by unique id. Returns ``None`` when
-    the entity hasn't been registered yet -- callers skip silently
+    the entity hasn't been registered yet: callers skip silently
     rather than fabricating a slug from the description key, which
     would diverge from the user's renamed entity id.
     """
@@ -283,7 +283,7 @@ async def _existing_stat_window(
 
 
 async def _clear_all(hass: HomeAssistant, statistic_ids: list[str]) -> None:
-    """Delete every statistic row for ``statistic_ids`` -- the WHOLE series.
+    """Delete every statistic row for ``statistic_ids``: the WHOLE series.
 
     The recorder's ``clear_statistics`` is the only public primitive
     here and it is series-scoped, not range-scoped. Callers must
@@ -716,7 +716,7 @@ async def _backfill_cost_sensor(
     that year's Jan 1: the loop accumulates monotonically from the first
     hour and (when ``emit_from`` is set) only writes rows on/after it, so
     a mid-year backfill still carries the correct year-to-date sum. The
-    sum must not be reset mid-series -- the recorder derives the Energy
+    sum must not be reset mid-series: the recorder derives the Energy
     dashboard's change as ``sum - prev_sum`` and ignores ``last_reset``
     for imported statistics, so a drop back to ~0 would render as a large
     spurious negative cost. The caller therefore anchors on Jan 1 of the
@@ -1083,7 +1083,7 @@ async def backfill_range(
     # Anchor on the LAST hour actually backfilled, not on ``end_utc``, which
     # is exclusive. services.yaml documents ``end`` as "first hour NOT to
     # backfill", so the canonical way to rebuild a whole year is
-    # start = 1 Jan YYYY, end = 1 Jan YYYY+1 -- and taking the year off that
+    # start = 1 Jan YYYY, end = 1 Jan YYYY+1, and taking the year off that
     # end lands on the NEXT year's anchor, which equals end_utc itself. The
     # cost window was then empty and the service reported success having
     # written 8760 price rows and zero cost rows.
@@ -1121,8 +1121,8 @@ async def backfill_range(
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
         # series-scoped), but a sub-year window only repopulates
-        # [start, end]; everything outside it -- including the
-        # Jan 1..start head of the current year -- would be gone for
+        # [start, end]; everything outside it, including the
+        # Jan 1..start head of the current year, would be gone for
         # good. Refuse the narrow-window + clear combination so the
         # destructive wipe can only run when the re-import covers the
         # cleared rows (start on or before the year anchor).

@@ -199,8 +199,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # One Synergrid profile serves every entry: it is a national curve, keyed by
 # year (and, for the RLP, by DSO blend), with nothing per-household in it.
-# Each coordinator used to download and parse its own copy -- 18 s for the
-# 3,4 MB RLP workbook on a Raspberry Pi -- and deferring that fetch to a
+# Each coordinator used to download and parse its own copy: 18 s for the
+# 3,4 MB RLP workbook on a Raspberry Pi, and deferring that fetch to a
 # background task made it worse rather than better, because every entry then
 # started its copy at the same moment instead of one after another. Rows carry
 # the instant they were fetched so the freshness rule below is applied to the
@@ -267,7 +267,7 @@ class _SpotsMixin:
         # rather than inheritance: a mixin inheriting
         # DataUpdateCoordinator[CoordinatorData] would need CoordinatorData,
         # which lives in coordinator.py and is imported from there by sensor,
-        # binary_sensor and diagnostics -- a cycle.
+        # binary_sensor and diagnostics: a cycle.
         hass: HomeAssistant
 
     def _cached_spot_hours(self, day_start_utc: datetime, want_quarters: bool) -> int:
@@ -299,7 +299,7 @@ class _SpotsMixin:
         statistics backfill, the compare page, and the deferred year-fill a
         fresh install schedules. Nothing serialised them, so two could walk
         the same empty cache at once and each fetch what the other was already
-        fetching -- wasted round-trips against a rate-limited source, and on a
+        fetching: wasted round-trips against a rate-limited source, and on a
         fresh install exactly when the cache is emptiest and the walk longest.
         Whichever gets there second finds the days present and returns without
         a request.
@@ -328,7 +328,7 @@ class _SpotsMixin:
         the recorder reports consumption there.
 
         Walks the day axis once. A day is considered "present" when at
-        least 20 of its 24 hours are already cached -- ENTSO-E
+        least 20 of its 24 hours are already cached: ENTSO-E
         occasionally leaves gaps under the carry-forward rule (and DST
         seam days have 23/25 hours), and a few missing hours per day
         shouldn't trigger a re-fetch every coordinator tick. Failed
@@ -731,7 +731,7 @@ class _SpotsMixin:
         Prefers this entry's own day-ahead cache: it is at the resolution the
         contract bills on, and it is the only thing that ever holds tomorrow.
         Falls back to the persisted year-to-date cache, which is hourly. The
-        two are never merged -- a quarter-hourly entry topped up with hourly
+        two are never merged: a quarter-hourly entry topped up with hourly
         means would price its slots off two different day-ahead products.
 
         Only today's and tomorrow's slots survive, and a source that cannot
@@ -987,9 +987,9 @@ class _SpotsMixin:
         not grow unbounded across year boundaries. Anchor on local midnight:
         in Brussels (UTC+1/+2) the local Jan 1 00:00 falls one or two hours
         BEFORE UTC Jan 1 00:00, so a UTC anchor would silently drop the first
-        hour or two of YTD. Prior-year keys are pure dead weight -- every
+        hour or two of YTD. Prior-year keys are pure dead weight: every
         consumer filters by the current (year, month) or an exact current-year
-        hour key -- so removing them changes no result."""
+        hour key, so removing them changes no result."""
         if not self._historical_spots:
             return
         today = dt_util.now().date()

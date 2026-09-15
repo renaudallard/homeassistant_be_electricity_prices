@@ -136,7 +136,7 @@ def is_belgian_holiday(d: date) -> bool:
     Assumption (15/8), All Saints (1/11), Armistice (11/11), Christmas
     (25/12). Easter-derived: Easter Monday (+1), Ascension (+39),
     Pentecost Monday (+50). Regional holidays (Walloon, Flemish,
-    Brussels) are deliberately excluded — DSO billing applies federal
+    Brussels) are deliberately excluded: DSO billing applies federal
     rules uniformly.
     """
     if (d.month, d.day) in _FIXED_HOLIDAYS:
@@ -200,17 +200,17 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
       transition : 11:00-17:00 + 22:00-01:00
       offpeak    : 01:00-07:00
 
-    Federal Belgian holidays follow the same rule as a weekend day —
+    Federal Belgian holidays follow the same rule as a weekend day,
     the supplier's published TOU bands explicitly call out weekends
     plus public holidays (TGEPRESC for Engie, equivalent CWaPE
     document for Luminus). Weekend rule depends on the contract:
 
       weekend_offpeak  Sat/Sun + holidays all off-peak (generic CWaPE
         default).
-      weekend_no_peak  Engie Empower Flextime — never peak;
+      weekend_no_peak  Engie Empower Flextime, never peak;
         transition 07:00-11:00 + 17:00-01:00,
         offpeak    01:00-07:00 + 11:00-17:00.
-      smartflex_seasonal  Luminus SmartFlex — seasonal bands applied
+      smartflex_seasonal  Luminus SmartFlex: seasonal bands applied
         every day (the card lists no weekend exception; the "free
         Sundays" promo is a first-year discount, out of scope):
         peak 07:00-11:00 + 17:00-22:00 both seasons; the 11:00-17:00
@@ -731,7 +731,7 @@ def network_eur_per_kwh(
         # rate regardless of the main connection's Impact opt-in, so it
         # is checked BEFORE the Impact band branch. Prefer the
         # exclusive-night rate when the extractor parses it, fall back
-        # to the off-peak rate, then to the single rate -- each
+        # to the off-peak rate, then to the single rate: each
         # fall-back step is closer to the real bill than the day rate.
         if dso.distribution_exclusive_night is not None:
             dist = dso.distribution_exclusive_night
@@ -753,7 +753,7 @@ def network_eur_per_kwh(
         # and would let through a TypeError on ``None + transport``.
         # Treat the Impact mode as "available only when all three are
         # set" and fall through to the bi-horaire / single path
-        # otherwise -- same end behaviour the per-DSO data drives on
+        # otherwise: same end behaviour the per-DSO data drives on
         # Brussels Sibelga / Flanders Fluvius cards that don't publish
         # Impact rates at all.
         band = dso_impact_band(when)

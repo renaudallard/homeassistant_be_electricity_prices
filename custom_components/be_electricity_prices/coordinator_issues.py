@@ -28,8 +28,8 @@
 Split out of coordinator.py. A pure reader: it reads _last_error, _snapshot,
 _unloaded, entry and hass, and writes nothing.
 
-Every issue id is f"{translation_key}_{entry_id}" and must stay byte-identical
--- Repairs persists it, so a changed id orphans an already-raised issue with no
+Every issue id is f"{translation_key}_{entry_id}" and must stay byte-identical:
+Repairs persists it, so a changed id orphans an already-raised issue with no
 way for the user to clear it."""
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ class _IssuesMixin:
         # rather than inheritance: a mixin inheriting
         # DataUpdateCoordinator[CoordinatorData] would need CoordinatorData,
         # which lives in coordinator.py and is imported from there by sensor,
-        # binary_sensor and diagnostics -- a cycle.
+        # binary_sensor and diagnostics: a cycle.
         hass: HomeAssistant
 
     def _sync_issue(
@@ -395,7 +395,7 @@ class _IssuesMixin:
 
         The supplier publishes its tariff card as page images, and what is
         being served is the repository's OCR reading of one. That is a price
-        rather than no price, so it is not a failure -- but it is a reading,
+        rather than no price, so it is not a failure, but it is a reading,
         and the user is entitled to know before they act on the figures.
         Cleared by the first readable card.
         """
@@ -434,7 +434,7 @@ class _IssuesMixin:
         Kept separate from the extractor / staleness cards on purpose. Those
         say "the fetch is failing"; this one says "the fetch will keep
         working and then stop, and here is what to do about it". Prices are
-        untouched -- a user still supplied by DATS 24 in August must still be
+        untouched: a user still supplied by DATS 24 in August must still be
         billed August's rates.
         """
         if self._unloaded:

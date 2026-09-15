@@ -1108,7 +1108,7 @@ def _extract_energy_fund(
     text: str, *, sans_domicile: bool = False, professional: bool = False
 ) -> float:
     """Flemish energy fund. Optional outside Flanders, so a miss
-    legitimately means 'no fund on this card' -- keep the silent default.
+    legitimately means 'no fund on this card': keep the silent default.
 
     The residential card prints two sub-cases: 'avec domicile' (0 for most
     products) and 'sans domicile' (a positive fee). The Empty House product
@@ -1217,7 +1217,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # Horizontal whitespace only ([^\S\n] = whitespace minus newline)
         # between the numbers so a greedy match can't span a blank line
         # and pull the next row's (or a footnote's) leading number into
-        # this row -- that shifted every column right and billed
+        # this row: that shifted every column right and billed
         # transport at a stray value while dropping the real rate.
         row = re.search(
             rf"^{re.escape(label)}[^\S\n]+((?:[\d,.]+[^\S\n]+){{8,}}[\d,.]+)",

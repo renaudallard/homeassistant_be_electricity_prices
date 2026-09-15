@@ -366,7 +366,7 @@ def _parse_iso_utc(text: str) -> datetime:
     # ENTSO-E A44 timestamps are UTC (they carry a 'Z'/offset), but if a
     # document ever omits the zone, fromisoformat returns a naive value
     # and astimezone would treat it as the HA host's local time. Treat a
-    # naive timestamp as UTC -- the publication document is UTC by spec.
+    # naive timestamp as UTC: the publication document is UTC by spec.
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
@@ -409,8 +409,8 @@ def _retry_after(value: str | None) -> timedelta:
     """How long a 429's ``Retry-After`` asks us to wait.
 
     RFC 9110 allows a delay in seconds or an HTTP-date; energy-charts sends
-    seconds (measured: ``retry-after: 29``). Anything else -- absent, a date,
-    a negative, nonsense -- takes the fallback wait, and the whole thing is
+    seconds (measured: ``retry-after: 29``). Anything else (absent, a date,
+    a negative, nonsense) takes the fallback wait, and the whole thing is
     capped so a hostile or mistaken value cannot park the source indefinitely.
     """
     try:
@@ -433,7 +433,7 @@ class EnergyChartsClient:
 
     Unlike ENTSO-E this returns ONE series, never a PT60M and a PT15M for the
     same period, so there is no resolution-blending hazard to guard against
-    here -- the hour is simply the mean of whatever slots fall inside it.
+    here: the hour is simply the mean of whatever slots fall inside it.
     """
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
@@ -598,7 +598,7 @@ async def fetch_day_ahead_or_fallback(
 
     # Both messages travel together from here on. When the fallback fails too
     # this is what reaches last_error and the log, and the ENTSO-E half is the
-    # half that explains the outage -- reporting only "energy-charts: non-JSON
+    # half that explains the outage: reporting only "energy-charts: non-JSON
     # response" for a day ENTSO-E spent returning 503 sends the reader after
     # the wrong service entirely.
     try:

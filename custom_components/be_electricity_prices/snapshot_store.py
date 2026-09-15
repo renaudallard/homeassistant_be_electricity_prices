@@ -161,14 +161,14 @@ class SharedFetch:
     sweep wants it to print one row as unreachable and carry on with the next
     contract. Neither is served by an exception unwinding the caller, so the
     exception rides back as a value. It is the object rather than just its
-    text, because the coordinator classifies on the type -- transient against
-    unreadable -- and re-raises the ones it did not expect with their original
+    text, because the coordinator classifies on the type: transient against
+    unreadable, and re-raises the ones it did not expect with their original
     traceback.
     """
 
     row: _SharedSnapshot | None
     # Which arm answered: shared | local | fetch | backoff | failed. The
-    # caller needs it because the arms are not interchangeable -- see
+    # caller needs it because the arms are not interchangeable: see
     # ``probe_confirmed``.
     source: str
     probe_key: str | None
@@ -234,7 +234,7 @@ async def fetch_shared(
     caller's own row, the negative-cache backoff, the per-key lock and the
     fetch. It lives beside the caches it manipulates rather than on the
     coordinator, because the coordinator is not the only thing that needs a
-    card any more -- a ranking sweep wants the same probe short-circuit, the
+    card any more: a ranking sweep wants the same probe short-circuit, the
     same lock and the same backoff, and a second implementation of them would
     drift from this one the way the two freshness rules already had.
 
@@ -244,7 +244,7 @@ async def fetch_shared(
     rule and run its own probe.
 
     ``supplier`` is the registry id, passed rather than read off the extractor
-    so the cache key is derived in exactly one place -- the caller that looked
+    so the cache key is derived in exactly one place: the caller that looked
     the extractor up. Two derivations of this key would not fail loudly: they
     would put the coordinator and the sweep in separate key spaces sharing
     nothing, and the symptom is a cache that simply never hits.
@@ -641,8 +641,8 @@ def monthly_rows_to_store(
 
     A CLOSED month that came back with no card is written too, as a marker
     carrying the instant it was asked. Establishing that costs the same
-    download and parse as a card does -- Frank Energie publishes nothing for
-    March 2026 and spends 24 s saying so -- and dropping the marker made every
+    download and parse as a card does: Frank Energie publishes nothing for
+    March 2026 and spends 24 s saying so, and dropping the marker made every
     restart pay it again, for ever. It is not a permanent answer: a supplier
     publishing in arrears turns "not out yet" into a real card days later, so
     the marker expires on the same ``_MONTHLY_PROVISIONAL_TTL`` it does in
@@ -665,8 +665,8 @@ def monthly_rows_to_store(
         snap = cache[cache_key]
         stamp = stamped.get(cache_key)
         if snap is None:
-            # Written on its stamp alone, so a marker with no stamp -- which
-            # nothing writes today -- is skipped rather than restored as
+            # Written on its stamp alone, so a marker with no stamp, which
+            # nothing writes today, is skipped rather than restored as
             # ageless. Never for the running month: that one is re-asked on
             # every tick anyway.
             if stamp is None or (month.year, month.month) >= running:
@@ -691,7 +691,7 @@ def restore_monthly_rows(
 
     A row already in the cache is left alone: this process fetched it, which
     outranks what the last one wrote. A row that no longer parses, or that was
-    written under an older snapshot schema, is dropped rather than migrated --
+    written under an older snapshot schema, is dropped rather than migrated,
     the same healing gate the live snapshot uses, so a parser fix reaches
     these months as soon as ``_SNAPSHOT_SCHEMA_VERSION`` moves. And a row that
     is no longer settled is dropped too: the file may be older than the clock
@@ -1080,8 +1080,8 @@ def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
 def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
     """How much this household uses in a year, in kWh. One answer for every leg.
 
-    Three legs resolve against a yearly volume -- the degressive excise band,
-    the Flemish network ceiling and EnergyVision's volume tranche -- and they
+    Three legs resolve against a yearly volume: the degressive excise band,
+    the Flemish network ceiling and EnergyVision's volume tranche, and they
     have to agree, or one card is priced against two different households.
 
     Four answers in order, and the order is the point:
@@ -1266,8 +1266,8 @@ class _MigratingStore(Store[dict[str, Any]]):
 # variable-family version suffix and served June's formula for ten weeks after
 # the August revision shipped; Ecopower's six-digit filename pattern could not
 # see the YYYYMMDD card that replaced it and kept serving January's tax block.
-# Neither supplier's probe key moves on its own here -- the pinned URL's card is
-# unchanged, which is exactly why nothing noticed -- so without this bump an
+# Neither supplier's probe key moves on its own here: the pinned URL's card is
+# unchanged, which is exactly why nothing noticed, so without this bump an
 # existing entry keeps the stale prices indefinitely.
 # v21: InjectionRates gained spp_indexed, and energie.be Variabel now parses
 # its injection FORMULA rather than only the card's printed indicative. Two

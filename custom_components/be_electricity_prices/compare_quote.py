@@ -244,8 +244,8 @@ def _compare_injection_credit(
     (Eneco's Belpex-injectie, Engie's and Luminus' EPEXDAM cards,
     TotalEnergies Impact). WHICH mean is the caller's business, because only
     it knows the side and can resolve it; this only requires that a mean was
-    named. Without one there is no honest resolution -- for an SPP card the
-    plain mean is a DIFFERENT index, not a coarser one -- so that case falls
+    named. Without one there is no honest resolution: for an SPP card the
+    plain mean is a DIFFERENT index, not a coarser one, so that case falls
     through to the printed indicative below.
 
     Delegating a month-indexed credit to the live helper instead does NOT
@@ -445,7 +445,7 @@ def _tou_weighted_per_kwh(
     time-averaged annual figure. For TOU contracts (Luminus SmartFlex, Engie
     Empower Flextime) and Impact contracts (Mega Off-peak Impact)
     ``compute_breakdown`` returns one of three slot rates depending on
-    the hour the user opens the dialog -- biased. So the coming year is
+    the hour the user opens the dialog: biased. So the coming year is
     walked and priced per kind of day (``_year_avg_all_in``), which is the
     exact hour-weighted annual figure rather than a sample of it.
 
@@ -630,8 +630,8 @@ class DailyCompare:
     answers to the same question.
 
     ``own`` is None on a cold entry whose own card has not resolved yet. The
-    ranking is still worth publishing then -- the alternatives rank against
-    each other -- but there is no saving to state, so the sensor reads unknown
+    ranking is still worth publishing then: the alternatives rank against
+    each other, but there is no saving to state, so the sensor reads unknown
     rather than claiming zero.
     """
 
@@ -797,7 +797,7 @@ def _whatif_note(
 
     The baseline clause exists because, with the regime moving both sides
     together, the printed supplier delta barely shifts, and the number the
-    user actually came for -- their own contract under the other regime --
+    user actually came for: their own contract under the other regime,
     would otherwise appear nowhere. It predates the picker offering the
     user's own contract (e2a52af): picking yourself is now a second route to
     the same answer, and the clause still gives it without the detour.
@@ -843,7 +843,7 @@ def _vintage_note(
     so the two sides of a quote share their DSO and federal overlays only for
     as long as both cards were published under the same rules. Measured
     across twelve Flemish cards, suppliers agree to four decimals on the DSO
-    tables and to the last digit on the excise -- until a regulatory change
+    tables and to the last digit on the excise: until a regulatory change
     lands, and then a card published either side of it differs by about
     0,0036 EUR/kWh, four times the ordinary spread between suppliers and
     worth around 13 EUR a year at 3500 kWh.
@@ -1030,8 +1030,8 @@ def _annual_bill(
         # Same correction for the Flanders capacity tariff, and for the same
         # reason: _ytd_capacity accrues each month by its OWN length
         # (days_in_ytd / days_in_full_month), while fee_proration is a uniform
-        # days_elapsed / days_in_year. The two drift inside the year -- a
-        # February close measured 36,37 against the live sensor's 37,50 -- and
+        # days_elapsed / days_in_year. The two drift inside the year: a
+        # February close measured 36,37 against the live sensor's 37,50, and
         # the what-if is meant to be comparable to that sensor to the cent.
         # Counted in MONTHS (0..12), like prosumer_proration.
         #

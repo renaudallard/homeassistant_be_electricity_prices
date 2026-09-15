@@ -162,7 +162,7 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
         # defusedxml rejects entity expansion / external references with its
         # own exceptions, which are NOT ParseError subclasses. They do inherit
         # ValueError below, but name them so this stays covered if that ever
-        # changes -- the docstring promises this function never raises.
+        # changes: the docstring promises this function never raises.
         DefusedXmlException,
         LookupError,  # KeyError (missing column) or IndexError (bad string index)
         ValueError,
@@ -190,7 +190,7 @@ async def _download(
     Every filesystem call goes through the executor. This runs on the event
     loop, the file is ~52 MB, and on the SD-card installs Home Assistant is
     commonly deployed to a write can block for a long time once the kernel
-    starts throttling dirty pages -- long enough for HA to log a blocking-call
+    starts throttling dirty pages: long enough for HA to log a blocking-call
     warning and for every other integration's callbacks to stall behind it.
     Chunks are accumulated into a bounded buffer so the offload happens a few
     times rather than once per network read.
@@ -343,7 +343,7 @@ def _accumulate_row(
             return
         # Excel serial -> UTC datetime; +30s absorbs float imprecision before
         # the hour is floored (the quarter's minute is irrelevant once
-        # aggregated). An out-of-range serial raises OverflowError -- skip that
+        # aggregated). An out-of-range serial raises OverflowError: skip that
         # row rather than aborting the whole parse.
         utc = _EXCEL_EPOCH + timedelta(days=serial) + timedelta(seconds=30)
     except (KeyError, TypeError, ValueError, OverflowError):
