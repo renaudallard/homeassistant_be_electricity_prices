@@ -1125,7 +1125,8 @@ for a month the branch does not hold, and the current card stands in when
 neither has it. The request names
 the supplier, contract, region and month and nothing else, and it is only
 made for a month the branch can hold: a closed one, and for a supplier with
-no archive of its own not before September 2026, when the captures began.
+no archive of its own not before August 2026, the earliest month the daily
+captures reach.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches it off per entry: the integration then never
 contacts GitHub, and those months are priced on the current card. A row holds what

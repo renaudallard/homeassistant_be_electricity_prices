@@ -476,10 +476,16 @@ CARD_ARCHIVE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
     "electricity/cards"
 )
-# The month the daily captures began. A supplier with no archive of its own
-# has nothing on the branch before it, since a backfill can only mirror a
-# supplier's archive, so the month cache never asks for those months.
-CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 9)
+# The earliest month the archive can hold for a supplier with no archive of
+# its own. A backfill only mirrors a supplier's own archive, so for those
+# suppliers the archive starts at its daily captures, which began in
+# September 2026. This is August rather than September because the walk keeps
+# the bytes of a card no reader could read and retries them whenever the
+# reader improves, so a month captured before it could be parsed can become a
+# row later. Ecofix's August 2026 cards are that case: captured in August,
+# read and filed in September. Below this month the cache does not ask, since
+# the answer would be a 404 a day for nothing.
+CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
 
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
