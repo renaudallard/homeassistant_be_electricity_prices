@@ -52,7 +52,7 @@ IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 
 # Names that are not files in this repository and never will be: what a
-# workflow WRITES (on the archive branch, or as a job artefact), one
+# workflow WRITES (into the card archive, or as a job artefact), one
 # placeholder the framework doc spells out, and one of Home Assistant's own
 # modules. A doc naming these is correct; resolving them is not the point.
 NOT_OURS = frozenset(

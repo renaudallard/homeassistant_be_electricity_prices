@@ -12,7 +12,7 @@ on:
       backfill_months:
         description: >-
           Also mirror this many closed months before the current one from the
-          supplier archives, for months the branch does not hold yet.
+          supplier archives, for months the archive does not hold yet.
         default: "0"
         required: false
         type: string
@@ -27,8 +27,8 @@ on:
         required: false
         type: boolean
 
-# The job pushes to the archive branch, and nothing else does; issues so a
-# failed run is filed rather than left on the Actions tab.
+# The job pushes to the cards repository, and nothing else does; issues so
+# a failed run is filed rather than left on the Actions tab.
 permissions:
   contents: write
   issues: write
@@ -112,14 +112,14 @@ jobs:
         # with be_water_prices: this integration's releases are named
         # electricity-<YYYY-MM> after the month the cards are for, the
         # files by their SHA-256. A month of cards is about 100 MB, which no
-        # git branch of this repository should carry and which HACS would
-        # mistake for a release if it lived here. GitHub caps a release at a
-        # thousand assets, five times what a month holds; should a month
-        # ever overflow it spills into electricity-YYYY-MM-2, and the
-        # manifest on the branch says which release holds each file. Needs a
-        # fine-grained token with contents read and write on that repository
-        # in the BE_ELECTRICITY_CARDS secret; without it the step says so and
-        # the branch still gets the parsed cards and their texts.
+        # git tree should carry and which HACS would mistake for a release if
+        # it lived in this repository. GitHub caps a release at a thousand
+        # assets, five times what a month holds; should a month ever overflow
+        # it spills into electricity-YYYY-MM-2, and pdfs.json says which
+        # release holds each file. Needs a fine-grained token with contents
+        # read and write on that repository in the BE_ELECTRICITY_CARDS
+        # secret; without it the step says so and the archive still gets the
+        # parsed cards and their texts.
         env:
           GH_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           CARDS_REPO: renaudallard/be_price_cards
@@ -151,7 +151,7 @@ jobs:
           [ -s "$manifest" ] || echo '{}' > "$manifest"
           ensure_release() {
             gh release view "$1" --repo "$CARDS_REPO" >/dev/null 2>&1 && return 0
-            gh release create "$1" --repo "$CARDS_REPO" --title "Electricity cards $2" --notes "The PDF tariff cards for $2 that the archive branch of homeassistant_be_electricity_prices refers to, each named by its SHA-256. Which card each file is: search this repository for the file name; the sheets under https://github.com/${CARDS_REPO}/tree/main/electricity/coverage link every contract and month to its card and to what was parsed out of it."
+            gh release create "$1" --repo "$CARDS_REPO" --title "Electricity cards $2" --notes "The PDF tariff cards for $2 that the card archive of homeassistant_be_electricity_prices refers to, each named by its SHA-256. Which card each file is: search this repository for the file name; the sheets under https://github.com/${CARDS_REPO}/tree/main/electricity/coverage link every contract and month to its card and to what was parsed out of it."
           }
           for dir in tmp/pdfs/electricity-*/; do
             [ -d "$dir" ] || continue
@@ -193,7 +193,7 @@ jobs:
               jq -s '.[0] + .[1]' "$manifest" landed.json > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
             fi
           done
-          # Same retention as the branch: a month older than three years goes.
+          # Same retention as the rows: a month older than three years goes.
           # Only this integration's releases; the water ones are not ours.
           cutoff="electricity-$(date -u -d '-36 months' +%Y-%m)"
           gh release list --repo "$CARDS_REPO" --json tagName --jq '.[].tagName'             | while read -r tag; do
@@ -320,7 +320,7 @@ jobs:
           failed=''
           [ "${{ steps.store.outcome }}" = 'failure' ] && failed='Store today'"'"'s cards (the walk stored nothing, or crashed)'
           [ "${{ steps.keep.outcome }}" = 'failure' ] && failed='Keep the cards themselves (the upload to the cards repository; check the BE_ELECTRICITY_CARDS token, it expires)'
-          [ "${{ steps.push.outcome }}" = 'failure' ] && failed='Commit and push what changed (the push to the archive branch)'
+          [ "${{ steps.push.outcome }}" = 'failure' ] && failed='Commit and push what changed (the push to the cards repository)'
           {
             echo "## Run"
             echo

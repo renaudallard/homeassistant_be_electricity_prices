@@ -1053,15 +1053,19 @@ month now and then), so a past month on those was billed on today's card.
 A second daily workflow
 ([`.github/workflows/archive_cards.yml`](./.github/workflows/archive_cards.yml),
 running [`scripts/archive_cards.py`](./scripts/archive_cards.py)) closes that
-gap from September 2026 on. Every morning it fetches every registered
-(supplier, contract, region) card exactly as the integration would, and
-commits what it parsed to the repository's
-[`archive`](https://github.com/renaudallard/homeassistant_be_electricity_prices/tree/archive)
-cards repository as `cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the text of
-every page or document that parse read under `texts/<YYYY-MM>/`, so a card
-can be re-read or checked by hand later. A manual run of the same workflow
-can also mirror past months from the supplier archives into it,
-which keeps them readable should a supplier drop its archive, as DATS 24 did.
+gap: it has run every morning since September 2026. It fetches every
+registered (supplier, contract, region) card exactly as the integration
+would, and commits what it parsed to
+[`be_price_cards`](https://github.com/renaudallard/be_price_cards), a
+repository shared with be_water_prices in which this integration owns the
+`electricity/` directory, as
+`electricity/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the
+text of every page or document that parse read under
+`electricity/texts/<YYYY-MM>/`, so a card can be re-read or checked by hand
+later. A manual run of the same workflow can also mirror past months from
+the supplier archives into it, which keeps them readable should a supplier
+drop its archive, as DATS 24 did.
+
 **Finding a stored card by hand.** Everything is addressed by the same
 three ids the integration uses, which are the directory names under
 `electricity/cards/`: the supplier (`totalenergies`, `bolt`, ...), the contract
@@ -1101,44 +1105,44 @@ definitive card) or ahead needs; a month is rewritten only when the parse
 changed, and months older than three years are dropped.
 
 The cards themselves are kept as well, as the real thing a parser can be
-re-run against later: every PDF the branch has not seen before is uploaded
-to a release of [`be_price_cards`](https://github.com/renaudallard/be_price_cards),
-a repository shared with be_water_prices in which this integration owns the
-`electricity-<YYYY-MM>` releases and the `electricity/` directory. A release
+re-run against later: every PDF the archive has not seen before is uploaded
+to an `electricity-<YYYY-MM>` release of that same repository. A release
 holds the cards for one month, whatever day each was captured or mirrored
-on, about two hundred files named by their SHA-256. Each card on the branch names its PDF by that
-digest under `_sources`, and the branch's `pdfs.json` says which release
-holds it. A month of cards is about 100 MB, which is why they live in
-releases rather than on a branch. That
-digest also keeps the daily run cheap: a card whose bytes have not changed
-is served the text the branch already holds instead of being rendered
-again. And a parser fix reaches the stored months on its own: when the
-parser sources change, the next run replays every stored month from the
-texts it kept, with the clock set to the day the card was captured and no
-supplier contacted, and rewrites what came out differently; a parser that
-now needs the card read another way gets the kept PDF back.
+on, about two hundred files named by their SHA-256. Each stored card names
+its PDF by that digest under `_sources`, and `electricity/pdfs.json` says
+which release holds it. A month of cards is about 100 MB, which is why they
+live in releases rather than in the tree. That digest also keeps the daily
+run cheap: a card whose bytes have not changed is served the text the
+archive already holds instead of being rendered again. And a parser fix
+reaches the stored months on its own: when the parser sources change, the
+next run replays every stored month from the texts it kept, with the clock
+set to the day the card was captured and no supplier contacted, and
+rewrites what came out differently; a parser that now needs the card read
+another way gets the kept PDF back.
 
-The integration reads that branch first for any closed month, one small
+The integration reads that archive first for any closed month, one small
 JSON per month straight from `raw.githubusercontent.com` against a PDF
 download and a parse from the supplier; the supplier's own archive answers
-for a month the branch does not hold, and the current card stands in when
-neither has it. The request names
-the supplier, contract, region and month and nothing else, and it is only
-made for a month the branch can hold: a closed one, and for a supplier with
-no archive of its own not before August 2026, the earliest month the daily
-captures reach.
+for a month the project's does not hold, and the current card stands in when
+neither has it. The request names the supplier, contract, region and month
+and nothing else, and it is only made for a month the archive can hold: a
+closed one, and for a supplier with no archive of its own not before August
+2026, the earliest month the daily captures reach.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches it off per entry: the integration then never
-contacts GitHub, and those months are priced on the current card. A row holds what
-the extractor of that day parsed, and the day after a parser change every
-row is re-parsed from the texts the branch kept, so a fix reaches past
-months within a day. The archive has no PDF bytes (a
-month of cards is tens of megabytes, three years of them would not fit a
-repository), a supplier that blocks the GitHub runners for a day (Mega has,
-the live check's timeouts show) just misses that day's capture, and and a card no
-parser can read (Ecofix's page images) is read by an OCR engine built for
-those cards and stored as an ordinary row; one even that refuses is kept as a
-PDF and named on the coverage sheet with no JSON beside it.
+contacts GitHub, and those months are priced on the current card. A row
+holds what the extractor of that day parsed, and the day after a parser
+change every row is re-parsed from the texts the archive kept, so a fix
+reaches past months within a day.
+
+It is not a complete record. A stored month carries no PDF bytes of its own,
+only the digest of the release file that holds the card; a supplier that
+blocks the GitHub runners for a day (Mega has, the live check's timeouts
+show) just misses that day's capture; and a card no parser can read
+(Ecofix's page images) is read by an OCR engine built for those cards and
+stored as an ordinary row, flagged so an entry served one says where the
+figures came from. One that even the OCR refuses is kept as a PDF and named
+on the coverage sheet with no JSON beside it.
 
 ## License
 

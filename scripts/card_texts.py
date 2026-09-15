@@ -1,6 +1,6 @@
-"""The archive branch's texts as a render cache.
+"""The card archive's texts as a render cache.
 
-A card's bytes hash to a digest, and every row on the archive branch names,
+A card's bytes hash to a digest, and every row in the card archive names,
 per reader variant, the text that digest rendered to. Installed as the
 readers' render hook (``providers/_pdf.render_through``), a downloaded card
 whose bytes are already known is served that text instead of being rendered
@@ -10,7 +10,7 @@ is the cost (about twenty minutes of a full walk on a Raspberry Pi, most of
 the nine on a runner), is skipped when nothing changed.
 
 Shared by the card archiver, which also keeps bytes it has not seen, and the
-live check, which reads the branch and renders only what is new. Imports
+live check, which reads the archive and renders only what is new. Imports
 nothing from the integration so the live check's own module loader can use
 it as is.
 """
@@ -39,14 +39,14 @@ def digest_of(pdf: str) -> str:
 
 
 class StoredTexts:
-    """What the branch already knows about card bytes."""
+    """What the archive already knows about card bytes."""
 
     def __init__(self, archive: Path, *, serve: bool = True) -> None:
         self.archive = archive
         # False when every card must be rendered afresh, which is how a
         # reader upgrade reaches the stored months.
         self.serve = serve
-        # (variant, digest) -> text path on the branch, from every stored row.
+        # (variant, digest) -> text path in the archive, from every stored row.
         self.texts: dict[tuple[str, str], str] = {}
         # The rows sit under cards/ in the cards repository; see _ROWS there.
         for row in archive.glob("cards/*/*/*/????-??.json"):

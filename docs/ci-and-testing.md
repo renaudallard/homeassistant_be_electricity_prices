@@ -233,10 +233,10 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
 ### Rendering only what changed
 
 With the cards repository checked out beside it (`--texts DIR`, `scripts/live_check.py`),
-the harness installs the branch's texts as the readers' render cache (`scripts/card_texts.py`,
+the harness installs the archive's texts as the readers' render cache (`scripts/card_texts.py`,
 the same `StoredTexts` the archiver builds on): a card whose bytes the archive walked an hour
 earlier and still holds is downloaded, timed, counted and parsed as before, but its text comes
-from the branch instead of a pdfplumber pass. Only a card that changed since is rendered. The
+from the archive instead of a pdfplumber pass. Only a card that changed since is rendered. The
 report ends with how many cards were served that way and how many rendered, and the retry loop's
 seven attempts on a bad morning no longer cost seven full renders. A fork's pull request has no
 stored text to read and renders everything, which is the behaviour before the cache existed.
@@ -726,7 +726,7 @@ Three design points:
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
-  so the branch gains a commit only when a card changed. Months older than `--keep-months`
+  so the archive gains a commit only when a card changed. Months older than `--keep-months`
   (36) are removed on every run (`_prune`, `scripts/archive_cards.py`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
@@ -736,7 +736,7 @@ archiver installs `_Cards.render` (`scripts/archive_cards.py`) there. It hashes 
 for a (variant, digest) pair some stored row already names it serves that row's text from the
 branch instead of rendering, so a card that has not changed since it was last stored costs one
 download and no pdfplumber pass; on a Raspberry Pi the render is the 20 minutes of the walk, the
-downloads are seconds. Bytes the branch has not recorded yet are written to
+downloads are seconds. Bytes the archive has not recorded yet are written to
 `--pdfs DIR/electricity-<YYYY-MM>/<sha256>.pdf`, the month being the one the row that read it is
 for (so a mirrored March card is filed under March, and bytes no row names, a card whose parse
 failed, under the month of the run), and the row's `_sources` entry names its PDF by that digest
@@ -753,7 +753,7 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the archive's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
@@ -778,14 +778,14 @@ not compared, because a listing page with a nonce or a render that is not byte-s
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
 than the parser that wrote it.
 
-Every run also rewrites the listing for people at the branch root, in a fixed order so a day
+Every run also rewrites the listing for people at the archive root, in a fixed order so a day
 that changed nothing rewrites it to the same bytes. `_write_coverage`
 (`scripts/archive_cards.py`) writes one sheet per supplier under `coverage/`, a table with a
-row per contract and region and a column per month the branch holds, and `coverage.md`, the index
+row per contract and region and a column per month the archive holds, and `coverage.md`, the index
 naming the sheets; a sheet whose supplier has no rows left is removed. Each cell links what the month was parsed from and what
 came out of it: `pdf` is the card in the cards repository's releases, once the manifest says
 where it landed (until then the bare word), `page` the text of the page a page-parsed row read,
-on the branch, and `json` the row itself; a month copied from the supplier's archive carries
+in the archive, and `json` the row itself; a month copied from the supplier's archive carries
 `(mirror)`. That is the answer to "is my month covered, where is the card, and what did we read
 off it". A card that downloaded and would not parse gets a cell too, `pdf` and `(not parsed)`
 with no `json`: some months a supplier publishes its card as page images that no reader can
@@ -793,7 +793,7 @@ read, and those bytes are uploaded like any other card, so something has to say 
 are. `_write_unparsed` keeps that list in `unparsed.json`, by the row the card would have become,
 merged with what earlier runs saw so a run over one supplier does not forget the others, and an
 entry whose month has a row is dropped, so a month that starts parsing leaves by itself.
-`_write_listings` writes the sheets, refreshes the branch README when its text changed
+`_write_listings` writes the sheets, refreshes the archive README when its text changed
 and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
 The workflow rewrites them once more after the upload step (`--index-only`, no fetch) so the
 day's new files are linked the day they are uploaded, then publishes them under `electricity/`
@@ -809,7 +809,7 @@ refuses a mark it cannot place; the reading is taken from `trusted_text`, which 
 carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
 so a mostly-refused page is no row rather than a row of silent misses. The row it produces
 carries `"_ocr": true`, which is how an installation knows to tell its user the figures came
-from a reading; the key is absent otherwise, so every row already on the branch is unchanged.
+from a reading; the key is absent otherwise, so every row already stored is unchanged.
 The engine is installed by this workflow alone, which runs 3.13 for everything else and 3.14 for
 it: no installation ever decodes a card, it reads the row.
 
@@ -827,7 +827,7 @@ months ago is expired.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
-months before the current one that the branch does not hold yet, and each answer is stored under
+months before the current one that the archive does not hold yet, and each answer is stored under
 the month asked for with `_via` set to `archive` (a live capture carries `live`). A month the
 supplier answers None for is left absent, as is a card still flagged provisional (Eneco's
 estimate before the next card prints the settled index), so a later backfill fills it once it has
@@ -990,7 +990,7 @@ PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_car
 shared with be_water_prices in which this integration owns the `electricity-` namespace: one
 release per month of cards (`electricity-YYYY-MM`, the month the card is for, whatever day it
 was captured or mirrored on) with each file named by its SHA-256. Where every file landed is
-recorded in the branch's `pdfs.json` before the commit step runs. GitHub caps a release at a thousand assets,
+recorded in the archive's `pdfs.json` before the commit step runs. GitHub caps a release at a thousand assets,
 which the first backfill hit when every month's cards were filed under the month of the run;
 a month's own cards are about two hundred, so the cap is now far away, but the step still looks
 at every release of the month that exists, uploads into the last one while it has room and opens
@@ -1011,7 +1011,7 @@ of `main` also pulls; and a release on this repository would be offered to HACS 
 The step needs a fine-grained personal access token with contents read and write on the cards
 repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
 empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
-cards and their texts still land on the branch, and the PDFs of that day are offered again by the
+cards and their texts still land in the archive, and the PDFs of that day are offered again by the
 next run that has the token. Releases older than the retention are deleted on the same cutoff the
 script uses for the rows.
 

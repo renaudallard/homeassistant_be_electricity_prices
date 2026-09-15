@@ -10,34 +10,35 @@ publishing in arrears (Ecopower's definitive card lands at the end of the
 month it covers) or ahead of time is filed where its card says; only a
 card whose label cannot be read is filed under the month it was seen in.
 
-Run daily by .github/workflows/archive_cards.yml against the ``archive``
-branch, which the integration reads for any month a supplier's own archive
-cannot serve (``snapshot_store._archived_card_from_github``). A month
+Run daily by .github/workflows/archive_cards.yml against the card archive
+in ``be_price_cards``, which the integration reads for any month a
+supplier's own archive cannot serve
+(``snapshot_store._archived_card_from_github``). A month
 already on disk is rewritten only when the parse changed, so a quiet day
 leaves nothing to commit, and months older than ``--keep-months`` are
 removed on every run.
 
 The cards themselves are kept too. With ``--pdfs DIR`` every PDF whose
-bytes the branch has not recorded yet is written to
+bytes the archive has not recorded yet is written to
 ``DIR/electricity-<YYYY-MM>/<sha256>.pdf``, where the month is the one the
 card is for (the month of the row that read it, so a mirrored March card
 goes to March), and the workflow uploads each directory as the assets of
 the release of that name in the cards repository shared with
 be_water_prices: one release per month of cards, about two hundred files,
 since a month of cards is about 100 MB and three years of them no git
-branch can hold. Where each one landed is recorded in ``<out>/pdfs.json``. A card's
+tree can hold. Where each one landed is recorded in ``<out>/pdfs.json``. A card's
 ``_sources`` entry names its PDF by digest alone; the manifest is the one
 place that says where it lives. The same digest is what keeps a daily run
-cheap: a card whose bytes have not changed is served the text the branch
+cheap: a card whose bytes have not changed is served the text the archive
 already holds for it instead of being rendered again.
 
 A parser fix reaches the stored months on its own. Every row carries the
 texts its parse read, so the run replays each row through the current
-extractor with those texts served from the branch, the clock pinned to
+extractor with those texts served from the archive, the clock pinned to
 the day the row was captured and no supplier contacted, and rewrites the
 row when the parse came out differently. That replay costs a regex pass
 per row and nothing else, and it happens only when the parser sources
-changed since the branch was last replayed (a digest of them is stamped in
+changed since the archive was last replayed (a digest of them is stamped in
 ``parser.txt``), so a day without a code change replays nothing;
 ``--reparse`` forces it. A parser that now reads a card with a different
 PDF reader finds no stored text for that reading and gets the kept PDF
@@ -46,10 +47,10 @@ every card, which is the way to pick up a reader upgrade.
 
 ``--backfill N`` also asks every supplier that keeps an archive of its own
 for the N closed months before this one, through the same
-``fetch_for_month`` the integration uses, and stores each month the branch
-does not hold yet. That makes the branch a mirror of those archives:
-insurance against a supplier dropping its archive (DATS 24 did) and a
-cheap read for any month a supplier's own path cannot serve. A month the
+``fetch_for_month`` the integration uses, and stores each month not held
+yet. That makes this a mirror of the supplier archives: insurance against a
+supplier dropping its own (DATS 24 did) and a cheap read for any month a
+supplier's own path cannot serve. A month the
 supplier answers None for is left absent, as is a card still flagged
 provisional, so a later backfill fills it once it has settled.
 
@@ -137,14 +138,14 @@ _CARD_TIMEOUT_S = 300
 # Keys the daily run rewrites; two files that differ only here hold the
 # same card and the older one is kept.
 _VOLATILE_KEYS = ("_cached_at", "_seen_on")
-# The digest of the parser sources the branch was last replayed with.
+# The digest of the parser sources the archive was last replayed with.
 _PARSER_STAMP = "parser.txt"
 # This integration's namespace in the cards repository, which it shares
 # with be_water_prices: its releases are electricity-<YYYY-MM>, one per
 # month of cards, its listings live under electricity/ in that
 # repository's tree.
 _RELEASE_PREFIX = "electricity"
-# One sheet per supplier of which months the branch holds, for the reader
+# One sheet per supplier of which months the archive holds, for the reader
 # who wants to know whether a given month of a given contract is covered
 # without listing directories, each month linking to the PDF it was
 # parsed from (a release lists them by digest only), to the page it read
@@ -155,16 +156,16 @@ _COVERAGE_DIR = "coverage"
 # Which cards were downloaded and could not be read, by the row they would
 # have become. Ecofix publishes page images some months and no reader can
 # read those; the bytes are kept and uploaded like any other card, and
-# without this nothing on the branch would say what they are.
+# without this nothing on the archive would say what they are.
 _UNPARSED = "unparsed.json"
 _LEGEND = (
     "Each month links to what it was parsed from and to what came out of it: `pdf` is the",
     "card itself, in the cards repository's releases, `page` the text of a page as it",
-    "was read, and `json` the card as the integration parsed it, both on this branch.",
+    "was read, and `json` the card as the integration parsed it, both in this repository.",
     "A month marked `(mirror)` was copied from the supplier's own archive rather than",
-    "captured while it was current; a month marked `(not parsed)` is a card the branch",
+    "captured while it was current; a month marked `(not parsed)` is a card the archive",
     "holds but no reader could read, so there is no JSON to link; a blank cell is a",
-    "month the branch does not hold.",
+    "month the archive does not hold.",
 )
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
@@ -190,7 +191,7 @@ Written daily by `.github/workflows/archive_cards.yml` running
   would have become. A supplier that publishes its card as page images
   some months leaves the bytes readable by nobody; they are uploaded all
   the same, and this is what says which card they are.
-- `coverage.md` and `coverage/<supplier>.md`: which months the branch
+- `coverage.md` and `coverage/<supplier>.md`: which months the archive
   holds for each contract and region, whether each was captured live or
   mirrored from the supplier's archive, and links from each month to the
   PDF it was parsed from, to the page text it read and to the JSON above;
@@ -320,10 +321,10 @@ class _Cards(StoredTexts):
     """What the run knows about card bytes, plus where they are kept.
 
     The render cache is the shared one (``card_texts.StoredTexts``): a
-    downloaded card whose bytes the branch has already seen is served the
+    downloaded card whose bytes the archive has already seen is served the
     stored text instead of being rendered again, which is what makes a
     daily walk over 250 cards cheap. On top of it, ``pdfs.json`` says which
-    digests are already uploaded, and bytes the branch has not recorded yet
+    digests are already uploaded, and bytes the archive has not recorded yet
     are held until a row names them and then written under ``pdf_dir`` in
     the directory of that row's month, for the workflow to upload to the
     release of that month.
@@ -366,7 +367,7 @@ class _Cards(StoredTexts):
         """The card's text, or what OCR reads off it when it carries none.
 
         Wraps the cache rather than replacing it: a card whose bytes the
-        branch has already read is still served its stored text, OCR or not,
+        archive has already read is still served its stored text, OCR or not,
         and only a card the renderer refuses reaches the engine. The stored
         text is the row's own, so a card read by OCR once is not read again
         the next day.
@@ -576,7 +577,7 @@ def _card_month(snap: SupplierSnapshot, today: date) -> str:
 # OCTA+'s archive answers with {"TariffSheet":"data:application/pdf;base64,..."}.
 # The bytes are kept as a release asset like any other card, so storing the
 # base64 too is the same PDF a second time, a third larger for the encoding and
-# incompressible with it. 150 such texts held 80,9 MB of the branch's 111,5.
+# incompressible with it. 150 such texts held 80,9 MB of the archive's 111,5.
 # The envelope is what matters; the payload is folded to a reference and put
 # back from the kept copy when a replay needs it.
 _EMBEDDED_CARD = re.compile(r"(data:[\w/+.-]+;base64,)([A-Za-z0-9+/=]{512,})")
@@ -715,13 +716,13 @@ def _write_card(
     The dict is what the integration's own Store persists for a month row,
     round-tripped through Home Assistant's encoder so the file holds exactly
     the types ``_snapshot_from_dict`` reads back, then laid out one key per
-    line so a day's diff on the branch is readable. ``via`` records which
+    line so a day's diff on the archive is readable. ``via`` records which
     path produced it, ``live`` (today's card, filed by its label) or
     ``archive`` (the supplier's own archive, filed by the month asked for).
     A replay passes the day the row was first captured as ``seen_on``.
     ``ocr`` marks a row whose card carried no text layer and was read off its
     pixels; the key is written only when true, so every other row on the
-    branch stays byte-identical to what it already holds.
+    archive stays byte-identical to what it already holds.
     """
     today = seen_on or now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
@@ -786,7 +787,7 @@ class _Held:
     via: str
     digests: list[str]
     page: str | None
-    # None for a card the branch holds but could not parse: there is no row.
+    # None for a card the archive holds but could not parse: there is no row.
     path: str | None
 
 
@@ -831,7 +832,7 @@ def _pdf_link(
 
 
 def _link(label: str, base: str | None, rel: str) -> str:
-    """A link into the branch, or the bare label with nowhere to link to."""
+    """A link into the archive, or the bare label with nowhere to link to."""
     return f"[{label}]({base}/{rel})" if base else label
 
 
@@ -948,7 +949,7 @@ def _write_coverage(
     under ``coverage/`` and an index naming them.
 
     Deterministic in their order, so a day that changed nothing rewrites
-    them to the same bytes and the branch gets no commit for it. A sheet
+    them to the same bytes and the archive gets no commit for it. A sheet
     whose supplier has no rows any more is removed.
     """
     held, kept = _kept_rows(out)
@@ -963,7 +964,7 @@ def _write_coverage(
         "# Coverage",
         "",
         "One sheet per supplier, each a table with a row per contract and region and a",
-        "column per month the branch holds.",
+        "column per month the archive holds.",
         *_LEGEND,
         "",
     ]
@@ -973,7 +974,7 @@ def _write_coverage(
         lines = [
             f"# {supplier}",
             "",
-            "One row per contract and region, one column per month the branch holds.",
+            "One row per contract and region, one column per month the archive holds.",
             *_LEGEND,
             "",
             "| contract | region | " + " | ".join(months) + " |",
@@ -1000,7 +1001,7 @@ def _write_coverage(
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
-    """The coverage sheets and the branch README, rewritten when out of date.
+    """The coverage sheets and the archive README, rewritten when out of date.
     The index of PDFs by release that earlier versions wrote is removed, the
     coverage sheets having taken it over."""
     _write_coverage(out, pdf_base_url, archive_base_url)
@@ -1068,7 +1069,7 @@ async def _replay_row(
 
     Under ``rerender`` the PDF texts are not seeded, so every card is
     fetched back from the kept copy and rendered afresh; the listing pages
-    still come from the branch, since there is nothing to re-render there.
+    still come from the archive, since there is nothing to re-render there.
     """
     out = cards.out
     supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
@@ -1162,7 +1163,7 @@ async def _retry_unparsed(
     now: datetime,
     summary: _Summary,
 ) -> None:
-    """Try the cards the branch holds but could not read, again.
+    """Try the cards the archive holds but could not read, again.
 
     A card that no reader could read is kept, uploaded and named in
     ``unparsed.json``, and there it stays: it cannot be re-fetched, because
@@ -1448,7 +1449,7 @@ def main() -> int:
         type=Path,
         default=None,
         metavar="DIR",
-        help="write every PDF the branch has not recorded yet under DIR",
+        help="write every PDF the archive has not recorded yet under DIR",
     )
     parser.add_argument(
         "--pdf-base-url",
@@ -1460,7 +1461,7 @@ def main() -> int:
         "--archive-base-url",
         default=None,
         metavar="URL",
-        help="where the branch is browsed, for the listing's links to rows and pages",
+        help="where the archive is browsed, for the listing's links to rows and pages",
     )
     parser.add_argument(
         "--reparse",

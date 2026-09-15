@@ -770,19 +770,19 @@ async def _archived_card_from_github(
 ) -> ArchivedCard | None:
     """The card the repository's own archive holds for this month, or None.
 
-    ``archive_cards.yml`` stores what every extractor parsed, daily, on the
-    ``archive`` branch (``scripts/archive_cards.py``), and mirrors the
-    supplier archives onto it, so a closed month is one small JSON there
-    against a PDF download and a parse from the supplier: that is why the
-    month cache asks here first. The row was parsed by the extractor of its
-    day and re-parsed by the branch the day after a parser change, so it
-    is read at the degraded schema floor, the page-image replay's position:
-    for a past month a row parsed under an older schema beats the current
-    card as a proxy, and the supplier's own archive still answers for a
-    month the branch does not hold.
+    ``archive_cards.yml`` stores what every extractor parsed, daily, in
+    the ``be_price_cards`` repository (``scripts/archive_cards.py``), and
+    mirrors the supplier archives into it, so a closed month is one small
+    JSON there against a PDF download and a parse from the supplier: that is
+    why the month cache asks here first. The row was parsed by the extractor
+    of its day and re-parsed by the daily walk the day after a parser change,
+    so it is read at the degraded schema floor, the page-image replay's
+    position: for a past month a row parsed under an older schema beats the
+    current card as a proxy, and the supplier's own archive still answers for
+    a month the project's archive does not hold.
 
     None on a 404, which is a month the archive predates, a contract it does
-    not cover or the branch not yet created, and on a row that no longer
+    not cover or a row never written, and on a row that no longer
     decodes. A transient failure propagates so the caller's negative cache
     treats it like a supplier archive blip and asks again later.
     """
@@ -827,7 +827,7 @@ async def card_for_unreadable_month(
 
     Asking for the running month is exactly what ``_card_archive_may_hold``
     refuses, and rightly: while a card can be read the live parse is the
-    better answer and the branch's copy is a day behind at best. That
+    better answer and the archive's copy is a day behind at best. That
     reasoning runs out when the card cannot be read, which is the only door
     into this function.
 
@@ -857,9 +857,9 @@ def _card_archive_may_hold(
     default. Only a closed month: the running month's card is the one being
     served live, which is what the current snapshot holds, and the
     repository's copy of it is a day behind at best. And a supplier with no
-    archive of its own has nothing on the branch from before the daily
-    captures began: a backfill can only mirror a supplier's archive, so
-    asking for an earlier month is a 404 a day for nothing.
+    archive of its own has nothing in the project's archive from before
+    ``CARD_ARCHIVE_FIRST_MONTH``: a backfill only mirrors a supplier's own
+    archive, so asking for an earlier month is a 404 a day for nothing.
     """
     if entry is not None and not entry.data.get(
         CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE
@@ -892,11 +892,11 @@ async def _snapshot_for_month(
     download and a parse per month from the supplier, which is what made
     the first year-to-date fill of a Frank or Bolt entry minutes on a
     Raspberry Pi. The supplier's own archive (``fetch_for_month``) answers
-    for what the branch does not hold: the running month, a month before
-    the branch's horizon, a row the branch cannot serve. The current
-    snapshot is the proxy when neither has the month, and it is the running
-    month's card by definition, so that month never reaches the repository.
-    A blip reading the branch is not "no card": the supplier is still
+    for what the project's archive does not hold: the running month, a
+    month before its horizon, a row it cannot serve. The current snapshot is
+    the proxy when neither has the month, and it is the running month's card
+    by definition, so that month never reaches the repository.
+    A blip reading the archive is not "no card": the supplier is still
     asked, and a month neither could give is retried on the failure marker
     rather than cached.
 
@@ -992,7 +992,7 @@ async def _snapshot_for_month(
         ):
             return current_snapshot
         fetch_failed = False
-        branch_failed = False
+        archive_failed = False
         snap: SupplierSnapshot | None = None
         if _card_archive_may_hold(extractor, year_month, today, entry):
             try:
@@ -1000,7 +1000,7 @@ async def _snapshot_for_month(
                     session, extractor.id, contract, region, year_month
                 )
                 snap = archived.snapshot if archived is not None else None
-            except Exception as err:  # noqa: BLE001 - a blip on the branch must not cost the supplier tier
+            except Exception as err:  # noqa: BLE001 - a blip on the archive must not cost the supplier tier
                 _LOGGER.debug(
                     "card archive read failed for %s/%s/%s/%s: %s",
                     extractor.id,
@@ -1009,7 +1009,7 @@ async def _snapshot_for_month(
                     cache_key[3],
                     err,
                 )
-                branch_failed = True
+                archive_failed = True
         if snap is None and extractor.fetch_for_month is not None:
             try:
                 snap = await extractor.fetch_for_month(
@@ -1026,8 +1026,8 @@ async def _snapshot_for_month(
                 )
                 snap = None
                 fetch_failed = True
-        if snap is None and branch_failed:
-            # The branch may well hold the month; ask again on the failure
+        if snap is None and archive_failed:
+            # The archive may well hold the month; ask again on the failure
             # marker rather than cache a None the TTL would hold for a day.
             fetch_failed = True
         if fetch_failed:
@@ -1438,7 +1438,7 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 
 
 # InjectionRates fields added after the card archive went live (0.20.13),
-# in the order they came. Every installed version reads the branch, and one
+# in the order they came. Every installed version reads the archive, and one
 # that does not know a field cannot decode a row carrying it and falls back
 # to the supplier tier for that month; a row rewritten with such a field at
 # its default is not a changed card either, and would have cost a commit

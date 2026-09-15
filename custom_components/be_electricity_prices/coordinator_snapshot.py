@@ -474,7 +474,7 @@ class _SnapshotMixin:
                 dt_util.now().date(),
                 self.entry,
             )
-        except Exception as err:  # noqa: BLE001 - a blip on the branch is not this tick's problem
+        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
             _LOGGER.debug("card archive read failed for an unreadable card: %s", err)
             return False
         if archived is None:

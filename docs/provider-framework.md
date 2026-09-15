@@ -161,7 +161,7 @@ month at the current rate. Return-value semantics:
   (`snapshot_store._archived_card_from_github`, fed daily by
   `scripts/archive_cards.py` and mirroring these archives, see
   [ci-and-testing.md](ci-and-testing.md)); `fetch_for_month` answers for a
-  month the branch does not hold, and on `None` from both the current
+  month the archive does not hold, and on `None` from both the current
   snapshot stands in as a proxy.
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
