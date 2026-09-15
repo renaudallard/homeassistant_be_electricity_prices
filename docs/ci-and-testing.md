@@ -871,7 +871,7 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 | --- | --- | --- |
 | Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml` |
 | Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml`) |
-| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml`) |
+| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next daily scheduled run (`.github/workflows/test.yml`) |
 | Tests | `pytest tests/ -q -n auto --dist loadfile` | `.github/workflows/test.yml` |
 
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml`).
@@ -891,17 +891,26 @@ These validate packaging and manifest conformance, not runtime behaviour.
 
 ### live_check.yml - Live extractor check
 
-Runs on the daily `cron: "17 6 * * *"` (06:17 UTC is 07:17/08:17 Belgian local, after suppliers'
-overnight publication), on manual dispatch, and on pull requests that touch `providers/**`,
+Runs on the daily `cron: "17 6 * * *"` (06:17 UTC, after suppliers' overnight publication), on
+manual dispatch, and on pull requests that touch `providers/**`,
 `scripts/live_check.py`, or the workflow itself (`.github/workflows/live_check.yml`). It needs
 `issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml`).
 
-The  is deliberate. GitHub documents the start of every hour as a high-load slot for the
+The odd minute is deliberate. GitHub documents the start of every hour as a high-load slot for the
 `schedule` event and says queued runs may be dropped when the load is high enough, which is exactly
 what happened on 2026-08-27: neither this workflow nor `validate.yml` produced a run from the 06:00
 slot, no delayed run and no `startup_failure`, just nothing. A dropped slot is not recovered
 automatically, so the day's check has to be dispatched by hand:
 `gh workflow run live_check.yml --ref main`.
+
+The minute in the cron is a request, not a start time. Measured over 7 to 14 September 2026 this
+check started between 10:55 and 12:59 UTC, four to seven hours after the slot it asks for, and the
+card archiver (`cron: "41 5 * * *"`) between 09:34 and 10:58. The 36 minutes between the two crons
+therefore decide nothing. Having the archiver go first is worth something, since this check then
+takes that day's renders from the archive rather than repeating them, and the queue has kept that
+order so far; when it does not, this check renders more cards and runs longer, which is the entire
+cost. That is why neither workflow is chained to the other with `workflow_run`: an archive run
+GitHub sheds would otherwise take the day's supplier check down with it.
 
 The single `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
 `homeassistant.util.dt`), checks the `archive` branch out under `tmp/archive` when the repository

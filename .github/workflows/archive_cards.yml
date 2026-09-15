@@ -2,10 +2,9 @@ name: Archive tariff cards
 
 on:
   schedule:
-    # 05:41 UTC = 06:41 CET / 07:41 CEST, after the suppliers' overnight
-    # publication and before the 06:17 live check. Off the hour for the
-    # reason live_check.yml spells out: the top of the hour is where GitHub
-    # sheds scheduled runs first.
+    # 05:41 UTC, after the suppliers' overnight publication and ahead of the
+    # live check, which reads what this stores. Off the hour, and hours later
+    # than it asks for, both for the reasons live_check.yml spells out.
     - cron: "41 5 * * *"
   workflow_dispatch:
     inputs:
