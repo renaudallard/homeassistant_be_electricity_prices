@@ -116,16 +116,23 @@ Each of these has a section of its own further down; this is the scan.
 > Nothing in the integration can parse a document with no text in it, so the
 > prices come from this project's own reading of the card's pixels: the card
 > archive runs a reader built for these cards once a day, files what it read,
-> and your entry uses that. It says so — a Repairs card, and a
-> `card_read_by_ocr` attribute on `current_price` — and both clear by
-> themselves when Ecofix publishes a readable card again.
+> and your entry uses that. It stops by itself when Ecofix publishes a readable
+> card again, because what makes a card unreadable is measured on every fetch
+> rather than held as a flag against the supplier.
 >
-> **Worth checking against your own card.** The energy formula and the
-> standing charge are still live text and are read exactly; the DSO tables and
-> the tax block are the image, and Ecofix's image is stale, so those figures
-> run a couple of months behind. A figure the reader could not read whole is
-> left out rather than guessed. If you would rather type the numbers in
-> yourself, the **Expert: custom formula** supplier takes them.
+> **Check the taxes against your own card.** The energy formula and the
+> standing charge survive as live text and are read exactly, and the DSO tables
+> read off the image are right: those tariffs are set for the calendar year, so
+> a picture taken in July still prints September's. The tax block is the one
+> that has moved. Ecofix's September 2026 card still carries the federal scheme
+> that ended on 1 August, an excise of 0,0503288 with a 0,0020417 contribution
+> beside it, where every other supplier's card for the same month carries a flat
+> 0,04876 and no contribution. That is 0,0036105 €/kWh too much, about 12,64 €
+> a year on 3.500 kWh, and the integration bills what the card says. The daily
+> live check now compares every supplier's federal block against the rest and
+> reports a card that drifts. A figure the reader could not read whole is left
+> out rather than guessed. If you would rather type the numbers in yourself, the
+> **Expert: custom formula** supplier takes them.
 >
 > The full story — what changed in their generator, what Ecofix said about it,
 > the measurements, and the current formulas to copy — is in

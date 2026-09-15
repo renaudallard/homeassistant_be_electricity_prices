@@ -106,6 +106,18 @@ Related reading:
 > would break the invariant stated at the top of `providers/base.py`, that no
 > EUR values live in Python source.
 >
+> **What the image does get wrong is the federal tax block.** The DSO tables it
+> carries are right, because those tariffs are set for the calendar year and a
+> picture taken in July still prints September's. The federal excise is not:
+> Ecofix's September 2026 card carries 0,0503288 with a 0,0020417 contribution
+> beside it, the scheme that ended on 1 August, where the fourteen other
+> residential suppliers in the archive carry a flat 0,04876 and no contribution.
+> That is 0,0036105 EUR/kWh, about 12,64 EUR a year on 3.500 kWh, billed as the
+> card prints it. `_check_federal_tax_consensus` (`scripts/live_check.py`)
+> compares every supplier's federal block against the rest of the archive daily
+> and reports the ones that drift; it reports rather than corrects, for the
+> cross-filling reason just above. TotalEnergies and Cociter drift the same way.
+>
 > Affected users are pointed at the **Expert: custom formula** supplier
 > (`providers/custom.py`), which collects exactly the missing DSO and tax blocks
 > and supports `quarter_hourly`, so Motion is reproduced faithfully. July's card
