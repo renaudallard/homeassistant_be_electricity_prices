@@ -314,8 +314,8 @@ Variable product, sharing the same PDF (`engie.py`). It requires the 7-price
 Empower row; the parser raises if it is asked for Flextime on a card that does
 not carry the triplet (a 4-price row, `engie.py`). Its weekend rule is
 `weekend_no_peak` (peak never applies at weekends; transition/offpeak split is
-kept), distinct from Luminus SmartFlex's `weekend_offpeak`, per CWaPE Engie
-publication (`engie.py`, framework schedule `base.py`).
+kept), distinct from the generic CWaPE `weekend_offpeak` default, per the CWaPE
+Engie publication (`engie.py`, framework schedule `base.py`).
 
 ## DSO overlay coverage
 

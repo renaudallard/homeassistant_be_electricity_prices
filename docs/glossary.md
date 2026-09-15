@@ -126,7 +126,7 @@ per config entry (`providers/base.py`).
 | VREG | Flemish energy regulator. Set the capacity tariff and its regulated monthly-peak floor. | `const.py` |
 | VREG_CAPACITY_FLOOR_KW | Regulated minimum (2.5 kW) the capacity tariff bills against. Fluvius's methodology applies it to each monthly peak before the twelve-month mean (`Rekenkundig gemiddelde van de Max (Maandpiek (m), 2.5)`), which is why the mean itself needs no clamp. Set by VREG at the January 2023 capacity-tariff introduction. | `const.py` |
 | Wallonia (`REGION_WALLONIA`) | One of the three regions. Five DSOs, CWaPE regulator, Tarif Impact, the compensation-regime prosumer fee, `wallonia_renewables` levy. | `const.py` |
-| weekend rule (`WeekendRule`) | Per-TOU-product weekend override: `weekend_offpeak` (Luminus SmartFlex, whole weekend off-peak), `weekend_no_peak` (Engie Empower Flextime, no peak slot on weekends), `smartflex_seasonal`. | `providers/base.py` |
+| weekend rule (`WeekendRule`) | Per-TOU-product weekend override: `weekend_offpeak` (the generic CWaPE default, whole weekend and public holidays off-peak), `weekend_no_peak` (Engie Empower Flextime, no peak slot on weekends), `smartflex_seasonal` (Luminus SmartFlex, seasonal bands every day with no weekend exception). | `providers/base.py` |
 | yearly_fixed_fee | Supplier flat annual subscription (EUR/year) on every energy dataclass; a separate `yearly_fixed_fee_exclusive_night` applies on an exclusive-night entry when the card prints one. | `providers/base.py` |
 
 ## Notes and gotchas
