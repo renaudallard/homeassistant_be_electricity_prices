@@ -689,6 +689,10 @@
       "title": "Lieferant fuer {supplier} ({contract}) nicht erreichbar",
       "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Sie verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise. Das ist meist ein voruebergehendes Netzwerk- oder CDN-Problem, das sich beim naechsten Aktualisieren von selbst loest; nutzen Sie den Dienst be_electricity_prices.refresh oder pruefen Sie Ihr Netzwerk, falls es weiter auftritt."
     },
+    "card_read_by_ocr": {
+      "title": "Die Preise von {supplier} werden aus Bildern seiner Karte gelesen",
+      "description": "{supplier} veroffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass aus dem Dokument selbst nichts gelesen werden kann. Diese Preise fur {contract} stammen aus der eigenen Lesung der Kartenpixel durch das Projekt, einmal taglich durchgefuhrt und von jeder Installation geteilt. Sie liest eine Zahl als das Einzige, was sie sein kann, oder gar nicht, sodass das Angezeigte vollstandig gelesen und nicht geraten wurde. Es bleibt aber eine Lesung, die Sie vor dem Handeln mit Ihrer Karte abgleichen sollten. Diese Meldung verschwindet von selbst, sobald {supplier} wieder eine lesbare Karte veroffentlicht."
+    },
     "extractor_unreadable_no_prices": {
       "title": "Keine Preise fur {supplier}: die Tarifkarte ist nicht lesbar",
       "description": "{supplier} veroffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass die Preise nicht ausgelesen werden konnen, und dieser Eintrag hat keine altere Karte im Cache, auf die er zuruckgreifen konnte. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts zu lesen. Alle Sensoren dieses Eintrags ({contract}) bleiben nicht verfugbar, bis {supplier} wieder eine lesbare Karte veroffentlicht. Fur Preise jetzt gleich: einen Eintrag Benutzerdefiniert (Experte) anlegen und die Werte der Karte von Hand eintragen. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veroffentlicht."

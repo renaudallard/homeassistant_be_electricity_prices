@@ -689,6 +689,10 @@
       "title": "Impossible de joindre le fournisseur pour {supplier} ({contract})",
       "description": "L'integration n'a pas pu telecharger la carte tarifaire apres plusieurs tentatives : {error}. Elle sert encore les derniers prix correctement analyses. Il s'agit generalement d'un probleme reseau ou CDN temporaire qui se resout au prochain rafraichissement; utilisez le service be_electricity_prices.refresh ou verifiez votre reseau si cela persiste."
     },
+    "card_read_by_ocr": {
+      "title": "Les prix de {supplier} sont lus sur des images de sa carte",
+      "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : rien ne peut etre extrait du document lui-meme. Ces prix pour {contract} proviennent de la lecture des pixels de la carte faite par le projet, une fois par jour et partagee par toutes les installations. Elle lit un chiffre comme la seule valeur possible ou pas du tout, donc ce que vous voyez a ete lu entierement plutot que devine. Cela reste une lecture, qu'il vaut la peine de verifier sur votre carte avant d'agir. Cette alerte disparait d'elle-meme des que {supplier} republie une carte lisible."
+    },
     "extractor_unreadable_no_prices": {
       "title": "Aucun prix pour {supplier} : sa carte tarifaire est illisible",
       "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : les prix ne peuvent pas en etre extraits, et cette entree n'a aucune carte plus ancienne en cache sur laquelle se rabattre. Il ne s'agit pas d'un bug de l'integration et le signaler n'aidera pas : il n'y a rien a lire dans le document. Tous les capteurs de cette entree ({contract}) restent indisponibles jusqu'a ce que {supplier} republie une carte lisible. Pour obtenir des prix des maintenant, creez une entree Personnalisee (expert) et encodez vous-meme les valeurs de votre carte. Cette alerte disparait d'elle-meme si {supplier} republie des cartes lisibles."

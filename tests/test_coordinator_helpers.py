@@ -5015,40 +5015,6 @@ def test_projection_attributes_are_not_recorded() -> None:
         assert name in BePriceSensor._unrecorded_attributes, name
 
 
-def test_config_flow_steps_are_fully_translated() -> None:
-    """Every config-flow field label and help string exists in all four files.
-
-    The translations carry RESOLVED literals where strings.json may carry a
-    ``[%key:...%]`` reference, so a field added to one path in strings.json can
-    reach users untranslated, or stale, on the other. That has happened: the
-    contract end date's options-flow copy kept telling users the date did not
-    affect pricing for a commit after it started to.
-    """
-    import json
-    import pathlib
-
-    base = pathlib.Path("custom_components/be_electricity_prices")
-    src = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))
-    langs = {
-        f.name: json.loads(f.read_text(encoding="utf-8"))
-        for f in sorted(base.joinpath("translations").glob("*.json"))
-    }
-    for section in ("config", "options"):
-        for step, body in src.get(section, {}).get("step", {}).items():
-            for kind in ("data", "data_description"):
-                want = set(body.get(kind, {}))
-                if not want:
-                    continue
-                for name, doc in langs.items():
-                    got = set(
-                        doc.get(section, {}).get("step", {}).get(step, {}).get(kind, {})
-                    )
-                    missing = want - got
-                    assert not missing, (
-                        f"{name} {section}.{step}.{kind}: {sorted(missing)}"
-                    )
-
-
 def test_strings_json_reads_the_same_as_the_english_translation() -> None:
     """Every literal in strings.json must match `translations/en.json`, and
     every key the translation carries must exist in strings.json.
@@ -5159,6 +5125,62 @@ def test_every_sensor_name_exists_in_all_translations() -> None:
         got = set(json.loads(path.read_text())["entity"]["sensor"])
         assert ref - got == set(), f"{path.name} is missing {sorted(ref - got)}"
         assert got - ref == set(), f"{path.name} has stray {sorted(got - ref)}"
+
+
+def test_every_string_exists_in_every_translation() -> None:
+    """Whole-file key parity, not one section at a time.
+
+    Three tests above check parity, and each checks a section: the config and
+    options steps, strings.json against the English file, and the entity names.
+    Between them they left `issues`, `selector`, `services` and `exceptions`
+    unguarded, which is 96 of the 425 strings. That is how the OCR Repairs card
+    shipped in English only: its two keys were the only ones of the 425 missing
+    from fr, nl and de, and nothing compared them. Home Assistant falls back to
+    English for a missing key, so it renders, just not in the reader's language,
+    and no test or log ever says so.
+
+    Placeholders too, in both directions. A translation that drops a {name} the
+    code supplies loses the value silently, and one that invents a {name} the
+    code does not supply raises KeyError when the card is rendered.
+
+    This replaces a narrower check over the config and options steps alone. The
+    reason that one existed still holds and is now covered here: the
+    translations carry resolved literals where strings.json may carry a
+    ``[%key:...%]`` reference, so a field added to one path can reach users
+    untranslated on the other. That happened to the contract end date, whose
+    options-flow copy kept telling users the date did not affect pricing for a
+    commit after it started to.
+    """
+    import json
+    import pathlib
+    import re
+
+    base = pathlib.Path("custom_components/be_electricity_prices")
+
+    def leaves(node: Any, prefix: str = "") -> dict[str, str]:
+        if isinstance(node, dict):
+            out: dict[str, str] = {}
+            for key, value in node.items():
+                out |= leaves(value, f"{prefix}.{key}" if prefix else key)
+            return out
+        return {prefix: str(node)}
+
+    ref = leaves(json.loads(base.joinpath("strings.json").read_text(encoding="utf-8")))
+    assert len(ref) > 400, "strings.json looks truncated"
+    for path in sorted(base.joinpath("translations").glob("*.json")):
+        got = leaves(json.loads(path.read_text(encoding="utf-8")))
+        assert not set(ref) - set(got), (
+            f"{path.name} is missing {sorted(set(ref) - set(got))}"
+        )
+        assert not set(got) - set(ref), (
+            f"{path.name} has stray {sorted(set(got) - set(ref))}"
+        )
+        for key, text in ref.items():
+            want = set(re.findall(r"\{(\w+)\}", text))
+            have = set(re.findall(r"\{(\w+)\}", got[key]))
+            assert want == have, (
+                f"{path.name} {key}: placeholders {sorted(have)} against {sorted(want)}"
+            )
 
 
 def test_no_user_facing_string_stands_a_dash_on_two_hyphens() -> None:
