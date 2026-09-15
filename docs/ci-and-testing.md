@@ -4,7 +4,7 @@ This document covers how the Belgian Electricity Prices integration is tested an
 fixture-driven pytest suite (`tests/`), the daily live extractor harness
 (`scripts/live_check.py`) that fetches every supplier's real tariff card and asserts the
 extractors still parse, the daily card archiver (`scripts/archive_cards.py`) that stores what
-every extractor parsed on the `archive` branch, the six GitHub Actions workflows (`test.yml`,
+every extractor parsed in the `be_price_cards` repository, the six GitHub Actions workflows (`test.yml`,
 `validate.yml`, `live_check.yml`, `archive_cards.yml`, `endpoint_probe.yml`, `autorelease.yml`),
 and the exact local commands a contributor runs before committing. It also spells out the
 version-bump policy that gates a release.
@@ -704,8 +704,8 @@ answer: it walks the same registry, fetches every (supplier, contract, region) c
 `<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py`). The
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
-`_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily on the
-`archive` branch (see `archive_cards.yml` below) and the month cache reads the result first for
+`_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily against
+the `be_price_cards` repository (see `archive_cards.yml` below) and the month cache reads the result first for
 any closed month, before the supplier's own archive (`snapshot_store._archived_card_from_github`,
 see [coordinator.md](coordinator.md)).
 
@@ -913,8 +913,10 @@ cost. That is why neither workflow is chained to the other with `workflow_run`: 
 GitHub sheds would otherwise take the day's supplier check down with it.
 
 The single `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
-`homeassistant.util.dt`), checks the `archive` branch out under `tmp/archive` when the repository
-has one so the harness can take its renders from there (`Rendering only what changed` above), and
+`homeassistant.util.dt`), clones `be_price_cards` shallow under `tmp/cards` so the harness can
+take its renders from the archive's texts (`Rendering only what changed` above; the clone is
+public, so it needs no token and works on a fork's pull request, and a clone that fails just means
+everything is rendered), and
 runs `scripts/live_check.py` inside a two-tier retry loop
 (`.github/workflows/live_check.yml`). The retry exists so an issue is filed only when a supplier
 is still broken roughly an hour after first detection, not for a transient CDN blip (issue #30):
@@ -988,11 +990,11 @@ the two booleans `reparse` and `rerender`, passed as the flags of the same names
 runs with none of them. A dispatch asking for a backfill or a re-render gets a six-hour job
 timeout instead of the usual one hour, since either is far more work than the daily walk: a
 backfill is one archived card per supplier, contract, region and month, a re-render downloads
-and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and the `archive` branch as a worktree under
-`tmp/` (which `.gitignore` covers); the first run creates that branch unborn with
-`git worktree add --orphan`, so nothing has to be pushed by hand
+and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and
+clones `be_price_cards` shallow under `tmp/cards`, which `.gitignore` covers, using the
+`BE_ELECTRICITY_CARDS` token since this clone is written back to
 (`.github/workflows/archive_cards.yml`). It then runs `scripts/archive_cards.py --out
-tmp/archive`, and commits and pushes only when the tree changed.
+tmp/cards/electricity`, and commits and pushes to that repository only when its tree changed.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
@@ -1121,7 +1123,7 @@ Notes:
   `python scripts/live_check.py`; it writes `catalog_report.md` and `drift_report.md` to the repo
   root and prints the extractor report to stdout. It is not part of the pre-commit gate.
 - `python scripts/archive_cards.py --out tmp/archive` stores today's cards under `tmp/archive`
-  the way the daily workflow stores them on the `archive` branch. A full walk asks about 250
+  the way the daily workflow stores them in `be_price_cards`. A full walk asks about 250
   cards and takes 21 minutes on a Raspberry Pi, most of it Bolt's and Mega's PDF parses, and
   writes about 7 MB. Not part of the gate either.
 - Per the repository conventions, ensure `__pycache__` contents are cleared before committing and

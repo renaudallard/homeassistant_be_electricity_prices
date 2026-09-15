@@ -463,7 +463,7 @@ Both backfill passes cache one `SupplierSnapshot` per month via
 `_month_snapshot_cache` (`cohort.py`, called at `backfill.py`), so a 365-day window
 touches at most 12 archive fetches. `_snapshot_for_month` asks the
 repository's own card archive first for a closed month (`_archived_card_from_github`, the
-`archive` branch that `.github/workflows/archive_cards.yml` writes daily and mirrors the supplier
+`be_price_cards` tree that `.github/workflows/archive_cards.yml` writes daily and mirrors the supplier
 archives into), then the extractor's `fetch_for_month` archive for a month the project's does not
 hold (see [provider-framework.md](provider-framework.md)), and falls back to the current live
 snapshot only when neither holds the month.
