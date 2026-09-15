@@ -77,6 +77,7 @@ from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _rlp_blend_for,
     _spp_weighting_enabled,
 )
 from .synergrid import RlpWeights, SppWeights
@@ -371,6 +372,36 @@ def _coordinator_rlp_weights(entry: ConfigEntry) -> RlpWeights | None:
     from the dialog."""
     coord = getattr(entry, "runtime_data", None)
     weights = getattr(coord, "_rlp_weights", None)
+    return weights or None
+
+
+def _coordinator_rlp_index_weights(
+    entry: ConfigEntry, snapshot: SupplierSnapshot | None
+) -> RlpWeights | None:
+    """The RLP curve the quoted card's own index names, or ``None``.
+
+    Its sibling above carries the household's load shape, which is what a
+    compensation net is spread over and a bi-hourly day split by whichever card
+    is being priced. This one carries the INDEX, and that belongs to the card:
+    Eneco's Belpex-RLP-M is the equal mean of the three regional curves,
+    energie.be's Belpex_RLP the column-weighted one, Energy Knights' and
+    Trevion's the Fluvius curve alone. All three sit in one Flanders ranking, so
+    reading the entry's own for every row prices most of them on an index their
+    card never mentions.
+
+    ``None`` for a card that names no RLP index, and for one whose blend this
+    process has not loaded; the walk then keeps the plain arithmetic mean, the
+    same fallback an entry with no profile at all gets. Never downloaded from
+    the dialog: the coordinator reduces every blend from the one workbook read
+    it already performs.
+    """
+    if snapshot is None or not _energy_is_rlp_indexed(snapshot.energy):
+        return None
+    coord = getattr(entry, "runtime_data", None)
+    getter = getattr(coord, "rlp_weights_for_blend", None)
+    if getter is None:
+        return None
+    weights: RlpWeights | None = getter(_rlp_blend_for(snapshot.energy))
     return weights or None
 
 
@@ -882,6 +913,9 @@ class _SweepEngine:
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    rlp_index_weights=_coordinator_rlp_index_weights(
+                        self.config_entry, snap
+                    ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, snap, own=False
                     ),
@@ -1301,9 +1335,21 @@ class _SweepEngine:
                 if _energy_is_rlp_indexed(snapshot.energy):
                     # Eneco's index is the RLP-weighted mean; the plain one
                     # is the fallback while the profile is not loaded. Reuses
-                    # the coordinator's profile, never downloads here.
+                    # the coordinator's profiles, never downloads here.
+                    #
+                    # THIS side's blend, not the entry's. The three reductions
+                    # are three different indices, not one at three
+                    # resolutions: measured on the August 2026 Belgian
+                    # day-ahead curve they stood at 133,44 / 134,93 / 135,66
+                    # EUR/MWh, so pricing an Energy Knights card on Eneco's
+                    # curve moves it 2,2 EUR/MWh against what it bills, which
+                    # is enough to reorder neighbouring rows on a page whose
+                    # whole job is the order.
                     weighted: float | None = coord._rlp_weighted_month_mean(
-                        today_local.year, today_local.month, spot_dict
+                        today_local.year,
+                        today_local.month,
+                        spot_dict,
+                        blend=_rlp_blend_for(snapshot.energy),
                     )
                     if weighted is not None:
                         return weighted

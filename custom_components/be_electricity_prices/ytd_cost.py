@@ -396,6 +396,7 @@ async def _ytd_hourly_energy(
     monthly_mean: bool = False,
     spp_weights: SppWeights | None = None,
     rlp_weights: RlpWeights | None = None,
+    rlp_index_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
     cached_only: bool = False,
 ) -> float | None:
@@ -553,7 +554,11 @@ async def _ytd_hourly_energy(
             month_bucket,
             month_means,
             today,
-            rlp_weights,
+            # The card's own RLP blend, which is the entry's for its own bill
+            # and the quoted card's on the compare page. Everything else below
+            # weights by the HOUSEHOLD's profile, because there it stands for
+            # the household's load shape rather than for a published index.
+            rlp_weights if rlp_index_weights is None else rlp_index_weights,
         )
         # Distinguishes "this contract needs no spot" (fixed, variable, TOU,
         # Impact) from "it needs one and the cache has none", which are billed
@@ -767,6 +772,7 @@ async def _compute_current_year_cost(
     spot_quarters: dict[datetime, list[float]] | None = None,
     spp_weights: SppWeights | None = None,
     rlp_weights: RlpWeights | None = None,
+    rlp_index_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
     billed_peak_kw: float = 0.0,
     cached_only: bool = False,
@@ -878,6 +884,14 @@ async def _compute_current_year_cost(
     solar-weighted mean. Five call sites now pass this argument, and asking
     each to remember is the shape of mistake that got the argument dropped in
     the first place.
+
+    ``rlp_weights`` carries two roles that agree on the entry's own bill and
+    part company on the compare page: the load shape a compensation net is
+    spread over and a bi-hourly day is split by, which is the HOUSEHOLD's, and
+    the index an RLP-indexed month leg resolves against, which is the CARD's.
+    ``rlp_index_weights`` names the second where they differ, so a foreign card
+    is priced on the blend its own card names; it defaults to ``rlp_weights``,
+    which is what the entry's own walk wants.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -1070,6 +1084,7 @@ async def _compute_current_year_cost(
             spot_quarters=spot_quarters,
             spp_weights=spp_weights,
             rlp_weights=rlp_weights,
+            rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
         )
         if dyn_energy is None:
@@ -1096,6 +1111,7 @@ async def _compute_current_year_cost(
             monthly_mean=True,
             spp_weights=spp_weights,
             rlp_weights=rlp_weights,
+            rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
         )
         if monthly_energy is None:
@@ -1132,6 +1148,7 @@ async def _compute_current_year_cost(
             spot_quarters=spot_quarters,
             spp_weights=spp_weights,
             rlp_weights=rlp_weights,
+            rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
         )
         if hourly_energy is None:

@@ -6,6 +6,8 @@ import asyncio
 import tempfile
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from collections.abc import Iterable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,7 +27,13 @@ from custom_components.be_electricity_prices.spot_stats import (
     _rlp_month_mean,
     _rlp_weighted_month_mean,
 )
-from custom_components.be_electricity_prices.synergrid import _rlp_weights_from_rows
+from custom_components.be_electricity_prices.providers.base import RlpBlend
+from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
+
+
+def _rlp_weights_from_rows(rows: Iterable[list[Any]], blend: str = "distinct") -> Any:
+    """One blend straight from sheet rows: the two halves the reader runs."""
+    return synergrid._weights_for_blend(synergrid._rlp_groups_from_rows(rows), blend)
 
 
 def _sheet(
@@ -167,7 +175,7 @@ async def test_fetch_rlp_returns_empty_on_download_error() -> None:
     with patch.object(
         synergrid, "_download", new=AsyncMock(side_effect=aiohttp.ClientError("boom"))
     ):
-        assert await synergrid.fetch_rlp_weights(session, 2026) == {}
+        assert await synergrid.fetch_rlp_blends(session, 2026, RLP_BLENDS) == {}
 
 
 async def test_fetch_rlp_returns_empty_on_a_bad_workbook_and_cleans_up() -> None:
@@ -178,20 +186,20 @@ async def test_fetch_rlp_returns_empty_on_a_bad_workbook_and_cleans_up() -> None
     with patch.object(
         synergrid, "_download", new=AsyncMock(return_value=Path(garbage.name))
     ):
-        assert await synergrid.fetch_rlp_weights(session, 2026) == {}
+        assert await synergrid.fetch_rlp_blends(session, 2026, RLP_BLENDS) == {}
     assert not Path(garbage.name).exists()
 
 
-async def test_fetch_rlp_passes_the_blend_to_the_parser() -> None:
+async def test_fetch_rlp_asks_the_parser_for_exactly_the_blends_wanted() -> None:
     seen: dict[str, Any] = {}
 
-    def fake_parse(_path: Any, blend: str = "distinct") -> dict[Any, float]:
-        seen["blend"] = blend
-        return {(1, 1, 0): 1.0}
+    def fake_parse(_path: Any, blends: Any) -> dict[str, dict[Any, float]]:
+        seen["blends"] = list(blends)
+        return {b: {(1, 1, 0): 1.0} for b in blends}
 
     with (
         patch.object(synergrid, "_download", new=AsyncMock(return_value=Path("x"))),
-        patch.object(synergrid, "_parse_rlp_weights", new=fake_parse),
+        patch.object(synergrid, "_parse_rlp_blends", new=fake_parse),
         patch.object(
             synergrid.asyncio,
             "to_thread",
@@ -199,8 +207,57 @@ async def test_fetch_rlp_passes_the_blend_to_the_parser() -> None:
         ),
         patch.object(synergrid, "Path"),
     ):
-        await synergrid.fetch_rlp_weights(MagicMock(), 2026, "flanders")
-    assert seen["blend"] == "flanders"
+        await synergrid.fetch_rlp_blends(MagicMock(), 2026, ("flanders",))
+    assert seen["blends"] == ["flanders"]
+
+
+async def test_fetch_rlp_blends_reads_the_workbook_once_for_every_blend() -> None:
+    """The read is the expensive half and the blends are reductions of it, so
+    asking for three is one download and one parse, not three of each. That is
+    what lets the compare page price each card on its own index without paying
+    3,4 MB per blend."""
+    downloads: list[str] = []
+
+    async def fake_download(_session: Any, url: str, **_kw: Any) -> Path:
+        downloads.append(url)
+        return Path("x")
+
+    def fake_parse(_path: Any, blends: Any) -> dict[str, dict[Any, float]]:
+        return {b: {(1, 1, 0): float(len(b))} for b in blends}
+
+    with (
+        patch.object(synergrid, "_download", new=fake_download),
+        patch.object(synergrid, "_parse_rlp_blends", new=fake_parse),
+        patch.object(
+            synergrid.asyncio,
+            "to_thread",
+            new=AsyncMock(side_effect=lambda f, *a: f(*a)),
+        ),
+        patch.object(synergrid, "Path"),
+    ):
+        out = await synergrid.fetch_rlp_blends(
+            MagicMock(), 2026, ("distinct", "columns", "flanders")
+        )
+    assert len(downloads) == 1
+    assert set(out) == {"distinct", "columns", "flanders"}
+
+
+def test_one_grouping_serves_every_blend_and_a_failing_one_stands_alone() -> None:
+    """The sheet is grouped once and each blend is a combination of the groups,
+    which is what makes three blends one read. Only the flanders blend can fail
+    on its own, when the sheet carries no Fluvius column, and it must not take
+    the other two with it."""
+    groups = synergrid._rlp_groups_from_rows(iter(_BLEND_ROWS))
+    for blend in synergrid.RLP_BLENDS:
+        assert synergrid._weights_for_blend(groups, blend) == _rlp_weights_from_rows(
+            iter(_BLEND_ROWS), blend
+        )
+    no_fluvius = synergrid._rlp_groups_from_rows(
+        iter(_sheet([_WALLONIA, _SIBELGA], 2, ["ORES (Namur)", "SIBELGA"]))
+    )
+    assert synergrid._weights_for_blend(no_fluvius, "distinct")
+    with pytest.raises(ValueError):
+        synergrid._weights_for_blend(no_fluvius, "flanders")
 
 
 async def test_fetch_rlp_asks_for_the_all_dso_workbook_with_an_xlsb_suffix() -> None:
@@ -211,7 +268,7 @@ async def test_fetch_rlp_asks_for_the_all_dso_workbook_with_an_xlsb_suffix() -> 
         raise aiohttp.ClientError("stop here")
 
     with patch.object(synergrid, "_download", new=fake_download):
-        assert await synergrid.fetch_rlp_weights(MagicMock(), 2026) == {}
+        assert await synergrid.fetch_rlp_blends(MagicMock(), 2026, RLP_BLENDS) == {}
     assert seen["suffix"] == ".xlsb"
     assert seen["url"].endswith("/2026/RLP0N%202026%20Electricity%20all%20DSOs.xlsb")
 
@@ -307,6 +364,16 @@ def _entry(**extra: Any) -> MockConfigEntry:
     )
 
 
+def _fake_blends(**per_blend: float) -> AsyncMock:
+    """Stand in for the multi-blend fetch: one curve per blend asked for, each
+    distinguishable so a caller reading the wrong one is visible."""
+
+    async def fetch(_session: Any, _year: int, blends: Any) -> dict[str, Any]:
+        return {b: {(9, 15, 10): per_blend.get(b, 2.0)} for b in blends}
+
+    return AsyncMock(side_effect=fetch)
+
+
 async def test_ensure_rlp_weights_fetches_when_stale(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -314,15 +381,14 @@ async def test_ensure_rlp_weights_fetches_when_stale(
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    fake = {(9, 15, 10): 2.0}
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
-        new=AsyncMock(return_value=fake),
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
     ) as mock:
         await coord._ensure_rlp_weights()
         await coord._ensure_rlp_weights()  # fresh: no second download
     assert mock.await_count == 1
-    assert coord._rlp_weights == fake
+    assert coord._rlp_weights == {(9, 15, 10): 2.0}
     assert coord._rlp_weights_year == 2026
 
 
@@ -342,8 +408,8 @@ async def test_two_entries_share_one_profile_download(
     coord_b = BePricesCoordinator(hass, second)
     fake = {(9, 15, 10): 2.0}
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
-        new=AsyncMock(return_value=fake),
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
     ) as mock:
         await asyncio.gather(
             coord_a._ensure_rlp_weights("distinct"),
@@ -360,31 +426,39 @@ async def test_two_entries_share_one_profile_download(
     third.add_to_hass(hass)
     coord_c = BePricesCoordinator(hass, third)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
-        new=AsyncMock(return_value=fake),
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(),
     ) as mock:
         await coord_c._ensure_rlp_weights("distinct")
     assert mock.await_count == 1
 
 
-async def test_ensure_rlp_weights_refetches_when_the_blend_changes(
+async def test_one_download_serves_every_blend(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The curves differ per blend, so asking for a different one is not fresh
-    even inside the refresh window: it re-downloads."""
+    """The curves differ per blend, but they are reductions of one file, so the
+    entry holds all of them after a single download: switching its own blend
+    re-reads nothing, and the compare page can price a foreign card on the
+    blend that card names."""
     freezer.move_to("2026-09-15 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
-        new=AsyncMock(side_effect=lambda _s, _y, blend: {(9, 15, 10): 1.0}),
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        new=_fake_blends(distinct=1.0, columns=2.0, flanders=3.0),
     ) as mock:
         await coord._ensure_rlp_weights("distinct")
         await coord._ensure_rlp_weights("distinct")  # fresh: no second download
-        await coord._ensure_rlp_weights("flanders")  # new blend: re-download
-    assert mock.await_count == 2
+        await coord._ensure_rlp_weights("flanders")  # already held: no download
+    assert mock.await_count == 1
     assert coord._rlp_blend == "flanders"
+    assert coord._rlp_weights == {(9, 15, 10): 3.0}
+    # Each blend answers its own curve, not the entry's.
+    assert coord.rlp_weights_for_blend("distinct") == {(9, 15, 10): 1.0}
+    assert coord.rlp_weights_for_blend("columns") == {(9, 15, 10): 2.0}
+    assert coord.rlp_weights_for_blend("flanders") == {(9, 15, 10): 3.0}
+    assert coord.rlp_weights_for_blend("nonesuch") is None
 
 
 async def test_ensure_rlp_weights_backs_off_after_failure(
@@ -395,7 +469,7 @@ async def test_ensure_rlp_weights_backs_off_after_failure(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
         new=AsyncMock(return_value={}),
     ) as mock:
         await coord._ensure_rlp_weights()
@@ -421,6 +495,109 @@ async def test_rlp_weights_survive_persist_round_trip(hass: HomeAssistant) -> No
     assert reloaded._rlp_weights == coord._rlp_weights
     assert reloaded._rlp_weights_year == 2026
     assert reloaded._rlp_blend == "flanders"
+
+
+async def test_every_held_blend_survives_the_persist_round_trip(
+    hass: HomeAssistant,
+) -> None:
+    """Not just the entry's own. Persisting one curve left the compare page
+    pricing foreign cards on the plain mean after every restart until the
+    profile next refreshed, which is a month away."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._rlp_blend_weights = {
+        "distinct": {(9, 15, 10): 1.0},
+        "columns": {(9, 15, 10): 2.0},
+        "flanders": {(9, 15, 10): 3.0},
+    }
+    coord._rlp_weights = coord._rlp_blend_weights["flanders"]
+    coord._rlp_weights_year = 2026
+    coord._rlp_blend = "flanders"
+    coord._rlp_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
+    entry.runtime_data = coord
+    await coord._save_persistent()
+
+    reloaded = BePricesCoordinator(hass, entry)
+    await reloaded.async_load_persistent()
+    assert reloaded._rlp_blend == "flanders"
+    assert reloaded._rlp_weights == {(9, 15, 10): 3.0}
+    for blend, value in (("distinct", 1.0), ("columns", 2.0), ("flanders", 3.0)):
+        assert reloaded.rlp_weights_for_blend(blend) == {(9, 15, 10): value}
+
+
+async def test_a_blob_written_before_blends_still_restores(
+    hass: HomeAssistant,
+) -> None:
+    """The old shape carried one curve under "weights" and the blend beside it.
+    It has to keep restoring as that entry's own blend."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._restore_rlp_weights(
+        {
+            "year": 2026,
+            "blend": "columns",
+            "fetched_at": "2026-09-01T00:00:00+00:00",
+            "weights": {"9,15,10": 2.0},
+        }
+    )
+    assert coord._rlp_blend == "columns"
+    assert coord._rlp_weights == {(9, 15, 10): 2.0}
+    assert coord.rlp_weights_for_blend("columns") == {(9, 15, 10): 2.0}
+    # Nothing was stored for the others, so the caller keeps the plain mean.
+    assert coord.rlp_weights_for_blend("flanders") is None
+    # And the entry does not look fresh, so the next tick reads the rest rather
+    # than leaving the compare page on the plain mean for a month after an
+    # upgrade. Restoring the fetch stamp here would do exactly that.
+    assert coord._rlp_fetched_at is None
+
+
+async def test_the_compare_page_weights_a_card_on_its_own_blend(
+    hass: HomeAssistant,
+) -> None:
+    """Three suppliers index on three reductions of the same sheet and all
+    three sit in one Flanders ranking. Reading the entry's own curve for every
+    row priced most of them on an index their card never names: measured on the
+    August 2026 Belgian day-ahead curve the reductions stood 2,2 EUR/MWh apart,
+    which is enough to reorder neighbouring rows."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        _coordinator_rlp_index_weights,
+    )
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._rlp_blend_weights = {
+        "distinct": {(9, 15, 10): 1.0},
+        "columns": {(9, 15, 10): 2.0},
+        "flanders": {(9, 15, 10): 3.0},
+    }
+    coord._rlp_blend = "distinct"
+    coord._rlp_weights = coord._rlp_blend_weights["distinct"]
+    entry.runtime_data = coord
+
+    def _card(blend: RlpBlend) -> Any:
+        return SimpleNamespace(
+            energy=SpotMonthlyRates(
+                factor=1.0, base=0.0, rlp_indexed=True, rlp_blend=blend
+            )
+        )
+
+    # The household is on the distinct curve; each quoted card still gets its
+    # own, and a card that names no RLP index gets nothing.
+    cards: tuple[tuple[RlpBlend, float], ...] = (
+        ("distinct", 1.0),
+        ("columns", 2.0),
+        ("flanders", 3.0),
+    )
+    for blend, value in cards:
+        weights = _coordinator_rlp_index_weights(entry, _card(blend))  # type: ignore[arg-type]
+        assert weights == {(9, 15, 10): value}
+    plain = SimpleNamespace(energy=SpotMonthlyRates(factor=1.0, base=0.0))
+    assert _coordinator_rlp_index_weights(entry, plain) is None  # type: ignore[arg-type]
+    assert _coordinator_rlp_index_weights(entry, None) is None
 
 
 async def test_the_tick_prices_energy_on_the_rlp_mean_and_injection_on_the_plain_one(

@@ -523,6 +523,10 @@ class BePricesCoordinator(
         self._rlp_weights: RlpWeights = {}
         self._rlp_weights_year: int | None = None
         self._rlp_blend: str = "distinct"
+        # Every blend this process holds, the entry's own included. The
+        # compare page prices foreign cards and each is billed on the index
+        # its own card names, so one reduction is not enough.
+        self._rlp_blend_weights: dict[str, RlpWeights] = {}
         self._rlp_fetched_at: datetime | None = None
         self._rlp_failed_at: datetime | None = None
         # Stable past days the spot walk should not ask for again yet, each
@@ -1794,14 +1798,20 @@ class BePricesCoordinator(
                 },
             }
         if self._rlp_weights and self._rlp_weights_year is not None:
+            # Every held blend, not only the entry's own: without the others a
+            # restart leaves the compare page pricing foreign cards on the
+            # plain mean until the profile next refreshes, a month away.
             payload["rlp_weights"] = {
                 "year": self._rlp_weights_year,
                 "blend": self._rlp_blend,
                 "fetched_at": (
                     self._rlp_fetched_at.isoformat() if self._rlp_fetched_at else None
                 ),
-                "weights": {
-                    f"{m},{d},{h}": v for (m, d, h), v in self._rlp_weights.items()
+                "blends": {
+                    blend: {f"{m},{d},{h}": v for (m, d, h), v in weights.items()}
+                    for blend, weights in (
+                        self._rlp_blend_weights or {self._rlp_blend: self._rlp_weights}
+                    ).items()
                 },
             }
         await self._store.async_save(payload)

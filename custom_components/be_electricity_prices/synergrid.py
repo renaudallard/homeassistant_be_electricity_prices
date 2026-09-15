@@ -53,9 +53,10 @@ import struct
 import tempfile
 import zipfile
 from datetime import datetime, timedelta
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, Final, get_args
 
 # The four parses below run over a REMOTE workbook. The stdlib parser
 # already refuses an EXTERNAL entity (it raises ParseError rather than
@@ -71,6 +72,7 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 import aiohttp
 
 from .providers._pdf import USER_AGENT
+from .providers.base import RlpBlend
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,20 +105,48 @@ SppWeights = dict[tuple[int, int, int], float]
 # reproduced to the cent only on that alignment.
 RlpWeights = dict[tuple[int, int, int], float]
 
+# Every reduction of the sheet a shipped card names. One download yields
+# all of them, so the compare page can price each card on its own index.
+RLP_BLENDS: Final[tuple[str, ...]] = get_args(RlpBlend)
 
-async def fetch_rlp_weights(
-    session: aiohttp.ClientSession, year: int, blend: str = "distinct"
-) -> RlpWeights:
-    """Return the year's hourly RLP weights in local time, or ``{}``.
 
-    The residential load profile (RLP0N) is the other Synergrid profile Belgian
-    cards index on: a card weights each hour's Belpex quotation by it. Synergrid
-    publishes it per DSO as a binary workbook,
-    ``RLP0N <year> Electricity all DSOs.xlsb``, about 3,4 MB, which
-    :func:`_parse_rlp_weights` reduces to one hourly curve for the requested
-    ``blend`` (see ``RlpBlend``). Never raises: a download or parse failure logs
-    and returns an empty mapping, and the caller keeps the plain arithmetic mean.
+@dataclass(frozen=True)
+class _RlpGroups:
+    """The RLP sheet reduced to its distinct DSO curves, before any blend.
+
+    Held between the read and the blends because the read is the expensive
+    half: one workbook pass yields this, and every blend is a combination of
+    ``curves`` that costs a fraction of it.
     """
+
+    # One (month, day, hour) per sheet row, in row order; the sheet is
+    # quarter-hourly, so several rows share a key and their weights add.
+    keys: list[tuple[int, int, int]]
+    curves: list[list[float]]
+    # How many columns carried each curve, and under which sub-area names.
+    counts: list[int]
+    names: list[list[str]]
+
+
+async def fetch_rlp_blends(
+    session: aiohttp.ClientSession, year: int, blends: Collection[str]
+) -> dict[str, RlpWeights]:
+    """Every requested blend of the year's RLP profile, from one download.
+
+    The blends are reductions of the same sheet, so asking for several is one
+    download and one workbook read with a cheap reduction apiece: measured on a
+    Raspberry Pi 5 over the 2026 file, 16 s to read the 35.043 rows and 2 s to
+    reduce them to one curve. That is what lets the compare page price each
+    card on the index its own card names without a download per blend.
+
+    A blend whose reduction fails is left out rather than failing the others,
+    since only the flanders one can fail on its own (no Fluvius column). Never
+    raises: a download or parse failure logs and returns what it has, and the
+    caller keeps the plain arithmetic mean for whatever is missing.
+    """
+    wanted = list(dict.fromkeys(blends))
+    if not wanted:
+        return {}
     url = f"{_BASE_URL}/{year}/RLP0N%20{year}%20Electricity%20all%20DSOs.xlsb"
     try:
         path = await _download(session, url, suffix=".xlsb")
@@ -124,7 +154,7 @@ async def fetch_rlp_weights(
         _LOGGER.warning("Synergrid RLP download failed (%s): %s", url, err)
         return {}
     try:
-        return await asyncio.to_thread(_parse_rlp_weights, path, blend)
+        return await asyncio.to_thread(_parse_rlp_blends, path, wanted)
     except (
         ImportError,  # pyxlsb missing: the manifest requirement was not installed
         zipfile.BadZipFile,  # an xlsb is a zip container; a non-workbook fails here
@@ -363,46 +393,40 @@ _RLP_YEAR_COLUMN = 1
 _RLP_CURVE_ROUNDING = 12
 
 
-def _parse_rlp_weights(path: Path, blend: str = "distinct") -> RlpWeights:
-    """Read the all-DSO RLP0N workbook into hourly local-time weights.
+def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeights]:
+    """Read the workbook once and reduce it to each requested blend.
 
-    ``pyxlsb`` is imported here rather than at module level so an install
-    without the manifest requirement fails the fetch, not the integration.
+    The read is the expensive half, so the sheet is grouped into its distinct
+    DSO curves once and every blend is a combination of those groups. A blend
+    that cannot be reduced is dropped from the result; the others stand.
     """
     from pyxlsb import open_workbook
 
     with open_workbook(str(path)) as workbook, workbook.get_sheet(_RLP_SHEET) as sheet:
-        return _rlp_weights_from_rows(
-            ([c.v for c in row] for row in sheet.rows()), blend
-        )
+        groups = _rlp_groups_from_rows(([c.v for c in row] for row in sheet.rows()))
+    out: dict[str, RlpWeights] = {}
+    for blend in dict.fromkeys(blends):
+        try:
+            out[blend] = _weights_for_blend(groups, blend)
+        except ValueError as err:
+            _LOGGER.warning("Synergrid RLP blend %s unusable: %s", blend, err)
+    if not out:
+        raise ValueError("RLP sheet yielded no usable blend")
+    return out
 
 
-def _rlp_weights_from_rows(
-    rows: Iterable[list[Any]], blend: str = "distinct"
-) -> RlpWeights:
-    """One DSO blend of the RLP profile, summed to local clock hours.
+def _rlp_groups_from_rows(rows: Iterable[list[Any]]) -> "_RlpGroups":
+    """The sheet's distinct DSO curves, which every blend is built from.
 
     Synergrid's workbook lists one column per DSO sub-area, but only three
     curves are distinct (Fluvius, the Walloon DSOs with the small ones,
-    Sibelga): the same Fluvius curve appears eight times. Three suppliers read
-    the same sheet three ways, and each reproduces its own published values to
-    the cent, so the blend is what the caller asks for:
+    Sibelga): the same Fluvius curve appears eight times. Curves are
+    deduplicated by value, not by name, so a sub-area that gains its own curve
+    counts once, and each group keeps how many columns share it and the names
+    they were printed under, which is what the blends select on.
 
-      - "distinct": the equal mean of the three distinct curves. Eneco's
-        Belpex-RLP-M; averaging the columns as printed instead weights Flanders
-        eight to one and misses Eneco by up to 2,2 EUR/MWh in summer.
-      - "columns": the mean over every column, i.e. each distinct curve
-        weighted by how many sub-areas share it. energie.be's Belpex_RLP,
-        which its card defines as the mean "van de verschillende
-        distributienetbeheerders" read literally.
-      - "flanders": the Fluvius curve alone, identified by name. Energy Knights
-        sells in Flanders only and bills on the customer's DSO.
-
-    Curves are deduplicated by value, not by name, so a sub-area that gains its
-    own curve counts once. Raises ``ValueError`` when the sheet has no curve,
-    the flanders blend finds no Fluvius column, or the weights do not sum to
-    about one over the year, which is what a wrong sheet or a truncated
-    download looks like.
+    Raises ``ValueError`` when the sheet holds no complete curve, which is what
+    a wrong sheet or a truncated download looks like.
     """
     header: list[Any] | None = None
     keys: list[tuple[int, int, int]] = []
@@ -452,9 +476,31 @@ def _rlp_weights_from_rows(
         group_names[group].append(str(col_names[idx]) if idx < len(col_names) else "")
     if not group_curves or not keys:
         raise ValueError("RLP sheet holds no complete curve")
-    chosen = _blend_curves(group_curves, group_counts, group_names, blend)
+    return _RlpGroups(keys, group_curves, group_counts, group_names)
+
+
+def _weights_for_blend(groups: "_RlpGroups", blend: str) -> RlpWeights:
+    """One DSO blend of the grouped curves, summed to local clock hours.
+
+    Three suppliers read the same sheet three ways, and each reproduces its own
+    published values to the cent, so the blend is what the caller asks for:
+
+      - "distinct": the equal mean of the three distinct curves. Eneco's
+        Belpex-RLP-M; averaging the columns as printed instead weights Flanders
+        eight to one and misses Eneco by up to 2,2 EUR/MWh in summer.
+      - "columns": the mean over every column, i.e. each distinct curve
+        weighted by how many sub-areas share it. energie.be's Belpex_RLP,
+        which its card defines as the mean "van de verschillende
+        distributienetbeheerders" read literally.
+      - "flanders": the Fluvius curve alone, identified by name. Energy Knights
+        sells in Flanders only and bills on the customer's DSO.
+
+    Raises ``ValueError`` when the flanders blend finds no Fluvius column, or
+    when the weights do not sum to about one over the year.
+    """
+    chosen = _blend_curves(groups.curves, groups.counts, groups.names, blend)
     weights: RlpWeights = {}
-    for index, key in enumerate(keys):
+    for index, key in enumerate(groups.keys):
         weights[key] = weights.get(key, 0.0) + chosen[index]
     total = sum(weights.values())
     if not 0.99 < total < 1.01:

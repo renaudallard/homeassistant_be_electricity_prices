@@ -478,6 +478,13 @@ opens a three-option menu:
   together puts the least certain number on top and calls it the cheapest. The
   one-off quote below is the place to cross that line, because it explains one
   pair at a time and has room to say why.
+  **Each row is priced on the index its own card names.** Several Flemish cards
+  settle on a monthly Belpex weighted by the residential load profile, and they
+  do not all weight it the same way: Eneco averages the three regional curves,
+  energie.be weights every DSO column, Energy Knights and Trevion read the
+  Flemish curve alone. Those are three different indices, about 2 €/MWh apart,
+  and all three can sit in one table, so the ranking resolves each card against
+  its own rather than against yours.
   The sweep is **bounded by a clock, not a timeout** — a tariff card cannot be
   parsed halfway and abandoned — so it fetches the cheapest cards first, and
   **the table is on screen while it fills**, rows appearing and reordering as

@@ -62,9 +62,10 @@ from .spot_stats import (
     _spp_weighted_month_mean,
 )
 from .synergrid import (
+    RLP_BLENDS,
     RlpWeights,
     SppWeights,
-    fetch_rlp_weights,
+    fetch_rlp_blends,
     fetch_spp_weights,
 )
 
@@ -252,6 +253,7 @@ class _SpotsMixin:
     _rlp_failed_at: datetime | None
     _rlp_weights_year: int | None
     _rlp_blend: str
+    _rlp_blend_weights: dict[str, RlpWeights]
     _complete_spot_days: set[date]
     _quarter_grid_days: set[date]
     _unloaded: bool
@@ -879,32 +881,83 @@ class _SpotsMixin:
             self._spp_failed_at = now
 
     def _restore_rlp_weights(self, blob: dict[str, Any]) -> None:
-        """Rehydrate the persisted RLP profile blob into ``_rlp_weights``."""
+        """Rehydrate the persisted RLP profile blob into the held blends."""
         year = blob.get("year")
-        raw = blob.get("weights")
-        if not isinstance(year, int) or not isinstance(raw, dict):
+        if not isinstance(year, int):
             return
-        parsed: RlpWeights = {}
-        for key, value in raw.items():
-            if not isinstance(key, str) or not isinstance(value, (int, float)):
-                continue
-            try:
-                month, day, hour = (int(x) for x in key.split(","))
-            except ValueError:
-                continue
-            parsed[(month, day, hour)] = float(value)
-        if not parsed:
-            return
-        self._rlp_weights = parsed
-        self._rlp_weights_year = year
         stored_blend = blob.get("blend")
-        self._rlp_blend = stored_blend if isinstance(stored_blend, str) else "distinct"
+        own = stored_blend if isinstance(stored_blend, str) else "distinct"
+        # Blobs written before the profile became blend-addressed carry one
+        # curve under "weights", which is the entry's own blend.
+        raw_blends = blob.get("blends")
+        if not isinstance(raw_blends, dict):
+            raw_blends = {own: blob.get("weights")}
+        held: dict[str, RlpWeights] = {}
+        for name, raw in raw_blends.items():
+            if not isinstance(name, str) or not isinstance(raw, dict):
+                continue
+            parsed: RlpWeights = {}
+            for key, value in raw.items():
+                if not isinstance(key, str) or not isinstance(value, (int, float)):
+                    continue
+                try:
+                    month, day, hour = (int(x) for x in key.split(","))
+                except ValueError:
+                    continue
+                parsed[(month, day, hour)] = float(value)
+            if parsed:
+                held[name] = parsed
+        if own not in held:
+            return
+        self._rlp_blend_weights = held
+        self._rlp_weights = held[own]
+        self._rlp_weights_year = year
+        self._rlp_blend = own
+        if not isinstance(blob.get("blends"), dict):
+            # Written before the profile became blend-addressed: the entry's own
+            # curve is all there is. Leave the fetch stamp unset so the next
+            # tick reads the others rather than leaving the compare page on the
+            # plain mean until the monthly refresh comes round.
+            return
         fetched = blob.get("fetched_at")
         if isinstance(fetched, str):
             try:
                 self._rlp_fetched_at = datetime.fromisoformat(fetched)
             except ValueError:
                 self._rlp_fetched_at = None
+
+    async def _shared_rlp_blends(self, year: int) -> dict[str, RlpWeights]:
+        """Every RLP blend for ``year``, downloaded at most once per process.
+
+        The sibling of :meth:`_shared_profile` for the one profile that has
+        more than one reduction. All of them come out of a single download and
+        a single workbook read (``fetch_rlp_blends``), so holding the two the
+        entry does not itself bill on costs a few seconds of CPU rather than
+        another 3,4 MB. The compare page needs them: it prices foreign cards,
+        and a card is billed on the index its own card names.
+
+        One lock for the file rather than one per blend, so two entries
+        starting together still share the single download.
+        """
+        cache = _profile_cache(self.hass)
+        now = dt_util.utcnow()
+        async with _profile_lock(self.hass, ("rlp", year, "")):
+            held: dict[str, RlpWeights] = {}
+            missing: list[str] = []
+            for blend in RLP_BLENDS:
+                row = cache.get(("rlp", year, blend))
+                if row is not None and (now - row[1]) < timedelta(
+                    days=_RLP_REFRESH_DAYS
+                ):
+                    held[blend] = row[0]
+                else:
+                    missing.append(blend)
+            if missing:
+                fetched = await fetch_rlp_blends(self._session, year, missing)
+                for blend, weights in fetched.items():
+                    cache[("rlp", year, blend)] = (weights, now)
+                    held[blend] = weights
+            return held
 
     async def _ensure_rlp_weights(self, blend: str = "distinct") -> None:
         """Refresh the Synergrid RLP profile for the current year if stale.
@@ -913,10 +966,11 @@ class _SpotsMixin:
         month mean (Eneco Flex on the distinct-curve mean, Energy Knights on
         the Fluvius curve, energie.be on the column mean) and for every entry
         on the compensation regime, whose yearly net is spread over the year by
-        the profile. ``blend`` picks which DSO reduction to fetch; a change of
-        blend re-downloads, since the curves differ. Soft-fail like the SPP
-        profile: on error keep what is held, back off ``_RLP_RETRY_TTL``, and
-        the caller prices the plain mean, or the metered slices, meanwhile.
+        the profile. ``blend`` names the entry's own reduction, which is the one
+        every sensor beside it reads; the others come off the same read and are
+        held for the compare page. Soft-fail like the SPP profile: on error keep
+        what is held, back off ``_RLP_RETRY_TTL``, and the caller prices the
+        plain mean, or the metered slices, meanwhile.
         """
         now = dt_util.utcnow()
         year = dt_util.now().year
@@ -934,11 +988,10 @@ class _SpotsMixin:
             and (now - self._rlp_failed_at) < _RLP_RETRY_TTL
         ):
             return
-        weights = await self._shared_profile(
-            "rlp", year, blend, _RLP_REFRESH_DAYS, fetch_rlp_weights, year, blend
-        )
-        if weights:
-            self._rlp_weights = weights
+        held = await self._shared_rlp_blends(year)
+        if held.get(blend):
+            self._rlp_blend_weights = held
+            self._rlp_weights = held[blend]
             self._rlp_weights_year = year
             self._rlp_blend = blend
             self._rlp_fetched_at = now
@@ -946,8 +999,32 @@ class _SpotsMixin:
         else:
             self._rlp_failed_at = now
 
+    def rlp_weights_for_blend(self, blend: str) -> RlpWeights | None:
+        """The held RLP curve for ``blend``, or ``None`` when it is not held.
+
+        A card is billed on the index its own card names, so the compare page
+        asks for the blend of the side it is pricing rather than reading the
+        entry's own. ``None`` means this process has not loaded that reduction,
+        and the caller falls back to the plain arithmetic mean exactly as an
+        entry with no profile at all does: a foreign blend is a different index,
+        not a coarser one, and standing in for it understates or overstates
+        that card alone.
+
+        The entry's own blend answers from ``_rlp_weights`` when the map has
+        not been filled, so asking for it is never worse than reading that
+        attribute directly.
+        """
+        held = self._rlp_blend_weights.get(blend)
+        if not held and blend == self._rlp_blend:
+            held = self._rlp_weights
+        return held or None
+
     def _rlp_weighted_month_mean(
-        self, year: int, month: int, extra_spots: dict[datetime, float]
+        self,
+        year: int,
+        month: int,
+        extra_spots: dict[datetime, float],
+        blend: str | None = None,
     ) -> float | None:
         """RLP-weighted mean of the delivery month's Day-Ahead spots, or None.
 
@@ -956,11 +1033,17 @@ class _SpotsMixin:
         local-delivery-month filter as :meth:`_monthly_spot_mean`; ``None``
         when the profile or the month's spots are unavailable, and the caller
         falls back to the plain mean.
+
+        ``blend`` names which reduction to weight by, for a caller pricing a
+        card other than the entry's own; the default is the entry's.
         """
-        if not self._rlp_weights:
+        weights = (
+            self._rlp_weights if blend is None else self.rlp_weights_for_blend(blend)
+        )
+        if not weights:
             return None
         return _rlp_weighted_month_mean(
-            self._billable_spots(extra_spots), self._rlp_weights, year, month
+            self._billable_spots(extra_spots), weights, year, month
         )
 
     def _spp_weighted_month_mean(

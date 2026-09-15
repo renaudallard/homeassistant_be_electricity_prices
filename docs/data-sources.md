@@ -682,13 +682,34 @@ SPP file applies, with a `.xlsb` suffix. The coordinator fetches the profile for
 an entry whose energy leg carries `rlp_indexed` (Eneco Zon & Wind Flex and Flex
 One, Energy Knights Essentia, energie.be Variabel) and holds an ENTSO-E key, and
 for every entry on the compensation regime, whose yearly net it spreads over the
-year by that profile (`_NetAllocation`, see the pricing model). The blend is the
-entry's own energy leg's (`_rlp_blend_for`), defaulting to `distinct` for a
-compensation entry with no RLP energy leg; a change of blend re-downloads, since
-the curves differ, and the blend is persisted beside the weights. It refreshes
-the profile monthly, persists it beside the SPP weights, and `_energy_month_spot`
+year by that profile (`_NetAllocation`, see the pricing model). It refreshes the
+profile monthly, persists it beside the SPP weights, and `_energy_month_spot`
 picks the weighted mean over the plain one for an RLP-indexed leg in the live
 tick, the year-to-date walk, the backfill and the compare page.
+
+Every blend comes out of one download. The three are reductions of the same
+sheet and the read is the expensive half (16 s against 2 s apiece on a Raspberry
+Pi 5 over the 2026 file), so `fetch_rlp_blends` groups the sheet into its
+distinct DSO curves once and combines them per blend, and the coordinator keeps
+and persists all of them. The entry's own blend is its energy leg's
+(`_rlp_blend_for`), defaulting to `distinct` for a compensation entry with no
+RLP energy leg; that one is what every sensor beside it reads.
+
+The others exist for the compare page, which prices cards the household is not
+on. A card is billed on the index its own card names, and the three are
+different indices rather than one at three resolutions: on the August 2026
+Belgian day-ahead curve they stood at 133,44 (`distinct`), 134,93 (`columns`)
+and 135,66 (`flanders`) EUR/MWh, against a plain arithmetic mean of 129,32. All
+three sit in a single Flanders ranking, so reading the entry's own for every row
+priced most of them 2,2 EUR/MWh away from what they bill, which is enough to
+reorder neighbouring rows on a page whose whole job is the order.
+`_coordinator_rlp_index_weights` therefore looks up the quoted card's blend, and
+`_ytd_hourly_energy` takes it as `rlp_index_weights` beside the household's own
+`rlp_weights`: the first is the published index a month leg resolves against,
+the second is the load shape a compensation net is spread over and a bi-hourly
+day split by, and only the entry's own bill wants the same curve for both. A
+blend this process has not loaded falls back to the plain arithmetic mean, the
+same answer an entry with no profile at all gets; the dialog never downloads.
 
 ### The SPP profile
 
