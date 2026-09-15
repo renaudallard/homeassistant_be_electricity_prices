@@ -5161,6 +5161,25 @@ def test_every_sensor_name_exists_in_all_translations() -> None:
         assert got - ref == set(), f"{path.name} has stray {sorted(got - ref)}"
 
 
+def test_no_user_facing_string_stands_a_dash_on_two_hyphens() -> None:
+    """A double hyphen renders as two hyphens, not as a dash.
+
+    The sweep that took these out of the comments and docstrings read the .py
+    files only, so four Repairs messages kept theirs in all four languages.
+    """
+    import pathlib
+
+    base = pathlib.Path("custom_components/be_electricity_prices")
+    files = [
+        base / "strings.json",
+        *sorted(base.joinpath("translations").glob("*.json")),
+    ]
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        assert "--" not in text, f"{path.name} spells a dash as two hyphens"
+        assert "\u2014" not in text, f"{path.name} carries an em dash"
+
+
 def test_the_compare_quote_helpers_read_only_entry_data() -> None:
     """The compare flow hands these helpers a stand-in ConfigEntry.
 
