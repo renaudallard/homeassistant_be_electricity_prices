@@ -1116,7 +1116,7 @@ Notes:
   rather than scattered across several. Measured on a Raspberry Pi 5 over 2087 tests: 21:52
   serial, 13:27 on two workers, 9:58 on four. Each worker pays one Home Assistant import, which
   is why this is not in `addopts`: on a single file that fixed cost dominates and four workers
-  take 2,4x as long as none (128 s against 310 s over 101 tests).
+  take 2,4x as long as none (310 s against 128 s over 101 tests).
 - To iterate on a single provider, target its module WITHOUT the split, for example
   `pytest tests/test_bolt.py -q`.
 - The full live check is network-bound and can be run locally with
