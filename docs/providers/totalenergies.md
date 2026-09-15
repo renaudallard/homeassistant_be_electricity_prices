@@ -123,6 +123,18 @@ stores each month's card as it was live, and the month cache reads it before
 proxying the current snapshot, so past months from then on bill at their own
 rate here too; earlier months still take the current snapshot as a proxy.
 
+That proxy is permanent for January to August 2026, and the archive can only
+grow forward. Checked on 15 September 2026, against
+`ELECTRICITE-FIXE_ELECTRICITY_WAL_FR.pdf`: `latest/` is the only path that
+exists. Every dated shape tried in its place (`2026-08/`, `202608/`,
+`08-2026/`, `2026/`, plus `archive/` and `previous/`) came back with the
+site's 205 KB HTML 404 page, which it serves under **HTTP 200** rather than a
+404 status. Read the content type, never the status, when probing this host
+by hand; the extractor is safe either way, since both PDF readers reject that
+page outright (`invalid pdf header`, `No /Root object!`). The one avenue not
+yet ruled out is a web.archive.org capture of the `latest/` URL, which could
+not be checked because the Internet Archive was offline that day.
+
 ### Discovery (CI only)
 
 `discover` (`totalenergies.py`) fetches the human `cartes-tarifaires` listing
