@@ -6751,6 +6751,89 @@ def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -
     assert _coordinator_spp_weights(bare, spp_card, own=True) is None  # type: ignore[arg-type]
 
 
+def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:
+    """The simple model the page falls back to when the archive engine throws
+    priced its two year-to-date rows without one, while the engine path and
+    every annual row beside them carried one. On a 200 EUR card eight months
+    into the first year that is about 141 EUR missing from a figure printed
+    next to figures that have it.
+
+    Read from the source, like its sibling above, so a tenth call added later
+    is held to the same rule rather than to whoever remembers.
+    """
+    import ast
+    import inspect
+
+    from custom_components.be_electricity_prices import compare_flow
+
+    tree = ast.parse(inspect.getsource(compare_flow))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_annual_bill"
+    ]
+    assert calls, "the compare page must still price a bill somewhere"
+    for call in calls:
+        assert "welcome_credit_eur" in {kw.arg for kw in call.keywords}, (
+            f"_annual_bill call at line {call.lineno} omits welcome_credit_eur"
+        )
+
+
+def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
+    """Not the year-ahead figure the annual rows carry: what these days have
+    actually accrued, and nothing for a card that grants none."""
+    from datetime import date, datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _ytd_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, yearly_fixed_fee=60.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    now = datetime(2026, 9, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    args = (
+        "ores",
+        "wallonia",
+        None,
+        "mono",
+        "bi_horaire",
+        None,
+        2500.0,
+    )
+    granted = _ytd_welcome_credit(
+        snap,
+        SimpleNamespace(welcome_credit_eur=200.0, welcome_credit_kind="pro_rata"),
+        date(2026, 1, 1),
+        now,
+        *args,
+        window_start=date(2026, 1, 1),
+        fee_proration=0.71,
+    )
+    # 258 of the first year's 365 days, under the eligible cap.
+    assert granted == pytest.approx(200.0 * 258 / 365, abs=0.01)
+    none = _ytd_welcome_credit(
+        snap,
+        SimpleNamespace(welcome_credit_eur=None),
+        date(2026, 1, 1),
+        now,
+        *args,
+        window_start=date(2026, 1, 1),
+        fee_proration=0.71,
+    )
+    assert none == 0.0
+
+
 def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     """The year-to-date engine takes its pricing inputs as keyword arguments,
     and a call site that omits one degrades silently rather than failing.

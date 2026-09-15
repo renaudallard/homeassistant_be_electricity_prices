@@ -813,6 +813,16 @@ The per-slot TOU triplet is never clamped. No card ships both a triplet and a
 floor, and `tests/test_custom.py` pins that rather than the pricing code
 carrying a branch that cannot run.
 
+The compare page's simple model, the one it falls back to when the archive
+engine throws, carries the welcome credit on its year-to-date rows too
+(`_ytd_welcome_credit`, `compare_quote.py`). Scoped to the window rather than the
+year the annual rows quote, with the standing charge in the eligible base
+prorated the way the bill beside it prorates it. It carried none at all, so a row
+the engine priced included a credit and the same row from the fallback did not,
+beside annual figures that always do:
+`test_every_compare_annual_bill_carries_a_welcome_credit` reads the source and
+holds every call to it.
+
 When the compare page has no measured export shape it falls back to weighting
 each slot by how long it is active, and those durations are counted off
 `pricing.tou_slot` itself over a year (`_tou_slot_hours`, `compare_quote.py`)

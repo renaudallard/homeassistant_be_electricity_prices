@@ -123,6 +123,7 @@ from .compare_quote import (
     _annual_bill,
     _annual_volume,
     _annual_welcome_credit,
+    _ytd_welcome_credit,
     _card_caveats,
     _compare_injection_credit,
     _consumption_weighted_spot,
@@ -2783,6 +2784,25 @@ class _CompareStepsMixin(OptionsFlow):
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
                 meter=current_meter,
+                # Window-scoped, not the year-ahead figure the annual rows
+                # carry: this is what these days have already accrued. The
+                # engine path above credits it, so a row that fell back here
+                # was the only one on the page priced without one.
+                welcome_credit_eur=_ytd_welcome_credit(
+                    current_snapshot,
+                    hh.signing_snapshot,
+                    _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
+                    dt_util.as_local(now_utc),
+                    dso,
+                    region,
+                    await _spot_for(current_snapshot),
+                    current_meter,
+                    dso_mode,
+                    hour_weights,
+                    ytd_kwh,
+                    window_start=ytd_from,
+                    fee_proration=fee_proration,
+                ),
             )
             compare_ytd = _annual_bill(
                 other_snap,
@@ -2797,6 +2817,23 @@ class _CompareStepsMixin(OptionsFlow):
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
                 meter=meter,
+                # A candidate is granted what its own card prints today, on the
+                # same window, exactly as the annual row beside it reads it.
+                welcome_credit_eur=_ytd_welcome_credit(
+                    other_snap,
+                    other_snap,
+                    today_local,
+                    dt_util.as_local(now_utc),
+                    dso,
+                    region,
+                    await _spot_for(other_snap),
+                    meter,
+                    other_dso_mode,
+                    hour_weights,
+                    ytd_kwh,
+                    window_start=ytd_from,
+                    fee_proration=fee_proration,
+                ),
             )
             placeholders["current_ytd"] = f"{current_ytd:.2f}"
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"

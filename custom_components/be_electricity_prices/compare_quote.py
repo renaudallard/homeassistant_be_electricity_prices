@@ -1138,6 +1138,61 @@ def _annual_fees(
     return static + capacity + prosumer
 
 
+def _ytd_welcome_credit(
+    snapshot: Any,
+    credited: Any,
+    start: date | None,
+    when_now: datetime,
+    dso: str,
+    region: str,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+    hour_weights: dict[int, float] | None,
+    consumption_kwh: float,
+    *,
+    window_start: date,
+    fee_proration: float,
+) -> float:
+    """The welcome credit the year-to-date window has already accrued.
+
+    The window-scoped sibling of :func:`_annual_welcome_credit`, for the simple
+    model the compare page falls back to when the archive engine throws. That
+    path carried no credit at all, so a row priced by the engine included one
+    and the same row priced by the fallback did not, next to annual figures
+    that always do.
+
+    Same eligible base as the annual helper, over the window rather than the
+    year: the standing charge is prorated the way the bill beside it prorates
+    it, since the cap is what these days were actually charged.
+    """
+    from .fees import _welcome_credit_eur
+    from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
+
+    if not getattr(credited, "welcome_credit_eur", None):
+        return 0.0
+    energy_per_kwh = _tou_weighted_per_kwh(
+        snapshot,
+        dso,
+        region,
+        when_now,
+        spot,
+        meter,
+        dso_mode,
+        hour_weights,
+        component="energy",
+    )
+    if energy_per_kwh is None:
+        return 0.0
+    eligible = (
+        consumption_kwh * energy_per_kwh
+        + float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
+        * fee_proration
+        + consumption_kwh * renewables_eur_per_kwh(snapshot.taxes, region)
+    )
+    return _welcome_credit_eur(credited, start, window_start, when_now.date(), eligible)
+
+
 def _annual_welcome_credit(
     snapshot: Any,
     credited: Any,
