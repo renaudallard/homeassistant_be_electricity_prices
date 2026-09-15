@@ -872,7 +872,7 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 | Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml` |
 | Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml`) |
 | Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml`) |
-| Tests | `pytest tests/ -q` | `.github/workflows/test.yml` |
+| Tests | `pytest tests/ -q -n auto --dist loadfile` | `.github/workflows/test.yml` |
 
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml`).
 The non-strict pass over `tests/` and `scripts/` is why the `# type: ignore[arg-type]` convention
@@ -1088,7 +1088,7 @@ ruff format .          # workflow uses `ruff format --check .`; run the formatte
 mypy --strict custom_components/be_electricity_prices
 mypy custom_components/ tests/ scripts/
 python scripts/doc_ref_check.py
-pytest tests/ -q
+pytest tests/ -q -n auto --dist loadfile
 ```
 
 Notes:
@@ -1101,7 +1101,12 @@ Notes:
   edit: it fails on a pin past the end of its file or on a dead line, and on a rise in the
   rewritable or unanchored-markdown counts. `--verbose` adds the moved-symbol suspects, and
   `--write` repins only what an AST symbol can resolve.
-- To iterate on a single provider, target its module, for example
+- The suite is split across cores BY FILE, so a file's fixtures are built once in one worker
+  rather than scattered across several. Measured on a Raspberry Pi 5 over 2087 tests: 21:52
+  serial, 13:27 on two workers, 9:58 on four. Each worker pays one Home Assistant import, which
+  is why this is not in `addopts`: on a single file that fixed cost dominates and four workers
+  take 2,4x as long as none (128 s against 310 s over 101 tests).
+- To iterate on a single provider, target its module WITHOUT the split, for example
   `pytest tests/test_bolt.py -q`.
 - The full live check is network-bound and can be run locally with
   `python scripts/live_check.py`; it writes `catalog_report.md` and `drift_report.md` to the repo

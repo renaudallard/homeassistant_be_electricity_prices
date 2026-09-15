@@ -23,3 +23,5 @@ pytest-freezer==0.4.9
 pytest-homeassistant-custom-component==0.13.316
 pyxlsb==1.0.10
 ruff==0.16.0
+# Splits the suite across cores for the full-suite runs; see ci-and-testing.md.
+pytest-xdist==3.8.0

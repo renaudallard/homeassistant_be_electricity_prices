@@ -53,4 +53,10 @@ jobs:
         # runs before the suite and reports in seconds.
         run: python scripts/doc_ref_check.py
       - name: Tests
-        run: pytest tests/ -q
+        # Split across the runner's cores by file, so a file's fixtures are
+        # built once in one worker rather than scattered. Measured on a
+        # Raspberry Pi 5 over 2087 tests: 21:52 serial, 13:27 on two workers,
+        # 9:58 on four. Per worker it costs one Home Assistant import, which
+        # is why this is on the full suite and not in addopts: it would make
+        # a single-file run during iteration slower, not faster.
+        run: pytest tests/ -q -n auto --dist loadfile
