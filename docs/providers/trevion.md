@@ -78,6 +78,18 @@ schedule and a single-register meter at the `Enkelvoudig` rate. The flag is
 what makes the pair readable; the engine ignores an unflagged pair on a
 fixed or variable card, so no other supplier is affected.
 
+Every path that credits the feed-in asks per register. The live sensor and the
+today/tomorrow array resolve the hour's own, and the year-to-date walk asks once
+for each: it is a per-day walk holding the day and night kWh apart already, so it
+takes one hour inside each block (`_DAY_REGISTER_HOUR` / `_NIGHT_REGISTER_HOUR`,
+`ytd_cost.py`) and credits each register at its own rate. It used to ask without
+the energy leg, the hour, the meter or the region, which are the four arguments
+that reach the register branch, so the whole year was credited the flat printed
+rate while the sensor beside it credited 6,3329 c/kWh by day against the printed
+5,7615: about 6 EUR a year on 3.500 kWh exported, and a contradiction visible
+hour by hour. A card with no flagged pair answers the same rate to both
+questions, so nothing else moved.
+
 ### Monthly indexed
 
 `_extract_monthly` reads the VAT-exclusive formula printed as

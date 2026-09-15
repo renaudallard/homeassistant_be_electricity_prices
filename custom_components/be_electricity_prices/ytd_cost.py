@@ -41,6 +41,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
 from datetime import datetime
+from datetime import time
 from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -131,6 +132,16 @@ from .synergrid import (
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# Which hour stands for each meter register when a card prints one feed-in rate
+# per register. The walk is per DAY and the register split is the DSO's day and
+# night schedule, so the rate is asked for one hour inside each block: 10:00 is
+# always a weekday day register and 03:00 always night. On a weekend or a
+# holiday the whole day is the night register, both questions answer the night
+# rate, and the day kWh a meter did not record there is zero anyway.
+_DAY_REGISTER_HOUR = 10
+_NIGHT_REGISTER_HOUR = 3
 
 
 def _days_through(start: date, end: date) -> list[date]:
@@ -1275,22 +1286,46 @@ async def _compute_current_year_cost(
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
                 d_cost = total_cons * single_bd.all_in
-            inj_rate = _historical_injection_rate(
-                snap_d.injection,
-                _spp_injection_spot(
-                    None,
-                    monthly_mean=_injection_on_month_mean(snap_d),
-                    strict=_injection_is_spp_indexed(snap_d),
-                    spp_weights=spp_weights,
-                    bucket=day_bucket,
-                    year=day.year,
-                    month=day.month,
-                    today=today,
-                    cache=day_spp,
-                ),
+            inj_spot = _spp_injection_spot(
+                None,
+                monthly_mean=_injection_on_month_mean(snap_d),
+                strict=_injection_is_spp_indexed(snap_d),
+                spp_weights=spp_weights,
+                bucket=day_bucket,
+                year=day.year,
+                month=day.month,
+                today=today,
+                cache=day_spp,
             )
-            if inj_rate is not None:
-                d_cost -= total_inj * inj_rate
+
+            # Asked once per register, because a card can print one feed-in
+            # rate per meter register (Trevion Vast) and this walk holds the
+            # day and night kWh apart already. The routing is the shared
+            # helper's: it reads the pair only when the card flags it as the
+            # registers' own rates and the meter has two, so every other card
+            # answers the same rate to both questions and the sum below
+            # collapses to what it always was. Without the four arguments the
+            # helper cannot reach that branch at all, and a Trevion Vast
+            # year-to-date was credited the flat printed rate while the
+            # injection_price sensor beside it credited per register.
+            def _rate_at(hour: int) -> float | None:
+                return _historical_injection_rate(
+                    snap_d.injection,
+                    inj_spot,
+                    energy=snap_d.energy,
+                    when=datetime.combine(
+                        day, time(hour), tzinfo=dt_util.DEFAULT_TIME_ZONE
+                    ),
+                    meter=meter,
+                    region=region,
+                )
+
+            day_rate = _rate_at(_DAY_REGISTER_HOUR)
+            night_rate = _rate_at(_NIGHT_REGISTER_HOUR)
+            if day_rate is not None:
+                d_cost -= d_inj * day_rate
+            if night_rate is not None:
+                d_cost -= n_inj * night_rate
         else:  # none
             if bi_capable:
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in

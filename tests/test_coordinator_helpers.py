@@ -1189,6 +1189,110 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     assert cost == pytest.approx(-30.0 * live)
 
 
+async def test_ytd_credits_a_register_pair_per_register(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card can print one feed-in rate per meter register (Trevion Vast),
+    and the day walk holds the day and night kWh apart, so each must be
+    credited at its own.
+
+    The walk asked the shared helper for a rate without telling it the energy
+    leg, the hour, the meter or the region, and those four are what reach the
+    register branch at all. So the whole year was credited the flat printed
+    rate while the injection_price sensor beside it credited per register: on
+    this card 6,3329 c/kWh by day against 5,7615 printed, a contradiction the
+    user can see hour by hour.
+
+    A fixed card never takes the hourly path, so this walk is the only one a
+    Trevion Vast entry ever runs. The default Walloon entry is used because
+    its schedule has been uniform every day since 2026-01-01, so each of the
+    three walked days splits the same way and the arithmetic stays readable.
+    """
+    freezer.move_to("2026-01-04 12:00:00+01:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, peak=0.11, offpeak=0.09),
+        injection=InjectionRates(
+            current=0.057615, peak=0.063329, offpeak=0.043330, bi_hourly=True
+        ),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="bi",
+        consumption_kwh="sensor.cons_total",
+        day_injection_kwh="sensor.inj_day",
+        night_injection_kwh="sensor.inj_night",
+    )
+    days = [date(2026, 1, day) for day in (1, 2, 3)]
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.inj_day":
+            return {day: 6.0 for day in days}
+        if entity_id == "sensor.inj_night":
+            return {day: 4.0 for day in days}
+        return {}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+        )
+
+    # Nothing consumed, so the bill is the credit alone. Each register at its
+    # own rate, not 30 kWh at the printed 0,057615.
+    per_register = -3 * (6.0 * 0.063329 + 4.0 * 0.043330)
+    flat = -30 * 0.057615
+    assert cost == pytest.approx(per_register, abs=1e-6)
+    assert cost != pytest.approx(flat, abs=1e-6)
+
+
+async def test_ytd_credit_is_unchanged_for_a_card_with_no_register_pair(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Asking per register must collapse to one rate for every other card, or
+    the fix above would move every static contract's feed-in credit."""
+    freezer.move_to("2026-01-04 12:00:00+01:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, peak=0.11, offpeak=0.09),
+        injection=InjectionRates(current=0.05),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="bi",
+        consumption_kwh="sensor.cons_total",
+        day_injection_kwh="sensor.inj_day",
+        night_injection_kwh="sensor.inj_night",
+    )
+    days = [date(2026, 1, day) for day in (1, 2, 3)]
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.inj_day":
+            return {day: 6.0 for day in days}
+        if entity_id == "sensor.inj_night":
+            return {day: 4.0 for day in days}
+        return {}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+        )
+    assert cost == pytest.approx(-30 * 0.05, abs=1e-6)
+
+
 async def test_ytd_spot_injection_credit_uses_each_month_own_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:
