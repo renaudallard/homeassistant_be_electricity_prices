@@ -943,10 +943,53 @@ async def test_a_page_image_card_is_read_by_ocr_and_the_row_says_so(
     assert summary.stored == 1
     assert summary.failed == []
     row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
-    assert row["_ocr"] is True
+    assert any(source.get("ocr") for source in row["_sources"])
     assert row["energy"]["single"] == 0.2
     # Nothing is left owing an explanation: the card parsed.
     assert not (out / "unparsed.json").exists()
+
+
+async def test_the_ocr_mark_survives_a_text_served_from_the_archive(
+    tmp_path: Path,
+) -> None:
+    """A card whose bytes have not changed is served its stored text without
+    the reader running at all, and the reader is what discovers that the card
+    has no text layer. So the fact lasted exactly one day: every row written
+    after the first said the card had been read normally, and an installation
+    reading those rows never told its user the prices came off pixels.
+
+    Measured on the live archive before this: not one of 1.686 rows carried the
+    mark, including four Ecofix months that are read off page images.
+    """
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 40
+
+    # Day one: the reader refuses, the engine reads the pixels, the row says so.
+    with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
+        await ac.archive(
+            out,
+            extractors=[_extractor(_page_image_fetch(session))],
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert any(source.get("ocr") for source in row["_sources"]), (
+        "the fact belongs beside the text, or the next run cannot learn it"
+    )
+
+    # Day two: same bytes, so the stored text is served and no OCR runs. The
+    # engine is not even installed, which is what proves it was not asked.
+    await ac.archive(
+        out,
+        extractors=[_extractor(_page_image_fetch(session))],
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert any(source.get("ocr") for source in row["_sources"]), (
+        "a served text must not lose what the card is"
+    )
 
 
 async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
@@ -964,7 +1007,7 @@ async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
         sleep=_no_sleep,
     )
     row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
-    assert "_ocr" not in row
+    assert not any(source.get("ocr") for source in row["_sources"])
 
 
 async def test_without_the_engine_a_page_image_card_is_refused_as_before(
@@ -1061,7 +1104,7 @@ async def test_a_card_nobody_could_read_is_tried_again_when_the_reader_changes(
         )
     assert summary.reparsed == 1
     row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
-    assert row["_ocr"] is True
+    assert any(source.get("ocr") for source in row["_sources"])
     # Nothing left owing an explanation: the month has a row now.
     assert not (out / "unparsed.json").exists()
 

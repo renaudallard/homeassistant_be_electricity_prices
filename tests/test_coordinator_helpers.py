@@ -2392,14 +2392,31 @@ def _archive_row(snapshot: SupplierSnapshot | None) -> ArchivedCard | None:
 
 @pytest.mark.parametrize(
     ("mark", "expected"),
-    [({"_ocr": True}, True), ({}, False), ({"_ocr": False}, False)],
+    [
+        # The mark sits on the SOURCE that names the document, because that is
+        # what it describes. A row reading two documents says which was which:
+        # 137 of the archive's rows read two, and marking the row instead made
+        # a readable card look unreadable for as long as it was read beside one.
+        ({"_sources": [{"pdf": "a", "ocr": "1"}]}, True),
+        ({"_sources": [{"pdf": "a"}]}, False),
+        ({"_sources": [{"pdf": "a"}, {"pdf": "b", "ocr": "1"}]}, True),
+        ({"_sources": [{"pdf": "a"}, {"pdf": "b"}]}, False),
+        ({"_sources": []}, False),
+        ({}, False),
+        # The row-level copy the archive used to carry is not read any more,
+        # and never reached a single installation: it was never once written.
+        ({"_ocr": True, "_sources": [{"pdf": "a"}]}, False),
+        # Junk where the sources should be must not raise.
+        ({"_sources": "not a list"}, False),
+        ({"_sources": ["not a dict"]}, False),
+    ],
 )
 async def test_an_archive_row_says_whether_its_card_was_read_by_ocr(
     mark: dict[str, object], expected: bool
 ) -> None:
-    """The archive walk marks a row whose card carried no text layer and had
-    to be read off its pixels. Reading that mark back is all an installation
-    does about OCR: the decoding happened in CI, this is JSON."""
+    """The archive walk marks the document a row read off its pixels. Reading
+    that back is all an installation does about OCR: the decoding happened in
+    CI, this is JSON."""
     row = _snapshot_to_dict(_archive_snapshot("2026-09"), dt_util.utcnow())
     row.update(mark)
 

@@ -747,14 +747,34 @@ def restore_monthly_rows(
     return restored
 
 
+def _row_read_by_ocr(row: dict[str, Any]) -> bool:
+    """Whether any document this row read had to be read off its pixels.
+
+    The archive marks the SOURCE, not the row: ``ocr`` sits beside the pdf
+    digest it describes, so a row that reads a readable card and an unreadable
+    one says which was which. This is the row-level question the Repairs card
+    asks, answered by looking.
+    """
+    sources = row.get("_sources")
+    if not isinstance(sources, list):
+        return False
+    return any(isinstance(source, dict) and source.get("ocr") for source in sources)
+
+
 @dataclass(frozen=True)
 class ArchivedCard:
     """One month's row off the repository's card archive.
 
-    ``read_by_ocr`` is the row's own ``_ocr`` mark: the card that month
-    carried no text layer and the archive walk read it off its pixels. It
-    rides beside the snapshot because the figures are the same shape either
-    way and only the user needs to know the difference.
+    ``read_by_ocr`` says the card that month carried no text layer and the
+    archive walk read it off its pixels. It rides beside the snapshot because
+    the figures are the same shape either way and only the user needs to know
+    the difference.
+
+    Read off the sources rather than a mark on the row, because the fact
+    belongs to a document: a row can read two, and only one of them need be
+    the unreadable one (137 of the archive's rows read two cards). The row
+    once carried its own derived copy as ``_ocr``; nothing kept it in step
+    with the sources, and it is gone.
     """
 
     snapshot: SupplierSnapshot
@@ -802,7 +822,7 @@ async def _archived_card_from_github(
             snapshot=_snapshot_from_dict(
                 row, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
             ),
-            read_by_ocr=bool(row.get("_ocr")),
+            read_by_ocr=_row_read_by_ocr(row),
         )
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)

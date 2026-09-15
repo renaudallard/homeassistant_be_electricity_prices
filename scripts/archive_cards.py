@@ -350,9 +350,11 @@ class _Cards(StoredTexts):
         # Downloaded, not recorded anywhere yet, waiting for the row that
         # names it to say which month it is for.
         self.pending: dict[str, bytes] = {}
-        # Digests of the cards this run had to read off their pixels, so the
-        # rows they produced can say they were read that way.
-        self.ocr: set[str] = set()
+        # Digests of the cards read off their pixels, so the rows they produce
+        # can say they were read that way. Seeded by ``StoredTexts`` from the
+        # rows already on the archive and added to whenever this run OCRs one:
+        # a card whose bytes have not changed is served its stored text without
+        # the reader running, so the fact has to outlive the run that found it.
         # Every card downloaded for the target being walked, as (url, digest),
         # whether or not it rendered. ``calls`` cannot answer this: it is
         # appended to after the render, and a card published as page images
@@ -623,6 +625,10 @@ def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     digest = cards.digest_for(url)
     if digest is not None:
         entry["pdf"] = digest
+        if digest in cards.ocr:
+            # Written only for a card read off its pixels, so every other row
+            # on the archive stays byte-identical to what it already holds.
+            entry["ocr"] = "1"
     return entry
 
 
@@ -645,14 +651,15 @@ def _sources_of(
         if (variant, url) in named:
             continue
         named.add((variant, url))
-        sources.append(
-            {
-                "url": url,
-                "variant": variant,
-                "text": _write_text(out, seen_month, text),
-                "pdf": digest,
-            }
-        )
+        entry = {
+            "url": url,
+            "variant": variant,
+            "text": _write_text(out, seen_month, text),
+            "pdf": digest,
+        }
+        if digest in cards.ocr:
+            entry["ocr"] = "1"
+        sources.append(entry)
     return sorted(
         sources, key=lambda s: (s["variant"] != "text", s["variant"], s["url"])
     )
@@ -693,11 +700,6 @@ def _same_card(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> bool:
     return settled(existing) == settled(fresh)
 
 
-def _read_by_ocr(sources: list[dict[str, str]], cards: "_Cards") -> bool:
-    """Whether any card this row read had to be read off its pixels."""
-    return any(source.get("pdf") in cards.ocr for source in sources)
-
-
 def _write_card(
     out: Path,
     supplier: str,
@@ -709,7 +711,6 @@ def _write_card(
     now: datetime,
     via: str,
     seen_on: date | None = None,
-    ocr: bool = False,
 ) -> bool:
     """Write the card's month file; True when the file changed.
 
@@ -720,17 +721,18 @@ def _write_card(
     path produced it, ``live`` (today's card, filed by its label) or
     ``archive`` (the supplier's own archive, filed by the month asked for).
     A replay passes the day the row was first captured as ``seen_on``.
-    ``ocr`` marks a row whose card carried no text layer and was read off its
-    pixels; the key is written only when true, so every other row on the
-    archive stays byte-identical to what it already holds.
+
+    A card read off its pixels is marked on the SOURCE that names it, by
+    ``_source_entry``, not on the row: a row can read two documents and only
+    one of them need be the unreadable one. The row carried a derived copy as
+    ``_ocr`` and nothing kept it in step, so it is gone; readers ask the
+    sources.
     """
     today = seen_on or now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
     card["_seen_on"] = today.isoformat()
     card["_sources"] = sources
     card["_via"] = via
-    if ocr:
-        card["_ocr"] = True
     path = out / _ROWS / supplier / contract / region / f"{month_id}.json"
     existing: dict[str, Any] | None = None
     if path.exists():
@@ -1150,7 +1152,6 @@ async def _replay_row(
         now,
         row.get("_via", "live"),
         seen_on,
-        ocr=_read_by_ocr(sources, cards),
     ):
         summary.reparsed += 1
 
@@ -1220,7 +1221,6 @@ async def _retry_unparsed(
             now,
             "live",
             date(int(month[:4]), int(month[5:]), 15),
-            ocr=_read_by_ocr(read, cards),
         ):
             summary.reparsed += 1
 
@@ -1327,7 +1327,6 @@ async def archive(
                     sources,
                     now,
                     "live",
-                    ocr=_read_by_ocr(sources, cards),
                 ):
                     summary.stored += 1
                 else:
@@ -1382,7 +1381,6 @@ async def archive(
                         sources,
                         now,
                         "archive",
-                        ocr=_read_by_ocr(sources, cards),
                     )
                     summary.backfilled += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))

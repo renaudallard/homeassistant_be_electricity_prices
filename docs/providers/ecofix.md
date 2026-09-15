@@ -97,7 +97,7 @@ Related reading:
 > these cards is `ocr_price_cards`, in the card-archive workflow, once a day:
 > it knows the fonts they are set in glyph by glyph and refuses a mark it
 > cannot place, and `scripts/archive_cards.py` asks it only after a reader has
-> refused the card. The row it writes carries `"_ocr": true`, and an
+> refused the card. The row it writes marks the document it read that way, and an
 > installation reads that row like any other month's. **Do not cross-fill from a
 > sibling card either**: DSO distribution and transport tariffs genuinely are
 > regulated and identical per DSO, but the green-certificate quota cost is

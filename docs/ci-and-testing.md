@@ -829,8 +829,24 @@ before it is given up on. That engine knows the fonts those cards are set in gly
 refuses a mark it cannot place; the reading is taken from `trusted_text`, which drops any line
 carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
 so a mostly-refused page is no row rather than a row of silent misses. The row it produces
-carries `"_ocr": true`, which is how an installation knows to tell its user the figures came
-from a reading; the key is absent otherwise, so every row already stored is unchanged.
+marks the SOURCE it read that way, as `"ocr"` on the `_sources` entry beside the pdf digest it
+describes; the key is absent otherwise, so every row already stored is unchanged. An installation
+asks the sources (`_row_read_by_ocr`, `snapshot_store.py`) to know whether to tell its user the
+figures came from a reading.
+
+The mark belongs to the document, not to the row, because a row can read two and only one of them
+need be the unreadable one: **137 of the archive's 1.686 rows read two cards**, and a row-level
+mark makes the readable one look unreadable for as long as it is read beside the other. It also
+has to outlive the run that discovers it. The reader is what finds a card has no text layer, and a
+card whose bytes have not changed is served its stored text without the reader running, so
+`StoredTexts` reads the mark back off the rows to keep it.
+
+The row used to carry a derived copy as `"_ocr"` as well. Nothing kept it in step with the
+sources, and it was **never once written**: not one of the 1.686 rows had it, the Ecofix months
+read off page images included, so the Repairs card it drives had never appeared for anybody.
+It is gone rather than migrated, because nothing was ever reading a value that never existed.
+Rows captured before the mark worked were set by measurement; a supplier that starts rasterizing
+now is marked on its first walk.
 The engine is installed by this workflow alone, which runs 3.13 for everything else and 3.14 for
 it: no installation ever decodes a card, it reads the row.
 

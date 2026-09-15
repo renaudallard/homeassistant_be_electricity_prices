@@ -48,6 +48,12 @@ class StoredTexts:
         self.serve = serve
         # (variant, digest) -> text path in the archive, from every stored row.
         self.texts: dict[tuple[str, str], str] = {}
+        # Digests of cards a PREVIOUS run had to read off their pixels. Carried
+        # in the rows beside the text, because serving a stored text skips the
+        # reader that would otherwise discover it again: without this the fact
+        # lasted exactly one day and every row after the first said the card
+        # was read normally.
+        self.ocr: set[str] = set()
         # The rows sit under cards/ in the cards repository; see _ROWS there.
         for row in archive.glob("cards/*/*/*/????-??.json"):
             try:
@@ -57,10 +63,12 @@ class StoredTexts:
             except ValueError:
                 continue
             for source in sources:
-                if "pdf" in source:
-                    self.texts[(source["variant"], digest_of(source["pdf"]))] = source[
-                        "text"
-                    ]
+                if "pdf" not in source:
+                    continue
+                digest = digest_of(source["pdf"])
+                self.texts[(source["variant"], digest)] = source["text"]
+                if source.get("ocr"):
+                    self.ocr.add(digest)
         # What this run rendered, so a second card on the same bytes is
         # served too.
         self.fresh: dict[tuple[str, str], str] = {}
