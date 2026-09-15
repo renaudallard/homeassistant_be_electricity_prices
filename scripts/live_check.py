@@ -3273,11 +3273,11 @@ assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
 
 async def _run(texts: Path | None = None) -> int:
     modules = _load_providers()
-    # With the archive branch checked out, a card whose bytes the branch
-    # already holds is served its stored text instead of being rendered: the
-    # download, its timing, its bytes and the freshness gate all stay, and
-    # the twenty minutes of pdfplumber go only to cards that changed since
-    # the archive walked them an hour earlier. Entered here and left at the
+    # With the card archive checked out, a card whose bytes it already holds is
+    # served its stored text instead of being rendered: the download, its
+    # timing, its bytes and the freshness gate all stay, and the twenty minutes
+    # of pdfplumber go only to cards that changed since the archive walked them
+    # an hour earlier. Entered here and left at the
     # end of the run rather than around the session block, so the block
     # below keeps its shape.
     hooks = ExitStack()
@@ -3607,7 +3607,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         default=None,
         metavar="DIR",
-        help="a checkout of the archive branch; cards it already holds are not rendered again",
+        help="a clone of the card archive; cards it already holds are not "
+        "rendered again",
     )
     return parser.parse_args(argv)
 

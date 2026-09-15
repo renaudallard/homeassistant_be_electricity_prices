@@ -1,4 +1,4 @@
-"""scripts/card_texts.py: the archive branch's texts as a render cache."""
+"""scripts/card_texts.py: the card archive's texts as a render cache."""
 
 from __future__ import annotations
 
