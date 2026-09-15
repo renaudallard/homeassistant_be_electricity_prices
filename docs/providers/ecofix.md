@@ -153,7 +153,7 @@ indexes on the monthly `BELPEX-SPP-M` and its variable energy leg fetches no spo
 | `ecofix_motion` | Ecofix Motion | `dynamic` | `Motion` | `True` | 15-min Belpex-indexed, phone customer service, full yearly fee (illustrative 60,00 EUR in the fixture) |
 | `ecofix_motion_online` | Ecofix Motion Online | `dynamic` | `Motion_Online` | `True` | 15-min Belpex-indexed, online-only, low yearly fee (illustrative 10,00 EUR in the fixture) |
 | `ecofix_flexy` | Ecofix Flexy | `variable` | `Flexy` | n/a | Monthly RLP-weighted Belpex average, indexation `BELPEX-RLP-M` |
-| `ecofix_flexy_online` | Ecofix Flexy Online | `variable` | `Flexy_Online` | n/a | The same variable product sold online-only; parses on Flexy's own branch |
+| `ecofix_flexy_online` | Ecofix Flexy Online | `variable` | `Flexy_Online` | n/a | The online-only variable product: its own coefficients and fee on a card laid out like Flexy's, so it parses on Flexy's branch |
 
 Notes:
 
@@ -171,8 +171,13 @@ Notes:
   could only ever return the URLs the registry already knew, so `discovered -
   baseline` was empty by construction and Flexy Online went unreported for the
   whole time it was on sale.
-- Flexy Online is the same card as Flexy with its own filename, so it shares the
-  variable branch outright. That branch reads the yearly fee and the Flemish
+- Flexy Online prints its own coefficients on a card laid out exactly like
+  Flexy's, so it shares the variable branch outright. Same layout, different
+  product: on the September 2026 Flanders cards Flexy is
+  `(BELPEX-RLP-M * 0,1020) + 1,2000` at 60,00 EUR/yr and Flexy Online is
+  `(BELPEX-RLP-M * 0,1010) + 0,74` at 10,00, which came out as 14,32 against
+  13,71 c/kWh. Neither may ever stand in for the other. That branch reads the
+  yearly fee and the Flemish
   renewable from two SEPARATE positional anchors, which is exactly what an Online
   twin reflows, so it now rejects a renewable at or above 5 c/kWh rather than
   billing the swap: measured on the Flexy fixture the swapped read is a 1,60
@@ -217,7 +222,18 @@ archive (`.github/workflows/archive_cards.yml`) covers the months it has read,
 which since August 2026 means the months it read off the pixels: the walk hands
 a card its own reader refused to `ocr_price_cards` and files the result. A card
 that even that refuses is named in `unparsed.json` and shows on the coverage
-sheet with its PDF and no JSON. If Ecofix ever exposes a dated archive, add an
+sheet with its PDF and no JSON.
+
+The archive therefore starts where each contract entered the registry, not
+where the supplier started selling it. Flexy Online was added on 5 September
+2026, after the walk had already captured that August, so its first archived
+month is 2026-09 while its three siblings reach back to 2026-05. Those two
+cards are gone: the filenames are overwrite-in-place under `prices/current/`
+and no dated path answers beside it (checked `prices/<YYYY-MM>/`,
+`prices/archive/` and a month suffix on the filename, all 404). A Flexy Online
+entry pricing May or August 2026 therefore falls through to the current card,
+and the blank cells on the coverage sheet are correct rather than a capture
+that failed. If Ecofix ever exposes a dated archive, add an
 `ArchivedSnapshotFetcher` (see `providers/base.py`).
 
 ### discover()

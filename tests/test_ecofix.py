@@ -393,9 +393,11 @@ def test_flexy_swapped_fee_and_renewable_columns_are_rejected() -> None:
 
 
 def test_flexy_online_reads_the_flexy_card_unchanged() -> None:
-    """Flexy Online is the same product sold online, so it parses on Flexy's
-    own branch: only the dispatch and the URL differ. Nothing here should
-    need a fixture of its own, and that is the point."""
+    """Flexy Online's card is laid out exactly like Flexy's, so it parses on
+    Flexy's own branch and needs no fixture of its own. What this pins is the
+    dispatch, not the product: fed one card's text both ids read it the same
+    way. The products themselves price differently, each card carrying its own
+    coefficients and fee."""
     text = _layout(_FLEXY)
     as_flexy = parse_snapshot("ecofix_flexy", text, "flanders")
     as_online = parse_snapshot("ecofix_flexy_online", text, "flanders")
