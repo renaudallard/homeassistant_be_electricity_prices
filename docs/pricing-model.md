@@ -813,6 +813,18 @@ The per-slot TOU triplet is never clamped. No card ships both a triplet and a
 floor, and `tests/test_custom.py` pins that rather than the pricing code
 carrying a branch that cannot run.
 
+When the compare page has no measured export shape it falls back to weighting
+each slot by how long it is active, and those durations are counted off
+`pricing.tou_slot` itself over a year (`_tou_slot_hours`, `compare_quote.py`)
+rather than written out a second time. Three things depend on that. A seasonal
+rule has no representative week at all: Luminus SmartFlex moves its 11:00-17:00
+block between super-creuses and creuses on 21 March and 20 September, so the
+weekly triple this replaced answered the generic rule for it and put the whole
+midday block, which is when a solar household exports, in creuses all year.
+Federal holidays land in the weekend slot the cards give them, worth 2,7 hours a
+week off the weekday slots. And a weekend rule added later is weighted without
+anyone remembering to come back, which is how the third one went unweighted.
+
 ### The four injection shapes
 
 | Shape | Populated fields | Needs spot? | Example |

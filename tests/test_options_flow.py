@@ -3372,12 +3372,63 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
         injection=InjectionRates(peak=0.06, transition=0.04, offpeak=0.02),
     )
     entry = SimpleNamespace(data={"solar_regime": "injection"})
-    # weekend_no_peak weights: peak 45h, transition 69h, offpeak 54h per week.
-    expected = (0.06 * 45.0 + 0.04 * 69.0 + 0.02 * 54.0) / (45.0 + 69.0 + 54.0)
+    # The weights are counted off tou_slot itself over a year, so holidays sit
+    # in the weekend slot the cards give them; the triple written out by hand
+    # here used to ignore them and covered only two of the three rules.
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_slot_weights,
+    )
+
+    wp, wt, wo = _tou_slot_weights("weekend_no_peak")
+    expected = (0.06 * wp + 0.04 * wt + 0.02 * wo) / (wp + wt + wo)
     credit = _compare_injection_credit(snap, entry, {}, avg_spot=None)
     assert credit == pytest.approx(expected)
     # The credit reflects the weighted mix, never a single slot rate.
     assert credit not in (0.06, 0.04, 0.02)
+
+
+def test_tou_slot_weights_cover_every_weekend_rule() -> None:
+    """The weights were a hand-written weekly triple that knew two rules and
+    answered the generic one for anything else. Luminus SmartFlex carries a
+    third, smartflex_seasonal, whose 11:00-17:00 block is super-creuses only
+    from 21 March to 20 September, so it was weighted as though that block were
+    creuses all year and as though weekends were fully off-peak, which its card
+    does not say. The midday block is when a solar household exports."""
+    from typing import get_args
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_slot_weights,
+    )
+    from custom_components.be_electricity_prices.providers.base import WeekendRule
+
+    weights = {rule: _tou_slot_weights(rule) for rule in get_args(WeekendRule)}
+    # No two rules share a shape, which is what having a rule at all means.
+    assert len({tuple(w) for w in weights.values()}) == len(weights)
+    # SmartFlex has no off-peak at all in winter and a whole midday block of it
+    # in summer, so over a year it is a minority slot rather than the largest
+    # one the generic rule gives.
+    peak, transition, offpeak = weights["smartflex_seasonal"]
+    assert offpeak > 0, "the summer super-creuses block must be counted"
+    assert offpeak < transition
+    assert peak == pytest.approx(63.0 / 168.0 * sum(weights["smartflex_seasonal"]))
+    # The generic rule puts its off-peak above everything else; the seasonal one
+    # must not have been answered with that.
+    assert weights["weekend_offpeak"][2] > weights["weekend_offpeak"][1]
+
+
+def test_tou_slot_weights_follow_the_measured_export_shape() -> None:
+    """A household exporting only at midday must weight the slot the midday
+    block is in, which on SmartFlex is off-peak in summer and transition in
+    winter. A week anchored in January answered transition for the whole year."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_slot_weights,
+    )
+
+    midday_only = {hour: (1.0 if 11 <= hour < 17 else 0.0) for hour in range(24)}
+    peak, transition, offpeak = _tou_slot_weights("smartflex_seasonal", midday_only)
+    assert peak == 0.0
+    assert offpeak > 0.0, "summer midday is super-creuses, not creuses"
+    assert transition > 0.0, "winter midday is creuses"
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

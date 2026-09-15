@@ -43,6 +43,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from functools import lru_cache
 
 from homeassistant.util import dt as dt_util
 from typing import Any
@@ -66,16 +67,52 @@ from .const import (
 )
 
 
+@lru_cache(maxsize=8)
+def _tou_slot_hours(weekend_rule: str, year: int) -> tuple[dict[int, float], ...]:
+    """Per slot, how many hours of ``year`` each clock hour spends in it.
+
+    Counted by asking ``tou_slot`` itself for every hour of the year rather
+    than writing the published windows out a second time. Three things follow
+    from that which a hand-built weekly triple got wrong:
+
+    * a seasonal rule is covered. Luminus SmartFlex moves its 11:00-17:00 block
+      between super-creuses and creuses on 21 March and 20 September, so no
+      single week describes it, and a week anchored in January (which is what
+      this walked) put the whole midday block in creuses all year. That block
+      is when a solar household exports.
+    * federal holidays land in the slot the cards give them, which is the
+      weekend one. Ten days a year is 2,7 hours a week off the weekday slots.
+    * a rule added later is weighted correctly without anyone remembering to
+      come back here. The triple covered two of the three rules that existed.
+
+    Wall-clock arithmetic on a naive datetime, so the year is exactly 24 hours
+    a day: this is a shape over clock hours, not a real calendar to bill, and a
+    DST seam would only lose an hour of it. Cached per rule and year, since the
+    ranking asks once a row and the answer moves only when the holidays do.
+    """
+    from .pricing import tou_slot
+
+    by_slot: dict[str, dict[int, float]] = {
+        "peak": dict.fromkeys(range(24), 0.0),
+        "transition": dict.fromkeys(range(24), 0.0),
+        "offpeak": dict.fromkeys(range(24), 0.0),
+    }
+    when = datetime.combine(date(year, 1, 1), time())
+    end = datetime.combine(date(year + 1, 1, 1), time())
+    while when < end:
+        by_slot[tou_slot(when, weekend_rule)][when.hour] += 1.0
+        when += timedelta(hours=1)
+    return by_slot["peak"], by_slot["transition"], by_slot["offpeak"]
+
+
 def _tou_slot_weights(
     weekend_rule: str, hour_weights: dict[int, float] | None = None
 ) -> tuple[float, float, float]:
     """Weight of each CWaPE TOU slot (peak, transition, offpeak).
 
-    Without ``hour_weights``, hours-per-week each slot is active, from the
-    published rules and a 5-weekday / 2-weekend split. Engie Empower Flextime
-    keeps the weekday transition/offpeak windows on weekends
-    (``weekend_no_peak``); Luminus SmartFlex makes weekends fully off-peak
-    (``weekend_offpeak``, the default).
+    Without ``hour_weights``, hours a year each slot is active, counted off the
+    contract's own rule by :func:`_tou_slot_hours`. Only the ratio is read, so
+    the scale does not matter.
 
     Duration is the right weighting for a quantity that flows evenly through
     the day and the wrong one for solar export, which is zero for the whole
@@ -88,30 +125,22 @@ def _tou_slot_weights(
 
     ``hour_weights`` is the household's own measured export shape per hour of
     the day, which replaces the duration mean with the same basis the live
-    credit uses.
+    credit uses. It is keyed by clock hour, so it multiplies straight into the
+    per-hour counts rather than needing a walk of its own.
     """
+    slots = _tou_slot_hours(weekend_rule, dt_util.now().year)
     if hour_weights is None:
-        if weekend_rule == "weekend_no_peak":
-            return 45.0, 69.0, 54.0
-        return 45.0, 45.0, 78.0
-    from .pricing import tou_slot
-
-    # Walk one representative week so each hour lands in the slot the weekday
-    # and weekend rules actually put it in, then carry that hour's share of
-    # the household's export.
-    monday = datetime.combine(
-        date(2026, 1, 5), time(), tzinfo=dt_util.DEFAULT_TIME_ZONE
+        peak, transition, offpeak = (sum(hours.values()) for hours in slots)
+        return peak, transition, offpeak
+    weighted = tuple(
+        sum(hour_weights.get(hour, 0.0) * count for hour, count in hours.items())
+        for hours in slots
     )
-    acc = {"peak": 0.0, "transition": 0.0, "offpeak": 0.0}
-    for hour in range(7 * 24):
-        when = monday + timedelta(hours=hour)
-        acc[tou_slot(when, weekend_rule)] += hour_weights.get(when.hour, 0.0)
-    total = sum(acc.values())
-    if total <= 0:
+    if sum(weighted) <= 0:
         # A wired meter that exported nothing: fall back rather than divide by
         # zero or return a credit built from an empty profile.
         return _tou_slot_weights(weekend_rule)
-    return acc["peak"], acc["transition"], acc["offpeak"]
+    return weighted[0], weighted[1], weighted[2]
 
 
 def _hour_weighted_mean(
