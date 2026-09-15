@@ -254,6 +254,27 @@ the same listing page the extractor does, but with a **looser** pattern. When a 
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
 
+### The federal tax block
+
+`_check_federal_tax_consensus` (`scripts/live_check.py`) asks the freshness question about a
+figure rather than a file. The federal excise and the federal energy contribution are set by law,
+so for one month and one region every residential card in the country carries the same pair. A
+supplier whose generator renders the tax block from a template and does not update it therefore
+prints last quarter's figures while parsing perfectly: healthy fetch, healthy parse, wrong money,
+and nothing else here would see it.
+
+It reads the card archive the run already clones rather than the network, so it costs nothing and
+compares what installations are actually served; a fork's run has no archive and the check is
+skipped. Professional cards are measured separately, because a degressive excise legitimately
+blends far below the residential rate -- every `_pro_` contract in the September 2026 archive
+carries 0,01421 against the residential 0,04876. A tie is not reported: with two suppliers
+disagreeing there is no consensus, and guessing which is right files issues against the correct card.
+
+Measured on that archive when the check was added, fourteen residential suppliers agreed exactly
+and three did not: Ecofix and TotalEnergies in every region they sell, Cociter in Wallonia, each
+still printing the separate energy contribution the others had folded into the excise on
+1 August 2026. It is the supplier's card that is wrong, so the check reports rather than corrects.
+
 ### The keyless day-ahead fallback
 
 `_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts still serves the

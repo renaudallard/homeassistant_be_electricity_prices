@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import importlib.util as iu
+import json
 import re
 import sys
 import time
@@ -1912,6 +1913,83 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     )
 
 
+def _check_federal_tax_consensus(archive: Path | None) -> None:
+    """Assert every supplier prints the same federal tax block for a month.
+
+    The federal excise and the federal energy contribution are set by law, so
+    for one month and one region every card in the country carries the same
+    pair. A supplier whose generator renders the tax block from a template and
+    forgets to update it therefore prints last quarter's figures while parsing
+    perfectly, which is the same blind spot ``_check_card_freshness`` covers
+    for a superseded card: healthy fetch, healthy parse, wrong money.
+
+    Ecofix is why this exists. Its September 2026 card carried excise
+    0,0503288 with a 0,0020417 contribution beside it, the scheme that ended on
+    1 August 2026, where every other supplier's card for the same month carried
+    a flat 0,04876 and no contribution: 0,0036105 EUR/kWh, about 12,64 EUR a
+    year on 3.500 kWh, billed silently.
+
+    Read from the card archive the run already clones rather than from the
+    network, so it costs nothing and compares what installations are actually
+    served. Skipped when the archive is not there, which is a fork's run.
+
+    Residential contracts only. A professional card bills a DEGRESSIVE excise,
+    so its rate is a blend over the entry's volume and legitimately sits far
+    below the residential one: measured on the September 2026 archive, every
+    `_pro_` contract carries 0,01421 against the residential 0,04876, and
+    grouping them together would file eight rows a day against cards that are
+    correct.
+
+    The majority is the answer, and a tie is not reported: with two suppliers
+    disagreeing there is no consensus to measure against, and guessing which
+    is right is how a check starts filing issues against the wrong card.
+    """
+    if archive is None:
+        return
+    rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
+    if not rows:
+        return
+    month = max(row.stem for row in rows)
+    # (region, month) -> {(excise, contribution): [supplier, ...]}
+    seen: dict[str, dict[tuple[float, float], list[str]]] = {}
+    for row in rows:
+        if row.stem != month:
+            continue
+        supplier, contract, region = row.parts[-4:-1]
+        registered = _CONTRACTS_BY_ID.get(contract)
+        # getattr, like the shape lookup below: the provider modules are loaded
+        # dynamically, so the registry is typed as object here.
+        if registered is None or getattr(registered, "professional", False):
+            continue
+        try:
+            taxes = json.loads(row.read_text(encoding="utf-8"))["taxes"]
+            pair = (
+                round(float(taxes["federal_excise"]), 7),
+                round(float(taxes["energy_contribution"]), 7),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        by_pair = seen.setdefault(region, {})
+        if supplier not in by_pair.setdefault(pair, []):
+            by_pair[pair].append(supplier)
+    for region, by_pair in sorted(seen.items()):
+        if len(by_pair) < 2:
+            continue
+        ranked = sorted(by_pair.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        (top_pair, top_suppliers), (_, runner_up) = ranked[0], ranked[1]
+        if len(top_suppliers) == len(runner_up):
+            continue
+        for pair, suppliers in ranked[1:]:
+            _record(
+                f"{suppliers[0]}/federal tax block disagrees for {month}",
+                False,
+                f"{region}: excise {pair[0]} + contribution {pair[1]} against "
+                f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
+                f"suppliers ({', '.join(sorted(suppliers))})",
+                kind="catalog",
+            )
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
@@ -3327,6 +3405,15 @@ async def _run(texts: Path | None = None) -> int:
             # Its own try: a catalog crash must not swallow the freshness
             # gate, which is the one check that sees a supplier superseding
             # a card we still resolve.
+            try:
+                _check_federal_tax_consensus(texts)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_federal: consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
             try:
                 await _check_card_freshness(session, modules)
             except Exception as err:  # noqa: BLE001

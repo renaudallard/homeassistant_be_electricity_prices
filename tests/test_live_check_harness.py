@@ -1724,3 +1724,117 @@ def test_a_card_whose_month_indexing_disagrees_with_the_registry_fails() -> None
     finally:
         lc._CONTRACTS_BY_ID.pop("harness_month", None)
         lc.CHECKS.clear()
+
+
+def _federal_archive(
+    root: Path, rows: dict[tuple[str, str, str], tuple[float, float]]
+) -> Path:
+    """A card archive holding just the tax block each row needs."""
+    import json
+
+    for (supplier, contract, region), (excise, contribution) in rows.items():
+        path = root / "cards" / supplier / contract / region / "2026-09.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "taxes": {
+                        "federal_excise": excise,
+                        "energy_contribution": contribution,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+    return root
+
+
+def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
+    tmp_path: Path,
+) -> None:
+    """The federal excise and contribution are set by law, so every residential
+    card for one month and region carries the same pair. A generator that
+    renders the tax block from a template and does not update it prints the old
+    scheme while parsing perfectly: healthy fetch, healthy parse, wrong money.
+
+    Measured on the real September 2026 archive, three suppliers still carried
+    the contribution the other fourteen had folded into the excise.
+    """
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "c_fixed": SimpleNamespace(professional=False),
+            "stale_fixed": SimpleNamespace(professional=False),
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("c", "c_fixed", "flanders"): (0.04876, 0.0),
+            ("stale", "stale_fixed", "flanders"): (0.0503288, 0.0020417),
+        },
+    )
+    lc._check_federal_tax_consensus(archive)
+    assert len(lc.CHECKS) == 1
+    check = lc.CHECKS[0]
+    assert not check.ok
+    assert check.label.startswith("stale/")
+    assert "0.0503288" in check.detail and "0.04876" in check.detail
+
+
+def test_a_professional_card_is_not_measured_against_residential_ones(
+    tmp_path: Path,
+) -> None:
+    """A professional card bills a degressive excise, so its blended rate sits
+    far below the residential one and is correct there. Grouping the two filed
+    eight rows a day against cards that were right."""
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "c_fixed": SimpleNamespace(professional=False),
+            "a_pro": SimpleNamespace(professional=True),
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("c", "c_fixed", "flanders"): (0.04876, 0.0),
+            ("a", "a_pro", "flanders"): (0.01421, 0.0019261),
+        },
+    )
+    lc._check_federal_tax_consensus(archive)
+    assert lc.CHECKS == []
+
+
+def test_the_federal_check_stays_quiet_without_a_consensus(tmp_path: Path) -> None:
+    """Two suppliers disagreeing is not a majority, and neither is no archive
+    at all, which is what a fork's run has."""
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.0503288, 0.0020417),
+        },
+    )
+    lc._check_federal_tax_consensus(archive)
+    assert lc.CHECKS == []
+    lc._check_federal_tax_consensus(None)
+    assert lc.CHECKS == []
