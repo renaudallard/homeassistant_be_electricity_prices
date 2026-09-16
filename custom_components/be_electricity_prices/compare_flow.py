@@ -72,6 +72,7 @@ from .providers import effective_kind
 from .providers import offers_quarter_hourly
 from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
+from .pricing import MeterType
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import (
     _energy_is_rlp_indexed,
@@ -743,6 +744,52 @@ class _SweepEngine:
         self.config_entry = config_entry
         self._compare = overrides
 
+    def _target_side(
+        self,
+        hh: Any,
+        supplier: str,
+        contract: str,
+        quarter_hourly: bool,
+        snap: SupplierSnapshot,
+    ) -> tuple[MeterType, str, ConfigEntry, SupplierSnapshot]:
+        """The meter, DSO mode, entry and resolved card a candidate is priced on.
+
+        The three target-side adjustments the one-to-one page makes, which a
+        ranking needs for exactly the same reasons, and which its annual row
+        and its year-to-date row have to make alike: left out of one of them,
+        the column is a second pricing path that quietly disagrees with the
+        first (the year-to-date pass billed a Tarif Impact card on the
+        household's bi-horaire columns and an ex-VAT card's running month off
+        the raw card).
+
+        METER: the household's own meter is the right default, because a
+        ranking has no step to ask a what-if and the physical meter is a
+        fact. But where the target's KIND forces one, that is not an override
+        at all, it is the only meter the product is sold on, and quoting a
+        dynamic card on a mono meter routes distribution through the
+        bi-horaire split while the supplier bills energy by slot.
+
+        DSO MODE: a Tarif Impact card carries three CWaPE band rates and no
+        mono/bi structure, so the band schedule prices its energy whatever the
+        household is on while the network leg and the Walloon terme fixe
+        follow the mode. Quoting it on the household's own mode bands the
+        energy and then bills the network off the standard columns.
+
+        The card is resolved per entry (VAT, excise band, volume tranche,
+        settlement grid) the way every other quote path resolves it.
+        """
+        from .snapshot_store import _resolve_snapshot
+
+        kind = _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
+        meter: MeterType = (
+            METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
+        )
+        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
+        target_entry = _quote_entry(
+            self.config_entry, hh.regime, dso_mode, quarter_hourly=quarter_hourly
+        )
+        return meter, dso_mode, target_entry, _resolve_snapshot(target_entry, snap)
+
     async def fill_ytd_column(
         self, sweep: dict[str, Any], coord: Any
     ) -> list[RankedRow]:
@@ -869,6 +916,9 @@ class _SweepEngine:
                 rows.append(row)
                 continue
             supplier, contract, quarter_hourly = pair
+            meter, _dso_mode, target_entry, resolved = self._target_side(
+                hh, supplier, contract, quarter_hourly, snap
+            )
             # Spot-priced kinds are excluded for the same reason the
             # one-to-one page excludes them: the archive engine bills each
             # past hour at factor*spot+base and needs a historical spot for
@@ -887,7 +937,7 @@ class _SweepEngine:
             # injection is indexed. Without spots that credit is not
             # approximated, it is dropped whole, so the row would print a
             # solar household's bill with no solar in it.
-            if _needs_missing_spots(snap, hh.quote_entry, hist_spots):
+            if _needs_missing_spots(resolved, target_entry, hist_spots):
                 rows.append(row)
                 continue
             # January first, and BEFORE asking about coverage. The coverage
@@ -904,8 +954,8 @@ class _SweepEngine:
                     contract,
                     sweep["region"],
                     months[0],
-                    snap,
-                    hh.quote_entry,
+                    resolved,
+                    target_entry,
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)
@@ -920,9 +970,10 @@ class _SweepEngine:
                     self.hass,
                     session,
                     get_extractor(supplier),
-                    snap,
-                    hh.quote_entry,
+                    resolved,
+                    target_entry,
                     contract_override=contract,
+                    meter_override=meter,
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
@@ -1737,7 +1788,7 @@ class _SweepEngine:
         shared (the row cache is keyed by the card, not by the settlement) and
         only the pricing differs, so the second row costs a dict lookup.
         """
-        from .snapshot_store import _resolve_snapshot, fetch_shared
+        from .snapshot_store import fetch_shared
 
         label = _candidate_label(supplier, contract, quarter_hourly)
         region = sweep["region"]
@@ -1776,30 +1827,9 @@ class _SweepEngine:
             cached[(region, supplier, contract)] = snap
 
         hh = sweep["household"]
-        kind = _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
-        # The three target-side adjustments the one-to-one page makes, which a
-        # ranking needs for exactly the same reasons. Left out, a sweep is a
-        # second pricing path that quietly disagrees with the first.
-        #
-        # METER: the household's own meter is the right default, because a
-        # ranking has no step to ask a what-if and the physical meter is a
-        # fact. But where the target's KIND forces one, that is not an
-        # override at all - it is the only meter the product is sold on, and
-        # quoting a dynamic card on a mono meter routes distribution through
-        # the bi-horaire split while the supplier bills energy by slot.
-        meter = (
-            METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
+        meter, dso_mode, target_entry, resolved = self._target_side(
+            hh, supplier, contract, quarter_hourly, snap
         )
-        # DSO MODE: a Tarif Impact card carries three CWaPE band rates and no
-        # mono/bi structure, so the band schedule prices its energy whatever
-        # the household is on while the network leg and the Walloon terme fixe
-        # follow the mode. Quoting it on the household's own mode bands the
-        # energy and then bills the network off the standard columns.
-        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
-        target_entry = _quote_entry(
-            self.config_entry, hh.regime, dso_mode, quarter_hourly=quarter_hourly
-        )
-        resolved = _resolve_snapshot(target_entry, snap)
         if hh.dso not in resolved.dsos:
             return RankedRow(
                 label=label, annual=None, status=f"does not serve DSO {hh.dso}"

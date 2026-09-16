@@ -242,6 +242,110 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
     assert by_label["Mega Online Fixed"].ytd is None
 
 
+async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figure(
+    hass: HomeAssistant,
+) -> None:
+    """The annual row quotes a candidate on the meter its kind forces, on
+    Tarif Impact mode for a Tarif Impact card, and on the card resolved per
+    entry. The year-to-date pass handed the engine the household's own proxy
+    entry and the raw card instead, so a Tarif Impact row was billed on the
+    bi-horaire columns plus the terme fixe the tariff does not charge, and
+    an ex-VAT card's running month carried fees short of VAT: one row, two
+    answers, in a column the table sorts.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices.providers.base import (
+        ImpactRates,
+        TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _resolve_snapshot,
+    )
+    from tests import make_snapshot
+
+    seen: dict[str, Any] = {}
+
+    async def _capture(
+        hass_: Any, session: Any, ext: Any, snap: Any, entry: Any, **kw: Any
+    ) -> float:
+        seen["snapshot"] = snap
+        seen["entry"] = entry
+        seen.update(kw)
+        return 2386.52
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "luminus",
+            "contract": "luminus_smartflex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "dso_tariff_mode": "bi_horaire",
+            "solar_regime": "none",
+        },
+    )
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    # A card printed ex-VAT, so resolving it per entry changes its figures.
+    raw = make_snapshot(
+        supplier="octaplus",
+        contract="octaplus_fixed_impact",
+        energy=ImpactRates(pic=0.30, medium=0.20, eco=0.10),
+        taxes=TaxOverlay(federal_excise=0.04, energy_contribution=0.0, vat_rate=0.21),
+    )
+    household = SimpleNamespace(
+        today_local=dt_util.now().date(),
+        current_snapshot=object(),
+        quote_entry=entry,
+        peak_kw=4.0,
+        current_meter="dynamic",
+        dso_mode="bi_horaire",
+        regime="none",
+    )
+    sweep = {
+        "region": "wallonia",
+        "rows": [RankedRow(label="OCTA+ Fixed Impact", annual=3376.46)],
+        "labels": {"OCTA+ Fixed Impact": ("octaplus", "octaplus_fixed_impact", False)},
+        "household": household,
+    }
+    months = [date(2026, m, 1) for m in range(1, 10)]
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _capture,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            ".archived_months_present",
+            return_value=months,
+        ),
+        # The January warm-up fetch the pass makes before asking about
+        # coverage; its result is discarded, the cache it fills is stubbed.
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            "._snapshot_for_month",
+            AsyncMock(return_value=raw),
+        ),
+        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(
+            cf,
+            "_sweep_rows",
+            return_value={("wallonia", "octaplus", "octaplus_fixed_impact"): raw},
+        ),
+    ):
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+
+    assert rows[0].ytd == 2386.52
+    # Tarif Impact mode for a Tarif Impact card, on the meter its kind forces.
+    assert seen["entry"].data["dso_tariff_mode"] == "impact"
+    assert seen["meter_override"] == "dynamic"
+    # And the card as this entry resolves it, not as the supplier printed it.
+    assert seen["snapshot"] == _resolve_snapshot(seen["entry"], raw)
+    assert seen["snapshot"] != raw
+
+
 async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     hass: HomeAssistant,
 ) -> None:
