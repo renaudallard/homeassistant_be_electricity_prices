@@ -208,10 +208,12 @@ class VariableRates:
     month_indexed: bool = False
     # The value that index settled at for THIS card's own month, in EUR/kWh,
     # once the supplier has published it. Eneco prints each month's realised
-    # Belpex-RLP-M in the footnote of the FOLLOWING month's card, so an
-    # archived month is settled on the figure Eneco itself bills, and
-    # ``current`` is then that figure rather than the printed estimate. None
-    # while the month is still running or the next card is not out yet.
+    # Belpex-RLP-M in the footnote of the FOLLOWING month's card, and EBEM
+    # names the month just closed the same way ("vorige maand bedroeg deze
+    # index"), so an archived month is settled on the figure the supplier
+    # itself bills, and ``current`` is then that figure rather than the
+    # printed estimate. None while the month is still running or the next
+    # card is not out yet.
     index_realised: float | None = None
     # True when the index is the RLP-weighted month mean (Eneco's
     # Belpex-RLP-M) rather than the plain one: each hour's Belpex quotation

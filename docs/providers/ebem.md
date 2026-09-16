@@ -262,8 +262,22 @@ EBEM variable cards print four numeric columns per row after the formula:
 `GESCHATTE JAARPRIJS INCL.BTW 6%`. Columns 1 + 2 are the per-kWh indicative at
 last month's Belpex; columns 3 + 4 use the VNR yearly-forecast Belpex. The
 extractor surfaces column 2 (incl-VAT per-kWh at last month's Belpex) as
-`current`, because it matches the value EBEM customers see on their bill more
-faithfully than recomputing against a placeholder spot. The row is found by
+`current`, which is what the live card can honestly say: EBEM states that the
+delivery month's index is not known while the month runs.
+
+It is not what a CLOSED month is billed at. The card of the following month
+names what the month just closed settled at ("vorige maand bedroeg deze index
+135,84"), and `_settle_on_published_index` (`ebem.py`) rebuilds every register
+of an archived month from its own coefficients at that figure, recording it in
+`index_realised`. Until that card exists the month keeps the estimate and the
+snapshot is flagged `provisional`, so the monthly cache re-asks rather than
+filing a forecast as a historical fact, exactly as Eneco's cards are handled.
+Measured over the nine archived 2026 cards, the printed rate for a month was
+the settled rate of the month BEFORE it to within 5e-7 every time, and a
+3.500 kWh year-to-date ran 16,55 EUR under after eight months because the index
+trended up across them.
+
+The row is found by
 counting figures rather than by spelling the formula out, so the sign between
 `Belpex` and the offset never enters into it: some months EBEM prints a U+2212
 minus / negative offset, which a literal `+` missed and failed the whole

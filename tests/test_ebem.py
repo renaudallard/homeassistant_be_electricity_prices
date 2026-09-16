@@ -42,9 +42,11 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.ebem import (
     _extract_validity,
+    _settled_on,
     discover,
     fetch_for_month,
     parse_snapshot,
+    published_index,
 )
 from tests import make_text_session, FIXTURES, fixture_text
 
@@ -351,6 +353,106 @@ def test_fetch_for_month_handles_underscore_separator() -> None:
     # (the URL was resolved, the underscore separator was handled, but
     # the served PDF was the wrong month).
     assert snap is None
+
+
+def test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index() -> None:
+    """EBEM's card says the delivery month's index is not known when it is
+    published, labels its columns "GESCHATTE", and gives the month just closed:
+    "vorige maand bedroeg deze index 85,80". So the rate it prints is the
+    formula at the PREVIOUS month, and the card of the following month is what
+    settles this one.
+
+    Measured over the nine archived 2026 cards, the printed rate for a month
+    equalled the settled rate of the month before it to within 5e-7 every time,
+    and a 3.500 kWh year-to-date ran 16,55 EUR under after eight months.
+
+    Both texts served here are the same card, relabelled for April, because the
+    fixtures hold one month. What that pins is the mechanism: the following
+    month's footnote is read, and every register is rebuilt from its own
+    coefficients rather than kept as printed.
+    """
+    may_text = _layout(_VARIABLE)
+    april_text = may_text.replace("mei 2026", "april 2026").replace("E05", "E04")
+
+    async def _read(_session: object, url: str, *a: object, **k: object) -> str:
+        return april_text if "-04-2026" in url else may_text
+
+    with patch(
+        "custom_components.be_electricity_prices.providers.ebem.fetch_pdf_text_layout",
+        new=_read,
+    ):
+        april = asyncio.run(
+            fetch_for_month(
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ebem_variable",
+                "flanders",
+                date(2026, 4, 1),
+            )
+        )
+    assert april is not None
+    energy = april.energy
+    assert isinstance(energy, VariableRates)
+    # 85,80 EUR/MWh, the figure the May card publishes for April.
+    assert energy.index_realised == pytest.approx(0.0858)
+    assert energy.formula_factor is not None and energy.formula_base is not None
+    assert energy.current == pytest.approx(
+        energy.formula_factor * 0.0858 + energy.formula_base
+    )
+    # A month with a settling card behind it is a fact, not an estimate.
+    assert april.provisional is False
+
+
+def test_fetch_for_month_keeps_the_estimate_and_flags_it_until_the_next_card() -> None:
+    """The running month has no card to settle it, so the printed estimate
+    stands and the row is provisional: the monthly cache re-asks after its TTL
+    instead of filing a forecast as a closed month's fact. The listing fixture
+    ends at May, so May is that case."""
+    with patch(
+        "custom_components.be_electricity_prices.providers.ebem.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=_layout(_VARIABLE)),
+    ):
+        may = asyncio.run(
+            fetch_for_month(
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ebem_variable",
+                "flanders",
+                date(2026, 5, 1),
+            )
+        )
+    assert may is not None
+    energy = may.energy
+    assert isinstance(energy, VariableRates)
+    assert may.provisional is True
+    assert energy.index_realised is None
+    # Untouched: still the card's own printed figure.
+    assert energy.current == pytest.approx(0.123363)
+
+
+def test_settling_rebuilds_every_register_from_its_own_pair() -> None:
+    """The bi-hourly and exclusive-night rows carry their own coefficients, so
+    settling only ``current`` would leave a bi-hourly meter on the estimate.
+    Real May coefficients, real published index."""
+    printed = parse_snapshot("ebem_variable", _layout(_VARIABLE), "u", "2026-05").energy
+    assert isinstance(printed, VariableRates)
+    index = published_index(_layout(_VARIABLE))
+    assert index is not None and index == pytest.approx(0.0858)
+    factor, base = printed.formula_factor, printed.formula_base
+    assert factor is not None and base is not None
+    settled = _settled_on(printed, index, factor, base)
+    for value, pair_factor, pair_base in (
+        (settled.current, printed.formula_factor, printed.formula_base),
+        (settled.peak, printed.formula_factor_peak, printed.formula_base_peak),
+        (settled.offpeak, printed.formula_factor_offpeak, printed.formula_base_offpeak),
+        (
+            settled.exclusive_night,
+            printed.formula_factor_exclusive_night,
+            printed.formula_base_exclusive_night,
+        ),
+    ):
+        assert pair_factor is not None and pair_base is not None
+        assert value == pytest.approx(pair_factor * index + pair_base)
+    # The three bands really are distinct, or the loop above proves nothing.
+    assert len({settled.current, settled.peak, settled.offpeak}) == 3
 
 
 def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:

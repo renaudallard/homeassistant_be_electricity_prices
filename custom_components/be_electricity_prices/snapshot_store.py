@@ -1467,7 +1467,14 @@ class _MigratingStore(Store[dict[str, Any]]):
 # or 0.22.0 went on serving the tenth-of-the-card price out of its own store:
 # Trevion's probe is a HEAD on its listing page, which a code release never
 # moves, and the gate below refuses only an OLDER schema. Same class as v18.
-_SNAPSHOT_SCHEMA_VERSION = 60
+# v61: EBEM's variable months settle on the index the FOLLOWING card publishes
+# rather than on the estimate their own card prints. A closed month is cached
+# as a historical fact and persisted, so every month row an entry already
+# holds carries the estimate and nothing would ever re-ask for it; this is the
+# bump that drops them. Measured over the nine archived 2026 cards the
+# estimate was the previous month's settled rate every time, and a 3.500 kWh
+# year-to-date ran 16,55 EUR under after eight months.
+_SNAPSHOT_SCHEMA_VERSION = 61
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
