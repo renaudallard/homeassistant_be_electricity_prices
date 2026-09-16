@@ -155,6 +155,9 @@ _FLUVIUS_LABELS: dict[str, str] = {
     "West": DSO_FLUVIUS_WEST,
     "Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
+# The January 2026 card printed the last area as "Zenne-Dijke", its figures
+# in place under the misprint. One letter is a card to read, not to refuse.
+_LABEL_PATTERNS: dict[str, str] = {"Zenne-Dijle": r"Zenne[\s\-]*Dij[lk]e"}
 
 _FRANK_REGIONS = frozenset({REGION_FLANDERS})
 
@@ -527,7 +530,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLUVIUS_LABELS.items():
-        escaped = re.escape(label).replace(r"\-", r"[\s\-]*")
+        escaped = _LABEL_PATTERNS.get(label) or re.escape(label).replace(
+            r"\-", r"[\s\-]*"
+        )
         row = re.search(
             rf"Fluvius\s*[\[\(]\s*{escaped}\s*[\]\)]\s*\n"
             rf"\s*{_NUM}\s*\n\s*{_NUM}\s*\n\s*{_NUM}\s*\n\s*{_NUM}",

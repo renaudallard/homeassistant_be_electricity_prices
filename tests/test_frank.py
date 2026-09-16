@@ -122,6 +122,22 @@ def test_a_card_missing_a_fluvius_row_is_refused() -> None:
         )
 
 
+def test_a_misprinted_zenne_dijle_label_still_reads() -> None:
+    """The January 2026 card prints the area as "Zenne-Dijke", its figures in
+    place under the misprint. The strict table check refused that whole card,
+    which left its five archive rows unreplayable and billed a January
+    signing cohort on the current card's taxes instead."""
+    text = _text()
+    assert text.count("Zenne-Dijle") == 2
+    misprinted = parse_snapshot(
+        text.replace("Zenne-Dijle", "Zenne-Dijke"),
+        "test://frank-apr",
+        "frank_dynamic",
+        "april 2026",
+    )
+    assert misprinted.dsos["fluvius_zenne_dijle"] == _snap().dsos["fluvius_zenne_dijle"]
+
+
 def test_dso_antwerpen_distribution() -> None:
     """Antwerpen digital meter: normaal 5,35 ct/kWh, excl nacht 4,81 ct/kWh."""
     snap = _snap()
