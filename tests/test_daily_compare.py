@@ -839,6 +839,63 @@ async def test_year_to_date_works_on_a_stored_ranking(hass: Any) -> None:
     assert "with_ytd" not in result["data_schema"].schema
 
 
+async def test_refresh_after_the_year_to_date_pass_keeps_the_own_row(
+    hass: Any,
+) -> None:
+    """Refresh on a stored ranking, after the year-to-date box was ticked,
+    ranked the alternatives with no baseline: the progress step appends the
+    household's own row only when it resolves the household itself, and the
+    year-to-date pass had already resolved it. Refresh has to drop the
+    household with the rows, and offer the year-to-date pass again on the
+    rows it just priced."""
+    from dataclasses import replace
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant import data_entry_flow
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord.daily_compare = _result()
+    entry.runtime_data = coord
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    with patch.dict(EXTRACTORS, patched):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        assert result["step_id"] == "compare_all_result"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"with_ytd": True}
+        )
+        assert result["step_id"] == "compare_all_result"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"refresh": True}
+        )
+        for _ in range(400):
+            if result["type"] is not data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        assert result["step_id"] == "compare_all_result"
+
+    ranking = result["description_placeholders"]["ranking"]
+    assert "YOUR CONTRACT" in ranking
+    assert "with_ytd" in result["data_schema"].schema
+
+
 async def test_the_sweep_persists_its_ranking_at_once(
     hass: HomeAssistant,
 ) -> None:

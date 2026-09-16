@@ -3185,10 +3185,19 @@ class _SweepStepsMixin(_CompareStepsMixin):
             if user_input.get(_REFRESH_FIELD):
                 # Drop the stored answer and sweep live. The cards themselves
                 # are still cached and probe-gated underneath, so asking again
-                # an hour later re-prices rather than re-downloads.
+                # an hour later re-prices rather than re-downloads. The
+                # household goes too: the progress step appends the own row
+                # only when it resolves the household itself, and a
+                # year-to-date pass run on the stored ranking had already
+                # resolved it, so a refresh after that pass ranked the
+                # alternatives against no baseline at all. Resolving it again
+                # is what a live sweep does anyway, and it re-offers the
+                # year-to-date box on the rows just priced.
                 self._sweep["rows"] = []
                 self._sweep["index"] = 0
                 self._sweep.pop("ran_at", None)
+                self._sweep.pop("household", None)
+                self._sweep.pop("ytd_done", None)
                 return await self._sweep_start()
             if user_input.get(_YTD_FIELD):
                 return await self.async_step_compare_all_ytd()
