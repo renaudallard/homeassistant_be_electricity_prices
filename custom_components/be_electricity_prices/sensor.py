@@ -54,6 +54,7 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     METER_BI,
+    METER_DYNAMIC,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
@@ -86,6 +87,12 @@ class BePriceSensorDescription(SensorEntityDescription):
     # since an entry can bill from its contract start date instead of 1
     # January.
     last_reset_fn: Callable[[ConfigEntry], datetime] | None = None
+    # A None from value_fn reads as unavailable rather than unknown. For the
+    # band sensors, which exist for a constant the card may not print: a
+    # bi-hourly meter on a monthly-indexed card has no constant day rate,
+    # and only one card in the registry prints a feed-in register pair, so
+    # the pair read unknown for good on every other supplier.
+    unavailable_when_none: bool = False
 
 
 def _current_slot_value(
@@ -373,7 +380,10 @@ def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
 
 
 def _eur_per_kwh(
-    key: str, value_fn: Callable[[CoordinatorData], float | None]
+    key: str,
+    value_fn: Callable[[CoordinatorData], float | None],
+    *,
+    unavailable_when_none: bool = False,
 ) -> BePriceSensorDescription:
     """Build a EUR/kWh measurement description with the standard precision."""
     return BePriceSensorDescription(
@@ -383,6 +393,7 @@ def _eur_per_kwh(
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
         value_fn=value_fn,
+        unavailable_when_none=unavailable_when_none,
     )
 
 
@@ -412,12 +423,14 @@ BI_HOURLY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh(
         "price_peak",
         lambda d: None if d.static_peak_price is None else d.static_peak_price.all_in,
+        unavailable_when_none=True,
     ),
     _eur_per_kwh(
         "price_offpeak",
         lambda d: (
             None if d.static_offpeak_price is None else d.static_offpeak_price.all_in
         ),
+        unavailable_when_none=True,
     ),
 )
 
@@ -441,8 +454,16 @@ INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
 # print separate injection rates per register (e.g. Trevion Vast).
 # None for contracts with a single injection rate or spot-indexed formulas.
 BI_HOURLY_INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
-    _eur_per_kwh("injection_price_peak", lambda d: d.static_injection_peak),
-    _eur_per_kwh("injection_price_offpeak", lambda d: d.static_injection_offpeak),
+    _eur_per_kwh(
+        "injection_price_peak",
+        lambda d: d.static_injection_peak,
+        unavailable_when_none=True,
+    ),
+    _eur_per_kwh(
+        "injection_price_offpeak",
+        lambda d: d.static_injection_offpeak,
+        unavailable_when_none=True,
+    ),
 )
 
 FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
@@ -591,7 +612,9 @@ async def async_setup_entry(
         descriptions.extend(PROSUMER_SENSORS)
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
-        if bi_hourly:
+        # The engine credits a register pair on both two-register meters, the
+        # bi-hourly and the digital one, so the band sensors follow it.
+        if entry.data.get(CONF_METER) in (METER_BI, METER_DYNAMIC):
             descriptions.extend(BI_HOURLY_INJECTION_SENSORS)
 
     entities: list[SensorEntity] = [
@@ -669,6 +692,15 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     def last_reset(self) -> datetime | None:
         fn = self.entity_description.last_reset_fn
         return fn(self.coordinator.entry) if fn is not None else None
+
+    @property
+    def available(self) -> bool:
+        if not super().available:
+            return False
+        if not self.entity_description.unavailable_when_none:
+            return True
+        data = self.coordinator.data
+        return data is not None and self.entity_description.value_fn(data) is not None
 
     @property
     def native_value(self) -> float | None:
