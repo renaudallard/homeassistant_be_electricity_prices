@@ -1849,6 +1849,22 @@ def test_a_withdrawn_suppliers_fetch_failure_does_not_gate_ci(
     assert lc._extractor_regressions(lc.CHECKS) == []
 
 
+def test_a_withdrawn_suppliers_timeout_does_not_gate_ci_either(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker keyed the supplier on the slash, so the three labels with
+    no contract segment, the two hard timeouts and the unexpected error,
+    stayed unexpected: a withdrawn supplier whose host stopped answering
+    would have filed the extractor-broken issue the marker exists to
+    prevent, weekly, for as long as the host stayed down."""
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 9, 1)))
+    lc._record("dats24: hard timeout", False, "no answer in 120 s")
+    (check,) = lc.CHECKS
+    assert check.expected
+    assert lc._extractor_regressions(lc.CHECKS) == []
+
+
 def test_a_withdrawing_supplier_still_fails_on_its_last_day(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -558,6 +558,13 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
     )
 
 
+def _supplier_of(label: str) -> str:
+    """The supplier segment of a check label: ``<supplier>: <what>`` or
+    ``<supplier>/<contract>[/<region>]: <what>``, so whatever precedes the
+    first separator of either kind."""
+    return label.split(":", 1)[0].split("/", 1)[0].strip()
+
+
 def _mark_if_withdrawn(label: str, detail: str) -> str:
     """Prefix the withdrawal marker when this check's supplier has left.
 
@@ -569,11 +576,15 @@ def _mark_if_withdrawn(label: str, detail: str) -> str:
 
     Marking here rather than at each of the six fetch call sites keeps the one
     rule in one place, and it keys on the supplier segment of the label so a
-    check with no supplier prefix is untouched.
+    check with no supplier prefix is untouched. The segment is read the way
+    the exit bit reads it: keyed on the slash alone, the three labels with no
+    contract segment (the two hard timeouts and the unexpected error) stayed
+    unexpected, so a withdrawn supplier whose host stopped answering would
+    have filed the issue this marker exists to prevent.
     """
     if detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)):
         return detail
-    supplier = label.split("/", 1)[0]
+    supplier = _supplier_of(label)
     withdrawn = _DEPRECATED_UNTIL.get(supplier)
     if withdrawn is None:
         return detail
@@ -3856,11 +3867,7 @@ def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:
     Labels are `<supplier>: <what>` or `<supplier>/<contract>[/<region>]:
     <what>`, so the supplier is whatever precedes the first separator.
     """
-    return frozenset(
-        check.label.split(":", 1)[0].split("/", 1)[0].strip()
-        for check in checks
-        if not check.ok
-    )
+    return frozenset(_supplier_of(check.label) for check in checks if not check.ok)
 
 
 def _drift_warnings(
