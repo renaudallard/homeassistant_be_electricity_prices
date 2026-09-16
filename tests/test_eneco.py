@@ -238,6 +238,24 @@ def test_august_card_drops_the_energy_contribution_row() -> None:
     assert snap.taxes.energy_contribution == pytest.approx(0.0)
 
 
+def test_a_figure_on_the_line_below_the_excise_is_not_the_contribution() -> None:
+    """The optional second figure of the excise row matched across a newline,
+    so it was right only because the September layout prints the WKK label
+    directly after the excise. A layout that put the WKK value on the next
+    line would have read it as a contribution the law folded into the excise
+    on 2026-08-01: 1,51 c/kWh on every Eneco kWh in both regions."""
+    text = fixture_text("eneco_flex_aug26.pdf")
+    assert "Alle verbruik 4,8760\nBijdrage groene stroom en WKK" in text
+    moved = text.replace(
+        "Alle verbruik 4,8760\nBijdrage groene stroom en WKK \nVlaanderen \n(€cent/kWh)\n1,51\n",
+        "Alle verbruik 4,8760\n1,51\nBijdrage groene stroom en WKK \nVlaanderen \n(€cent/kWh)\n",
+    )
+    assert moved != text
+    snap = parse_snapshot(moved, "power_flex", "test://fix", REGION_FLANDERS)
+    assert snap.taxes.federal_excise == pytest.approx(0.048760)
+    assert snap.taxes.energy_contribution == pytest.approx(0.0)
+
+
 def test_flex_extracts_current_monthly_rate() -> None:
     snap = parse_snapshot(
         fixture_text("eneco_flex.pdf"), "power_flex", "test://flex", REGION_FLANDERS

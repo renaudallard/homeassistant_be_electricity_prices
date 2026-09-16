@@ -152,6 +152,9 @@ _INDEX_FOOTNOTE_RE = re.compile(
     r"Belpex-RLP-M\s*\((\d{2})/(\d{4}):\s*€\s*([\d.,]+)\s*/MWh\)"
 )
 _WS = r"[\s\xa0]"
+# Horizontal whitespace only: the space variants pypdf prints between two
+# figures on one row, and never a newline.
+_HWS = r"[ \t\xa0\u2009\u202f]"
 # Eneco prefixed every priced row label with a ">" bullet until the
 # June 2025 issue ("10,67 10,67 10,67 10,67 > Maandprijs"); the July
 # 2025 redesign dropped it. Accept it optionally so the archive stays
@@ -641,7 +644,13 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     tier_match = re.search(
         rf"(?:Verbruik tussen{_WS}*\n*{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*\n*{_WS}*"
         + _NUM
-        + rf"(?:{_WS}+"
+        # The optional second figure is the energy contribution printed on
+        # the SAME row. Horizontal whitespace only: with a class that matched
+        # a newline, the first figure on the line below the excise would be
+        # read as a contribution the law folded into the excise on
+        # 2026-08-01, and the WKK levy is exactly one line below on the
+        # September 2026 card.
+        + rf"(?:{_HWS}+"
         + _NUM
         + r")?",
         text,
