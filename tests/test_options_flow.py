@@ -2855,6 +2855,88 @@ def test_compare_injection_credit_weights_slots_by_export_shape() -> None:
     )
 
 
+def test_compare_injection_credit_averages_a_register_pair_over_the_year(
+    freezer: Any,
+) -> None:
+    """Trevion Groene Energie Vast prints one feed-in rate per meter register.
+    The live helper answers the register the clock is in, which is right for
+    a sensor and wrong for a rate that multiplies a whole year's export: the
+    compare page and projected_year_cost went through it and so credited the
+    day rate on a weekday afternoon and the night rate on a Sunday, 25 % apart
+    on the same card. Average the two registers over the year on the region's
+    own schedule, by the export shape when the household has one."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.pricing import is_offpeak
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_entry, make_snapshot
+
+    # The September 2026 card tests/test_trevion.py asserts.
+    snap = make_snapshot(
+        supplier="trevion",
+        contract="groene_energie_vast",
+        energy=FixedRates(single=0.1146, peak=0.1244, offpeak=0.1041),
+        injection=InjectionRates(
+            current=0.057615, peak=0.063329, offpeak=0.04333, bi_hourly=True
+        ),
+    )
+    entry = make_entry(
+        supplier="trevion",
+        contract="groene_energie_vast",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter="bi",
+        solar_regime="injection",
+        injection_kwh="sensor.inj",
+    )
+    freezer.move_to("2026-09-16 13:00:00+02:00")  # a Wednesday, day register
+    weekday = _compare_injection_credit(snap, entry, {}, None)
+    freezer.move_to("2026-09-20 13:00:00+02:00")  # a Sunday, night register
+    sunday = _compare_injection_credit(snap, entry, {}, None)
+    assert weekday is not None and weekday == sunday
+
+    # The duration mean: the year's hours in each register, counted here off
+    # the schedule itself so the expectation does not come from the helper.
+    day_hours = night_hours = 0
+    when = datetime(2026, 1, 1)
+    while when.year == 2026:
+        if is_offpeak(when, "flanders"):
+            night_hours += 1
+        else:
+            day_hours += 1
+        when += timedelta(hours=1)
+    assert weekday == pytest.approx(
+        (0.063329 * day_hours + 0.04333 * night_hours) / (day_hours + night_hours)
+    )
+
+    # Panels export by daylight, which is mostly the day register on weekdays,
+    # so a measured shape moves the credit up from the clock mean.
+    daylight = {h: 1.0 for h in range(8, 18)}
+    shaped = _compare_injection_credit(snap, entry, {}, None, None, daylight)
+    assert shaped is not None and shaped > weekday
+
+    # A single-register meter is credited what the card prints for it, and the
+    # one-to-one page's meter override is honoured over the entry's own.
+    mono = make_entry(
+        supplier="trevion",
+        contract="groene_energie_vast",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter="mono",
+        solar_regime="injection",
+        injection_kwh="sensor.inj",
+    )
+    assert _compare_injection_credit(snap, mono, {}, None) == pytest.approx(0.057615)
+    assert _compare_injection_credit(
+        snap, entry, {}, None, meter="mono"
+    ) == pytest.approx(0.057615)
+    assert _compare_injection_credit(snap, mono, {}, None, meter="dynamic") == weekday
+
+
 def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
     """A time-of-use estimate must weight the slots by the kWh they bill.
 

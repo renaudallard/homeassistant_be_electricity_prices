@@ -1848,6 +1848,7 @@ class _SweepEngine:
                 hh.avg_spot,
                 await hh.credit_month_spot_for(resolved, own=False),
                 hh.inj_hour_weights,
+                meter=meter,
             ),
             # EXPORT RATE: under compensation the bill nets consumption
             # against injection, and each side has to be priced on its own
@@ -2473,6 +2474,7 @@ class _CompareStepsMixin(OptionsFlow):
                     avg_spot,
                     await _credit_month_spot_for(other_snap, own=False),
                     inj_hour_weights,
+                    meter=meter,
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(

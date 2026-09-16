@@ -53,12 +53,15 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_METER,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     MEASURED_FULL_YEAR_DAYS,
     MEASURED_MIN_DAYS,
     MEASURED_YEAR_GAP_DAYS,
+    METER_BI,
+    METER_DYNAMIC,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -128,10 +131,20 @@ def _tou_slot_weights(
     credit uses. It is keyed by clock hour, so it multiplies straight into the
     per-hour counts rather than needing a walk of its own.
     """
-    slots = _tou_slot_hours(weekend_rule, dt_util.now().year)
+    peak, transition, offpeak = _slot_weights(
+        _tou_slot_hours(weekend_rule, dt_util.now().year), hour_weights
+    )
+    return peak, transition, offpeak
+
+
+def _slot_weights(
+    slots: tuple[dict[int, float], ...], hour_weights: dict[int, float] | None
+) -> tuple[float, ...]:
+    """Weight of each slot: its hours a year, or those hours weighted by the
+    household's own export shape when it has one (see :func:`_tou_slot_weights`
+    for why the two differ)."""
     if hour_weights is None:
-        peak, transition, offpeak = (sum(hours.values()) for hours in slots)
-        return peak, transition, offpeak
+        return tuple(sum(hours.values()) for hours in slots)
     weighted = tuple(
         sum(hour_weights.get(hour, 0.0) * count for hour, count in hours.items())
         for hours in slots
@@ -139,8 +152,36 @@ def _tou_slot_weights(
     if sum(weighted) <= 0:
         # A wired meter that exported nothing: fall back rather than divide by
         # zero or return a credit built from an empty profile.
-        return _tou_slot_weights(weekend_rule)
-    return weighted[0], weighted[1], weighted[2]
+        return _slot_weights(slots, None)
+    return weighted
+
+
+@lru_cache(maxsize=8)
+def _register_hours(region: str, year: int) -> tuple[dict[int, float], ...]:
+    """Per meter register (day, night), how many hours of ``year`` each clock
+    hour spends in it on the region's own day/night schedule, counted off
+    ``is_offpeak`` the way :func:`_tou_slot_hours` counts the TOU slots."""
+    from .pricing import is_offpeak
+
+    day: dict[int, float] = dict.fromkeys(range(24), 0.0)
+    night: dict[int, float] = dict.fromkeys(range(24), 0.0)
+    when = datetime.combine(date(year, 1, 1), time())
+    end = datetime.combine(date(year + 1, 1, 1), time())
+    while when < end:
+        (night if is_offpeak(when, region) else day)[when.hour] += 1.0
+        when += timedelta(hours=1)
+    return day, night
+
+
+def _register_weights(
+    region: str, hour_weights: dict[int, float] | None = None
+) -> tuple[float, float]:
+    """Weight of the day and night registers, the way
+    :func:`_tou_slot_weights` weights the TOU slots."""
+    day, night = _slot_weights(
+        _register_hours(region, dt_util.now().year), hour_weights
+    )
+    return day, night
 
 
 def _hour_weighted_mean(
@@ -245,6 +286,7 @@ def _compare_injection_credit(
     month_spot: float | None = None,
     inj_hour_weights: dict[int, float] | None = None,
     raw_snapshot: Any = None,
+    meter: str | None = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
@@ -253,7 +295,13 @@ def _compare_injection_credit(
     live credit uses; delegating to the live helper would instead return the
     dialog-open slot rate and bias the credit. Without a measurement it falls
     back to the published slot durations, which under-credit because the
-    overnight off-peak block occupies a third of the clock and exports nothing. A
+    overnight off-peak block occupies a third of the clock and exports nothing.
+    A day/night REGISTER pair (Trevion Groene Energie Vast, flagged
+    ``bi_hourly``) is averaged the same way over the two registers of the
+    region's schedule, on the meter the quote is for: ``meter`` when the page
+    overrides it, the entry's otherwise. It used to reach the live helper too,
+    which answers the register the clock is in, so the credit for a whole
+    year's export moved by a third between a weekday afternoon and a Sunday. A
     spot-indexed injection is priced per slot over the window and averaged by
     the household's export shape, the same basis as the TOU branch and the
     same one ``current_year_cost`` bills on. It deliberately does NOT follow
@@ -319,6 +367,22 @@ def _compare_injection_credit(
         return float(
             (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
         )
+    if (
+        inj is not None
+        and weekend_rule is None
+        and inj.bi_hourly
+        and inj.peak is not None
+        and inj.offpeak is not None
+    ):
+        if meter is None:
+            meter = entry.data.get(CONF_METER, METER_MONO)
+        if meter not in (METER_BI, METER_DYNAMIC):
+            # One register: the card's own rate for it, as the live path.
+            return _floor_injection(inj.current, inj)
+        wd, wn = _register_weights(
+            entry.data.get(CONF_REGION, REGION_FLANDERS), inj_hour_weights
+        )
+        return float((inj.peak * wd + inj.offpeak * wn) / (wd + wn))
     if (
         inj is not None
         and inj.factor is not None
