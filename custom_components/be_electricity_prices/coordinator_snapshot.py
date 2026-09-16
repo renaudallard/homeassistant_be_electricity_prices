@@ -215,13 +215,12 @@ class _SnapshotMixin:
         Compared against what the resolver would use NOW, and stamped with
         what it actually used, both through the same ``entry_annual_kwh``
         call. The stamp used to be the raw measurement while the resolver read
-        the figure through ``entry.runtime_data``, and on the first tick those
-        two are not the same thing: runtime_data is not assigned yet, so the
-        card was split against the household default under a stamp saying
-        the measurement had been applied, and this method saw nothing to redo
-        until the trailing-year figure next moved. Identity while the resolved
-        figure has not moved, which is every tick but the first of a day the
-        measurement changed on.
+        the figure through ``entry.runtime_data``, which setup assigned only
+        after the first refresh at the time, so the card was split against the
+        household default under a stamp saying the measurement had been
+        applied, and this method saw nothing to redo until the trailing-year
+        figure next moved. Identity while the resolved figure has not moved,
+        which is every tick but the first of a day the measurement changed on.
         """
         if self._snapshot_raw is None:
             return

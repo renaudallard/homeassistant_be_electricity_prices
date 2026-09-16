@@ -33,23 +33,25 @@ The coordinator is instantiated once per config entry in `async_setup_entry` (`_
 
 ```
 coordinator = BePricesCoordinator(hass, entry)      # __init__.py
+entry.runtime_data = coordinator                    # __init__.py  BEFORE the first refresh, see 1.2
 await coordinator.async_load_persistent()           # __init__.py  restore cache from disk
 await coordinator.async_config_entry_first_refresh()# __init__.py  first tick, may raise ConfigEntryNotReady
-entry.runtime_data = coordinator                    # __init__.py  ASSIGNED ONLY AFTER first refresh
 entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 ```
 
 `BePricesCoordinator.__init__` (`coordinator.py`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
 
-### 1.2 The runtime_data ordering trap
+### 1.2 When runtime_data is there
 
-`entry.runtime_data` is assigned *after* `async_config_entry_first_refresh` returns (`__init__.py`). During that very first refresh `runtime_data` is HA's `UNDEFINED` sentinel, not this coordinator. Two guards depend on this:
+`entry.runtime_data` is assigned *before* `async_config_entry_first_refresh` runs (`__init__.py`), not after it as the usual Home Assistant pattern has it. The tick resolves the archived month rows, the cohort card and the Flemish network ceiling against the yearly volume, and those read the measurement through `entry.runtime_data` (`entry_annual_kwh`, `snapshot_store.py`): assigned afterwards, the first tick of every restart could not see it and priced them on the typed figure or the household default, so a banded card billed the past months of the year-to-date on the wrong tier for an hour and `current_year_cost` stepped down at the second tick. The coordinator's own card was already resolved by handing the coordinator over explicitly (`_set_snapshot`); the early assignment covers every other reader at once.
 
-- `_save_persistent` reads `runtime_data` defensively (`coordinator.py`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
-- `async_unload_entry` (`__init__.py`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised before line 172 leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
+The attribute is still absent, HA's `UNDEFINED` sentinel, in three windows: before that line, after a first refresh that raised `ConfigEntryNotReady` on anything but an unreadable card (setup deletes it again, the way HA drops it on unload), and after an unload or mid-reload. Every reader therefore keeps its guard:
 
-Never read `entry.runtime_data` as "this coordinator" during first refresh.
+- `_save_persistent` reads `runtime_data` defensively (`coordinator.py`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`.
+- `async_unload_entry` (`__init__.py`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
+
+Never read `entry.runtime_data` as "this coordinator" without the type check.
 
 ### 1.3 State captured at construction
 

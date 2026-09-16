@@ -1137,13 +1137,15 @@ def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
     coordinator, so a what-if falls back to the typed figure and then to the
     default exactly as before.
 
-    ``coordinator`` is for the coordinator resolving its OWN card. Home
-    Assistant assigns ``entry.runtime_data`` only after the first refresh has
-    returned, so during that refresh the entry cannot lead here, and the
-    coordinator has to hand itself over: without that its first tick resolved
-    a volume-tiered card against the household default while believing it had
-    used the measurement, and nothing re-resolved it until the trailing-year
-    figure next moved, a day later on a live meter and never on a flat one.
+    ``coordinator`` is for the coordinator resolving its OWN card, and dates
+    from when setup assigned ``entry.runtime_data`` only after the first
+    refresh had returned: during that refresh the entry could not lead here,
+    so the first tick resolved a volume-tiered card against the household
+    default while believing it had used the measurement, and nothing
+    re-resolved it until the trailing-year figure next moved. Setup now
+    assigns the attribute before the first refresh, which is what lets the
+    month rows, the cohort card and the network ceiling, all of which arrive
+    here through the entry alone, see the measurement on that tick too.
     """
     if coordinator is None:
         coordinator = getattr(entry, "runtime_data", None)

@@ -5446,6 +5446,50 @@ async def test_a_transient_cold_start_failure_still_retries_setup(
         await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_RETRY
+    # And no coordinator is left on the entry that did not come up: the
+    # attribute is assigned before the first refresh, so the failure path has
+    # to take it back, the way Home Assistant drops it on unload.
+    assert not hasattr(entry, "runtime_data")
+
+
+async def test_the_coordinator_is_on_the_entry_during_its_first_refresh(
+    hass: HomeAssistant,
+) -> None:
+    """The tick resolves the archived month rows, the cohort card and the
+    Flemish network ceiling against the yearly volume, and those read the
+    measurement through entry.runtime_data. Assigned after the first refresh,
+    as the usual pattern has it, the first tick of every restart could not
+    see it and priced them on the typed figure or the household default, so
+    a banded card billed the past months on the wrong tier for an hour and
+    the year-to-date stepped down at the second tick."""
+    seen: list[Any] = []
+
+    async def _fetch(*args: Any, **kwargs: Any) -> Any:
+        seen.append(getattr(entry, "runtime_data", None))
+        return make_snapshot()
+
+    async def _no_backfill(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=_fetch),
+        ),
+        # The one-shot backfill setup schedules would reach for a recorder
+        # this harness does not run.
+        patch(
+            "custom_components.be_electricity_prices.backfill_if_missing", _no_backfill
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert seen and isinstance(seen[0], BePricesCoordinator)
+    assert seen[0] is entry.runtime_data
 
 
 async def test_a_month_indexed_credit_bakes_on_a_dynamic_contract_too(

@@ -204,6 +204,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
  async_setup_entry            __init__.py
    |  _migrate_current_year_cost_unique_id(hass, entry)  # 0.5.2 key rename carry-over
    |  BePricesCoordinator(hass, entry)
+   |  entry.runtime_data = coordinator               # before the first refresh, see coordinator.md 1.2
    |  await coordinator.async_load_persistent()      # warm cache from .storage
    |  await coordinator.async_config_entry_first_refresh()
    |        |
@@ -222,7 +223,6 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |     v
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py
    |
-   entry.runtime_data = coordinator                  __init__.py
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
    async_track_time_change(...) -> push at slot boundaries   __init__.py
    async_create_background_task(backfill_if_missing) # one-shot recorder backfill
@@ -242,9 +242,11 @@ Numbered walkthrough:
    offline boot can still serve last-known prices.
 4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
-   24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
-   `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py`),
-   so the coordinator must not read `runtime_data` during first refresh.
+   24-hour TTL expired) does it call the extractor's `fetch`. `entry.runtime_data` is assigned
+   before this refresh (`__init__.py`), so the yearly volume the month rows and the ceiling are
+   resolved against is the measured one on the first tick too; readers still type-check it,
+   since it is absent before setup, after a failed one and after an unload
+   ([coordinator.md](coordinator.md), section 1.2).
 5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
@@ -257,8 +259,7 @@ Numbered walkthrough:
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
    suppliers, `coordinator.py`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
-9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
-   slot-boundary push is registered (`__init__.py`). Because `current_price` and
+9. The three platforms are forwarded and a slot-boundary push is registered (`__init__.py`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
    quarter-hourly supplier) re-evaluates the sensors without a re-fetch, keeping them aligned to
    the slot the user is actually billed for.

@@ -288,6 +288,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     _migrate_zeroed_custom_impact_bands(hass, entry)
     _migrate_bolt_dynamic_contract(hass, entry)
     coordinator = BePricesCoordinator(hass, entry)
+    # Assigned BEFORE the first refresh, not after it as the usual pattern
+    # has it. The tick resolves the archived month rows, the cohort card and
+    # the Flemish network ceiling against the yearly volume, and those read
+    # it through entry.runtime_data (entry_annual_kwh); assigned afterwards,
+    # the first tick of every restart could not see the measurement and
+    # priced them on the typed figure or the household default, so a banded
+    # card billed the past months of the year-to-date on the wrong tier for
+    # an hour and stepped down at the second tick. Every reader still copes
+    # with the attribute being absent, which it is until this line, after a
+    # setup that failed below, and after an unload.
+    entry.runtime_data = coordinator
     await coordinator.async_load_persistent()
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -297,11 +308,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
         # entities at all and nothing ever gets it out. Set up regardless: the
         # entities exist and read unavailable, the Repairs card explains the
         # workaround, and the entry stays reconfigurable. Every other
-        # cold-start failure keeps the retry, which is what it is for.
+        # cold-start failure keeps the retry, which is what it is for, and
+        # leaves no coordinator on the entry, the way Home Assistant drops it
+        # on unload.
         if not coordinator.card_unreadable:
+            object.__delattr__(entry, "runtime_data")
             raise
 
-    entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
