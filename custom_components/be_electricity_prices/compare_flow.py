@@ -3084,7 +3084,6 @@ class _SweepStepsMixin(_CompareStepsMixin):
         if nxt is None:
             return self.async_show_progress_done(next_step_id="compare_all_result")
         # Anything skipped on the way here could not fit and is left pending.
-        sweep["skipped"] = sweep.get("skipped", 0) + (nxt - sweep["index"])
         sweep["index"] = nxt
         supplier, contract, quarter_hourly = sweep["candidates"][sweep["index"]]
         self._sweep_task = self.hass.async_create_task(
