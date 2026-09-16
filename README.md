@@ -623,7 +623,10 @@ inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
 
 - **`snapshot_stale_<entry>`** — the cached snapshot is older than **7
-  days**.
+  days**. Not raised once the supplier has left the market (its
+  `deprecated_until` has passed): the final card stays stale for good, the
+  deprecation notice below already says so, and the entry stops asking the
+  supplier for a card that is gone.
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;

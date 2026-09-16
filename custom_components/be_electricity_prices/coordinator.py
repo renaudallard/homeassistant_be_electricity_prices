@@ -860,7 +860,7 @@ class BePricesCoordinator(
                 if not self._last_error:
                     self._last_error = str(err)
                 age = self._snapshot_age_hours()
-                stale = age > SNAPSHOT_STALE_DAYS * 24
+                stale = age > SNAPSHOT_STALE_DAYS * 24 and not self._supply_ended()
                 self._sync_stale_issue(stale)
             raise
 
@@ -1323,7 +1323,10 @@ class BePricesCoordinator(
         await self._save_persistent()
 
         age = self._snapshot_age_hours()
-        stale = age > SNAPSHOT_STALE_DAYS * 24
+        # A supplier that has left keeps its final card for good; the
+        # deprecation card already says so, and a second alarm on top of it
+        # asked the user to fix a staleness nothing can fix.
+        stale = age > SNAPSHOT_STALE_DAYS * 24 and not self._supply_ended()
         self._sync_stale_issue(stale)
         self._sync_exclusive_night_gap_issue()
         self._sync_impact_gap_issue()

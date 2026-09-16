@@ -5883,3 +5883,38 @@ async def test_a_cleared_entsoe_blip_leaves_last_error(
 
     assert await _tick("ENTSO-E: HTTP 503") == ""
     assert await _tick("HTTP 500 fetching the card") == "HTTP 500 fetching the card"
+
+
+async def test_a_withdrawn_supplier_is_neither_asked_nor_flagged_stale(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Past deprecated_until the supplier's final card stays up and stays
+    stale for good. Every hourly tick still fetched it, logged two warnings
+    per tick and, a week after the last fetch, raised the stale card on top of
+    the deprecation card already explaining it. Nothing in this repository
+    can fix that staleness, so the entry keeps what it holds quietly."""
+    freezer.move_to("2026-09-16 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot())
+    coord._snapshot_fetched_at = dt_util.utcnow() - timedelta(days=8)
+    fetch = AsyncMock(side_effect=AssertionError("must not ask a supplier that left"))
+    gone = replace(make_stub_extractor(fetch=fetch), deprecated_until=date(2026, 8, 31))
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=gone,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_issues.get_extractor",
+            return_value=gone,
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+        assert fetch.await_count == 0
+        coord._sync_stale_issue(
+            coord._snapshot_age_hours() > 7 * 24 and not coord._supply_ended()
+        )
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"snapshot_stale_{entry.entry_id}") is None

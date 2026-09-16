@@ -119,6 +119,8 @@ class _SnapshotMixin:
         # binary_sensor and diagnostics: a cycle.
         hass: HomeAssistant
 
+        def _supply_ended(self) -> bool: ...
+
         def _sync_extractor_issue(
             self,
             message: str | None,
@@ -338,6 +340,13 @@ class _SnapshotMixin:
         # CardNotReadableError is raised per download: a supplier that goes
         # back to publishing text has to stop being unreadable on its own.
         self._card_unreadable = False
+        if self._supply_ended():
+            # The supplier has left the market: its final card stays up and
+            # stays stale for good, and asking for it every hour only logged
+            # two warnings per tick against a card that is gone. Keep serving
+            # what is held; the year-to-date still reads the archive through
+            # fetch_for_month, which is not this path.
+            return
         result = await fetch_shared(
             self.hass,
             self._session,

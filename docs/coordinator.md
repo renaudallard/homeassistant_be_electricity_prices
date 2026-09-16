@@ -462,7 +462,7 @@ Repairs issues, all keyed by `entry_id`:
 
 | Issue | Raised by | When | Line |
 |-------|-----------|------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 158 |
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d), and the supplier has not left the market (`_supply_ended`): past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all | - |
 | `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 316 |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 316 |
 | `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 316 |
