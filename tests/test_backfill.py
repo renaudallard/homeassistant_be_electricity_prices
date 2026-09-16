@@ -1854,3 +1854,34 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     # or agreeing with it would prove nothing.
     assert stats["welcome_credit_eur"] == pytest.approx(200.0 * 90 / 365)
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
+
+
+def test_backfilled_feed_in_bills_the_printed_indicative_beside_a_formula() -> None:
+    """A static card that prints a monthly indicative beside its formula
+    bills the indicative; the live scalar and both year-to-date walks hand
+    the hour's spot to the credit only when the card settles per slot. The
+    backfill handed it unconditionally, so the same hour was credited off
+    the formula there and off the indicative everywhere else."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=60.0),
+        injection=InjectionRates(current=0.05, factor=0.9, base=-0.01),
+    )
+    utc_hour = datetime(2026, 1, 6, 11, tzinfo=UTC)
+    rate = bf._injection_rate_for_hour(
+        snap,
+        spot=0.06,
+        spots={utc_hour: 0.06},
+        quarters={},
+        utc_hour=utc_hour,
+        local=dt_util.as_local(utc_hour),
+        spp_weights=None,
+        month_spp_cache={},
+        hourly_injection=False,
+        today=date(2026, 1, 31),
+    )
+    assert rate == pytest.approx(0.05)

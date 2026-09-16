@@ -116,6 +116,7 @@ from .injection import (
     _injection_hourly_on_cohort,
     _injection_needs_month_spot,
     _injection_needs_spot,
+    _injection_is_spot_formula,
 )
 from .spot_stats import (
     _NetAllocation,
@@ -522,7 +523,17 @@ def _injection_rate_for_hour(
     """
     monthly_mean = _injection_on_month_mean(snap_h)
     inj_spot = _spp_injection_spot(
-        spot,
+        # The hour's spot goes in only when the CREDIT is the one that replays
+        # it, judged by the same predicate the live scalar and the year-to-date
+        # walk use: a card that prints a monthly indicative beside its formula
+        # bills the indicative, and handing this the energy's spot priced a
+        # whole year of feed-in off a formula the card calls an illustration.
+        (
+            spot
+            if snap_h.injection is not None
+            and _injection_is_spot_formula(snap_h.injection, snap_h.energy)
+            else None
+        ),
         monthly_mean=monthly_mean,
         # An SPP-indexed formula may only resolve against the SPP-weighted
         # mean; without one _historical_injection_rate falls through to the
