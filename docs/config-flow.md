@@ -129,8 +129,9 @@ in the mixin: `_after_meter` (`config_flow.py`), `_after_dso_tariff_mode`
 
 Schema `_user_schema` (`flow_schemas.py`). Two dropdowns:
 
-- Supplier: `_supplier_options()` (`config_flow.py`) lists every registered
-  extractor by `id`/`label`, minus any carrying `deprecated_until` (a supplier that
+- Supplier: `_supplier_options()` (`flow_schemas.py`) lists every registered
+  extractor by `id`/`label`, ordered by label with the expert custom supplier
+  last, minus any carrying `deprecated_until` (a supplier that
   has announced it is leaving the residential market -- you cannot sign up for a
   contract being transferred away). Region filtering happens at the *contract* step
   instead, so a supplier with no product in the chosen region aborts there with a
