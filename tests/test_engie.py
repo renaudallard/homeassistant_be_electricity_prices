@@ -977,3 +977,31 @@ async def test_archive_swallows_failures_and_unsold_combinations(
     )
     assert len(asked) == 1
     assert EXTRACTORS["engie"].fetch_for_month is engie.fetch_for_month
+
+
+async def test_archive_offset_counts_from_the_brussels_date(
+    freezer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The month offset the document API takes is the calendar distance from
+    today, and today was the OS clock's. On a UTC host that is still
+    yesterday until 02:00 Brussels, so on the first of a month the offset for
+    the month just closed was one short and the archive answered with the
+    card after it, which the validity check then refused."""
+    from custom_components.be_electricity_prices.providers import engie
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    freezer.move_to("2026-10-01 00:30:00+02:00")
+    asked: list[str] = []
+
+    async def _capture(session: Any, url: str, *a: Any, **k: Any) -> str:
+        asked.append(url)
+        raise ExtractorError("HTTP 404 fetching " + url)
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _capture)
+    assert (
+        await engie.fetch_for_month(
+            None, "engie_easy_fixed", "wallonia", date(2026, 9, 1)
+        )  # type: ignore[arg-type]
+        is None
+    )
+    assert asked and "monthOffset=1&" in asked[0]

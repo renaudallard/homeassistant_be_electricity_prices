@@ -56,6 +56,7 @@ from datetime import date
 from dataclasses import dataclass, replace
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     VAT_RATE_STANDARD,
@@ -488,7 +489,11 @@ async def fetch_for_month(
     ):
         return None
     first = date(year_month.year, year_month.month, 1)
-    today = date.today()
+    # Home Assistant's own zone, like every other provider: the OS clock is
+    # still yesterday between midnight and 02:00 Brussels on a UTC host, and
+    # on the first of a month that made the offset for the month just closed
+    # one short, so the archive answered with the card after it.
+    today = dt_util.now().date()
     offset = (today.year - first.year) * 12 + (today.month - first.month)
     if offset < 0:
         return None
