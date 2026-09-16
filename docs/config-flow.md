@@ -756,9 +756,10 @@ emits has a matching entry under `config.step.*` / `config.abort.*` / `config.er
 | Options menu + every options step | `options.step.*` (`strings.json`) |
 
 The `translation_key` selectors (`region`, `capacity_mode`, `meter`,
-`dso_tariff_mode`, `connection_kva_tier`, `solar_regime`, and `supplier` in the
-compare step) resolve their option labels from `selector.<key>.options`
-(`strings.json`), not from the raw enum values. The options-flow steps reuse the
+`dso_tariff_mode`, `connection_kva_tier`, `solar_regime`) resolve their option
+labels from `selector.<key>.options` (`strings.json`), not from the raw enum
+values; the compare step's supplier picker carries its labels on the options
+themselves. The options-flow steps reuse the
 config-flow strings through `[%key:component::be_electricity_prices::config::step::...%]`
 references (for example `options.step.edit.title` -> `config.step.user.title`,
 `strings.json`), so the same text is not duplicated.

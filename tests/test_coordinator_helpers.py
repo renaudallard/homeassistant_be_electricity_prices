@@ -5264,6 +5264,40 @@ def test_strings_json_reads_the_same_as_the_english_translation() -> None:
     assert not missing, f"strings.json has no source string for {missing}"
 
 
+def test_every_selector_translation_key_names_a_selector_block() -> None:
+    """A `translation_key` on a select selector makes the frontend look the
+    option labels up under `selector.<key>.options` in strings.json, falling
+    back to the label carried on the option and then to the raw value. A key
+    with no block is inert at best, and a picker that relies on it for its
+    labels shows users the raw enum values. The compare supplier picker named
+    `supplier` for a year while no such block existed, and the docs listed it
+    among the keys that resolve.
+    """
+    import inspect
+    import pathlib
+    import re
+
+    from custom_components.be_electricity_prices import (
+        compare_flow,
+        config_flow,
+        flow_schemas,
+    )
+
+    base = pathlib.Path(__file__).resolve().parent.parent / (
+        "custom_components/be_electricity_prices"
+    )
+    blocks = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))[
+        "selector"
+    ]
+    named = {
+        key
+        for module in (compare_flow, config_flow, flow_schemas)
+        for key in re.findall(r'translation_key="([^"]+)"', inspect.getsource(module))
+    }
+    assert named, "no select selector names a translation key any more"
+    assert named <= set(blocks), sorted(named - set(blocks))
+
+
 def test_the_meters_step_explains_every_field() -> None:
     """The meters step must carry per-field help, not just labels.
 

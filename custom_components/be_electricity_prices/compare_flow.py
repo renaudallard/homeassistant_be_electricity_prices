@@ -1953,7 +1953,6 @@ class _CompareStepsMixin(OptionsFlow):
                         SelectSelectorConfig(
                             options=options,
                             mode=SelectSelectorMode.DROPDOWN,
-                            translation_key="supplier",
                         )
                     ),
                 }
