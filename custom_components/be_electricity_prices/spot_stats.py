@@ -97,8 +97,9 @@ def _group_spot_quarters_by_hour(
     costs more than the four numbers it carries.
 
     An hour holds between one and four values. ENTSO-E answers a PT15M request
-    with the PT60M series where no 15-minute one was published (``api.py:159``),
-    a week-chunk can stop mid-hour, and the carry-forward rule can leave a slot
+    with the PT60M series where no 15-minute one was published
+    (``parse_day_ahead_xml`` in ``api.py``), a week-chunk can stop mid-hour,
+    and the carry-forward rule can leave a slot
     unspecified. Nothing here requires four: the mean of whatever the hour
     holds is still the best answer about that hour, and a single value
     degenerates to the plain hourly price.

@@ -2669,13 +2669,15 @@ class _CompareStepsMixin(OptionsFlow):
             return placeholders
 
         # Year-to-date what-if. Two paths:
-        #   1. Archive-capable suppliers (Eneco / Cociter / Ecopower):
-        #      reuse the coordinator's _compute_current_year_cost engine
-        #      against each snapshot chain, so per-month tariff transitions
-        #      and the same proration model the user's actual bill uses
-        #      apply to both sides. Most accurate.
-        #   2. Suppliers without an archive (Bolt / Mega / OCTA+ / Engie /
-        #      Luminus / DATS 24 / TotalEnergies): fall back to the simple
+        #   1. Archive-capable pairs, both suppliers keeping a month archive
+        #      (every scraped supplier but Ecofix and TotalEnergies today)
+        #      and neither side spot-priced: reuse the coordinator's
+        #      _compute_current_year_cost engine against each snapshot
+        #      chain, so per-month tariff transitions and the same proration
+        #      model the user's actual bill uses apply to both sides. Most
+        #      accurate.
+        #   2. Everything else (a side without an archive, the custom
+        #      supplier, a spot-priced side): fall back to the simple
         #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
         #      and same proration on both sides, so the delta still isolates
         #      the supplier-driven difference.

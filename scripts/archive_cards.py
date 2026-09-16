@@ -3,7 +3,7 @@
 
 Walks every registered (supplier, contract, region), fetches the card the
 integration would price on right now and writes what it parsed to
-``<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json``, with every text
+``<out>/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json``, with every text
 the parse read under ``<out>/texts/<YYYY-MM>/<sha256>.txt``. A card is
 filed under the month its own publication label names, so a supplier
 publishing in arrears (Ecopower's definitive card lands at the end of the
@@ -174,38 +174,6 @@ _LEGEND = (
 _PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_store.py")
 # The PDF readers whose installed version is part of what a parse depends on.
 _READERS = ("pypdf", "pdfplumber")
-
-_README = """# Tariff card archive
-
-Written daily by `.github/workflows/archive_cards.yml` running
-`scripts/archive_cards.py` from the main branch. Not edited by hand.
-
-- `<supplier>/<contract>/<region>/<YYYY-MM>.json`: the card as the
-  integration parsed it, filed under the month the card names, or under
-  the month it was seen in when it names none.
-- `texts/<YYYY-MM>/<sha256>.txt`: every document text a parse read that
-  month, stored once and shared between the cards that read it. Each card
-  lists its own under `_sources`, and names the PDF it read by SHA-256.
-- `pdfs.json`: where each PDF is kept, as `<release tag>/<sha256>.pdf` in
-  the releases of the cards repository (`be_price_cards`, shared with
-  be_water_prices; this integration's releases are `electricity-<YYYY-MM>`,
-  one per month of cards, whatever day the card was captured on).
-- `unparsed.json`: the cards kept whose parse failed, by the row they
-  would have become. A supplier that publishes its card as page images
-  some months leaves the bytes readable by nobody; they are uploaded all
-  the same, and this is what says which card they are.
-- `coverage.md` and `coverage/<supplier>.md`: which months the archive
-  holds for each contract and region, whether each was captured live or
-  mirrored from the supplier's archive, and links from each month to the
-  PDF it was parsed from, to the page text it read and to the JSON above;
-  one sheet per supplier, the index naming them. A month marked
-  `(not parsed)` is one of the cards above: the PDF is there, the JSON is
-  not.
-
-To get the original card of a contract and month: open `coverage.md`, open
-the supplier's sheet, find the row, click `pdf` (or `page`); `json` is what
-the integration parsed out of it. Months older than three years are removed.
-"""
 
 
 class _RecordingMemo(dict[str, str]):
@@ -1016,13 +984,10 @@ def _write_coverage(
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
-    """The coverage sheets and the archive README, rewritten when out of date.
-    The index of PDFs by release that earlier versions wrote is removed, the
-    coverage sheets having taken it over."""
+    """The coverage sheets, rewritten when out of date. The index of PDFs by
+    release that earlier versions wrote is removed, the coverage sheets having
+    taken it over; the README beside them is the workflow's."""
     _write_coverage(out, pdf_base_url, archive_base_url)
-    readme = out / "README.md"
-    if not readme.exists() or readme.read_text(encoding="utf-8") != _README:
-        readme.write_text(_README, encoding="utf-8")
     (out / "pdfs.md").unlink(missing_ok=True)
 
 

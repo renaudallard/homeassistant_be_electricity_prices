@@ -266,12 +266,12 @@ METER_EXCLUSIVE_NIGHT: Final = "exclusive_night"
 # install flow and the compare flow gate on it, and the copies had already
 # drifted once: tou_impact was missing from the compare side, which offered an
 # impossible mono/bi meter for Mega Off-peak Impact.
+SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_impact")
+
 # Belgium's standard VAT rate. The professional cards are published
 # excluding it, so the pro extractors gross their values back up by it;
 # three of them declared their own copy with the same comment.
 VAT_RATE_STANDARD: Final = 0.21
-
-SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_impact")
 
 # Contract kinds whose energy leg cannot be priced without an ENTSO-E spot:
 # dynamic resolves per slot, spot_monthly against the delivery month's mean.
@@ -363,8 +363,8 @@ CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
 # Brussels contractual connection power (kVA), used only to pick the Brugel
 # OSP (Obligations de Service Public) annual-fee tier off the Sibelga card.
-# Residential connections are <=13 kVA, so only the four residential tiers
-# are offered; the key is matched against the parsed OSP table.
+# Eight tiers are offered, the four at or below 13 kVA most households sit
+# on and the four above them; the key is matched against the parsed OSP table.
 CONF_CONNECTION_KVA_TIER: Final = "connection_kva_tier"
 CONNECTION_KVA_TIER_LE1_44: Final = "le1_44"
 CONNECTION_KVA_TIER_LE6: Final = "le6"
@@ -490,9 +490,9 @@ CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps
-# the native quarter-hour slots only for suppliers that actually bill per
-# quarter-hour (Engie Dynamic). Values match the ENTSO-E resolution
-# tokens so the spot client can reuse them.
+# the native quarter-hour slots only for the contracts that bill per
+# quarter-hour, Engie Dynamic being the first of them. Values match the
+# ENTSO-E resolution tokens so the spot client can reuse them.
 RESOLUTION_HOURLY: Final = "PT60M"
 RESOLUTION_QUARTER: Final = "PT15M"
 

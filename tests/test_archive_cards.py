@@ -169,7 +169,6 @@ async def test_a_card_is_filed_under_the_month_its_label_names(tmp_path: Path) -
     assert source == {"url": CARD_URL, "variant": "text", "text": ANY}
     assert source["text"].startswith("texts/2026-09/")
     assert (tmp_path / source["text"]).read_text() == "card text"
-    assert (tmp_path / "README.md").exists()
 
 
 async def test_an_unreadable_label_files_under_the_month_seen(tmp_path: Path) -> None:
@@ -1581,8 +1580,8 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
 ) -> None:
     """Once the manifest says where a card's PDF landed, the coverage cell
     links to it beside the row's JSON; --index-only rewrites the table
-    without fetching anything, refreshes a stale branch README and drops
-    the PDF index earlier versions wrote."""
+    without fetching anything and drops the PDF index earlier versions
+    wrote."""
     out, pdfs = tmp_path / "out", tmp_path / "pdfs"
     session = _PdfSession({PDF_URL: b"%PDF v1"})
     extractor = _extractor(_pdf_fetch(session, []), contracts=("a", "b"))
@@ -1609,7 +1608,6 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
         json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
     )
     (out / "pdfs.md").write_text("stale index")
-    (out / "README.md").write_text("stale readme")
     ac._write_listings(out, base, branch)
     url = f"{base}/electricity-2026-09/{digest}.pdf"
     coverage = (out / "coverage/acme.md").read_text()
@@ -1622,7 +1620,6 @@ async def test_a_person_can_get_from_a_month_to_its_pdf_and_its_json(
         in coverage
     )
     assert not (out / "pdfs.md").exists()
-    assert (out / "README.md").read_text() == ac._README
 
 
 def test_index_only_touches_nothing_but_the_listing(
@@ -1637,7 +1634,6 @@ def test_index_only_touches_nothing_but_the_listing(
     (tmp_path / "pdfs.md").write_text("stale index")
     assert ac.main() == 0
     assert (tmp_path / "coverage.md").exists()
-    assert (tmp_path / "README.md").exists()
     assert not (tmp_path / "pdfs.md").exists()
 
 
