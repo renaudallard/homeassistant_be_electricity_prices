@@ -396,6 +396,12 @@ class _SnapshotMixin:
             self._snapshot_fetched_at = result.row.fetched_at
             self._snapshot_probe_key = result.row.probe_key
             self._last_error = ""
+            # A card with a text layer came in, ours or a sibling's, so the
+            # notice that the prices were read off a picture of the card no
+            # longer holds. This is the one arm a readable card lands on,
+            # which is why the reset lives here and nowhere else.
+            self._card_read_by_ocr = False
+            self._sync_card_read_by_ocr_issue(False)
             # No pop here. A successful fetch already clears the negative row
             # inside fetch_shared, and the ADOPT arm must not: adopting a
             # sibling's card says nothing about whether the supplier answered

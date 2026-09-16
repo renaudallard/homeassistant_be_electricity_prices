@@ -2067,6 +2067,67 @@ async def test_a_row_the_card_itself_was_read_from_raises_no_ocr_notice(
     )
 
 
+async def test_a_readable_card_clears_the_ocr_notice(hass: HomeAssistant) -> None:
+    """The flag and the Repairs card were set when an OCR row was adopted and
+    never reset: a later tick that fetched a card with a text layer cleared
+    the extractor cards and left this one, so every Ecofix entry kept telling
+    the user its figures were read off a picture for the life of the entry,
+    on the sensor and in Repairs, once Ecofix published text again."""
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        ArchivedCard,
+        _shared_failed_fetches,
+    )
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    snap = make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+    issue_id = f"card_read_by_ocr_{entry.entry_id}"
+
+    async def _textless(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError("card has no text layer: 172 characters")
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=_textless),
+        ),
+        patch.object(
+            snapshot_store,
+            "_archived_card_from_github",
+            AsyncMock(return_value=ArchivedCard(snapshot=snap, read_by_ocr=True)),
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert coord.card_read_by_ocr is True
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # The next tick: the supplier is back to publishing a text layer. Its
+    # probe answers a key, as Ecofix's HEAD does, so the OCR row, which was
+    # deliberately not stamped as a probe hit, is re-fetched rather than kept
+    # for the TTL a probe-less supplier would get.
+    _shared_failed_fetches(hass).clear()
+
+    async def _readable(*args: Any, **kwargs: Any) -> Any:
+        return snap
+
+    readable = replace(
+        make_stub_extractor(fetch=_readable), probe=AsyncMock(return_value="sep-text")
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=readable,
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert coord.card_read_by_ocr is False
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_the_archive_is_not_asked_when_the_household_switched_it_off(
     hass: HomeAssistant,
 ) -> None:
