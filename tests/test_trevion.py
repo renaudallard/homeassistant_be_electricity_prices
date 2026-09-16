@@ -327,6 +327,77 @@ async def test_fetch_for_month_parses_archive_and_rejects_missing_month(
     )
 
 
+async def test_listing_resolves_the_newest_month_of_a_product() -> None:
+    """Two months of one product on the listing: the newer one is the card.
+    The listing tests used one month per product, so the resolver's max()
+    could have been a min() and every test stayed green, which is the
+    0.12.5 Ecopower shape: the oldest card, downloading and parsing clean."""
+    contract = _BY_ID["groene_energie_vast"]
+    html = "\n".join(
+        f'<a href="/tariefkaarten/{n}">{n}</a>'
+        for n in (
+            "Trevion-tariefkaart-Groene-energie-VAST-particulier-202608.pdf",
+            "Trevion-tariefkaart-Groene-energie-VAST-particulier-202609.pdf",
+        )
+    )
+    url, label = await _find_card(make_text_session(html), contract)
+    assert label == "2026-09"
+    assert "202609" in url
+
+
+async def test_fetch_for_month_takes_the_requested_month_not_the_newest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive lookup hands the month to the resolver; without it the
+    resolver answers the newest card, which parses and passes for April's."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    html = "\n".join(
+        f'<a href="/tariefkaarten/{n}">{n}</a>'
+        for n in (
+            "Trevion-tariefkaart-Groene-energie-VAST-particulier-202604.pdf",
+            "Trevion-tariefkaart-Groene-energie-VAST-particulier-202609.pdf",
+        )
+    )
+    render = AsyncMock(return_value=_layout(_VAST_APRIL))
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", render)
+    snap = await fetch_for_month(
+        make_text_session(html),
+        "groene_energie_vast",
+        REGION_FLANDERS,
+        date(2026, 4, 12),
+    )
+    assert snap is not None and snap.publication_label == "2026-04"
+    assert "202604" in render.call_args.args[1]
+
+
+async def test_fetch_for_month_rejects_a_card_that_names_another_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A CDN serving the current card under an archived name must not bill
+    April at September's rates: the validity cross-check answers None."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    html = (
+        '<a href="/tariefkaarten/'
+        'Trevion-tariefkaart-Groene-energie-VAST-particulier-202604.pdf">card</a>'
+    )
+    monkeypatch.setattr(
+        trevion,
+        "fetch_pdf_text_layout",
+        AsyncMock(return_value=_layout("trevion_vast_2026-09.pdf")),
+    )
+    assert (
+        await fetch_for_month(
+            make_text_session(html),
+            "groene_energie_vast",
+            REGION_FLANDERS,
+            date(2026, 4, 12),
+        )
+        is None
+    )
+
+
 async def test_unsupported_contracts_and_regions_do_not_fetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
