@@ -387,6 +387,7 @@ class _SpotsMixin:
     _rlp_blend: str
     _rlp_blend_weights: dict[str, RlpWeights]
     _complete_spot_days: set[date]
+    _complete_spot_days_quarters: bool
     _quarter_grid_days: set[date]
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
@@ -490,6 +491,14 @@ class _SpotsMixin:
         want_quarters = snap is not None and _injection_needs_spot_quarters(
             snap, self.entry
         )
+        if want_quarters != self._complete_spot_days_quarters:
+            # A day found complete against one cache says nothing about the
+            # other. The flip that happens inside one coordinator lifetime is
+            # a card gaining a floor: the shortcut below then answered 24 for
+            # a day whose quarters were never fetched, and the floored credit
+            # replayed off the hourly mean until the next restart.
+            self._complete_spot_days.clear()
+            self._complete_spot_days_quarters = want_quarters
         if snap is not None and not want_quarters:
             # The entry stopped needing the slots. Unticking the quarter-hourly
             # box or the never-negative one, or leaving the injection regime,

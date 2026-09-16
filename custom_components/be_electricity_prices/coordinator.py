@@ -550,6 +550,9 @@ class BePricesCoordinator(
         # timezone conversion and 24 dict lookups for every settled day. Prior
         # year entries are dropped in _prune_historical_spots at the boundary.
         self._complete_spot_days: set[date] = set()
+        # Which cache the days above were measured against: the hourly one or
+        # the quarter one; the set is dropped when that flips.
+        self._complete_spot_days_quarters = False
         # Local days whose cached spots came from ENTSO-E's 15-minute product,
         # for an entry billed hourly whose archived month card bills per
         # quarter-hour: the walk fetches such a month on that product, and a

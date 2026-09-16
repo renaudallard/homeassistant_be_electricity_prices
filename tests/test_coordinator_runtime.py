@@ -528,6 +528,49 @@ async def test_a_complete_hourly_day_is_refetched_when_its_quarters_are_missing(
     )
 
 
+async def test_a_day_found_complete_on_the_hourly_cache_is_re_measured_once_quarters_are_wanted(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The complete-day shortcut remembered a verdict taken against the hourly
+    cache. When the card gained a floor mid-year the entry started wanting the
+    quarter cache, but the shortcut kept answering 24 for the day, so the
+    quarters were never fetched and the floored credit replayed off the
+    hourly mean until the next restart."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _floored_quarter_entry()
+    entry.add_to_hass(hass)
+    day_start = datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
+    coord = BePricesCoordinator(hass, entry)
+    coord._historical_spots = {day_start + timedelta(hours=h): 0.05 for h in range(24)}
+    calls = 0
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        nonlocal calls
+        calls += 1
+        return {
+            start + timedelta(hours=h, minutes=15 * q): 0.05
+            for h in range(24)
+            for q in range(4)
+        }
+
+    # An unfloored formula walks off the hourly cache and finds the day whole.
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+    )
+    with _patch_spot_fetch(_fake_fetch):
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+    assert calls == 0 and date(2026, 1, 1) in coord._complete_spot_days
+
+    # The card gains a floor: the same coordinator now wants the quarters.
+    coord._snapshot = _floored_quarter_snapshot()
+    with _patch_spot_fetch(_fake_fetch):
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+    assert calls == 1
+    assert len(coord._historical_spot_quarters) == 24
+
+
 async def test_ensure_historical_spots_skips_permanently_short_day(
     hass: HomeAssistant, freezer: Any
 ) -> None:
