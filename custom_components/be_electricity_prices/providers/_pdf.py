@@ -575,9 +575,10 @@ def vat_multiplier(
     ``"21,5%"``) work without per-provider parsing.
 
     Falls back to ``default`` (1.06, the current Belgian residential rate)
-    when none of the patterns match - the value of the multiplier itself
-    is not load-bearing because most cards either ship VAT-incl numbers
-    (no rescaling needed) or print the rate explicitly.
+    when none of the patterns match. Most cards ship VAT-inclusive figures
+    or print the rate, so the value rarely matters; where a card prints
+    ex-VAT coefficients and no rate at all (every residential Bolt card) the
+    fallback is what the entry bills on, and such a caller names it.
     """
     for pattern in patterns:
         match = (

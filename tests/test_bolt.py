@@ -1203,3 +1203,21 @@ def test_each_card_keeps_its_own_coefficients_and_standing_charge() -> None:
     for cid, url in urls.items():
         slug = bolt_mod._CONTRACTS_BY_ID[cid].slug
         assert url.endswith(f"/var/{slug}_res_el_fr_13.pdf"), cid
+
+
+def test_residential_cards_print_no_vat_phrase_so_the_fallback_is_the_rate() -> None:
+    """The settlement coefficients and the Impact bands are grossed by the
+    multiplier, and no residential card prints a "N% TVA" phrase for it to
+    read: "TVAC" and "HTVA" are all they say. The residential rate is named
+    in the module for that reason, rather than being the helper's default
+    by accident."""
+    from custom_components.be_electricity_prices.providers import bolt
+    from custom_components.be_electricity_prices.providers._pdf import vat_multiplier
+
+    for name in ("bolt_fix.pdf", "bolt_variable.pdf"):
+        text = fixture_text(name, layout=True)
+        assert bolt._VAT_PHRASE_RE.search(text) is None, name
+        assert (
+            vat_multiplier(text, bolt._VAT_PHRASE_RE, default=bolt._RESIDENTIAL_VAT)
+            == 1.06
+        )

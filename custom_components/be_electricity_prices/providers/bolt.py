@@ -638,9 +638,12 @@ def _consumption_formula(
             raise ExtractorError("Bolt: professional card is not marked HTVA")
         vat = 1.0
     else:
-        vat = vat_multiplier(
-            text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
-        )
+        # No residential Bolt card prints a "N% TVA" phrase: they read "TVAC"
+        # and mark the settlement formula "HTVA", so the multiplier is the
+        # residential rate by default rather than by reading, and it IS
+        # load-bearing here, since the settlement leg and the Impact bands
+        # below are grossed by it.
+        vat = vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT)
     base_eur_mwh = parse_sign(sign) * to_float(base_s)
     return to_float(factor_s) * vat, base_eur_mwh / 1000.0 * vat
 
@@ -796,9 +799,7 @@ def _extract_energy(
             text,
             1.0
             if professional
-            else vat_multiplier(
-                text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
-            ),
+            else vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT),
         )
         # ``current`` is the printed Prix mensuel, which is what a household
         # settling against the RLP-weighted month is billed. The coefficients
@@ -1260,6 +1261,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 # Re-verify at least every 6 months (next: 2026-11) by parsing a
 # current Bolt Wallonia card and confirming TECTEO RESA's printed
 # distribution_single is HIGHER than WAVRE's (the swap target).
+# The residential VAT the settlement formula and the Impact bands are grossed
+# by. Named rather than left to the helper's default: the residential cards
+# print no "N% TVA" phrase for the multiplier to read, so this is the value
+# every residential entry bills on, and a helper default is where a reader
+# would not look for it.
+_RESIDENTIAL_VAT = 1.06
+_VAT_PHRASE_RE = re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,
