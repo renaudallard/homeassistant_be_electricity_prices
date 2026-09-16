@@ -135,6 +135,17 @@ jobs:
             #        traceback is in the run's stdout. None of the
             #        issue-creation steps below fire for rc=8, so the
             #        PR check (last step) is the only push-time signal.
+            # A harness that died before _run wrote no failure list: a
+            # module-level ImportError exits 1, an OOM kill 137, a runner
+            # SIGTERM 143. An odd code took the extractor branch with an
+            # empty attempt list and ended green as "transient"; an even
+            # one broke out as if green and landed on an rc no step below
+            # matched. Both are the crash rc 8 exists for.
+            if [ "$rc" -gt 7 ] || { [ $((rc & 1)) -ne 0 ] && [ ! -f extractor_failures.txt ]; }; then
+              echo "harness died (exit $rc) without writing its failure list" >&2
+              rc=8
+              break
+            fi
             if [ $((rc & 1)) -eq 0 ]; then
               # A green sweep clears the intersection: every earlier
               # failure has now passed at least once.

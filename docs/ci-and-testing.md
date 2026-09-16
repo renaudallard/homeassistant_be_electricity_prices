@@ -642,7 +642,7 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 | 0 | 1 | extractor **regression** (fetch or parse), excluding unreadable cards | yes |
 | 1 | 2 | catalog signal (a new product appeared at a supplier) | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
-| - | 8 | harness crash (top-level Python exception in the script) | no |
+| - | 8 | harness crash: a top-level Python exception in the script, or, set by the workflow's loop itself, any exit above 7 and any odd exit with no `extractor_failures.txt` written (a module-level ImportError exits 1, an OOM kill 137, a runner SIGTERM 143) | no |
 
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
@@ -1004,7 +1004,11 @@ On `pull_request` events the issue-creation steps are skipped; instead a final s
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
 informational, not a regression (`.github/workflows/live_check.yml`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml`).
+ending green (`.github/workflows/live_check.yml`). The retry loop maps a harness that died
+before writing its failure list onto that code too: an odd exit used to take the extractor
+branch with an empty attempt list and end green as "transient", and an even one broke out as
+if the sweep were green and landed on an rc no step matched. `tests/test_live_check_harness.py`
+runs the step's own shell out of the workflow file with `python` stubbed to prove it.
 
 ### endpoint_probe.yml - Endpoint probe
 

@@ -36,6 +36,8 @@ body and the actual failures were only visible in the run log.
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import sys
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -1838,3 +1840,63 @@ def test_the_federal_check_stays_quiet_without_a_consensus(tmp_path: Path) -> No
     assert lc.CHECKS == []
     lc._check_federal_tax_consensus(None)
     assert lc.CHECKS == []
+
+
+# ---- the workflow's retry loop -----------------------------------------------
+
+
+def _run_retry_loop(root: Path, python_stub: str) -> str:
+    """Run the "Run live check" step's shell out of live_check.yml itself, with
+    ``python`` replaced by ``python_stub`` (a shell body) and ``sleep`` by a
+    no-op, and return what it wrote to GITHUB_OUTPUT."""
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    steps = workflow["jobs"]["check"]["steps"]
+    script = next(s["run"] for s in steps if s.get("id") == "check")
+    root.mkdir(exist_ok=True)
+    stubs = root / "bin"
+    stubs.mkdir()
+    (stubs / "python").write_text("#!/bin/sh\n" + python_stub + "\n")
+    (stubs / "sleep").write_text("#!/bin/sh\nexit 0\n")
+    for stub in stubs.iterdir():
+        stub.chmod(0o755)
+    work = root / "work"
+    work.mkdir()
+    out = root / "github_output"
+    out.write_text("")
+    env = {
+        **os.environ,
+        "PATH": f"{stubs}:{os.environ['PATH']}",
+        "GITHUB_OUTPUT": str(out),
+        "texts": "",
+    }
+    subprocess.run(
+        ["bash", "-c", script], cwd=work, env=env, check=True, capture_output=True
+    )
+    return out.read_text().strip()
+
+
+@pytest.mark.parametrize("exit_code", [1, 137, 143])
+def test_the_retry_loop_files_a_harness_death_as_a_crash(
+    tmp_path: Path, exit_code: int
+) -> None:
+    """A harness that died before writing its failure list used to end the run
+    green: an odd exit code took the extractor branch with an empty attempt
+    list and cleared its bit as "transient", an even one broke out as if the
+    sweep were green and landed on an rc no later step matched. A module-level
+    ImportError, an OOM kill and a runner SIGTERM are all that shape."""
+    assert _run_retry_loop(tmp_path / "dead", f"exit {exit_code}") == "rc=8"
+
+
+def test_the_retry_loop_still_files_a_persistent_failure(tmp_path: Path) -> None:
+    """The control: a sweep that fails the same check every attempt files it,
+    and a green sweep clears the bit."""
+    failing = 'printf "bolt/fix: rate\\n" > extractor_failures.txt; exit 1'
+    assert _run_retry_loop(tmp_path / "failing", failing) == "rc=1"
+    green = ": > extractor_failures.txt; exit 0"
+    assert _run_retry_loop(tmp_path / "green", green) == "rc=0"
