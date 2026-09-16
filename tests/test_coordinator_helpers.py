@@ -5265,6 +5265,31 @@ def test_every_sensor_name_exists_in_all_translations() -> None:
         assert got - ref == set(), f"{path.name} has stray {sorted(got - ref)}"
 
 
+def test_every_wizard_step_is_translated_on_both_flows() -> None:
+    """The wizard steps are one mixin shared by the config flow and the
+    options flow, and Home Assistant looks a step up under the section of the
+    flow that shows it, with no fallback from options to config. The
+    "ENTSO-E could not be reached" menu had a config entry only, so an entry
+    edited while ENTSO-E was down showed two blank menu rows."""
+    import inspect
+    import json
+    import pathlib
+    import re
+
+    from custom_components.be_electricity_prices.config_flow import _WizardStepsMixin
+
+    shown = set(
+        re.findall(r'step_id="([a-z_]+)"', inspect.getsource(_WizardStepsMixin))
+    )
+    assert "api_key_unreachable" in shown
+    strings = json.loads(
+        pathlib.Path("custom_components/be_electricity_prices/strings.json").read_text()
+    )
+    for section in ("config", "options"):
+        missing = sorted(shown - set(strings[section]["step"]))
+        assert missing == [], f"{section}.step lacks {missing}"
+
+
 def test_every_string_exists_in_every_translation() -> None:
     """Whole-file key parity, not one section at a time.
 

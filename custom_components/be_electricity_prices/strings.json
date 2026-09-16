@@ -387,6 +387,14 @@
           "api_key": "[%key:component::be_electricity_prices::config::step::injection_api_key::data::api_key%]"
         }
       },
+      "api_key_unreachable": {
+        "title": "[%key:component::be_electricity_prices::config::step::api_key_unreachable::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::api_key_unreachable::description%]",
+        "menu_options": {
+          "api_key_recheck": "[%key:component::be_electricity_prices::config::step::api_key_unreachable::menu_options::api_key_recheck%]",
+          "api_key_unverified": "[%key:component::be_electricity_prices::config::step::api_key_unreachable::menu_options::api_key_unverified%]"
+        }
+      },
       "capacity": {
         "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
