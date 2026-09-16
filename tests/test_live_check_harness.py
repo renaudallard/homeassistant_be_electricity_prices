@@ -1683,22 +1683,22 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     # Each slip trips exactly the bound written for it.
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(fixed, peak=2.0))
-    ) == ["peak rate EUR/kWh in [0.05, 0.5]"]
+    ) == ["peak rate EUR/kWh in [0.02, 0.5]"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(variable, formula_factor=0.113))
-    ) == ["variable month factor in [0.3, 3]"]
+    ) == ["variable month factor in [0.25, 4]"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(variable, formula_base_peak=0.53))
-    ) == ["variable peak month base in [-0.1, 0.1]"]
+    ) == ["variable peak month base in [-0.1, 0.2]"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(variable, formula_base=None))
     ) == ["variable month coefficient pair is complete"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(tou, formula_factor_peak=15.0))
-    ) == ["TOU peak month factor in [0.3, 3]"]
+    ) == ["TOU peak month factor in [0.25, 4]"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(impact, pic_factor=0.15))
-    ) == ["Impact pic month factor in [0.3, 3]"]
+    ) == ["Impact pic month factor in [0.25, 4]"]
     assert _failures(
         lambda: lc._validate_injection(
             "x", snap(replace(spot_inj, factor=94.0)), "spot"
@@ -1708,7 +1708,7 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
         lambda: lc._validate_injection(
             "x", snap(replace(spot_inj, base=-1.133)), "spot"
         )
-    ) == ["injection base in [-0.05, 0.05]"]
+    ) == ["injection base in [-0.2, 0.05]"]
     assert _failures(
         lambda: lc._validate_injection(
             "x", snap(replace(pair, peak=6.3329)), "bihourly"
