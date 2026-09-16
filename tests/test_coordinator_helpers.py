@@ -8851,3 +8851,25 @@ async def test_projection_takes_the_remaining_welcome_credit_off_the_year(
         expired == pytest.approx(without, abs=0.01)
         and diag4["welcome_credit_eur"] == 0.0
     )
+
+
+def test_apply_vat_grosses_the_injection_floor_with_the_rates() -> None:
+    """A card that taxes injection and guarantees a floor: the floor is a
+    rate like the coefficients beside it and was left as printed, ex-VAT
+    beside grossed rates."""
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        TaxOverlay,
+        apply_vat,
+    )
+
+    net = make_snapshot(
+        injection=InjectionRates(
+            current=0.05, factor=1.0, base=-0.01, minimum=0.01, vat_applies=True
+        ),
+        taxes=TaxOverlay(federal_excise=0.04, energy_contribution=0.0, vat_rate=0.21),
+    )
+    gross = apply_vat(net, include_vat=True)
+    assert gross.injection is not None
+    assert gross.injection.current == pytest.approx(0.05 * 1.21)
+    assert gross.injection.minimum == pytest.approx(0.01 * 1.21)
