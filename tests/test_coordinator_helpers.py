@@ -4330,6 +4330,22 @@ def test_a_cache_from_an_older_schema_is_discarded() -> None:
     assert _snapshot_from_dict(payload).supplier == "ecopower"
 
 
+def test_a_cache_written_before_the_trevion_unit_fix_is_discarded() -> None:
+    """0.22.1 put the missing factor of ten back into Trevion's dynamic and
+    monthly formulas and left the schema at 59, so an entry set up on 0.21.0
+    or 0.22.0 kept serving the tenth-of-the-card price out of its own store:
+    Trevion's probe is a HEAD on its listing page, which a release does not
+    move, and the gate refuses only an older schema. Those blobs carry 59."""
+    payload = _snapshot_to_dict(
+        make_snapshot(supplier="trevion", contract="groene_energie_dynamisch"),
+        datetime(2026, 9, 14, tzinfo=UTC),
+        probe_key="listing-unchanged",
+    )
+    stale = {**payload, "_schema_version": 59}
+    with pytest.raises(ValueError, match="older than the running integration"):
+        _snapshot_from_dict(stale)
+
+
 async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> None:
     # The compare flow can override the meter; the YTD fixed fee must then
     # be billed at the override meter, not the entry meter, so an

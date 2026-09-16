@@ -1441,7 +1441,13 @@ class _MigratingStore(Store[dict[str, Any]]):
 # a cashback now parse theirs. A v58 blob carries neither, so a Frank entry
 # would keep being ranked as though its tier's whole reason for existing were
 # not there.
-_SNAPSHOT_SCHEMA_VERSION = 59
+# v60: no field moved. Trevion's dynamic and monthly formulas were parsed a
+# factor of ten small until 0.22.1 (the card prints c€/kWh against a Belpex in
+# EUR/MWh), and that release did not bump this, so an entry set up on 0.21.0
+# or 0.22.0 went on serving the tenth-of-the-card price out of its own store:
+# Trevion's probe is a HEAD on its listing page, which a code release never
+# moves, and the gate below refuses only an OLDER schema. Same class as v18.
+_SNAPSHOT_SCHEMA_VERSION = 60
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
