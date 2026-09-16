@@ -7,6 +7,7 @@ import zlib
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -329,3 +330,23 @@ def test_migration_keeps_its_unique_id_when_the_target_is_taken(
     assert entry.data["quarter_hourly"] is True
     assert entry.unique_id == "bolt:bolt_dynamic:flanders:fluvius_antwerpen"
     assert existing.unique_id == "bolt:bolt_variable:flanders:fluvius_antwerpen"
+
+
+async def test_a_setup_that_fails_before_the_first_refresh_leaves_no_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """The attribute was taken back on ConfigEntryNotReady only. A store that
+    cannot be read fails the setup before the first refresh, and Home
+    Assistant deletes runtime_data only when unloading an entry that loaded,
+    so a coordinator that never ran stayed on an entry in SETUP_ERROR."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    with patch.object(
+        BePricesCoordinator,
+        "async_load_persistent",
+        AsyncMock(side_effect=OSError("store unreadable")),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert not hasattr(entry, "runtime_data")

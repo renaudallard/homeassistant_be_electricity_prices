@@ -299,8 +299,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     # with the attribute being absent, which it is until this line, after a
     # setup that failed below, and after an unload.
     entry.runtime_data = coordinator
-    await coordinator.async_load_persistent()
     try:
+        await coordinator.async_load_persistent()
         await coordinator.async_config_entry_first_refresh()
     except ConfigEntryNotReady:
         # A card published as page images does not become readable by asking
@@ -314,6 +314,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
         if not coordinator.card_unreadable:
             object.__delattr__(entry, "runtime_data")
             raise
+    except BaseException:
+        # A store that cannot be read, or a start that was cancelled, ends
+        # the setup before the retry above; Home Assistant deletes the
+        # attribute only when unloading an entry that loaded, so take it
+        # back here too rather than leave a coordinator that never ran.
+        object.__delattr__(entry, "runtime_data")
+        raise
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
