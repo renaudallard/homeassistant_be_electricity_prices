@@ -732,7 +732,14 @@ async def _ytd_spot_injection_credit(
     crediting it twice would double the feed-in.
     """
     inj = snapshot.injection
-    if inj is None or not historical_spots or not _injection_replays_hourly_spot(inj):
+    if not historical_spots:
+        return 0.0
+    if snap_for is None and (inj is None or not _injection_replays_hourly_spot(inj)):
+        # With no resolver every hour takes the current card, so its shape
+        # decides. With one, each month's own card decides below: judging the
+        # current card here too skipped a month whose card replays the spot
+        # whenever the newest card printed only an indicative, and that
+        # month's credit was then dropped by both walks.
         return 0.0
     inj_ids = _hourly_injection_sensors(entry)
     if not inj_ids:

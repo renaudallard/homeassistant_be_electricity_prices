@@ -1294,6 +1294,67 @@ async def test_ytd_credit_is_unchanged_for_a_card_with_no_register_pair(
     assert cost == pytest.approx(-30 * 0.05, abs=1e-6)
 
 
+async def test_ytd_spot_injection_credit_reads_each_month_shape_not_todays(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The early return judged the CURRENT card's shape while the loop judges
+    each month's own. A month whose archived card replays the spot was then
+    credited by neither walk once the newest card printed only an indicative:
+    the per-day walk refuses the illustration and this term never looked."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    august = InjectionRates(factor=0.94, base=-0.01133, current=0.05, slot_indexed=True)
+    september = InjectionRates(factor=None, base=None, current=0.05)
+
+    def _snap_with(inj: InjectionRates) -> Any:
+        return _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=VariableRates(current=0.16),
+            injection=inj,
+        )
+
+    entry = _entry(solar_regime="injection", injection_kwh="sensor.inj_total")
+    aug_h = dt_util.start_of_local_day(datetime(2026, 8, 6)).astimezone(
+        UTC
+    ) + timedelta(hours=11)
+    spots = {aug_h: 0.06}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {aug_h: 2.0} if entity_id == "sensor.inj_total" else {}
+
+    async def _snap_for(month_first: date) -> Any:
+        return _snap_with(august if month_first.month == 8 else september)
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        credit = await _ytd_spot_injection_credit(
+            hass,
+            _snap_with(september),
+            entry,
+            today,
+            spots,
+            _snap_for,
+            window_start=date(2026, 1, 1),
+        )
+    assert credit == pytest.approx(2 * (0.94 * 0.06 - 0.01133))
+
+    # Without a resolver the current card is every month's card, and a flat
+    # one still credits nothing here: the walk this is added to has it.
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        credit = await _ytd_spot_injection_credit(
+            hass,
+            _snap_with(september),
+            entry,
+            today,
+            spots,
+            None,
+            window_start=date(2026, 1, 1),
+        )
+    assert credit == 0.0
+
+
 async def test_ytd_spot_injection_credit_uses_each_month_own_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:
