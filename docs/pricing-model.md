@@ -185,6 +185,34 @@ the reverse of the residential wording). An extractor whose card taxes it sets
 not in the per-component path either (see
 [Injection math](#injection-feed-in-math)).
 
+### The federal energy contribution stops at a date, not at a card
+
+The Belgian "bijdrage op de energie" was abolished as a line of its own on
+2026-08-01 and folded into the special excise, which was flattened in the same
+measure. It is a federal levy on consumption rather than a contract term, so
+the DELIVERY month decides whether it is owed: a July bill still owes it, a
+September one does not, whatever the card prints.
+
+Three residential card families went on printing it into September 2026
+(Cociter, Ecofix whose card is an OCR reading of a rasterized July one, and
+TotalEnergies), so pricing their cards as printed billed a levy nobody
+charges, roughly 7 EUR/year at 3.500 kWh.
+`resolve_federal_contribution` (`providers/base.py`) zeroes it for a delivery
+month at or after `FEDERAL_CONTRIBUTION_ZEROED_FROM` (`const.py`), and
+`_resolve_snapshot` (`snapshot_store.py`) applies it once on the way from a
+stored card to a priced one, beside `apply_vat` and the two resolvers below.
+Running there rather than in the parsers keeps the archive holding what each
+card actually printed, needs no schema bump, and reaches every path that
+rebuilds a bill. The month rows pass their own delivery month; every other
+caller prices the running one.
+
+Professional cards keep whatever they print, which is why the resolver takes
+the flag: Bolt, Engie and Mega have all printed 0,0019261 ex-VAT on theirs
+through the change and every month since, so the professional scheme keeps the
+levy rather than three suppliers being stale in lockstep. The live check still
+reports every disagreement against the month's consensus, which is how a stale
+card gets noticed at all (`docs/ci-and-testing.md`).
+
 ### Degressive federal excise
 
 The federal special excise is normally one rate, but a card may print it as a

@@ -127,11 +127,13 @@ Each of these has a section of its own further down; this is the scan.
 > that has moved. Ecofix's September 2026 card still carries the federal scheme
 > that ended on 1 August, an excise of 0,0503288 with a 0,0020417 contribution
 > beside it, where every other supplier's card for the same month carries a flat
-> 0,04876 and no contribution. That is 0,0036105 €/kWh too much, about 12,64 €
-> a year on 3.500 kWh, and the integration bills what the card says. The daily
-> live check now compares every supplier's federal block against the rest and
-> reports a card that drifts. A figure the reader could not read whole is left
-> out rather than guessed. If you would rather type the numbers in yourself, the
+> 0,04876 and no contribution. The contribution is not billed: that levy was
+> abolished on 1 August and the integration drops it from every month after
+> that date, on any card that still prints it. The stale excise is billed as
+> the card prints it, 0,0015688 €/kWh too much, about 5,49 € a year on
+> 3.500 kWh. The daily live check compares every supplier's federal block
+> against the rest and reports a card that drifts. A figure the reader could
+> not read whole is left out rather than guessed. If you would rather type the numbers in yourself, the
 > **Expert: custom formula** supplier takes them.
 >
 > The full story — what changed in their generator, what Ecofix said about it,

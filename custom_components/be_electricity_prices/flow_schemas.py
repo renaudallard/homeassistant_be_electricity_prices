@@ -173,6 +173,7 @@ from .const import (
 )
 from .providers import get as get_extractor
 from .providers import effective_kind
+from .providers import is_professional
 
 
 def _supplier_options(
@@ -272,14 +273,10 @@ def _contract_is_professional(supplier_id: str | None, contract_id: str | None) 
     """True when the chosen contract is a professional product, whose card
     is published excluding VAT and may band the federal excise by annual
     volume. Resolved from the registry's ``Contract.professional`` flag.
+
+    The flow's name for the registry lookup the pricing side reads as well.
     """
-    if not supplier_id or not contract_id:
-        return False
-    try:
-        contracts = get_extractor(supplier_id).contracts
-    except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.professional for c in contracts)
+    return is_professional(supplier_id, contract_id)
 
 
 def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:

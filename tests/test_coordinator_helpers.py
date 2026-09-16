@@ -5264,6 +5264,76 @@ def test_projection_attributes_are_not_recorded() -> None:
         assert name in BePriceSensor._unrecorded_attributes, name
 
 
+def test_the_federal_contribution_is_dropped_from_the_months_it_is_not_levied() -> None:
+    """The federal energy contribution was abolished as a line of its own on
+    2026-08-01 and folded into the special excise. It is a levy on
+    consumption, not a contract term, so the delivery month decides whether it
+    is owed and a card that goes on printing it bills a levy nobody charges:
+    Cociter, Ecofix and TotalEnergies still printed it in September 2026,
+    about 7 EUR a year at 3.500 kWh.
+
+    Professional cards keep it. Bolt, Engie and Mega have all printed
+    0,0019261 ex-VAT on theirs through the change and every month since, which
+    is the professional scheme rather than three suppliers stale in lockstep.
+    """
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_federal_contribution,
+    )
+
+    card = make_snapshot()
+    card = _replace(
+        card,
+        taxes=_replace(
+            card.taxes, federal_excise=0.04876, energy_contribution=0.0020417
+        ),
+    )
+    owed = resolve_federal_contribution(
+        card, date(2026, 7, 31), professional=False
+    ).taxes
+    assert owed.energy_contribution == pytest.approx(0.0020417)
+    assert owed.federal_excise == pytest.approx(0.04876)
+    for month in (date(2026, 8, 1), date(2026, 9, 16), date(2027, 1, 1)):
+        gone = resolve_federal_contribution(card, month, professional=False).taxes
+        assert gone.energy_contribution == 0.0, month
+        # Only that line: the excise is the card's own figure either way.
+        assert gone.federal_excise == pytest.approx(0.04876), month
+    kept = resolve_federal_contribution(
+        card, date(2026, 9, 16), professional=True
+    ).taxes
+    assert kept.energy_contribution == pytest.approx(0.0020417)
+
+
+def test_a_priced_card_loses_the_contribution_on_the_month_it_is_billed_for(
+    hass: HomeAssistant,
+) -> None:
+    """Baked once where a stored card becomes a priced one, so every path
+    that rebuilds a bill inherits it and the archive keeps what the card
+    printed. The month rows pass their own delivery month; everything else
+    prices the running one."""
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices import snapshot_store
+    from tests import make_entry
+
+    entry = make_entry(supplier="cociter", contract="cociter_variable")
+    entry.add_to_hass(hass)
+    card = make_snapshot(supplier="cociter", contract="cociter_variable")
+    card = _replace(
+        card,
+        taxes=_replace(
+            card.taxes, federal_excise=0.04876, energy_contribution=0.0020417
+        ),
+    )
+    running = snapshot_store._resolve_snapshot(entry, card)  # type: ignore[arg-type]
+    assert running.taxes.energy_contribution == 0.0
+    june = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+        entry, card, delivery_month=date(2026, 6, 1)
+    )
+    assert june.taxes.energy_contribution == pytest.approx(0.0020417)
+
+
 def test_strings_json_reads_the_same_as_the_english_translation() -> None:
     """Every literal in strings.json must match `translations/en.json`, and
     every key the translation carries must exist in strings.json.

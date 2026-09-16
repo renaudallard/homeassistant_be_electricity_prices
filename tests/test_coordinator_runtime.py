@@ -64,6 +64,7 @@ from custom_components.be_electricity_prices.snapshot_store import (
     _monthly_snapshots,
     _shared_failed_fetches,
     _shared_lock,
+    _resolve_snapshot,
     _shared_snapshots,
     _snapshot_to_dict,
     evict_shared_caches,
@@ -1067,8 +1068,11 @@ async def test_two_coordinators_share_snapshot_and_only_fetch_once(
         await coord_b._maybe_refresh_snapshot()
 
     assert fetch_calls == 1
-    assert coord_a._snapshot is fetched
-    assert coord_b._snapshot is fetched
+    # The card as parsed is the very object both serve; _snapshot is the
+    # priced view of it, which resolving may rebuild (a levy the delivery
+    # month no longer owes, a VAT preference, an excise band).
+    assert coord_a._snapshot_raw is fetched
+    assert coord_b._snapshot_raw is fetched
 
 
 async def test_force_refresh_keeps_snapshot_when_refetch_fails(
@@ -1594,7 +1598,7 @@ async def test_self_fresh_populates_empty_shared_cache(
     # against their own VAT preference; on a VAT-incl card that is the
     # very object this entry prices against.
     assert shared.snapshot is coord._snapshot_raw
-    assert shared.snapshot is coord._snapshot
+    assert coord._snapshot == _resolve_snapshot(coord.entry, shared.snapshot)
     assert shared.probe_key == "stable-key"
 
 
@@ -3205,7 +3209,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
         await coord.async_refresh()
 
     assert coord.last_update_success
-    assert coord._snapshot is snap
+    assert coord._snapshot_raw is snap
 
 
 def _flanders_sensor_entry(peak_entity: str) -> MockConfigEntry:

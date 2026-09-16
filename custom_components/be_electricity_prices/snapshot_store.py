@@ -69,7 +69,7 @@ from .const import (
     SUPPLIER_CUSTOM,
     WELCOME_CREDIT_PRO_RATA,
 )
-from .providers import offers_quarter_hourly
+from .providers import is_professional, offers_quarter_hourly
 from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers.base import (
     DsoOverlay,
@@ -87,6 +87,7 @@ from .providers.base import (
     VariableRates,
     apply_vat,
     resolve_excise_band,
+    resolve_federal_contribution,
     resolve_settlement_grid,
     resolve_volume_tier,
 )
@@ -944,7 +945,11 @@ async def _snapshot_for_month(
     def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
         if snap is None:
             return current_snapshot
-        return snap if entry is None else _resolve_snapshot(entry, snap)
+        return (
+            snap
+            if entry is None
+            else _resolve_snapshot(entry, snap, delivery_month=year_month)
+        )
 
     cache = _monthly_snapshots(hass)
     failed = _monthly_failed_fetches(hass)
@@ -1164,7 +1169,11 @@ def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
 
 
 def _resolve_snapshot(
-    entry: ConfigEntry, snap: SupplierSnapshot, *, annual_kwh: float | None = None
+    entry: ConfigEntry,
+    snap: SupplierSnapshot,
+    *,
+    annual_kwh: float | None = None,
+    delivery_month: date | None = None,
 ) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
 
@@ -1180,6 +1189,10 @@ def _resolve_snapshot(
     (it grosses the fees and the feed-in leg), and the settlement grid moves
     no rate at all.
 
+    ``delivery_month`` is the month being billed, which decides whether the
+    federal energy contribution is owed at all; today's when omitted, since
+    every caller but the month rows prices the running month.
+
     The tranche is dropped rather than folded on an exclusive-night entry: the
     cards that carry one put it on the single register, or split it 900/900
     across a day/night pair, and say in the same footnote that it is "niet van
@@ -1187,6 +1200,11 @@ def _resolve_snapshot(
     circuit a share of a tranche it never receives.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
+    resolved = resolve_federal_contribution(
+        resolved,
+        delivery_month or dt_util.now().date(),
+        professional=is_professional(snap.supplier, snap.contract),
+    )
     if annual_kwh is None:
         annual_kwh = entry_annual_kwh(entry)
     resolved = resolve_volume_tier(

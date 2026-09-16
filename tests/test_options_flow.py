@@ -776,7 +776,12 @@ def _real_coordinator(
     )
 
     coord = BePricesCoordinator(hass, entry)
-    coord._snapshot = snapshot
+    # Through _set_snapshot, as every production path does, so the household
+    # side of a quote is resolved the way the target side is. Assigning
+    # _snapshot directly skipped the VAT choice, the excise band and the levy
+    # a delivery month no longer owes, which showed up as a compare delta that
+    # only one side had paid.
+    coord._set_snapshot(snapshot)
     coord._peak_kw = peak_kw
     coord._spot_cache = {}
     return coord
@@ -2673,11 +2678,15 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
     # Without this the assertion above would pass on two identically wrong
     # numbers if the modes ever priced alike.
     now = dt_util.as_local(dt_util.utcnow())
+    # Off the card as the page prices it, not as it was parsed: the page
+    # quotes a resolved snapshot, and this card carries a federal energy
+    # contribution that the delivery month no longer owes.
+    priced = snapshot_store._resolve_snapshot(on_impact, impact_snap)
     on_bands = _tou_weighted_per_kwh(
-        impact_snap, "ores", "wallonia", now, None, "dynamic", "impact"
+        priced, "ores", "wallonia", now, None, "dynamic", "impact"
     )
     off_bands = _tou_weighted_per_kwh(
-        impact_snap, "ores", "wallonia", now, None, "dynamic", "bi_horaire"
+        priced, "ores", "wallonia", now, None, "dynamic", "bi_horaire"
     )
     assert on_bands is not None and off_bands is not None
     assert on_bands != pytest.approx(off_bands)
@@ -4544,11 +4553,13 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
         assert result["step_id"] == "compare_result"
         ph = result["description_placeholders"]
         assert ph is not None
+        # Off the card as the page prices it, resolved rather than as parsed.
+        priced = snapshot_store._resolve_snapshot(entry, own)
         at_month_mean = compute_breakdown(
-            own, "ores", "wallonia", now_local, month_mean, "mono"
+            priced, "ores", "wallonia", now_local, month_mean, "mono"
         ).all_in
         at_day_mean = compute_breakdown(
-            own, "ores", "wallonia", now_local, 0.02, "mono"
+            priced, "ores", "wallonia", now_local, 0.02, "mono"
         ).all_in
         assert ph["current_per_kwh"] != "-"
         assert float(ph["current_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
@@ -4679,11 +4690,15 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
         # spot-monthly contract bills one flat rate per month; quoting it off a
         # single day makes the page swing with the day it was opened and
         # contradict the user's own current_price sensor.
+        # Off the card as the page prices it: the quote resolves the snapshot,
+        # and this one carries a federal energy contribution the delivery month
+        # no longer owes.
+        priced = snapshot_store._resolve_snapshot(entry, other_snap)
         at_month_mean = compute_breakdown(
-            other_snap, "fluvius_antwerpen", "flanders", now_local, month_mean, "mono"
+            priced, "fluvius_antwerpen", "flanders", now_local, month_mean, "mono"
         ).all_in
         at_day_mean = compute_breakdown(
-            other_snap, "fluvius_antwerpen", "flanders", now_local, 0.02, "mono"
+            priced, "fluvius_antwerpen", "flanders", now_local, 0.02, "mono"
         ).all_in
         assert float(ph["compare_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
         assert float(ph["compare_per_kwh"]) != pytest.approx(at_day_mean, abs=2e-3)

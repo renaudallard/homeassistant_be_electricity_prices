@@ -49,6 +49,7 @@ from typing import Any, Literal, Protocol
 import aiohttp
 
 from ..const import (
+    FEDERAL_CONTRIBUTION_ZEROED_FROM,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGIONS,
@@ -1137,6 +1138,39 @@ def resolve_excise_band(
     if rate == snapshot.taxes.federal_excise:
         return snapshot
     return replace(snapshot, taxes=replace(snapshot.taxes, federal_excise=rate))
+
+
+def resolve_federal_contribution(
+    snapshot: SupplierSnapshot, delivery_month: date, *, professional: bool
+) -> SupplierSnapshot:
+    """Drop the federal energy contribution from a month it is not levied in.
+
+    The Belgian "bijdrage op de energie" was abolished as a line of its own on
+    2026-08-01 and folded into the special excise, which was flattened in the
+    same measure; Eneco's card states it outright. It is a federal levy on
+    consumption rather than a contract term, so the DELIVERY month decides
+    whether it is owed, not the month the card was written in: a July bill
+    still owes it, a September one does not, whatever the card prints.
+
+    Three residential card families went on printing it into September 2026
+    (Cociter, Ecofix, TotalEnergies), two of them a stale block and one a
+    figure its publisher has not withdrawn. A card printing a levy nobody owes
+    billed it, about 7 EUR a year at 3.500 kWh. Resolving it here rather than
+    in the parsers keeps the archive holding what each card actually printed,
+    needs no schema bump, and reaches every path that rebuilds a bill, since
+    they all price a resolved card.
+
+    Professional cards are out of scope and keep whatever they print. Bolt,
+    Engie and Mega have all gone on printing 0,0019261 ex-VAT on theirs
+    through the change and every month since, which is the professional scheme
+    keeping the levy rather than three suppliers being stale in lockstep.
+    """
+    taxes = snapshot.taxes
+    if professional or not taxes.energy_contribution:
+        return snapshot
+    if (delivery_month.year, delivery_month.month) < FEDERAL_CONTRIBUTION_ZEROED_FROM:
+        return snapshot
+    return replace(snapshot, taxes=replace(taxes, energy_contribution=0.0))
 
 
 def resolve_volume_tier(

@@ -112,8 +112,12 @@ Related reading:
 > Ecofix's September 2026 card carries 0,0503288 with a 0,0020417 contribution
 > beside it, the scheme that ended on 1 August, where the fourteen other
 > residential suppliers in the archive carry a flat 0,04876 and no contribution.
-> That is 0,0036105 EUR/kWh, about 12,64 EUR a year on 3.500 kWh, billed as the
-> card prints it. `_check_federal_tax_consensus` (`scripts/live_check.py`)
+> The contribution half is not billed: that levy was abolished on 1 August, so
+> `resolve_federal_contribution` drops it for every delivery month from then on
+> whatever the card prints (see
+> [../pricing-model.md](../pricing-model.md#the-federal-energy-contribution-stops-at-a-date-not-at-a-card)).
+> The excise is billed as the card prints it, 0,0015688 EUR/kWh too much, about
+> 5,49 EUR a year on 3.500 kWh. `_check_federal_tax_consensus` (`scripts/live_check.py`)
 > compares every supplier's federal block against the rest of the archive daily
 > and reports the ones that drift; it reports rather than corrects, for the
 > cross-filling reason just above. TotalEnergies and Cociter drift the same way.

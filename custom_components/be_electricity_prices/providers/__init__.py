@@ -101,6 +101,24 @@ def all_extractors() -> tuple[SupplierExtractor, ...]:
     return tuple(EXTRACTORS.values())
 
 
+def is_professional(supplier_id: str | None, contract_id: str | None) -> bool:
+    """True when this product is a professional one, whose card is published
+    excluding VAT, may band the federal excise by annual volume and keeps
+    levies the residential scheme has dropped.
+
+    Read from the registry rather than from the entry, for the reason
+    ``offers_quarter_hourly`` gives below, and tolerant of an unknown pair the
+    OptionsFlow can hold after a catalogue change.
+    """
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.professional for c in contracts)
+
+
 def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> bool:
     """True when the supplier lets this product settle per quarter-hour.
 

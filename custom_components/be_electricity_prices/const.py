@@ -487,6 +487,13 @@ CARD_ARCHIVE_URL: Final = (
 # the answer would be a 404 a day for nothing.
 CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
 
+# The month the federal "bijdrage op de energie" stopped being levied as a
+# line of its own: abolished on 2026-08-01 and folded into the special
+# excise, which was flattened in the same measure. A (year, month) pair like
+# the constant above, compared against the DELIVERY month: the levy is law,
+# not a contract term, so a July bill still owes it whatever card prices it.
+FEDERAL_CONTRIBUTION_ZEROED_FROM: Final = (2026, 8)
+
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps
