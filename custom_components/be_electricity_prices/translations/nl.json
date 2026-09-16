@@ -73,7 +73,7 @@
       },
       "connection_power": {
         "title": "Aansluitvermogen (Brussel)",
-        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een 3x400 V-aansluiting met een warmtepomp of een laadpaal zit daarboven.",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een 3x400 V / 25 A-aansluiting met een warmtepomp of een laadpaal zit daarboven.",
         "data": {
           "connection_kva_tier": "Aansluitvermogen"
         }
@@ -368,7 +368,7 @@
       },
       "connection_power": {
         "title": "Aansluitvermogen (Brussel)",
-        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een 3x400 V-aansluiting met een warmtepomp of een laadpaal zit daarboven.",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een 3x400 V / 25 A-aansluiting met een warmtepomp of een laadpaal zit daarboven.",
         "data": {
           "connection_kva_tier": "Aansluitvermogen"
         }

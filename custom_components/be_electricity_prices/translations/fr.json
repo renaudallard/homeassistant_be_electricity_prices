@@ -73,7 +73,7 @@
       },
       "connection_power": {
         "title": "Puissance de raccordement (Bruxelles)",
-        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
         "data": {
           "connection_kva_tier": "Puissance de raccordement"
         }
@@ -368,7 +368,7 @@
       },
       "connection_power": {
         "title": "Puissance de raccordement (Bruxelles)",
-        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
         "data": {
           "connection_kva_tier": "Puissance de raccordement"
         }

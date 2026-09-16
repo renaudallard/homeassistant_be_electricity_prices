@@ -354,8 +354,8 @@ Schema `_connection_power_schema` (`flow_schemas.py`), default
 `DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py`). Options are the eight
 tiers of `CONNECTION_KVA_TIERS` (`const.py`), `le1_44` through `le13` for the
 households on 13 kVA or less and `le18` through `gt56`
-(`CONNECTION_KVA_TIERS_ABOVE_13`) for a 3x400 V connection with a heat pump or a
-charger, `translation_key="connection_kva_tier"`. Reached from
+(`CONNECTION_KVA_TIERS_ABOVE_13`) for a 3x400 V / 25 A connection with a heat pump
+or a charger, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
 connection power, so the tier is asked before solar. Every band the card prints
