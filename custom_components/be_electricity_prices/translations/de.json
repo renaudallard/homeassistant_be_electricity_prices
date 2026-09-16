@@ -73,7 +73,7 @@
       },
       "connection_power": {
         "title": "Anschlussleistung (Brüssel)",
-        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein Drehstromanschluss mit Wärmepumpe oder Ladestation liegt darüber.",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
         "data": {
           "connection_kva_tier": "Anschlussleistung"
         }
@@ -368,7 +368,7 @@
       },
       "connection_power": {
         "title": "Anschlussleistung (Brüssel)",
-        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein Drehstromanschluss mit Wärmepumpe oder Ladestation liegt darüber.",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
         "data": {
           "connection_kva_tier": "Anschlussleistung"
         }

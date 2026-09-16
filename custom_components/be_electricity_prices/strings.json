@@ -73,7 +73,7 @@
       },
       "connection_power": {
         "title": "Connection power (Brussels)",
-        "description": "Your contractual connection power in kVA. Brussels bills a Brugel 'Obligations de Service Public' fee scaled by it. Most homes are on 13 kVA or less; a three-phase connection with a heat pump or a charger sits above it.",
+        "description": "Your contractual connection power in kVA. Brussels bills a Brugel 'Obligations de Service Public' fee scaled by it. Most homes are on 13 kVA or less; a 3x400 V connection with a heat pump or a charger sits above it.",
         "data": {
           "connection_kva_tier": "Connection power"
         }
