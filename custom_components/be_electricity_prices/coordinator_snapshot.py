@@ -379,6 +379,13 @@ class _SnapshotMixin:
                 )
                 if self._snapshot_raw is not None
                 and self._snapshot_fetched_at is not None
+                # An OCR reading is served, never offered: it is the
+                # archive's fallback rather than a card this entry fetched,
+                # so the tick asks the supplier again in case readable cards
+                # came back, and no sibling adopts a picture's figures as a
+                # text card. Offered, a probe-less supplier kept it for the
+                # whole TTL and its siblings took it with the notice cleared.
+                and not self._card_read_by_ocr
                 else None
             ),
             force=self._force_refresh,

@@ -5980,3 +5980,65 @@ async def test_a_withdrawn_suppliers_refused_blob_is_replayed(
     assert coord._snapshot is not None
     assert coord._snapshot_schema_version == 59
     assert round(coord._snapshot_age_hours()) == 20 * 24
+
+
+async def test_an_ocr_reading_is_not_offered_as_the_entrys_own_row(
+    hass: HomeAssistant,
+) -> None:
+    """The archive's OCR reading was offered to the next tick as the entry's
+    own row, with no probe key. A supplier with a probe re-fetched anyway,
+    since no key matches None; a probe-less one kept the picture's figures for
+    the whole TTL, seeded them into the shared cache for its siblings, and the
+    notice was cleared on the sibling that adopted them. The reading is served,
+    never offered: the tick asks the supplier again, as its docstring always
+    said it would."""
+    from custom_components.be_electricity_prices.snapshot_store import (
+        ArchivedCard,
+        _shared_failed_fetches,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    await _refresh_with_unreadable_card(
+        hass, entry, ArchivedCard(snapshot=make_snapshot(), read_by_ocr=True)
+    )
+    coord = hass.data["_ocr_coord"]
+    assert coord.card_read_by_ocr is True
+    _shared_failed_fetches(hass).clear()
+    fetch = AsyncMock(return_value=make_snapshot())
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=fetch),
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert fetch.await_count == 1
+    assert coord.card_read_by_ocr is False
+
+
+async def test_an_ocr_reading_survives_a_restart_as_what_it_is(
+    hass: HomeAssistant,
+) -> None:
+    """The snapshot was persisted and the flag was not, so a restart on a
+    probe-less supplier served the picture's figures as a text card for one
+    TTL while the persisted notice stayed up beside them."""
+    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    await _refresh_with_unreadable_card(
+        hass, entry, ArchivedCard(snapshot=make_snapshot(), read_by_ocr=True)
+    )
+    coord = hass.data["_ocr_coord"]
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert saved["snapshot"]["_read_by_ocr"] is True
+    restarted = BePricesCoordinator(hass, entry)
+    with patch.object(restarted._store, "async_load", AsyncMock(return_value=saved)):
+        await restarted.async_load_persistent()
+    assert restarted._snapshot is not None
+    assert restarted.card_read_by_ocr is True

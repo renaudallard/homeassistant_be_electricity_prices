@@ -635,6 +635,9 @@ class BePricesCoordinator(
                 self._snapshot_probe_key = (
                     cached_probe if isinstance(cached_probe, str) else None
                 )
+                self._card_read_by_ocr = snap.get("_read_by_ocr") is True
+                if self._card_read_by_ocr:
+                    self._sync_card_read_by_ocr_issue(True)
             except (KeyError, ValueError, TypeError) as err:
                 _LOGGER.warning(
                     "discarding cached snapshot for %s: %s",
@@ -1794,6 +1797,10 @@ class BePricesCoordinator(
                 self._snapshot_probe_key,
                 schema_version=self._snapshot_schema_version,
             )
+            if self._card_read_by_ocr:
+                # Restored with the card, so a restart keeps saying where the
+                # figures came from until a readable card lands.
+                payload["snapshot"]["_read_by_ocr"] = True
         # Prune in memory (not just in the serialized copy) so a coordinator
         # running across a year boundary doesn't retain the prior year's
         # ~8760 hourly entries forever.
