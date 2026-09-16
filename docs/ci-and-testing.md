@@ -812,8 +812,11 @@ archive path no longer settles it. A row whose parse came out differently is rew
 keeping its capture day; `_cached_at` moves. The replay is a regex pass per row, no download
 and no render, so it is minutes for the whole branch, and a day without a code change replays
 nothing. `--reparse` forces it; `--rerender` also leaves the PDF texts out of the seed, so every
-card is fetched back from its kept copy and rendered afresh, which is the way to pick up a
-pdfplumber or pypdf upgrade, at the cost of downloading every kept card. A row is rewritten only
+card is fetched back from its kept copy and rendered afresh, at the cost of downloading every
+kept card. A pdfplumber or pypdf upgrade takes that path by itself: the reader versions are
+stamped beside the digest in `parser.txt`, a run that finds them moved renders rather than
+re-reads, and the workflow gives that run the six-hour budget a dispatched re-render gets
+(`Size the walk's budget`). A row is rewritten only
 when what a source was or what it parsed to changed: the path of the text it was read from is
 not compared, because a listing page with a nonce or a render that is not byte-stable would
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older

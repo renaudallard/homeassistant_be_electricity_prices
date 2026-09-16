@@ -512,7 +512,7 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
     august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
     await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
-    assert (tmp_path / "parser.txt").read_text().strip() == "digest-a"
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-a"
     row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
     assert json.loads(row.read_text())["energy"]["single"] == 0.2
 
@@ -544,7 +544,7 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     assert card["energy"]["single"] == 0.4
     assert card["publication_label"] == "augustus 2026"
     assert card["_seen_on"] == "2026-08-05"
-    assert (tmp_path / "parser.txt").read_text().strip() == "digest-b"
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-b"
     assert seen == [date.today(), date(2026, 8, 5), date(2026, 9, 18)]
 
     # And the forced flag replays even when the digest matches.
@@ -603,7 +603,7 @@ async def test_a_row_that_cannot_be_reproduced_offline_is_left_alone(
         "acme/acme_fix/wallonia/2026-08: texts/2026-08/gone.txt is missing"
     ]
     assert json.loads(row.read_text()) == card
-    assert (tmp_path / "parser.txt").read_text().strip() == "digest-c"
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-c"
 
 
 async def test_a_reader_that_changed_variant_gets_the_kept_pdf_back(
@@ -750,6 +750,47 @@ async def test_a_rerender_reads_every_card_back_from_the_kept_copy(
     after = json.loads(row.read_text())
     assert after["energy"] == before["energy"]
     assert after["_seen_on"] == "2026-09-05"
+
+
+async def test_a_reader_that_moved_renders_the_kept_cards_by_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reader versions moved the digest, but a moved digest replayed the
+    rows off the texts the OLD reader produced, so a pypdf or pdfplumber bump
+    never ran the new reader on a card the archive held. The versions are
+    stamped beside the digest and a run that finds them changed renders every
+    kept card afresh, as --rerender does; the workflow reads the same answer."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    monkeypatch.setattr(ac, "_readers_line", lambda: "pypdf==6.18.0 pdfplumber==0.11.9")
+    await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, renders))],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=5),
+        sleep=_no_sleep,
+    )
+    assert renders == [b"%PDF v1"]
+    assert not ac.rerender_due(out)
+    monkeypatch.setattr(ac, "_readers_line", lambda: "pypdf==7.0.0 pdfplumber==0.11.9")
+    assert ac.rerender_due(out)
+    session.pdfs.clear()  # the supplier is gone; only the kept copy is left
+    summary = await ac.archive(
+        out,
+        extractors=[_extractor(_pdf_fetch(session, renders))],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=6),
+        sleep=_no_sleep,
+    )
+    assert (summary.replayed, summary.unreplayable) == (1, [])
+    assert renders == [b"%PDF v1", b"%PDF v1"]
+    assert not ac.rerender_due(out)
+    assert (out / "parser.txt").read_text().splitlines() == [
+        "digest-a",
+        "pypdf==7.0.0 pdfplumber==0.11.9",
+    ]
 
 
 def test_a_probe_in_a_replay_finds_only_the_card_the_row_read(tmp_path: Path) -> None:

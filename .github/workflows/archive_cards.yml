@@ -45,11 +45,9 @@ concurrency:
 jobs:
   archive:
     runs-on: ubuntu-latest
-    # A full walk is about 250 cards, 21 minutes on a Raspberry Pi; a parse
-    # that never returns is bounded per card by the script. A backfill asks
-    # one archived card per supplier, contract, region and month on top,
-    # so a dispatch that asks for one gets six hours.
-    timeout-minutes: ${{ ((github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') || github.event.inputs.rerender == 'true') && 360 || 60 }}
+    # The walk's own budget sits on its step below; this only bounds the
+    # upload and the push around it.
+    timeout-minutes: 420
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -96,8 +94,23 @@ jobs:
             tmp/cards
           mkdir -p tmp/cards/electricity
 
+      - name: Size the walk's budget
+        id: budget
+        # A reader that moved since the last replay makes the walk render
+        # every kept card afresh, the six-hour job a dispatched re-render
+        # gets; the script decides from the same stamp.
+        run: |
+          due=$(python -c 'import sys; sys.path.insert(0, "scripts"); from pathlib import Path; import archive_cards; print(str(archive_cards.rerender_due(Path("tmp/cards/electricity"))).lower())')
+          echo "rerender=$due" >> "$GITHUB_OUTPUT"
+
       - name: Store today's cards
         id: store
+        # A full walk is about 250 cards, 21 minutes on a Raspberry Pi; a
+        # parse that never returns is bounded per card by the script. A
+        # backfill asks one archived card per supplier, contract, region and
+        # month on top, and a re-render fetches every kept card back, so
+        # either gets six hours.
+        timeout-minutes: ${{ (steps.budget.outputs.rerender == 'true' || (github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') || github.event.inputs.rerender == 'true') && 360 || 60 }}
         env:
           CARDS_REPO: renaudallard/be_price_cards
         run: >-

@@ -40,10 +40,12 @@ row when the parse came out differently. That replay costs a regex pass
 per row and nothing else, and it happens only when the parser sources
 changed since the archive was last replayed (a digest of them is stamped in
 ``parser.txt``), so a day without a code change replays nothing;
-``--reparse`` forces it. A parser that now reads a card with a different
-PDF reader finds no stored text for that reading and gets the kept PDF
-back from the cards releases instead; ``--rerender`` asks for that on
-every card, which is the way to pick up a reader upgrade.
+``--reparse`` forces it. A parser that now reads a card in the other
+reader mode (plain against layout) finds no stored text for that reading
+and gets the kept PDF back from the cards releases instead. A reader whose
+version moved is stamped beside the digest, and the run that finds it
+moved renders every kept card afresh the same way, since the stored texts
+are the old reader's; ``--rerender`` asks for that on demand.
 
 ``--backfill N`` also asks every supplier that keeps an archive of its own
 for the N closed months before this one, through the same
@@ -530,6 +532,32 @@ def _parser_digest() -> str:
     for reader in _READERS:
         digest.update(f"{reader}=={importlib.metadata.version(reader)}".encode("utf-8"))
     return digest.hexdigest()
+
+
+def _readers_line() -> str:
+    """The reader versions a parse runs on, one line for the stamp."""
+    return " ".join(
+        f"{reader}=={importlib.metadata.version(reader)}" for reader in _READERS
+    )
+
+
+def _read_stamp(stamp: Path, default: str) -> tuple[str, str]:
+    """The sources digest and the readers line of the last replay. A fresh
+    archive reads as replayed by this parser, and a stamp from before the
+    readers were recorded reads as rendered by these readers, so neither
+    starts a replay by itself."""
+    if not stamp.exists():
+        return default, ""
+    lines = stamp.read_text(encoding="utf-8").split("\n")
+    return lines[0].strip(), (lines[1].strip() if len(lines) > 1 else "")
+
+
+def rerender_due(out: Path) -> bool:
+    """Whether the readers moved since the archive was last replayed, which
+    makes the next run render every kept card afresh; the workflow sizes
+    that run's budget on the same answer."""
+    _, readers = _read_stamp(out / _PARSER_STAMP, "")
+    return bool(readers) and readers != _readers_line()
 
 
 def _month_id(year: int, month: int) -> str:
@@ -1266,6 +1294,15 @@ async def archive(
     # become. A card that failed on the network read no bytes and leaves
     # nothing here.
     unreadable: dict[str, list[dict[str, str]]] = {}
+    # A reader that changed lays cards out differently, and a stored text is
+    # served to every later parse for as long as the card's bytes stand, so
+    # the replay below has to render the kept cards afresh rather than
+    # re-read the texts the old reader produced. Decided here because the
+    # store is told at construction which texts it may serve.
+    stamp = out / _PARSER_STAMP
+    parser = _parser_digest()
+    stamped, _ = _read_stamp(stamp, parser)
+    rerender = rerender or rerender_due(out)
     cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
@@ -1363,12 +1400,8 @@ async def archive(
                     summary.backfilled += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
         # A fresh archive holds nothing older than this parser, so the first
-        # run only stamps it; from then on a changed digest replays the rows.
-        stamp = out / _PARSER_STAMP
-        parser = _parser_digest()
-        stamped = (
-            stamp.read_text(encoding="utf-8").strip() if stamp.exists() else parser
-        )
+        # run only stamps it; from then on a changed digest replays the rows
+        # and a changed reader renders them again.
         if reparse or rerender or stamped != parser:
             replay = _ReplaySession(session, pdf_dir, pdf_base_url, cards.kept)
             await _replay_all(
@@ -1385,7 +1418,7 @@ async def archive(
             await _retry_unparsed(
                 out, {ex.id: ex for ex in registry}, cards, replay, now, summary
             )
-        stamp.write_text(parser + "\n", encoding="utf-8")
+        stamp.write_text(f"{parser}\n{_readers_line()}\n", encoding="utf-8")
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
