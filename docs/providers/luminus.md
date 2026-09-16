@@ -59,10 +59,11 @@ all label regexes below are French.
 
 Ten user-selectable products, all available in both Flanders and Wallonia (each
 `Contract.regions` is `_LUMINUS_REGIONS`, so `EXTRACTOR.regions()` is
-`{flanders, wallonia}`). None sets `spot_indexed_injection` (default `False`):
-the dynamic contract already collects the ENTSO-E key via its energy formula,
-and the non-dynamic contracts print a monthly indicative injection so they never
-need a spot for injection.
+`{flanders, wallonia}`). Seven set `spot_indexed_injection` (Comfy, Comfy Plus,
+MaxxFix, MaxxFlex, BasicFix, BasicFlex, SmartFlex), so the flow offers the ENTSO-E
+key on the injection regime; ComfyFlex and ComfyFlex Plus leave it off, and Dynamic
+collects the key through its energy formula already. MaxxFlex and SmartFlex also
+carry `month_indexed_energy`, which offers the key on every solar regime.
 
 | Contract id | Label | Kind | Slug | Notes |
 | --- | --- | --- | --- | --- |

@@ -60,8 +60,8 @@ map to contract ids.
 
 | Contract id | Label | Kind | PDF kind | Injection shape | quarter_hourly |
 | --- | --- | --- | --- | --- | --- |
-| `ebem_variable` | EBEM Groen Variabel | `variable` | `elek` | monthly indicative only | n/a |
-| `ebem_basic_plus` | EBEM Groen B@sic+ | `variable` | `elek` | monthly indicative only | n/a |
+| `ebem_variable` | EBEM Groen Variabel | `variable` | `elek` | monthly indicative plus the SPP0 pair (`spp_indexed`) | n/a |
+| `ebem_basic_plus` | EBEM Groen B@sic+ | `variable` | `elek` | monthly indicative plus the SPP0 pair (`spp_indexed`) | n/a |
 | `ebem_dynamic` | EBEM Groen Dyn@mic | `dynamic` | `dynamic` | hourly factor*spot+base | True (15-min) |
 
 Declared in `_CONTRACTS` (`ebem.py`) and turned into `Contract` objects in

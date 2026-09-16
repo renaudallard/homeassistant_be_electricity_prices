@@ -302,8 +302,9 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py`):
 - **Non-dynamic contracts: monthly-indicative-only.** The table injection value is
   the V-test annual ESTIMATE; the billed value is the realized monthly indicative
   ("prix mensuels de l'injection"), so `_realized_monthly_injection`
-  (`totalenergies.py`) overrides `current` and `factor`/`base` stay `None`
-  (`totalenergies.py`). Illustrative 0.0112 EUR/kWh for both a variable and
+  (`totalenergies.py`) overrides `current`, and the month formula printed under
+  the injection heading is surfaced as `factor`/`base` with `month_indexed`, so
+  the delivery month's mean re-prices it (`totalenergies.py`). Illustrative 0.0112 EUR/kWh for both a variable and
   a fixed card (`tests/test_totalenergies.py`).
 
 This places TotalEnergies in two of the three injection taxonomy shapes: shape (b)

@@ -69,11 +69,14 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | Group | Source | Created when |
 | --- | --- | --- |
 | `SENSORS` (11 core price sensors) | `sensor.py` | always |
-| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py` | always |
+| `FEE_SENSORS` (5 fee/cost sensors) | `sensor.py` | always |
+| `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI` |
 | `CAPACITY_SENSORS` (2) | `sensor.py` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
+| `BI_HOURLY_INJECTION_SENSORS` (2 band credits) | `sensor.py` | injection regime on a bi-hourly or dynamic meter, the two meters the engine credits a register pair on |
 | `ContractEndDateSensor` (1) | `sensor.py` | `CONF_CONTRACT_END_DATE` is set |
+| `PotentialSavingSensor` (1) | `sensor.py` | `CONF_DAILY_COMPARE` is on |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -587,11 +590,11 @@ Top-level keys in `strings.json`:
 | `selector` | option labels for `region`, `capacity_mode`, `meter`, `dso_tariff_mode`, `connection_kva_tier`, `solar_regime` |
 | `services` | names and field descriptions for the four services |
 | `exceptions` | `ServiceValidationError` messages |
-| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `exclusive_night_rate_missing`, `impact_rates_missing`, `connection_fee_missing` |
+| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `card_read_by_ocr`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `supplier_deprecated_ended`, `supplier_deprecated_ended_no_successor`, `exclusive_night_rate_missing`, `impact_rates_missing`, `prosumer_tariff_missing`, `connection_fee_missing` |
 | `entity` | entity names under `sensor.*`, `binary_sensor.*`, `button.*` |
 
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under
 `entity.sensor.<key>.name` (`strings.json`) or HA falls back to the raw key.
-The `entity.sensor` block lists all twenty possible sensors even though a given
+The `entity.sensor` block lists all twenty-six possible sensors even though a given
 entry only instantiates the subset its region and solar regime allow.

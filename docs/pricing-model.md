@@ -907,7 +907,9 @@ data (`injection.py`). Priority:
 
 1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py`).
 2. **Spot formula** `factor * spot + base` when either the energy is
-   `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
+   `DynamicRates` (shape b) OR the leg is shape (c) as `_injection_is_spot_formula`
+   (`injection.py`) reads it: both coefficients, no month or SPP index, and either
+   no printed `current` or one the card flags `slot_indexed`. If no spot is
    available it returns `None` rather than fabricate a value
    (`injection.py`). The spot is looked up on the contract's own grid
    (`RESOLUTION_QUARTER` when `_energy_is_quarter_hourly`, else hourly), snapped
@@ -959,9 +961,10 @@ A monthly-indexed injection (DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex 
 EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
-from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`injection.py`) and `_compute_injection_price`
-(`injection.py`): when a card prints a monthly `current`, the spot branch
+from swallowing these cards is the `month_indexed` / `spp_indexed` refusal that
+`_injection_needs_spot` and `_injection_is_spot_formula` (`injection.py`) apply
+ahead of their `current is None or slot_indexed` test: a month-indexed leg is
+never a per-hour formula, whatever the card prints, so the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`injection.py`). A latent mis-price
 here is masked whenever the indicative prints, which is why it was fixed

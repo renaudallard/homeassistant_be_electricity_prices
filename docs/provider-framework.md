@@ -16,7 +16,7 @@ Related docs:
 - [coordinator.md](coordinator.md): who calls `fetch` / `probe` / `fetch_for_month`, and when.
 - [pricing-model.md](pricing-model.md): how `compute_breakdown` consumes the dataclasses documented here.
 - [config-flow.md](config-flow.md): how contracts and regions drive the setup wizard.
-- [ci-and-testing.md](ci-and-testing.md): how `scripts/live_check.py` exercises every extractor weekly.
+- [ci-and-testing.md](ci-and-testing.md): how `scripts/live_check.py` exercises every extractor daily.
 - [glossary.md](glossary.md): Belgian-energy and HA terms used throughout.
 - The per-supplier docs under [providers/](providers/) each document one concrete extractor.
 
@@ -678,4 +678,4 @@ Grounded in the protocol above, a minimal new PDF provider looks like this:
 9. Register it: add the import and the `EXTRACTORS` entry in `providers/__init__.py`.
 10. Add a fixture-driven test under `tests/` (see [ci-and-testing.md](ci-and-testing.md))
     and a provider doc under [providers/](providers/). `scripts/live_check.py`
-    will exercise the real card weekly via `all_extractors()`.
+    will exercise the real card daily via `all_extractors()`.

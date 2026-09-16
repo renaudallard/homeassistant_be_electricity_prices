@@ -740,7 +740,7 @@ green does not mean covered.
 The live check asks whether today's card still parses. `scripts/archive_cards.py` keeps the
 answer: it walks the same registry, fetches every (supplier, contract, region) card through
 `extractor.fetch` exactly as the coordinator does, and writes the parsed snapshot to
-`<out>/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py`). The
+`<out>/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json` (`scripts/archive_cards.py`). The
 dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for a month row,
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily against
@@ -834,14 +834,13 @@ read, and those bytes are uploaded like any other card, so something has to say 
 are. `_write_unparsed` keeps that list in `unparsed.json`, by the row the card would have become,
 merged with what earlier runs saw so a run over one supplier does not forget the others, and an
 entry whose month has a row is dropped, so a month that starts parsing leaves by itself.
-`_write_listings` writes the sheets, refreshes the archive README when its text changed
-and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
+`_write_listings` writes the sheets and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
 The workflow rewrites them once more after the upload step (`--index-only`, no fetch) so the
-day's new files are linked the day they are uploaded, then publishes them under `electricity/`
-in the cards repository's own tree (`Publish the listings in the cards repository`), with a
-README naming the namespaces, so a person on that repository's releases page is one click from
-the names; each release's notes point there, and a search of that repository for a file's digest
-finds its sheet.
+day's new files are linked the day they are uploaded, writes the two READMEs itself (`Write the
+two READMEs`: the root one names the namespaces, the `electricity/` one the layout) and pushes
+the lot with the day's rows (`Commit and push what changed`), so a person on that repository's
+releases page is one click from the names; each release's notes point there, and a search of
+that repository for a file's digest finds its sheet.
 
 A card whose reader refuses it -- a supplier publishing page images, which Ecofix has done
 since August 2026 -- is handed to `ocr_price_cards` (`_ocr_text`, `scripts/archive_cards.py`)
@@ -1089,10 +1088,10 @@ cards and their texts still land in the archive, and the PDFs of that day are of
 next run that has the token. Releases older than the retention are deleted on the same cutoff the
 script uses for the rows.
 
-The archive lives on its own branch on purpose: three years of daily commits would bury
-`main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
-made with the workflow's `GITHUB_TOKEN` start no other workflow, and `test.yml`, `validate.yml`
-and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather than cancelled
+The archive lives in its own repository on purpose: three years of daily commits would bury
+`main`'s history, race the maintainer's own pushes, and land in every HACS download. The push
+goes through the `BE_ELECTRICITY_CARDS` token to `be_price_cards`, so nothing here is started
+by it and this repository's own token stays read-only. Concurrency is queued rather than cancelled
 (`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
 same day twice and lose the second push as non-fast-forward.
 

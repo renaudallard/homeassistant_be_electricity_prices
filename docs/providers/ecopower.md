@@ -317,8 +317,10 @@ because treating them as optional would let a relabel silently drop a per-kWh ch
 
 ### Injection parsing
 
-**gbs** injection is a **monthly-indicative-only** shape (taxonomy: `current` set, no
-`factor`/`base`). `_extract_injection` (`ecopower.py`). The terugleververgoeding is a
+**gbs** injection is a **monthly indicative** (`current`); from the July 2026 card the
+credit is half fixed and half indexed on the month's SPP-weighted EPEX mean, and the two
+halves are blended into one `factor`/`base` pair carrying `spp_indexed`, the printed
+figure staying the fallback. `_extract_injection` (`ecopower.py`). The terugleververgoeding is a
 feed-in credit the customer *receives*; Ecopower states it is never negative, but the card prints
 it as a negative EUR/kWh figure because it sits in the energy/cost column where a credit shows as a
 negative cost. The parser takes the magnitude (`abs`) so `current` holds a positive credit,
@@ -362,7 +364,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 | Distribution | per-kWh, unscaled (pricing applies VAT) | same |
 | Transport | 0.0 (rolled into distribution) | 0.0 |
 | Tax overlay | federal excise + energy contribution + GSC+WKK renewables + energy fund, `vat_rate=0.06` | identical block, reused |
-| Injection shape | monthly-indicative-only (`current`) | hourly `factor × spot + base` |
+| Injection shape | monthly indicative (`current`), blended with the SPP-indexed pair on the 2026-07+ cards | hourly `factor × spot + base` |
 | Prosumer / PV forfait | none (Flanders digital SMR3 has no prosumer tariff) | none |
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.

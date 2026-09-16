@@ -24,7 +24,7 @@ Related reading:
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py` |
 | Probe | HEAD the listing page, prefer `ETag` then `Last-Modified` | `bolt.py` |
-| Archive | Only `bolt_fix` (slug `fix`) is monthly-archived back to 2024-01; everything else falls back to the current snapshot | `bolt.py` |
+| Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot | `bolt.py` |
 | VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py`, `base.py` |
 
 Bolt's PDFs are the reason this extractor exists in its current form. They are around 5 MB each,
@@ -408,7 +408,8 @@ Two land mines are baked into the anchor (`bolt.py`):
   `test_injection_accepts_negative_second_column` (`tests/test_bolt.py`) locks this in.
 
 `test_injection_carries_the_quarter_hourly_formula` checks both fix and variable
-cards yield `current` = 5,31 c/kWh (illustrative) with `factor`/`base` `None`.
+cards yield `current` = 5,31 c/kWh (illustrative) beside the printed Belpex
+coefficients (`factor` 0,94, `base` -0,01133 EUR/kWh) and `slot_indexed` set.
 
 ### Tax block (`_extract_taxes`)
 
@@ -424,11 +425,11 @@ absorbed it. `_row_is_explicit_zero` (`bolt.py`) recognises that shape and price
 is the card **saying** zero, which is a different fact from a row whose values could not be read, and
 only the first may pass silently -- reading a missing row as zero is how a card that changed shape
 bills several c€/kWh short behind a passing extractor. So a row that vanishes entirely still raises,
-and a dashed **excise** still raises too, since that levy is never zero (issue #78). `_per_region` (`bolt.py`) indexes group 1/2/3 by region and treats `-` or empty as 0.
+and a dashed **excise** still raises too, since that levy is never zero (issue #78). `_pick` (`bolt.py`) indexes group 1/2/3 by region and treats `-` or empty as 0.
 
 The connection-fee row (`Redevance de raccordement`) is Wallonia-only on real cards, so a miss is
 permitted (returns 0). Its regex eats up to three integer footnote markers ahead of the FL/WAL/BX
-values (`bolt.py`); the `{0,3}` cap deliberately stops a future integer-only Flanders value from
+values (`bolt.py`); the `{0,4}` cap deliberately stops a future integer-only Flanders value from
 being mistaken for a footnote and silently shifting the columns.
 
 `test_taxes_split_correctly_per_region` (`tests/test_bolt.py`) checks nationwide excise
@@ -562,7 +563,7 @@ Ordered by likelihood of breaking when Bolt re-renders or restructures a card:
    consumption-side `Prix mensuel` row shifts the anchor; a new second-column sign convention needs
    the `-?` tolerance revisited.
 6. **`_extract_taxes` / `_extract_renewables`** (`bolt.py`). Federal levy and
-   certificats-verts misses raise; the connection-fee footnote `{0,3}` cap may need widening if Bolt
+   certificats-verts misses raise; the connection-fee footnote `{0,4}` cap may need widening if Bolt
    adds markers.
 7. **URL construction** (`_document_url` `bolt.py`, `_resolve_variable_suffix` `bolt.py`).
    A variable-version bump now resolves itself off the listing, and the live-check freshness gate

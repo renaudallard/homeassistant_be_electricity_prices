@@ -62,18 +62,18 @@ Never read `entry.runtime_data` as "this coordinator" without the type check.
 
 Other important instance fields set in `__init__`:
 
-| Field | Purpose | Line |
-|-------|---------|------|
-| `_store` | `_MigratingStore` on-disk cache, keyed `be_electricity_prices_cache_<entry_id>` | 319 |
-| `_snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key` | current in-memory snapshot and its provenance | 326-329 |
-| `_force_refresh` | one-shot flag set by the refresh service to bypass freshness checks | 336 |
-| `_spot_cache`, `_spot_cache_day`, `_spot_cache_includes_tomorrow` | today/tomorrow ENTSO-E curve cache; the curve itself is persisted as an outage fallback, the two markers are not | 337-339 |
-| `_historical_spots` | UTC-hour -> EUR/kWh for past hours, replayed for YTD; persisted | 343 |
-| `_historical_spot_quarters` | the same hours -> their individual 15-minute slots, for a floored feed-in formula only; persisted | 349 |
-| `daily_compare` | the last scheduled supplier ranking; persisted, so the potential-saving sensor keeps its figure across a restart instead of reading unknown until the next nightly sweep | 336 |
-| `_spot_day_retry_at` | past days the spot walk may not ask for again yet, each holding the instant it may be retried at | 361 |
-| `_peak_kw`, `_peak_month` | Flanders monthly capacity peak (rolling max) | 368-369 |
-| `_last_error` | last human-readable failure, surfaced in `last_error` and Repairs | 374 |
+| Field | Purpose |
+|-------|---------|
+| `_store` | `_MigratingStore` on-disk cache, keyed `be_electricity_prices_cache_<entry_id>` |
+| `_snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key` | current in-memory snapshot and its provenance |
+| `_force_refresh` | one-shot flag set by the refresh service to bypass freshness checks |
+| `_spot_cache`, `_spot_cache_day`, `_spot_cache_includes_tomorrow` | today/tomorrow ENTSO-E curve cache; the curve itself is persisted as an outage fallback, the two markers are not |
+| `_historical_spots` | UTC-hour -> EUR/kWh for past hours, replayed for YTD; persisted |
+| `_historical_spot_quarters` | the same hours -> their individual 15-minute slots, for a floored feed-in formula only; persisted |
+| `daily_compare` | the last scheduled supplier ranking; persisted, so the potential-saving sensor keeps its figure across a restart instead of reading unknown until the next nightly sweep |
+| `_spot_day_retry_at` | past days the spot walk may not ask for again yet, each holding the instant it may be retried at |
+| `_peak_kw`, `_peak_month` | Flanders monthly capacity peak (rolling max) |
+| `_last_error` | last human-readable failure, surfaced in `last_error` and Repairs |
 
 ### 1.4 Restoring from disk
 
@@ -143,15 +143,15 @@ All five live in `fetch_shared` (`snapshot_store.py`) rather than on the coordin
 
 Two config entries on the same `(supplier, contract, region)` share one fetched snapshot so the same card is never polled twice. The process-wide state lives in `hass.data[DOMAIN]`:
 
-| Key | Shape | Meaning | Line |
-|-----|-------|---------|------|
-| `snapshot_cache` | `dict[tuple, _SharedSnapshot]` | latest shared snapshot per tuple | 231 |
-| `snapshot_locks` | `dict[tuple, asyncio.Lock]` | dedup lock for first fetch per tuple | 232 |
-| `snapshot_failed_fetches` | `dict[tuple, (ts, err, count)]` | negative cache of recent fetch failures | 241 |
-| `monthly_snapshot_cache` | `dict[(sup,con,reg,YYYY-MM), Snapshot | None]` | archived per-month snapshots for YTD | 259 |
-| `monthly_snapshot_failed_fetches` | `dict[key, ts]` | negative marker for a transient archive fetch, supplier or repository | 269 |
-| `monthly_snapshot_locks` | `dict[key, asyncio.Lock]` | dedup lock per month key | 405 |
-| `tuple_generations` | `dict[tuple, int]` | generation counter for eviction races | 413 |
+| Key | Shape | Meaning |
+|-----|-------|---------|
+| `snapshot_cache` | `dict[tuple, _SharedSnapshot]` | latest shared snapshot per tuple |
+| `snapshot_locks` | `dict[tuple, asyncio.Lock]` | dedup lock for first fetch per tuple |
+| `snapshot_failed_fetches` | `dict[tuple, (ts, err, count)]` | negative cache of recent fetch failures |
+| `monthly_snapshot_cache` | `dict[(sup,con,reg,YYYY-MM), Snapshot | None]` | archived per-month snapshots for YTD |
+| `monthly_snapshot_failed_fetches` | `dict[key, ts]` | negative marker for a transient archive fetch, supplier or repository |
+| `monthly_snapshot_locks` | `dict[key, asyncio.Lock]` | dedup lock per month key |
+| `tuple_generations` | `dict[tuple, int]` | generation counter for eviction races |
 
 `monthly_snapshot_cache` is the one row of that table with an on-disk half: settled months are written to the entry's Store and seeded back into it on load (section 10), because a closed month's card is a historical fact and re-fetching one PDF per elapsed month on every restart is what issue #88 spent its bootstrap budget on. The other rows stay process-local.
 
@@ -460,21 +460,21 @@ The fail policy is "keep serving the cached snapshot, surface a Repairs issue". 
 
 Repairs issues, all keyed by `entry_id`:
 
-| Issue | Raised by | When | Line |
-|-------|-----------|------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d), and the supplier has not left the market (`_supply_ended`): past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all | - |
-| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 316 |
-| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 316 |
-| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 316 |
-| `extractor_unreadable_no_prices` | `_sync_extractor_issue(unreadable=True)` with `_snapshot is None` | the same unreadable card on an entry with nothing cached to serve: a brand-new entry, or one whose blob fell below `_DEGRADED_MIN_SCHEMA_VERSION`. Every sensor reads unavailable, so it names the workaround and says nothing about drift | 316 |
-| `card_read_by_ocr` | `_sync_card_read_by_ocr_issue` | the archive's OCR reading of an unreadable card was adopted (`_serve_card_read_by_ocr`, `coordinator_snapshot.py`): the entry is priced, off a picture of the card. Replaces the two unreadable cards above, and clears the moment a card with a text layer lands, ours or a sibling's | - |
-| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 393 |
-| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 409 |
-| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 409 |
-| `supplier_deprecated_ended` | `_sync_deprecated_supplier_issue` | same as `supplier_deprecated`, but the local date is past `deprecated_until`: the transfer has happened and this entry has stopped updating | 409 |
-| `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor | 409 |
-| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 237 |
-| `prosumer_tariff_missing` | `_sync_prosumer_gap_issue` | the entry is a Walloon compensation install (`_compensation_kva` above zero) and its DSO overlay carries no `prosumer_eur_per_kva_year`, i.e. a card that omits the "Tarif prosumer" column | 258 |
+| Issue | Raised by | When |
+|-------|-----------|------|
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d), and the supplier has not left the market (`_supply_ended`): past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all |
+| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure |
+| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures |
+| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue |
+| `extractor_unreadable_no_prices` | `_sync_extractor_issue(unreadable=True)` with `_snapshot is None` | the same unreadable card on an entry with nothing cached to serve: a brand-new entry, or one whose blob fell below `_DEGRADED_MIN_SCHEMA_VERSION`. Every sensor reads unavailable, so it names the workaround and says nothing about drift |
+| `card_read_by_ocr` | `_sync_card_read_by_ocr_issue` | the archive's OCR reading of an unreadable card was adopted (`_serve_card_read_by_ocr`, `coordinator_snapshot.py`): the entry is priced, off a picture of the card. Replaces the two unreadable cards above, and clears the moment a card with a text layer lands, ours or a sibling's |
+| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key |
+| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region |
+| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region |
+| `supplier_deprecated_ended` | `_sync_deprecated_supplier_issue` | same as `supplier_deprecated`, but the local date is past `deprecated_until`: the transfer has happened and this entry has stopped updating |
+| `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor |
+| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row |
+| `prosumer_tariff_missing` | `_sync_prosumer_gap_issue` | the entry is a Walloon compensation install (`_compensation_kva` above zero) and its DSO overlay carries no `prosumer_eur_per_kva_year`, i.e. a card that omits the "Tarif prosumer" column |
 
 The first four are failure states and clear on a successful refresh, as do
 `connection_fee_missing` and `prosumer_tariff_missing` once the supplier prints

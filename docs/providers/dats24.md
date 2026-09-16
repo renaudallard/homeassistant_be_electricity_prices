@@ -101,23 +101,24 @@ Two deliberate choices:
   `dats24.py`). A timeout, a 5xx or an unreadable payload propagates, so
   the coordinator classifies it transient and keeps serving its cached
   current-month snapshot. Falling back on any error would silently re-price
-  every user at last month's rates, which is worse than a deferred refresh. This
-  is stricter than `bolt.py`, which falls back on any `ExtractorError`
-  because Bolt's cards expose no parseable `valid_until` to signal the swap.
+  every user at last month's rates, which is worse than a deferred refresh. `bolt.py`
+  is close: only a fix-folder card whose fetch failed for good (a 404 for an
+  unpublished month) takes the previous-month path, and a transient error fails
+  the tick, because Bolt's cards expose no parseable `valid_until` to signal the swap.
 
 ## Contracts
 
 | id | label | kind | regions | spot_indexed_injection |
 |---|---|---|---|---|
-| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | False (default) |
+| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | True |
 
 Only one `Contract` is declared (`dats24.py`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
-`DynamicRates`, not on a variable contract). `spot_indexed_injection` is left at
-its default `False`: that flag means a PER-HOUR spot formula, and this injection
-is month-indexed. An ENTSO-E key still improves it, since the delivery month's
-SPP-weighted mean is resolved from the spot cache, but the contract prices
-without one by falling back to the card's printed figure. See [../provider-framework.md](../provider-framework.md) for what
+`DynamicRates`, not on a variable contract). `spot_indexed_injection` is set:
+the credit is indexed on BE_spotSPP, the delivery month's solar-weighted mean,
+which is resolved from the spot cache, so the flow offers the ENTSO-E key on the
+injection regime. The contract still prices without one by falling back to the
+card's printed figure. See [../provider-framework.md](../provider-framework.md) for what
 `spot_indexed_injection` gates in the config flow.
 
 `fetch` rejects any other contract id with `ExtractorError` (`dats24.py`)
@@ -455,8 +456,9 @@ comment or test:
    `data_management_per_year` and `prosumer_eur_per_kva_year` are raw EUR values;
    only the c€/kWh distribution and transport columns are divided by 100. Mixing
    these up mis-scales by 100.
-8. **Injection is Flanders-only and monthly.** Never emit factor/base; never surface
-   a credit in Wallonia (`dats24.py`). See Injection above.
+8. **Injection is Flanders-only and month-indexed.** Emit the BE_spotSPP coefficients
+   with `spp_indexed` beside the printed indicative, never a per-hour formula; never
+   surface a credit in Wallonia (`dats24.py`). See Injection above.
 9. **Negative injection indicative.** Keep the optional sign group and `parse_sign`
    (`dats24.py`).
 10. **Fatal-vs-nullable asymmetry.** Afname row, yearly fee, federal excise/contribution,

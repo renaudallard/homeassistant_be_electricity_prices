@@ -37,7 +37,7 @@ Both flows walk the *same* chain: `supplier/region -> contract -> (settlement) -
 (connection_power) -> solar -> (injection_api_key) -> (custom_injection) ->
 (custom_dso) -> (custom_tax) -> meters`. The four `custom_*` steps run only for
 the expert custom supplier. Only the entry step and `_finalize` differ. The
-mixin's docstring at `flow_prefill.py` states the invariant: `_after_meter` is
+mixin's docstring in `config_flow.py` states the invariant: `_after_meter` is
 overridden in `BePricesConfigFlow` to add the install-time unique-id reject, and
 `_finalize` is abstract (`config_flow.py` raises `NotImplementedError`).
 
@@ -160,7 +160,7 @@ Schema `_contract_schema` (`flow_schemas.py`). Contracts come from
 `fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/base.py`).
 
 Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
-filtered list is empty (`flow_prefill.py`), for example a Flanders-only supplier
+filtered list is empty (`config_flow.py`), for example a Flanders-only supplier
 selected with region Wallonia. The default is pre-selected only when the stored
 `CONF_CONTRACT` still exists in the filtered set (`flow_schemas.py`); a stale id
 leaves the field unset so the user must repick.
@@ -350,9 +350,11 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py`).
 ### `connection_power`: Brussels connection-power tier
 
 Schema `_connection_power_schema` (`flow_schemas.py`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py`): `le1_44`, `le6`,
-`le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py`). Options are the eight
+tiers of `CONNECTION_KVA_TIERS` (`const.py`), `le1_44` through `le13` for the
+households on 13 kVA or less and `le18` through `gt56`
+(`CONNECTION_KVA_TIERS_ABOVE_13`) for a three-phase connection with a heat pump
+or a charger, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
 connection power, so the tier is asked before solar. Every band the card prints
@@ -371,7 +373,7 @@ Schema `_solar_schema` (`flow_schemas.py`). Fields:
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
   `SOLAR_REGIMES` (`const.py`) with a region filter.
 
-The region filter (`flow_prefill.py`): `SOLAR_REGIME_COMPENSATION` is offered
+The region filter (`flow_schemas.py`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
 net-metering, "compteur qui tourne a l'envers") is Walloon-only: that meter pays
 the prosumer tariff and no capacity tariff, so offering it in Flanders would
@@ -471,12 +473,12 @@ Anything pre-filled stays editable (`strings.json`).
 
 | Rule | Where | Reason |
 | --- | --- | --- |
-| Supplier has no contract in region -> abort `supplier_region_unavailable` | `flow_prefill.py` | Region filtering deferred from the supplier step to here |
+| Supplier has no contract in region -> abort `supplier_region_unavailable` | `config_flow.py` | Region filtering deferred from the supplier step to here |
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `flow_schemas.py` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py` | Impact is CWaPE-only; other regions bill differently |
 | `capacity` step only in Flanders | `config_flow.py` | Only Flanders has the capaciteitstarief |
 | `connection_power` step only in Brussels | `config_flow.py` | Only Brussels charges the Brugel OSP fee |
-| Compensation regime only in Wallonia | `flow_prefill.py` | Avoids double-counting the Flemish capacity tariff |
+| Compensation regime only in Wallonia | `flow_schemas.py` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `flow_schemas.py` | Issue #19: a kWh sensor would inflate the capacity bill |
 | kWh sensors restricted to device_class energy | `flow_schemas.py` | A non-energy sensor would be read as raw kWh |
 | ENTSO-E key validated live before finalize | `config_flow.py` | Prevents finalizing an entry that fails on first refresh |
@@ -534,17 +536,18 @@ stale stored value never renders as an invalid pre-selection:
 - `_meter_schema` clears the default when the stored meter is not in the
   kind-narrowed option list (`config_flow.py`).
 - `_solar_schema` falls back to `none` when the stored regime is filtered out
-  (`flow_prefill.py`).
+  (`flow_schemas.py`).
 
 ## Options flow
 
 `BePricesOptionsFlow` (`config_flow.py`) opens on `async_step_init`
-(`config_flow.py`) with a two-item menu (`async_show_menu`):
+(`config_flow.py`) with a three-item menu (`async_show_menu`):
 
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
 | `compare` | `async_step_compare` (`compare_flow.py`) | One-off quote against another supplier; nothing saved |
+| `compare_all` | `async_step_compare_all` (`compare_flow.py`) | Rank every candidate card for the household; the ranking branch below |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json`).
 
@@ -590,7 +593,8 @@ user to edit the existing entry instead (`strings.json`).
 ### Compare path (one-off quote, nothing saved)
 
 The compare branch (`compare_flow.py` onward) walks `compare -> compare_contract
--> compare_meter -> compare_solar -> (compare_api_key) -> compare_result` and exits
+-> (compare_settlement) -> compare_meter -> compare_solar -> (compare_api_key) ->
+compare_result` and exits
 via `async_abort`, so it creates no entry and writes no options. Region, DSO and
 peak stay fixed to the current entry so the quote is apples-to-apples;
 supplier, contract, (for static targets) meter, the DSO tariff mode and the
@@ -627,9 +631,6 @@ question "what does leaving compensation cost me" would have no direct answer on
 the page. The clause predates the picker offering the user's own contract
 (`e2a52af`); picking yourself is now a second route to the same number, and the
 table below is the authority on what the picker excludes.
-
-| Step | Method | Notes |
-| --- | --- | --- |
 
 ### The ranking branch
 
@@ -679,8 +680,8 @@ is watching:
 - **No budget and no skipping.** `COMPARE_SWEEP_BUDGET_S` exists because a
   progress bar is on screen. Stopping early on a schedule would publish a
   ranking whose cheapest row is only the cheapest that *fitted*.
-- **Sequential, not gathered.** Sixteen suppliers at once is a burst on
-  sixteen servers to save minutes nobody is waiting through, and the listing
+- **Sequential, not gathered.** Every supplier at once is a burst on as
+  many servers to save minutes nobody is waiting through, and the listing
   memo only pays off when candidates sharing a listing page run adjacently.
 - **Failures are swallowed and logged.** A supplier that changed its site
   overnight must not take the entry down; the sensor keeps the previous
@@ -692,7 +693,7 @@ on a time correlated with its rollover second. Derived rather than randomised
 each day: an install that runs at a different time every day cannot be
 reasoned about when it fails.
 
-Cheap in the steady state. Twelve of the seventeen suppliers publish a
+Cheap in the steady state. Thirteen of the seventeen suppliers publish a
 freshness probe, including the two slowest cards, so a day on which nothing
 was republished costs a handful of conditional requests rather than the ~164 s
 a cold sweep takes; cards move about monthly.
@@ -706,6 +707,7 @@ a cold sweep takes; cards move about monthly.
 
 | `compare` | `compare_flow.py` | Supplier picker via `_compare_supplier_options` (`compare_flow.py`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py` | Contract picker via `_compare_contract_schema` (`compare_flow.py`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare_settlement` | `compare_flow.py` | Shown when `offers_quarter_hourly` (`providers/__init__.py`) says the target card can settle per quarter-hour (Bolt's variable family and Frank Energie): which settlement to quote the TARGET on. Defaulted from the household's own answer only where its own contract offers the same choice; read off the entry unconditionally it would quote a Bolt card per quarter-hour because the user happens to be on Frank's quarter-hourly settlement |
 | `compare_meter` | `compare_flow.py` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py`) |
 | `compare_solar` | `compare_flow.py` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py` | Shown when `_after_compare_meter` (`compare_flow.py`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |

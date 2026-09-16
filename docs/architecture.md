@@ -99,11 +99,11 @@ relative to that package directory.
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Shared PDF and HTTP helpers used by the extractors (text extraction, transient-error classification via `is_transient_fetch_error`, and column-alignment utilities). |
 
-In addition, sixteen scraped supplier modules live under `providers/`, each exposing a top-level
+In addition, seventeen scraped supplier modules live under `providers/`, each exposing a top-level
 `EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
 `eneco.py`, `energiebe.py`, `energyknights.py`, `energyvision.py`, `engie.py`, `frank.py`,
-`luminus.py`, `mega.py`, `octaplus.py`, and `totalenergies.py`. Each has its own page under
-[providers/](providers/). A seventeenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
+`luminus.py`, `mega.py`, `octaplus.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
+[providers/](providers/). An eighteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
 stub) and the
 coordinator builds its snapshot from the config entry. The framework they implement is
 documented in [provider-framework.md](provider-framework.md).

@@ -82,7 +82,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead fallback** — no ENTSO-E key yet, or ENTSO-E is down: prices keep coming from a keyless source until it recovers.
+- **Keyless day-ahead fallback** — ENTSO-E is down, or you skipped the key where the flow lets you: prices keep coming from a keyless source. A dynamic contract needs its own key regardless.
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
@@ -299,12 +299,12 @@ manifest.
 
 ## Configuration
 
-The UI walks **up to ten steps**, twelve with the *Expert: custom formula*
+The UI walks **up to eleven steps**, twelve with the *Expert: custom formula*
 supplier, depending on contract type and region. Apart from two paths no
 EUR values are asked, since energy, DSO and tax rates all come from the
 supplier's tariff card. The exceptions are the optional **signing-rate**
-step, which appears when you set a contract start date and lets you type
-the rate and yearly fee you actually signed, and the **Expert: custom
+step, which appears when you set a contract start date or a tariff card
+month and lets you type the rate and yearly fee you actually signed, and the **Expert: custom
 formula** supplier, which has no card and asks for the whole set.
 
 1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
@@ -330,7 +330,8 @@ formula** supplier, which has no card and asks for the whole set.
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Cociter Variable
    and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
-   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One — and on
+   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, every
+   Mega Flex and Off-peak Impact card — and on
    the injection regime for a contract whose injection is itself
    index-linked, which is most static cards and not the handful it once was
    — every Bolt card and both Cociter variable cards index it per hour, while
@@ -440,7 +441,7 @@ re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Cociter
 Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and
 SmartFlex, OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex
-One). Both stay off without a key rather than failing the entry — the
+One, every Mega Flex and Off-peak Impact card). Both stay off without a key rather than failing the entry — the
 injection price goes unavailable, and the re-price keeps the card's printed
 figure, which is the previous month's. The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
@@ -526,7 +527,7 @@ opens a three-option menu:
   with the table saying when it ran and a box to price it again on the spot.
   Off by default because it fetches tariff cards from suppliers you have no
   relationship with, which is a decision to take rather than one an update
-  makes for you. It is cheap once running: twelve of the seventeen suppliers
+  makes for you. It is cheap once running: thirteen of the seventeen suppliers
   publish a freshness check, including the two slowest cards, so a day on which
   nothing was republished costs a handful of conditional requests rather than
   the ~164 seconds a cold sweep takes, and tariff cards move about monthly. A
@@ -1045,7 +1046,7 @@ changed since the morning's archive walk is rendered again:
   out on a different supplier each time stays quiet, and a supplier that
   stays broken is commented on once a week rather than once a day.
 - **Catalog phase** — the `discover()` of every supplier that implements one
-  (all but energie.be and the expert custom supplier) is run against its
+  (all but energie.be, Trevion and the expert custom supplier) is run against its
   public listing page; any product visible at the supplier but missing
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
