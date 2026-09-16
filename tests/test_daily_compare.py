@@ -212,6 +212,7 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
         "labels": {"Mega Online Fixed": ("mega", "online_fixed")},
         "household": SimpleNamespace(
             today_local=dt_util.now().date(),
+            ytd_from=date(dt_util.now().year, 1, 1),
             current_snapshot=object(),
             quote_entry=entry,
             peak_kw=4.0,
@@ -296,6 +297,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
     )
     household = SimpleNamespace(
         today_local=dt_util.now().date(),
+        ytd_from=date(dt_util.now().year, 1, 1),
         current_snapshot=object(),
         quote_entry=entry,
         peak_kw=4.0,
@@ -346,6 +348,118 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
     assert seen["snapshot"] != raw
 
 
+async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
+    hass: HomeAssistant,
+) -> None:
+    """The pass measured coverage over January to today while the engine walks
+    the entry's own window, which starts at the contract start date when the
+    option is ticked. The candidate was fetched January as the cheap reject,
+    so its covered set carried a month the baseline could never have, the
+    two could never be equal, and no candidate row ever printed a figure for
+    exactly the households the option exists for.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+    from tests import make_snapshot
+
+    today = date(2026, 9, 16)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "contract_start_date": "2026-04-15",
+            "ytd_from_contract_start": True,
+        },
+    )
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    # A month cache the way the real one behaves: written by the walk and by
+    # the pass's warm-up fetch, read back by the coverage check, per contract.
+    cache: dict[str, set[date]] = {}
+
+    async def _walk(
+        hass_: Any, session: Any, ext: Any, snap: Any, e: Any, **kw: Any
+    ) -> float:
+        contract = kw.get("contract_override") or e.data["contract"]
+        start = ytd_window_start(e, today)
+        cache.setdefault(contract, set()).update(
+            date(today.year, m, 1) for m in range(start.month, today.month + 1)
+        )
+        return 2426.56
+
+    async def _warm(
+        hass_: Any,
+        session: Any,
+        ext: Any,
+        contract: str,
+        region: str,
+        month: date,
+        *a: Any,
+        **kw: Any,
+    ) -> Any:
+        cache.setdefault(contract, set()).add(month)
+        return object()
+
+    def _present(
+        hass_: Any, supplier: str, contract: str, region: str, months: Any
+    ) -> list[date]:
+        return [m for m in months if m in cache.get(contract, set())]
+
+    household = SimpleNamespace(
+        today_local=today,
+        ytd_from=ytd_window_start(entry, today),
+        current_snapshot=object(),
+        quote_entry=entry,
+        peak_kw=4.0,
+        current_meter="mono",
+        dso_mode="bi_horaire",
+        regime="none",
+    )
+    sweep = {
+        "region": "wallonia",
+        "rows": [
+            RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True),
+            RankedRow(label="Engie Easy Fixed", annual=3432.93),
+        ],
+        "labels": {"Engie Easy Fixed": ("engie", "engie_easy_fixed", False)},
+        "household": household,
+    }
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _walk,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            "._snapshot_for_month",
+            _warm,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            ".archived_months_present",
+            _present,
+        ),
+        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(
+            cf,
+            "_sweep_rows",
+            return_value={("wallonia", "engie", "engie_easy_fixed"): make_snapshot()},
+        ),
+    ):
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+
+    assert household.ytd_from == date(2026, 4, 15)
+    assert [r.ytd for r in rows] == [2426.56, 2426.56]
+    # And nothing before the window was ever asked for.
+    assert min(cache["engie_easy_fixed"]) == date(2026, 4, 1)
+
+
 async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     hass: HomeAssistant,
 ) -> None:
@@ -374,6 +488,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
         "labels": {},
         "household": SimpleNamespace(
             today_local=dt_util.now().date(),
+            ytd_from=date(dt_util.now().year, 1, 1),
             current_snapshot=object(),
             quote_entry=entry,
             peak_kw=4.0,

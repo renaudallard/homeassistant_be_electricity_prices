@@ -839,7 +839,15 @@ class _SweepEngine:
         hh = sweep["household"]
         current = self.config_entry.data
         today = hh.today_local
-        months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
+        # The months the walk bills: from the entry's own year-to-date window,
+        # not from January. A household billing from its contract start date
+        # walks fewer months, and measuring coverage over January onwards
+        # gave every candidate a month the baseline could never have, so the
+        # column stayed empty for exactly the households the option exists
+        # for.
+        months = [
+            date(today.year, m, 1) for m in range(hh.ytd_from.month, today.month + 1)
+        ]
         # The household's own side sets the standard, so it is walked first -
         # again, before anything asks about coverage. Its own snapshot is the
         # fallback the walk needs, and _compute_current_year_cost is what
@@ -940,12 +948,13 @@ class _SweepEngine:
             if _needs_missing_spots(resolved, target_entry, hist_spots):
                 rows.append(row)
                 continue
-            # January first, and BEFORE asking about coverage. The coverage
-            # cache is only ever written by this walk, so checking it up front
-            # answers "nothing is covered" for every candidate and the whole
-            # pass becomes a no-op that hides its own checkbox. One month is
-            # also the cheap reject: a contract with no month-addressable card
-            # costs one fetch here rather than a full year of them.
+            # The window's first month first, and BEFORE asking about
+            # coverage. The coverage cache is only ever written by this walk,
+            # so checking it up front answers "nothing is covered" for every
+            # candidate and the whole pass becomes a no-op that hides its own
+            # checkbox. One month is also the cheap reject: a contract with no
+            # month-addressable card costs one fetch here rather than a full
+            # year of them.
             try:
                 await _snapshot_for_month(
                     self.hass,
