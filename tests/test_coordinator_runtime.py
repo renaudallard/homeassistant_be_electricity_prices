@@ -5847,3 +5847,39 @@ async def test_an_adopted_profile_row_keeps_its_own_age(
         await coord._ensure_spp_weights()
     assert downloads == 1
     assert coord._spp_weights == {(6, 1, 13): 2.0}
+
+
+async def test_a_cleared_entsoe_blip_leaves_last_error(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A transient ENTSO-E failure writes its message into last_error and
+    serves the cached curve. A probe match clears it on the next tick; on a
+    probe-less supplier nothing did, so the sensor carried the blip beside
+    spot_source entsoe for up to the 24 h TTL. A successful spot fetch clears
+    that message, and only that one: an extractor failure kept this tick is
+    not the spot fetch's to erase."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    freezer.move_to("2026-07-01 10:30:00+00:00")
+    curve = {datetime(2026, 7, 1, h, tzinfo=UTC): 0.10 for h in range(24)}
+    coord._fetch_spot_prices = AsyncMock(return_value=curve)  # type: ignore[method-assign]
+
+    async def _tick(message: str) -> str | None:
+        coord._last_error = message
+        with (
+            patch(
+                "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+                AsyncMock(return_value=0.0),
+            ),
+            patch.object(coord, "_save_persistent", AsyncMock()),
+        ):
+            await coord._update_body()
+        return coord._last_error
+
+    assert await _tick("ENTSO-E: HTTP 503") == ""
+    assert await _tick("HTTP 500 fetching the card") == "HTTP 500 fetching the card"

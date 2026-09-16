@@ -946,6 +946,14 @@ class BePricesCoordinator(
             # share the hard-fail-on-cold-start path.
             try:
                 spot_prices = await self._fetch_spot_prices()
+                if (self._last_error or "").startswith("ENTSO-E:"):
+                    # The blip a previous tick recorded has cleared. Only that
+                    # message: a probe match clears an extractor error, and
+                    # on a probe-less supplier nothing else did, so the blip
+                    # sat on the sensor for up to the 24 h TTL. An extractor
+                    # failure kept from this tick is not the spot fetch's to
+                    # erase.
+                    self._last_error = ""
             except EntsoeAuthError as err:
                 self._sync_entsoe_auth_issue(True, str(err))
                 raise UpdateFailed(f"ENTSO-E auth: {err}") from err
