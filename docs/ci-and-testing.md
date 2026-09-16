@@ -644,7 +644,9 @@ the two baselines are identical until the day they are not.
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
 repo root (`scripts/live_check.py`), each a side-channel the workflow reads to file a separate
-issue so the three failure modes never conflate in one thread.
+issue so the three failure modes never conflate in one thread; beside the drift report goes
+`drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes` line per blown budget
+with no measurement in it, which is what the drift issue is fingerprinted on.
 
 The exit code is bit-encoded (`scripts/live_check.py`):
 
@@ -992,9 +994,11 @@ The job then branches on the captured `rc` to open or update three distinct issu
 `scripts/file_ci_issue.sh`, which finds the one open issue by its label (never by a title substring,
 so a manually opened issue cannot catch these comments) and posts a comment only when the failure
 changed or the last post is older than a week. Each body ends in a hidden fingerprint marker: for
-the extractor issue it is a hash of `persistent_failures.txt`, for the other two a hash of the
-report itself, and the script compares the marker on the issue's latest post with the one it is
-about to write. A supplier that stays broken therefore gets one issue and one comment a week
+the extractor issue it is a hash of `persistent_failures.txt`, for the catalog issue a hash of its
+report, for the drift issue a hash of `drift_fingerprint.txt` (the report itself carries the
+measured seconds and bytes, so hashing it never matched the previous day and a supplier over its
+budget for weeks got a comment a day), and the script compares the marker on the issue's latest
+post with the one it is about to write. A supplier that stays broken therefore gets one issue and one comment a week
 rather than one a day, which was the last open piece of the live check's noise problem, while a
 failure that changes shape is still posted the same morning. `tests/test_file_ci_issue.py` drives
 the script through a fake `gh`.

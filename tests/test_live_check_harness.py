@@ -1532,6 +1532,47 @@ def test_a_spot_monthly_card_with_per_meter_bands_is_fully_bounded(
     ]
 
 
+def test_the_drift_issue_is_fingerprinted_on_the_budget_not_the_measurement() -> None:
+    """The drift issue was fingerprinted on the report, and the report carries
+    the measured seconds and bytes, so a supplier over its budget for weeks
+    read as a new failure every morning and got a comment a day, the noise
+    the seven-day cooldown exists to stop. The fingerprint names the supplier
+    and the budget kind, so the same situation hashes the same and a supplier
+    joining or leaving the list is what moves it."""
+    import yaml  # type: ignore[import-untyped]
+
+    day1 = _blown("ecofix")
+    day2 = _blown("ecofix")
+    day2["ecofix"]["elapsed_s"] += 0.7
+    day2["ecofix"]["bytes"] += 4096
+    assert lc._drift_warnings(day1, frozenset()) != lc._drift_warnings(
+        day2, frozenset()
+    )
+    assert lc._drift_fingerprint(day1, frozenset()) == lc._drift_fingerprint(
+        day2, frozenset()
+    )
+    assert "ecofix" in lc._drift_fingerprint(day1, frozenset())
+    assert "." not in lc._drift_fingerprint(day1, frozenset())
+    # A second supplier over budget is a different situation.
+    both = {**day1, **_blown("eneco")}
+    assert lc._drift_fingerprint(both, frozenset()) != lc._drift_fingerprint(
+        day1, frozenset()
+    )
+    assert lc._drift_fingerprint({}, frozenset()) == ""
+    # And the workflow files the issue on that, not on the report.
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    drift = next(
+        s["run"]
+        for s in workflow["jobs"]["check"]["steps"]
+        if "drift" in s.get("name", "").lower() and "issue" in s.get("name", "").lower()
+    )
+    assert "--fingerprint drift_fingerprint.txt" in drift
+
+
 def _failures(run: Callable[[], None]) -> list[str]:
     lc.CHECKS.clear()
     run()

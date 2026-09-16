@@ -319,7 +319,7 @@ jobs:
             --label "$label" \
             --title "$title_prefix" \
             --body drift_issue_body.md \
-            --fingerprint drift_report.md \
+            --fingerprint drift_fingerprint.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update new-products issue

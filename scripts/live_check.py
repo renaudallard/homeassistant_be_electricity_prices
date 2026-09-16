@@ -3662,8 +3662,15 @@ async def _run(texts: Path | None = None) -> int:
     # gets the file alongside the existing logs (CI happens to invoke
     # from repo root, so behaviour there is unchanged).
     (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
-    drift_warnings = _drift_warnings(METRICS, _failed_suppliers(extractor_checks))
+    failed_suppliers = _failed_suppliers(extractor_checks)
+    drift_warnings = _drift_warnings(METRICS, failed_suppliers)
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
+    # Side-channel: what the workflow fingerprints the drift issue on. The
+    # report above carries the measurements, and a fingerprint over it never
+    # matched the previous day's.
+    (ROOT / "drift_fingerprint.txt").write_text(
+        _drift_fingerprint(METRICS, failed_suppliers)
+    )
     regressions = _extractor_regressions(extractor_checks)
     # Side-channel: this attempt's failing check labels for the workflow's
     # retry loop to intersect across attempts.
@@ -3837,7 +3844,32 @@ def _drift_warnings(
     failed: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Static-threshold drift signals: latency or byte budgets blown."""
-    warnings: list[str] = []
+    return [message for _key, message in _drift_alerts(metrics, failed)]
+
+
+def _drift_fingerprint(
+    metrics: dict[str, dict[str, float]],
+    failed: frozenset[str] = frozenset(),
+) -> str:
+    """What the drift issue is filed on: one line per supplier and budget
+    kind, with no measurement in it.
+
+    The issue used to be fingerprinted on the report, and the report carries
+    the measured seconds and bytes, so a supplier over its budget for weeks
+    read as a new failure every morning and got a comment a day, which is
+    the noise the seven-day cooldown was written to stop. The same supplier
+    over the same budget is the same situation whatever it measured today;
+    a supplier joining or leaving the list is what changes the shape.
+    """
+    return "".join(f"{key}\n" for key, _message in _drift_alerts(metrics, failed))
+
+
+def _drift_alerts(
+    metrics: dict[str, dict[str, float]],
+    failed: frozenset[str] = frozenset(),
+) -> list[tuple[str, str]]:
+    """Each blown budget as ``(stable key, human message)``."""
+    warnings: list[tuple[str, str]] = []
     for supplier, m in sorted(metrics.items()):
         if supplier == "_catalog":
             # The catalog pass aggregates every supplier's discovery
@@ -3866,14 +3898,20 @@ def _drift_warnings(
         latency_budget = _latency_budget(supplier)
         if m["elapsed_s"] > latency_budget:
             warnings.append(
-                f"`{supplier}` fetch time {m['elapsed_s']:.1f}s "
-                f"exceeds {latency_budget:.0f}s budget"
+                (
+                    f"{supplier} latency",
+                    f"`{supplier}` fetch time {m['elapsed_s']:.1f}s "
+                    f"exceeds {latency_budget:.0f}s budget",
+                )
             )
         budget = _bytes_budget(supplier)
         if m["bytes"] > budget:
             warnings.append(
-                f"`{supplier}` received {int(m['bytes']):,} bytes "
-                f"exceeds {budget:,} byte budget"
+                (
+                    f"{supplier} bytes",
+                    f"`{supplier}` received {int(m['bytes']):,} bytes "
+                    f"exceeds {budget:,} byte budget",
+                )
             )
     return warnings
 
