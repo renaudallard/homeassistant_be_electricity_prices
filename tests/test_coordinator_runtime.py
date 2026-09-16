@@ -5918,3 +5918,65 @@ async def test_a_withdrawn_supplier_is_neither_asked_nor_flagged_stale(
         )
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"snapshot_stale_{entry.entry_id}") is None
+
+
+async def test_a_withdrawn_suppliers_refused_blob_is_replayed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The withdrawal gate returns before the fetch, and the schema gate had
+    just refused the older blob on load, so an entry on a supplier that left
+    held nothing after the first restart past a schema bump, asked nobody and
+    sat in SETUP_RETRY for good with no card saying so. With no fetch left to
+    heal with, the refused blob is replayed the way an unreadable card's is."""
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _snapshot_to_dict,
+    )
+
+    freezer.move_to("2026-09-16 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "dats24",
+            "contract": "dats24_groen_variabel",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    payload = _snapshot_to_dict(
+        make_snapshot(supplier="dats24", contract="dats24_groen_variabel"),
+        dt_util.utcnow() - timedelta(days=20),
+        probe_key=None,
+    )
+    blob = {
+        "entry_supplier": "dats24",
+        "entry_contract": "dats24_groen_variabel",
+        "entry_region": "flanders",
+        "snapshot": {**payload, "_schema_version": 59},
+    }
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+        await coord.async_load_persistent()
+    assert coord._snapshot is None
+    assert coord._stale_snapshot is not None
+    fetch = AsyncMock(side_effect=AssertionError("must not ask a supplier that left"))
+    gone = replace(
+        make_stub_extractor(extractor_id="dats24", fetch=fetch),
+        deprecated_until=date(2026, 8, 31),
+    )
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=gone,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_issues.get_extractor",
+            return_value=gone,
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert fetch.await_count == 0
+    assert coord._snapshot is not None
+    assert coord._snapshot_schema_version == 59
+    assert round(coord._snapshot_age_hours()) == 20 * 24

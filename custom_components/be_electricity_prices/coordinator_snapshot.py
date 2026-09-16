@@ -271,14 +271,17 @@ class _SnapshotMixin:
         # still keeps what it rejected.
         self._stale_snapshot = None
 
-    def _replay_stale_snapshot(self) -> None:
+    def _replay_stale_snapshot(self, reason: str) -> None:
         """Serve the blob the schema gate rejected, because nothing can replace it.
 
-        Only ever reached when the card downloaded fine and carries no text
-        layer, which no amount of parser work can read, so the choice is this
-        months-old card or no prices at all. The gate is right in every other
-        case and stays: it is how a parser fix reaches a cached user, and it
-        only becomes a trap when there is no fetch left to heal with.
+        Reached when no fetch is left to heal with: the card downloaded fine
+        and carries no text layer, which no amount of parser work can read,
+        or the supplier has left the market and its final card is the last
+        it will ever publish. Either way the choice is this months-old card
+        or no prices at all. The gate is right in every other case and
+        stays: it is how a parser fix reaches a cached user, and it only
+        becomes a trap when there is no fetch left to heal with. ``reason``
+        is the clause the log line hangs on the supplier's name.
 
         Refused below ``_DEGRADED_MIN_SCHEMA_VERSION``, where the stored fields
         do not mean what they say any more. Above it the replayed card is
@@ -311,9 +314,10 @@ class _SnapshotMixin:
         )
         self._snapshot_schema_version = int(blob.get("_schema_version", 1))
         _LOGGER.warning(
-            "%s publishes its tariff card as page images; serving the cached "
-            "card of %s (schema v%d) rather than no prices at all",
+            "%s %s; serving the cached card of %s (schema v%d) rather than "
+            "no prices at all",
             self.entry.data.get(CONF_SUPPLIER),
+            reason,
             fetched_at.date().isoformat(),
             self._snapshot_schema_version,
         )
@@ -346,6 +350,14 @@ class _SnapshotMixin:
             # two warnings per tick against a card that is gone. Keep serving
             # what is held; the year-to-date still reads the archive through
             # fetch_for_month, which is not this path.
+            #
+            # Held, or refused by the schema gate on load. With no fetch left
+            # to heal with, the refused blob is replayed the way an unreadable
+            # card's is: after a bump the final card is this or nothing, and
+            # without it a DATS 24 entry lost every entity on the first
+            # restart after v60, asked nobody and sat in SETUP_RETRY for good.
+            if self._snapshot is None:
+                self._replay_stale_snapshot("has left the market")
             return
         result = await fetch_shared(
             self.hass,
@@ -448,7 +460,7 @@ class _SnapshotMixin:
             # on load is the only card this entry will ever have, so replay it
             # here, before the repair below picks which of the two unreadable
             # cards to raise.
-            self._replay_stale_snapshot()
+            self._replay_stale_snapshot("publishes its tariff card as page images")
         if not transient:
             self._sync_extractor_issue(
                 result.error_message, transient=False, unreadable=unreadable
