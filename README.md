@@ -82,7 +82,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead fallback** — ENTSO-E is down, or you skipped the key where the flow lets you: prices keep coming from a keyless source. A dynamic contract needs its own key regardless.
+- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from a keyless source until it recovers. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills the card's printed figure instead.
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
