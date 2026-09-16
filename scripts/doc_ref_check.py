@@ -51,9 +51,9 @@ BASES = (
 )
 SOURCE_EXT = "py|yml|yaml|json|sh|toml|cfg|txt|md"
 FILE_REF = re.compile(rf"`([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))`")
-ANCHOR_REF = re.compile(r"\b([A-Za-z0-9_./-]+\.md)#([a-z0-9-]+)")
-LINK_REF = re.compile(rf"\]\(([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))(?:#([a-z0-9-]+))?\)")
-SELF_ANCHOR = re.compile(r"\]\(#([a-z0-9-]+)\)")
+ANCHOR_REF = re.compile(r"\b([A-Za-z0-9_./-]+\.md)#([a-z0-9_-]+)")
+LINK_REF = re.compile(rf"\]\(([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))(?:#([a-z0-9_-]+))?\)")
+SELF_ANCHOR = re.compile(r"\]\(#([a-z0-9_-]+)\)")
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 

@@ -96,3 +96,25 @@ def test_a_link_a_browser_cannot_follow_fails(
     assert "MISSING FILE   bolt.md:3 (README.md)" in out
     assert "tool.py" not in out
     assert "#the-map" not in out
+
+
+def test_an_anchor_with_an_underscore_is_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A heading named after a function keeps its underscores in the slug,
+    and the anchor classes read letters, digits and hyphens only, so
+    `#fetch_for_month` was never looked at and a cross-doc link carrying one
+    matched no pattern at all, file check included."""
+    root = _tree(
+        tmp_path,
+        (
+            "guide.md",
+            "# Guide\n\n## fetch_for_month\n\nSee [own](#fetch_for_month), [bolt](providers/bolt.md#fetch_for_month) "
+            "and [typo](#fetch_for_months).\n",
+        ),
+        ("providers/bolt.md", "# Bolt\n\n## fetch_for_month\n"),
+    )
+    assert _run(monkeypatch, root) == 1
+    out = capsys.readouterr().out
+    assert "MISSING ANCHOR guide.md:5 #fetch_for_months" in out
+    assert out.count("MISSING") == 1
