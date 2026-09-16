@@ -98,11 +98,17 @@ def test_fixed_card_parses_both_pdf_text_orders(layout: bool) -> None:
 
 
 @pytest.mark.parametrize("layout", [False, True])
-def test_april_fixed_card_parses_tiered_excise_fallback(layout: bool) -> None:
+def test_april_fixed_card_reads_the_residential_excise_tier(layout: bool) -> None:
+    """Until July 2026 the card printed the federal excise as four degressive
+    tiers. A household pays the 0-3 MWh one, which is the tier every sibling
+    extractor reads; this one took the last value of the block, the 50-1000
+    MWh industrial tier, and billed every pre-August month 0,29 c/kWh low. The
+    two readers lay the block out differently (one value per row against the
+    four labels followed by the four values), and both must land on 5,03288."""
     snap = parse_snapshot(
         "groene_energie_vast", fixture_text(_VAST_APRIL, layout=layout)
     )
-    assert snap.taxes.federal_excise == pytest.approx(0.0474668)
+    assert snap.taxes.federal_excise == pytest.approx(0.0503288)
     assert snap.taxes.energy_contribution == pytest.approx(0.0020417)
     assert snap.valid_until == date(2026, 4, 30)
 

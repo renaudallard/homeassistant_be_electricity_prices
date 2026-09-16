@@ -133,7 +133,9 @@ column already represents the network rate surfaced by Trevion.
 
 - `Bijdrage op de energie` as EUR/kWh after conversion from cents;
 - the flat `Bijzondere accijns` on current cards;
-- the final `50-1000 MWh` value on older tiered cards;
+- the `0-3 MWh` row of the degressive block on older tiered cards, the tier a
+  household pays and the one every sibling extractor reads, under either reader's
+  layout of that block;
 - green certificate and WKK costs from `_meter_shared_values`;
 - the domiciled Energiefonds row in EUR/month.
 

@@ -399,27 +399,37 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     return out
 
 
+# A c€/kWh figure as this card prints one: the tier labels of the older
+# excise block ("0-3 MWh") carry no decimal comma, so this cannot read one of
+# them as a rate.
+_DEC = r"\d+,\d+"
+# Tried in order, first match wins, the way flanders_tax_overlay does it. The
+# GSC and WKK levies keep this parser off that helper: Trevion prints them in
+# the meter table, not the tax block (_meter_shared_values).
+_EXCISE_ROWS = (
+    # The flat row every card carries since August 2026, value on its own line.
+    re.compile(
+        rf"^Bijzondere accijns[^\n]*?\)[^\S\n]+({_DEC})[^\S\n]*$",
+        re.IGNORECASE | re.MULTILINE,
+    ),
+    # The degressive block older cards print. The 0-3 MWh row is the tier a
+    # household pays and the one every sibling extractor reads; the layout
+    # reader keeps each tier's value on its row.
+    re.compile(rf"^0-3\s*MWh[^\S\n]+({_DEC})", re.IGNORECASE | re.MULTILINE),
+    # The plain reader prints the four labels and then the four values in the
+    # same order, so the first figure after the last label is that same tier.
+    re.compile(rf"50-1000\s*MWh\s+({_DEC})", re.IGNORECASE),
+)
+
+
 def _extract_taxes(text: str) -> TaxOverlay:
     contribution = re.search(
         rf"^Bijdrage op de energie[^\n]*?\)\s+({_NUM})\s*$",
         text,
         re.IGNORECASE | re.MULTILINE,
     )
-    excise = re.search(
-        rf"^Bijzondere accijns[^\n]*?\)\s+({_NUM})\s*$",
-        text,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if not excise:
-        band = re.search(
-            r"50-1000\s*MWh(.*?)Bijdrage energiefonds",
-            text,
-            re.IGNORECASE | re.DOTALL,
-        )
-        band_values = re.findall(_NUM, band.group(1)) if band else []
-        excise_value = band_values[-1] if band_values else None
-    else:
-        excise_value = excise.group(1)
+    excise = next((m for p in _EXCISE_ROWS if (m := p.search(text))), None)
+    excise_value = excise.group(1) if excise else None
     fund = re.search(
         rf"Bijdrage energiefonds met domicilie.*?\(\d+\)\s+({_NUM})",
         text,
