@@ -181,6 +181,7 @@ What is left is what a RENAME breaks, which is the only way these can still rot:
 | --- | --- | --- |
 | a file a doc names does not exist | yes | the name is provably wrong: it was renamed or removed and the prose did not follow |
 | a `file.md#anchor` names no heading | yes | same, for the pins into README the glossary carries |
+| a markdown link names a `.md` file, or an anchor in one, that is not there | yes | the docs cross-link without backticks, so a renamed doc used to break every link into it while the check stayed green; resolved relative to the linking doc first, as a browser reads it |
 | a symbol named beside a file that this tree does not define | no | printed for a human; most are prose words, Home Assistant's own names and service ids, and no rule separates those from a rename |
 
 The third is deliberately not gated. Gating a count of it would put the docs back to needing an

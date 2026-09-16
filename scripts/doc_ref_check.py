@@ -12,6 +12,10 @@ rot:
 
   1. Every file a doc names in backticks resolves to one on disk.
   2. Every ``file.md#anchor`` resolves to a heading in that file.
+  3. Every markdown link to a ``.md`` file, ``[text](file.md#anchor)``,
+     resolves the same way, relative to the linking doc first. The docs
+     cross-link without backticks, so a renamed doc used to break every
+     link into it while the check stayed green.
 
 Both fail the run, because both are provably wrong rather than a judgement
 call. A third thing is reported and never gated: a backticked symbol named
@@ -48,6 +52,7 @@ BASES = (
 SOURCE_EXT = "py|yml|yaml|json|sh|toml|cfg|txt|md"
 FILE_REF = re.compile(rf"`([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))`")
 ANCHOR_REF = re.compile(r"\b([A-Za-z0-9_./-]+\.md)#([a-z0-9-]+)")
+LINK_REF = re.compile(r"\]\(([A-Za-z0-9_./-]+\.md)(?:#([a-z0-9-]+))?\)")
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 
@@ -102,6 +107,15 @@ def resolve(rel: str) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def resolve_link(doc: Path, rel: str) -> Path | None:
+    """The file a markdown link names: relative to the linking doc, as a
+    browser reads it, else as a path token."""
+    candidate = (doc.parent / rel).resolve()
+    if candidate.is_file():
+        return candidate
+    return resolve(rel)
 
 
 def anchors_of(path: Path) -> set[str]:
@@ -165,7 +179,19 @@ def main() -> int:
                     missing_files.append(f"{doc.name}:{number} `{rel}`")
                     continue
                 named |= symbol_cache.setdefault(target, symbols_of(target))
-            for rel, anchor in ANCHOR_REF.findall(line):
+            for rel, anchor in LINK_REF.findall(line):
+                files_seen += 1
+                target = resolve_link(doc, rel)
+                if target is None:
+                    missing_files.append(f"{doc.name}:{number} ({rel})")
+                    continue
+                if not anchor:
+                    continue
+                anchors_seen += 1
+                if anchor not in anchor_cache.setdefault(target, anchors_of(target)):
+                    missing_anchors.append(f"{doc.name}:{number} {rel}#{anchor}")
+            # Bare tokens outside a link; the links were counted above.
+            for rel, anchor in ANCHOR_REF.findall(LINK_REF.sub("", line)):
                 target = resolve(rel)
                 if target is None:
                     continue
