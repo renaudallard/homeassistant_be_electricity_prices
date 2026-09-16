@@ -2201,3 +2201,18 @@ def test_a_withdrawn_suppliers_catalog_failure_does_not_set_the_exit_bit() -> No
     assert lc._catalog_gates_ci(rows) is False
     rows.append(lc.Check("bolt/catalog: new product", False, "y", kind="catalog"))
     assert lc._catalog_gates_ci(rows) is True
+
+
+def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> None:
+    """OCTA+ Dynamic's January 2026 card printed factor x spot - 0,0102: a
+    negative constant is a real shape, and a floor at zero sized the bound on
+    tariff economics rather than on the unit slip. A base read in c/kWh lands
+    a hundred times away and is still caught."""
+    from custom_components.be_electricity_prices.providers.base import DynamicRates
+
+    printed = DynamicRates(factor=1.0, base=-0.0102, yearly_fixed_fee=60.0)
+    assert _failures(lambda: lc._validate_energy("x", "c", printed)) == []
+    slipped = DynamicRates(factor=1.0, base=-1.02, yearly_fixed_fee=60.0)
+    assert _failures(lambda: lc._validate_energy("x", "c", slipped)) == [
+        "dynamic base in [-0.10, 0.10] EUR/kWh"
+    ]

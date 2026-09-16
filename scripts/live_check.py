@@ -3298,9 +3298,12 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
             factor is not None and 0.5 <= factor <= 3.0,
             detail=f"factor={factor}",
         )
+        # The constant can be negative: OCTA+ Dynamic's January 2026 card
+        # printed factor x spot - 0,0102. Sized on the slip, as the bands
+        # above are: a base read in c/kWh lands a hundred times away.
         _expect(
-            f"{prefix}: dynamic base in [0, 0.10] EUR/kWh",
-            base is not None and 0.0 <= base <= 0.10,
+            f"{prefix}: dynamic base in [-0.10, 0.10] EUR/kWh",
+            base is not None and -0.10 <= base <= 0.10,
             detail=f"base={base}",
         )
     elif isinstance(energy, _RATE_SPOT_MONTHLY):
