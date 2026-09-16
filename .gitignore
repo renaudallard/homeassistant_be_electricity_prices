@@ -15,3 +15,8 @@ build/
 .vscode/
 .DS_Store
 tmp/
+# What scripts/live_check.py leaves at the root when run by hand
+drift_fingerprint.txt
+drift_report.md
+extractor_failures.txt
+catalog_report.md
