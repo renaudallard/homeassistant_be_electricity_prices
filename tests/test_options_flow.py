@@ -5545,6 +5545,7 @@ _GOLDEN_BASE = {
     "meter_used": "mono",
     "solar_note": "",
     "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
+    "ytd_from": "01/01/2026",
     "ytd_injection_kwh": "-",
     "ytd_kwh": "-",
 }
@@ -5570,6 +5571,7 @@ _GOLDEN_DYNAMIC_TARGET = {
     "meter_used": "dynamic",
     "solar_note": "",
     "ytd_chart": "",
+    "ytd_from": "01/01/2026",
     "ytd_injection_kwh": "-",
     "ytd_kwh": "-",
 }
@@ -5595,6 +5597,7 @@ _GOLDEN_METER_OVERRIDE = {
     "meter_used": "bi",
     "solar_note": "",
     "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
+    "ytd_from": "01/01/2026",
     "ytd_injection_kwh": "-",
     "ytd_kwh": "-",
 }
@@ -5620,6 +5623,7 @@ _GOLDEN_ENTRY_RELOADING = {
     "meter_used": "mono",
     "solar_note": "",
     "ytd_chart": "",
+    "ytd_from": "-",
     "ytd_injection_kwh": "-",
     "ytd_kwh": "-",
 }
