@@ -618,7 +618,7 @@ _MAX_LEVY = 0.10
 # read in c/kWh (4,98 for 0,0498) clears the ceiling by a factor ten, one read
 # in EUR/MWh falls a hundred below the floor. The energy registers run
 # 0,056 to 0,29 over the archive (SmartFlex off-peak, May 2026, is the
-# cheapest) and the network rates 0,04 to 0,19; the floors sit close to
+# cheapest) and the network rates 0,05 to 0,19; the floors sit close to
 # three times below the cheapest register, since a slipped figure lands a
 # hundred times away and a cheap month must not file.
 _ENERGY_RATE_BOUNDS = (0.02, 0.50)
@@ -627,7 +627,7 @@ _NETWORK_RATE_BOUNDS = (0.02, 0.50)
 # factor is dimensionless and the base is in EUR/kWh. The cards state both in
 # c/kWh per EUR/MWh, so a missing conversion moves the factor by ten (Trevion
 # parsed 0,113 for 1,13 in 0.22.0) and the base by a hundred. Measured over
-# the same archive the factors run 0,43 to 2,28 and the bases 0,0045 to 0,053.
+# the same archive the factors run 0,43 to 2,28 and the bases 0,0012 to 0,053.
 # The factor band can widen no further: a tenfold slip of the largest factor
 # lands at 0,23 and of the smallest (0,4346, SmartFlex off-peak, March 2026)
 # at 4,35, so each end sits between a real figure and its slip. The
