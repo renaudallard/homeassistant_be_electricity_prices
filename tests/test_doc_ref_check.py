@@ -67,3 +67,32 @@ def test_a_dangling_link_or_link_anchor_fails(
     out = capsys.readouterr().out
     assert "MISSING FILE   guide.md:3 (old-architecture.md)" in out
     assert "MISSING ANCHOR guide.md:3 providers/bolt.md#no-such-heading" in out
+
+
+def test_a_link_a_browser_cannot_follow_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The link resolver fell back to the path-token bases, so a link that
+    only resolves from the repository root passed while the browser answered
+    404; a same-page anchor was never looked at, and a link to a source file
+    was not a link at all."""
+    root = _tree(
+        tmp_path,
+        (
+            "guide.md",
+            "# Guide\n\n## The map\n\nSee [arch](docs/architecture.md), [tool](../scripts/tool.py), "
+            "[gone](../scripts/gone.py), [me](#the-map) and [nowhere](#nowhere).\n",
+        ),
+        ("architecture.md", "# Architecture\n"),
+        ("providers/bolt.md", "# Bolt\n\nBack to the [readme](README.md).\n"),
+    )
+    (root / "scripts").mkdir()
+    (root / "scripts" / "tool.py").write_text("", encoding="utf-8")
+    assert _run(monkeypatch, root) == 1
+    out = capsys.readouterr().out
+    assert "MISSING FILE   guide.md:5 (docs/architecture.md)" in out
+    assert "MISSING FILE   guide.md:5 (../scripts/gone.py)" in out
+    assert "MISSING ANCHOR guide.md:5 #nowhere" in out
+    assert "MISSING FILE   bolt.md:3 (README.md)" in out
+    assert "tool.py" not in out
+    assert "#the-map" not in out

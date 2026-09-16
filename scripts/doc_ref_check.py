@@ -52,7 +52,8 @@ BASES = (
 SOURCE_EXT = "py|yml|yaml|json|sh|toml|cfg|txt|md"
 FILE_REF = re.compile(rf"`([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))`")
 ANCHOR_REF = re.compile(r"\b([A-Za-z0-9_./-]+\.md)#([a-z0-9-]+)")
-LINK_REF = re.compile(r"\]\(([A-Za-z0-9_./-]+\.md)(?:#([a-z0-9-]+))?\)")
+LINK_REF = re.compile(rf"\]\(([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))(?:#([a-z0-9-]+))?\)")
+SELF_ANCHOR = re.compile(r"\]\(#([a-z0-9-]+)\)")
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 
@@ -110,12 +111,11 @@ def resolve(rel: str) -> Path | None:
 
 
 def resolve_link(doc: Path, rel: str) -> Path | None:
-    """The file a markdown link names: relative to the linking doc, as a
-    browser reads it, else as a path token."""
+    """The file a markdown link names, relative to the linking doc as a
+    browser reads it. No fallback to the path-token bases: a link that only
+    resolves from the repository root is one the browser answers 404 to."""
     candidate = (doc.parent / rel).resolve()
-    if candidate.is_file():
-        return candidate
-    return resolve(rel)
+    return candidate if candidate.is_file() else None
 
 
 def anchors_of(path: Path) -> set[str]:
@@ -190,6 +190,10 @@ def main() -> int:
                 anchors_seen += 1
                 if anchor not in anchor_cache.setdefault(target, anchors_of(target)):
                     missing_anchors.append(f"{doc.name}:{number} {rel}#{anchor}")
+            for anchor in SELF_ANCHOR.findall(line):
+                anchors_seen += 1
+                if anchor not in anchor_cache.setdefault(doc, anchors_of(doc)):
+                    missing_anchors.append(f"{doc.name}:{number} #{anchor}")
             # Bare tokens outside a link; the links were counted above.
             for rel, anchor in ANCHOR_REF.findall(LINK_REF.sub("", line)):
                 target = resolve(rel)
