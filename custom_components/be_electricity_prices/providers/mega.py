@@ -86,6 +86,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     fold_accents,
+    is_transient_fetch_error,
     parse_valid_until,
     tier_bound_kwh,
     to_float,
@@ -511,9 +512,16 @@ async def fetch(
             # and one is dynamic, so last month's card carries last
             # month's index: the prices would be wrong, not just old.
             raise
-        except ExtractorError:
+        except ExtractorError as err:
             # Early in a month Mega can lag a day or two before the new
-            # card lands; the one still in force is last month's.
+            # card lands; the one still in force is last month's. Only that
+            # case, which answers 404, takes the previous month: a timeout,
+            # a reset or a 5xx says nothing about which card is in force,
+            # and falling back on it served last month's index, overlays
+            # and taxes as this month's for the 24 h TTL, with no error
+            # recorded, where every other supplier surfaces the failure.
+            if is_transient_fetch_error(str(err)):
+                raise
             previous = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
             pdf_url = _pro_pdf_url(contract, region_code, previous)
             text = await fetch_pdf_text(session, pdf_url)

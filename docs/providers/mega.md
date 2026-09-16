@@ -136,7 +136,10 @@ contract only needs its family token (`Smart`, `Cosy`, `Dynamic`, ...) and the
 `-Fixed` variant suffix. A month Mega has not published resolves to the CDN's
 HTML stub, which `fetch_pdf_text` rejects, so a wrong guess fails loud; `fetch`
 then falls back to the previous month, which covers the day or two of lag around
-a month boundary.
+a month boundary. Only that case takes the fallback: a transient failure (a timeout,
+a reset, a 5xx, an anti-bot 403) is raised like everywhere else, because falling
+back on it served last month's index, overlays and taxes as this month's for the
+24 h TTL a probe-less contract gets, with no error recorded.
 
 Consequences of having no listing:
 

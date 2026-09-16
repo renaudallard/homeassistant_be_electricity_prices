@@ -1271,6 +1271,43 @@ async def test_pro_textless_card_is_not_rolled_back_to_last_month() -> None:
     assert len(served) == 1
 
 
+async def test_pro_transient_error_is_not_rolled_back_to_last_month() -> None:
+    """The same fallback caught every failure the fetch helpers classify as
+    transient, so one timeout on the current month's card served last
+    month's card as this month's, with its index, overlays and taxes, for the
+    24 h TTL a probe-less contract gets, no error recorded and no Repairs
+    card. Only a card that is not there yet, which answers 404, may take the
+    previous month; a transient failure surfaces like everywhere else."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    served: list[str] = []
+
+    async def _timing_out(session: object, url: str, *a: object, **k: object) -> str:
+        served.append(url)
+        raise ExtractorError(f"network error fetching {url}: TimeoutError")
+
+    with patch.object(mega_mod, "fetch_pdf_text", new=_timing_out):
+        with pytest.raises(ExtractorError, match="network error"):
+            await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    assert len(served) == 1
+
+    # The control: a card that is not published yet still rolls back a month.
+    served.clear()
+
+    async def _not_there_yet(session: object, url: str, *a: object, **k: object) -> str:
+        served.append(url)
+        if len(served) == 1:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return fixture_text("mega_pro_smart_fixed_w.pdf")
+
+    with patch.object(mega_mod, "fetch_pdf_text", new=_not_there_yet):
+        snap = await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    assert len(served) == 2
+    assert snap.supplier == "mega"
+
+
 def test_cap_parses_the_energy_price_ceiling() -> None:
     """Mega Cap is the one product that caps what the commodity can cost:
     "la composante energie facturee est limitee a un plafond de ... vous payez
