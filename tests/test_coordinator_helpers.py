@@ -1355,6 +1355,56 @@ async def test_ytd_spot_injection_credit_reads_each_month_shape_not_todays(
     assert credit == 0.0
 
 
+async def test_ytd_spot_injection_credit_asks_the_months_before_the_recorder(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With a resolver the per-month judgement lived in the hour loop only, so
+    a card printing an indicative every month (Eneco Fix, EBEM Variabel, every
+    SPP-indexed card) paid the recorder's statistics query on every tick for a
+    credit that is always zero. The months are asked first, and nothing is
+    read when none of them replays the spot."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    flat = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(
+            current=0.05, factor=0.9, base=-0.01, month_indexed=True
+        ),
+    )
+    entry = _entry(solar_regime="injection", injection_kwh="sensor.inj_total")
+    hour = dt_util.start_of_local_day(datetime(2026, 8, 6)).astimezone(UTC) + timedelta(
+        hours=11
+    )
+    reads: list[str] = []
+    months: list[date] = []
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        reads.append(entity_id)
+        return {hour: 2.0}
+
+    async def _snap_for(month_first: date) -> Any:
+        months.append(month_first)
+        return flat
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        credit = await _ytd_spot_injection_credit(
+            hass,
+            flat,
+            entry,
+            today,
+            {hour: 0.06},
+            _snap_for,
+            window_start=date(2026, 1, 1),
+        )
+    assert credit == 0.0
+    assert reads == []
+    assert months == [date(2026, m, 1) for m in range(1, 10)]
+
+
 async def test_ytd_spot_injection_credit_uses_each_month_own_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:

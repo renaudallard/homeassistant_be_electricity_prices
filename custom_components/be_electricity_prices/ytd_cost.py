@@ -690,6 +690,22 @@ async def _ytd_hourly_energy(
     return energy_cost
 
 
+async def _any_month_replays_hourly_spot(
+    snap_for: Callable[[date], Awaitable[SupplierSnapshot]],
+    window_start: date,
+    today: date,
+) -> bool:
+    """Whether any month of the window is priced on a card whose feed-in
+    settles on the hour's own spot, judged the way the hour loop judges it."""
+    month = date(window_start.year, window_start.month, 1)
+    while month <= today:
+        inj = (await snap_for(month)).injection
+        if inj is not None and _injection_replays_hourly_spot(inj):
+            return True
+        month = (month + timedelta(days=32)).replace(day=1)
+    return False
+
+
 async def _ytd_spot_injection_credit(
     hass: HomeAssistant,
     snapshot: SupplierSnapshot,
@@ -743,6 +759,14 @@ async def _ytd_spot_injection_credit(
         return 0.0
     inj_ids = _hourly_injection_sensors(entry)
     if not inj_ids:
+        return 0.0
+    if snap_for is not None and not await _any_month_replays_hourly_spot(
+        snap_for, window_start, today
+    ):
+        # The months are asked before the recorder is: at most twelve memoised
+        # resolutions, against the statistics query over the whole window that
+        # a card printing an indicative every month otherwise paid on every
+        # tick for a credit that is always zero.
         return 0.0
     per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Topped up from the live meter, exactly as both sibling paths do: the
