@@ -265,7 +265,11 @@ and nothing else here would see it.
 
 It reads the card archive the run already clones rather than the network, so it costs nothing and
 compares what installations are actually served; a fork's run has no archive and the check is
-skipped. Professional cards are measured separately, because a degressive excise legitimately
+skipped. The month compared is the one most residential cards are filed under, not the
+newest present: a card is filed under the month its label names and a label ahead of the
+calendar is allowed, so one supplier publishing October's card on the 28th would otherwise move
+the comparison to a month with a single row and silence every disagreement of the month everyone
+is still on. Professional cards are measured separately, because a degressive excise legitimately
 blends far below the residential rate -- every `_pro_` contract in the September 2026 archive
 carries 0,01421 against the residential 0,04876. A tie is not reported: with two suppliers
 disagreeing there is no consensus, and guessing which is right files issues against the correct card.
@@ -787,8 +791,10 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the archive's
-`parser.txt`; when they differ it replays every stored row (`_replay_row`,
+plus the installed `pypdf` and `pdfplumber` versions, since a reader release lays a card out
+differently and a stored text is served to every replay and to the live check for as long as the
+card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
+archive's `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's

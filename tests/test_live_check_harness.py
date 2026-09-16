@@ -2047,6 +2047,42 @@ def test_a_professional_card_is_not_measured_against_residential_ones(
     assert lc.CHECKS == []
 
 
+def test_one_card_filed_ahead_does_not_silence_the_federal_check(
+    tmp_path: Path,
+) -> None:
+    """The check compared the newest month present. A card is filed under the
+    month its label names and a label ahead of the calendar is allowed, so a
+    single supplier publishing October's card on the 28th moved the whole
+    comparison to a month with one row, and the September disagreement it was
+    written for went unreported."""
+    import json
+
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "c_fixed": SimpleNamespace(professional=False),
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("c", "c_fixed", "flanders"): (0.0503288, 0.0020417),
+        },
+    )
+    early = archive / "cards" / "a" / "a_fixed" / "flanders" / "2026-10.json"
+    early.write_text(
+        json.dumps({"taxes": {"federal_excise": 0.04876, "energy_contribution": 0.0}}),
+        encoding="utf-8",
+    )
+    lc._check_federal_tax_consensus(archive)
+    assert [c.label for c in lc.CHECKS] == ["c/federal tax block disagrees for 2026-09"]
+
+
 def test_the_federal_check_stays_quiet_without_a_consensus(tmp_path: Path) -> None:
     """Two suppliers disagreeing is not a majority, and neither is no archive
     at all, which is what a fork's run has."""

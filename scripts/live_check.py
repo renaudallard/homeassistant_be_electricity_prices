@@ -2008,20 +2008,32 @@ def _check_federal_tax_consensus(archive: Path | None) -> None:
     if archive is None:
         return
     rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
-    if not rows:
+    residential = [
+        row
+        for row in rows
+        # getattr, like the shape lookup below: the provider modules are loaded
+        # dynamically, so the registry is typed as object here.
+        if (registered := _CONTRACTS_BY_ID.get(row.parts[-3])) is not None
+        and not getattr(registered, "professional", False)
+    ]
+    if not residential:
         return
-    month = max(row.stem for row in rows)
+    # The month most residential cards are filed under, not the newest one
+    # present: a card is filed under the month its label names and a label
+    # ahead of the calendar is allowed, so one supplier publishing October's
+    # card on the 28th moved the comparison to a month with a single row and
+    # every disagreement of the month everyone is still on went unreported.
+    # Ties go to the later month, which is the one about to be billed.
+    counts: dict[str, int] = {}
+    for row in residential:
+        counts[row.stem] = counts.get(row.stem, 0) + 1
+    month = max(counts, key=lambda stem: (counts[stem], stem))
     # (region, month) -> {(excise, contribution): [supplier, ...]}
     seen: dict[str, dict[tuple[float, float], list[str]]] = {}
-    for row in rows:
+    for row in residential:
         if row.stem != month:
             continue
         supplier, contract, region = row.parts[-4:-1]
-        registered = _CONTRACTS_BY_ID.get(contract)
-        # getattr, like the shape lookup below: the provider modules are loaded
-        # dynamically, so the registry is typed as object here.
-        if registered is None or getattr(registered, "professional", False):
-            continue
         try:
             taxes = json.loads(row.read_text(encoding="utf-8"))["taxes"]
             pair = (
