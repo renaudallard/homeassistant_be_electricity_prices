@@ -470,6 +470,17 @@ def test_suppliers_are_listed_alphabetically_before_the_custom_one() -> None:
     assert labels == sorted(labels, key=str.casefold)
 
 
+def test_compare_targets_are_listed_alphabetically() -> None:
+    """The compare page builds its own supplier list and kept walking the
+    registry in import order after the install picker was sorted, so the two
+    dropdowns disagreed on where Trevion sits."""
+    labels = [
+        o["label"]
+        for o in _compare_supplier_options(const.REGION_FLANDERS, "dynamic", False)
+    ]
+    assert labels == sorted(labels, key=str.casefold)
+
+
 # ---- withdrawn suppliers -----------------------------------------------------
 
 

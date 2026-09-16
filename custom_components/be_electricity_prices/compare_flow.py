@@ -208,7 +208,9 @@ def _compare_supplier_options(
     ``professional`` scopes the list to products the household could
     actually sign; see ``_compare_contract_schema`` for why."""
     out: list[SelectOptionDict] = []
-    for ext in all_extractors():
+    # By label, as the install picker lists them; the registry's import order
+    # put a supplier added later wherever its import happened to land.
+    for ext in sorted(all_extractors(), key=lambda e: e.label.casefold()):
         # The expert custom supplier has no fetchable card, so it can't be a
         # comparison target (only the current side of a quote).
         if ext.id == SUPPLIER_CUSTOM:
