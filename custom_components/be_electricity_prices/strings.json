@@ -87,7 +87,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API key (optional)",
-        "description": "Optional. This contract indexes its energy price on the delivery month's day-ahead mean, or its solar injection on the day-ahead spot, or both, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; without a key the integration bills the figure printed on your tariff card, which is the previous month's, and the injection price stays unavailable if your card prints none.",
+        "description": "Optional. This contract indexes its energy price on the delivery month's day-ahead mean, or its solar injection on the day-ahead spot, or both, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; without a key a card that prints a monthly figure is billed on it, which is the previous month's, while a feed-in formula settled per slot stays uncredited and its price unavailable.",
         "data": {
           "api_key": "ENTSO-E API key"
         }

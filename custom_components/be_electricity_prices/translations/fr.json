@@ -87,7 +87,7 @@
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, l'integration facture le montant imprime sur votre fiche tarifaire, celui du mois precedent, et le prix d'injection reste indisponible si votre fiche n'en imprime aucun.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection reglee par tranche horaire n'est pas creditee et son prix reste indisponible.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -382,7 +382,7 @@
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, l'integration facture le montant imprime sur votre fiche tarifaire, celui du mois precedent, et le prix d'injection reste indisponible si votre fiche n'en imprime aucun.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection reglee par tranche horaire n'est pas creditee et son prix reste indisponible.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
