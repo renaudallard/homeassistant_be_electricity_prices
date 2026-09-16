@@ -59,6 +59,7 @@ NOT_OURS = frozenset(
     {
         "catalog_report.md",
         "coverage.md",
+        "drift_fingerprint.txt",
         "drift_report.md",
         "extractor_failures.txt",
         "parser.txt",
