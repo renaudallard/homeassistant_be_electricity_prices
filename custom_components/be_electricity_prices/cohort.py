@@ -610,10 +610,22 @@ async def _cohort_legs(
         current_snapshot.energy if archived is None else archived,
         taxes.published_vat_rate or taxes.vat_rate,
     )
+    energy = manual if manual is not None else archived
+    if energy is None:
+        # Nothing to freeze a rate from: signed this month, a supplier with
+        # no archive, or a month the archive does not hold. That must not
+        # switch a month-indexed card onto its printed figure, which is LAST
+        # month's index by the card's own words: the coefficients the current
+        # card prints are the ones an archived card would have been re-priced
+        # from anyway, so the delivery month keeps its own mean, exactly as it
+        # does for an entry that names no cohort month at all.
+        energy = _month_indexed_leg(current_snapshot, entry)
     if manual is not None:
         source = "hand-entered signing rate"
     elif archived is not None:
         source = "archived signing-month card"
+    elif energy is not None:
+        source = "current card, re-priced on the delivery month's index"
     else:
         source = "current card (no cohort rate available)"
     # Which of the three resolutions won is otherwise invisible: the sensors
@@ -625,7 +637,6 @@ async def _cohort_legs(
         start,
         source,
     )
-    energy = manual if manual is not None else archived
     # The feed-in leg locks with the offtake leg, so it is resolved from the
     # same archived card rather than left on the current one (issue #85).
     injection = (

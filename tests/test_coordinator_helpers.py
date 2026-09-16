@@ -73,6 +73,7 @@ from custom_components.be_electricity_prices.cohort import (
     _tariff_card_month,
     _effective_snapshot_for_month,
     _manual_energy_leg,
+    _month_indexed_leg,
 )
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
@@ -5880,6 +5881,61 @@ async def test_cohort_energy_leg_none_when_no_archive(
     entry = _entry(contract="test", contract_start_date="2025-11-10")
     leg = await _cohort_energy_leg(
         hass, MagicMock(), _fixed_extractor(None), "test", "wallonia", entry, current
+    )
+    assert leg is None
+
+
+async def test_cohort_month_indexed_card_keeps_its_index_without_a_signing_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A Cociter Variable or Eneco Flex card prints last month's index and says
+    so, and without a cohort month it is re-priced on the delivery month's
+    mean. Naming a month the archive cannot serve used to switch that off and
+    bill the printed figure instead, as if the date had frozen a rate nobody
+    signed: a contract signed this month, a supplier that keeps no archive,
+    and a month older than the archive reaches all did it."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=VariableRates(
+            current=0.1126,
+            formula_factor=1.0,
+            formula_base=0.02,
+            month_indexed=True,
+        )
+    )
+
+    async def _no_such_month(*_a: object, **_k: object) -> SupplierSnapshot | None:
+        return None
+
+    async def _do_not_fetch(*_a: object, **_k: object) -> SupplierSnapshot:
+        raise AssertionError("this month's card is the current one, do not fetch")
+
+    expected = _month_indexed_leg(current, _entry(contract="test", api_key="k"))
+    assert isinstance(expected, SpotMonthlyRates)
+    cases = (
+        ("signed this month", _fixed_extractor(_do_not_fetch), "2026-09-05"),
+        ("no archive", _fixed_extractor(None), "2026-03-01"),
+        ("month not archived", _fixed_extractor(_no_such_month), "2026-03-01"),
+    )
+    for label, ext, start in cases:
+        _monthly_snapshots(hass).clear()
+        entry = _entry(contract="test", contract_start_date=start, api_key="k")
+        leg = await _cohort_energy_leg(
+            hass, MagicMock(), ext, "test", "wallonia", entry, current
+        )
+        assert leg == expected, label
+    # Without the key there is no mean to resolve against, so the printed
+    # figure stands, as it does for an entry with no cohort month.
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-09-05")
+    leg = await _cohort_energy_leg(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_do_not_fetch),
+        "test",
+        "wallonia",
+        entry,
+        current,
     )
     assert leg is None
 
