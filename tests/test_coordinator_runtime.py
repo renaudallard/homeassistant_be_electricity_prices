@@ -6042,3 +6042,72 @@ async def test_an_ocr_reading_survives_a_restart_as_what_it_is(
         await restarted.async_load_persistent()
     assert restarted._snapshot is not None
     assert restarted.card_read_by_ocr is True
+
+
+async def test_a_replayed_ocr_blob_keeps_its_marker(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The load path restores the OCR marker, the degraded replay did not.
+    An entry serving the archive's reading, restarted on a bumped schema
+    while the archive answers nothing, served the picture's figures as a text
+    card for a tick, saved the blob without the marker, and on a probe-less
+    supplier offered the row as its own for the whole TTL."""
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_failed_fetches,
+        _snapshot_to_dict,
+    )
+
+    freezer.move_to("2026-09-16 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    payload = _snapshot_to_dict(
+        make_snapshot(), dt_util.utcnow() - timedelta(hours=2), probe_key=None
+    )
+    payload.update({"_schema_version": 59, "_read_by_ocr": True})
+    blob = {
+        "entry_supplier": entry.data["supplier"],
+        "entry_contract": entry.data["contract"],
+        "entry_region": entry.data["region"],
+        "snapshot": payload,
+    }
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+        await coord.async_load_persistent()
+    assert coord._snapshot is None
+    assert coord._stale_snapshot is not None
+
+    async def _textless(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError("card has no text layer: 172 characters")
+
+    fetch = AsyncMock(side_effect=_textless)
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(data: dict[str, Any]) -> None:
+        saved.update(data)
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=fetch),
+        ),
+        patch.object(
+            snapshot_store, "_archived_card_from_github", AsyncMock(return_value=None)
+        ),
+        patch.object(coord._store, "async_save", new=_fake_save),
+    ):
+        await coord._maybe_refresh_snapshot()
+        assert coord._snapshot is not None
+        assert coord.card_read_by_ocr is True
+        await coord._save_persistent()
+        assert saved["snapshot"]["_read_by_ocr"] is True
+        # A probe-less supplier: the replayed row is served, not offered, so
+        # the next tick asks the supplier again once the failure backoff on
+        # the tuple has passed.
+        _shared_failed_fetches(hass).clear()
+        await coord._maybe_refresh_snapshot()
+    assert fetch.await_count == 2
+    assert coord.card_read_by_ocr is True

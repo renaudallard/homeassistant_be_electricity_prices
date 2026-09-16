@@ -635,9 +635,7 @@ class BePricesCoordinator(
                 self._snapshot_probe_key = (
                     cached_probe if isinstance(cached_probe, str) else None
                 )
-                self._card_read_by_ocr = snap.get("_read_by_ocr") is True
-                if self._card_read_by_ocr:
-                    self._sync_card_read_by_ocr_issue(True)
+                self._restore_read_by_ocr(snap)
             except (KeyError, ValueError, TypeError) as err:
                 _LOGGER.warning(
                     "discarding cached snapshot for %s: %s",

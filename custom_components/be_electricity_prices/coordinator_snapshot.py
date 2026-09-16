@@ -271,6 +271,21 @@ class _SnapshotMixin:
         # still keeps what it rejected.
         self._stale_snapshot = None
 
+    def _restore_read_by_ocr(self, blob: dict[str, Any]) -> None:
+        """Take the OCR marker back from a stored blob, with its notice.
+
+        Shared by the load path and the degraded replay, so a blob served
+        either way says where its figures came from, is written back with
+        the marker still on it, and is not offered as the entry's own row.
+        The replay restored the timestamp, the probe key and the schema
+        version and left the marker behind, so an Ecofix entry restarted on a
+        bumped schema served the picture's figures as a text card for a tick
+        and saved the blob without the marker.
+        """
+        self._card_read_by_ocr = blob.get("_read_by_ocr") is True
+        if self._card_read_by_ocr:
+            self._sync_card_read_by_ocr_issue(True)
+
     def _replay_stale_snapshot(self, reason: str) -> None:
         """Serve the blob the schema gate rejected, because nothing can replace it.
 
@@ -313,6 +328,7 @@ class _SnapshotMixin:
             cached_probe if isinstance(cached_probe, str) else None
         )
         self._snapshot_schema_version = int(blob.get("_schema_version", 1))
+        self._restore_read_by_ocr(blob)
         _LOGGER.warning(
             "%s %s; serving the cached card of %s (schema v%d) rather than "
             "no prices at all",
