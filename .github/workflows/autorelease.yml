@@ -27,6 +27,9 @@ jobs:
 
   hacs:
     runs-on: ubuntu-latest
+    # Floating-ref actions get no write token from the workflow-level grant.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: hacs/action@main
@@ -35,6 +38,9 @@ jobs:
 
   hassfest:
     runs-on: ubuntu-latest
+    # Floating-ref actions get no write token from the workflow-level grant.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: home-assistant/actions/hassfest@master

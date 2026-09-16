@@ -10,6 +10,10 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
+# Both actions run from floating refs; neither needs to write anything.
+permissions:
+  contents: read
+
 concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true

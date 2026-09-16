@@ -28,8 +28,11 @@ on:
 
 # The job pushes to the cards repository, and nothing else does; issues so
 # a failed run is filed rather than left on the Actions tab.
+# Read only on this repository: every write, the clone, the push and the
+# releases, goes through the cards repository's own token; github.token is
+# used by the two issue steps alone.
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 # A manual run overlapping the schedule would push the same day's cards
