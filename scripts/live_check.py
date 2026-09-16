@@ -595,6 +595,70 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
 # so anything above a cent per kWh is a unit slip rather than a real rate.
 _MAX_ENERGY_CONTRIBUTION = 0.01
 
+# Ceiling on the federal excise and the regional certificate levies, in
+# EUR/kWh. Measured over the September 2026 archive the excise runs 0,0142
+# (a professional band) to 0,0503 and the levies up to 0,0581 (Wallonia), so
+# a figure read in c/kWh instead of EUR/kWh lands ten times above this and a
+# figure in EUR/MWh a hundred times below the floor the > 0 checks keep.
+_MAX_LEVY = 0.10
+
+# Bounds on the per-kWh rates every rate shape and every DSO overlay can
+# carry, in EUR/kWh. Sized on the unit slip they catch: a distribution rate
+# read in c/kWh (4,98 for 0,0498) clears the ceiling by a factor ten, one read
+# in EUR/MWh falls a hundred below the floor. The energy registers run
+# 0,08 to 0,29 on the September 2026 cards and the network rates 0,04 to
+# 0,19, so nothing published sits near either end.
+_ENERGY_RATE_BOUNDS = (0.05, 0.50)
+_NETWORK_RATE_BOUNDS = (0.02, 0.50)
+# A month-indexed coefficient pair, factor and base, on the energy side: the
+# factor is dimensionless and the base is in EUR/kWh. The cards state both in
+# c/kWh per EUR/MWh, so a missing conversion moves the factor by ten (Trevion
+# parsed 0,113 for 1,13 in 0.22.0) and the base by a hundred. Measured over
+# the same archive the factors run 0,44 to 2,28 and the bases 0,0045 to 0,053;
+# the spot-monthly leg keeps its own tighter pair below, which predates these.
+_COEFFICIENT_FACTOR_BOUNDS = (0.3, 3.0)
+_COEFFICIENT_BASE_BOUNDS = (-0.10, 0.10)
+# A feed-in formula on a per-slot shape (every Bolt and Cociter card, every
+# dynamic card): the archive runs 0,21 to 1,02 on the factor and -0,04 to
+# 0,0003 on the base, so a factor read in c/kWh (0,094 for 0,94) falls below
+# the floor and a base read in c/kWh (-2,5 for -0,025) below the ceiling.
+_INJECTION_FACTOR_BOUNDS = (0.1, 2.0)
+_INJECTION_BASE_BOUNDS = (-0.05, 0.05)
+# The printed feed-in rates: the indicative, a register pair, a slot triplet.
+# A producer can pay to inject at a very low spot, hence the negative floor.
+_INJECTION_RATE_BOUNDS = (-0.10, 0.20)
+
+
+def _expect_rate(
+    prefix: str, label: str, value: object, bounds: tuple[float, float]
+) -> None:
+    """Bound one populated figure; a None is a field the card does not print
+    and is asserted where presence matters, not here."""
+    if value is None:
+        return
+    lo, hi = bounds
+    _expect(
+        f"{prefix}: {label} in [{lo:g}, {hi:g}]",
+        isinstance(value, (int, float)) and lo <= value <= hi,
+        detail=f"{label}={value}",
+    )
+
+
+def _expect_coefficient_pair(
+    prefix: str, label: str, factor: object, base: object
+) -> None:
+    """Bound a month-indexed coefficient pair, which comes whole or not at
+    all: half a pair silently sends the leg back to the printed rate."""
+    if factor is None and base is None:
+        return
+    _expect(
+        f"{prefix}: {label} coefficient pair is complete",
+        factor is not None and base is not None,
+        detail=f"factor={factor}, base={base}",
+    )
+    _expect_rate(prefix, f"{label} factor", factor, _COEFFICIENT_FACTOR_BOUNDS)
+    _expect_rate(prefix, f"{label} base", base, _COEFFICIENT_BASE_BOUNDS)
+
 
 # Professional contracts whose CARD exempts injection from VAT. Being a
 # business edition does not settle the question and Mega proves it: the pro
@@ -917,7 +981,6 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
             snap.taxes.federal_excise > 0,
             detail=str(snap.taxes),
         )
-        _expect_energy_contribution(prefix, snap.taxes)
         _validate_snapshot(prefix, cid, snap)
 
 
@@ -936,7 +999,6 @@ async def _check_trevion(
             continue
         _expect(f"{prefix}: publication label", bool(snap.publication_label))
         _expect_region_basics(prefix, "flanders", snap)
-        _expect_energy_contribution(prefix, snap.taxes)
         _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
@@ -973,7 +1035,6 @@ async def _check_two_region_supplier(
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect_region_basics(prefix, region_key, snap)
-            _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
 
@@ -2384,6 +2445,19 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             -0.10 <= current <= 0.20,
             detail=f"current={current}",
         )
+    if shape not in ("spp", "month"):
+        # A per-slot formula, whatever the card prints beside it: the shapes
+        # above bound theirs; every Bolt and Cociter card and every dynamic
+        # card carries one, and it billed without a bound.
+        _expect_rate(prefix, "injection factor", factor, _INJECTION_FACTOR_BOUNDS)
+        _expect_rate(prefix, "injection base", base, _INJECTION_BASE_BOUNDS)
+    for slot in ("peak", "transition", "offpeak"):
+        _expect_rate(
+            prefix,
+            f"injection {slot} EUR/kWh",
+            getattr(injection, slot, None),
+            _INJECTION_RATE_BOUNDS,
+        )
     # Asserted whatever the card prints alongside. Several dynamic cards
     # publish BOTH a formula and an indicative, and this used to hang off the
     # else of the check above, so the shape was only tested while current
@@ -2667,6 +2741,19 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
         getattr(taxes, "federal_excise", 0) > 0,
         detail=str(taxes),
     )
+    # Ceilings sized on the unit slip they catch, not on tariff economics:
+    # the Walloon certificate levy tops out near 0,06 and the residential
+    # excise sits at 0,05 EUR/kWh, so a value read in c/kWh lands a factor
+    # ten above either. A floor alone let that through green.
+    for label, field in (
+        ("regional renewables", _RENEWABLES_FIELD[region_key]),
+        ("federal excise", "federal_excise"),
+    ):
+        _expect(
+            f"{prefix}: {label} at most {_MAX_LEVY} EUR/kWh",
+            getattr(taxes, field, 0) <= _MAX_LEVY,
+            detail=str(taxes),
+        )
 
 
 # Suppliers whose card legitimately is NOT for the current month, with the
@@ -2883,6 +2970,9 @@ def _validate_snapshot(
     the per-contract default (used for region-dependent cases like
     DATS 24, whose Wallonia card pays no feed-in)."""
     _expect_card_period(prefix, contract_id, snap)
+    # For every supplier, not the three that used to ask for it at their own
+    # call sites: the levy is federal and the unit slip it catches is not.
+    _expect_energy_contribution(prefix, getattr(snap, "taxes", None))
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
@@ -2994,6 +3084,47 @@ def _validate_dsos(
                 5.0 <= metering <= ceiling,
                 detail=f"data_management_per_year={metering}",
             )
+        for field in (
+            "distribution_single",
+            "distribution_peak",
+            "distribution_offpeak",
+            "distribution_exclusive_night",
+            "distribution_pic",
+            "distribution_medium",
+            "distribution_eco",
+        ):
+            _expect_rate(
+                prefix,
+                f"{key} {field} EUR/kWh",
+                getattr(overlay, field, None),
+                _NETWORK_RATE_BOUNDS,
+            )
+        # Zero is a published value here: the Flemish cards fold transport
+        # into the distribution rate. The ceiling is the slip check.
+        _expect_rate(
+            prefix,
+            f"{key} transport EUR/kWh",
+            getattr(overlay, "transport", None),
+            (0.0, 0.05),
+        )
+        _expect_rate(
+            prefix,
+            f"{key} prosumer tariff EUR/kVA/yr",
+            getattr(overlay, "prosumer_eur_per_kva_year", None),
+            (20.0, 200.0),
+        )
+        _expect_rate(
+            prefix,
+            f"{key} network ceiling EUR/kWh",
+            getattr(overlay, "network_ceiling_eur_per_kwh", None),
+            (0.10, 1.0),
+        )
+        _expect_rate(
+            prefix,
+            f"{key} power term above 13 kVA EUR/yr",
+            getattr(overlay, "brussels_power_term_above_13kva", None),
+            (50.0, 300.0),
+        )
         capacity = getattr(overlay, "capacity_eur_per_kw_year", None)
         if key in require_capacity:
             _expect(
@@ -3032,6 +3163,19 @@ _NO_STANDING_CHARGE: frozenset[str] = frozenset(
 # the same reason: this is the product's structure, not its current price, so
 # it does not drift the way a re-pricing would.
 _BUNDLED_STANDING_CHARGE: frozenset[str] = frozenset({"energyvision_laadpunt"})
+
+
+def _expect_registers(prefix: str, energy: object) -> None:
+    """Bound the bi-hourly and exclusive-night registers a fixed or variable
+    card prints beside its mono rate. They bill the two-register meters, and
+    were the one energy figure no gate read."""
+    for band in ("peak", "offpeak", "exclusive_night"):
+        _expect_rate(
+            prefix,
+            f"{band} rate EUR/kWh",
+            getattr(energy, band, None),
+            _ENERGY_RATE_BOUNDS,
+        )
 
 
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
@@ -3075,6 +3219,7 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
             rate is not None and 0.05 <= rate <= 0.50,
             detail=f"single={rate}",
         )
+        _expect_registers(prefix, energy)
     elif isinstance(energy, _RATE_VARIABLE):
         current = getattr(energy, "current", None)
         _expect(
@@ -3082,6 +3227,38 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
             current is not None and 0.05 <= current <= 0.50,
             detail=f"current={current}",
         )
+        _expect_registers(prefix, energy)
+        # The month coefficients a variable card re-prices on when the entry
+        # holds a key, mono and per register, and the Impact bands and price
+        # ceilings Bolt's and Cociter's Walloon cards print beside the
+        # standard rates.
+        _expect_coefficient_pair(
+            prefix,
+            "variable month",
+            getattr(energy, "formula_factor", None),
+            getattr(energy, "formula_base", None),
+        )
+        for band in ("peak", "offpeak", "exclusive_night"):
+            _expect_coefficient_pair(
+                prefix,
+                f"variable {band} month",
+                getattr(energy, f"formula_factor_{band}", None),
+                getattr(energy, f"formula_base_{band}", None),
+            )
+        for band in ("pic", "medium", "eco"):
+            _expect_rate(
+                prefix,
+                f"variable impact {band} EUR/kWh",
+                getattr(energy, f"impact_{band}", None),
+                _ENERGY_RATE_BOUNDS,
+            )
+        for band in ("single", "peak", "offpeak", "exclusive_night"):
+            _expect_rate(
+                prefix,
+                f"variable {band} ceiling EUR/kWh",
+                getattr(energy, f"ceiling_{band}", None),
+                _ENERGY_RATE_BOUNDS,
+            )
     elif isinstance(energy, _RATE_DYNAMIC):
         factor = getattr(energy, "factor", None)
         base = getattr(energy, "base", None)
@@ -3176,6 +3353,16 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
                 peak >= transition >= offpeak,
                 detail=f"peak={peak}, transition={transition}, offpeak={offpeak}",
             )
+        # The per-slot month coefficients the entry actually bills on with a
+        # key (Engie Flextime, Luminus SmartFlex); the printed triplet above
+        # is last month's figure.
+        for slot in ("peak", "transition", "offpeak"):
+            _expect_coefficient_pair(
+                prefix,
+                f"TOU {slot} month",
+                getattr(energy, f"formula_factor_{slot}", None),
+                getattr(energy, f"formula_base_{slot}", None),
+            )
     elif isinstance(energy, _RATE_IMPACT):
         pic = getattr(energy, "pic", None)
         medium = getattr(energy, "medium", None)
@@ -3196,6 +3383,21 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
                 f"{prefix}: Impact bands ordered pic >= medium >= eco",
                 pic >= medium >= eco,
                 detail=f"pic={pic}, medium={medium}, eco={eco}",
+            )
+        # The per-band month coefficients and price ceilings (Cociter
+        # trihoraire, Mega Off-peak Impact).
+        for band in ("pic", "medium", "eco"):
+            _expect_coefficient_pair(
+                prefix,
+                f"Impact {band} month",
+                getattr(energy, f"{band}_factor", None),
+                getattr(energy, f"{band}_base", None),
+            )
+            _expect_rate(
+                prefix,
+                f"Impact {band} ceiling EUR/kWh",
+                getattr(energy, f"ceiling_{band}", None),
+                _ENERGY_RATE_BOUNDS,
             )
     else:
         _record(

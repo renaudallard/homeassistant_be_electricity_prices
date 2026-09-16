@@ -1532,6 +1532,194 @@ def test_a_spot_monthly_card_with_per_meter_bands_is_fully_bounded(
     ]
 
 
+def _failures(run: Callable[[], None]) -> list[str]:
+    lc.CHECKS.clear()
+    run()
+    return [c.label.removeprefix("x: ") for c in lc.CHECKS if not c.ok]
+
+
+def test_every_populated_rate_is_bounded_against_a_unit_slip(
+    _bound_rate_types: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gates bounded one field per shape: FixedRates its mono rate,
+    VariableRates its current, the DSO overlay its metering fee and capacity,
+    the levies with a floor and no ceiling. A distribution rate read in c/kWh,
+    a register, a month coefficient, a per-slot feed-in formula or the excise
+    a factor ten out all passed green and billed. Every populated figure now
+    sits inside a band sized on the unit slip it catches, and a real card
+    (the September 2026 figures below) trips none of them."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        ImpactRates,
+        InjectionRates,
+        TaxOverlay,
+        TimeOfUseRates,
+        VariableRates,
+    )
+
+    monkeypatch.setitem(lc._EXPECTED_DSOS, "wallonia", frozenset({"ores"}))
+    ores = DsoOverlay(
+        distribution_single=0.1198,
+        distribution_peak=0.1327,
+        distribution_offpeak=0.0739,
+        distribution_exclusive_night=0.0739,
+        transport=0.0274,
+        data_management_per_year=14.10,
+        prosumer_eur_per_kva_year=85.84,
+    )
+    taxes = TaxOverlay(
+        federal_excise=0.04876, energy_contribution=0.0, wallonia_renewables=0.0581
+    )
+    fixed = FixedRates(
+        single=0.18,
+        peak=0.20,
+        offpeak=0.14,
+        exclusive_night=0.13,
+        yearly_fixed_fee=60.0,
+    )
+    variable = VariableRates(
+        current=0.1126,
+        peak=0.13,
+        offpeak=0.09,
+        yearly_fixed_fee=60.0,
+        formula_factor=1.0,
+        formula_base=0.02,
+        formula_factor_peak=1.1,
+        formula_base_peak=0.02,
+        formula_factor_offpeak=0.9,
+        formula_base_offpeak=0.02,
+        impact_pic=0.19,
+        impact_medium=0.15,
+        impact_eco=0.09,
+        ceiling_single=0.265,
+    )
+    tou = TimeOfUseRates(
+        peak=0.30,
+        transition=0.20,
+        offpeak=0.10,
+        yearly_fixed_fee=60.0,
+        formula_factor_peak=1.5,
+        formula_base_peak=0.03,
+        formula_factor_transition=1.1,
+        formula_base_transition=0.02,
+        formula_factor_offpeak=0.44,
+        formula_base_offpeak=0.005,
+    )
+    impact = ImpactRates(
+        pic=0.23,
+        medium=0.19,
+        eco=0.14,
+        yearly_fixed_fee=60.0,
+        pic_factor=1.5,
+        pic_base=0.03,
+        medium_factor=1.25,
+        medium_base=0.02,
+        eco_factor=0.9,
+        eco_base=0.01,
+        ceiling_pic=0.265,
+    )
+    spot_inj = InjectionRates(
+        current=None, factor=0.94, base=-0.01133, slot_indexed=True
+    )
+    pair = InjectionRates(
+        current=0.057615, peak=0.063329, offpeak=0.04333, bi_hourly=True
+    )
+
+    def snap(inj: InjectionRates) -> SimpleNamespace:
+        return SimpleNamespace(injection=inj, dsos={"ores": ores}, taxes=taxes)
+
+    # The real figures pass every gate.
+    for leg in (fixed, variable, tou, impact):
+        assert _failures(lambda: lc._validate_energy("x", "c", leg)) == []
+    assert _failures(lambda: lc._validate_injection("x", snap(spot_inj), "spot")) == []
+    assert _failures(lambda: lc._validate_injection("x", snap(pair), "bihourly")) == []
+    assert _failures(lambda: lc._validate_dsos("x", snap(pair))) == []
+    assert (
+        _failures(lambda: lc._expect_region_basics("x", "wallonia", snap(pair))) == []
+    )
+
+    # Each slip trips exactly the bound written for it.
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(fixed, peak=2.0))
+    ) == ["peak rate EUR/kWh in [0.05, 0.5]"]
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(variable, formula_factor=0.113))
+    ) == ["variable month factor in [0.3, 3]"]
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(variable, formula_base_peak=0.53))
+    ) == ["variable peak month base in [-0.1, 0.1]"]
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(variable, formula_base=None))
+    ) == ["variable month coefficient pair is complete"]
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(tou, formula_factor_peak=15.0))
+    ) == ["TOU peak month factor in [0.3, 3]"]
+    assert _failures(
+        lambda: lc._validate_energy("x", "c", replace(impact, pic_factor=0.15))
+    ) == ["Impact pic month factor in [0.3, 3]"]
+    assert _failures(
+        lambda: lc._validate_injection(
+            "x", snap(replace(spot_inj, factor=94.0)), "spot"
+        )
+    ) == ["injection factor in [0.1, 2]"]
+    assert _failures(
+        lambda: lc._validate_injection(
+            "x", snap(replace(spot_inj, base=-1.133)), "spot"
+        )
+    ) == ["injection base in [-0.05, 0.05]"]
+    assert _failures(
+        lambda: lc._validate_injection(
+            "x", snap(replace(pair, peak=6.3329)), "bihourly"
+        )
+    ) == ["injection peak EUR/kWh in [-0.1, 0.2]"]
+    slipped = SimpleNamespace(
+        injection=pair,
+        dsos={"ores": replace(ores, distribution_single=11.98)},
+        taxes=taxes,
+    )
+    assert _failures(lambda: lc._validate_dsos("x", slipped)) == [
+        "ores distribution_single EUR/kWh in [0.02, 0.5]"
+    ]
+    slipped = SimpleNamespace(
+        injection=pair, dsos={"ores": replace(ores, transport=2.74)}, taxes=taxes
+    )
+    assert _failures(lambda: lc._validate_dsos("x", slipped)) == [
+        "ores transport EUR/kWh in [0, 0.05]"
+    ]
+    slipped = SimpleNamespace(
+        injection=pair,
+        dsos={"ores": replace(ores, prosumer_eur_per_kva_year=858.4)},
+        taxes=taxes,
+    )
+    assert _failures(lambda: lc._validate_dsos("x", slipped)) == [
+        "ores prosumer tariff EUR/kVA/yr in [20, 200]"
+    ]
+    slipped = SimpleNamespace(
+        injection=pair, dsos={"ores": ores}, taxes=replace(taxes, federal_excise=0.4876)
+    )
+    assert _failures(lambda: lc._expect_region_basics("x", "wallonia", slipped)) == [
+        "federal excise at most 0.1 EUR/kWh"
+    ]
+    slipped = SimpleNamespace(
+        injection=pair,
+        dsos={"ores": ores},
+        taxes=replace(taxes, wallonia_renewables=0.581),
+    )
+    assert _failures(lambda: lc._expect_region_basics("x", "wallonia", slipped)) == [
+        "regional renewables at most 0.1 EUR/kWh"
+    ]
+
+
+def test_the_energy_contribution_is_bounded_for_every_supplier() -> None:
+    """Three suppliers asked for it at their own call sites; the levy is
+    federal and a unit slip on it is not supplier-specific."""
+    import inspect
+
+    assert "_expect_energy_contribution" in inspect.getsource(lc._validate_snapshot)
+    assert inspect.getsource(lc).count("_expect_energy_contribution(prefix, ") == 1
+
+
 def test_a_mono_only_spot_monthly_card_is_unaffected(_bound_rate_types: None) -> None:
     """energie.be Variabel prints one formula for every meter. The new band
     assertions must not start demanding pairs it never had.

@@ -494,7 +494,18 @@ that reads the value 100x too large — and that part still holds.
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
-  additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
+  additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). Every
+  populated figure is bounded, not one per shape: the bi-hourly and exclusive-night registers
+  (`_expect_registers`), every month-indexed coefficient pair a variable, TOU or Impact card
+  carries, which must also come whole (`_expect_coefficient_pair`), the Impact bands and price
+  ceilings, every per-kWh network rate, the transport rate, the prosumer tariff, the VREG ceiling
+  and the Sibelga power term on each DSO overlay (`_validate_dsos`), the per-slot feed-in formula
+  and the printed pair or triplet (`_validate_injection`), and a ceiling on the federal excise and
+  the regional levies (`_expect_region_basics`). The bands are sized on the unit slip they catch,
+  measured over the September 2026 archive, never on tariff economics: a figure read in c/kWh
+  lands ten times above a ceiling, one read in EUR/MWh a hundred below a floor, while every real
+  card sits well inside. The federal energy contribution is bounded for every supplier from
+  `_validate_snapshot` rather than by the three checks that used to ask for it. An
   unrecognised energy class is a failure. Spot-monthly cards are bounded on the same axis as
   dynamic ones, and on each per-meter pair the card populates: every bi-hourly or
   night-circuit coefficient carries its own bounds, the bi-hourly pair has to be complete or
