@@ -248,6 +248,10 @@ case** ("FLUVIUS ANTWERPEN", "FLUVIUS KEMPEN", ...), so the shared Title-case
 Note Kempen -> `fluvius_iveka` and Midden-Vlaanderen -> `fluvius_intergem`: the card's
 regional trade name is not the canonical key. `test_dsos_cover_all_eight_fluvius_subareas`
 asserts all eight are present on both cards.
+A card missing any of the eight, or the Walloon card missing one of its five, is refused
+(`ExtractorError` naming the keys) rather than adopted: a partial table would be persisted
+and shared, and the entry on the missing area would fail every tick with no Repairs card
+while the last good card was gone from the cache. Two tests drop a row from the real cards.
 
 The card prints two meter tables (`Vlaams Gewest Digitale Meter` then
 `Vlaams Gewest Analoge Meter`); the parser slices to the **digital-meter** block between

@@ -756,6 +756,14 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row[3]),
             network_ceiling_eur_per_kwh=to_float(row[4]) / 100.0,
         )
+    missing = [key for _, key in _DSO_ROWS if key not in out]
+    if missing:
+        # A partial table is worse than none: the areas are what every
+        # entry picks its network cost from, and a card missing one would
+        # be adopted, persisted and shared, leaving the entry on that area
+        # with no overlay and every tick failing, while the last good card
+        # is gone from the cache. Refusing keeps that card serving.
+        raise ExtractorError(f"EnergyVision: DSO rows not found for {sorted(missing)}")
     return out
 
 
@@ -867,6 +875,14 @@ def _extract_dsos_fr(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=to_float(row.group(9)),
             prosumer=to_float(row.group(10)),
         )
+    missing = [key for _, key in _DSO_ROWS_FR if key not in out]
+    if missing:
+        # A partial table is worse than none: the areas are what every
+        # entry picks its network cost from, and a card missing one would
+        # be adopted, persisted and shared, leaving the entry on that area
+        # with no overlay and every tick failing, while the last good card
+        # is gone from the cache. Refusing keeps that card serving.
+        raise ExtractorError(f"EnergyVision: DSO rows not found for {sorted(missing)}")
     return out
 
 

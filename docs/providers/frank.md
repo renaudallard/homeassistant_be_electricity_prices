@@ -384,6 +384,10 @@ canonical DSO key:
 Note Kempen -> `fluvius_iveka` and Midden-Vlaanderen -> `fluvius_intergem`: the card's
 regional trade name is not the canonical key. `test_dsos_cover_all_eight_fluvius_subareas`
 (`tests/test_frank.py`) asserts all eight are present.
+A card missing any of the eight is refused (`ExtractorError` naming the keys) rather
+than adopted: a partial table would be persisted and shared, and the entry on the missing
+area would fail every tick with no Repairs card while the last good card was gone from
+the cache. `test_a_card_missing_a_fluvius_row_is_refused` drops a row from the real card.
 
 The parser first narrows to the digital-meter section between the "Digitale meter" and
 "Klassieke meter" markers (`providers/frank.py`); a missing "Digitale meter" marker

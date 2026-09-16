@@ -108,6 +108,18 @@ def test_dsos_cover_all_eight_fluvius_subareas() -> None:
     assert set(_snap().dsos) == set(FLUVIUS_KEYS)
 
 
+def test_a_card_missing_a_fluvius_row_is_refused() -> None:
+    """A partial table used to be adopted, persisted and shared: the entry on
+    the missing area then hit a KeyError on every tick with no Repairs card,
+    while the last good card was gone from the cache. Energy Knights refused
+    such a card from the start; this card is refused the same way."""
+    lines = _text().splitlines()
+    kept = [line for line in lines if "Fluvius (Limburg" not in line]
+    assert len(kept) < len(lines)
+    with pytest.raises(ExtractorError, match="fluvius_limburg"):
+        parse_snapshot("\n".join(kept), "test://energiebe-jul")
+
+
 def test_dso_antwerpen_distribution() -> None:
     """Antwerpen digital meter: normaal 5,35 ct/kWh, excl nacht 4,81 ct/kWh."""
     a = _snap().dsos["fluvius_antwerpen"]

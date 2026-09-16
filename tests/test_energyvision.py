@@ -244,6 +244,27 @@ def test_dsos_cover_all_eight_fluvius_subareas(snap_fn) -> None:  # type: ignore
     assert set(snap_fn().dsos) == set(FLUVIUS_KEYS)
 
 
+def test_a_card_missing_a_fluvius_row_is_refused() -> None:
+    """A partial table used to be adopted, persisted and shared: the entry on
+    the missing area then hit a KeyError on every tick with no Repairs card,
+    while the last good card was gone from the cache. Energy Knights refused
+    such a card from the start; both of this supplier's tables now do."""
+    text = fixture_text("energyvision_dynamic_jul.pdf", layout=True)
+    lines = text.splitlines()
+    kept = [line for line in lines if "FLUVIUS LIMBURG" not in line]
+    assert len(kept) < len(lines)
+    with pytest.raises(ExtractorError, match="fluvius_limburg"):
+        parse_snapshot("energyvision_dynamic", "\n".join(kept), "test://ev")
+
+
+def test_a_walloon_card_missing_a_dso_row_is_refused() -> None:
+    lines = _wal_text().splitlines()
+    kept = [line for line in lines if not line.startswith("TECTEO RESA")]
+    assert len(kept) < len(lines)
+    with pytest.raises(ExtractorError, match="resa"):
+        parse_snapshot("energyvision_fixed_1y", "\n".join(kept), "test://ev-wal")
+
+
 def test_dso_antwerpen_digital_meter_columns() -> None:
     """Antwerpen digital meter: cap 52,3679 EUR/kW/yr, kWh 5,35329 c€,
     excl-nacht 4,81301 c€, databeheer 18,92 EUR/yr (maximumtarief ignored)."""
