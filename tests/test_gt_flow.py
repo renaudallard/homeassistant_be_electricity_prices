@@ -281,7 +281,7 @@ async def test_a_recheck_that_rejects_an_optional_key_keeps_it_optional(
     with patch(validate, return_value="invalid_api_key"):
         result = await cfg(flow, {"next_step_id": "api_key_recheck"})
     assert result["step_id"] == "injection_api_key"
-    marker = next(
-        k for k in result["data_schema"].schema if str(k) == const.CONF_API_KEY
-    )
+    schema = result["data_schema"]
+    assert schema is not None
+    marker = next(k for k in schema.schema if str(k) == const.CONF_API_KEY)
     assert isinstance(marker, vol.Optional)

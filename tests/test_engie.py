@@ -1000,8 +1000,11 @@ async def test_archive_offset_counts_from_the_brussels_date(
     monkeypatch.setattr(engie, "fetch_pdf_text", _capture)
     assert (
         await engie.fetch_for_month(
-            None, "engie_easy_fixed", "wallonia", date(2026, 9, 1)
-        )  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "engie_easy_fixed",
+            "wallonia",
+            date(2026, 9, 1),
+        )
         is None
     )
     assert asked and "monthOffset=1&" in asked[0]
