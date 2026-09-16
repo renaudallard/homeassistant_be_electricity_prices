@@ -516,17 +516,18 @@ async def head_freshness_key(
         return None
 
 
-async def head_ok(
+async def head_or_raise(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 10
-) -> bool:
-    """Whether ``url`` answers a HEAD probe with a non-error status.
+) -> None:
+    """HEAD ``url`` and raise the way the fetch helpers do when it fails.
 
-    A small existence check for ``discover()`` paths that only need to
-    know the card still resolves. Returns ``False`` on any HTTP >= 400 or
-    on a network failure, including the bare ``TimeoutError`` that
-    aiohttp's total ``ClientTimeout`` raises (it is not an
-    ``aiohttp.ClientError``, so catching only the latter would let a slow
-    endpoint bubble a crash out of the probe).
+    ``HTTP <status>`` at 400 and above, ``network error fetching`` on a
+    client error or a timeout (the bare ``TimeoutError`` aiohttp's total
+    ``ClientTimeout`` raises included), so ``is_transient_fetch_error`` can
+    tell a card that is not there from a supplier that is down. For a lookup
+    that probes before it downloads: Eneco tries five volumes a month, and
+    a probe folding both cases into "not there" had a CDN blip cached as a
+    month with no archive.
     """
     try:
         async with session.head(
@@ -535,9 +536,28 @@ async def head_ok(
             timeout=aiohttp.ClientTimeout(total=timeout),
             allow_redirects=True,
         ) as resp:
-            return resp.status < 400
-    except (aiohttp.ClientError, TimeoutError):
+            if resp.status >= 400:
+                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+    except (aiohttp.ClientError, TimeoutError) as err:
+        raise ExtractorError(
+            f"network error fetching {url}: {error_text(err)}"
+        ) from err
+
+
+async def head_ok(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 10
+) -> bool:
+    """Whether ``url`` answers a HEAD probe with a non-error status.
+
+    A small existence check for ``discover()`` paths that only need to
+    know the card still resolves. ``False`` on any HTTP >= 400 or on a
+    network failure, which is every case :func:`head_or_raise` raises for.
+    """
+    try:
+        await head_or_raise(session, url, timeout=timeout)
+    except ExtractorError:
         return False
+    return True
 
 
 def vat_multiplier(

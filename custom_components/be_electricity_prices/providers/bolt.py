@@ -485,7 +485,11 @@ async def fetch_for_month(
     url = _document_url(contract, suffix=suffix)
     try:
         text = await fetch_pdf_text_layout(session, url, timeout=60)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     try:
         snap = parse_snapshot(contract_id, text, region, url)

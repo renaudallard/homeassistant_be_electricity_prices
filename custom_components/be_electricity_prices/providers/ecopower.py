@@ -87,6 +87,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -208,7 +209,11 @@ async def fetch_for_month(
     target = f"{year_month.year:04d}{year_month.month:02d}"
     try:
         html = await fetch_text(session, _PRICE_PAGE)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # Highest stamp wins rather than first match: a month can carry both a
     # bare YYYYMM card and a dated YYYYMMDD reissue, and the reissue is the
@@ -228,7 +233,11 @@ async def fetch_for_month(
         text = await fetch_pdf_text_layout(session, pdf_url)
         label = f"{target[:4]}-{target[4:]}"
         snap = parse_snapshot(text, pdf_url, label)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # Cross-check the parsed card actually covers the requested month;
     # if the CDN ever serves the current card under a historical URL
@@ -912,7 +921,11 @@ async def _fetch_dbs_for_month(
     target = f"{year_month.year:04d}{year_month.month:02d}"
     try:
         html = await fetch_text(session, _DBS_PAGE)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     eligible = sorted(
         (sort_key, yyyymm, url)
@@ -927,7 +940,11 @@ async def _fetch_dbs_for_month(
     _sort_key, yyyymm, url = eligible[-1]
     try:
         text = await fetch_pdf_text_layout(session, url)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     return parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
 

@@ -474,8 +474,8 @@ def test_fetch_for_month_returns_snapshot_when_url_matches_month() -> None:
     text = fixture_text("eneco_flex_dec25.pdf")
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
-            new=AsyncMock(return_value="ok"),
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=AsyncMock(return_value=None),
         ),
         patch(
             "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
@@ -496,8 +496,8 @@ def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
     text = fixture_text("eneco_flex_dec25.pdf")
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
-            new=AsyncMock(return_value="ok"),
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=AsyncMock(return_value=None),
         ),
         patch(
             "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
@@ -510,12 +510,12 @@ def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
 
 
 def test_fetch_for_month_returns_none_on_404() -> None:
-    """An archive miss (HEAD returns None for every candidate volume)
-    must degrade gracefully so the coordinator can fall back to the
-    proxy."""
+    """An archive miss (HEAD answers 404 for every candidate volume) must
+    degrade gracefully so the coordinator can fall back to the proxy. A
+    transient failure is another matter and is raised (test_archive_errors)."""
     with patch(
-        "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
-        new=AsyncMock(return_value=None),
+        "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+        new=AsyncMock(side_effect=eneco_mod.ExtractorError("HTTP 404 fetching x")),
     ):
         snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2024, 6, 1)))  # type: ignore[arg-type]
     assert snap is None
@@ -548,8 +548,8 @@ def test_fetch_for_month_gates_the_energy_fund_by_region() -> None:
     )
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
-            new=AsyncMock(return_value="ok"),
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=AsyncMock(return_value=None),
         ),
         patch(
             "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
@@ -729,8 +729,9 @@ def test_published_index_is_the_index_the_printed_price_was_computed_at() -> Non
 def _archive_of(cards: dict[str, str]) -> tuple[Any, Any]:
     """HEAD and GET stand-ins serving ``cards`` keyed by the URL's issue."""
 
-    async def head(_session: Any, url: str) -> str | None:
-        return "ok" if any(issue in url for issue in cards) else None
+    async def head(_session: Any, url: str) -> None:
+        if not any(issue in url for issue in cards):
+            raise eneco_mod.ExtractorError(f"HTTP 404 fetching {url}")
 
     async def pdf(_session: Any, url: str) -> str:
         for issue, text in cards.items():
@@ -754,7 +755,7 @@ def test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index() -> Non
     )
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
             new=head,
         ),
         patch(
@@ -786,7 +787,7 @@ def test_fetch_for_month_keeps_the_estimate_and_flags_it_while_the_next_card_is_
     head, pdf = _archive_of({"012609": fixture_text("eneco_flex_aug26.pdf")})
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
             new=head,
         ),
         patch(
@@ -804,7 +805,7 @@ def test_fetch_for_month_keeps_the_estimate_and_flags_it_while_the_next_card_is_
     head, pdf = _archive_of({"012608": fixture_text("eneco_flex_aug26.pdf")})
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
             new=head,
         ),
         patch(
@@ -833,7 +834,7 @@ def test_fetch_for_month_leaves_a_fixed_card_alone() -> None:
     )
     with (
         patch(
-            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
             new=head,
         ),
         patch(

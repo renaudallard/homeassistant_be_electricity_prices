@@ -558,7 +558,11 @@ async def _archive_pdf_url(
         return _pro_pdf_url(contract, region_code, year_month)
     try:
         listing = await _fetch_listing_html(session)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
     if current_url is None:
@@ -676,7 +680,9 @@ async def fetch_for_month(
 
     Returns ``None`` when the URL 404s (or returns the CDN's HTML stub
     for a non-archived effective day, which ``_is_pdf_payload`` rejects),
-    the parse fails, or the requested month falls outside the archive.
+    the parse fails, or the requested month falls outside the archive. A
+    transient fetch failure is raised instead, so the month cache retries
+    the month rather than caching it as absent.
     """
     if contract_id not in _CONTRACTS_BY_ID:
         return None
@@ -690,11 +696,15 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text(session, url)
         snap = parse_snapshot(contract_id, text, region, url)
-    except ExtractorError:
+    except ExtractorError as err:
         # Deliberately no previous-month retry, unlike fetch(): a month Mega
         # never published must resolve to None so the caller falls back to the
         # current-card proxy, not to a neighbouring month's card silently
-        # billed as this one's.
+        # billed as this one's. A timeout, a reset or a 5xx says nothing about
+        # the month, though: raise, so the month cache retries it instead of
+        # caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # Cross-check the parsed card actually covers the requested month; if Mega
     # ever serves a current PDF under a historical URL, the validity / title

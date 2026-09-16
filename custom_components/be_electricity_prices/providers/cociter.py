@@ -66,6 +66,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -170,7 +171,11 @@ async def fetch_for_month(
     target_yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
     try:
         html = await fetch_text(session, _INDEX_URL)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # A month can appear twice when Cociter re-uploads its card: WordPress
     # keeps the original and adds "-1" to the newcomer, so the suffixed URL is
@@ -205,7 +210,12 @@ async def fetch_for_month(
             snap = parse_snapshot(
                 text, contract_id, pdf_url, _yymm_to_label(target_yymm)
             )
-        except ExtractorError:
+        except ExtractorError as err:
+            # A timeout, a reset or a 5xx says nothing about the edition:
+            # raise, so the month cache retries the month instead of
+            # caching it as absent once every edition has been tried.
+            if is_transient_fetch_error(str(err)):
+                raise
             continue
         return archive_validity_check(snap, text, year_month, month_names=_FR_MONTHS)
     return None

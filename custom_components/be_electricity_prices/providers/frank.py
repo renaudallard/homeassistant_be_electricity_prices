@@ -86,6 +86,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -266,7 +267,11 @@ async def fetch_for_month(
         )
         text = await fetch_pdf_text_layout(session, pdf_url)
         snap = parse_snapshot(text, pdf_url, contract_id, label)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
 

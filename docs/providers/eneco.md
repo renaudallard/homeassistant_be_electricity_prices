@@ -149,13 +149,15 @@ BC_032_<VOL><YY><MM>_NL_ENECO_POWER_<slug>.pdf
 For the requested month it walks volumes `01`..`05` (`eneco.py`). For each
 candidate:
 
-1. `head_freshness_key` HEAD-probes the URL first (`eneco.py`). A missing
+1. `head_or_raise` HEAD-probes the URL first (`eneco.py`). A missing
    volume returns inside the 10 s HEAD budget instead of stalling on the 30 s GET
    timeout, dropping worst-case missing-month latency from `5 x 30s` to about
-   `5 x 10s` under sustained CDN issues. A `None` (404 or no header) skips the
-   volume.
+   `5 x 10s` under sustained CDN issues. A 404 skips the volume; a timeout, a
+   reset or a 5xx is raised, since it says nothing about the volume and the
+   month cache would otherwise hold the month as one with no archive. The probe
+   used to go through `head_freshness_key`, which folds both into `None`.
 2. `fetch_pdf_text` downloads and extracts; an `ExtractorError` skips the volume
-   (`eneco.py`).
+   under the same rule (`eneco.py`).
 3. `parse_snapshot` parses; an `ExtractorError` skips the volume
    (`eneco.py`).
 4. `archive_validity_check` (`_pdf.py`) confirms the snapshot actually

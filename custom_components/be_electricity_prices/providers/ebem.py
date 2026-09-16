@@ -75,6 +75,7 @@ from ._pdf import (
     scan_month_end,
     to_float,
     vat_multiplier,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -171,7 +172,11 @@ async def fetch_for_month(
         return None
     try:
         html = await fetch_text(session, _LISTING_URL)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     target = (
         contract.pdf_kind,
@@ -189,7 +194,11 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text_layout(session, url)
         snap = parse_snapshot(contract_id, text, url, label)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     return archive_validity_check(snap, text, year_month)
 

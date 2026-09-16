@@ -118,6 +118,7 @@ from ._pdf import (
     parse_valid_until,
     to_float,
     vat_multiplier,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -528,9 +529,11 @@ async def fetch_for_month(
 
     ``None`` means "no archive here, bill the proxy": before the contract's own
     horizon, or when the month does not resolve, or when the served card fails
-    the validity cross-check. Every failure is swallowed rather than raised,
-    because this runs inside the year-to-date walk and one unpublished month
-    must not take the whole year down.
+    the validity cross-check. Every failure of the card itself is swallowed
+    rather than raised, because this runs inside the year-to-date walk and one
+    unpublished month must not take the whole year down; a transient fetch
+    failure is raised, so the month cache retries the month rather than
+    caching it as absent.
 
     An out-of-range month or a retired slug answers 302 to the marketing
     homepage, which aiohttp follows, so the payload is 480 bytes of HTML rather
@@ -552,7 +555,11 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text_layout(session, url)
         snap = parse_snapshot(contract_id, text, url, contract.products_for(first))
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # The card carries its own "geldig van ... tot en met ..." range, so the
     # authoritative tier of the cross-check always applies and the textual

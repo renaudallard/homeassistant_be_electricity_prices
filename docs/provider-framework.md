@@ -151,6 +151,13 @@ can bill each past month at its own historical rate rather than proxying every
 month at the current rate. Return-value semantics:
 
 - A `SupplierSnapshot` for the requested month when the archive resolves.
+- An `ExtractorError` for a transient fetch failure (a timeout, a reset, a 5xx,
+  an anti-bot 403, per `is_transient_fetch_error`). The month cache
+  (`_snapshot_for_month`, `snapshot_store.py`) writes its retry marker only
+  when the fetcher RAISES; a `None` is cached as the month's answer for the
+  provisional TTL and, through a backfill, can reach the recorder. Every
+  provider re-raises such a failure around its network calls, the way
+  `dats24.py` always did.
 - `None` when the supplier has no accessible archive for that month. This
   applies to overwrite-in-place suppliers (Ecofix, OCTA+, TotalEnergies),
   suppliers with no archive at all (TotalEnergies, Ecofix), the
@@ -534,6 +541,7 @@ consistent.
 | `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py`). |
 | `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by energie.be, Energy Knights, EnergyVision and Frank. |
 | `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py`). |
+| `head_or_raise` | `head_or_raise(session, url, *, timeout=10) -> None` | HEAD the URL and raise `ExtractorError` the way the fetch helpers do (`HTTP <status>` at 400 and above, `network error fetching` on a client error or timeout), so `is_transient_fetch_error` can tell a card that is not there from a supplier that is down. For a lookup that probes before it downloads (Eneco's five volumes a month). `head_ok` is the `bool` form of it for `discover()` paths (`_pdf.py`). |
 
 Internals worth knowing:
 

@@ -69,12 +69,13 @@ from ._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
-    head_freshness_key,
+    head_or_raise,
     numeric_row,
     parse_sign,
     parse_valid_until,
     to_float,
     vat_multiplier,
+    is_transient_fetch_error,
 )
 from .base import (
     Contract,
@@ -226,11 +227,15 @@ async def _archived_card(
         # from 5 x 30s = 150s to 5 x 10s ~= 50s under sustained CDN
         # issues, and is unchanged in the typical case (HEAD returns
         # 404 instantly).
-        if await head_freshness_key(session, url) is None:
-            continue
         try:
+            await head_or_raise(session, url)
             text = await fetch_pdf_text(session, url)
-        except ExtractorError:
+        except ExtractorError as err:
+            # A timeout, a reset or a 5xx says nothing about the volume:
+            # raise, so the month cache retries the month instead of
+            # caching it as absent once the five volumes are tried.
+            if is_transient_fetch_error(str(err)):
+                raise
             continue
         try:
             snap = parse_snapshot(text, contract_id, url, region)

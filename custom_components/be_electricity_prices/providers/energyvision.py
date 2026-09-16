@@ -96,6 +96,7 @@ from ._pdf import (
     tier_bound_kwh,
     to_float,
     vat_multiplier,
+    is_transient_fetch_error,
 )
 from .base import (
     walloon_dso_overlay,
@@ -430,8 +431,10 @@ async def fetch_for_month(
     bytes and the ``except`` below turns that into "no archive here". Letting
     the 404 be the horizon keeps a constant from going stale behind the site.
 
-    Every failure is swallowed: this runs inside the year-to-date walk, and one
-    unpublished month must not take the whole year down.
+    Every failure of the card itself is swallowed: this runs inside the
+    year-to-date walk, and one unpublished month must not take the whole year
+    down. A transient fetch failure is raised, so the month cache retries the
+    month rather than caching it as absent.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or region not in contract.regions:
@@ -444,7 +447,11 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text_layout(session, url)
         snap = parse_snapshot(contract_id, text, url)
-    except ExtractorError:
+    except ExtractorError as err:
+        # A timeout, a reset or a 5xx says nothing about the month: raise,
+        # so the month cache retries it instead of caching it as absent.
+        if is_transient_fetch_error(str(err)):
+            raise
         return None
     # Every card prints "geldig ... tot en met" so valid_until is parsed and the
     # authoritative tier of the cross-check applies. It is what catches a CDN
