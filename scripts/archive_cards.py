@@ -73,6 +73,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import importlib.metadata
 import json
 import re
 import shutil
@@ -171,6 +172,8 @@ _LEGEND = (
 # dataclasses beside them, the constants they key on, and the codec the
 # rows are written with.
 _PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_store.py")
+# The PDF readers whose installed version is part of what a parse depends on.
+_READERS = ("pypdf", "pdfplumber")
 
 _README = """# Tariff card archive
 
@@ -541,13 +544,23 @@ class _ReplaySession:
 
 
 def _parser_digest() -> str:
-    """One digest over every source a parse depends on."""
+    """One digest over every source a parse depends on.
+
+    The readers count as sources: a pypdf or pdfplumber release can lay a
+    card out differently (a 6.16 against a 6.18 render gave different texts
+    on 2026-09-13), and a stored text is served to every later replay and to
+    the live check for as long as the card's bytes stand, so without the
+    reader version in here a pin bump replayed nothing and the new reader was
+    never run on a card the archive already held.
+    """
     root = ROOT / "custom_components" / "be_electricity_prices"
     digest = hashlib.sha256()
     for pattern in _PARSER_SOURCES:
         for path in sorted(root.glob(pattern)):
             digest.update(path.relative_to(root).as_posix().encode("utf-8"))
             digest.update(path.read_bytes())
+    for reader in _READERS:
+        digest.update(f"{reader}=={importlib.metadata.version(reader)}".encode("utf-8"))
     return digest.hexdigest()
 
 

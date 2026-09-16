@@ -116,6 +116,28 @@ async def _no_sleep(_seconds: float) -> None:
     return None
 
 
+def test_the_parser_digest_moves_with_the_reader_versions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stored text is served to every later replay and to the live check
+    for as long as the card's bytes stand, so a pypdf or pdfplumber release
+    that lays a card out differently reached neither until someone dispatched
+    a re-render by hand: the digest hashed the parser sources only. A reader
+    bump has to move it."""
+    import importlib.metadata
+
+    real = importlib.metadata.version
+    before = ac._parser_digest()
+
+    def _bumped(name: str) -> str:
+        return "99.0.0" if name == "pdfplumber" else real(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", _bumped)
+    assert ac._parser_digest() != before
+    monkeypatch.setattr(importlib.metadata, "version", real)
+    assert ac._parser_digest() == before
+
+
 async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
     """Cociter's listing carries carriage returns; a text read back with
     newline translation would be two bytes shorter than what the parser
