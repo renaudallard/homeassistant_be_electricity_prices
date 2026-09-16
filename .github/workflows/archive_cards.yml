@@ -194,8 +194,11 @@ jobs:
           done
           # Same retention as the rows: a month older than three years goes.
           # Only this integration's releases; the water ones are not ours.
+          # Listed with an explicit limit: gh stops at 30 by default, and with
+          # two releases a month the ones past the cutoff would sit beyond it
+          # from 2029 on, never listed and never deleted.
           cutoff="electricity-$(date -u -d '-36 months' +%Y-%m)"
-          gh release list --repo "$CARDS_REPO" --json tagName --jq '.[].tagName'             | while read -r tag; do
+          gh release list --repo "$CARDS_REPO" --limit 1000 --json tagName --jq '.[].tagName'             | while read -r tag; do
               case "$tag" in electricity-*) ;; *) continue ;; esac
               if [ "$tag" \< "$cutoff" ]; then
                 gh release delete "$tag" --repo "$CARDS_REPO" --yes --cleanup-tag
