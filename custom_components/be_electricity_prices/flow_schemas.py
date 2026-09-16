@@ -188,9 +188,15 @@ def _supplier_options(
     extractors = all_extractors()
     if region is not None:
         extractors = tuple(e for e in extractors if region in e.regions())
+    # By label, not by registry order, which is insertion order and put a
+    # supplier added later wherever its import happened to land; the expert
+    # escape hatch stays last.
+    ordered = sorted(
+        extractors, key=lambda e: (e.id == SUPPLIER_CUSTOM, e.label.casefold())
+    )
     return [
         SelectOptionDict(value=e.id, label=e.label)
-        for e in extractors
+        for e in ordered
         if e.deprecated_until is None or e.id == keep
     ]
 

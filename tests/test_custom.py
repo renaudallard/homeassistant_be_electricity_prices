@@ -460,6 +460,16 @@ def test_custom_listed_last_in_supplier_dropdown() -> None:
     assert values[-1] == const.SUPPLIER_CUSTOM
 
 
+def test_suppliers_are_listed_alphabetically_before_the_custom_one() -> None:
+    """The dropdown followed the registry's insertion order, which put a
+    supplier added later wherever its import happened to land: Trevion sat
+    between TotalEnergies and Luminus."""
+    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
+
+    labels = [o["label"] for o in _supplier_options()][:-1]
+    assert labels == sorted(labels, key=str.casefold)
+
+
 # ---- withdrawn suppliers -----------------------------------------------------
 
 
