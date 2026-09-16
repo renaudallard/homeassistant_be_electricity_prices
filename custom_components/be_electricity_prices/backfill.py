@@ -908,8 +908,16 @@ async def _backfill_cost_sensor(
         # meets the live _ytd_capacity proration (days_in_ytd /
         # days_in_full_month) at the seam rather than trailing it.
         if billed_peak_kw:
+            # With the card's VAT basis, as the live walk passes it: the
+            # ceiling headroom is grossed by the same rate as the charge,
+            # and without it a professional card billed VAT-inclusive had its
+            # headroom a fifth short here and its capped months lower than
+            # the live sensor's.
             monthly = _capped_capacity_monthly_eur(
-                snap_h.dsos.get(dso), entry, billed_peak_kw
+                snap_h.dsos.get(dso),
+                entry,
+                billed_peak_kw,
+                vat_rate=snap_h.taxes.vat_rate,
             )
             if monthly:
                 days_in_full_month = calendar.monthrange(

@@ -237,7 +237,9 @@ The ceiling now stays as printed and the difference is grossed where the
 comparison happens, against a capacity charge that already is. On a
 residential card the factor is 1 and none of this moves. Every path that bills the charge goes through it -- the
 live `capacity_cost` sensor, the year-to-date walk and the backfill's per-hour
-accrual -- because it used to sit on the quote paths alone, and a card printing
+accrual, each handing the cap the card's own `vat_rate` (the backfill handed the
+default 0 and sat a fifth short on its headroom) -- because it used to sit on the
+quote paths alone, and a card printing
 a ceiling then had it honoured in the compare page and billed straight through
 by the sensor the compare page is meant to match. At the 2026 rates and the
 regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so nothing

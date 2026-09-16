@@ -1088,6 +1088,149 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 
+async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
+    hass: HomeAssistant,
+) -> None:
+    """A professional card billed VAT-inclusive keeps the card's 21% on its
+    taxes so the engine can gross the per-kWh terms, and the VREG ceiling's
+    headroom has to be grossed by the same rate as the capacity charge it is
+    compared with. The live walk and the compare page hand that rate to the
+    cap; the backfill handed the default 0, so on a Flanders card whose
+    ceiling binds its capped months sat below the live sensor's and the
+    imported series met the sensor at a step."""
+    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        TaxOverlay,
+    )
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=52.37,
+                network_ceiling_eur_per_kwh=0.3145,
+                data_management_per_year=18.0,
+            )
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.04876,
+            energy_contribution=0.0,
+            flanders_renewables=0.015,
+            vat_rate=0.21,
+        ),
+    )
+    entry = make_entry(
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter="mono",
+        title="Capped on a professional card",
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+        annual_consumption_kwh=600.0,
+    )
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = dt_util.start_of_local_day(date(2026, 2, 1)).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    per_hour = {h: 0.05 for h in hours}
+    per_day: dict[date, float] = {}
+    for h in hours:
+        local_day = dt_util.as_local(h).date()
+        per_day[local_day] = per_day.get(local_day, 0.0) + 0.05
+
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 5.0,
+    )
+    entry.runtime_data = coordinator
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.cons_total" else {}
+
+    async def fake_daily(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+
+    async def noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    captured: list[list[dict[str, Any]]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.append(list(stats))
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
+        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(
+            cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(
+            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: (
+                dt_util.start_of_local_day(date(2026, 1, 31))
+                + timedelta(hours=23, minutes=59)
+            ),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            {},
+            {},
+        )
+        live = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            billed_peak_kw=5.0,
+        )
+    rows = [row for batch in captured for row in batch]
+    assert rows, "the backfill imported nothing"
+    assert live is not None
+    # The ceiling binds on 600 kWh at 5 kW, so a headroom short of VAT shows.
+    assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
+
+
 async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None:
     """A static-energy card whose injection is spot-indexed (Cociter
     Variable shape) must still trigger a spot backfill on the injection
