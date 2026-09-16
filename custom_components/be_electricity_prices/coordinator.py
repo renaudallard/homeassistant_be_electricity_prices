@@ -437,6 +437,9 @@ class BePricesCoordinator(
         # parsed, which is what gets shared with sibling entries and
         # persisted - they may answer the VAT question differently.
         self._snapshot: SupplierSnapshot | None = None
+        # The cohort-spliced snapshot of the last tick; the spot layer reads
+        # its grid off this (_billing_snapshot). Never persisted.
+        self._priced: SupplierSnapshot | None = None
         # The last scheduled ranking, when the entry opted into one. Held on
         # the coordinator rather than in hass.data because the sensor that
         # publishes it is a CoordinatorEntity: setting this and asking for a
@@ -910,6 +913,10 @@ class BePricesCoordinator(
             if not cohort_changes
             else replace(self._snapshot, **cohort_changes)  # type: ignore[arg-type]
         )
+        # The spot fetch and the historical walk decide their grid off the
+        # leg that is priced, so it has to be on the coordinator before either
+        # runs; the resolution below is read off the same leg.
+        self._priced = priced
 
         spot_prices: dict[datetime, float] = {}
         # Auth + extractor issue clear paths run OUTSIDE the

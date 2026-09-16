@@ -886,6 +886,86 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
     assert captured["quarter_hourly"] is False
 
 
+async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """LifePowr was a quarter-hourly dynamic product until May 2026 and a
+    monthly Belpex_RLP one from June. An entry on the May cohort prices its
+    energy on that month's leg, quarter-hourly, while the current card is
+    monthly, and the live fetch read its grid off the card: 24 hourly slots
+    under a table published as PT15M, so current_price was unknown one
+    quarter of every hour and showed the next hour's price another. The grid
+    has to follow the leg the tick prices on."""
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+    from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        SpotMonthlyRates,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "trevion",
+            "contract": "lifepowr",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "dynamic",
+            "api_key": "test-token",
+            "contract_start_date": "2026-05-10",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="trevion",
+        contract="lifepowr",
+        energy=SpotMonthlyRates(factor=1.0, base=0.01),
+        dsos={"fluvius_antwerpen": DsoOverlay(distribution_single=0.05, transport=0.0)},
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    freezer.move_to("2026-09-16 10:30:00+02:00")
+    captured: dict[str, bool] = {}
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        captured["quarter_hourly"] = quarter_hourly
+        step = timedelta(minutes=15 if quarter_hourly else 60)
+        prices: dict[datetime, float] = {}
+        when = start
+        while when < end:
+            prices[when] = 0.10
+            when += step
+        return prices
+
+    async def _cohort(*_a: object, **_k: object) -> _CohortLegs:
+        return _CohortLegs(
+            energy=DynamicRates(factor=1.06, base=0.01378, quarter_hourly=True),
+            injection=None,
+        )
+
+    with (
+        _patch_spot_fetch(_fake_fetch),
+        patch(
+            "custom_components.be_electricity_prices.coordinator._cohort_legs",
+            new=_cohort,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    assert captured["quarter_hourly"] is True
+    assert data.resolution == RESOLUTION_QUARTER
+    assert len(data.hourly) == 96
+
+
 async def test_force_refresh_drops_caches_and_requests_update(
     hass: HomeAssistant,
 ) -> None:

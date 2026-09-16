@@ -390,6 +390,7 @@ class _SpotsMixin:
     _quarter_grid_days: set[date]
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
+    _priced: SupplierSnapshot | None
     _snapshot_raw: SupplierSnapshot | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
@@ -422,6 +423,19 @@ class _SpotsMixin:
             self._historical_spot_quarters if want_quarters else self._historical_spots
         )
         return sum(1 for h in range(24) if day_start_utc + timedelta(hours=h) in cache)
+
+    def _billing_snapshot(self) -> SupplierSnapshot | None:
+        """The snapshot whose energy leg the tick prices on.
+
+        The cohort-spliced one once a tick has built it, the card itself
+        before that. Every grid decision reads this rather than the card: a
+        LifePowr entry on the May 2026 cohort prices its energy on that
+        month's quarter-hourly formula while the current card is monthly, and
+        reading the grid off the card fetched 24 hourly slots for a table
+        published as PT15M, so current_price was unknown one quarter of every
+        hour and the next hour's price another.
+        """
+        return self._priced if self._priced is not None else self._snapshot
 
     async def _ensure_historical_spots(
         self, start: date, end: date, api_key: str | None = None
@@ -469,7 +483,7 @@ class _SpotsMixin:
         fetches are logged and skipped; the caller treats absent hours as
         "no data" rather than tearing the YTD computation down.
         """
-        snap = self._snapshot
+        snap = self._billing_snapshot()
         # Both decisions are read here, before the day walk, because the walk
         # measures coverage against whichever cache this entry replays from.
         quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
@@ -825,9 +839,10 @@ class _SpotsMixin:
         end = dt_util.start_of_local_day(local_today + timedelta(days=days)).astimezone(
             UTC
         )
-        # Keep the native 15-minute slots only for suppliers that bill on
-        # them (Engie Dynamic); everyone else gets the hourly aggregate.
-        snap = self._snapshot
+        # Keep the native 15-minute slots only for a leg that bills on them
+        # (Engie Dynamic); everyone else gets the hourly aggregate. The leg,
+        # not the card: a cohort can splice one onto a card of another kind.
+        snap = self._billing_snapshot()
         quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
         previous_source = self._spot_source
         prices, self._spot_source = await fetch_day_ahead_or_fallback(
