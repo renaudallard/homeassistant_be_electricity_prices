@@ -324,8 +324,11 @@ jobs:
 
       - name: Open or update new-products issue
         # rc bit 1 set: a new product was detected at a supplier we
-        # know how to discover. Independent issue from the extractor
-        # one so the two failure modes don't conflate in one thread.
+        # know how to discover, OR a supplier's tax block disagrees. The
+        # two share the bit and are told apart here by which report
+        # carries failures, so neither files under the other's title.
+        # Independent issue from the extractor one so the failure modes
+        # don't conflate in one thread.
         # Skipped on pull_request -- failing job is the signal.
         if: always() && github.event_name != 'pull_request' && (
             steps.check.outputs.rc == '2'
@@ -336,6 +339,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The bit is shared with the tax-block step below, so say
+          # nothing when the products half is clean: a run that opened an
+          # issue titled "new supplier products detected" with fifteen
+          # green discovery rows in it is what this guard exists for.
+          if ! grep -q '^## Failures' catalog_report.md; then
+            echo "no new product; nothing to file" >&2
+            exit 0
+          fi
           title_prefix='[live-check] new supplier products detected'
           label='live-check-catalog'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -354,6 +365,42 @@ jobs:
             --title "$title_prefix" \
             --body catalog_issue_body.md \
             --fingerprint catalog_report.md \
+            --workflow .github/workflows/live_check.yml
+
+      - name: Open or update tax-block issue
+        # The other half of rc bit 1: one supplier prints a federal tax
+        # block the month's other cards do not. Supplier-side and not
+        # fixable here, so it files its own thread rather than failing a
+        # run or riding under the new-products title.
+        if: always() && github.event_name != 'pull_request' && (
+            steps.check.outputs.rc == '2'
+            || steps.check.outputs.rc == '3'
+            || steps.check.outputs.rc == '6'
+            || steps.check.outputs.rc == '7'
+          )
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! grep -q '^## Failures' tax_report.md; then
+            echo "every card agrees on the month's tax block" >&2
+            exit 0
+          fi
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Federal tax block"
+            echo
+            cat tax_report.md
+          } > tax_issue_body.md
+
+          bash scripts/file_ci_issue.sh \
+            --label 'live-check-tax' \
+            --title "[live-check] a supplier's federal tax block disagrees" \
+            --body tax_issue_body.md \
+            --fingerprint tax_report.md \
             --workflow .github/workflows/live_check.yml
 
       - name: Fail PR job on extractor or drift signal

@@ -199,6 +199,13 @@ class Check:
     # "catalog"   -> a new product detected at the supplier; opens a
     #                separate issue so the two failure modes don't get
     #                conflated in one thread.
+    # "tax"       -> a supplier's federal tax block disagrees with the
+    #                month's consensus. Shares the catalog exit bit, since
+    #                neither is this repository's bug to fix and neither
+    #                should fail a pull request, but it is reported in its
+    #                own file and files its own issue: a run with no new
+    #                product at all was opening one titled "new supplier
+    #                products detected".
     kind: str = "extractor"
     # A failure that is real but KNOWN and unactionable: the supplier
     # publishes its card as page images, so no parser change can read it.
@@ -2077,7 +2084,7 @@ def _check_federal_tax_consensus(archive: Path | None) -> None:
                 f"{region}: excise {pair[0]} + contribution {pair[1]} against "
                 f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
                 f"suppliers ({', '.join(sorted(suppliers))})",
-                kind="catalog",
+                kind="tax",
             )
 
 
@@ -3674,6 +3681,7 @@ async def _run(texts: Path | None = None) -> int:
 
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
+    tax_checks = [c for c in CHECKS if c.kind == "tax"]
     # Stdout = extractor report (existing workflow consumes this).
     # Metrics piggyback on the extractor report so silent slowdowns and
     # PDF-size jumps surface daily without a separate pipeline.
@@ -3695,6 +3703,11 @@ async def _run(texts: Path | None = None) -> int:
     # gets the file alongside the existing logs (CI happens to invoke
     # from repo root, so behaviour there is unchanged).
     (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
+    # Its own file, so the workflow can title the issue after what actually
+    # failed. A tax block that disagrees is a supplier printing a levy the
+    # month's other cards do not, which is neither a new product nor
+    # something a release here fixes.
+    (ROOT / "tax_report.md").write_text(_render_report(tax_checks))
     failed_suppliers = _failed_suppliers(extractor_checks)
     drift_warnings = _drift_warnings(METRICS, failed_suppliers)
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
@@ -3709,11 +3722,14 @@ async def _run(texts: Path | None = None) -> int:
     # retry loop to intersect across attempts.
     _write_failure_labels(ROOT / "extractor_failures.txt", regressions)
     extractor_failed = bool(regressions)
-    catalog_failed = _catalog_gates_ci(catalog_checks)
+    # One bit for both: neither fails a pull request, and the workflow tells
+    # them apart by which report carries failures.
+    catalog_failed = _catalog_gates_ci([*catalog_checks, *tax_checks])
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
     #   bit 0 (1) = extractor failure
-    #   bit 1 (2) = catalog signal
+    #   bit 1 (2) = catalog signal (a new product, or a tax block that
+    #               disagrees; the two reports say which)
     #   bit 2 (4) = drift alert
     return (
         (1 if extractor_failed else 0)

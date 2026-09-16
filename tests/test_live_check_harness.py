@@ -2034,6 +2034,52 @@ def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
     assert "0.0503288" in check.detail and "0.04876" in check.detail
 
 
+def test_a_tax_disagreement_is_reported_apart_from_the_product_catalogue(
+    tmp_path: Path,
+) -> None:
+    """Both share the exit bit, since neither is this repository's bug and
+    neither should fail a pull request, but they are different news. Filed
+    together, a run whose fifteen discovery rows all passed opened an issue
+    titled "new supplier products detected" carrying six tax rows (#101). The
+    rows now carry their own kind and render into their own report, which is
+    what the workflow titles each issue from.
+    """
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "stale_fixed": SimpleNamespace(professional=False),
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("stale", "stale_fixed", "flanders"): (0.0503288, 0.0020417),
+        },
+    )
+    lc._record("acme/catalog: no new products at supplier", True, kind="catalog")
+    lc._check_federal_tax_consensus(archive)
+
+    kinds = {c.kind for c in lc.CHECKS}
+    assert kinds == {"catalog", "tax"}
+    tax = [c for c in lc.CHECKS if c.kind == "tax"]
+    catalog = [c for c in lc.CHECKS if c.kind == "catalog"]
+    assert len(tax) == 1 and not tax[0].ok
+    assert all(c.ok for c in catalog)
+
+    # The products report stays clean, so the workflow's guard keeps that
+    # issue shut; the tax report carries the failure and files its own.
+    assert "## Failures" not in lc._render_report(catalog)
+    assert "## Failures" in lc._render_report(tax)
+    # And it still sets the shared bit, or neither step would run at all.
+    assert lc._catalog_gates_ci([*catalog, *tax]) is True
+    assert lc._catalog_gates_ci(catalog) is False
+
+
 def test_a_professional_card_is_not_measured_against_residential_ones(
     tmp_path: Path,
 ) -> None:

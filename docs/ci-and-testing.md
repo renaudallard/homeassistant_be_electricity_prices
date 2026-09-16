@@ -649,7 +649,7 @@ the two baselines are identical until the day they are not.
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
 repo root (`scripts/live_check.py`), each a side-channel the workflow reads to file a separate
-issue so the three failure modes never conflate in one thread; beside the drift report goes
+issue so the failure modes never conflate in one thread; beside the drift report goes
 `drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes` line per blown budget
 with no measurement in it, which is what the drift issue is fingerprinted on.
 
@@ -658,12 +658,17 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
 | 0 | 1 | extractor **regression** (fetch or parse), excluding unreadable cards | yes |
-| 1 | 2 | catalog signal (a new product appeared at a supplier) | no |
+| 1 | 2 | catalog signal: a new product appeared at a supplier, or a supplier's federal tax block disagrees with the month's consensus. One bit for two kinds of news, because neither is this repository's bug and neither should fail a pull request; `catalog_report.md` and `tax_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash: a top-level Python exception in the script, or, set by the workflow's loop itself, any exit above 7 and any odd exit with no `extractor_failures.txt` written (a module-level ImportError exits 1, an OOM kill 137, a runner SIGTERM 143) | no |
 
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
+
+Both halves of bit 1 run their step and then look at their own report: each begins with a
+`grep -q '^## Failures'` on it and exits quietly when its half is clean. Without that guard a
+run whose fifteen discovery rows all passed still opened an issue titled "new supplier products
+detected", carrying six rows about a stale tax block (issue #101).
 
 ### Unreadable cards do not gate bit 0
 
@@ -1017,6 +1022,7 @@ the script through a fake `gh`.
 | bit 0 (rc 1/3/5/7) | Open or update extractor-broken issue | `live-check-extractor` | `[live-check] supplier extractor broken` |
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,

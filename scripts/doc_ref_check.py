@@ -75,6 +75,7 @@ NOT_OURS = frozenset(
         "providers/foo.py",
         "report.md",
         "sensor/recorder.py",
+        "tax_report.md",
         "unparsed.json",
     }
 )
