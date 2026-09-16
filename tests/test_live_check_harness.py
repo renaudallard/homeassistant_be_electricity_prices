@@ -2165,3 +2165,23 @@ def test_the_retry_loop_still_files_a_persistent_failure(tmp_path: Path) -> None
     assert _run_retry_loop(tmp_path / "failing", failing) == "rc=1"
     green = ": > extractor_failures.txt; exit 0"
     assert _run_retry_loop(tmp_path / "green", green) == "rc=0"
+
+
+def test_a_withdrawn_suppliers_catalog_failure_does_not_set_the_exit_bit() -> None:
+    """The extractor side honours the expected marker; the catalog side
+    read every failing row, so a withdrawn supplier whose listing started
+    raising would have filed a new-products issue naming a supplier that
+    left the market, weekly, for as long as the page was gone."""
+    rows = [
+        lc.Check(
+            "dats24/catalog: discovery raised",
+            False,
+            "x",
+            kind="catalog",
+            expected=True,
+        ),
+        lc.Check("mega/catalog: discover()", True, "", kind="catalog"),
+    ]
+    assert lc._catalog_gates_ci(rows) is False
+    rows.append(lc.Check("bolt/catalog: new product", False, "y", kind="catalog"))
+    assert lc._catalog_gates_ci(rows) is True

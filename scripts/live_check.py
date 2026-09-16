@@ -3688,7 +3688,7 @@ async def _run(texts: Path | None = None) -> int:
     # retry loop to intersect across attempts.
     _write_failure_labels(ROOT / "extractor_failures.txt", regressions)
     extractor_failed = bool(regressions)
-    catalog_failed = any(not c.ok for c in catalog_checks)
+    catalog_failed = _catalog_gates_ci(catalog_checks)
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
     #   bit 0 (1) = extractor failure
@@ -3819,6 +3819,18 @@ def _extractor_regressions(checks: Iterable[Check]) -> list[Check]:
     its own table, so it is visible without being actionable noise.
     """
     return [c for c in checks if not c.ok and not c.expected]
+
+
+def _catalog_gates_ci(checks: Iterable[Check]) -> bool:
+    """Whether the catalog rows set the exit bit: a failure that _record
+    marked expected does not, on this side as on the extractor side.
+
+    The extractor bit goes through _extractor_regressions, which honours the
+    marker; this one read every failing row, so a withdrawn supplier whose
+    listing started raising would have filed a new-products issue naming a
+    supplier that left the market, weekly, for as long as the page was gone.
+    """
+    return any(not c.ok and not c.expected for c in checks)
 
 
 def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
