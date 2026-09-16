@@ -118,6 +118,9 @@ Three properties are load-bearing:
   `_spot_is_sane` does not catch it, since that runs only when the cache is
   restored from disk. Skipped rather than raised, matching the rule for a
   `null` gap: one unusable point costs its own slot, not the whole window.
+  The same rule covers a finite instant the platform cannot represent (`1e18`
+  seconds, a negative year), which `fromtimestamp` refuses with an `OSError` or
+  `ValueError` that no caller of the fallback catches.
 - **The historical walk does not use it per chunk.** `/price` is rate-limited
   to **two requests per minute per client IP** (token bucket, burst 2). The
   walk chunks by week because ENTSO-E wants it that way, and routing every
@@ -306,6 +309,12 @@ point count and the prices come from the document itself:
   contract's flat rate goes `nan`, and the backfill writes it into recorder
   statistics where it outlives the document. `1e400` is the case to care about:
   a plausible upstream typo rather than a hostile literal.
+- **A period the calendar cannot carry is an `EntsoeError`.** A year-9999
+  `timeInterval` passes the timestamp check and overflowed the date arithmetic
+  of the forward-fill loop on the second position, as a bare `OverflowError`
+  the coordinator's `EntsoeError` handler never saw, so the tick took the
+  generic failure path and the entry went unavailable instead of serving its
+  cached curve. The period is checked once, before the loop.
 
 The interval length is inferred from `timeInterval` end minus start, rounded up
 so a window that is not an exact multiple of the resolution keeps its trailing

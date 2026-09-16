@@ -244,6 +244,36 @@ def test_malformed_time_interval_raises_entsoe_error() -> None:
         parse_day_ahead_xml(doc)
 
 
+def test_a_period_the_calendar_cannot_carry_raises_entsoe_error() -> None:
+    """A year-9999 timeInterval passed the timestamp check and overflowed the
+    date arithmetic of the forward-fill loop on the second position, as a
+    bare OverflowError no caller catches: the tick took the generic failure
+    path and the entry went unavailable instead of serving its cached curve."""
+    doc = _doc(
+        "<Point><position>1</position><price.amount>50.0</price.amount></Point>"
+        "<Point><position>2</position><price.amount>60.0</price.amount></Point>"
+    )
+    doc = doc.replace("2026-04-29T22:00Z", "9999-12-31T22:00Z").replace(
+        "2026-04-30T22:00Z", "9999-12-31T23:00Z"
+    )
+    with pytest.raises(EntsoeError, match="cannot carry"):
+        parse_day_ahead_xml(doc)
+
+
+def test_energy_charts_skips_an_instant_the_platform_cannot_represent() -> None:
+    """Finite is not enough: 1e18 seconds and a negative year both pass the
+    isfinite check and raise OSError or ValueError out of fromtimestamp,
+    which the fallback path does not catch. Skipped like a null gap, so the
+    point costs its own slot and the good one beside it is kept."""
+    body = json.dumps(
+        {"unix_seconds": [1e18, -1e15, 1788128100], "price": [50.0, 60.0, 100.0]}
+    )
+    out = _parse_energy_charts(
+        body, datetime(2026, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC), True
+    )
+    assert list(out.values()) == [0.1]
+
+
 def test_zoneless_timestamp_is_treated_as_utc() -> None:
     # ENTSO-E timestamps carry a 'Z', but a zoneless one must be read as
     # UTC (the publication document is UTC by spec), not as the HA host's

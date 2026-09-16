@@ -292,6 +292,18 @@ def parse_day_ahead_xml(
             # 870 MB of peak memory and 163 s of CPU, which is the same OOM
             # the interval cap exists to prevent. Bound the loop itself.
             total = min(total, _MAX_PERIOD_SLOTS(step))
+            # A start the calendar cannot carry the period from (a year-9999
+            # timeInterval) overflows the date arithmetic below on the
+            # second position, as a bare OverflowError that no caller
+            # catches: the tick took the generic failure path and the entry
+            # went unavailable instead of serving its cached curve. Ask once
+            # per period, before the loop.
+            try:
+                start + step * total
+            except OverflowError as err:
+                raise EntsoeError(
+                    f"malformed timeInterval: {start_text!r} cannot carry {total} slots"
+                ) from err
             # Carry-forward only: ENTSO-E documents fill *forward* from the
             # previous explicit point, never backward. If position 1 itself
             # is missing, every position before the first explicit one
@@ -552,7 +564,14 @@ def _parse_energy_charts(
             # Skipped rather than raised, matching the rule one line up: an
             # unusable point costs its own slot, not the whole window.
             continue
-        when = datetime.fromtimestamp(float(raw_when), UTC)
+        try:
+            when = datetime.fromtimestamp(float(raw_when), UTC)
+        except (OverflowError, OSError, ValueError):
+            # Finite but not an instant the platform can represent (1e18, or
+            # a negative year): skipped like a null gap, so the point costs
+            # its own slot rather than escaping as a bare error the fallback
+            # path does not catch.
+            continue
         if not period_start <= when < period_end:
             # The request is day-granular, so the response overhangs the
             # asked-for window whenever it does not start at local midnight.
