@@ -1037,6 +1037,21 @@ def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
     )
 
 
+def _injection_api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """The optional twin of :func:`_api_key_schema`, for the injection-only
+    key step, which may be left blank to skip. The re-check path re-shows
+    whichever key step is pending and has to keep this one optional: shown
+    as required, the documented "leave blank to skip" exit disappeared."""
+    current = defaults.get(CONF_API_KEY, "")
+    return vol.Schema(
+        {
+            vol.Optional(CONF_API_KEY, default=current): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
 async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
     """Test the ENTSO-E key with a day-ahead query.
 

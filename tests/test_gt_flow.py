@@ -242,3 +242,46 @@ async def test_a_recheck_that_exposes_a_bad_key_returns_to_the_form(
     assert result["type"] == "form"
     assert result["step_id"] == "api_key"
     assert result["errors"] == {const.CONF_API_KEY: "invalid_api_key"}
+
+
+async def test_a_recheck_that_rejects_an_optional_key_keeps_it_optional(
+    hass: HomeAssistant,
+) -> None:
+    """The re-check re-showed whichever key step was pending with the
+    mandatory step's schema. On the injection path that turned an optional
+    box into a required one: the frontend keeps Submit disabled while a
+    required field is empty, so the documented "leave blank to skip" exit
+    was gone and only a valid key or closing the dialog got the user out."""
+    import voluptuous as vol
+
+    result = await hass.config_entries.flow.async_init(
+        const.DOMAIN, context={"source": "user"}
+    )
+    cfg = hass.config_entries.flow.async_configure
+    flow = result["flow_id"]
+    await cfg(flow, {const.CONF_SUPPLIER: "eneco", const.CONF_REGION: "wallonia"})
+    await cfg(flow, {const.CONF_CONTRACT: "power_fix"})
+    await cfg(flow, {const.CONF_DSO: "ores"})
+    await cfg(flow, {const.CONF_METER: const.METER_MONO})
+    await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_SIMPLE})
+    result = await cfg(
+        flow,
+        {
+            const.CONF_SOLAR_KVA: 5.0,
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+        },
+    )
+    assert result["step_id"] == "injection_api_key"
+    validate = (
+        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key"
+    )
+    with patch(validate, return_value="cannot_connect"):
+        result = await cfg(flow, {const.CONF_API_KEY: "typed"})
+    assert result["type"] == "menu"
+    with patch(validate, return_value="invalid_api_key"):
+        result = await cfg(flow, {"next_step_id": "api_key_recheck"})
+    assert result["step_id"] == "injection_api_key"
+    marker = next(
+        k for k in result["data_schema"].schema if str(k) == const.CONF_API_KEY
+    )
+    assert isinstance(marker, vol.Optional)

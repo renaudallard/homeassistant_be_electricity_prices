@@ -49,7 +49,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -57,15 +56,11 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.selector import (
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-)
 
 from .flow_schemas import (
     _METER_SENSOR_KEYS,
     _api_key_schema,
+    _injection_api_key_schema,
     _capacity_schema,
     _connection_power_schema,
     _contract_has_spot_injection,
@@ -427,7 +422,13 @@ class _WizardStepsMixin:
         # rather than leaving them a "continue anyway" they should not take.
         return self.async_show_form(
             step_id=self._pending_key_step,
-            data_schema=_api_key_schema(self._data),
+            # The step's own schema: the injection key is optional and stays
+            # so, or the documented "leave blank to skip" exit disappears.
+            data_schema=(
+                _injection_api_key_schema(self._data)
+                if self._pending_key_step == "injection_api_key"
+                else _api_key_schema(self._data)
+            ),
             errors={CONF_API_KEY: err},
         )
 
@@ -561,13 +562,7 @@ class _WizardStepsMixin:
             errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="injection_api_key",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_API_KEY, default=self._data.get(CONF_API_KEY, "")
-                    ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
-                }
-            ),
+            data_schema=_injection_api_key_schema(self._data),
             errors=errors,
         )
 
