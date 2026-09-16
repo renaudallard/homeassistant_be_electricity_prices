@@ -381,6 +381,26 @@ def test_lifepowr_cards_before_june_are_the_dynamic_product() -> None:
     assert snap.valid_until == date(2026, 5, 31)
 
 
+@pytest.mark.parametrize(
+    "row",
+    [
+        "Bijdrage op de energie (c€/kWh) 0",
+        "Bijdrage energiefonds met domicilie (€/maand) (2) 0",
+    ],
+)
+def test_a_zero_tax_row_the_card_drops_is_read_as_zero(row: str) -> None:
+    """Both rows print 0 since August 2026. The other Flemish extractors made
+    them optional when the levy was abolished, because suppliers answered by
+    deleting the row; this parser still required them, so Trevion doing the
+    same would have taken all six contracts offline with no figure to read."""
+    text = fixture_text("trevion_vast_2026-09.pdf", layout=True)
+    assert row in text
+    snap = parse_snapshot("groene_energie_vast", text.replace(row + "\n", ""))
+    assert snap.taxes.energy_contribution == 0.0
+    assert snap.taxes.energy_fund_eur_per_month == 0.0
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+
+
 def test_validity_parses_dutch_month_name() -> None:
     assert _extract_validity("geldig in september 2026") == date(2026, 9, 30)
     assert _extract_validity("geen periode") is None

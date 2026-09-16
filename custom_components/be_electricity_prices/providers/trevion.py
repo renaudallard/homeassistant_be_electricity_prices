@@ -440,14 +440,22 @@ def _extract_taxes(text: str) -> TaxOverlay:
         text,
         re.IGNORECASE | re.DOTALL,
     )
-    if not contribution or excise_value is None or not fund:
+    if excise_value is None:
         raise ExtractorError("Trevion: tax block not found")
     green, chp, _ = _meter_shared_values(text)
+    # The contribution and the domiciled energiefonds row both print 0 since
+    # August 2026 and are optional, the policy flanders_tax_overlay holds for
+    # every other Flemish card: the levy was abolished on 2026-08-01 and the
+    # other suppliers answered by deleting the row, so a card without it is
+    # the abolished levy, not a layout drift, and must not take all six
+    # contracts offline the day Trevion does the same.
     return TaxOverlay(
         federal_excise=_number(excise_value) / 100.0,
-        energy_contribution=_number(contribution.group(1)) / 100.0,
+        energy_contribution=(
+            _number(contribution.group(1)) / 100.0 if contribution else 0.0
+        ),
         flanders_renewables=(green + chp) / 100.0,
-        energy_fund_eur_per_month=_number(fund.group(1)),
+        energy_fund_eur_per_month=_number(fund.group(1)) if fund else 0.0,
         vat_rate=0.0,
     )
 

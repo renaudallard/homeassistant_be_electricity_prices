@@ -131,13 +131,16 @@ column already represents the network rate surfaced by Trevion.
 
 `_extract_taxes` reads:
 
-- `Bijdrage op de energie` as EUR/kWh after conversion from cents;
+- `Bijdrage op de energie` as EUR/kWh after conversion from cents, 0 when the
+  row is gone (the levy was abolished on 2026-08-01 and every other Flemish
+  card may drop the row; requiring it would take all six contracts offline);
 - the flat `Bijzondere accijns` on current cards;
 - the `0-3 MWh` row of the degressive block on older tiered cards, the tier a
   household pays and the one every sibling extractor reads, under either reader's
   layout of that block;
 - green certificate and WKK costs from `_meter_shared_values`;
-- the domiciled Energiefonds row in EUR/month.
+- the domiciled Energiefonds row in EUR/month, 0 when the row is gone, for the
+  same reason.
 
 Residential card values are already VAT-inclusive, so `vat_rate=0.0`, as on
 every other residential card; `published_vat_rate` is left at its default for
