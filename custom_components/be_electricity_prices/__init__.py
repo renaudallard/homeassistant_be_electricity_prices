@@ -325,19 +325,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     # keeps them aligned to the slot the user is actually billed for. The
     # coordinator's own 60-minute tick is not clock-aligned, so without
     # this the current price could lag the slot boundary by most of an
-    # hour. Resolution is stable per supplier; a reconfigure reloads the
-    # entry and re-registers this with the right cadence.
-    coord_data = coordinator.data
-    quarter = coord_data is not None and coord_data.resolution == RESOLUTION_QUARTER
-    slot_minute = [0, 15, 30, 45] if quarter else 0
+    # hour. The cadence follows the table's resolution and is re-registered
+    # whenever that moves: it was fixed once from coordinator.data here,
+    # which is None after a first refresh that was tolerated for an
+    # unreadable card, so a quarter-hourly Ecofix entry set up that way was
+    # pushed hourly for as long as it lived, its price sitting on a stale
+    # quarter for up to 45 minutes once the archive's reading was adopted.
+    slot_push: dict[str, Any] = {"resolution": None, "cancel": None}
 
     @callback
     def _push_slot_boundary(_now: datetime) -> None:
         coordinator.async_update_listeners()
 
-    entry.async_on_unload(
-        async_track_time_change(hass, _push_slot_boundary, minute=slot_minute, second=0)
-    )
+    @callback
+    def _track_slot_boundary() -> None:
+        data = coordinator.data
+        resolution = data.resolution if data is not None else RESOLUTION_HOURLY
+        if resolution == slot_push["resolution"]:
+            return
+        if slot_push["cancel"] is not None:
+            slot_push["cancel"]()
+        slot_push["cancel"] = async_track_time_change(
+            hass,
+            _push_slot_boundary,
+            minute=[0, 15, 30, 45] if resolution == RESOLUTION_QUARTER else 0,
+            second=0,
+        )
+        slot_push["resolution"] = resolution
+
+    @callback
+    def _untrack_slot_boundary() -> None:
+        if slot_push["cancel"] is not None:
+            slot_push["cancel"]()
+
+    _track_slot_boundary()
+    entry.async_on_unload(coordinator.async_add_listener(_track_slot_boundary))
+    entry.async_on_unload(_untrack_slot_boundary)
 
     # Crossing local midnight invalidates the price table itself, which no
     # amount of re-reading can fix. ``_build_hourly`` anchors the today +

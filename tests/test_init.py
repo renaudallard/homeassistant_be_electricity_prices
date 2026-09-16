@@ -147,6 +147,66 @@ async def _setup_capturing_time_listeners(
     return registered, refresh
 
 
+async def test_the_slot_push_follows_the_resolution_the_table_ends_up_with(
+    hass: HomeAssistant,
+) -> None:
+    """The cadence was fixed once at setup from coordinator.data, which is
+    None after a first refresh tolerated for an unreadable card. A
+    quarter-hourly Ecofix entry set up that way was pushed hourly for as long
+    as it lived, so once the archive's reading was adopted current_price sat
+    on a stale quarter for up to 45 minutes. The push has to follow the
+    resolution the table ends up with."""
+    from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
+    from custom_components.be_electricity_prices.coordinator import CoordinatorData
+
+    registered: list[dict[str, Any]] = []
+    cancelled: list[dict[str, Any]] = []
+
+    def _capture(
+        _hass: HomeAssistant,
+        action: Any,
+        hour: Any = None,
+        minute: Any = None,
+        second: Any = None,
+    ) -> Any:
+        spec = {"hour": hour, "minute": minute, "second": second}
+        registered.append(spec)
+        return lambda: cancelled.append(spec)
+
+    async def _no_backfill(*_a: object, **_kw: object) -> None:
+        return None
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    with (
+        patch.object(BePricesCoordinator, "async_load_persistent", AsyncMock()),
+        patch.object(
+            BePricesCoordinator, "async_config_entry_first_refresh", AsyncMock()
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch(f"{_MODULE}.async_track_time_change", _capture),
+        patch(f"{_MODULE}.backfill_if_missing", _no_backfill),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+        # No table yet, so the push is hourly, as before.
+        slot = [r for r in registered if r["hour"] is None]
+        assert [r["minute"] for r in slot] == [0]
+
+        # The first tick that prices the entry does so on the 15-minute grid.
+        entry.runtime_data.async_set_updated_data(
+            CoordinatorData(hourly={}, resolution=RESOLUTION_QUARTER)
+        )
+        slot = [r for r in registered if r["hour"] is None]
+        assert [r["minute"] for r in slot] == [0, [0, 15, 30, 45]]
+        assert cancelled == [slot[0]]
+
+        # A tick that keeps the grid registers nothing new.
+        entry.runtime_data.async_set_updated_data(
+            CoordinatorData(hourly={}, resolution=RESOLUTION_QUARTER)
+        )
+        assert len([r for r in registered if r["hour"] is None]) == 2
+
+
 async def test_setup_registers_a_local_midnight_rebuild(hass: HomeAssistant) -> None:
     """Crossing local midnight leaves the price table anchored on the previous
     day, so the tomorrow_* sensors read unknown and tomorrow_prices_available

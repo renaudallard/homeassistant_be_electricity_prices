@@ -340,7 +340,7 @@ The entities, not the coordinator, do the current/next-slot lookup. `sensor.py` 
 
 ### 5.1 Slot-boundary push
 
-The coordinator's 60-minute tick is not clock-aligned. `async_setup_entry` registers an `async_track_time_change` callback (`__init__.py`) that fires `coordinator.async_update_listeners()` at `:00` (and `:15/:30/:45` for a quarter-hourly supplier, `__init__.py`) so the live price sensors re-read the wall clock at the exact slot boundary without re-fetching.
+The coordinator's 60-minute tick is not clock-aligned. `async_setup_entry` registers an `async_track_time_change` callback (`__init__.py`) that fires `coordinator.async_update_listeners()` at `:00` (and `:15/:30/:45` for a quarter-hourly supplier, `__init__.py`) so the live price sensors re-read the wall clock at the exact slot boundary without re-fetching. The cadence follows the table's `resolution` and is re-registered by a coordinator listener whenever that moves: fixed once from `coordinator.data` at setup, it stayed hourly on a quarter-hourly Ecofix entry whose first refresh was tolerated for an unreadable card, since that entry had no table yet.
 
 The push only helps a sensor whose `value_fn` reads the clock: re-evaluating a value baked into `CoordinatorData` yields the same value. That is why every per-slot number a user sees has to come out of a per-slot table indexed at `utcnow()`, not out of a scalar the tick resolved. `injection_price` was the exception until issue #44 and now goes through `_current_injection`.
 
