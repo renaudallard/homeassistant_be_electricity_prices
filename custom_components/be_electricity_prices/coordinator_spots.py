@@ -949,7 +949,7 @@ class _SpotsMixin:
         refresh_days: int,
         fetch: Any,
         *args: Any,
-    ) -> Any:
+    ) -> tuple[Any, datetime]:
         """Fetch one Synergrid profile at most once per process, per key.
 
         The two callers own their own freshness and back-off state, which is
@@ -968,12 +968,16 @@ class _SpotsMixin:
         async with _profile_lock(self.hass, key):
             row = cache.get(key)
             if row is not None and (now - row[1]) < timedelta(days=refresh_days):
-                return row[0]
+                # Handed back with the row's own stamp: the caller stamped an
+                # adopted row as fetched today, so a row adopted on its 29th
+                # day was held for 30 more and a revised profile reached that
+                # entry a month late.
+                return row[0], row[1]
             weights = await fetch(self._session, *args)
             if weights:
                 cache[key] = (weights, now)
                 await _save_profile_cache(self.hass)
-            return weights
+            return weights, now
 
     async def _ensure_spp_weights(self) -> None:
         """Refresh the Synergrid SPP profile for the current year if stale.
@@ -1000,18 +1004,20 @@ class _SpotsMixin:
             and (now - self._spp_failed_at) < _SPP_RETRY_TTL
         ):
             return
-        weights = await self._shared_profile(
+        weights, fetched_at = await self._shared_profile(
             "spp", year, "", _SPP_REFRESH_DAYS, fetch_spp_weights, year
         )
         if weights:
             self._spp_weights = weights
             self._spp_weights_year = year
-            self._spp_fetched_at = now
+            self._spp_fetched_at = fetched_at
             self._spp_failed_at = None
         else:
             self._spp_failed_at = now
 
-    async def _shared_rlp_blends(self, year: int) -> dict[str, RlpWeights]:
+    async def _shared_rlp_blends(
+        self, year: int
+    ) -> tuple[dict[str, RlpWeights], dict[str, datetime]]:
         """Every RLP blend for ``year``, downloaded at most once per process.
 
         The sibling of :meth:`_shared_profile` for the one profile that has
@@ -1028,6 +1034,7 @@ class _SpotsMixin:
         now = dt_util.utcnow()
         async with _profile_lock(self.hass, ("rlp", year, "")):
             held: dict[str, RlpWeights] = {}
+            stamps: dict[str, datetime] = {}
             missing: list[str] = []
             for blend in RLP_BLENDS:
                 row = cache.get(("rlp", year, blend))
@@ -1035,6 +1042,7 @@ class _SpotsMixin:
                     days=_RLP_REFRESH_DAYS
                 ):
                     held[blend] = row[0]
+                    stamps[blend] = row[1]
                 else:
                     missing.append(blend)
             if missing:
@@ -1042,9 +1050,10 @@ class _SpotsMixin:
                 for blend, weights in fetched.items():
                     cache[("rlp", year, blend)] = (weights, now)
                     held[blend] = weights
+                    stamps[blend] = now
                 if fetched:
                     await _save_profile_cache(self.hass)
-            return held
+            return held, stamps
 
     async def _ensure_rlp_weights(self, blend: str = "distinct") -> None:
         """Refresh the Synergrid RLP profile for the current year if stale.
@@ -1075,13 +1084,14 @@ class _SpotsMixin:
             and (now - self._rlp_failed_at) < _RLP_RETRY_TTL
         ):
             return
-        held = await self._shared_rlp_blends(year)
+        held, stamps = await self._shared_rlp_blends(year)
         if held.get(blend):
             self._rlp_blend_weights = held
             self._rlp_weights = held[blend]
             self._rlp_weights_year = year
             self._rlp_blend = blend
-            self._rlp_fetched_at = now
+            # The row's own stamp, not now (see _shared_profile).
+            self._rlp_fetched_at = stamps[blend]
             self._rlp_failed_at = None
         else:
             self._rlp_failed_at = now

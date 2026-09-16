@@ -5812,3 +5812,38 @@ async def test_the_grid_marker_round_trips_through_the_store(
     with patch.object(restored._store, "async_load", new=_fake_load):
         await restored.async_load_persistent()
     assert restored._quarter_grid_days == {date(2026, 1, 1)}
+
+
+async def test_an_adopted_profile_row_keeps_its_own_age(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A second entry, or the first after a restart, adopts the shared
+    profile row without downloading. It stamped the adoption as fetched today,
+    so a row adopted on its 29th day was held for 30 more and reached 59 days
+    old, while the shared layer's own rule and the docs say monthly. The
+    entry has to carry the row's stamp, so it asks again when the row is
+    due, not when the adoption is."""
+    from custom_components.be_electricity_prices import coordinator_spots as cs
+
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    fetched = dt_util.utcnow() - timedelta(days=29)
+    cs._profile_cache(hass)[("spp", 2026, "")] = ({(6, 1, 12): 1.0}, fetched)
+    downloads = 0
+
+    async def _fake_fetch(session: Any, year: int) -> dict[Any, float]:
+        nonlocal downloads
+        downloads += 1
+        return {(6, 1, 13): 2.0}
+
+    with patch.object(cs, "fetch_spp_weights", _fake_fetch):
+        await coord._ensure_spp_weights()
+        assert downloads == 0
+        assert coord._spp_fetched_at == fetched
+        # Five days later the row is 34 days old: due, adoption or not.
+        freezer.tick(timedelta(days=5))
+        await coord._ensure_spp_weights()
+    assert downloads == 1
+    assert coord._spp_weights == {(6, 1, 13): 2.0}

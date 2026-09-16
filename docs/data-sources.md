@@ -781,6 +781,10 @@ not-yet-published year) returns `{}` so the caller falls back to the plain mean.
 The coordinator refreshes the profile at most monthly (`_SPP_REFRESH_DAYS`; the
 ex-ante file is revised in-year) via `_ensure_spp_weights`, and persists the
 weights in the entry's Store blob so a restart does not force a fresh download.
+An entry that adopts the shared row rather than downloading carries the row's own
+stamp (`_shared_profile` hands it back beside the weights, as `_shared_rlp_blends`
+does per blend), so it asks again when the row is due and not thirty days after the
+adoption: stamped as fetched today, a row adopted on its 29th day was held to 59.
 
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of
