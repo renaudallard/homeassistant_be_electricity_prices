@@ -73,7 +73,7 @@
       },
       "connection_power": {
         "title": "Aansluitvermogen (Brussel)",
-        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. Residentiele aansluitingen zijn 13 kVA of minder.",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een driefasige aansluiting met een warmtepomp of een laadpaal zit daarboven.",
         "data": {
           "connection_kva_tier": "Aansluitvermogen"
         }
@@ -302,7 +302,7 @@
       },
       "compare_result": {
         "title": "Eenmalige offerte",
-        "description": "Gebruikt metertype: {meter_used}. Jaarraming gebruikt {annual_kwh} kWh verbruikt ({consumption_source}). {solar_note}\n\n**Jouw huidige ingang**\n  {current_supplier} - {current_contract}\n  Per kWh nu: {current_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {current_annual} EUR/jaar\n\n**Vergeleken met**\n  {compare_supplier} - {compare_contract}\n  Per kWh nu: {compare_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {compare_annual} EUR/jaar\n\n**Jaarlijks verschil**: {delta_annual} EUR/jaar (positief = alternatief is duurder).\n\n```\n{annual_chart}\n```\n\n**Sinds 1 januari** ({ytd_kwh} kWh verbruikt, {ytd_injection_kwh} kWh geinjecteerd, aan het huidige tarief van elke leverancier):\n  Huidig: {current_ytd} EUR\n  Alternatief: {compare_ytd} EUR\n  Verschil: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nEr is niets opgeslagen. Bevestig om dit dialoog te sluiten."
+        "description": "Gebruikt metertype: {meter_used}. Jaarraming gebruikt {annual_kwh} kWh verbruikt ({consumption_source}). {solar_note}\n\n**Jouw huidige ingang**\n  {current_supplier} - {current_contract}\n  Per kWh nu: {current_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {current_annual} EUR/jaar\n\n**Vergeleken met**\n  {compare_supplier} - {compare_contract}\n  Per kWh nu: {compare_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {compare_annual} EUR/jaar\n\n**Jaarlijks verschil**: {delta_annual} EUR/jaar (positief = alternatief is duurder).\n\n```\n{annual_chart}\n```\n\n**Sinds {ytd_from}** ({ytd_kwh} kWh verbruikt, {ytd_injection_kwh} kWh geinjecteerd, aan het huidige tarief van elke leverancier):\n  Huidig: {current_ytd} EUR\n  Alternatief: {compare_ytd} EUR\n  Verschil: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nEr is niets opgeslagen. Bevestig om dit dialoog te sluiten."
       },
       "contract": {
         "title": "Contract",
@@ -368,7 +368,7 @@
       },
       "connection_power": {
         "title": "Aansluitvermogen (Brussel)",
-        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. Residentiele aansluitingen zijn 13 kVA of minder.",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. De meeste woningen zitten op 13 kVA of minder; een driefasige aansluiting met een warmtepomp of een laadpaal zit daarboven.",
         "data": {
           "connection_kva_tier": "Aansluitvermogen"
         }

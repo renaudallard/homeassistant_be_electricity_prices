@@ -1275,6 +1275,7 @@ async def test_compare_result_renders_when_coordinator_not_ready(
         "solar_note",
         "meter_used",
         "annual_kwh",
+        "ytd_from",
         "ytd_kwh",
         "consumption_source",
         "current_supplier",

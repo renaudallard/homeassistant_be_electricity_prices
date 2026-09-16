@@ -1533,6 +1533,7 @@ class _SweepEngine:
             # this one, and the year-to-date legs replay meter history that
             # was recorded under the configured regime, so both are left
             # blank rather than mixing the two.
+            "ytd_from": ytd_from.strftime("%d/%m/%Y"),
             "ytd_kwh": ("-" if volumes_typed or ytd_kwh is None else f"{ytd_kwh:.0f}"),
             "annual_chart": "",
             "ytd_chart": "",
@@ -2285,6 +2286,7 @@ class _CompareStepsMixin(OptionsFlow):
                 "compare_ytd": "-",
                 "delta_ytd": "-",
                 "annual_kwh": f"{DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f}",
+                "ytd_from": "-",
                 "ytd_kwh": "-",
                 "ytd_injection_kwh": "-",
                 "solar_note": "",
