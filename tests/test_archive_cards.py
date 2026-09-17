@@ -1745,3 +1745,65 @@ def test_main_fails_the_run_only_when_nothing_was_archived(
         ac, "all_extractors", lambda: (_extractor(_card_fetch("september 2026")),)
     )
     assert ac.main() == 0
+
+
+async def test_the_next_months_text_never_shadows_a_rows_own_card(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The replay seeds the FOLLOWING month's sources so a settlement that
+    reads that card can resolve offline (EBEM's index, Trevion's two). It must
+    seed them behind the row's own, never over them.
+
+    The memo is keyed by URL, and several suppliers publish every month at one
+    unchanging "current" address. Seeding the follower first replayed Ecofix's
+    six August 2026 rows as September cards, label, validity and price alike.
+    Here both months are served from one URL with different content, and
+    August must come back as August.
+    """
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 8:
+            return None
+        return await _pdf_fetch(session, renders)(_session, contract, region)
+
+    live = _pdf_fetch(session, renders)
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=live,
+        fetch_for_month=fetch_for_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    # August is captured off the "v1" card, then September replaces it at the
+    # same URL, which is what a "current" address does.
+    await ac.archive(
+        tmp_path / "out",
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    august = out / "cards/acme/acme_fix/wallonia/2026-08.json"
+    before = json.loads(august.read_text())
+    session.pdfs[PDF_URL] = b"%PDF v2"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    await ac.archive(
+        out, extractors=[extractor], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    after = json.loads(august.read_text())
+    assert after["energy"] == before["energy"], "August replayed as another month"
+    assert after["publication_label"] == before["publication_label"]

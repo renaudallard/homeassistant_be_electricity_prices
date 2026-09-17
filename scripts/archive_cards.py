@@ -1065,6 +1065,35 @@ def _targets(
     return out
 
 
+def _memo_key(source: dict[str, str]) -> str:
+    """How a source's text is keyed in the fetch memo: by URL, and by reader
+    variant beside it for anything but a plain text read."""
+    return (
+        source["url"]
+        if source["variant"] == "text"
+        else f"{source['variant']}\0{source['url']}"
+    )
+
+
+def _follower_sources(path: Path) -> list[dict[str, str]]:
+    """The sources of the row for the month after ``path``, or none.
+
+    Read from disk rather than passed in, because the replay walks rows
+    grouped by capture day and the follower is filed under its own month.
+    """
+    year, month = int(path.stem[:4]), int(path.stem[5:])
+    year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    follower = path.with_name(f"{year:04d}-{month:02d}.json")
+    if not follower.exists():
+        return []
+    try:
+        row = json.loads(follower.read_text(encoding="utf-8"))
+    except ValueError:
+        return []
+    sources = row.get("_sources", [])
+    return [s for s in sources if isinstance(s, dict) and "text" in s]
+
+
 async def _replay_row(
     path: Path,
     extractors: dict[str, SupplierExtractor],
@@ -1094,18 +1123,28 @@ async def _replay_row(
         summary.unreplayable.append(f"{label}: no extractor registered")
         return
     memo = _RecordingMemo()
-    for source in row.get("_sources", []):
+    own = list(row.get("_sources", []))
+    # A row that settles on the FOLLOWING month's card reads a text this row
+    # never did: EBEM takes the index that card publishes for this month and
+    # Trevion takes both of its indices. Without the next month's texts the
+    # settlement reaches the offline session, is refused as a network error,
+    # and the row comes back provisional, which the replay reports as no
+    # longer settling. That was 16 EBEM rows and 9 Trevion ones.
+    #
+    # The follower is seeded SECOND and never over a key the row already
+    # holds. Several suppliers publish every month at one unchanging "current"
+    # URL, and the memo is keyed by URL: seeding the follower first replayed
+    # Ecofix's six August rows as September cards, label, validity and all.
+    # A month is replayed from its OWN card, and the follower only fills in
+    # what that card cannot answer.
+    for source in own:
         text_path = out / source["text"]
         if not text_path.exists():
             summary.unreplayable.append(f"{label}: {source['text']} is missing")
             return
         if rerender and source["variant"] != "text":
             continue
-        key = (
-            source["url"]
-            if source["variant"] == "text"
-            else f"{source['variant']}\0{source['url']}"
-        )
+        key = _memo_key(source)
         # Seeded, not touched: only what the parse actually reads counts.
         stored = read_text(text_path)
         if _CARD_REF.search(stored):
@@ -1114,6 +1153,18 @@ async def _replay_row(
             except Exception as err:  # noqa: BLE001 - a card we cannot put back is a row we cannot replay
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 return
+        dict.__setitem__(memo, key, stored)
+    # Best effort: the newest month has no follower and must still replay.
+    for source in _follower_sources(path):
+        text_path = out / source["text"]
+        key = _memo_key(source)
+        if key in memo or not text_path.exists():
+            continue
+        if rerender and source["variant"] != "text":
+            continue
+        stored = read_text(text_path)
+        if _CARD_REF.search(stored):
+            continue
         dict.__setitem__(memo, key, stored)
     replay.pdfs = {
         s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s

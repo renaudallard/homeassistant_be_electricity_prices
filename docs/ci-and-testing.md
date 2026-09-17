@@ -802,7 +802,14 @@ differently and a stored text is served to every replay and to the live check fo
 card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
 archive's `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py`): the texts the row's `_sources` name are seeded into the memo,
-the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
+then, behind them and never over them, the texts the FOLLOWING month's row names. A month that
+settles on the next month's card (EBEM's index, Trevion's two) reads a text its own row never
+did, and without it the settlement reaches the offline session, is refused as a network error and
+comes back provisional, which the replay reports as no longer settling: 16 EBEM rows and 9
+Trevion ones. Behind, because the memo is keyed by URL and several suppliers publish every month
+at one unchanging address: seeded first, the follower replayed Ecofix's six August 2026 rows as
+September cards, label, validity and price alike. The clock is pinned with freezegun to the row's
+`_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
 `_ReplaySession` (`scripts/archive_cards.py`) in place of aiohttp. That session reaches no
