@@ -75,11 +75,19 @@ def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | 
     """The successor supplier, but only when it can serve ``region``.
 
     A withdrawal announcement names one successor for the whole country,
-    while our coverage is per region: EnergyVision took over DATS 24's
-    Flemish and Walloon customers alike, but only its Flanders cards are
-    modelled. Returns ``None`` when the successor is unset, unknown to this
-    build, or has no contract in the region, so the caller can avoid telling
-    a user to pick a supplier the config flow would then refuse.
+    while our coverage is per region. Returns ``None`` when the successor is
+    unset, unknown to this build, or has no contract in the region, so the
+    caller can avoid telling a user to pick a supplier the config flow would
+    then refuse.
+
+    Having a contract in the region is not the same as having THEIR contract,
+    and this cannot tell the two apart: a withdrawal names a supplier, not the
+    product each customer lands on. EnergyVision has five Flemish products and
+    the DATS 24 customers who transferred to it landed on none of them, but on
+    the legacy card continued under its name, which is published nowhere this
+    can read (issue #100). So the card names the successor and then says what
+    to do when the product is missing, rather than promising a match it cannot
+    check.
     """
     if not supplier_id:
         return None

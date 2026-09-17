@@ -141,8 +141,15 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("energyvision_fixed_3y", "EnergyVision 3 jaar vast", "fixed", "GS3JV"),
     # Wallonia's own fixed product, on a French card. It is a 1-year lock
     # where Flanders gets 3, so it is a distinct contract rather than the same
-    # one in another region. This is the product DATS 24's Walloon customers
-    # land on after the 2026-08-31 transfer (see providers/dats24.py).
+    # one in another region.
+    #
+    # It used to say here that this is where DATS 24's Walloon customers land
+    # after the 2026-08-31 transfer. Nothing sourced that: DATS 24's own site
+    # named EnergyVision and no product. Issue #100's reporter, who was
+    # actually transferred, landed on the legacy DATS 24 card continued under
+    # EnergyVision's name, and that card covers Wallonia on its face, so the
+    # Walloon customers plausibly went the same way. Unknown either way, and
+    # the Repairs card no longer tells anyone which product to pick.
     _ContractDef(
         "energyvision_fixed_1y",
         "EnergyVision 1 an fixe",

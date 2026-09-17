@@ -5392,6 +5392,37 @@ def test_a_priced_card_loses_the_contribution_on_the_month_it_is_billed_for(
     assert june.taxes.energy_contribution == pytest.approx(0.0020417)
 
 
+def test_the_transfer_card_says_what_to_do_when_the_product_is_missing() -> None:
+    """Naming a successor is not the same as naming THEIR product, and the
+    card cannot check the difference: a withdrawal announces a supplier, not
+    the product each customer lands on. DATS 24's Flemish customers were moved
+    to a product EnergyVision publishes nowhere, so the card sent them to a
+    picker with nothing in it they could choose (issue #100).
+
+    Both successor variants therefore have to carry the escape route, in every
+    language, or the advice dead-ends for the next withdrawal too.
+    """
+    import pathlib as _pathlib
+
+    base = _pathlib.Path(__file__).resolve().parent.parent / (
+        "custom_components/be_electricity_prices"
+    )
+    files = ["strings.json"] + [
+        f"translations/{lang}.json" for lang in ("en", "fr", "nl", "de")
+    ]
+    for name in files:
+        data = json.loads(base.joinpath(name).read_text(encoding="utf-8"))
+        for key in ("supplier_deprecated", "supplier_deprecated_ended"):
+            node = data["issues"][key]
+            flow = node.get("fix_flow", {}).get("step", {}).get("confirm", {})
+            text = flow.get("description") or node.get("description", "")
+            # The two halves of the escape route: what to pick, and what to do
+            # when it is not there. Matched on the supplier's own name, which
+            # is the one token that survives translation.
+            assert "Expert" in text, (name, key)
+            assert "GitHub" in text, (name, key)
+
+
 def test_strings_json_reads_the_same_as_the_english_translation() -> None:
     """Every literal in strings.json must match `translations/en.json`, and
     every key the translation carries must exist in strings.json.

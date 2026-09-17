@@ -689,7 +689,13 @@ successful refresh:
   clears when the entry points at a supplier that is still selling. The
   successor is only named when this integration can actually price it in
   your region; otherwise the card says the entry will stop updating and
-  asks you to check the letter your supplier sends.
+  asks you to check the letter your supplier sends. Naming the successor is
+  not a promise that your product is in its list: a withdrawal announces a
+  supplier, not the product each customer is moved to, and DATS 24's Flemish
+  customers were moved to one EnergyVision publishes no card for. So the card
+  tells you to pick the product named on your letter, and what to do when it
+  is not there: the **Expert: custom formula** supplier prices it from your
+  own card in the meantime.
 - **`extractor_unreadable_<entry>`** — the card downloaded fine but its
   pages carry no text layer, so no parser change here can read it (Ecofix
   since the August 2026 card). Cached prices keep serving, and it clears

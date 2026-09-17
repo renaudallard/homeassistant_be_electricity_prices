@@ -715,11 +715,11 @@
     },
     "supplier_deprecated": {
       "title": "{supplier} is transferring your contract to {successor} on {ends_on}",
-      "description": "{supplier} is leaving the residential energy market: your contract transfers automatically to {successor} on {ends_on}. Prices stay correct until {supplier} stops publishing its tariff card, so nothing is broken yet, but this entry will stop updating afterwards. Edit the entry and select {successor} as the supplier once your transfer is confirmed."
+      "description": "{supplier} is leaving the residential energy market: your contract transfers automatically to {successor} on {ends_on}. Prices stay correct until {supplier} stops publishing its tariff card, so nothing is broken yet, but this entry will stop updating afterwards. Edit the entry and select {successor} as the supplier once your transfer is confirmed. Pick the product named on the letter they sent you. If it is not in the list, this integration cannot price that product yet: the 'Expert: custom formula' supplier takes the figures off your card by hand in the meantime, and an issue on GitHub is how it gets covered properly."
     },
     "supplier_deprecated_ended": {
       "title": "{supplier} has transferred your contract to {successor}",
-      "description": "{supplier} left the residential energy market on {ends_on} and your contract has transferred automatically to {successor}. It has stopped publishing a tariff card, so this entry can no longer update: it is still showing the last prices it read, and those are no longer what you are billed. Edit the entry and select {successor} as the supplier to start pricing your new contract."
+      "description": "{supplier} left the residential energy market on {ends_on} and your contract has transferred automatically to {successor}. It has stopped publishing a tariff card, so this entry can no longer update: it is still showing the last prices it read, and those are no longer what you are billed. Edit the entry and select {successor} as the supplier to start pricing your new contract. Pick the product named on the letter they sent you. If it is not in the list, this integration cannot price that product yet: the 'Expert: custom formula' supplier takes the figures off your card by hand in the meantime, and an issue on GitHub is how it gets covered properly."
     },
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stops supplying residential energy on {ends_on}",
