@@ -112,15 +112,23 @@ Related reading:
 > Ecofix's September 2026 card carries 0,0503288 with a 0,0020417 contribution
 > beside it, the scheme that ended on 1 August, where the fourteen other
 > residential suppliers in the archive carry a flat 0,04876 and no contribution.
-> The contribution half is not billed: that levy was abolished on 1 August, so
-> `resolve_federal_contribution` drops it for every delivery month from then on
-> whatever the card prints (see
-> [../pricing-model.md](../pricing-model.md#the-federal-energy-contribution-stops-at-a-date-not-at-a-card)).
-> The excise is billed as the card prints it, 0,0015688 EUR/kWh too much, about
-> 5,49 EUR a year on 3.500 kWh. `_check_federal_tax_consensus` (`scripts/live_check.py`)
-> compares every supplier's federal block against the rest of the archive daily
-> and reports the ones that drift; it reports rather than corrects, for the
-> cross-filling reason just above. TotalEnergies and Cociter drift the same way.
+> Neither half is billed as this card prints it. Both are federal levies set by
+> law rather than by the supplier, so the month being billed decides them: the
+> contribution was abolished on 1 August and `resolve_federal_contribution`
+> drops it, and `resolve_federal_excise` bills the 0,04876 the law sets rather
+> than this card's 0,0503288 (see
+> [../pricing-model.md](../pricing-model.md#the-special-excise-is-the-laws-not-a-stale-cards-copy-of-it)).
+> Together that is the 0,0036105 EUR/kWh, about 12,64 EUR a year on 3.500 kWh,
+> the stale block used to cost. What still comes off the image is the energy
+> formula, the standing charge and the DSO tables, which is why the card is
+> worth reading at all.
+>
+> That is a levy read from the law, not a value cross-filled from another
+> supplier's card, which is the thing the invariant above forbids and which
+> this does not do. `_check_federal_tax_consensus` (`scripts/live_check.py`)
+> still compares every supplier's federal block against the rest of the archive
+> daily and reports the ones that drift, which is how a supplier that corrects
+> itself gets noticed. TotalEnergies and Cociter drift the same way.
 >
 > Affected users are pointed at the **Expert: custom formula** supplier
 > (`providers/custom.py`), which collects exactly the missing DSO and tax blocks

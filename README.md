@@ -127,13 +127,14 @@ Each of these has a section of its own further down; this is the scan.
 > that has moved. Ecofix's September 2026 card still carries the federal scheme
 > that ended on 1 August, an excise of 0,0503288 with a 0,0020417 contribution
 > beside it, where every other supplier's card for the same month carries a flat
-> 0,04876 and no contribution. The contribution is not billed: that levy was
-> abolished on 1 August and the integration drops it from every month after
-> that date, on any card that still prints it. The stale excise is billed as
-> the card prints it, 0,0015688 €/kWh too much, about 5,49 € a year on
-> 3.500 kWh. The daily live check compares every supplier's federal block
-> against the rest and reports a card that drifts. A figure the reader could
-> not read whole is left out rather than guessed. If you would rather type the numbers in yourself, the
+> 0,04876 and no contribution. Neither is billed. Both are federal levies set
+> by law rather than by your supplier, so the integration bills what the law
+> sets for the month being billed: the contribution was abolished on 1 August
+> and is dropped, and the excise is the 0,04876 every other card in the country
+> prints. That is the 0,0036105 €/kWh, about 12,64 € a year on 3.500 kWh, the
+> stale block used to cost you. The daily live check still compares every
+> supplier's federal block against the rest and reports a card that drifts. A
+> figure the reader could not read whole is left out rather than guessed. If you would rather type the numbers in yourself, the
 > **Expert: custom formula** supplier takes them.
 >
 > The full story — what changed in their generator, what Ecofix said about it,
@@ -232,6 +233,33 @@ native 15-minute slots.
 
 VAT spreads uniformly across components, so `energy_component +
 network_component + taxes_component` always equals `current_price` to the cent.
+
+### The federal levies come from the law, not from your card
+
+Two items in that `levies` term are set by federal law rather than by your
+supplier: the **special excise** and the **energy contribution**. One rate
+applies to every residential customer in the country in a given month, so the
+month being billed decides them, not the month your card was printed in.
+
+Since **1 August 2026** the law sets a flat excise of **4,876 c€/kWh** and
+abolished the energy contribution, folding it into that rate. The integration
+bills exactly that for every month from then on, and a card that still prints
+the old pair is not billed as printed. Three suppliers were still printing it
+in September 2026: Ecofix, whose card is an image of its July card, Cociter,
+and TotalEnergies with a rounded figure. Together the two corrections are worth
+about 12,64 € a year at 3.500 kWh on an Ecofix contract.
+
+Two limits worth knowing. **Professional contracts are untouched**, because
+that scheme bands the excise by annual volume and is a genuinely different
+rate. And **the correction covers the months we can verify**: the same measure
+steps the excise down again each January from 2027, so from 1 January 2027 your
+card's own figure is used again until the new rate is confirmed against the
+fleet. Before August 2026 the card's figures were always used, so a bill for an
+earlier month is unaffected.
+
+The daily live check compares every supplier's federal block against the rest
+and reports a card that drifts, which is how a supplier that corrects itself
+gets noticed: Bolt and Trevion both did between August and September.
 
 ## Sensors
 

@@ -494,6 +494,22 @@ CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
 # not a contract term, so a July bill still owes it whatever card prices it.
 FEDERAL_CONTRIBUTION_ZEROED_FROM: Final = (2026, 8)
 
+# The residential special excise the same measure set, in EUR/kWh including
+# the 6% VAT, and the months it is known to cover. A federal levy on
+# consumption: one rate for the whole country, so a card printing another one
+# for a delivery month in this window is stale rather than different, which is
+# what a picture of an older card looks like.
+#
+# Only a step that is IN EFFECT and cross-checked against the fleet belongs
+# here. The measure steps the rate down again on 1 January 2027, 2028 and
+# 2029; encoding a rate before it is in force would bill a prediction, and a
+# schedule left to go stale is worse than the card. Past the end of the window
+# the card is read as before, and the live check's consensus row is what says
+# a step has landed.
+FEDERAL_EXCISE_RESIDENTIAL_TVAC: Final = 0.04876
+FEDERAL_EXCISE_KNOWN_FROM: Final = (2026, 8)
+FEDERAL_EXCISE_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
+
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps

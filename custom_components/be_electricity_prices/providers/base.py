@@ -50,6 +50,9 @@ import aiohttp
 
 from ..const import (
     FEDERAL_CONTRIBUTION_ZEROED_FROM,
+    FEDERAL_EXCISE_KNOWN_FROM,
+    FEDERAL_EXCISE_KNOWN_UNTIL,
+    FEDERAL_EXCISE_RESIDENTIAL_TVAC,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGIONS,
@@ -1173,6 +1176,40 @@ def resolve_federal_contribution(
     if (delivery_month.year, delivery_month.month) < FEDERAL_CONTRIBUTION_ZEROED_FROM:
         return snapshot
     return replace(snapshot, taxes=replace(taxes, energy_contribution=0.0))
+
+
+def resolve_federal_excise(
+    snapshot: SupplierSnapshot, delivery_month: date, *, professional: bool
+) -> SupplierSnapshot:
+    """Bill the special excise the law sets, not a stale card's copy of it.
+
+    The excise is a federal levy on consumption: one residential rate for the
+    whole country in any given month, so two cards disagreeing about it is one
+    of them being out of date rather than a difference between suppliers. On
+    the September 2026 cards thirteen suppliers print 4,876 c/kWh, TotalEnergies
+    prints it rounded, and Ecofix prints July's 5,03288 because its card is a
+    picture of July's card, which no parser change can read differently.
+
+    Applied only inside the window the constants name, on the card's own VAT
+    basis: most print the levy including VAT, Ecopower prints it excluding and
+    the engine grosses it later, so writing one number into both would be
+    wrong by 6% for one of them. A card that already prints the rate is
+    returned unchanged, so this is identity for almost every entry.
+
+    Left alone: a professional card, whose scheme bands the levy by annual
+    volume and is a different rate entirely, and any card carrying
+    ``federal_excise_bands`` for the same reason.
+    """
+    taxes = snapshot.taxes
+    if professional or taxes.federal_excise_bands:
+        return snapshot
+    month = (delivery_month.year, delivery_month.month)
+    if not FEDERAL_EXCISE_KNOWN_FROM <= month < FEDERAL_EXCISE_KNOWN_UNTIL:
+        return snapshot
+    rate = FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + taxes.vat_rate)
+    if abs(rate - taxes.federal_excise) < 5e-7:
+        return snapshot
+    return replace(snapshot, taxes=replace(taxes, federal_excise=rate))
 
 
 def resolve_volume_tier(

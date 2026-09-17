@@ -88,6 +88,7 @@ from .providers.base import (
     apply_vat,
     resolve_excise_band,
     resolve_federal_contribution,
+    resolve_federal_excise,
     resolve_settlement_grid,
     resolve_volume_tier,
 )
@@ -1189,9 +1190,10 @@ def _resolve_snapshot(
     (it grosses the fees and the feed-in leg), and the settlement grid moves
     no rate at all.
 
-    ``delivery_month`` is the month being billed, which decides whether the
-    federal energy contribution is owed at all; today's when omitted, since
-    every caller but the month rows prices the running month.
+    ``delivery_month`` is the month being billed, which decides both federal
+    levies: whether the energy contribution is owed at all, and what the
+    special excise is. Today's when omitted, since every caller but the month
+    rows prices the running month.
 
     The tranche is dropped rather than folded on an exclusive-night entry: the
     cards that carry one put it on the single register, or split it 900/900
@@ -1200,11 +1202,12 @@ def _resolve_snapshot(
     circuit a share of a tranche it never receives.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
-    resolved = resolve_federal_contribution(
-        resolved,
-        delivery_month or dt_util.now().date(),
-        professional=is_professional(snap.supplier, snap.contract),
-    )
+    # The two federal levies, both defined by the month being billed rather
+    # than by the card that prints them.
+    month = delivery_month or dt_util.now().date()
+    professional = is_professional(snap.supplier, snap.contract)
+    resolved = resolve_federal_contribution(resolved, month, professional=professional)
+    resolved = resolve_federal_excise(resolved, month, professional=professional)
     if annual_kwh is None:
         annual_kwh = entry_annual_kwh(entry)
     resolved = resolve_volume_tier(

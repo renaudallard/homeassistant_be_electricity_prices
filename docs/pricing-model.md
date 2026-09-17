@@ -213,6 +213,33 @@ levy rather than three suppliers being stale in lockstep. The live check still
 reports every disagreement against the month's consensus, which is how a stale
 card gets noticed at all (`docs/ci-and-testing.md`).
 
+### The special excise is the law's, not a stale card's copy of it
+
+The same measure set the residential special excise at 4,876 c/kWh incl. VAT
+from 2026-08-01. It is a federal levy on consumption, so one rate covers the
+whole country in any month and two cards disagreeing about it is one of them
+being out of date: on the September 2026 cards thirteen suppliers print it,
+TotalEnergies prints it rounded to 4,88, and Ecofix prints July's 5,03288
+because its card is a picture of July's card, which no parser change can read
+differently (about 5,49 EUR/year at 3.500 kWh).
+
+`resolve_federal_excise` (`providers/base.py`) writes the law's figure for a
+delivery month inside the window `FEDERAL_EXCISE_KNOWN_FROM` ..
+`FEDERAL_EXCISE_KNOWN_UNTIL` (`const.py`), applied beside the contribution in
+`_resolve_snapshot` (`snapshot_store.py`), and it is identity for a card that
+already prints it. On the card's OWN VAT basis: most print the levy including
+VAT and Ecopower prints it excluding, the engine grossing it later, so writing
+one number into both would be 6% wrong for one of them. A professional card is
+left alone, and so is any card carrying `federal_excise_bands`: that scheme
+bands the levy by annual volume and is a different rate entirely.
+
+The window is deliberately narrow. The measure steps the rate down again on
+1 January 2027, 2028 and 2029, and only a step that is in effect and
+cross-checked against the fleet's cards belongs in the constants; past the end
+of the window the card is read as before. A schedule left to go stale would be
+worse than the bug it fixes, and the live check's consensus row is what says a
+step has landed.
+
 ### Degressive federal excise
 
 The federal special excise is normally one rate, but a card may print it as a

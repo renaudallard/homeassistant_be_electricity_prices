@@ -5305,6 +5305,64 @@ def test_the_federal_contribution_is_dropped_from_the_months_it_is_not_levied() 
     assert kept.energy_contribution == pytest.approx(0.0020417)
 
 
+def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
+    """The special excise is a federal levy on consumption: one residential
+    rate for the whole country in a month, so two cards disagreeing is one of
+    them being out of date. Ecofix prints July's 5,03288 on its September card
+    because that card is a picture of July's, which no parser change can read
+    differently, and billing it costs 5,49 EUR a year at 3.500 kWh.
+
+    On the card's own VAT basis, not one number for everyone: most print the
+    levy including VAT, Ecopower prints it excluding and the engine grosses it
+    later. The professional scheme bands the levy by annual volume and is left
+    alone, and so is any month outside the window the constants cover, since
+    the rate steps down again in 2027 and a schedule left to go stale would be
+    worse than reading the card.
+    """
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_federal_excise,
+    )
+
+    def card(
+        excise: float,
+        vat: float = 0.0,
+        bands: tuple[tuple[float, float], ...] | None = None,
+    ) -> SupplierSnapshot:
+        base = make_snapshot()
+        return _replace(
+            base,
+            taxes=_replace(
+                base.taxes,
+                federal_excise=excise,
+                vat_rate=vat,
+                federal_excise_bands=bands,
+            ),
+        )
+
+    stale = card(0.0503288)
+    billed = resolve_federal_excise(stale, date(2026, 9, 1), professional=False)
+    assert billed.taxes.federal_excise == pytest.approx(0.04876)
+    # A July bill owes July's rate, whatever a later card prints.
+    july = resolve_federal_excise(stale, date(2026, 7, 1), professional=False)
+    assert july.taxes.federal_excise == pytest.approx(0.0503288)
+    # An ex-VAT card keeps its basis: 4,876 c/kWh incl. VAT is 4,60 without.
+    ecopower = resolve_federal_excise(
+        card(0.04748, vat=0.06), date(2026, 8, 1), professional=False
+    )
+    assert ecopower.taxes.federal_excise == pytest.approx(0.046)
+    # Untouched: the professional scheme, a banded card, and a month the
+    # constants do not cover.
+    for snap, month, pro in (
+        (card(0.0503288), date(2026, 9, 1), True),
+        (card(0.01421, bands=((20000, 0.01421),)), date(2026, 9, 1), False),
+        (card(0.0503288), date(2027, 1, 1), False),
+    ):
+        left = resolve_federal_excise(snap, month, professional=pro)
+        assert left is snap, (month, pro)
+
+
 def test_a_priced_card_loses_the_contribution_on_the_month_it_is_billed_for(
     hass: HomeAssistant,
 ) -> None:
