@@ -51,8 +51,10 @@ are the old reader's; ``--rerender`` asks for that on demand.
 for the N closed months before this one, through the same
 ``fetch_for_month`` the integration uses, and stores each month not held
 yet. That makes this a mirror of the supplier archives: insurance against a
-supplier dropping its own (DATS 24 did) and a cheap read for any month a
-supplier's own path cannot serve. A month the
+supplier dropping its own, and a cheap read for any month a supplier's own
+path cannot serve. It only ever holds what was walked while the supplier was
+still publishing: DATS 24 left before this script existed, so it has no rows
+here and is not the precedent it looks like. A month the
 supplier answers None for is left absent, as is a card still flagged
 provisional, so a later backfill fills it once it has settled.
 

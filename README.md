@@ -1127,7 +1127,10 @@ text of every page or document that parse read under
 `electricity/texts/<YYYY-MM>/`, so a card can be re-read or checked by hand
 later. A manual run of the same workflow can also mirror past months from
 the supplier archives into it, which keeps them readable should a supplier
-drop its archive, as DATS 24 did.
+drop its own. That only covers suppliers walked while they were still
+publishing: DATS 24 left the market before this archive existed, so none of
+its months are in here and they are read from its own server for as long as
+that lasts.
 
 **Finding a stored card by hand.** Everything is addressed by the same
 three ids the integration uses, which are the directory names under

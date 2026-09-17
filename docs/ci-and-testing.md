@@ -896,8 +896,9 @@ the month asked for with `_via` set to `archive` (a live capture carries `live`)
 supplier answers None for is left absent, as is a card still flagged provisional (Eneco's
 estimate before the next card prints the settled index), so a later backfill fills it once it has
 settled, and a month already on disk is never asked again. The branch thus mirrors the supplier
-archives: insurance against a supplier dropping its archive, as DATS 24 did, and a cheap read for
-any month a supplier's own path cannot serve. The daily schedule runs with `--backfill 0`; the
+archives: insurance against a supplier dropping its own, and a cheap read for
+any month a supplier's own path cannot serve. Only for suppliers walked while they were still
+publishing, though: DATS 24 left before the archive existed and holds no rows here at all. The daily schedule runs with `--backfill 0`; the
 workflow's manual dispatch takes the number as an input.
 
 Per card, transient failures are retried three times with the live check's own classification
