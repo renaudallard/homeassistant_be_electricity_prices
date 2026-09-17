@@ -6115,3 +6115,74 @@ async def test_a_replayed_ocr_blob_keeps_its_marker(
         await coord._maybe_refresh_snapshot()
     assert fetch.await_count == 2
     assert coord.card_read_by_ocr is True
+
+
+async def test_the_persistent_blob_holds_the_card_as_parsed(
+    hass: HomeAssistant,
+) -> None:
+    """A restart must price what the run before it priced.
+
+    The blob carries ``_snapshot_raw``, the card as the extractor returned it,
+    and the load path re-resolves it through ``_set_snapshot``. Persisting the
+    PRICED card instead looks identical on a residential VAT-inclusive card,
+    which is what every load test here used, so the whole suite stayed green
+    when the field was swapped. Checked by swapping it: 1225 tests, none
+    failed.
+
+    On an ex-VAT card it compounds. A 100 EUR/yr standing charge is grossed to
+    121, persisted at 121, grossed again on the next load to 146,41, and again
+    on the restart after that. It is also what unticking the quarter-hour box
+    would fail to undo: the reload would keep a leg already converted for the
+    old answer.
+    """
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    raw = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=100.0),
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.21),
+    )
+    coord._set_snapshot(raw)
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    priced = coord._snapshot
+    assert priced is not None
+    # The card the extractor returned is not the card the entry is billed on,
+    # which is the whole reason the two are held apart.
+    assert priced != raw
+    assert isinstance(priced.energy, FixedRates)
+    assert priced.energy.yearly_fixed_fee == pytest.approx(121.0)
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert saved["snapshot"]["energy"]["yearly_fixed_fee"] == pytest.approx(100.0)
+
+    async def _fake_load() -> dict[str, Any]:
+        return dict(saved)
+
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", new=_fake_load):
+        await fresh.async_load_persistent()
+    assert fresh._snapshot_raw == raw
+    assert fresh._snapshot == priced
+    # And a second restart is the same again, which is what compounding is not.
+    saved2: dict[str, Any] = {}
+
+    async def _fake_save2(payload: dict[str, Any]) -> None:
+        saved2.update(payload)
+
+    with patch.object(fresh._store, "async_save", new=_fake_save2):
+        await fresh._save_persistent()
+    assert saved2["snapshot"]["energy"] == saved["snapshot"]["energy"]
