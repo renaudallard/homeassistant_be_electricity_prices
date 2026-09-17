@@ -1030,6 +1030,17 @@ excise window before it lapses (`_check_excise_window`, silent until eight weeks
 supplier- or maintainer-side rather than a break here, which is why they share a thread and fail
 no pull request.
 
+A disagreement that has been looked at and decided goes in `_KNOWN_TAX_BLOCKS`
+(`scripts/live_check.py`) and is then reported in its own section without filing: the
+integration bills both federal levies from the law rather than from the card, so no household is
+billed those figures, and an issue a day about a card already read is noise that closing only
+makes worse, since the filing script looks for an OPEN issue and opens a new one when it finds
+none. Two properties keep the allowance from becoming a mute button. It is keyed on the exact
+(supplier, excise, contribution) triple, so a card that moves either figure by a digit files
+again, which is how Bolt and Trevion were seen correcting themselves between August and
+September. And each entry carries an expiry, all of them 2027-01-01, when the excise steps down
+and every card in the country has to be reprinted anyway.
+
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
 which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A

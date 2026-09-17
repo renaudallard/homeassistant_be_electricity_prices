@@ -2069,6 +2069,74 @@ def test_the_excise_window_asks_to_be_extended_before_it_lapses(
         assert "45,58" in check.detail
 
 
+def test_a_known_tax_block_reports_without_filing_until_it_expires(
+    tmp_path: Path,
+) -> None:
+    """Three cards print a federal levy the rest of the fleet does not, each
+    looked at and decided: the integration bills both federal levies from the
+    law, so nobody is billed these figures. Filing an issue every day about a
+    card we have already read is noise, and closing that issue only makes the
+    next run open another one.
+
+    So they report without filing. The allowance is keyed on the exact pair
+    printed, and it expires: a supplier that changes either figure by a digit
+    files again, which is how Bolt and Trevion were seen correcting themselves,
+    and every allowance lapses at the January excise step when every card in
+    the country has to be reprinted anyway.
+    """
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "ecofix_flexy": SimpleNamespace(professional=False),
+        }
+    )
+    stale = (0.0503288, 0.0020417)
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("ecofix", "ecofix_flexy", "flanders"): stale,
+        },
+    )
+
+    # Inside the allowance: reported, expected, and the report carries no
+    # Failures table, which is what the workflow files on.
+    lc._check_federal_tax_consensus(archive, date(2026, 9, 17))
+    (check,) = lc.CHECKS
+    assert not check.ok and check.expected
+    assert check.kind == "tax"
+    assert "billed from the law" in check.detail
+    report = lc._render_report(list(lc.CHECKS))
+    assert "## Failures" not in report
+    assert "## Known tax blocks (expected, not a regression)" in report
+    assert lc._catalog_gates_ci(list(lc.CHECKS)) is False
+
+    # Past the expiry it is news again.
+    lc.CHECKS.clear()
+    lc._check_federal_tax_consensus(archive, date(2027, 1, 1))
+    (check,) = lc.CHECKS
+    assert not check.expected
+    assert lc._catalog_gates_ci(list(lc.CHECKS)) is True
+
+    # And a supplier that moves either figure stops matching, even by a digit.
+    moved = _federal_archive(
+        tmp_path / "moved",
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("ecofix", "ecofix_flexy", "flanders"): (0.0503288, 0.0020418),
+        },
+    )
+    lc.CHECKS.clear()
+    lc._check_federal_tax_consensus(moved, date(2026, 9, 17))
+    (check,) = lc.CHECKS
+    assert not check.expected
+
+
 def test_a_tax_disagreement_is_reported_apart_from_the_product_catalogue(
     tmp_path: Path,
 ) -> None:

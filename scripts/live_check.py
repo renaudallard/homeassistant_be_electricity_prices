@@ -552,6 +552,49 @@ _UNREADABLE_MARKER = "CardNotReadableError"
 # card stays up and stays stale forever. Real, visible, and not actionable
 # by any change here: the same class as an unreadable card.
 _WITHDRAWN_MARKER = "SupplierWithdrawn"
+# A federal tax block we have already looked at and decided about: the card
+# prints it, the integration does not bill it, and nothing here can make the
+# supplier reprint. Reported in its own table, never filed.
+_ALLOWED_TAX_MARKER = "KnownTaxBlock"
+
+# (supplier, excise, contribution) -> (expires, why). Keyed on the exact pair
+# the card prints, so a supplier that changes either figure by a digit stops
+# matching and files: that is how Bolt and Trevion were seen correcting
+# themselves between August and September.
+#
+# Every allowance expires on the same date and for the same reason: the
+# taxshift steps the residential excise down on 2027-01-01, so every card in
+# the country has to be reprinted by then and a card still printing these
+# figures after it is news again. An allowance that cannot expire is a mute
+# button, which is the thing this check exists not to have.
+_KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
+    ("ecofix", 0.0503288, 0.0020417): (
+        date(2027, 1, 1),
+        "card is an image of its July card; both levies are billed from the law",
+    ),
+    ("cociter", 0.04876, 0.0020417): (
+        date(2027, 1, 1),
+        "prints the abolished contribution beside the current excise; not billed",
+    ),
+    ("totalenergies", 0.0488, 0.002): (
+        date(2027, 1, 1),
+        "prints both levies rounded; billed from the law either way",
+    ),
+}
+
+
+def _tax_block_allowance(
+    supplier: str, excise: float, contribution: float, today: date
+) -> str | None:
+    """The reason this exact block is allowed today, or ``None``.
+
+    Matched on the figures rather than on the supplier, so an allowance covers
+    the disagreement that was looked at and nothing else.
+    """
+    known = _KNOWN_TAX_BLOCKS.get((supplier, round(excise, 7), round(contribution, 7)))
+    if known is None or today >= known[0]:
+        return None
+    return known[1]
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
@@ -564,7 +607,9 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
             detail=detail,
             kind=kind,
             expected=not ok
-            and detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)),
+            and detail.startswith(
+                (_UNREADABLE_MARKER, _WITHDRAWN_MARKER, _ALLOWED_TAX_MARKER)
+            ),
         )
     )
 
@@ -2049,7 +2094,9 @@ def _check_excise_window(today: date | None = None) -> None:
     )
 
 
-def _check_federal_tax_consensus(archive: Path | None) -> None:
+def _check_federal_tax_consensus(
+    archive: Path | None, today: date | None = None
+) -> None:
     """Assert every supplier prints the same federal tax block for a month.
 
     The federal excise and the federal energy contribution are set by law, so
@@ -2082,6 +2129,7 @@ def _check_federal_tax_consensus(archive: Path | None) -> None:
     """
     if archive is None:
         return
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
     residential = [
         row
@@ -2128,12 +2176,18 @@ def _check_federal_tax_consensus(archive: Path | None) -> None:
         if len(top_suppliers) == len(runner_up):
             continue
         for pair, suppliers in ranked[1:]:
+            detail = (
+                f"{region}: excise {pair[0]} + contribution {pair[1]} against "
+                f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
+                f"suppliers ({', '.join(sorted(suppliers))})"
+            )
+            allowed = _tax_block_allowance(suppliers[0], pair[0], pair[1], today)
+            if allowed is not None:
+                detail = f"{_ALLOWED_TAX_MARKER}: {detail}; {allowed}"
             _record(
                 f"{suppliers[0]}/federal tax block disagrees for {month}",
                 False,
-                f"{region}: excise {pair[0]} + contribution {pair[1]} against "
-                f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
-                f"suppliers ({', '.join(sorted(suppliers))})",
+                detail,
                 kind="tax",
             )
 
@@ -3543,6 +3597,7 @@ def _render_report(
     # tell the reader to go looking for a text layer.
     unreadable = [c for c in expected if c.detail.startswith(_UNREADABLE_MARKER)]
     withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
+    allowed = [c for c in expected if c.detail.startswith(_ALLOWED_TAX_MARKER)]
     headline = f"# Live extractor check: {pass_count} pass, {len(regressions)} fail"
     if unreadable:
         # Say it in the headline. A run that reads "0 fail" while the table
@@ -3550,6 +3605,8 @@ def _render_report(
         headline += f", {len(unreadable)} unreadable (expected)"
     if withdrawn:
         headline += f", {len(withdrawn)} withdrawn (expected)"
+    if allowed:
+        headline += f", {len(allowed)} known tax blocks (expected)"
     rows.append(headline)
     rows.append("")
     if regressions:
@@ -3558,6 +3615,27 @@ def _render_report(
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
         for c in regressions:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
+        rows.append("")
+    if allowed:
+        rows.append("## Known tax blocks (expected, not a regression)")
+        rows.append("")
+        rows.append(
+            "These cards print a federal levy that disagrees with the rest of "
+            "the fleet, and each has been looked at: the integration bills both "
+            "federal levies from the law rather than from the card, so no "
+            "household is billed these figures. They are listed because the "
+            "card is still wrong and the supplier may fix it. Each allowance is "
+            "keyed on the exact pair printed, so a supplier that changes either "
+            "figure by a digit files again, and each expires on 2027-01-01, "
+            "when the excise steps down and every card in the country has to be "
+            "reprinted anyway."
+        )
+        rows.append("")
+        rows.append("| Check | Detail |")
+        rows.append("| --- | --- |")
+        for c in allowed:
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
