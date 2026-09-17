@@ -9222,8 +9222,6 @@ async def test_the_signing_card_is_priced_for_the_month_it_was_signed_in(
     would come back on the hourly grid, so the spot layer would fetch the wrong
     product and the tick would price hourly.
     """
-    from dataclasses import replace as _replace
-
     from custom_components.be_electricity_prices import snapshot_store
     from custom_components.be_electricity_prices.cohort import _cohort_legs
     from custom_components.be_electricity_prices.providers.base import TaxOverlay

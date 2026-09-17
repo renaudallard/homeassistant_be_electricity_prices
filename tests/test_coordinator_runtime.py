@@ -6135,8 +6135,6 @@ async def test_the_persistent_blob_holds_the_card_as_parsed(
     would fail to undo: the reload would keep a leg already converted for the
     old answer.
     """
-    from dataclasses import replace as _replace
-
     from custom_components.be_electricity_prices.providers.base import (
         FixedRates,
         TaxOverlay,

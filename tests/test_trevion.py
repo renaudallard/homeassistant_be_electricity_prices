@@ -604,7 +604,10 @@ async def test_settling_a_month_reads_the_listing_once(
 
     monkeypatch.setattr(trevion, "fetch_pdf_text_layout", _render)
     april = await fetch_for_month(
-        object(), "groene_stroom_flex", REGION_FLANDERS, date(2026, 4, 1)
+        object(),  # type: ignore[arg-type]
+        "groene_stroom_flex",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
     )
     assert april is not None
     assert april.injection is not None
