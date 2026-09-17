@@ -9202,3 +9202,64 @@ async def test_a_month_row_is_resolved_on_the_way_out_of_the_cache(
         entry,  # type: ignore[arg-type]
     )
     assert again.taxes == expected.taxes
+
+
+async def test_the_signing_card_is_priced_for_the_month_it_was_signed_in(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The cohort leg is cut from the signing month's card AFTER that card is
+    resolved for that month, which is why ``cohort._cohort_legs`` hands the
+    entry to ``_snapshot_for_month``.
+
+    Every harness here fed it a residential VAT-inclusive card with no tier and
+    no quarter-hour setting, so resolution was the identity and the entry
+    argument could be dropped with the whole suite still green. Checked by
+    dropping it: 1225 tests, none failed.
+
+    What it would cost, since this leg feeds the live tick, the year-to-date,
+    the backfill and the compare page alike: a professional entry would bill the
+    signing card's standing charge ex-VAT, and a quarter-hourly entry's leg
+    would come back on the hourly grid, so the spot layer would fetch the wrong
+    product and the tick would price hourly.
+    """
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from tests import make_entry
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    ex_vat = TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.21)
+    current = make_snapshot(
+        energy=FixedRates(single=0.30, yearly_fixed_fee=200.0), taxes=ex_vat
+    )
+    archived = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=100.0), taxes=ex_vat
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    start = date(2026, 6, 1)
+    entry = make_entry(
+        supplier="test", contract="test", contract_start_date="2026-06-10"
+    )
+    entry.add_to_hass(hass)
+    legs = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        entry,  # type: ignore[arg-type]
+        current,
+    )
+    expected = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+        entry, archived, delivery_month=start
+    )
+    assert legs.energy == expected.energy
+    # Which is the card's 100 EUR/yr grossed, not the 100 it prints.
+    assert isinstance(legs.energy, FixedRates)
+    assert legs.energy.yearly_fixed_fee == pytest.approx(121.0)
