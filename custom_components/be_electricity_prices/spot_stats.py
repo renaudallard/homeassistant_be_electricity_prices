@@ -276,6 +276,16 @@ def _spp_month_mean(
     Weights each price by the Synergrid profile weight for its UTC hour. The
     weights span the whole year, so a boundary hour (local month != UTC month)
     still finds its weight. Returns ``None`` when no weighted hour is available.
+
+    Hourly, and deliberately so, but it is NOT the only definition in the
+    market and must not be "corrected" to quarters. Measured over January to
+    August 2026, this reproduces the Belpex-SPP-M Energy Knights publishes to
+    0,007%, while EBEM's SPP0 and Trevion's Belpex_SPP_BE weight each quarter
+    by its own share and sit about 0,9 EUR/MWh below this in every month.
+    Computing at quarter resolution just swaps which family is wrong. Those two
+    publish their settled value on the following card and are settled on it
+    outright (``InjectionRates.index_realised``), which is why this stays
+    hourly for the suppliers that have no published series to settle against.
     """
     num = 0.0
     den = 0.0

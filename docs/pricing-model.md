@@ -400,12 +400,20 @@ considers any mean. From May 2026 on the two publish identical figures, which is
 makes them the market's numbers rather than one supplier's; over the three
 months before that they differ by up to 1,3 EUR/MWh, so each is settled on its
 own card and never on the other's.
-The mean it replaces is close but biased in one direction: it weights each hour's
-MEAN price by that hour's solar share, while the index weights each quarter by
-its own, and since PV output and the day-ahead price both move inside the hour
-the two do not agree. Over January to August 2026 the computed mean sat about
-0,9 EUR/MWh above the published SPP0 in every single month, worth roughly
-1,8 EUR a year of over-credit at 2.000 kWh injected.
+The mean it replaces is not the same number for these two. It weights each
+hour's MEAN price by that hour's solar share, while both of their indices weight
+each quarter by its own, and since PV output and the day-ahead price both move
+inside the hour the two do not agree. Over January to August 2026 the computed
+mean sat about 0,9 EUR/MWh above both published series in every single month,
+worth roughly 1,8 EUR a year of over-credit at 2.000 kWh injected.
+
+That is a difference in definition, not an error in the mean, and the hourly one
+is not the wrong default: Energy Knights publishes its own settled Belpex-SPP-M
+and the integration's hourly computation reproduces that series to 0,007%.
+Computing every card at quarter resolution would simply move the 0,9 onto
+Essentia. So the resolution is read as a property of the card, the way the RLP
+blend is, and only the suppliers that publish a settled value are settled on
+it.
 
 Both flags live on the parsed snapshot, and the config flow cannot see a
 snapshot before the entry exists. So the registry carries the same fact a

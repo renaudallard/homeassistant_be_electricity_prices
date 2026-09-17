@@ -46,6 +46,12 @@ about 0,9 EUR/MWh above the published one and the energy index 0,19 below, which
 is what settling on the published figures removes. From May 2026 on, Trevion and
 EBEM publish identical values for both indices.
 
+The hourly computation is not simply wrong, though: Energy Knights defines its
+own Belpex-SPP-M on the hourly quotation and the same code reproduces its
+published series to 0,007%. Resolution is a property of the card, so it is not
+changed integration-wide, and only the suppliers that publish a settled value
+are settled on it.
+
 ## Contracts
 
 | Contract id | Product | Kind | Consumption index | Injection |
