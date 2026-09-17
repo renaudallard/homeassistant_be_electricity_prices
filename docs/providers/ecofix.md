@@ -130,6 +130,14 @@ Related reading:
 > daily and reports the ones that drift, which is how a supplier that corrects
 > itself gets noticed. TotalEnergies and Cociter drift the same way.
 >
+> The comparison pages take the same reading rather than reporting the card as
+> unreadable: `_SweepEngine._ocr_fallback` (`compare_flow.py`) asks
+> `card_for_unreadable_month` exactly as the live tick does, on the exception
+> type rather than its message, so only a card with no text layer takes it and
+> a supplier that is merely down still reports as down. The ranking row carries
+> an `OCR` tag and the quote adds a caveat naming the supplier, because a
+> figure someone might switch over must not hide where it came from.
+>
 > Affected users are pointed at the **Expert: custom formula** supplier
 > (`providers/custom.py`), which collects exactly the missing DSO and tax blocks
 > and supports `quarter_hourly`, so Motion is reproduced faithfully. July's card

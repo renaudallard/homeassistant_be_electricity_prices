@@ -711,6 +711,11 @@ class RankedRow:
     ytd: float | None = None
     status: str = ""
     is_own: bool = False
+    # Priced off the card archive's OCR reading, because this supplier
+    # publishes its card as page images and no parser can read one. A price
+    # rather than no price, but a reading, and the row says so: a figure you
+    # might switch supplier over must not hide where it came from.
+    read_by_ocr: bool = False
 
 
 @dataclass(frozen=True)
@@ -825,6 +830,8 @@ def _ranking_table(
             line += f" · {'+' if delta > 0 else ''}{_eur(delta)}"
         if row.ytd is not None:
             line += f" · YTD {_eur(row.ytd)}"
+        if row.read_by_ocr:
+            line += " `OCR`"
         out.append(line)
 
     if unpriced:
@@ -966,7 +973,7 @@ def _vintage_note(
     )
 
 
-def _card_caveats(snapshot: Any, label: str) -> list[str]:
+def _card_caveats(snapshot: Any, label: str, *, read_by_ocr: bool = False) -> list[str]:
     """What one side's card does not say, in the household's own terms.
 
     Separate from ``_uncredited_note``, which explains a missing injection
@@ -978,6 +985,11 @@ def _card_caveats(snapshot: Any, label: str) -> list[str]:
     supplier each caveat belongs to rather than hedging the whole quote.
     """
     out: list[str] = []
+    if read_by_ocr:
+        out.append(
+            f"{label} publishes its card as page images, so this quote is "
+            "priced off the archive's OCR reading of it"
+        )
     # A card whose rate IS the delivery month's index prints one computed from
     # the PREVIOUS month's and says so, worth 8,1% under in May and 15,4% over
     # in February on the energy leg of the 2026 cards. Only the entry's own

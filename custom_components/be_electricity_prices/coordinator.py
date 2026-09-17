@@ -1863,6 +1863,7 @@ def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
                 "ytd": row.ytd,
                 "status": row.status,
                 "is_own": row.is_own,
+                "read_by_ocr": row.read_by_ocr,
             }
             for row in result.rows
         ],
@@ -1923,6 +1924,9 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
                 ytd=None if ytd is None else float(ytd),
                 status=status,
                 is_own=is_own,
+                # Absent from every blob written before the tag existed, and
+                # a ranking restored without it must still render.
+                read_by_ocr=raw.get("read_by_ocr") is True,
             )
         )
     return DailyCompare(

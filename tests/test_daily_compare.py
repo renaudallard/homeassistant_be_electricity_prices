@@ -334,7 +334,9 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
         patch.object(
             cf,
             "_sweep_rows",
-            return_value={("wallonia", "octaplus", "octaplus_fixed_impact"): raw},
+            return_value={
+                ("wallonia", "octaplus", "octaplus_fixed_impact"): (raw, False)
+            },
         ),
     ):
         rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
@@ -449,7 +451,9 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
         patch.object(
             cf,
             "_sweep_rows",
-            return_value={("wallonia", "engie", "engie_easy_fixed"): make_snapshot()},
+            return_value={
+                ("wallonia", "engie", "engie_easy_fixed"): (make_snapshot(), False)
+            },
         ),
     ):
         rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
@@ -1041,3 +1045,70 @@ async def test_a_failed_save_does_not_undo_the_published_ranking(
         await async_run_daily_compare(hass, entry, coord)
 
     assert coord.daily_compare is ranking
+
+
+async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
+    hass: HomeAssistant,
+) -> None:
+    """The live tick answers an unreadable card with the archive's OCR
+    reading, and the ranking did not, so a supplier publishing page images
+    read "card has no text layer" on the one screen that says whether to
+    switch to it. Ecofix's four contracts did exactly that.
+
+    Only for that failure: every other one is a supplier unreachable or
+    broken, where a stale reading would be the wrong answer, which is why the
+    fallback tests the exception type rather than its message.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+        ExtractorError,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    archived = ArchivedCard(snapshot=make_snapshot(), read_by_ocr=True)
+
+    unreadable = SimpleNamespace(
+        error=CardNotReadableError("card has no text layer: 348 characters"),
+        error_message="card has no text layer",
+    )
+    with patch(
+        "custom_components.be_electricity_prices.snapshot_store"
+        ".card_for_unreadable_month",
+        AsyncMock(return_value=archived),
+    ):
+        got = await engine._ocr_fallback(
+            "ecofix", "ecofix_flexy", "flanders", unreadable
+        )
+    assert got is archived
+
+    # A supplier that is simply down gets no stale reading.
+    down = SimpleNamespace(error=ExtractorError("HTTP 503"), error_message="HTTP 503")
+    with patch(
+        "custom_components.be_electricity_prices.snapshot_store"
+        ".card_for_unreadable_month",
+        AsyncMock(side_effect=AssertionError("must not ask the archive")),
+    ):
+        assert await engine._ocr_fallback("bolt", "bolt_fix", "flanders", down) is None
+
+
+def test_a_row_priced_from_a_reading_is_tagged_in_the_ranking() -> None:
+    """A figure someone might switch supplier over must not hide that it was
+    read off a picture of the card. The live entry gets a Repairs card saying
+    so; the ranking row says it inline."""
+    from custom_components.be_electricity_prices.compare_quote import _ranking_table
+
+    rows = (
+        RankedRow(label="Eneco Zon & Wind Flex", annual=1200.0, is_own=True),
+        RankedRow(label="Ecofix Flexy", annual=1100.0, read_by_ocr=True),
+        RankedRow(label="Mega Online Fixed", annual=1150.0),
+    )
+    text = _ranking_table(rows, ran_at=None, deferred=0)
+    ecofix = next(line for line in text.splitlines() if "Ecofix" in line)
+    mega = next(line for line in text.splitlines() if "Mega" in line)
+    assert "`OCR`" in ecofix
+    assert "`OCR`" not in mega

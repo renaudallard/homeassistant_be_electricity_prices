@@ -917,11 +917,12 @@ class _SweepEngine:
             # card share a fetch, so splatting the whole candidate here builds a
             # four-element key that matches nothing and silently skipped every
             # row of the year-to-date pass.
-            snap = (
+            held = (
                 cached.get((sweep["region"], pair[0], pair[1]))
                 if pair is not None
                 else None
             )
+            snap = held[0] if held is not None else None
             if row.annual is None or pair is None or snap is None or not baseline:
                 rows.append(row)
                 continue
@@ -1784,6 +1785,44 @@ class _SweepEngine:
             return None
         return RankedRow(label=label, annual=annual, is_own=True)
 
+    async def _ocr_fallback(
+        self,
+        supplier: str,
+        contract: str,
+        region: str,
+        fetched: Any,
+    ) -> Any:
+        """The archive's OCR reading, for a card no parser can read.
+
+        Only for a card that downloaded fine and carries no text layer, which
+        is what ``CardNotReadableError`` means and why this tests the exception
+        rather than its message. Every other failure is a supplier that is
+        unreachable or broken, and a stale reading would be the wrong answer
+        for those.
+
+        The same helper the live tick uses, so the two pages agree about which
+        month is served and both honour the entry's card-archive box.
+        """
+        from .providers.base import CardNotReadableError
+        from .snapshot_store import card_for_unreadable_month
+
+        if not isinstance(fetched.error, CardNotReadableError):
+            return None
+        try:
+            return await card_for_unreadable_month(
+                async_get_clientsession(self.hass),
+                supplier,
+                contract,
+                region,
+                dt_util.now().date(),
+                self.config_entry,
+            )
+        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this row's problem
+            _LOGGER.debug(
+                "card archive read failed for %s/%s: %s", supplier, contract, err
+            )
+            return None
+
     async def _sweep_one(
         self,
         sweep: dict[str, Any],
@@ -1805,7 +1844,8 @@ class _SweepEngine:
         label = _candidate_label(supplier, contract, quarter_hourly)
         region = sweep["region"]
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
-        snap = cached.get((region, supplier, contract))
+        held = cached.get((region, supplier, contract))
+        snap, read_by_ocr = held if held is not None else (None, False)
         if snap is None:
             # Share one listing memo across every candidate in this sweep.
             # Nine providers resolve a per-supplier listing page inside
@@ -1830,13 +1870,25 @@ class _SweepEngine:
                     record_failure=False,
                 )
             if fetched.row is None:
-                return RankedRow(
-                    label=label,
-                    annual=None,
-                    status=fetched.error_message or "supplier unreachable",
-                )
-            snap = fetched.row.snapshot
-            cached[(region, supplier, contract)] = snap
+                # A card published as page images leaves a parser nothing to
+                # work with, and the live tick answers that by serving the
+                # archive's OCR reading. This page has to do the same or the
+                # supplier shows up as an error on the one screen that says
+                # whether to switch to it: Ecofix's four contracts read
+                # "card has no text layer" where every rival showed a price.
+                archived = await self._ocr_fallback(supplier, contract, region, fetched)
+                if archived is None:
+                    return RankedRow(
+                        label=label,
+                        annual=None,
+                        status=fetched.error_message or "supplier unreachable",
+                    )
+                snap = archived.snapshot
+                read_by_ocr = archived.read_by_ocr
+            else:
+                snap = fetched.row.snapshot
+                read_by_ocr = False
+            cached[(region, supplier, contract)] = (snap, read_by_ocr)
 
         hh = sweep["household"]
         meter, dso_mode, target_entry, resolved = self._target_side(
@@ -1901,7 +1953,7 @@ class _SweepEngine:
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )
-        return RankedRow(label=label, annual=annual)
+        return RankedRow(label=label, annual=annual, read_by_ocr=read_by_ocr)
 
 
 class _CompareStepsMixin(OptionsFlow):
@@ -2423,18 +2475,39 @@ class _CompareStepsMixin(OptionsFlow):
             force=True,
             record_failure=False,
         )
-        if fetched.row is None:
+        archived = (
+            None
+            if fetched.row is not None
+            else await self._engine._ocr_fallback(
+                self._compare[CONF_SUPPLIER],
+                self._compare[CONF_CONTRACT],
+                region,
+                fetched,
+            )
+        )
+        if fetched.row is None and archived is None:
             # Includes the backoff arm, which carries a sibling's recent
             # failure and no exception of its own.
             placeholders["error"] = f"could not fetch quote: {fetched.error_message}"
         else:
+            if archived is not None:
+                # Page images: the archive's OCR reading is the only price
+                # that exists for this month, and the note below says so.
+                other_read_by_ocr = archived.read_by_ocr
+                fetched_snapshot = archived.snapshot
+            else:
+                # Not None here: the branch above covers the failed fetch, so
+                # one of the two always carries a card.
+                assert fetched.row is not None
+                other_read_by_ocr = False
+                fetched_snapshot = fetched.row.snapshot
             other_snap = _resolve_snapshot(
                 _quote_entry(
                     self.config_entry,
                     regime,
                     quarter_hourly=_settlement_of(self._compare),
                 ),
-                fetched.row.snapshot,
+                fetched_snapshot,
             )
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
@@ -2617,7 +2690,9 @@ class _CompareStepsMixin(OptionsFlow):
             )
         if other_snap is not None:
             caveats += _card_caveats(
-                other_snap, _label_for_supplier(self._compare[CONF_SUPPLIER])
+                other_snap,
+                _label_for_supplier(self._compare[CONF_SUPPLIER]),
+                read_by_ocr=other_read_by_ocr,
             )
         vintage = _vintage_note(
             current_snapshot,
@@ -2909,6 +2984,11 @@ def _sweep_rows(
     row, so reopening after changing a household setting re-prices from what
     was already downloaded instead of re-downloading it. The expensive half of
     a sweep is the fetch and the parse; the arithmetic on top is free.
+
+    The value is ``(card, read_by_ocr)``: a supplier publishing page images is
+    priced off the archive's OCR reading, and the row has to say so however
+    many times it is re-priced from this cache, so the two travel together
+    rather than in a second map that can drift from this one.
 
     Keyed by region as well as contract. A household that edits its region
     between two opens is asking about a different market with different DSOs,

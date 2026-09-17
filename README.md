@@ -120,6 +120,14 @@ Each of these has a section of its own further down; this is the scan.
 > card again, because what makes a card unreadable is measured on every fetch
 > rather than held as a flag against the supplier.
 >
+> **The comparison pages use that reading too**, and say so. A supplier whose
+> card cannot be read used to show up as an error on the ranking, which is the
+> one screen that exists to tell you whether to switch to it. Its row is now
+> priced from the same reading your own entry uses and tagged `OCR`, and the
+> one-off quote adds a line naming the supplier and saying where the figure
+> came from. A price you might act on should never hide that it was read off a
+> picture.
+>
 > **Check the taxes against your own card.** The energy formula and the
 > standing charge survive as live text and are read exactly, and the DSO tables
 > read off the image are right: those tariffs are set for the calendar year, so
