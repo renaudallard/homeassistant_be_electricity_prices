@@ -48,6 +48,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 from datetime import date
+from typing import Any
 
 import aiohttp
 
@@ -103,6 +104,13 @@ from .base import (
 # into the number. Either separator, since a re-render can flip the decimal.
 _PREV_INDEX_RE = re.compile(
     r"vorige maand bedroeg deze index\s*(\d+(?:[.,]\d+)?)", re.IGNORECASE
+)
+# The feed-in sibling of the line above, on the same card: "De SPP0 vorige
+# maand bedroeg 79,11 In de simulator van Ebem ...". Bounded the same way,
+# because the sentence that follows it runs straight on and a greedy
+# ``[\d.,]+`` swallows the separator.
+_PREV_SPP_RE = re.compile(
+    r"SPP0 vorige maand bedroeg\s*(\d+(?:[.,]\d+)?)", re.IGNORECASE
 )
 
 _LISTING_URL = "https://www.ebem.be/tarieven/"
@@ -245,6 +253,20 @@ def published_index(text: str) -> float | None:
     return None if match is None else to_float(match.group(1)) / 1000.0
 
 
+def published_spp_index(text: str) -> float | None:
+    """The SPP0 the card says the month before it settled at, in EUR/kWh.
+
+    The feed-in leg's own index, and a different number from
+    :func:`published_index`: the consumption side weights Belpex by the Flemish
+    residential load profile, the credit by the solar production profile, and
+    in August 2026 those were 135,84 and 79,11 EUR/MWh. Trevion publishes the
+    same 79,11 for that month on its own card, which is the cross-check that
+    this is the market's settled figure rather than an EBEM house number.
+    """
+    match = _PREV_SPP_RE.search(text)
+    return None if match is None else to_float(match.group(1)) / 1000.0
+
+
 def _settled_on(
     energy: VariableRates, index: float, factor: float, base: float
 ) -> VariableRates:
@@ -309,9 +331,8 @@ async def _settle_on_published_index(
     a re-render dropped.
     """
     energy = snap.energy
-    if not isinstance(energy, VariableRates):
-        return snap
-    if energy.formula_factor is None or energy.formula_base is None:
+    injection = snap.injection
+    if not _settleable(energy, injection):
         return snap
     following = date(
         year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
@@ -319,13 +340,56 @@ async def _settle_on_published_index(
     found = await _archived_card(session, contract_id, contract, following, html)
     if found is None:
         return replace(snap, provisional=True)
-    index = published_index(found[1])
-    if index is None:
-        return snap
-    return replace(
-        snap,
-        energy=_settled_on(energy, index, energy.formula_factor, energy.formula_base),
-    )
+    changed: dict[str, Any] = {}
+    if (
+        isinstance(energy, VariableRates)
+        and energy.formula_factor is not None
+        and energy.formula_base is not None
+    ):
+        index = published_index(found[1])
+        if index is not None:
+            changed["energy"] = _settled_on(
+                energy, index, energy.formula_factor, energy.formula_base
+            )
+    if injection is not None and injection.spp_indexed:
+        spp = published_spp_index(found[1])
+        if spp is not None:
+            changed["injection"] = _settled_injection(injection, spp)
+    return replace(snap, **changed) if changed else snap
+
+
+def _settleable(energy: EnergyRates, injection: InjectionRates | None) -> bool:
+    """True when either leg could be settled on the following card's figures.
+
+    Asked before that card is fetched, so the dynamic contract, which is
+    indexed on neither, pays for no download and is never flagged provisional
+    because next month is not out yet.
+    """
+    if (
+        isinstance(energy, VariableRates)
+        and energy.formula_factor is not None
+        and energy.formula_base is not None
+    ):
+        return True
+    return injection is not None and injection.spp_indexed
+
+
+def _settled_injection(inj: InjectionRates, index: float) -> InjectionRates:
+    """The feed-in leg recomputed at the SPP0 the month settled at.
+
+    ``current`` is rebuilt from the card's own coefficients, so the printed
+    estimate gives way to the arithmetic EBEM itself invoices, and
+    ``index_realised`` carries the figure so the engine bills it rather than
+    the SPP-weighted mean it would otherwise compute. That mean is close but
+    biased: over January to August 2026 it ran about 0,9 EUR/MWh above the
+    published SPP0 every single month, because it weights the hour's mean
+    price by the hour's solar share while the index weights each quarter by
+    its own, and PV output and the day-ahead price both move inside the hour.
+    A leg with no coefficients keeps its printed figure and records the index.
+    """
+    if inj.factor is None or inj.base is None:
+        return replace(inj, index_realised=index)
+    return replace(inj, current=inj.factor * index + inj.base, index_realised=index)
 
 
 async def probe(

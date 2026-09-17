@@ -592,6 +592,7 @@ def _spp_injection_spot(
     hourly_spot: float | None = None,
     hourly: bool = False,
     strict: bool = False,
+    index_realised: float | None = None,
 ) -> float | None:
     """The spot value to price mean-indexed injection at.
 
@@ -633,7 +634,15 @@ def _spp_injection_spot(
     the rest pass the raw ``historical_spots`` and it is bucketed here on the
     first miss for a month. Shared by the live YTD credit and the backfill
     accrual so the two price mean-indexed injection identically.
+
+    ``index_realised`` is the supplier's own published value of the index for
+    this month, spliced onto the leg from the following month's card. It
+    settles the month exactly, so it short-circuits everything else, the same
+    way ``_month_spot_for`` treats the energy leg's field of that name. Only a
+    month-indexed credit ever carries one.
     """
+    if index_realised is not None:
+        return float(index_realised)
     if hourly:
         return hourly_spot
     if not monthly_mean:

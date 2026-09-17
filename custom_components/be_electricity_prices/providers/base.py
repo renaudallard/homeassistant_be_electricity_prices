@@ -614,6 +614,16 @@ class InjectionRates:
     # one or the other, never both. Either way the coefficients are month
     # coefficients, so the pricing engine must never hand them an hourly spot.
     month_indexed: bool = False
+    # The supplier's own published value of the index this credit is formulated
+    # on, for the ONE delivery month the leg is applied to, in EUR/kWh. EBEM
+    # names the month just closed on the FOLLOWING month's card ("de SPP0
+    # vorige maand bedroeg 79,11"), and that figure is what it invoices, so an
+    # archived month settles on it and no mean is computed here. The energy
+    # leg's field of the same name does the same job for its own index; the two
+    # are different indices (solar-weighted against residential-load-weighted)
+    # and are settled independently. None while the month is still running, or
+    # while the next card is not out yet.
+    index_realised: float | None = None
     # True when the card bills the credit PER SETTLEMENT SLOT whatever the
     # energy leg does, so the printed figure is an illustration rather than the
     # rate. Bolt's fixed and variable cards say it outright: *"Le tableau

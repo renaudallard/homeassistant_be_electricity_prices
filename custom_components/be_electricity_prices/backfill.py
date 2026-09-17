@@ -539,6 +539,9 @@ def _injection_rate_for_hour(
         # mean; without one _historical_injection_rate falls through to the
         # card's printed indicative rather than the energy leg's mean.
         strict=_injection_is_spp_indexed(snap_h),
+        # The month's own settled index when the supplier has published it,
+        # which makes every source below moot.
+        index_realised=getattr(snap_h.injection, "index_realised", None),
         spp_weights=spp_weights,
         historical_spots=spots,
         year=local.year,

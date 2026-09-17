@@ -388,6 +388,21 @@ values to four decimals (March 92,6102 against the card's 92,6114, July
 the solar-weighted sibling for cards that name Belpex_SPP; a card is one or the
 other, never both.
 
+A supplier that publishes its solar-weighted index settles the credit outright,
+the way Eneco's footnote settles the consumption leg. EBEM prints the month just
+closed on every following card ("Voor de injectie is dit op basis van het
+SPP0-lastprofiel. De SPP0 vorige maand bedroeg 79,11"), so `ebem.fetch_for_month`
+carries it on `InjectionRates.index_realised` and rebuilds `current` from the
+card's own coefficients, and `_spp_injection_spot` answers that figure before it
+considers any mean. Trevion publishes the identical 79,11 for August 2026 on its
+own card, which is what makes it the market's number rather than one supplier's.
+The mean it replaces is close but biased in one direction: it weights each hour's
+MEAN price by that hour's solar share, while the index weights each quarter by
+its own, and since PV output and the day-ahead price both move inside the hour
+the two do not agree. Over January to August 2026 the computed mean sat about
+0,9 EUR/MWh above the published SPP0 in every single month, worth roughly
+1,8 EUR a year of over-credit at 2.000 kWh injected.
+
 Both flags live on the parsed snapshot, and the config flow cannot see a
 snapshot before the entry exists. So the registry carries the same fact a
 second time, as `Contract.spot_indexed_injection`, and the two have to agree.

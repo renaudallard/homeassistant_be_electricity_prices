@@ -636,6 +636,9 @@ async def _ytd_hourly_energy(
                 # price. Passing it resolved a month formula per hour.
                 monthly_mean=_injection_on_month_mean(snap_h),
                 strict=_injection_is_spp_indexed(snap_h),
+                # The month's own settled index when the supplier has published
+                # it, which makes every source below moot.
+                index_realised=getattr(snap_h.injection, "index_realised", None),
                 spp_weights=spp_weights,
                 bucket=month_bucket,
                 year=local.year,
@@ -1321,6 +1324,7 @@ async def _compute_current_year_cost(
                 None,
                 monthly_mean=_injection_on_month_mean(snap_d),
                 strict=_injection_is_spp_indexed(snap_d),
+                index_realised=getattr(snap_d.injection, "index_realised", None),
                 spp_weights=spp_weights,
                 bucket=day_bucket,
                 year=day.year,

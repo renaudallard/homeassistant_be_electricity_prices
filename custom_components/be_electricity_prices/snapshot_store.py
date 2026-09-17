@@ -1477,7 +1477,13 @@ class _MigratingStore(Store[dict[str, Any]]):
 # bump that drops them. Measured over the nine archived 2026 cards the
 # estimate was the previous month's settled rate every time, and a 3.500 kWh
 # year-to-date ran 16,55 EUR under after eight months.
-_SNAPSHOT_SCHEMA_VERSION = 61
+# v62: the same EBEM months settle their FEED-IN leg too, on the SPP0 the
+# following card publishes ("de SPP0 vorige maand bedroeg 79,11"), carried on
+# InjectionRates.index_realised. A v61 row holds only the printed estimate and
+# leaves the credit to the SPP-weighted mean computed here, which ran about
+# 0,9 EUR/MWh high in each of the first eight months of 2026 and so over-paid
+# the credit by roughly 1,8 EUR a year at 2.000 kWh injected.
+_SNAPSHOT_SCHEMA_VERSION = 62
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

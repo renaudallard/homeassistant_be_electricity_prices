@@ -619,3 +619,94 @@ def test_the_variable_energy_leg_is_indexed_on_the_delivery_month() -> None:
     assert contracts["ebem_variable"].month_indexed_energy is True
     assert contracts["ebem_basic_plus"].month_indexed_energy is True
     assert contracts["ebem_dynamic"].month_indexed_energy is False
+
+
+def test_fetch_for_month_settles_the_feed_in_leg_on_the_next_cards_spp0() -> None:
+    """The credit is indexed on SPP0, the solar-weighted monthly mean, and the
+    card prints the figure for the month BEFORE it the same way the
+    consumption side does: "de SPP0 vorige maand bedroeg 27,95". So the
+    following month's card settles this month's credit too.
+
+    Until now only the consumption leg was settled and the credit was left to
+    the SPP-weighted mean computed from the spot cache. That mean is close but
+    biased: hour by hour it weights the hour's MEAN price by the hour's solar
+    share, while the published index weights each quarter by its own, and over
+    January to August 2026 it came out about 0,9 EUR/MWh above every published
+    SPP0, always in the same direction. Trevion publishes the identical 79,11
+    for August 2026, so the figure is the market's and not EBEM's.
+
+    The April text here carries a DIFFERENT SPP0 from the May one, so what the
+    assertions separate is the printed estimate from the settled figure.
+    """
+    may_text = _layout(_VARIABLE)
+    april_text = (
+        may_text.replace("mei 2026", "april 2026")
+        .replace("E05", "E04")
+        # March's index, and the indicative April printed from it:
+        # 0,0925 x 19,00 - 1,25 = 0,5075 c/kWh.
+        .replace("bedroeg 27,95", "bedroeg 19,00")
+        .replace("Belpex - 1,25 1,3354", "Belpex - 1,25 0,5075")
+    )
+
+    printed = parse_snapshot("ebem_variable", april_text, "test://v", "2026-04")
+    assert printed.injection is not None
+    assert printed.injection.current == pytest.approx(0.005075)
+    assert printed.injection.index_realised is None
+
+    async def _read(_session: object, url: str, *a: object, **k: object) -> str:
+        return april_text if "-04-2026" in url else may_text
+
+    with patch(
+        "custom_components.be_electricity_prices.providers.ebem.fetch_pdf_text_layout",
+        new=_read,
+    ):
+        april = asyncio.run(
+            fetch_for_month(
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ebem_variable",
+                "flanders",
+                date(2026, 4, 1),
+            )
+        )
+    assert april is not None
+    inj = april.injection
+    assert inj is not None
+    # 27,95 EUR/MWh, the SPP0 the May card publishes for April.
+    assert inj.index_realised == pytest.approx(0.02795)
+    assert inj.factor is not None and inj.base is not None
+    assert inj.current == pytest.approx(inj.factor * 0.02795 + inj.base)
+    # Which is the 1,3354 c/kWh the May card prints, to its own four decimals,
+    # and not the 0,5075 April printed.
+    assert inj.current == pytest.approx(0.013354, abs=5e-7)
+
+
+def test_the_settled_feed_in_index_is_what_the_pricing_engine_bills() -> None:
+    """A settled month must not be re-derived from the spot cache.
+
+    ``_spp_injection_spot`` is the one place the live tick, the year-to-date
+    walk and the backfill all resolve a mean-indexed credit, so the published
+    figure short-circuits it there and all three bill the same number. Without
+    that the field would ride along on the snapshot and change nothing.
+    """
+    from custom_components.be_electricity_prices.spot_stats import _spp_injection_spot
+
+    cache: dict[tuple[int, int, bool], float | None] = {}
+    kwargs: dict[str, object] = {
+        "monthly_mean": True,
+        "spp_weights": {(4, 1, 12): 1.0},
+        "bucket": {},
+        "year": 2026,
+        "month": 4,
+        "today": date(2026, 5, 15),
+        "cache": cache,
+        "strict": True,
+    }
+    # With nothing settled and no usable bucket, a strict SPP formula answers
+    # "no spot" and the caller falls back to the card's printed indicative.
+    assert _spp_injection_spot(None, **kwargs) is None  # type: ignore[arg-type]
+    # With the month settled, that is the number, whatever the cache holds.
+    assert _spp_injection_spot(
+        None,
+        index_realised=0.02795,
+        **kwargs,  # type: ignore[arg-type]
+    ) == pytest.approx(0.02795)
