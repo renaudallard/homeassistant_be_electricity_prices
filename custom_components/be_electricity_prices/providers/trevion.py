@@ -34,8 +34,9 @@ from __future__ import annotations
 
 import re
 from calendar import monthrange
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
+from typing import Any
 
 import aiohttp
 
@@ -72,12 +73,24 @@ from .base import (
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
+    settled_injection,
 )
 
 _LISTING_URL = "https://trevion.be/tariefkaarten/"
 _BASE_URL = "https://trevion.be"
 _NUM = r"[\d.,]+"
 _MONTH = r"(?:januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)"
+_MONTH_NUMBERS = {name: index for index, name in enumerate(_MONTH[4:-1].split("|"), 1)}
+# The settled index a card names, with the month it belongs to: "De laatst
+# gekende waarde is deze van augustus 2026 (79,11 EUR/MWh)". The card prints
+# that sentence twice in the same words, once per parameter, so each reader
+# anchors on its own marker and the gap to it is bounded. Unanchored, the
+# feed-in reader takes the consumption sentence, which is a different index
+# entirely: 135,84 against 79,11 for August 2026.
+_PUBLISHED_INDEX_TAIL = (
+    r".{0,40}?laatst\s+gekende\s+waarde\s+is\s+deze\s+van\s+"
+    rf"({_MONTH})\s+(20\d{{2}})\s*\(\s*(\d+(?:[.,]\d+)?)\s*\u20ac/MWh"
+)
 
 _DSOS = {
     "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
@@ -197,15 +210,80 @@ async def fetch_for_month(
     try:
         url, label = await _find_card(session, contract, year_month)
         text = await fetch_pdf_text_layout(session, url)
-        return archive_validity_check(
+        snap = archive_validity_check(
             parse_snapshot(contract_id, text, url, label), text, year_month
         )
+        # None means the check refused the card, a CDN serving some other
+        # month's file. Nothing to settle, and nothing to serve.
+        if snap is None:
+            return None
+        return await _settle_on_published_indices(session, contract, snap, year_month)
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
         return None
+
+
+async def _settle_on_published_indices(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    snap: SupplierSnapshot,
+    year_month: date,
+) -> SupplierSnapshot:
+    """Bill an archived month at the two indices Trevion publishes for it.
+
+    The monthly card prices both legs on a Belpex mean of the delivery month,
+    which is not known while that month runs: what it prints is the last value
+    published, i.e. the month before. The following month's card names this
+    month's, with the month spelled out, so an archived month takes both
+    figures from it.
+
+    Only the legs that are indexed ask. The fixed and dynamic contracts are
+    settled by neither, so they never pay for the extra card; the monthly one
+    carries an RLP-indexed energy leg and an SPP-indexed credit and takes both.
+    While the following card is not out the month is flagged ``provisional``,
+    so the month cache re-asks after its TTL and the archive walk leaves the
+    row absent rather than filing an estimate as a closed month's fact.
+
+    Both means this replaces are near misses rather than the same number: the
+    card defines each index on "de Belgische kwartierprijzen", the quarter-hour
+    prices, and the integration computes on hourly ones. Over the 2026 months
+    that put the credit's index about 0,9 EUR/MWh high and the energy leg's
+    0,19 low.
+    """
+    energy = snap.energy
+    injection = snap.injection
+    settles_energy = isinstance(energy, SpotMonthlyRates) and energy.rlp_indexed
+    settles_injection = injection is not None and injection.spp_indexed
+    if not settles_energy and not settles_injection:
+        return snap
+    following = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    try:
+        url, _label = await _find_card(session, contract, following)
+        text = await fetch_pdf_text_layout(session, url)
+    except ExtractorError as err:
+        # A timeout or a 5xx says nothing about the month, so let the month
+        # cache retry it rather than freeze an estimate behind it.
+        if is_transient_fetch_error(str(err)):
+            raise
+        return replace(snap, provisional=True)
+    month = date(year_month.year, year_month.month, 1)
+    changed: dict[str, Any] = {}
+    if isinstance(energy, SpotMonthlyRates) and energy.rlp_indexed:
+        found = published_rlp_index(text)
+        # The month is checked, not assumed: a card that skipped a month would
+        # otherwise settle this one on somebody else's index.
+        if found is not None and found[0] == month:
+            changed["energy"] = replace(energy, index_realised=found[1])
+    if injection is not None and injection.spp_indexed:
+        found = published_spp_index(text)
+        if found is not None and found[0] == month:
+            changed["injection"] = settled_injection(injection, found[1])
+    return replace(snap, **changed) if changed else snap
 
 
 async def probe(
@@ -219,33 +297,46 @@ async def probe(
 
 
 def _extract_validity(text: str) -> date | None:
-    months = {
-        name: index
-        for index, name in enumerate(
-            (
-                "januari",
-                "februari",
-                "maart",
-                "april",
-                "mei",
-                "juni",
-                "juli",
-                "augustus",
-                "september",
-                "oktober",
-                "november",
-                "december",
-            ),
-            1,
-        )
-    }
     match = re.search(rf"{_MONTH}\s+(20\d{{2}})", text, re.IGNORECASE)
     if not match:
         return None
     month_name = match.group(0).split()[0].lower()
     year = int(match.group(1))
-    month = months[month_name]
+    month = _MONTH_NUMBERS[month_name]
     return date(year, month, monthrange(year, month)[1])
+
+
+def _published_index(text: str, marker: str) -> tuple[date, float] | None:
+    """The settled value the card names for ``marker``, as ``(month, EUR/kWh)``."""
+    match = re.search(
+        re.escape(marker) + _PUBLISHED_INDEX_TAIL, text, re.IGNORECASE | re.DOTALL
+    )
+    if match is None:
+        return None
+    month = _MONTH_NUMBERS[match.group(1).lower()]
+    return date(int(match.group(2)), month, 1), _number(match.group(3)) / 1000.0
+
+
+def published_rlp_index(text: str) -> tuple[date, float] | None:
+    """The settled Belpex_RLP_VL a card names, which its energy leg bills at."""
+    return _published_index(text, "Belpex_RLP_VL")
+
+
+def published_spp_index(text: str) -> tuple[date, float] | None:
+    """The settled Belpex_SPP_BE a card names, which its credit bills at.
+
+    Trevion prints the month each value belongs to, unlike EBEM's card, which
+    names only "vorige maand". From May 2026 on the two suppliers publish
+    identical figures on both indices (79,11 and 135,84 for August 2026),
+    which is what says these are the market's settled values rather than house
+    numbers; over the three months before that they differ by up to 1,3, so
+    each supplier is still settled on its own published figure.
+
+    The card also says what the value is a mean OF: "het gewogen gemiddelde
+    van de Belgische kwartierprijzen", the quarter-hour prices. A mean
+    computed on hourly ones is a near miss rather than the same number.
+    """
+    return _published_index(text, "Belpex_SPP_BE")
 
 
 def _meter_shared_values(text: str) -> tuple[float, float, float]:

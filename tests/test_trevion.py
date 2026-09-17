@@ -533,3 +533,103 @@ def test_the_formula_reproduces_the_price_the_card_prints(
     got = (snap.energy.factor * spot + snap.energy.base) * 100.0
     # A centime: the card rounds its own printed figure to two decimals.
     assert got == pytest.approx(want, abs=0.01)
+
+
+def _flex_listing(*stamps: str) -> str:
+    return "\n".join(
+        '<a href="/tariefkaarten/'
+        f'Trevion-tariefkaart-Groene-Stroom-Flex-particulier-{stamp}.pdf">card</a>'
+        for stamp in stamps
+    )
+
+
+async def test_fetch_for_month_settles_both_legs_on_the_next_cards_indices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The monthly card prices both legs on a Belpex mean of the delivery
+    month, which is not known while that month runs, so what it prints is the
+    last value published. The following card names this month's, with the month
+    spelled out: "De laatst gekende waarde is deze van april 2026 (85,60
+    EUR/MWh)" for consumption and 29,17 for the feed-in credit.
+
+    Both were left to a mean computed here from the spot cache. That mean is a
+    near miss rather than the same number, because the card defines each index
+    on "de Belgische kwartierprijzen" and the cache is hourly: over the 2026
+    months the credit's index came out about 0,9 EUR/MWh high and the energy
+    leg's 0,19 low.
+    """
+    from custom_components.be_electricity_prices.providers import trevion
+
+    may_text = _layout("trevion_flex_2026-05.pdf")
+    april_text = may_text.replace("mei 2026", "april 2026")
+
+    async def _render(_session: object, url: str, *a: object, **k: object) -> str:
+        return april_text if "202604" in url else may_text
+
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", _render)
+    april = await fetch_for_month(
+        make_text_session(_flex_listing("202604", "202605")),
+        "groene_stroom_flex",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert april is not None
+    energy = april.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.index_realised == pytest.approx(0.0856)
+    inj = april.injection
+    assert inj is not None
+    assert inj.index_realised == pytest.approx(0.02917)
+    assert inj.factor is not None and inj.base is not None
+    assert inj.current == pytest.approx(inj.factor * 0.02917 + inj.base)
+    # A month with a settling card behind it is a fact, not an estimate.
+    assert april.provisional is False
+
+
+async def test_fetch_for_month_flags_a_month_the_next_card_cannot_settle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no following card the printed estimate stands, and the row says so:
+    the month cache re-asks after its TTL and the archive walk leaves it absent
+    rather than filing last month's index as this month's fact."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    monkeypatch.setattr(
+        trevion,
+        "fetch_pdf_text_layout",
+        AsyncMock(return_value=_layout("trevion_flex_2026-05.pdf")),
+    )
+    may = await fetch_for_month(
+        make_text_session(_flex_listing("202605")),
+        "groene_stroom_flex",
+        REGION_FLANDERS,
+        date(2026, 5, 1),
+    )
+    assert may is not None
+    assert may.provisional is True
+    assert may.injection is not None
+    assert may.injection.index_realised is None
+
+
+async def test_a_card_indexed_on_neither_asks_for_no_second_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fixed contract is settled by neither index, so it must not pay for
+    the following month's download, and must never come back provisional
+    because that month is not out yet."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    render = AsyncMock(return_value=_layout(_VAST_APRIL))
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", render)
+    snap = await fetch_for_month(
+        make_text_session(
+            '<a href="/tariefkaarten/'
+            'Trevion-tariefkaart-Groene-energie-VAST-particulier-202604.pdf">c</a>'
+        ),
+        "groene_energie_vast",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert snap is not None
+    assert snap.provisional is False
+    assert render.await_count == 1

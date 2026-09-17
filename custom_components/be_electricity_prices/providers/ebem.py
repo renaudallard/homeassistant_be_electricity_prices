@@ -91,6 +91,7 @@ from .base import (
     TariffKind,
     TaxOverlay,
     VariableRates,
+    settled_injection,
 )
 
 # The index the card's printed rates were computed on, in EUR/MWh. EBEM says
@@ -354,7 +355,7 @@ async def _settle_on_published_index(
     if injection is not None and injection.spp_indexed:
         spp = published_spp_index(found[1])
         if spp is not None:
-            changed["injection"] = _settled_injection(injection, spp)
+            changed["injection"] = settled_injection(injection, spp)
     return replace(snap, **changed) if changed else snap
 
 
@@ -372,24 +373,6 @@ def _settleable(energy: EnergyRates, injection: InjectionRates | None) -> bool:
     ):
         return True
     return injection is not None and injection.spp_indexed
-
-
-def _settled_injection(inj: InjectionRates, index: float) -> InjectionRates:
-    """The feed-in leg recomputed at the SPP0 the month settled at.
-
-    ``current`` is rebuilt from the card's own coefficients, so the printed
-    estimate gives way to the arithmetic EBEM itself invoices, and
-    ``index_realised`` carries the figure so the engine bills it rather than
-    the SPP-weighted mean it would otherwise compute. That mean is close but
-    biased: over January to August 2026 it ran about 0,9 EUR/MWh above the
-    published SPP0 every single month, because it weights the hour's mean
-    price by the hour's solar share while the index weights each quarter by
-    its own, and PV output and the day-ahead price both move inside the hour.
-    A leg with no coefficients keeps its printed figure and records the index.
-    """
-    if inj.factor is None or inj.base is None:
-        return replace(inj, index_realised=index)
-    return replace(inj, current=inj.factor * index + inj.base, index_realised=index)
 
 
 async def probe(

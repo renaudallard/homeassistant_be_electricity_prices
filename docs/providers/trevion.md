@@ -27,6 +27,23 @@ listing, resolves relative links against `https://trevion.be`, and chooses the
 newest month. `fetch_for_month` uses the same catalog with an exact month filter
 and passes the parsed result through `archive_validity_check`.
 
+It then looks one card further and settles the month on the indices that card
+names. Both legs price on a Belpex mean of the delivery month, which is not
+known while the month runs, so a card prints the last value published instead;
+the following one names this month's, with the month spelled out: "De laatst
+gekende waarde is deze van augustus 2026 (79,11 EUR/MWh)". The sentence appears
+twice in the same words, once for `Belpex_RLP_VL` and once for `Belpex_SPP_BE`,
+so each reader is anchored on its own parameter. Only indexed legs ask, so the
+fixed and dynamic contracts pay for no second card, and a month whose following
+card is not out yet comes back `provisional`.
+
+The card also defines both indices on "het gewogen gemiddelde van de Belgische
+kwartierprijzen", the quarter-hour prices, while the integration computes its
+means on hourly ones. Over the 2026 months that put the computed credit index
+about 0,9 EUR/MWh above the published one and the energy index 0,19 below, which
+is what settling on the published figures removes. From May 2026 on, Trevion and
+EBEM publish identical values for both indices.
+
 ## Contracts
 
 | Contract id | Product | Kind | Consumption index | Injection |

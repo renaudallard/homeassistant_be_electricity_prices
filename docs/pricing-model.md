@@ -389,13 +389,17 @@ the solar-weighted sibling for cards that name Belpex_SPP; a card is one or the
 other, never both.
 
 A supplier that publishes its solar-weighted index settles the credit outright,
-the way Eneco's footnote settles the consumption leg. EBEM prints the month just
-closed on every following card ("Voor de injectie is dit op basis van het
+the way Eneco's footnote settles the consumption leg. Two do. Trevion names the
+month in as many words on every card since March 2026, and settles both of its
+legs that way (`docs/providers/trevion.md`). EBEM prints the month just closed
+on every following card ("Voor de injectie is dit op basis van het
 SPP0-lastprofiel. De SPP0 vorige maand bedroeg 79,11"), so `ebem.fetch_for_month`
 carries it on `InjectionRates.index_realised` and rebuilds `current` from the
 card's own coefficients, and `_spp_injection_spot` answers that figure before it
-considers any mean. Trevion publishes the identical 79,11 for August 2026 on its
-own card, which is what makes it the market's number rather than one supplier's.
+considers any mean. From May 2026 on the two publish identical figures, which is what
+makes them the market's numbers rather than one supplier's; over the three
+months before that they differ by up to 1,3 EUR/MWh, so each is settled on its
+own card and never on the other's.
 The mean it replaces is close but biased in one direction: it weights each hour's
 MEAN price by that hour's solar share, while the index weights each quarter by
 its own, and since PV output and the day-ahead price both move inside the hour

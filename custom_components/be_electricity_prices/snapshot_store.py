@@ -1483,7 +1483,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # leaves the credit to the SPP-weighted mean computed here, which ran about
 # 0,9 EUR/MWh high in each of the first eight months of 2026 and so over-paid
 # the credit by roughly 1,8 EUR a year at 2.000 kWh injected.
-_SNAPSHOT_SCHEMA_VERSION = 62
+# v63: Trevion's monthly months settle BOTH legs on the indices its following
+# card names ("de laatst gekende waarde is deze van augustus 2026"), the
+# Belpex_RLP_VL for energy and the Belpex_SPP_BE for the credit. A v62 row was
+# computed from the spot cache on hourly prices, while the card defines both
+# indices on quarter-hour ones.
+_SNAPSHOT_SCHEMA_VERSION = 63
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
