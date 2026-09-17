@@ -9116,3 +9116,89 @@ def test_apply_vat_grosses_the_injection_floor_with_the_rates() -> None:
     assert gross.injection is not None
     assert gross.injection.current == pytest.approx(0.05 * 1.21)
     assert gross.injection.minimum == pytest.approx(0.01 * 1.21)
+
+
+async def test_a_month_row_is_resolved_on_the_way_out_of_the_cache(
+    hass: HomeAssistant,
+) -> None:
+    """A month row must be priced for the month it is a row FOR.
+
+    ``_snapshot_for_month`` caches the card as parsed and resolves on every
+    read, which is what applies VAT, the abolished federal contribution, the
+    flat excise, the excise band, the volume tranche and the settlement grid
+    to that delivery month. Every caller in the package passes ``entry``, so
+    the ``entry is None`` path the other harnesses here take is one production
+    never takes, and the resolve step could be deleted outright with the whole
+    suite still green.
+
+    What that would cost: an August 2026 row would keep the 0,0020417 energy
+    contribution the law abolished on 1 August and the old 0,0503288 excise,
+    about 12,6 EUR a year at 3.500 kWh, billed by the year-to-date sensor, by
+    the backfilled cost series and by the compare page's YTD column alike.
+
+    Asserted against ``_resolve_snapshot`` rather than against literals, so
+    the row tracks whatever that resolver grows next.
+    """
+    from dataclasses import replace as _replace
+
+    from custom_components.be_electricity_prices import snapshot_store
+    from tests import make_entry
+
+    entry = make_entry(supplier="cociter", contract="cociter_variable")
+    entry.add_to_hass(hass)
+    archived = _replace(
+        _archive_snapshot("2026-08"),
+        supplier="cociter",
+        contract="cociter_variable",
+        taxes=_replace(
+            make_snapshot().taxes,
+            federal_excise=0.0503288,
+            energy_contribution=0.0020417,
+        ),
+    )
+
+    async def _fetch(*_args: object, **_kw: object) -> SupplierSnapshot:
+        return archived
+
+    extractor = SupplierExtractor(
+        id="cociter",
+        label="Cociter",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fetch,
+    )
+    _monthly_snapshots(hass).clear()
+    month = date(2026, 8, 1)
+    row = await _snapshot_for_month(
+        hass,
+        MagicMock(),
+        extractor,
+        "cociter_variable",
+        "wallonia",
+        month,
+        _archive_snapshot("current"),
+        entry,  # type: ignore[arg-type]
+    )
+    expected = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+        entry, archived, delivery_month=month
+    )
+    assert row.taxes.energy_contribution == 0.0
+    assert row.taxes == expected.taxes
+    # The CACHED object stays the card as parsed, so the next read resolves
+    # from the same source rather than compounding on its own output.
+    cached = _monthly_snapshots(hass)[
+        ("cociter", "cociter_variable", "wallonia", "2026-08")
+    ]
+    assert cached is not None
+    assert cached.taxes.energy_contribution == pytest.approx(0.0020417)
+    again = await _snapshot_for_month(
+        hass,
+        MagicMock(),
+        extractor,
+        "cociter_variable",
+        "wallonia",
+        month,
+        _archive_snapshot("current"),
+        entry,  # type: ignore[arg-type]
+    )
+    assert again.taxes == expected.taxes
