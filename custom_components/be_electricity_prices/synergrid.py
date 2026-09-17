@@ -35,9 +35,13 @@ Synergrid publishes it as a public, no-login workbook at
 ``synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx``.
 The file is ~52 MB, almost entirely the ex-post sheet, which we never touch: we
 stream the download to a temp file and parse only the ex-ante sheet (a few MB of
-XML) with the stdlib, keeping peak memory around 20 MB. Only the ex-ante
-(forecast) profile is available for the running year; the realized ex-post lags,
-so an SPP-weighted average from this file is close but not the settled value.
+XML) with the stdlib, keeping peak memory around 20 MB. The ex-post half lags by
+about a year (the 2026 file stops in 2025S1), and that costs nothing: the
+suppliers' own settled indices are computed on the ex-ante profile too, and
+weighting it against the hourly day-ahead reproduces the Belpex-SPP-M Energy
+Knights publishes to 0,007% over January to August 2026. Where a published index
+disagrees it is over resolution, not profile vintage: see
+``spot_stats._spp_month_mean``.
 
 ``fetch_spp_weights`` returns hourly-aggregated weights keyed by the UTC
 ``(month, day, hour)`` so they line up with the coordinator's hourly spot cache.

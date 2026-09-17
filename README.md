@@ -208,8 +208,12 @@ month closes. For injection, the monthly-average mode offers an optional
 and weights the monthly day-ahead mean by it (as SPP-indexed contracts do) instead
 of a plain average — much closer for a solar prosumer, since the plain mean
 over-credits injection by weighting the cheap midday hours the same as the rest.
-It uses the published *ex-ante* (forecast) profile, so it is close to but not
-exactly the settled SPP value, and it falls back to the plain mean if the profile
+It uses the published *ex-ante* profile, which is the one the suppliers' own
+settled indices are computed on: measured over January to August 2026 this
+reproduces the Belpex-SPP-M Energy Knights publishes to 0,007%. Two suppliers
+weight the quarter-hour prices instead of the hourly ones and so publish a value
+about 0,9 EUR/MWh lower; their contracts are settled on the figure their own card
+prints rather than on this mean. It falls back to the plain mean if the profile
 can't be fetched.
 
 ### How often the integration polls
