@@ -586,6 +586,32 @@ async def test_fetch_for_month_settles_both_legs_on_the_next_cards_indices(
     assert april.provisional is False
 
 
+async def test_settling_a_month_reads_the_listing_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both months are listed on the same page, so it is fetched once and both
+    are resolved out of it. Asking twice is a round trip that buys nothing, on
+    the walk that already costs one extra PDF per month."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    may_text = _layout("trevion_flex_2026-05.pdf")
+    april_text = may_text.replace("mei 2026", "april 2026")
+    listing = AsyncMock(return_value=_flex_listing("202604", "202605"))
+    monkeypatch.setattr(trevion, "fetch_text", listing)
+
+    async def _render(_session: object, url: str, *a: object, **k: object) -> str:
+        return april_text if "202604" in url else may_text
+
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", _render)
+    april = await fetch_for_month(
+        object(), "groene_stroom_flex", REGION_FLANDERS, date(2026, 4, 1)
+    )
+    assert april is not None
+    assert april.injection is not None
+    assert april.injection.index_realised == pytest.approx(0.02917)
+    assert listing.await_count == 1
+
+
 async def test_fetch_for_month_flags_a_month_the_next_card_cannot_settle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

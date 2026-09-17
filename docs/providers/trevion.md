@@ -23,8 +23,10 @@ Read this with [the provider framework](../provider-framework.md) and
 | PDF reader | `fetch_pdf_text_layout` (`pdfplumber`) |
 
 The filenames end in `YYYYMM.pdf` or `YYYYMM-N.pdf`. `_find_card` scrapes the
-listing, resolves relative links against `https://trevion.be`, and chooses the
-newest month. `fetch_for_month` uses the same catalog with an exact month filter
+listing and hands it to `_resolve_card`, which resolves relative links against
+`https://trevion.be` and chooses the newest month, or the one asked for. The
+split exists so a month and the card that settles it come out of one fetch of
+the page both are listed on. `fetch_for_month` uses the same catalog with an exact month filter
 and passes the parsed result through `archive_validity_check`.
 
 It then looks one card further and settles the month on the indices that card

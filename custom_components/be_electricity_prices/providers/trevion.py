@@ -158,7 +158,18 @@ def _card_url(path: str) -> str:
 async def _find_card(
     session: aiohttp.ClientSession, contract: _ContractDef, month: date | None = None
 ) -> tuple[str, str]:
-    html = await fetch_text(session, _LISTING_URL)
+    return _resolve_card(await fetch_text(session, _LISTING_URL), contract, month)
+
+
+def _resolve_card(
+    html: str, contract: _ContractDef, month: date | None = None
+) -> tuple[str, str]:
+    """The card URL and label for ``month`` out of an already-fetched listing.
+
+    Split from the fetch so that settling a month on the next month's card
+    costs one PDF and not a second round trip for the page both months are
+    listed on, which is the discipline ``ebem._archived_card`` keeps.
+    """
     matches = _archive_re(contract).findall(html)
     if not matches:
         raise ExtractorError(f"Trevion: no card found for {contract.id}")
@@ -208,7 +219,8 @@ async def fetch_for_month(
     if contract is None or region != REGION_FLANDERS:
         return None
     try:
-        url, label = await _find_card(session, contract, year_month)
+        html = await fetch_text(session, _LISTING_URL)
+        url, label = _resolve_card(html, contract, year_month)
         text = await fetch_pdf_text_layout(session, url)
         snap = archive_validity_check(
             parse_snapshot(contract_id, text, url, label), text, year_month
@@ -217,7 +229,9 @@ async def fetch_for_month(
         # month's file. Nothing to settle, and nothing to serve.
         if snap is None:
             return None
-        return await _settle_on_published_indices(session, contract, snap, year_month)
+        return await _settle_on_published_indices(
+            session, contract, snap, year_month, html
+        )
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
@@ -231,6 +245,7 @@ async def _settle_on_published_indices(
     contract: _ContractDef,
     snap: SupplierSnapshot,
     year_month: date,
+    html: str,
 ) -> SupplierSnapshot:
     """Bill an archived month at the two indices Trevion publishes for it.
 
@@ -263,7 +278,7 @@ async def _settle_on_published_indices(
         year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
     )
     try:
-        url, _label = await _find_card(session, contract, following)
+        url, _label = _resolve_card(html, contract, following)
         text = await fetch_pdf_text_layout(session, url)
     except ExtractorError as err:
         # A timeout or a 5xx says nothing about the month, so let the month
