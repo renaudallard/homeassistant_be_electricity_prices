@@ -580,3 +580,42 @@ def test_basic_plus_keeps_no_band_formulas() -> None:
     assert energy.formula_factor_peak is None
     assert energy.formula_factor_offpeak is None
     assert energy.formula_factor_exclusive_night is None
+
+
+def test_the_variable_energy_leg_is_indexed_on_the_delivery_month() -> None:
+    """EBEM's card states the delivery month's index is not known while the
+    month runs, prints its price columns as "GESCHATTE", and gives the month
+    just closed. So the printed rate is the formula at the PREVIOUS month, and
+    for the running month the delivery month's own weighted mean is the better
+    estimate of what will be billed: 15,62 EUR/MWh from it on average against
+    1,61 for the blend, about 64 EUR a year at 3.500 kWh against 7.
+
+    The printed figure survives as ``current``, which is what an entry with no
+    ENTSO-E key is billed, and a closed month never uses either: the following
+    card publishes what the month actually settled at.
+
+    The blend is the one value here that is a fit rather than a settlement,
+    pinned so a later change to it is a decision rather than a drift.
+    """
+    for cid, row in (
+        ("ebem_variable", "Enkelvoudige teller"),
+        ("ebem_basic_plus", "Verbruik alle uren"),
+    ):
+        energy = parse_snapshot(cid, _layout(_VARIABLE), "u", "2026-05").energy
+        assert isinstance(energy, VariableRates), cid
+        assert energy.month_indexed is True, cid
+        assert energy.rlp_indexed is True, cid
+        assert energy.rlp_blend == "flanders", cid
+        # The card's own printed estimate is kept as the keyless fallback.
+        assert energy.current == pytest.approx(
+            0.123363 if cid == "ebem_variable" else 0.121243
+        ), cid
+        assert energy.formula_factor is not None and energy.formula_base is not None
+        assert row in _layout(_VARIABLE)
+
+    # And the registry agrees, which is what offers the key in the config flow
+    # and engages the re-price: the two halves have drifted apart before.
+    contracts = {c.id: c for c in EXTRACTORS["ebem"].contracts}
+    assert contracts["ebem_variable"].month_indexed_energy is True
+    assert contracts["ebem_basic_plus"].month_indexed_energy is True
+    assert contracts["ebem_dynamic"].month_indexed_energy is False

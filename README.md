@@ -368,8 +368,8 @@ formula** supplier, which has no card and asks for the whole set.
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Cociter Variable
    and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
-   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, every
-   Mega Flex and Off-peak Impact card — and on
+   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, EBEM
+   Groen Variabel and B@sic+, every Mega Flex and Off-peak Impact card — and on
    the injection regime for a contract whose injection is itself
    index-linked, which is most static cards and not the handful it once was
    — every Bolt card and both Cociter variable cards index it per hour, while
@@ -479,7 +479,8 @@ re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Cociter
 Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and
 SmartFlex, OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex
-One, every Mega Flex and Off-peak Impact card). Both stay off without a key rather than failing the entry — the
+One, EBEM Groen Variabel and B@sic+, every Mega Flex and Off-peak Impact
+card). Both stay off without a key rather than failing the entry — the
 injection price goes unavailable, and the re-price keeps the card's printed
 figure, which is the previous month's. The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:

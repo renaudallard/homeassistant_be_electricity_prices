@@ -79,6 +79,7 @@ from ._pdf import (
 )
 from .base import (
     Contract,
+    RlpBlend,
     DsoOverlay,
     DynamicRates,
     EnergyRates,
@@ -529,6 +530,9 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             formula=f"({factor_pdf} BelpexRLP0 + {base_pdf_cents}) c€/kWh ex-VAT",
             formula_factor=f_factor,
             formula_base=f_base,
+            month_indexed=True,
+            rlp_indexed=True,
+            rlp_blend=_RLP_BLEND,
         )
 
     # ebem_variable: parse all four meter-type rows. Mirror the dynamic +
@@ -589,6 +593,9 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         formula_base_offpeak=offpeak_pair[1],
         # A separate night circuit is its own row on this card, not the
         # off-peak one; they coincide numerically and are distinct contracts.
+        month_indexed=True,
+        rlp_indexed=True,
+        rlp_blend=_RLP_BLEND,
         formula_factor_exclusive_night=night_pair[0],
         formula_base_exclusive_night=night_pair[1],
     )
@@ -851,6 +858,25 @@ _EBEM_REGIONS = frozenset({REGION_FLANDERS})
 # path falls back to the card's printed figure. See
 # ``Contract.spot_indexed_injection``.
 _MONTH_INDEXED_INJECTION = frozenset({"ebem_variable", "ebem_basic_plus"})
+# The same two on the CONSUMPTION side: their card states the delivery month's
+# index is not known while the month runs, prints "GESCHATTE" columns computed
+# from the month before, and the following card names what the month closed at.
+_MONTH_INDEXED_ENERGY = _MONTH_INDEXED_INJECTION
+# Which blend the running month is estimated on, and the one value on this card
+# that is a FIT rather than a settlement. EBEM weights "het gemiddelde van de
+# RLP's in Vlaanderen van Synergrid", and none of the three blends reproduces
+# the index it publishes: measured against the eight settled months of 2026,
+# the mean absolute error is 2,40 EUR/MWh on the distinct curve, 1,80 on the
+# columns one and 1,61 here, every blend under-stating in every month, and
+# weighting at quarter-hour resolution rather than hourly moves it by a tenth
+# of that. So this is the closest of the three, not EBEM's own construction.
+#
+# It is still worth having: the printed figure this replaces is the PREVIOUS
+# month's index, 15,62 EUR/MWh from the delivered one on average, so the live
+# rate goes from about 64 EUR/year out at 3.500 kWh to about 7. A closed month
+# never uses it, because the following card publishes what the month actually
+# settled at and that overrides everything.
+_RLP_BLEND: RlpBlend = "flanders"
 
 
 EXTRACTOR = SupplierExtractor(
@@ -864,6 +890,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=_EBEM_REGIONS,
             spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
+            month_indexed_energy=c.contract_id in _MONTH_INDEXED_ENERGY,
         )
         for c in _CONTRACTS
     ),

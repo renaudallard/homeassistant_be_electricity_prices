@@ -657,6 +657,16 @@ resolved against Synergrid's RLP profile in the blend it names (see the data
 sources, Part 3): Eneco's Belpex-RLP-M against the equal mean of the three
 distinct regional curves, Energy Knights Essentia against the Fluvius curve
 alone, each reproducing its own supplier's published 2026 values to the cent.
+EBEM Groen Variabel and B@sic+ are the exception that proves the rule: they name
+the same weighting in the same words and NO blend reproduces the index they
+publish, so theirs is a fit rather than a settlement. Measured against the eight
+settled months of 2026 the mean absolute error is 2,40 EUR/MWh on the distinct
+curve, 1,80 on the column-weighted one and 1,61 on the Fluvius one, every blend
+under-stating in every month, and weighting at quarter-hour resolution instead
+of hourly moves that by a tenth. The closest is used, because the figure it
+replaces is the previous month's index and 15,62 EUR/MWh out on average, and
+because a closed EBEM month never reaches it: the following card publishes what
+the month settled at (`ebem.py`).
 energie.be Variabel against the column-weighted mean, every DSO sub-area counting
 once, which is how it publishes the same phrase Eneco reads as the distinct
 mean. Each blend was settled against the supplier's own published table rather

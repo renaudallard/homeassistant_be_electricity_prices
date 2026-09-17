@@ -265,6 +265,16 @@ extractor surfaces column 2 (incl-VAT per-kWh at last month's Belpex) as
 `current`, which is what the live card can honestly say: EBEM states that the
 delivery month's index is not known while the month runs.
 
+For the RUNNING month that is the best the card offers, but not the best that
+exists: the delivery month's own load-weighted mean is 1,61 EUR/MWh from what
+the month settles at on average, where the printed figure is 15,62, about 7 EUR
+a year at 3.500 kWh against 64. So both contracts carry `month_indexed` and
+`rlp_indexed` and the running month resolves against the Fluvius blend, with the
+printed figure kept as the fallback for an entry with no ENTSO-E key. That blend
+is a FIT, not a settlement: no blend reproduces EBEM's published index and every
+one under-states it (see
+[../pricing-model.md](../pricing-model.md#spot-monthly-factor-monthly_meanspot-base)).
+
 It is not what a CLOSED month is billed at. The card of the following month
 names what the month just closed settled at ("vorige maand bedroeg deze index
 135,84"), and `_settle_on_published_index` (`ebem.py`) rebuilds every register
