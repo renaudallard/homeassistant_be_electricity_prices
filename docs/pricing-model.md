@@ -672,16 +672,25 @@ resolved against Synergrid's RLP profile in the blend it names (see the data
 sources, Part 3): Eneco's Belpex-RLP-M against the equal mean of the three
 distinct regional curves, Energy Knights Essentia against the Fluvius curve
 alone, each reproducing its own supplier's published 2026 values to the cent.
-EBEM Groen Variabel and B@sic+ are the exception that proves the rule: they name
-the same weighting in the same words and NO blend reproduces the index they
-publish, so theirs is a fit rather than a settlement. Measured against the eight
-settled months of 2026 the mean absolute error is 2,40 EUR/MWh on the distinct
-curve, 1,80 on the column-weighted one and 1,61 on the Fluvius one, every blend
-under-stating in every month, and weighting at quarter-hour resolution instead
-of hourly moves that by a tenth. The closest is used, because the figure it
-replaces is the previous month's index and 15,62 EUR/MWh out on average, and
-because a closed EBEM month never reaches it: the following card publishes what
-the month settled at (`ebem.py`).
+EBEM Groen Variabel and B@sic+ name the Fluvius curve in as many words, "het
+gemiddelde van de RLP's in Vlaanderen van Synergrid", and the workbook says
+those are one curve: all eight Flemish columns carry identical values, against
+one shared Walloon curve and one for Brussels. So the blend is settled by the
+wording, and what was left was the RESOLUTION. Against the eight published 2026
+values the Fluvius curve at quarter-hour resolution has a mean absolute error of
+0,002 EUR/MWh, which is every month reproduced exactly; the same curve on hourly
+prices is 0,19 low, the column-weighted one 0,71 and the equal mean of the three
+curves 1,87.
+
+Resolution is a property of the card, not a better way to compute. Eneco's
+Belpex-RLP-M goes the other way: the hourly computation reproduces its eight
+published values to the cent, and the quarter-hour one misses each by 0,08 to
+0,21. Each supplier weights the quotation it contracts on, and the integration
+keeps the hourly form for both. The 0,19 EUR/MWh EBEM loses by it is worth about
+0,02 c/kWh and reaches only the RUNNING month, because a closed EBEM month is
+settled outright on the figure the following card publishes (`ebem.py`); the
+estimate that figure replaces is the previous month's index, 15,62 EUR/MWh out
+on average, which is the error that actually mattered.
 energie.be Variabel against the column-weighted mean, every DSO sub-area counting
 once, which is how it publishes the same phrase Eneco reads as the distinct
 mean. Each blend was settled against the supplier's own published table rather
