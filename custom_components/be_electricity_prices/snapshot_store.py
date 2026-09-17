@@ -1511,14 +1511,26 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # its default is not a changed card either, and would have cost a commit
 # per row. So a field at its default is left out, and only a card that sets
 # it carries it: those rows are new cards no earlier version asks for.
-_INJECTION_OPTIONAL_KEYS = ("bi_hourly",)
+# ``index_realised`` joined the list when the EBEM and Trevion settlements
+# added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
+# and every one of them would have been rewritten with the field at null.
+_INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised")
 _INJECTION_FIELDS = frozenset(f.name for f in fields(InjectionRates))
+_INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 
 
 def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
+    """The leg as a row, without the optional fields it does not use.
+
+    A field is left out when it still holds its dataclass DEFAULT, not when
+    it is merely falsy. The difference matters for ``index_realised``: a month
+    whose index settled at exactly 0 EUR/MWh is a settled month, and dropping
+    that row's field would send the pricing engine back to computing a mean
+    for a month the supplier has already published.
+    """
     data = dict(inj.__dict__)
     for key in _INJECTION_OPTIONAL_KEYS:
-        if not data.get(key):
+        if data.get(key) == _INJECTION_DEFAULTS[key]:
             data.pop(key, None)
     return data
 
