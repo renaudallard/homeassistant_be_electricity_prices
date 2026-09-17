@@ -1178,8 +1178,25 @@ maintainer.
 
 ## Local dev commands before committing
 
-Run the same five gates the `test.yml` job runs, from the repo root, before committing. These are
-the exact invocations derived from `.github/workflows/test.yml`:
+`scripts/gate.sh` runs all of them in one go and is what to use before a push:
+
+```
+scripts/gate.sh                     # the whole suite, about 22 minutes on a Pi
+scripts/gate.sh tests/test_ebem.py  # one file, for a quick pass
+```
+
+It checks a throwaway git worktree of HEAD rather than the working tree. The gate is what protects
+a push and takes twenty minutes, so it reads files that are still being edited: two runs were
+voided that way on 2026-09-17, one by a test file changing under pytest and one by a commit
+shifting the lines an `inspect`-based test reads, and both looked green until the next run
+disagreed. Editing while it runs now cannot reach it, and what it verifies is what a push would
+publish. The consequence is that uncommitted work is NOT tested: commit first, then gate. The
+interpreter, `tmp/actionlint` and the installed plugins come from the real tree, since the
+worktree holds tracked files only; without the actionlint binary that one check is skipped and
+says so.
+
+The individual invocations, derived from `.github/workflows/test.yml`, if you would rather run
+one by hand:
 
 ```
 ruff check .
