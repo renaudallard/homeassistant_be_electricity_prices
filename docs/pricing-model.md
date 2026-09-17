@@ -240,6 +240,14 @@ of the window the card is read as before. A schedule left to go stale would be
 worse than the bug it fixes, and the live check's consensus row is what says a
 step has landed.
 
+Lapsing quietly is the failure mode that costs money, so the check asks for the
+window before it closes: `_check_excise_window` (`scripts/live_check.py`) is
+silent until eight weeks out, then reports a tax row naming the constants to
+move and the announced next rate, and keeps reporting after the date has passed,
+which is when the protection is actually gone. Nothing in the code can know the
+next rate, so it asks a person, the same way the archive workflow warns before
+its upload token expires.
+
 ### Degressive federal excise
 
 The federal special excise is normally one rate, but a card may print it as a

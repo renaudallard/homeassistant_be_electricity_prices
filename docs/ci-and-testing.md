@@ -1024,6 +1024,12 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 
+The tax report carries two kinds of row: a supplier whose federal block disagrees with the
+month's consensus (`_check_federal_tax_consensus`), and the standing request to extend the
+excise window before it lapses (`_check_excise_window`, silent until eight weeks out). Both are
+supplier- or maintainer-side rather than a break here, which is why they share a thread and fail
+no pull request.
+
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
 which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A

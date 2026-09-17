@@ -2034,6 +2034,41 @@ def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
     assert "0.0503288" in check.detail and "0.04876" in check.detail
 
 
+def test_the_excise_window_asks_to_be_extended_before_it_lapses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`resolve_federal_excise` bills the law's rate instead of a stale card's
+    copy, but only inside a window, because the taxshift steps the rate down
+    every January and encoding a rate before it is in force would bill a
+    prediction. Past the window every card is read as printed again, which
+    silently re-opens the hole a stale card leaves.
+
+    Nothing in the code can know the next rate, so it asks a person, the way
+    the archive workflow warns before its upload token expires. Quiet until the
+    lapse is in sight, then it keeps asking, including after the date has
+    passed, since that is when the protection is actually gone.
+    """
+    monkeypatch.setattr(lc, "_EXCISE_KNOWN_UNTIL", (2027, 1))
+    for day in (date(2026, 9, 17), date(2026, 11, 5)):
+        lc.CHECKS.clear()
+        lc._check_excise_window(day)
+        assert lc.CHECKS == [], day
+    for day, expected in (
+        (date(2026, 11, 20), "in 42 days"),
+        (date(2027, 1, 15), "14 days ago"),
+    ):
+        lc.CHECKS.clear()
+        lc._check_excise_window(day)
+        (check,) = lc.CHECKS
+        assert not check.ok, day
+        assert check.kind == "tax", day
+        assert expected in check.detail, day
+        # The row has to say what to change, or it is a reminder with no
+        # instructions eight weeks after anyone remembered why.
+        assert "FEDERAL_EXCISE_KNOWN_UNTIL" in check.detail
+        assert "45,58" in check.detail
+
+
 def test_a_tax_disagreement_is_reported_apart_from_the_product_catalogue(
     tmp_path: Path,
 ) -> None:
