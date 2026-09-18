@@ -49,9 +49,11 @@ from homeassistant.util import dt as dt_util
 
 from .base import (
     CardNotReadableError,
+    DsoOverlay,
     ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
+    brussels_sibelga_overlay,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -985,6 +987,46 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
         if tier is not None:
             out[tier] = to_float(match.group("value"))
     return out or None
+
+
+def parse_sibelga_row(text: str) -> DsoOverlay | None:
+    """Build the Brussels overlay from the eight-column Sibelga row.
+
+    Layout, which Engie's French card and EnergyVision's Dutch Brusol card
+    print identically:
+
+        distribution Normal | Pleines | Creuses | Excl Nuit (c€/kWh) |
+        metering (€/an) | power term <=13kVA (€/an) |
+        power term >13kVA (€/an) | Transport (c€/kWh)
+
+    Returns None when the row is absent, leaving the caller to decide
+    whether that is a card without a Brussels table or a drift to refuse.
+
+    Not every Brussels card uses this layout: TotalEnergies prints seven
+    columns and puts the power term on its own "Terme de puissance mise a
+    disposition" line, so it keeps its own reader rather than being bent
+    into this one.
+    """
+    row = numeric_row(text, "SIBELGA", 8)
+    if not row:
+        return None
+    nums = [to_float(value) for value in row]
+    # A residential <=13kVA Brussels connection is billed both the metering
+    # fee (nums[4]) and the Sibelga <=13kVA power term (nums[5]). Brussels
+    # has no separate capacity charge (capacity is Flanders-only), so fold
+    # both flat annual euros into the DSO fee.
+    return brussels_sibelga_overlay(
+        mono=nums[0],
+        peak=nums[1],
+        offpeak=nums[2],
+        excl_night=nums[3],
+        transport=nums[7],
+        # Columns 5 and 6 are the power term's two bands, at or below
+        # 13 kVA and above it; the metering fee (4) is billed either way.
+        data_management_per_year=nums[4] + nums[5],
+        power_term_above_13kva=nums[4] + nums[6],
+        osp_by_tier=parse_brussels_osp(text),
+    )
 
 
 # Full month names in calendar order (index 0 == January). The single

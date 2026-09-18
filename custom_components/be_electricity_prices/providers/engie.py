@@ -86,7 +86,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     numeric_row,
-    parse_brussels_osp,
+    parse_sibelga_row,
     parse_sign,
     parse_valid_until,
     tier_bound_kwh,
@@ -107,7 +107,6 @@ from .base import (
     TaxOverlay,
     TimeOfUseRates,
     VariableRates,
-    brussels_sibelga_overlay,
     fixed_or_variable_rates,
     walloon_dso_overlay,
 )
@@ -1282,34 +1281,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
-    """Read the Sibelga row.
+    """Read the Sibelga row off the eight-column table Engie prints.
 
-    Layout: distribution Normal | Pleines | Creuses | Excl Nuit (c€/kWh) |
-            Activité de mesure (€/an) | Puissance ≤13kVA (€/an) |
-            Puissance >13kVA (€/an) | Transport (c€/kWh)
+    A card that does not carry the row yields no Brussels overlay, which is
+    what this did before the row reader moved into ``_pdf``.
     """
-    row = numeric_row(text, "SIBELGA", 8)
-    if not row:
-        return {}
-    nums = [to_float(value) for value in row]
-    # A residential <=13kVA Brussels connection is billed both the metering
-    # fee (Activite de mesure, nums[4]) and the Sibelga <=13kVA power term
-    # (nums[5]). Brussels has no separate capacity charge (capacity is
-    # Flanders-only), so fold both flat annual euros into the DSO fee.
-    return {
-        DSO_SIBELGA: brussels_sibelga_overlay(
-            mono=nums[0],
-            peak=nums[1],
-            offpeak=nums[2],
-            excl_night=nums[3],
-            transport=nums[7],
-            # Columns 5 and 6 are the power term's two bands, at or below
-            # 13 kVA and above it; the mesure fee (4) is billed either way.
-            data_management_per_year=nums[4] + nums[5],
-            power_term_above_13kva=nums[4] + nums[6],
-            osp_by_tier=parse_brussels_osp(text),
-        )
-    }
+    overlay = parse_sibelga_row(text)
+    return {} if overlay is None else {DSO_SIBELGA: overlay}
 
 
 _LETTER_TO_REGION = {_V: REGION_FLANDERS, _W: REGION_WALLONIA, _B: REGION_BRUSSELS}
