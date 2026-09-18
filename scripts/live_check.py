@@ -1309,7 +1309,19 @@ async def _check_energyvision(
                 snap.taxes.vat_rate == 0.0,
                 detail=str(snap.taxes),
             )
-            _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+            _validate_snapshot(
+                prefix,
+                cid,
+                snap,
+                require_capacity=_CAPACITY_REQUIRED,
+                # The Walloon card of the tiered product prints "Frais fixes
+                # 0 €/an" where the Flemish and Brussels ones charge 50, so
+                # the floor is dropped for that region alone. The extractor
+                # raises on a missing row, so a zero here was read.
+                no_standing_charge=(
+                    region == "wallonia" and cid == "energyvision_tiered_1800"
+                ),
+            )
             if contract.kind == "spot_monthly":
                 _check_energyvision_tier(
                     prefix,
@@ -3112,17 +3124,27 @@ def _validate_snapshot(
     *,
     injection_shape: str | None = None,
     require_capacity: frozenset[str] = frozenset(),
+    no_standing_charge: bool = False,
 ) -> None:
     """Validate the energy rates and the injection coverage/shape of one
     fetched snapshot. Called by every ``_check_*`` after its
     supplier-specific DSO / tax assertions. ``injection_shape`` overrides
     the per-contract default (used for region-dependent cases like
-    DATS 24, whose Wallonia card pays no feed-in)."""
+    DATS 24, whose Wallonia card pays no feed-in), and
+    ``no_standing_charge`` does the same for the abonnement floor, which
+    the ``_NO_STANDING_CHARGE`` allowlist can only answer per contract:
+    EnergyVision's 1.800 kWh card charges 50 EUR/yr in Flanders and
+    Brussels and nothing in Wallonia."""
     _expect_card_period(prefix, contract_id, snap)
     # For every supplier, not the three that used to ask for it at their own
     # call sites: the levy is federal and the unit slip it catches is not.
     _expect_energy_contribution(prefix, getattr(snap, "taxes", None))
-    _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
+    _validate_energy(
+        prefix,
+        contract_id,
+        getattr(snap, "energy", None),
+        no_standing_charge=no_standing_charge,
+    )
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
@@ -3327,7 +3349,9 @@ def _expect_registers(prefix: str, energy: object) -> None:
         )
 
 
-def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
+def _validate_energy(
+    prefix: str, contract_id: str, energy: object, *, no_standing_charge: bool = False
+) -> None:
     # The supplier's standing charge, on every rate shape. The floor is the
     # half that pays: the field defaults to 0,0, so an anchor that stops
     # matching after a re-render drops the whole abonnement in silence. Bounds
@@ -3339,7 +3363,7 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
     # magnitude. That one wants a tighter anchor in the extractor, not a wider
     # assertion here.
     fee = getattr(energy, "yearly_fixed_fee", None)
-    floor = 0.0 if contract_id in _NO_STANDING_CHARGE else 5.0
+    floor = 0.0 if no_standing_charge or contract_id in _NO_STANDING_CHARGE else 5.0
     # The ceiling is sized on the misread it catches, not on what an abonnement
     # ought to cost: 600 admits the 410 a bundled product prints, with room for
     # it to be re-priced, and still catches the ten-fold slip that would put it

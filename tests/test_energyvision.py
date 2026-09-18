@@ -403,12 +403,13 @@ def test_energyvision_is_registered() -> None:
 def test_each_contract_is_offered_exactly_where_a_card_exists() -> None:
     # A contract is never offered in a region whose card does not exist, and
     # never withheld from one that has it: GS1800V is published for Flanders
-    # on energyvision.be and for Brussels, as Brusol, on brusol.be.
+    # and Wallonia on energyvision.be and for Brussels, as Brusol, on
+    # brusol.be.
     regions = {c.id: c.regions for c in EXTRACTORS["energyvision"].contracts}
     assert regions[_DYNAMIC] == frozenset({"flanders"})
     assert regions[_FIXED] == frozenset({"flanders"})
     assert regions[_FIXED_WAL] == frozenset({"wallonia"})
-    assert regions[_TIERED_1800] == frozenset({"flanders", "brussels"})
+    assert regions[_TIERED_1800] == frozenset({"flanders", "wallonia", "brussels"})
     for tiered in (_TIERED_VI3, _TIERED_LP):
         assert regions[tiered] == frozenset({"flanders"})
 
@@ -1106,4 +1107,95 @@ def test_a_tiered_card_that_loses_its_tranche_row_still_fails_loud() -> None:
     with pytest.raises(ExtractorError, match="fixed tranche row"):
         parse_snapshot(
             _TIERED_1800, text.replace(row[0], ""), "test://vl", region="flanders"
+        )
+
+
+# ---- Wallonia (GS1800V): the tiered range's French publication ---------------
+
+
+def _wal_1800() -> SupplierSnapshot:
+    return _tiered(
+        _TIERED_1800, "energyvision_tiered_1800_wal_sep.pdf", region="wallonia"
+    )
+
+
+def test_wallonia_tiered_energy_leg_matches_the_dutch_cards() -> None:
+    """The three regions price this product identically on the energy leg.
+    Only the standing charge differs, and only in Wallonia: the card prints
+    "Frais fixes 0 €/an" where Flanders and Brussels charge 50."""
+    wal, vl = _wal_1800().energy, _tiered_1800().energy
+    assert isinstance(wal, SpotMonthlyRates) and isinstance(vl, SpotMonthlyRates)
+    assert (wal.factor, wal.base) == (vl.factor, vl.base)
+    assert (wal.tier_kwh, wal.tier_rate) == (vl.tier_kwh, vl.tier_rate)
+    assert wal.yearly_fixed_fee == 0.0
+    assert vl.yearly_fixed_fee == 50.0
+
+
+def test_wallonia_tiered_indexes_on_the_flanders_curve() -> None:
+    """The French card names "les différents gestionnaires de réseau de
+    distribution" and no region, so the blend is not read off its wording.
+    EnergyVision publishes one Belpex-RLP-M month table in both languages
+    with identical values, so there is one index for the country and the
+    Dutch card is what defines it."""
+    energy = _wal_1800().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.rlp_indexed is True
+    assert energy.rlp_blend == "flanders"
+
+
+def test_wallonia_tiered_injection() -> None:
+    inj = _wal_1800().injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0278)
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-0.015)
+    assert inj.minimum == pytest.approx(0.01)
+
+
+def test_wallonia_tiered_network_and_taxes() -> None:
+    """The DSO and tax blocks are the ones the 1-year fixed card already
+    carries, so the same French parsers read them."""
+    snap = _wal_1800()
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.03)
+    assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    o = snap.dsos["ores"]
+    # Cheapest first, the reverse of the DATS 24 layout: a positional mis-map
+    # silently swaps peak and off-peak distribution.
+    assert o.distribution_eco is not None and o.distribution_medium is not None
+    assert o.distribution_pic is not None
+    assert o.distribution_eco < o.distribution_medium < o.distribution_pic
+
+
+def test_the_walloon_excise_row_is_read_with_either_thousands_separator() -> None:
+    """EnergyVision groups the thousand two ways in the same row of the same
+    regulated table: "3.000" on the 1-year fixed cards and "3 000" on the
+    1.800 kWh ones, same month and same rate. Pinning the dot lost the whole
+    tax block on the other publication, and with it every archived Walloon
+    month of this contract."""
+    dotted = fixture_text("energyvision_fixed_1y_wal_jul.pdf", layout=True)
+    spaced = fixture_text("energyvision_tiered_1800_wal_sep.pdf", layout=True)
+    assert "0 & 3.000 kWh" in dotted
+    # September is on the flat excise, so the spaced form is asserted on the
+    # row shape the older cards of this product print.
+    spaced_old = spaced.replace(
+        "Accise spéciale 4,876 €cent/kWh",
+        "Consommation entre 0 & 3 000 kWh 5,03288",
+    )
+    assert parse_snapshot(
+        _TIERED_1800, spaced_old, "test://wal", region="wallonia"
+    ).taxes.federal_excise == pytest.approx(0.0503288)
+    assert parse_snapshot(
+        _FIXED_WAL, dotted, "test://wal", region="wallonia"
+    ).taxes.federal_excise == pytest.approx(0.0503288)
+
+
+def test_a_walloon_tiered_card_missing_its_tranche_is_refused() -> None:
+    text = fixture_text("energyvision_tiered_1800_wal_sep.pdf", layout=True)
+    row = [line for line in text.splitlines() if "tarif fixe)" in line]
+    assert row, "the fixture stopped printing the tranche row"
+    with pytest.raises(ExtractorError, match="fixed tranche row"):
+        parse_snapshot(
+            _TIERED_1800, text.replace(row[0], ""), "test://wal", region="wallonia"
         )

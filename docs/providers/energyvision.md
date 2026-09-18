@@ -29,9 +29,10 @@ integration tracks six of them:
 - **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.
 - **GS1JV** ("Électricité bon marché 1 an fixe", Wallonia) - the same fixed shape on a
   1-year lock, off a French card.
-- **GS1800V** ("Goedkope stroom met 1.800 kWh vast", Flanders and Brussels) - the tiered
+- **GS1800V** ("Goedkope stroom met 1.800 kWh vast", all three regions) - the tiered
   shape: the year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
-  `1,12 x Belpex-RLP-M + 20 EUR/MWh`. The Brussels card prices it identically.
+  `1,12 x Belpex-RLP-M + 20 EUR/MWh`. All three cards price that leg identically; only
+  the standing charge differs, and only in Wallonia, which pays none.
 - **GSVI3** ("Goedkope stroom met vaste injectieprijs 3 jaar", Flanders) - the same shape
   on a 1.000 kWh tranche at 9,54 c€/kWh with a `1,15` coefficient, and a feed-in price
   fixed for the term instead of indexed.
@@ -88,7 +89,7 @@ token, which site and which archive layout that region's publication uses:
 | `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | flanders → `nl` | True |
 | `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | flanders → `nl` | n/a |
 | `energyvision_fixed_1y` | EnergyVision 1 an fixe | fixed | GS1JV | wallonia → `WAL-fr` | n/a |
-| `energyvision_tiered_1800` | EnergyVision 1.800 kWh vast | spot_monthly | GS1800V | flanders → `nl`, brussels → `BXL-nl` | n/a |
+| `energyvision_tiered_1800` | EnergyVision 1.800 kWh vast | spot_monthly | GS1800V | flanders → `nl`, wallonia → `WAL-fr`, brussels → `BXL-nl` | n/a |
 | `energyvision_fixed_injection_3y` | EnergyVision vaste injectieprijs 3 jaar | spot_monthly | GSVI3 | flanders → `nl` | n/a |
 | `energyvision_laadpunt` | EnergyVision Laadpunt | spot_monthly | GSLP | flanders → `nl` | n/a |
 | `energyvision_groene_stroom` | EnergyVision Groene stroom | spot_monthly | GRS | brussels → `BXL-nl` | n/a |
@@ -96,8 +97,8 @@ token, which site and which archive layout that region's publication uses:
 Contract ids carry no region token, per the project convention: the region lives only in
 the keys of `cards`, which `regions` is derived from. The Walloon product is a separate
 contract rather than the Flemish one in another region because it is a different product
-(a 1-year lock, not 3). GS1800V is the opposite case: the same product in two regions, so
-it is one contract with two cards.
+(a 1-year lock, not 3). GS1800V is the opposite case: the same product in all three
+regions, so it is one contract with three cards.
 
 ### Brussels is published as Brusol, on another site
 
@@ -382,6 +383,31 @@ The GRS card names Belpex-RLP-M and Belpex-SPP-M without defining either and poi
 same published parameter page, so it inherits that blend rather than being given one; if
 EnergyVision ever defines a Brussels profile, that is what changes.
 
+### Wallonia publishes the tiered shape too
+
+`EV-<MMYY>-GS1800V-WAL-fr.pdf` is the same product on the separate French publication, and
+it needs the `*_fr` anchors in front of the same body, which is why `_tiered_legs` takes
+its patterns as arguments: the two publications share no wording, and merging them into
+bilingual alternations would cost each set the fail-loud guarantee it gives on its own
+card. Three things are the Walloon card's own:
+
+- **No standing charge.** "Frais fixes 0 €/an" where Flanders and Brussels print 50. A
+  figure to read, not a row to treat as missing. It was 50 on the March 2026 card and zero
+  from April, which the archive bills correctly.
+- **The blend is not readable off it.** It says only "les différents gestionnaires de
+  réseau de distribution", naming no region, where the Dutch cards say "van Vlaanderen".
+  Settled by the figures rather than the prose: EnergyVision publishes its Belpex-RLP-M
+  month table in both languages and the two are identical value for value, so there is one
+  index for the country and the Dutch card defines it.
+- **The thousand is grouped differently.** The excise row reads "0 & 3 000 kWh" here and
+  "0 & 3.000 kWh" on the 1-year fixed cards, same month and same rate. `_EXCISE_FR_RE`
+  accepts either; pinned to the dot it lost the whole tax block on this publication, and
+  with it every archived Walloon month of this contract.
+
+The DSO table and the rest of the tax block are the ones the 1-year fixed card already
+carries, so `_extract_dsos_fr` and `_extract_taxes_fr` read them unchanged, Impact bands
+and all.
+
 ### GRS bills no tranche
 
 Brusol's "Groene stroom" prints one variable rate and the same monthly formula behind it,
@@ -564,6 +590,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |
 | `energyvision_tiered_1800_bxl_sep.pdf` | the Brusol GS1800V card for Brussels, same month |
 | `energyvision_groene_stroom_bxl_sep.pdf` | the Brusol GRS card, September 2026: the untranched shape |
+| `energyvision_tiered_1800_wal_sep.pdf` | the GS1800V card for Wallonia, same month: the French publication of the tiered shape |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on

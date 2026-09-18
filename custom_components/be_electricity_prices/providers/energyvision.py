@@ -240,11 +240,17 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # The tiered range. All three share one shape and differ only in the
     # tranche, the flat rate, the coefficient, the standing charge and how the
     # feed-in is priced, so one parser reads the three of them.
-    # Sold in Flanders and, as Brusol, in Brussels. The Dutch Brussels card
-    # is worded exactly like the Flemish one and prints the same energy leg
+    # The one product sold in all three regions. The Dutch Brussels card is
+    # worded exactly like the Flemish one and prints the same energy leg
     # figure for figure, so it goes through the same parser; only the network
-    # and tax blocks are the region's own. The Brussels product is open to
-    # households with EnergyVision/Brusol panels on the roof.
+    # and tax blocks are the region's own. The Walloon card is the separate
+    # French publication and needs the *_fr anchors, but the same body behind
+    # them, and it charges NO standing charge where the other two charge 50.
+    #
+    # Who may take it differs too, which the config flow cannot express and
+    # the README says instead: Flanders and Wallonia sell it to any
+    # residential customer, Brussels only to roofs already carrying
+    # EnergyVision/Brusol panels.
     _ContractDef(
         "energyvision_tiered_1800",
         "EnergyVision 1.800 kWh vast",
@@ -252,6 +258,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "GS1800V",
         {
             REGION_FLANDERS: _FLANDERS_CARD,
+            REGION_WALLONIA: _CardDef(token="WAL-fr"),
             REGION_BRUSSELS: _CardDef(
                 token="BXL-nl",
                 site=_BRUSOL_SITE,
@@ -475,13 +482,28 @@ _FIXED_INJECTION_FR_RE = re.compile(
     rf"Injection\s*[{SIGN_CHARS}]\s*variable\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )
+# The Walloon tiered card's tranche row, "Électricité verte (<1.800 kWh –
+# tarif fixe) 10,60 €cent/kWh". The parenthetical is what tells it apart from
+# the flat card's "Électricité verte – tarif fixe", which _FIXED_ENERGY_FR_RE
+# reads and which correctly misses this one. The bound's dot is a thousands
+# separator, so it goes through tier_bound_kwh rather than to_float, which
+# would read 1.800 kWh as one point eight.
+_TIER_FIXED_FR_RE = re.compile(
+    rf"Électricité\s+verte[^(\n]*\(\s*<\s*([\d.,]+)\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"tarif\s+fixe\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    re.IGNORECASE,
+)
 _FEE_FR_RE = re.compile(rf"Frais\s+fixes\s+{_NUM}\s*€\s*/\s*an", re.IGNORECASE)
 
 # Walloon tax block. The units live in the section headers ("Suppléments
 # (€cent/kWh)", "Accise fédérale (€cent/kWh)"), not on the rows, so every
 # value here is c€/kWh and divides by 100.
+# EnergyVision groups the thousand two ways in the same row of the same
+# regulated table: "3.000" on the 1-year fixed cards and "3 000" on the
+# 1.800 kWh ones, for the same month and the same rate. Anchored on either,
+# because pinning the dot lost the whole tax block on the other publication.
 _EXCISE_FR_RE = re.compile(
-    rf"Consommation\s+entre\s+0\s*&\s*3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
+    rf"Consommation\s+entre\s+0\s*&\s*3[.\s]000\s+kWh\s+{_NUM}", re.IGNORECASE
 )
 # From 1 August 2026 the federal scheme folded the energy contribution into
 # the special excise and flattened it, so the card prints one rate under
@@ -788,11 +810,18 @@ def _parse_wallonia(
 ) -> SupplierSnapshot:
     """Parse the French Walloon card.
 
-    Same snapshot shape as the Flemish fixed card, off an entirely separate
-    publication: a flat VAT-inclusive rate, a yearly standing charge, and a
-    monthly-indexed injection indicative.
+    Same snapshot shape as the Flemish cards, off an entirely separate
+    publication. Two energy shapes now: the 1-year fixed product's flat
+    VAT-inclusive rate, and the 1.800 kWh product's tranche plus monthly
+    formula. Both carry a yearly standing charge and a monthly-indexed
+    injection indicative, and both share the Walloon DSO and tax blocks.
     """
-    energy, injection = _extract_fixed_fr(text)
+    contract = _CONTRACTS_BY_ID[contract_id]
+    energy: EnergyRates
+    if contract.kind == "spot_monthly":
+        energy, injection = _extract_tiered_fr(text)
+    else:
+        energy, injection = _extract_fixed_fr(text)
     return SupplierSnapshot(
         supplier="energyvision",
         contract=contract_id,
@@ -921,10 +950,22 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     return energy, injection
 
 
-def _extract_tiered(
-    text: str, *, tranche: bool = True
+def _tiered_legs(
+    text: str,
+    *,
+    fee: float,
+    vat_re: re.Pattern[str],
+    tier_re: re.Pattern[str],
+    injection_re: re.Pattern[str],
+    tranche: bool,
 ) -> tuple[SpotMonthlyRates, InjectionRates]:
     """Energy + feed-in for a monthly-indexed card, tranche or not.
+
+    The anchors come from the caller, because the Flemish and Walloon cards
+    share no wording and merging them into bilingual alternations would cost
+    the fail-loud guarantee each set gives on its own publication. What they
+    do share is everything below: the formula, the VAT basis, the sign and
+    the feed-in, which is why this body is one and not two.
 
     The tranche and the formula are carried side by side rather than blended
     here: which of them a household actually pays depends on its yearly
@@ -937,13 +978,21 @@ def _extract_tiered(
     row was found, so a tiered card that stops printing its tranche still
     fails loud instead of quietly billing every kWh at the indexed rate.
 
-    ``rlp_blend`` is the Flanders curve because that is what the card names,
-    "het rekenkundig gemiddelde van de RLP-verbruiksprofielen stroom van de
-    verschillende distributienetbeheerders van Vlaanderen". Every Flemish
-    sub-area shares one Synergrid curve, so the mean over them IS that curve.
+    ``rlp_blend`` is the Flanders curve because that is what the Dutch cards
+    name, "het rekenkundig gemiddelde van de RLP-verbruiksprofielen stroom
+    van de verschillende distributienetbeheerders van Vlaanderen". Every
+    Flemish sub-area shares one Synergrid curve, so the mean over them IS
+    that curve.
+
+    The French card says only "les différents gestionnaires de réseau de
+    distribution", naming no region, so the blend is not read off it. It is
+    read off the figures instead: EnergyVision publishes its Belpex-RLP-M
+    month table in both languages and the two are identical value for value
+    (60,280 / 55,349 / ... / 135,655 from June 2024 to August 2026), so
+    there is one index for the country and the Dutch card is what defines
+    it. A Walloon household on this product is billed on the Flemish curve.
     """
-    fee = _fee(text)
-    tier = _TIER_FIXED_RE.search(text) if tranche else None
+    tier = tier_re.search(text) if tranche else None
     if tranche and tier is None:
         raise ExtractorError("EnergyVision: could not parse the fixed tranche row")
     formula = _RLP_FORMULA_RE.search(text)
@@ -953,7 +1002,7 @@ def _extract_tiered(
     # printed prices, so the coefficients are scaled to the same basis the way
     # the dynamic leg's are. The tranche's own rate is printed inclusive and
     # is used as-is.
-    vat = vat_multiplier(text, _VAT_RE)
+    vat = vat_multiplier(text, vat_re)
     energy = SpotMonthlyRates(
         factor=to_float(formula.group(1)) * vat,
         base=parse_sign(formula.group(2)) * to_float(formula.group(3)) / 1000.0 * vat,
@@ -963,13 +1012,48 @@ def _extract_tiered(
         rlp_blend="flanders",
         yearly_fixed_fee=fee,
     )
-    inj = _TIER_INJECTION_RE.search(text)
+    inj = injection_re.search(text)
     if inj is None:
         raise ExtractorError("EnergyVision: could not parse the injection price")
     # A card that fixes its feed-in price for the term (GSVI3) prints no SPP
     # formula, so this returns the printed figure as a flat credit; the two
     # that index it get the coefficients and the monthly guarantee.
     return energy, _spp_injection(text, to_float(inj.group(1)) / 100.0)
+
+
+def _extract_tiered(
+    text: str, *, tranche: bool = True
+) -> tuple[SpotMonthlyRates, InjectionRates]:
+    """The Dutch monthly cards: the Flemish tiered range and Brusol's two."""
+    return _tiered_legs(
+        text,
+        fee=_fee(text),
+        vat_re=_VAT_RE,
+        tier_re=_TIER_FIXED_RE,
+        injection_re=_TIER_INJECTION_RE,
+        tranche=tranche,
+    )
+
+
+def _extract_tiered_fr(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
+    """The Walloon 1.800 kWh card, on the French publication.
+
+    Its standing charge is zero where the Flemish and Brussels cards of the
+    same product charge 50 EUR/yr, which is a figure to read rather than a
+    row to treat as missing: ``_FEE_FR_RE`` matching "Frais fixes 0 €/an" is
+    the card saying nothing is owed.
+    """
+    fee = _FEE_FR_RE.search(text)
+    if fee is None:
+        raise ExtractorError("EnergyVision: frais fixes row not found")
+    return _tiered_legs(
+        text,
+        fee=to_float(fee.group(1)),
+        vat_re=_VAT_FR_RE,
+        tier_re=_TIER_FIXED_FR_RE,
+        injection_re=_FIXED_INJECTION_FR_RE,
+        tranche=True,
+    )
 
 
 def _extract_taxes(text: str) -> TaxOverlay:

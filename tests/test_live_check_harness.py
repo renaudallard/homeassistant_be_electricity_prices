@@ -1124,6 +1124,33 @@ def test_no_standing_charge_matches_the_cards() -> None:
     assert lc._NO_STANDING_CHARGE - set(cards) == {"engie_pro_empty_house"}
 
 
+def test_the_abonnement_floor_is_dropped_per_region_not_per_contract() -> None:
+    """EnergyVision's 1.800 kWh card charges 50 EUR/yr in Flanders and
+    Brussels and nothing in Wallonia, so it cannot go on the allowlist: that
+    is keyed by contract and would drop the floor for all three. The
+    ``no_standing_charge`` override exists for exactly this, and these are
+    the figures it is sized on."""
+    from custom_components.be_electricity_prices.providers import energyvision
+
+    from tests import fixture_text
+
+    fees = {
+        region: energyvision.parse_snapshot(
+            "energyvision_tiered_1800",
+            fixture_text(fixture, layout=True),
+            "test://x",
+            region=region,
+        ).energy.yearly_fixed_fee
+        for region, fixture in (
+            ("flanders", "energyvision_tiered_1800_sep.pdf"),
+            ("wallonia", "energyvision_tiered_1800_wal_sep.pdf"),
+            ("brussels", "energyvision_tiered_1800_bxl_sep.pdf"),
+        )
+    }
+    assert fees == {"flanders": 50.0, "wallonia": 0.0, "brussels": 50.0}
+    assert "energyvision_tiered_1800" not in lc._NO_STANDING_CHARGE
+
+
 def test_pro_injection_vat_expectation_matches_the_cards() -> None:
     """The live check's expectation and the extractor must agree.
 

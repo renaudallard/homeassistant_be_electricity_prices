@@ -5341,7 +5341,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "slot", True): 1,
         ("wallonia", "static", False): 51,
         ("wallonia", "static", True): 21,
-        ("wallonia", "spot", False): 13,
+        # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
+        # the French publication of the same card. Monthly-indexed, so the
+        # spot cell.
+        ("wallonia", "spot", False): 14,
         ("wallonia", "spot", True): 6,
         ("wallonia", "slot", False): 5,
         ("wallonia", "slot", True): 1,
