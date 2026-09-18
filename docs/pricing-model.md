@@ -443,6 +443,27 @@ Month coefficients are never a per-hour formula, and without that guard a card
 that stopped printing its indicative would flip to crediting the current slot's
 spot, which is the 0.6.7 mis-credit and is silent.
 
+### The direct-debit reduction
+
+Brusol's Groene stroom charges 250 EUR/yr and 230 on domiciliëring, the only card in the
+registry that prices how the invoice is settled. `SupplierSnapshot` carries the REDUCTION
+(`direct_debit_discount_eur`), the config flow asks the household how it pays
+(`CONF_DIRECT_DEBIT`), and `resolve_direct_debit` (`providers/base.py`) takes one off the
+other before the snapshot is priced, clearing the field as it goes.
+
+Resolved there rather than at the six places that read a standing charge (the live tick,
+the year-to-date, the backfill accrual, the config-flow annual estimate and both comparison
+quotes) for the reason the excise band and the volume tranche are: a transform that has to
+reach every cost path is baked once into the snapshot the entry reads, and those paths keep
+reading one fee and knowing nothing about how it is paid. It runs BEFORE the tranche, which
+can turn a spot-monthly leg into a fixed one: the fee travels across that conversion but a
+reduction still waiting to be applied would not. The result floors at zero, since a
+reduction larger than the charge it comes off would pay the household to be supplied.
+
+`_direct_debit` (`snapshot_store.py`) requires the stored answer AND the registry flag of
+the card in hand, so on the comparison page the household's payment method reaches a target
+whose card prices it and nowhere else.
+
 ### Volume-tiered energy
 
 EnergyVision's tiered range prices a first tranche of the YEAR's volume at a

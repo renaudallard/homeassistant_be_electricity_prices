@@ -212,6 +212,15 @@ CONF_METER: Final = "meter"
 # every other card fixes the grid itself and the setting cannot change it.
 CONF_QUARTER_HOURLY: Final = "quarter_hourly"
 
+# Whether this household pays its supplier by direct debit, where the card
+# prices that differently. Only meaningful on a contract whose card states
+# the reduction (``Contract.direct_debit_discount``); every other card
+# charges the same standing charge however the invoice is settled, and the
+# setting cannot change it. Defaults to False: a household that has not been
+# asked is billed the figure its card leads with.
+CONF_DIRECT_DEBIT: Final = "direct_debit"
+DEFAULT_DIRECT_DEBIT: Final = False
+
 CONF_API_KEY: Final = "api_key"
 
 # Whether prices include VAT. Only meaningful on a contract whose card

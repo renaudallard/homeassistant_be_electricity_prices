@@ -79,6 +79,7 @@ from .flow_schemas import (
     _incomplete_register_pairs,
     _meter_schema,
     _meters_schema,
+    _direct_debit_schema,
     _professional_schema,
     _settlement_schema,
     _region_mismatch_error,
@@ -107,6 +108,7 @@ from .const import (
     DSO_MODE_IMPACT,
     CONF_INCLUDE_VAT,
     CONF_METER,
+    CONF_DIRECT_DEBIT,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_REGIME,
@@ -122,7 +124,7 @@ from .const import (
     REGION_WALLONIA,
 )
 from .providers import get as get_extractor
-from .providers import offers_quarter_hourly
+from .providers import offers_direct_debit, offers_quarter_hourly
 
 
 # ---- shared schema builders ---------------------------------------------------
@@ -366,7 +368,7 @@ class _WizardStepsMixin:
             # ex-VAT preference silently in force.
             self._data.pop(CONF_INCLUDE_VAT, None)
             self._data.pop(CONF_ANNUAL_CONSUMPTION_KWH, None)
-            return await self._after_meter()
+            return await self._ask_direct_debit()
         return await self.async_step_professional()
 
     async def async_step_professional(
@@ -374,9 +376,36 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return await self._after_meter()
+            return await self._ask_direct_debit()
         return self.async_show_form(
             step_id="professional", data_schema=_professional_schema(self._data)
+        )
+
+    async def _ask_direct_debit(self) -> ConfigFlowResult:
+        """Only a card that prices a direct-debit payer differently.
+
+        Every other card charges the same standing charge however the invoice
+        is settled, so asking would be a box whose answer changes nothing.
+        """
+        if not offers_direct_debit(
+            self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+        ):
+            # The box was not asked, so an answer stored against a previous
+            # contract has to go: on a card that grants no reduction it is
+            # inert, and it would come back into force the day the user
+            # switched to one that does.
+            self._data.pop(CONF_DIRECT_DEBIT, None)
+            return await self._after_meter()
+        return await self.async_step_direct_debit()
+
+    async def async_step_direct_debit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_meter()
+        return self.async_show_form(
+            step_id="direct_debit", data_schema=_direct_debit_schema(self._data)
         )
 
     async def _offer_unverified_key(self, key: str, came_from: str) -> ConfigFlowResult:

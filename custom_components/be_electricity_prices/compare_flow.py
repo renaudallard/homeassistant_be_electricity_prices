@@ -562,6 +562,13 @@ def _quote_entry(
     a Bolt card per quarter-hour because the user happens to be on Frank's
     quarter-hourly tariff. ``None`` leaves the household's answer in place,
     which is what the own side wants.
+
+    Direct debit is deliberately NOT in that list and rides along inherited.
+    It is the one of these that is a fact about the household rather than
+    about the product: someone who pays by direct debit would still do so at
+    the supplier being quoted. ``_resolve_snapshot`` gates it on the TARGET
+    card's own registry flag, so it reaches the reduction only where that
+    card states one and is identity everywhere else.
     """
     overrides: dict[str, Any] = {}
     if regime != entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):

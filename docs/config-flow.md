@@ -60,6 +60,7 @@ the "Shown when" column gives the gate.
 | `dso` | `async_step_dso` (`config_flow.py`) | Distribution operator | `CONF_DSO` | Always |
 | `settlement` | `async_step_settlement` (`config_flow.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
 | `meter` | `async_step_meter` (`config_flow.py`) | Meter type | `CONF_METER` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved |
+| `direct_debit` | `async_step_direct_debit` (`config_flow.py`) | Whether this household pays by direct debit | `CONF_DIRECT_DEBIT` | Only on a contract whose card prices a direct-debit payer (`Contract.direct_debit_discount`); runs after `meter` and after the professional step, where nothing downstream reads it. Not asked means the stored key is DROPPED (`_ask_direct_debit`), so an answer given on one contract cannot come back into force on another the day the user switches to a card that does grant a reduction |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py`) |
 | `api_key` | `async_step_api_key` (`config_flow.py`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
@@ -205,6 +206,41 @@ does not offer the choice pops `CONF_QUARTER_HOURLY`, exactly as `_ask_professio
 the VAT treatment. Left behind, a stored `True` sits inert on the new card and comes back
 into force the day the user switches to a supplier that does offer the choice, for a
 reason they long since forgot agreeing to.
+
+### `direct_debit`: how the household pays, where the card prices it
+
+Schema `_direct_debit_schema` (`flow_schemas.py`), one box, gated on
+`offers_direct_debit` (`providers/__init__.py`) reading `Contract.direct_debit_discount`.
+Only Brusol's Groene stroom carries it today: 250 EUR/yr standing charge, 230 on
+domiciliëring.
+
+Its own step for the reason the settlement box has one, the contract step's schema being
+built before the contract is picked. It sits after `meter`, and after the professional step
+where that runs, because unlike the settlement answer it narrows no later option: it moves
+one yearly figure and nothing else.
+
+The reduction itself is read off the card, never written here, and it is the REDUCTION that
+is stored rather than the reduced fee, so it cannot silently disagree with the standing
+charge beside it. The extractor checks its own reading against the total the same sentence
+states and refuses a footnote that stops adding up.
+
+`resolve_direct_debit` (`providers/base.py`) applies the answer beside the VAT treatment,
+the excise band and the volume tranche, which is what puts it on all six paths that price a
+standing charge (the live tick, the year-to-date, the backfill accrual, the config-flow
+estimate and both comparison quotes) instead of teaching each of them about it. It runs
+BEFORE the tranche, which can turn a spot-monthly leg into a fixed one: the fee travels
+across that conversion but a reduction still waiting to be applied would not.
+
+`_direct_debit` (`snapshot_store.py`) requires both halves, the stored answer and the
+registry flag of the CARD IN HAND, exactly as `_quarter_hourly` does. On the comparison page
+that is what carries the household's payment method onto a target whose card prices it and
+nowhere else: unlike the settlement grid, which is a property of the product and must be
+stated per target, how someone pays their bills follows them to whichever supplier is being
+quoted.
+
+Not asked means un-answered: `_ask_direct_debit` pops `CONF_DIRECT_DEBIT` on a contract that
+grants no reduction, the way `_after_contract` pops the settlement answer and
+`_ask_professional` the VAT treatment.
 
 ### `meter`: type, narrowed by contract kind
 

@@ -1199,3 +1199,121 @@ def test_a_walloon_tiered_card_missing_its_tranche_is_refused() -> None:
         parse_snapshot(
             _TIERED_1800, text.replace(row[0], ""), "test://wal", region="wallonia"
         )
+
+
+# ---- the direct-debit reduction ---------------------------------------------
+
+
+def test_groene_stroom_carries_the_direct_debit_reduction() -> None:
+    """The card states the charge, the reduction and the reduced total in one
+    sentence. The REDUCTION is what the snapshot carries, so it cannot
+    silently disagree with the standing charge beside it."""
+    snap = _grs()
+    assert snap.direct_debit_discount_eur == pytest.approx(20.0)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(250.0)
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "energyvision_tiered_1800_sep.pdf",
+        "energyvision_tiered_1800_bxl_sep.pdf",
+        "energyvision_tiered_1800_wal_sep.pdf",
+    ],
+)
+def test_a_card_without_the_footnote_carries_no_reduction(fixture: str) -> None:
+    """An absent footnote is a product that charges the same however it is
+    paid, not a layout drift, so it must not raise."""
+    region = (
+        "brussels"
+        if "bxl" in fixture
+        else "wallonia"
+        if "wal" in fixture
+        else "flanders"
+    )
+    snap = _tiered(_TIERED_1800, fixture, region=region)
+    assert snap.direct_debit_discount_eur is None
+
+
+def test_a_direct_debit_footnote_that_stops_adding_up_is_refused() -> None:
+    """Billing a household a discount taken off the wrong number is worse
+    than billing it none, so the reading is checked against the card's own
+    arithmetic rather than trusted."""
+    text = fixture_text("energyvision_groene_stroom_bxl_sep.pdf", layout=True)
+    assert "korting van € 20" in text
+    with pytest.raises(ExtractorError, match="does not add up"):
+        parse_snapshot(
+            _GRS,
+            text.replace("korting van € 20", "korting van € 35"),
+            "test://grs",
+            region="brussels",
+        )
+
+
+def test_the_registry_flag_and_the_parsed_reduction_agree() -> None:
+    """With the flag unset no flow step ever asks, nothing is stored and the
+    reduction is billed to nobody; with it set on a card that grants none the
+    flow offers a box whose answer changes nothing. The two halves are held
+    against each other here, the way the month-index flags are."""
+    from custom_components.be_electricity_prices.providers import offers_direct_debit
+
+    assert offers_direct_debit("energyvision", _GRS) is True
+    assert _grs().direct_debit_discount_eur is not None
+    for contract in EXTRACTORS["energyvision"].contracts:
+        if contract.id != _GRS:
+            assert contract.direct_debit_discount is False, contract.id
+
+
+def _grs_entry(**data: object) -> SimpleNamespace:
+    base: dict[str, object] = {
+        "supplier": "energyvision",
+        "contract": _GRS,
+        "meter": "mono",
+    }
+    base.update(data)
+    return SimpleNamespace(data=base)
+
+
+def _grs_fee(**data: object) -> float:
+    from custom_components.be_electricity_prices import snapshot_store
+
+    resolved = snapshot_store._resolve_snapshot(
+        _grs_entry(**data),  # type: ignore[arg-type]
+        _grs(),
+    )
+    return float(resolved.energy.yearly_fixed_fee)
+
+
+def test_direct_debit_comes_off_the_standing_charge_for_an_entry_that_pays_that_way() -> (
+    None
+):
+    assert _grs_fee(direct_debit=True) == pytest.approx(230.0)
+    assert _grs_fee(direct_debit=False) == pytest.approx(250.0)
+    # A household that was never asked is billed the figure its card leads
+    # with, not the reduced one.
+    assert _grs_fee() == pytest.approx(250.0)
+
+
+def test_a_resolved_snapshot_no_longer_carries_the_reduction() -> None:
+    """Cleared either way, the way the volume tranche is: it is a fact about
+    the card that has been answered for this entry, and a snapshot still
+    holding it would look unresolved to the next reader of it."""
+    from custom_components.be_electricity_prices import snapshot_store
+
+    for answer in (True, False):
+        resolved = snapshot_store._resolve_snapshot(
+            _grs_entry(direct_debit=answer),  # type: ignore[arg-type]
+            _grs(),
+        )
+        assert resolved.direct_debit_discount_eur is None
+
+
+def test_a_stored_answer_does_not_reach_a_card_that_grants_no_reduction() -> None:
+    """The registry flag is asked about the CARD in hand, so an answer stored
+    against Groene stroom cannot discount a 1.800 kWh entry, and cannot
+    discount another supplier's row on the comparison page either."""
+    from custom_components.be_electricity_prices import snapshot_store
+
+    entry = _entry(direct_debit=True)
+    resolved = snapshot_store._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
+    assert resolved.energy.yearly_fixed_fee == pytest.approx(50.0)

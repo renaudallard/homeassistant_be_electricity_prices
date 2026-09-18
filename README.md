@@ -101,7 +101,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Eneco** | Zon & Wind Vast · Zon & Wind Flex · Zon & Wind Flex One · Zon & Wind Dynamisch | Flanders + Wallonia, Dynamisch is Flanders only · [`eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) · [notes](./docs/providers/eneco.md)
 | **energie.be** | Dynamisch *(quarter-hourly EPEX)* · Variabel *(monthly Belpex_RLP)* · Vast | Flanders only; on the dynamic card only · [`energiebe.py`](./custom_components/be_electricity_prices/providers/energiebe.py) · [notes](./docs/providers/energiebe.md)
 | **Energy Knights** | Agilior Online *(quarter-hourly Belpex_15)* · Agilis Online *(hourly Belpex_h)* · Essentia Online *(monthly Belpex_RLP)* · all three as **Green** | Flanders only · [`energyknights.py`](./custom_components/be_electricity_prices/providers/energyknights.py) · [notes](./docs/providers/energyknights.md)
-| **EnergyVision** | Dynamisch *(quarter-hourly Belpex)* · 3 jaar vast · 1 an fixe *(Wallonia)* · 1.800 kWh vast *(all three regions)* · vaste injectieprijs 3 jaar · Laadpunt · Groene stroom *(Brussels, monthly Belpex-RLP-M)* | The 1.800 kWh card is sold in all three regions and prices the same energy leg in each, but Wallonia pays no standing charge where the other two pay 50 EUR/yr. In Brussels EnergyVision trades as **Brusol** and publishes on its own site, and there the card is sold only to households with EnergyVision/Brusol panels on the roof; Groene stroom is Brusol's own product and any Brussels household can take it · [`energyvision.py`](./custom_components/be_electricity_prices/providers/energyvision.py) · [notes](./docs/providers/energyvision.md)
+| **EnergyVision** | Dynamisch *(quarter-hourly Belpex)* · 3 jaar vast · 1 an fixe *(Wallonia)* · 1.800 kWh vast *(all three regions)* · vaste injectieprijs 3 jaar · Laadpunt · Groene stroom *(Brussels, monthly Belpex-RLP-M)* | The 1.800 kWh card is sold in all three regions and prices the same energy leg in each, but Wallonia pays no standing charge where the other two pay 50 EUR/yr. In Brussels EnergyVision trades as **Brusol** and publishes on its own site, and there the card is sold only to households with EnergyVision/Brusol panels on the roof; Groene stroom is Brusol's own product, any Brussels household can take it, and it is the one card in the registry that prices a direct-debit payer differently (250 EUR/yr, 230 on domiciliëring), which the setup flow asks about · [`energyvision.py`](./custom_components/be_electricity_prices/providers/energyvision.py) · [notes](./docs/providers/energyvision.md)
 | **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House · the same eight as **pro** contracts, minus Direct Online and Basic Online | [`engie.py`](./custom_components/be_electricity_prices/providers/engie.py) · [notes](./docs/providers/engie.md)
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch Korting · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic | [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
@@ -415,19 +415,27 @@ formula** supplier, which has no card and asks for the whole set.
    dashboard's grid source, so users with the typical P1-power →
    kWh-Riemann → dashboard chain don't have to pick the same sensor
    twice; the auto-pick refuses non-power sources.
-8. **Connection power** *(Brussels only)* — the contractual connection power
+8. **Direct debit** *(only where the card prices it)* — whether you pay your
+   supplier by direct debit. Some cards charge a lower yearly standing
+   charge when the invoice is settled that way: Brusol Groene stroom is
+   250 € a year and 230 € on domiciliëring. The reduction is read off the
+   card, not typed, and nothing else on the bill changes. The box is hidden
+   on every contract whose card grants none, and an answer given on one
+   contract is dropped when you switch to another, so it cannot come back
+   into force later.
+9. **Connection power** *(Brussels only)* — the contractual connection power
    tier (≤ 1.44 / 1.44-6 / 6-9.6 / 9.6-13 / 13-18 / 18-36 / 36-56 / > 56 kVA).
    Brussels bills a Brugel OSP (Obligations de Service Public) annual fee
    scaled by this tier, and a connection above 13 kVA is billed Sibelga's
    own higher power term in place of the data-management charge; existing
    entries default to the 1.44-6 kVA tier.
-9. **Solar panels** — inverter capacity in kVA + the regime that applies:
+10. **Solar panels** — inverter capacity in kVA + the regime that applies:
    - **No solar panels** *(default)* — no extra sensors.
    - **Compensation regime** — Wallonia only, installations **certified before
      2024-01-01**, valid until 2030-12-31. Creates `prosumer_cost`.
    - **Injection tariff** — post-2024 Walloon installations and Flemish smart
      meters. Creates `injection_price`, ready for HA Energy.
-10. **Energy meters** *(optional, all four / two fields are skippable)* —
+11. **Energy meters** *(optional, all four / two fields are skippable)* —
    feeds the `current_year_cost` sensor. Whichever way you wire it, every
    field wants a **cumulative** kWh reading, one that only ever climbs.
    A sensor that resets, such as a "this year" or "this month" total,

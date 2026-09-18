@@ -58,8 +58,10 @@ from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CARD_ARCHIVE,
     CONF_INCLUDE_VAT,
+    CONF_DIRECT_DEBIT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
+    DEFAULT_DIRECT_DEBIT,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CARD_ARCHIVE,
     DEFAULT_INCLUDE_VAT,
@@ -69,7 +71,7 @@ from .const import (
     SUPPLIER_CUSTOM,
     WELCOME_CREDIT_PRO_RATA,
 )
-from .providers import is_professional, offers_quarter_hourly
+from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers.base import (
     DsoOverlay,
@@ -90,6 +92,7 @@ from .providers.base import (
     resolve_federal_contribution,
     resolve_federal_excise,
     resolve_settlement_grid,
+    resolve_direct_debit,
     resolve_volume_tier,
 )
 
@@ -1103,6 +1106,21 @@ def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
     return offers_quarter_hourly(snap.supplier, snap.contract)
 
 
+def _direct_debit(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
+    """Whether this entry's standing charge takes the card's direct-debit cut.
+
+    Both halves have to agree, for the reason :func:`_quarter_hourly` gives,
+    and the registry half is asked about the CARD in hand for the same one:
+    the compare page resolves an alternative supplier's snapshot through a
+    proxy carrying the user's own supplier and contract, and how a household
+    pays is a fact about the household, so it should follow it onto a target
+    whose card prices it, and nowhere else.
+    """
+    if not bool(entry.data.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)):
+        return False
+    return offers_direct_debit(snap.supplier, snap.contract)
+
+
 def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
     """How much this household uses in a year, in kWh. One answer for every leg.
 
@@ -1210,6 +1228,10 @@ def _resolve_snapshot(
     resolved = resolve_federal_excise(resolved, month, professional=professional)
     if annual_kwh is None:
         annual_kwh = entry_annual_kwh(entry)
+    # Before the tranche, which can turn a spot-monthly leg into a fixed one:
+    # the fee travels across that conversion but a reduction still waiting to
+    # be applied would not.
+    resolved = resolve_direct_debit(resolved, direct_debit=_direct_debit(entry, snap))
     resolved = resolve_volume_tier(
         resolve_excise_band(resolved, annual_kwh),
         annual_kwh,
@@ -1579,6 +1601,7 @@ def _snapshot_to_dict(
         "injection": _injection_to_dict(snap.injection) if snap.injection else None,
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
         "welcome_credit_eur": snap.welcome_credit_eur,
+        "direct_debit_discount_eur": snap.direct_debit_discount_eur,
         "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
@@ -1652,6 +1675,7 @@ def _snapshot_from_dict(
             "supplier_prosumer_eur_per_kva_year"
         ),
         welcome_credit_eur=data.get("welcome_credit_eur"),
+        direct_debit_discount_eur=data.get("direct_debit_discount_eur"),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 

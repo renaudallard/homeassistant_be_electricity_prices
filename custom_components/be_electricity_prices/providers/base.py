@@ -142,6 +142,17 @@ class Contract:
     # Only set it where the card documents a choice, or the flow offers a
     # toggle that moves the bill away from what the supplier actually invoices.
     quarter_hourly_option: bool = False
+    # True when this product's card prices a direct-debit payer differently,
+    # so the config flow asks how the household pays. Brusol's Groene stroom
+    # is the case: 250 EUR/yr standing charge, 230 on domiciliering.
+    #
+    # Same registry-versus-parser agreement as the two flags above, and the
+    # same failure if they disagree: with this False no step ever asks, the
+    # answer is never stored and ``resolve_direct_debit`` has nothing to
+    # apply, so a discount the extractor parsed is billed to nobody. Set it
+    # only where the card states the reduction, never to offer a box a
+    # supplier's own invoice would not honour.
+    direct_debit_discount: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -941,6 +952,22 @@ class SupplierSnapshot:
     # rather than two independent ones. A future card that pro-rates without a
     # cap, or caps a lump, is what would split this into two fields.
     welcome_credit_kind: str = WELCOME_CREDIT_PRO_RATA
+    # What the supplier takes off the YEARLY STANDING CHARGE when the customer
+    # pays by direct debit, in EUR/year, or None where the card offers no such
+    # reduction, which is every card but Brusol's Groene stroom today. Read
+    # off the card like every other euro: "De vaste vergoeding bedraagt
+    # 250 EUR. Indien je kiest voor domiciliering dan krijg je een extra
+    # korting van 20 EUR, zodat je totale vaste vergoeding 230 EUR bedraagt."
+    #
+    # Held as the REDUCTION rather than the reduced fee, so it cannot silently
+    # disagree with ``yearly_fixed_fee`` beside it, and so the extractor can
+    # check its own reading against the total the card also prints.
+    #
+    # Whether this household pays that way is not on the card: it is a
+    # per-entry answer the config flow collects, and ``resolve_direct_debit``
+    # applies it, clearing this field as it goes so no later reader can apply
+    # it twice.
+    direct_debit_discount_eur: float | None = None
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
@@ -1246,6 +1273,46 @@ def resolve_federal_excise(
     if abs(rate - taxes.federal_excise) < 5e-7:
         return snapshot
     return replace(snapshot, taxes=replace(taxes, federal_excise=rate))
+
+
+def resolve_direct_debit(
+    snapshot: SupplierSnapshot, *, direct_debit: bool
+) -> SupplierSnapshot:
+    """Take the card's direct-debit reduction off the standing charge, or not.
+
+    Identity on a card that offers none, which is every card but Brusol's
+    Groene stroom today, so this is free for every existing entry.
+
+    Applied here rather than at the six places that read the standing charge
+    (the live tick, the year-to-date, the backfill accrual, the config-flow
+    estimate and both comparison quotes), for the reason
+    :func:`resolve_excise_band` and :func:`resolve_volume_tier` are: a
+    transform that has to reach every cost path is baked once into the
+    snapshot the entry reads, and those paths keep reading one fee and
+    knowing nothing about how it is paid.
+
+    The reduction is CLEARED either way, the way the volume tranche is: it is
+    a fact about the card that has now been answered for this entry, and a
+    snapshot still carrying it would look unresolved to the next reader.
+
+    The floor is zero. A reduction larger than the charge it comes off would
+    otherwise pay the household to be supplied, which no card offers and
+    which would flow straight into the yearly-cost sensors.
+    """
+    discount = snapshot.direct_debit_discount_eur
+    if discount is None:
+        return snapshot
+    energy = snapshot.energy
+    if not direct_debit:
+        return replace(snapshot, direct_debit_discount_eur=None)
+    return replace(
+        snapshot,
+        direct_debit_discount_eur=None,
+        energy=replace(
+            energy,
+            yearly_fixed_fee=max(0.0, energy.yearly_fixed_fee - discount),
+        ),
+    )
 
 
 def resolve_volume_tier(

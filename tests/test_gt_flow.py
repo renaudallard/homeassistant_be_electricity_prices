@@ -76,6 +76,11 @@ async def test_where_the_flow_lands(
             flow,
             {const.CONF_INCLUDE_VAT: True, const.CONF_ANNUAL_CONSUMPTION_KWH: 5000},
         )
+    if result.get("step_id") == "direct_debit":
+        # Offered only where the card prices a direct-debit payer, the same
+        # shape as the professional hop above.
+        assert contract.direct_debit_discount, (sid, contract.id)
+        result = await cfg(flow, {const.CONF_DIRECT_DEBIT: True})
     if result.get("step_id") == "dso_tariff_mode":
         result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_SIMPLE})
     landed = result.get("step_id")

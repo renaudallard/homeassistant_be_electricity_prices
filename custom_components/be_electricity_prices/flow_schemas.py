@@ -125,6 +125,7 @@ from .const import (
     CONF_MANUAL_ENERGY_OFFPEAK,
     CONF_MANUAL_ENERGY_PEAK,
     CONF_MANUAL_ENERGY_SINGLE,
+    CONF_DIRECT_DEBIT,
     CONF_MANUAL_YEARLY_FEE,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
@@ -144,6 +145,7 @@ from .const import (
     CUSTOM_INJECTION_MODES,
     CUSTOM_INJECTION_MODE_CURRENT,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DEFAULT_DIRECT_DEBIT,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CUSTOM_VAT_RATE,
     DEFAULT_CARD_ARCHIVE,
@@ -1024,6 +1026,25 @@ def _settlement_schema(defaults: dict[str, Any]) -> vol.Schema:
             vol.Optional(
                 CONF_QUARTER_HOURLY,
                 default=bool(defaults.get(CONF_QUARTER_HOURLY, False)),
+            ): BooleanSelector()
+        }
+    )
+
+
+def _direct_debit_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """The one box of the direct-debit step.
+
+    Its own step for the reason the settlement box has one: the contract
+    step's schema is built before the contract it depends on has been picked.
+    It sits after the meter step, where nothing downstream reads it, because
+    unlike the settlement answer it narrows no later option: it moves one
+    yearly figure and nothing else.
+    """
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_DIRECT_DEBIT,
+                default=bool(defaults.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)),
             ): BooleanSelector()
         }
     )

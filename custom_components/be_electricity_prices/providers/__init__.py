@@ -139,6 +139,26 @@ def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> b
     return any(c.id == contract_id and c.quarter_hourly_option for c in contracts)
 
 
+def offers_direct_debit(supplier_id: str | None, contract_id: str | None) -> bool:
+    """True when this product's card prices a direct-debit payer differently.
+
+    Read from the registry for the reason :func:`offers_quarter_hourly` is:
+    the config flow's box and the resolution of a stored answer come off one
+    flag, so a supplier dropping the reduction removes both at once instead
+    of leaving a stored answer applying a discount nobody grants.
+
+    Tolerates an unknown supplier or contract, which the OptionsFlow can hold
+    after a catalogue change.
+    """
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.direct_debit_discount for c in contracts)
+
+
 def effective_kind(
     supplier_id: str | None, contract_id: str | None, *, quarter_hourly: bool = False
 ) -> str:
@@ -198,6 +218,7 @@ __all__ = [
     "VariableRates",
     "all_extractors",
     "effective_kind",
+    "offers_direct_debit",
     "offers_quarter_hourly",
     "get",
 ]

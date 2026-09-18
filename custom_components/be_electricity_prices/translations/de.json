@@ -64,6 +64,16 @@
           "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
         }
       },
+      "direct_debit": {
+        "title": "Lastschrift",
+        "description": "Ihr Lieferant berechnet eine niedrigere jährliche Grundgebühr, wenn die Rechnung per Lastschrift bezahlt wird.",
+        "data": {
+          "direct_debit": "Ich zahle per Lastschrift"
+        },
+        "data_description": {
+          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte eine Ermäßigung nennt. Brusol Groene stroom: 250 EUR pro Jahr, 230 per Lastschrift. Sonst ändert sich nichts an der Rechnung."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
         "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
@@ -357,6 +367,16 @@
         "data_description": {
           "include_vat": "Ausschalten, wenn Ihr Unternehmen die MwSt. abziehen kann: Preise, Gebühren und Kosten werden dann ohne MwSt. ausgewiesen. Die Einspeisung folgt derselben Wahl.",
           "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
+        }
+      },
+      "direct_debit": {
+        "title": "Lastschrift",
+        "description": "Ihr Lieferant berechnet eine niedrigere jährliche Grundgebühr, wenn die Rechnung per Lastschrift bezahlt wird.",
+        "data": {
+          "direct_debit": "Ich zahle per Lastschrift"
+        },
+        "data_description": {
+          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte eine Ermäßigung nennt. Brusol Groene stroom: 250 EUR pro Jahr, 230 per Lastschrift. Sonst ändert sich nichts an der Rechnung."
         }
       },
       "dso_tariff_mode": {

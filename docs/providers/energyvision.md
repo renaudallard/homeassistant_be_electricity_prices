@@ -411,10 +411,20 @@ and all.
 ### GRS bills no tranche
 
 Brusol's "Groene stroom" prints one variable rate and the same monthly formula behind it,
-with nothing in front: `1,12 x Belpex-RLP-M + 38 EUR/MWh`, a 250 €/yr standing charge
-(230 € on direct debit, which the model has no payment-method input to express, so the
-card's headline figure is what bills), injection `0,6 x Belpex-SPP-M - 30 EUR/MWh` and no
-minimum, where GS1800V guarantees 1 c€/kWh.
+with nothing in front: `1,12 x Belpex-RLP-M + 38 EUR/MWh`, a 250 €/yr standing charge,
+injection `0,6 x Belpex-SPP-M - 30 EUR/MWh` and no minimum, where GS1800V guarantees
+1 c€/kWh.
+
+It is also the one card in the registry that prices a direct-debit payer: "De vaste
+vergoeding bedraagt € 250 . Indien je kiest voor domiciliëring dan krijg je een extra
+korting van € 20 , zodat je totale vaste vergoeding € 230 bedraagt."
+`_direct_debit_discount` reads the REDUCTION rather than the reduced total, so it cannot
+silently disagree with the standing charge beside it, and checks its own reading against
+the third figure the same sentence states: a footnote that stops adding up is a re-render
+this parser has misread, and billing a household a discount taken off the wrong number is
+worse than billing it none. `Contract.direct_debit_discount` is what makes the config flow
+ask, and the two halves are held against each other in
+`test_the_registry_flag_and_the_parsed_reduction_agree`.
 
 `_ContractDef.tranche` says so, and `_extract_tiered` takes it as an argument rather than
 deciding from whether the row was found. That is the whole point of the flag: a GS1800V

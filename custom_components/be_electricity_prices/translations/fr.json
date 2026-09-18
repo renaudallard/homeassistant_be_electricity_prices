@@ -64,6 +64,16 @@
           "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
         }
       },
+      "direct_debit": {
+        "title": "Domiciliation",
+        "description": "Votre fournisseur applique une redevance fixe annuelle réduite lorsque la facture est payée par domiciliation.",
+        "data": {
+          "direct_debit": "Je paie par domiciliation"
+        },
+        "data_description": {
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une réduction. Brusol Groene stroom : 250 EUR par an, 230 en domiciliation. Rien d'autre ne change sur la facture."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
         "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
@@ -357,6 +367,16 @@
         "data_description": {
           "include_vat": "Désactivez si votre entreprise récupère la TVA : les prix, redevances et coûts sont alors rapportés hors TVA. L'injection suit le même choix.",
           "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
+        }
+      },
+      "direct_debit": {
+        "title": "Domiciliation",
+        "description": "Votre fournisseur applique une redevance fixe annuelle réduite lorsque la facture est payée par domiciliation.",
+        "data": {
+          "direct_debit": "Je paie par domiciliation"
+        },
+        "data_description": {
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une réduction. Brusol Groene stroom : 250 EUR par an, 230 en domiciliation. Rien d'autre ne change sur la facture."
         }
       },
       "dso_tariff_mode": {

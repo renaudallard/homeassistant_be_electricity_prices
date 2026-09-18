@@ -444,6 +444,18 @@ _FUND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Brusol's "Groene stroom" footnote, which prices a direct-debit payer: "De
+# vaste vergoeding bedraagt € 250 . Indien je kiest voor domiciliëring dan
+# krijg je een extra korting van € 20 , zodat je totale vaste vergoeding
+# € 230 bedraagt." All three figures are captured so the reduction can be
+# checked against the total the same sentence states.
+_DIRECT_DEBIT_RE = re.compile(
+    rf"vaste\s+vergoeding\s+bedraagt\s*€?\s*{_NUM}\s*€?[\s.]*"
+    rf"Indien\s+je\s+kiest\s+voor\s+domicili[eë]ring[^0-9]*{_NUM}\s*€?"
+    rf"[^0-9]*?vaste\s*\n?\s*vergoeding\s*€?\s*{_NUM}",
+    re.IGNORECASE,
+)
+
 # Taxes (Brussels). One green levy instead of the Flemish GSC + WKC pair:
 # "Kosten Groene stroom 2,737 €cent/kWh". The "Kosten" is what keeps this off
 # the page-1 energy rows, which name the same product without it.
@@ -802,6 +814,7 @@ def parse_snapshot(
         valid_until=parse_valid_until(text),
         injection=injection,
         welcome_credit_eur=_welcome_credit(text),
+        direct_debit_discount_eur=_direct_debit_discount(text, energy.yearly_fixed_fee),
     )
 
 
@@ -853,6 +866,33 @@ def _welcome_credit(text: str) -> float | None:
     """
     m = _WELCOME_RE.search(text)
     return None if m is None else to_float(m.group(1))
+
+
+def _direct_debit_discount(text: str, fee: float) -> float | None:
+    """What the card takes off the standing charge for a direct-debit payer.
+
+    ``None`` where the card offers none, which is every EnergyVision card but
+    Brusol's Groene stroom: an absent footnote is a product that charges the
+    same however it is paid, not a layout drift.
+
+    The card states the charge, the reduction and the reduced total in one
+    sentence, so the reading is checked against its own arithmetic rather
+    than trusted. A sentence that stops adding up is a re-render this parser
+    has misread, and billing a household a discount taken from the wrong
+    number is worse than billing it none.
+    """
+    m = _DIRECT_DEBIT_RE.search(text)
+    if m is None:
+        return None
+    printed_fee = to_float(m.group(1))
+    discount = to_float(m.group(2))
+    reduced = to_float(m.group(3))
+    if abs(printed_fee - fee) > 0.005 or abs(printed_fee - discount - reduced) > 0.005:
+        raise ExtractorError(
+            f"EnergyVision: direct-debit footnote does not add up "
+            f"({printed_fee} - {discount} != {reduced}, fee row says {fee})"
+        )
+    return discount
 
 
 def _fee(text: str) -> float:
@@ -1263,6 +1303,14 @@ def _extract_dsos_fr(text: str) -> dict[str, DsoOverlay]:
 # ``Contract.spot_indexed_injection``.
 _MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fixed_1y"})
 
+# Contracts whose card prices a direct-debit payer differently, so the config
+# flow asks how the household pays. Only Brusol's Groene stroom does, at
+# 20 EUR/yr off a 250 EUR standing charge. A registry flag beside the parsed
+# figure, and they must agree: with this unset no step ever asks, nothing is
+# stored and the discount is billed to nobody. ``test_direct_debit_registry_
+# matches_the_cards`` holds the two against each other.
+_DIRECT_DEBIT = frozenset({"energyvision_groene_stroom"})
+
 
 EXTRACTOR = SupplierExtractor(
     # Re-measured when the tiered range landed: those three cards take 6,4 to
@@ -1281,6 +1329,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=c.regions,
             spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
+            direct_debit_discount=c.contract_id in _DIRECT_DEBIT,
         )
         for c in _CONTRACTS
     ),
