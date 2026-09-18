@@ -293,6 +293,7 @@ All sensors share one device per config entry.
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
 | `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_elapsed`, `days_seen` / `days_elapsed`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
+| `current_month_cost` | The same bill as `current_year_cost` over the running month, which is the period a household budgets in and the one an invoice covers. Priced as its own window rather than sliced off the year, so under the Walloon compensation regime it nets **that month's** registers and twelve of these do not add up to the yearly figure; on every other regime they do. Resets on the 1st. See [docs/entities.md](./docs/entities.md). |
 | `tomorrow_prices_available` | Binary sensor. ON when the price table covers at least one hour with tomorrow's local date **and** the supplier's published validity still covers tomorrow. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET). For fixed/variable contracts it is ON throughout the month, but flips OFF on the last day of a month whose card stops at month-end, since next month's rates are not published yet. |
 | `projected_year_cost` | Roughly what a year on this contract costs in EUR, priced once at today's tariffs against your own measured yearly volume. An indication for ranking contracts, not a forecast of your settlement: tariffs move and your usage will not repeat exactly. Unknown when the rate is a formula over an index that does not exist yet. See [docs/entities.md](./docs/entities.md). |
 
@@ -341,7 +342,7 @@ manifest.
 
 ## Configuration
 
-The UI walks **up to eleven steps**, twelve with the *Expert: custom formula*
+The UI walks **up to twelve steps**, thirteen with the *Expert: custom formula*
 supplier, depending on contract type and region. Apart from two paths no
 EUR values are asked, since energy, DSO and tax rates all come from the
 supplier's tariff card. The exceptions are the optional **signing-rate**
@@ -364,10 +365,18 @@ formula** supplier, which has no card and asks for the whole set.
    Luminus SmartFlex) and Impact contracts (Cociter Tarif Variable
    Trihoraire, Mega Off-peak Impact, OCTA+ Fixed Impact) lock the picker to
    *dynamic* — the SMR3 meter is required to bill by hour-of-day.
-5. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
+5. **Direct debit** *(only where the card prices it)* — whether you pay your
+   supplier by direct debit. Some cards charge a lower yearly standing
+   charge when the invoice is settled that way: Brusol Groene stroom is
+   250 € a year and 230 € on domiciliëring. The reduction is read off the
+   card, not typed, and nothing else on the bill changes. The box is hidden
+   on every contract whose card grants none, and an answer given on one
+   contract is dropped when you switch to another, so it cannot come back
+   into force later.
+6. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-horaire follow the existing
    meter convention.
-6. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
+7. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, to every
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Cociter Variable
@@ -393,7 +402,7 @@ formula** supplier, which has no card and asks for the whole set.
    injection case it is optional and skippable: leave it blank to finish
    setup, and the injection price simply stays unavailable until you add
    a key via Reconfigure.
-7. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
+8. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
    kW value (default 2.5 kW, the VREG regulated minimum). Leaving it at that
    default when your real peak is higher understates the bill by the
    difference times the per-kW rate, which is the largest single thing that
@@ -415,14 +424,6 @@ formula** supplier, which has no card and asks for the whole set.
    dashboard's grid source, so users with the typical P1-power →
    kWh-Riemann → dashboard chain don't have to pick the same sensor
    twice; the auto-pick refuses non-power sources.
-8. **Direct debit** *(only where the card prices it)* — whether you pay your
-   supplier by direct debit. Some cards charge a lower yearly standing
-   charge when the invoice is settled that way: Brusol Groene stroom is
-   250 € a year and 230 € on domiciliëring. The reduction is read off the
-   card, not typed, and nothing else on the bill changes. The box is hidden
-   on every contract whose card grants none, and an answer given on one
-   contract is dropped when you switch to another, so it cannot come back
-   into force later.
 9. **Connection power** *(Brussels only)* — the contractual connection power
    tier (≤ 1.44 / 1.44-6 / 6-9.6 / 9.6-13 / 13-18 / 18-36 / 36-56 / > 56 kVA).
    Brussels bills a Brugel OSP (Obligations de Service Public) annual fee
@@ -582,7 +583,8 @@ opens a three-option menu:
   makes for you. It is cheap once running: thirteen of the seventeen suppliers
   publish a freshness check, including the two slowest cards, so a day on which
   nothing was republished costs a handful of conditional requests rather than
-  the ~164 seconds a cold sweep takes, and tariff cards move about monthly. A
+  the minutes of fetching a cold sweep costs, and tariff cards move about
+  monthly. A
   negative reading on the sensor is a real answer: nothing on the market beats
   what you already have. Unlike the dialog the scheduled run has **no time
   budget and skips nothing**, because the budget only exists to keep a progress

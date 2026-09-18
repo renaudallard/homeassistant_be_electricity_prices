@@ -732,8 +732,12 @@ reasoned about when it fails.
 
 Cheap in the steady state. Thirteen of the seventeen suppliers publish a
 freshness probe, including the two slowest cards, so a day on which nothing
-was republished costs a handful of conditional requests rather than the ~164 s
-a cold sweep takes; cards move about monthly.
+was republished costs a handful of conditional requests rather than the minutes
+of fetching a cold sweep costs; cards move about monthly. No figure is pinned
+here on purpose: the last one was measured before a supplier joined the sweep
+and nothing re-measures it. What the sweep reserves per supplier is
+`SupplierExtractor.sweep_cost_s`, which is derivable and is what orders the
+rows.
 
 | Step | Method | Notes |
 | --- | --- | --- |
