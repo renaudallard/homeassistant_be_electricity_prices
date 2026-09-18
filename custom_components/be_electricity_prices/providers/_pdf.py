@@ -942,14 +942,13 @@ _OSP_OPEN_MIN_BOUND = 56.0
 def parse_brussels_osp(text: str) -> dict[str, float] | None:
     """Parse the Brussels Brugel OSP annual-fee table off a Sibelga card.
 
-    Every Brussels card that prints the "Obligations de Service Public"
-    block lists one flat EUR/year fee per connection-power tier. The three
-    supplier extractors render it three different ways (label above vs.
-    beside the value; ``et``/``Entre``/``<=`` phrasings), but each tier row
-    always ends ``<bound> kVA <value>``, so anchor on the value-bearing
-    ``kVA`` token. Returns every tier the card prints, keyed by the shared tier
-    ids, or None when the block is absent (a card that omits it, or a
-    non-Brussels card).
+    Every Brussels card that prints the public-service-obligation block
+    lists one flat EUR/year fee per connection-power tier. The supplier
+    extractors render it several ways (label above vs. beside the value;
+    ``et``/``en``/``Entre``/``<=`` phrasings), but each tier row always ends
+    ``<bound> kVA <value>``, so anchor on the value-bearing ``kVA`` token.
+    Returns every tier the card prints, keyed by the shared tier ids, or None
+    when the block is absent (a card that omits it, or a non-Brussels card).
 
     The rows have to be told apart by their operator, not by the number alone.
     "> 36 et <= 56 kVA" and "> 56 kVA" both end in ``56 kVA``, so keying on the
@@ -957,8 +956,16 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     charge a 40 kVA connection the 56-and-above fee.
     """
     # Case-insensitive: Bolt prints "Obligations de service publique" (lower
-    # 's'), the others "Obligations de Service Public".
-    block = re.search(r"Obligations de Service.*?(?=\n\s*\(\d\)|\Z)", text, re.S | re.I)
+    # 's'), the other French cards "Obligations de Service Public". Brussels
+    # is bilingual and the Dutch cards head the same table "Taks openbare
+    # dienstverplichtingen (ODV)", so both languages anchor here rather than
+    # the block going unread on a card that prints it.
+    block = re.search(
+        r"(?:Obligations de Service|Taks openbare dienstverplichtingen)"
+        r".*?(?=\n\s*\(\d\)|\Z)",
+        text,
+        re.S | re.I,
+    )
     if block is None:
         return None
     out: dict[str, float] = {}

@@ -53,6 +53,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     fetch_text,
     is_transient_fetch_error,
     numeric_row,
+    parse_brussels_osp,
     parse_sign,
     parse_valid_until,
     text_mentions_month,
@@ -869,3 +870,53 @@ def test_a_bare_figure_line_borrows_no_label_from_a_row_above() -> None:
     a real row cannot be read as that row repeated."""
     card = "Fluvius West 60,5255 6,69853\n1,00 2,00\n"
     assert numeric_row(card, "Fluvius West", 2) == ["60,5255", "6,69853"]
+
+
+_OSP_FEES = {
+    "le1_44": 0.0,
+    "le6": 13.36,
+    "le9_6": 21.37,
+    "le13": 26.71,
+    "le18": 39.94,
+    "le36": 53.30,
+    "le56": 106.59,
+    "gt56": 173.25,
+}
+
+
+def test_brussels_osp_reads_the_french_block() -> None:
+    card = (
+        "Taxe obligations de Service Public (OSP) - €/an\n"
+        "<= 1,44 kVA 0,00\n"
+        "> 1,44 et <= 6,0 kVA 13,36\n"
+        "> 6,00 et <= 9,6 kVA 21,37\n"
+        "> 9,60 et <= 13,0 kVA 26,71\n"
+        "> 13,00 et <= 18,0 kVA 39,94\n"
+        "> 18,00 et <= 36,0 kVA 53,30\n"
+        "> 36,00 et <= 56,0 kVA 106,59\n"
+        "> 56,00 kVA 173,25\n"
+    )
+    assert parse_brussels_osp(card) == _OSP_FEES
+
+
+def test_brussels_osp_reads_the_dutch_block() -> None:
+    """Brussels is bilingual and the Dutch cards head the same regulated
+    table "Taks openbare dienstverplichtingen (ODV)". Anchored on the French
+    wording alone the block went unread, so a Dutch Brussels card priced
+    every connection at a zero OSP fee instead of up to 173,25 EUR a year."""
+    card = (
+        "Taks openbare dienstverplichtingen (ODV) - €/jaar\n"
+        "<= 1,44 kVA 0,00\n"
+        "> 1,44 en <= 6,0 kVA 13,36\n"
+        "> 6,00 en <= 9,6 kVA 21,37\n"
+        "> 9,60 en <= 13,0 kVA 26,71\n"
+        "> 13,00 en <= 18,0 kVA 39,94\n"
+        "> 18,00 en <= 36,0 kVA 53,30\n"
+        "> 36,00 en <= 56,0 kVA 106,59\n"
+        "> 56,00 kVA 173,25\n"
+    )
+    assert parse_brussels_osp(card) == _OSP_FEES
+
+
+def test_brussels_osp_is_none_off_a_card_without_the_block() -> None:
+    assert parse_brussels_osp("SIBELGA 9,96 9,96 7,53 7,53 14,73 2,27") is None
