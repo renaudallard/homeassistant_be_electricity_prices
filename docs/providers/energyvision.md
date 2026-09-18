@@ -37,6 +37,10 @@ integration tracks six of them:
   fixed for the term instead of indexed.
 - **GSLP** ("Goedkope stroom + Laadpunt", Flanders) - the 1.000 kWh tranche again, with the
   charging point's much larger 410 €/yr standing charge.
+- **GRS** ("Groene stroom", Brussels) - the same monthly index with no tranche in front of
+  it, so it bills `1,12 x Belpex-RLP-M + 38 EUR/MWh` from the first kWh. Brusol's own
+  product and the one any Brussels household can sign, where GS1800V asks for
+  EnergyVision/Brusol panels on the roof.
 
 A product is published once per region, one card each (`-nl` for the Flemish cards,
 `-WAL-fr` for the Walloon one, `-BXL-nl` for the Brussels ones), so `_ContractDef` carries a
@@ -87,6 +91,7 @@ token, which site and which archive layout that region's publication uses:
 | `energyvision_tiered_1800` | EnergyVision 1.800 kWh vast | spot_monthly | GS1800V | flanders → `nl`, brussels → `BXL-nl` | n/a |
 | `energyvision_fixed_injection_3y` | EnergyVision vaste injectieprijs 3 jaar | spot_monthly | GSVI3 | flanders → `nl` | n/a |
 | `energyvision_laadpunt` | EnergyVision Laadpunt | spot_monthly | GSLP | flanders → `nl` | n/a |
+| `energyvision_groene_stroom` | EnergyVision Groene stroom | spot_monthly | GRS | brussels → `BXL-nl` | n/a |
 
 Contract ids carry no region token, per the project convention: the region lives only in
 the keys of `cards`, which `regions` is derived from. The Walloon product is a separate
@@ -346,9 +351,9 @@ card says "is geldig voor het product ... van juli 2026", so the month name sits
 "geldig" validity-keyword window and resolves to the last day of the month
 (`date(2026, 7, 31)`, `test_publication_label_and_valid_until`).
 
-## The tiered cards (GS1800V / GSVI3 / GSLP)
+## The monthly cards (GS1800V / GSVI3 / GSLP / GRS)
 
-All three print the tranche and its remainder as two rows on page 1:
+Three of the four print the tranche and its remainder as two rows on page 1:
 
 ```
 Groene stroom (<1.800 kWh - vast tarief)     10,60 €cent/kWh
@@ -373,6 +378,22 @@ The index is the Flanders RLP curve: the card names "het rekenkundig gemiddelde 
 RLP-verbruiksprofielen stroom van de verschillende distributienetbeheerders van
 Vlaanderen", and every Flemish sub-area shares one Synergrid curve, so the mean over them
 is that curve. That is the same `rlp_blend="flanders"` Energy Knights Essentia bills on.
+The GRS card names Belpex-RLP-M and Belpex-SPP-M without defining either and points at the
+same published parameter page, so it inherits that blend rather than being given one; if
+EnergyVision ever defines a Brussels profile, that is what changes.
+
+### GRS bills no tranche
+
+Brusol's "Groene stroom" prints one variable rate and the same monthly formula behind it,
+with nothing in front: `1,12 x Belpex-RLP-M + 38 EUR/MWh`, a 250 €/yr standing charge
+(230 € on direct debit, which the model has no payment-method input to express, so the
+card's headline figure is what bills), injection `0,6 x Belpex-SPP-M - 30 EUR/MWh` and no
+minimum, where GS1800V guarantees 1 c€/kWh.
+
+`_ContractDef.tranche` says so, and `_extract_tiered` takes it as an argument rather than
+deciding from whether the row was found. That is the whole point of the flag: a GS1800V
+card that stopped printing its tranche has drifted and must fail loud, not quietly bill
+every kWh at the indexed rate. The live check asserts it both ways for the same reason.
 
 Two per-card differences are worth knowing, because both broke the first parse:
 
@@ -542,6 +563,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_fixed_1y_wal_aug.pdf` | the same card for August 2026, carrying the rewritten tax block |
 | `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |
 | `energyvision_tiered_1800_bxl_sep.pdf` | the Brusol GS1800V card for Brussels, same month |
+| `energyvision_groene_stroom_bxl_sep.pdf` | the Brusol GRS card, September 2026: the untranched shape |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on

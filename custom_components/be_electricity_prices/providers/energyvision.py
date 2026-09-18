@@ -149,6 +149,7 @@ _BRUSOL_GS1800V_URL = (
     f"{_BRUSOL_SITE}/nl/%C3%A9lectricit%C3%A9-et-gaz"
     "/schrijf-je-in-voor-goedkope-stroom-van-brusol"
 )
+_BRUSOL_GRS_URL = f"{_BRUSOL_SITE}/nl/schrijf-je-in-voor-groene-stroom-van-brusol"
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,11 @@ class _ContractDef:
     # under the Brusol brand, for Brussels, off two different sites. The
     # mapping makes this class unhashable, which nothing needs it to be.
     cards: Mapping[str, _CardDef]
+    # Whether a spot_monthly card bills a first tranche of the year at a flat
+    # rate before the indexed remainder. Declared rather than discovered: a
+    # tiered card whose tranche row went missing has drifted and must fail
+    # loud, not quietly bill every kWh at the indexed rate.
+    tranche: bool = True
 
     @property
     def regions(self) -> frozenset[str]:
@@ -268,6 +274,33 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "GSLP",
         {REGION_FLANDERS: _FLANDERS_CARD},
     ),
+    # Brusol's other Brussels product, and the one any household can sign:
+    # GS1800V is sold only to roofs carrying EnergyVision/Brusol panels,
+    # while this card's condition 3 asks for nothing but a residential
+    # connection. Same monthly RLP index as the tiered range with no tranche
+    # in front of it, so it is a spot_monthly card that bills the formula
+    # from the first kWh.
+    #
+    # It names Belpex-RLP-M and Belpex-SPP-M without defining either, where
+    # the GS1800V card spells out that the weighting is the mean of the
+    # Flemish DSOs' profiles. Same supplier, same index names, same published
+    # parameter page, so the blend is read off that card rather than guessed;
+    # if EnergyVision ever defines a Brussels profile, this is what changes.
+    _ContractDef(
+        "energyvision_groene_stroom",
+        "EnergyVision Groene stroom",
+        "spot_monthly",
+        "GRS",
+        {
+            REGION_BRUSSELS: _CardDef(
+                token="BXL-nl",
+                site=_BRUSOL_SITE,
+                index_url=_BRUSOL_GRS_URL,
+                archive_by_upload_month=True,
+            )
+        },
+        tranche=False,
+    ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
@@ -282,6 +315,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "GS3JV",
         "GS1JV",
         "GSVI3",
+        "GRS",
         "GS1800V",
         "GSLP",
         "GSEZ",
@@ -331,8 +365,12 @@ _TIER_FIXED_RE = re.compile(
 # Their feed-in row is either indexed ("variabel") or fixed for the term
 # ("vast", GSVI3). Both print one figure; which of the two it is decides
 # whether _spp_injection finds a formula to index it on.
+# The Brusol "Groene stroom" card qualifies the row, "Injectie - variabel
+# (indien van toepassing) 1,28€cent/kWh", so the parenthetical is tolerated.
+# It cannot swallow a figure: the group still has to be the next number.
 _TIER_INJECTION_RE = re.compile(
-    rf"Injectie\s*[{SIGN_CHARS}]\s*(?:variabel|vast)\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Injectie\s*[{SIGN_CHARS}]\s*(?:variabel|vast)\s*(?:\([^)]*\))?\s+"
+    rf"{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )
 # The tranche's remainder: "1,12 x Belpex-RLP-M + 20 EUR/MWh". Same shape as
@@ -725,7 +763,7 @@ def parse_snapshot(
     if contract.kind == "dynamic":
         energy, injection = _extract_dynamic(text)
     elif contract.kind == "spot_monthly":
-        energy, injection = _extract_tiered(text)
+        energy, injection = _extract_tiered(text, tranche=contract.tranche)
     else:
         energy, injection = _extract_fixed(text)
     # The energy leg is worded identically in both regions and needs no
@@ -883,13 +921,21 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     return energy, injection
 
 
-def _extract_tiered(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
-    """Energy + feed-in for a tiered card.
+def _extract_tiered(
+    text: str, *, tranche: bool = True
+) -> tuple[SpotMonthlyRates, InjectionRates]:
+    """Energy + feed-in for a monthly-indexed card, tranche or not.
 
     The tranche and the formula are carried side by side rather than blended
     here: which of them a household actually pays depends on its yearly
     volume, which is entry data and not card data, so ``resolve_volume_tier``
     folds them together when the snapshot is read for an entry.
+
+    ``tranche=False`` is Brusol's "Groene stroom", which prints the same
+    monthly formula with nothing in front of it and so bills it from the
+    first kWh. The flag comes from the contract rather than from whether the
+    row was found, so a tiered card that stops printing its tranche still
+    fails loud instead of quietly billing every kWh at the indexed rate.
 
     ``rlp_blend`` is the Flanders curve because that is what the card names,
     "het rekenkundig gemiddelde van de RLP-verbruiksprofielen stroom van de
@@ -897,8 +943,8 @@ def _extract_tiered(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     sub-area shares one Synergrid curve, so the mean over them IS that curve.
     """
     fee = _fee(text)
-    tier = _TIER_FIXED_RE.search(text)
-    if tier is None:
+    tier = _TIER_FIXED_RE.search(text) if tranche else None
+    if tranche and tier is None:
         raise ExtractorError("EnergyVision: could not parse the fixed tranche row")
     formula = _RLP_FORMULA_RE.search(text)
     if formula is None:
@@ -911,8 +957,8 @@ def _extract_tiered(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     energy = SpotMonthlyRates(
         factor=to_float(formula.group(1)) * vat,
         base=parse_sign(formula.group(2)) * to_float(formula.group(3)) / 1000.0 * vat,
-        tier_kwh=tier_bound_kwh(tier.group(1)),
-        tier_rate=to_float(tier.group(2)) / 100.0,
+        tier_kwh=tier_bound_kwh(tier.group(1)) if tier else None,
+        tier_rate=to_float(tier.group(2)) / 100.0 if tier else None,
         rlp_indexed=True,
         rlp_blend="flanders",
         yearly_fixed_fee=fee,

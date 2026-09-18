@@ -1311,7 +1311,11 @@ async def _check_energyvision(
             )
             _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
             if contract.kind == "spot_monthly":
-                _check_energyvision_tier(prefix, snap)
+                _check_energyvision_tier(
+                    prefix,
+                    snap,
+                    tranche=energyvision._CONTRACTS_BY_ID[cid].tranche,
+                )
             if "ores" in snap.dsos:
                 # The Walloon card prints the CWaPE Impact bands cheapest
                 # first, the reverse of the DATS 24 layout: a positional
@@ -1327,9 +1331,9 @@ async def _check_energyvision(
                 )
 
 
-def _check_energyvision_tier(prefix: str, snap: object) -> None:
-    """The tiered range's own shape: a tranche, a rate for it, and the Flanders
-    RLP curve the remainder resolves against.
+def _check_energyvision_tier(prefix: str, snap: object, *, tranche: bool) -> None:
+    """The monthly range's own shape: the Flanders RLP curve the indexed leg
+    resolves against, and where the card bills one, a tranche and its rate.
 
     Every bound here is sized on the unit slip it catches rather than on what
     the tariff happens to cost. The tranche bound is the one that matters:
@@ -1337,20 +1341,32 @@ def _check_energyvision_tier(prefix: str, snap: object) -> None:
     with ``to_float`` instead of ``tier_bound_kwh`` yields 1,8 kWh, which
     would put essentially the whole year on the variable leg and leave every
     other assertion here green.
+
+    ``tranche=False`` is Brusol's "Groene stroom", which bills the formula
+    from the first kWh. Asserted both ways rather than skipped: a tranche
+    appearing on that card, or vanishing from the three that print one, is a
+    drift either way.
     """
     energy = getattr(snap, "energy", None)
     tier_kwh = getattr(energy, "tier_kwh", None)
     tier_rate = getattr(energy, "tier_rate", None)
-    _expect(
-        f"{prefix}: tranche parsed as whole kWh",
-        tier_kwh is not None and tier_kwh >= 100.0,
-        detail=f"tier_kwh={tier_kwh}",
-    )
-    _expect(
-        f"{prefix}: tranche rate in EUR/kWh",
-        tier_rate is not None and 0.01 <= tier_rate <= 1.0,
-        detail=f"tier_rate={tier_rate}",
-    )
+    if tranche:
+        _expect(
+            f"{prefix}: tranche parsed as whole kWh",
+            tier_kwh is not None and tier_kwh >= 100.0,
+            detail=f"tier_kwh={tier_kwh}",
+        )
+        _expect(
+            f"{prefix}: tranche rate in EUR/kWh",
+            tier_rate is not None and 0.01 <= tier_rate <= 1.0,
+            detail=f"tier_rate={tier_rate}",
+        )
+    else:
+        _expect(
+            f"{prefix}: no tranche, as this card prints none",
+            tier_kwh is None and tier_rate is None,
+            detail=f"tier_kwh={tier_kwh}, tier_rate={tier_rate}",
+        )
     factor = getattr(energy, "factor", None)
     base = getattr(energy, "base", None)
     _expect(

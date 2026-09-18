@@ -396,6 +396,7 @@ def test_energyvision_is_registered() -> None:
         _TIERED_1800,
         _TIERED_VI3,
         _TIERED_LP,
+        "energyvision_groene_stroom",
     }
 
 
@@ -1026,3 +1027,83 @@ def test_brussels_archive_tries_both_upload_directories() -> None:
         "https://www.energyvision.be/sites/default/files/inline-files/"
         "EV-0526-GS1800V-nl.pdf",
     )
+
+
+# ---- Brussels (Brusol) card: GRS "Groene stroom" -----------------------------
+
+_GRS = "energyvision_groene_stroom"
+
+
+def _grs() -> SupplierSnapshot:
+    return _tiered(_GRS, "energyvision_groene_stroom_bxl_sep.pdf", region="brussels")
+
+
+def test_groene_stroom_is_registered_for_brussels_only() -> None:
+    contracts = {c.id: c for c in EXTRACTORS["energyvision"].contracts}
+    assert contracts[_GRS].regions == frozenset({"brussels"})
+    assert contracts[_GRS].kind == "spot_monthly"
+    assert "GRS" in DISCOVER_IDS
+
+
+def test_groene_stroom_bills_the_formula_from_the_first_kwh() -> None:
+    """No tranche in front of the index, unlike the three tiered cards: the
+    card prints one variable rate and the monthly formula behind it."""
+    energy = _grs().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh is None
+    assert energy.tier_rate is None
+    # 1,12 x Belpex-RLP-M + 38 EUR/MWh, quoted excluding VAT against
+    # VAT-inclusive printed prices, so both legs take the 6% multiplier.
+    assert energy.factor == pytest.approx(1.12 * 1.06)
+    assert energy.base == pytest.approx(38.0 / 1000.0 * 1.06)
+    assert energy.rlp_indexed is True
+    assert energy.yearly_fixed_fee == pytest.approx(250.0)
+
+
+def test_groene_stroom_injection() -> None:
+    """0,6 x Belpex-SPP-M - 30 EUR/MWh. The card grants no minimum, where the
+    1.800 kWh one guarantees 1 c€/kWh, so there is no floor to carry."""
+    inj = _grs().injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0128)
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-30.0 / 1000.0)
+    assert inj.spp_indexed is True
+    assert inj.minimum is None
+
+
+def test_groene_stroom_injection_row_is_read_through_its_parenthetical() -> None:
+    """The row reads "Injectie - variabel (indien van toepassing) 1,28", where
+    the tiered cards print the figure straight after "variabel". Tolerating
+    the qualifier must not let the pattern reach past a figure into the next
+    one, so the three tiered cards are re-read here."""
+    assert _grs().injection is not None
+    for snap, expected in (
+        (_tiered_1800(), 0.0278),
+        (_tiered(_TIERED_VI3, "energyvision_vast_injectie_sep.pdf"), 0.0400),
+        (_tiered(_TIERED_LP, "energyvision_laadpunt_sep.pdf"), 0.0278),
+    ):
+        assert snap.injection is not None
+        assert snap.injection.current == pytest.approx(expected)
+
+
+def test_groene_stroom_network_and_taxes_are_the_brussels_ones() -> None:
+    snap = _grs()
+    assert set(snap.dsos) == {"sibelga"}
+    assert snap.dsos["sibelga"].data_management_per_year == pytest.approx(64.81)
+    assert snap.taxes.brussels_renewables == pytest.approx(0.02737)
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    assert snap.taxes.flanders_renewables == 0.0
+
+
+def test_a_tiered_card_that_loses_its_tranche_row_still_fails_loud() -> None:
+    """The untranched card is declared, not detected. A GS1800V card that
+    stopped printing its tranche would otherwise bill every kWh at the
+    indexed rate without a word."""
+    text = fixture_text("energyvision_tiered_1800_sep.pdf", layout=True)
+    row = [line for line in text.splitlines() if "vast tarief" in line]
+    assert row, "the fixture stopped printing the tranche row"
+    with pytest.raises(ExtractorError, match="fixed tranche row"):
+        parse_snapshot(
+            _TIERED_1800, text.replace(row[0], ""), "test://vl", region="flanders"
+        )

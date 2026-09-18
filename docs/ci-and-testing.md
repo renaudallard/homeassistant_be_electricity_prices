@@ -102,6 +102,9 @@ committed under `tests/fixtures/`:
   `cociter_var_2604.pdf`).
 - `tests/fixtures/discover/*.html` are frozen snippets of each supplier's listing page, one per
   supplier (`bolt.html`, `mega.html`, `octaplus.html`, and so on), used by `tests/test_discover.py`.
+  A supplier that advertises its cards on more than one page gets one snippet per page:
+  EnergyVision has `energyvision.html` for its own listing and `brusol_gs1800v.html` /
+  `brusol_grs.html` for the Brussels products, which are published on another site entirely.
 
 A provider test feeds the fixture text through the same parse path the coordinator uses and
 asserts the resulting `SupplierSnapshot` (energy rates, per-DSO overlays, taxes, injection,

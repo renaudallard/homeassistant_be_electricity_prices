@@ -161,15 +161,47 @@ def test_mega_discover_matches_registry() -> None:
 
 
 def test_energyvision_discover_matches_registry() -> None:
-    session = _FakeSession(_read("energyvision.html"))
+    session = _UrlFakeSession(
+        {
+            "goedkope-stroom-van-brusol": (_read("brusol_gs1800v.html"), 200),
+            "groene-stroom-van-brusol": (_read("brusol_grs.html"), 200),
+            "energyvision.be": (_read("energyvision.html"), 200),
+        }
+    )
     discovered = _run(energyvision_mod.discover(session))
-    # discover() returns every residential electricity code on the listing,
-    # across BOTH language tokens: the Flemish cards are published only as
-    # -nl and the Walloon ones only as -WAL-fr, so matching one token would
+    # discover() returns every residential electricity code advertised, across
+    # EVERY page and EVERY language token: a product is published for one
+    # region in one language, and Brussels is not on the EnergyVision site at
+    # all but on Brusol's, so reading one page or matching one token would
     # silently drop a whole region's catalogue from the drift check. The
     # registry baseline is DISCOVER_IDS (the full catalogue, so only a
     # genuinely new code flags).
     assert discovered == set(energyvision_mod.DISCOVER_IDS)
+
+
+def test_energyvision_discover_reads_the_brusol_pages() -> None:
+    """The Brussels catalogue is invisible from energyvision.be. Without the
+    Brusol pages GRS is never seen, and a new Brussels SKU never flags."""
+    off_ev_only = _run(
+        energyvision_mod.discover(_FakeSession(_read("energyvision.html")))
+    )
+    assert "GRS" not in off_ev_only
+    off_brusol = _run(
+        energyvision_mod.discover(
+            _UrlFakeSession(
+                {
+                    "groene-stroom-van-brusol": (_read("brusol_grs.html"), 200),
+                    "goedkope-stroom-van-brusol": (
+                        _read("brusol_gs1800v.html"),
+                        200,
+                    ),
+                }
+            )
+        )
+    )
+    # GSG is the Brussels gas card, catalogued and declined like its Flemish
+    # twin; it is in DISCOVER_IDS so it does not flag.
+    assert off_brusol == {"GRS", "GS1800V", "GSG"}
 
 
 def test_energyknights_discover_matches_registry() -> None:

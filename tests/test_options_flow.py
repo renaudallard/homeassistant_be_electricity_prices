@@ -5348,11 +5348,12 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("brussels", "static", False): 29,
         ("brussels", "static", True): 21,
         # 7 before EnergyVision's 1.800 kWh contract gained Brussels, where
-        # it is published as Brusol on another site. It settles on a monthly
-        # index, so it lands in the spot cell. No re-costing: the supplier's
-        # 9,1 s reservation already covers its slowest card and this is not
-        # it.
-        ("brussels", "spot", False): 8,
+        # it is published as Brusol on another site, and 8 before Brusol's
+        # own Groene stroom joined it. Both settle on a monthly index, so
+        # they land in the spot cell. No re-costing: the supplier's 9,1 s
+        # reservation already covers its slowest card and neither of these
+        # is it.
+        ("brussels", "spot", False): 9,
         ("brussels", "spot", True): 6,
         ("brussels", "slot", False): 1,
         ("brussels", "slot", True): 1,
