@@ -2435,26 +2435,34 @@ async def _check_card_freshness(
     energyvision = modules.get("energyvision")
     if energyvision is not None:
         for contract in energyvision._CONTRACTS:
-            # The trailing literal hyphen after the code keeps the GS1JVG
-            # gas card out of the GS1JV row.
-            pattern = (
-                rf"inline-files/EV-([^\"]*?)-{re.escape(contract.code)}-[^\"]*\.pdf"
-            )
+            for region, card in sorted(contract.cards.items()):
+                # The trailing literal hyphen after the code keeps the GS1JVG
+                # gas card out of the GS1JV row. The directory is not anchored:
+                # the Brussels cards live under the month Brusol uploaded them
+                # rather than in one folder.
+                pattern = (
+                    rf"/files/[^\"]*?EV-([^\"]*?)-{re.escape(contract.code)}"
+                    rf"-{re.escape(card.token)}[^\"]*\.pdf"
+                )
 
-            async def _ev_served(
-                _html: str, _c: object = contract, _p: str = pattern
-            ) -> list[str | None]:
-                url = await energyvision._resolve_card_url(session, _c)
-                return _stamps_from(_p, url)
+                async def _ev_served(
+                    _html: str,
+                    _c: object = contract,
+                    _card: object = card,
+                    _p: str = pattern,
+                ) -> list[str | None]:
+                    url = await energyvision._resolve_card_url(session, _c, _card)
+                    return _stamps_from(_p, url)
 
-            await _freshness_row(
-                f"energyvision/freshness: newest advertised {contract.code} card",
-                session,
-                energyvision._LISTING_URL,
-                pattern,
-                _ev_served,
-                key=_mmyy_key,
-            )
+                await _freshness_row(
+                    f"energyvision/freshness: newest advertised "
+                    f"{contract.code} card ({region})",
+                    session,
+                    card.index_url,
+                    pattern,
+                    _ev_served,
+                    key=_mmyy_key,
+                )
 
 
 def _validate_injection(prefix: str, snap: object, shape: str = "present") -> None:

@@ -33,9 +33,13 @@ suffixes (the fixed card ships as ``EV-0726-GS3JV-nl_0.pdf``), so a
 constructed URL would miss it. The fetch therefore scrapes the current
 card href off the tariefkaart listing page (the Mega / Frank shape).
 
-Three residential electricity products are supported. Each is published for
-exactly one region in exactly one language, so the region is a property of
-the product rather than a variant of one card:
+A product is published per region, one card each, and a card is never
+bilingual: the Flemish cards are ``-nl`` and the Walloon ones ``-WAL-fr``.
+So ``_ContractDef`` holds a ``_CardDef`` per region rather than one filename
+token, and that card says which site, which index page and which archive
+layout the region's publication uses.
+
+The residential electricity products supported:
 
 * ``GSDYN`` (Goedkope Stroom Dynamisch, Flanders): quarter-hourly Belpex
   formula, the same EUR/MWh HTVA axis as Bolt / Frank. The coefficient is a
@@ -67,8 +71,9 @@ the model.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -115,11 +120,33 @@ from .base import (
 )
 
 _SITE_BASE = "https://www.energyvision.be"
-# One listing page carries every card, Flemish and Walloon alike, so the
-# freshness probe covers both.
+# One listing page carries every card on the EnergyVision site, Flemish and
+# Walloon alike, so the freshness probe covers both.
 _LISTING_URL = f"{_SITE_BASE}/nl-be/tariefkaart"
-_FLANDERS_ONLY = frozenset({REGION_FLANDERS})
-_WALLONIA_ONLY = frozenset({REGION_WALLONIA})
+
+
+@dataclass(frozen=True)
+class _CardDef:
+    """Where one product's card for one region is published.
+
+    A product is published per region, and the publication is not one
+    catalogue: the region decides the filename token, the site and the page
+    the current card is resolved off.
+    """
+
+    # Filename language / region token, the part between the product code and
+    # the Drupal dedup suffix: "nl" for the Flemish cards, "WAL-fr" for the
+    # Walloon ones.
+    token: str
+    # Site the card and the page that advertises it live on.
+    site: str = _SITE_BASE
+    # Page whose HTML carries the current card's href.
+    index_url: str = _LISTING_URL
+    # How an archived card is located under <site>/sites/default/files/.
+    # False is EnergyVision's flat "inline-files" folder, where the filename
+    # alone locates every month; True is Brusol, which files each card under
+    # the month it uploaded it.
+    archive_by_upload_month: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,17 +155,38 @@ class _ContractDef:
     label: str
     kind: TariffKind
     code: str  # EV filename product code (GSDYN, GS3JV, ...)
-    # Filename language / region token, the part between the product code and
-    # the Drupal dedup suffix. EnergyVision publishes each product for exactly
-    # one region in exactly one language: the Flemish cards only as "-nl", the
-    # Walloon ones only as "-WAL-fr". There is no card for the other pairing.
-    token: str = "nl"
-    regions: frozenset[str] = _FLANDERS_ONLY
+    # One card per region this product is sold in. Most products are sold in
+    # one region only, but not all: GS1800V is published for Flanders and,
+    # under the Brusol brand, for Brussels, off two different sites. The
+    # mapping makes this class unhashable, which nothing needs it to be.
+    cards: Mapping[str, _CardDef]
+
+    @property
+    def regions(self) -> frozenset[str]:
+        return frozenset(self.cards)
+
+    def card(self, region: str) -> _CardDef | None:
+        return self.cards.get(region)
+
+
+_FLANDERS_CARD = _CardDef(token="nl")
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
-    _ContractDef("energyvision_dynamic", "EnergyVision Dynamisch", "dynamic", "GSDYN"),
-    _ContractDef("energyvision_fixed_3y", "EnergyVision 3 jaar vast", "fixed", "GS3JV"),
+    _ContractDef(
+        "energyvision_dynamic",
+        "EnergyVision Dynamisch",
+        "dynamic",
+        "GSDYN",
+        {REGION_FLANDERS: _FLANDERS_CARD},
+    ),
+    _ContractDef(
+        "energyvision_fixed_3y",
+        "EnergyVision 3 jaar vast",
+        "fixed",
+        "GS3JV",
+        {REGION_FLANDERS: _FLANDERS_CARD},
+    ),
     # Wallonia's own fixed product, on a French card. It is a 1-year lock
     # where Flanders gets 3, so it is a distinct contract rather than the same
     # one in another region.
@@ -155,8 +203,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "EnergyVision 1 an fixe",
         "fixed",
         "GS1JV",
-        token="WAL-fr",
-        regions=_WALLONIA_ONLY,
+        {REGION_WALLONIA: _CardDef(token="WAL-fr")},
     ),
     # The tiered range. All three share one shape and differ only in the
     # tranche, the flat rate, the coefficient, the standing charge and how the
@@ -166,18 +213,21 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "EnergyVision 1.800 kWh vast",
         "spot_monthly",
         "GS1800V",
+        {REGION_FLANDERS: _FLANDERS_CARD},
     ),
     _ContractDef(
         "energyvision_fixed_injection_3y",
         "EnergyVision vaste injectieprijs 3 jaar",
         "spot_monthly",
         "GSVI3",
+        {REGION_FLANDERS: _FLANDERS_CARD},
     ),
     _ContractDef(
         "energyvision_laadpunt",
         "EnergyVision Laadpunt",
         "spot_monthly",
         "GSLP",
+        {REGION_FLANDERS: _FLANDERS_CARD},
     ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -407,14 +457,15 @@ async def fetch(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         raise ExtractorError(f"unknown EnergyVision contract {contract_id!r}")
-    if region not in contract.regions:
+    card = contract.card(region)
+    if card is None:
         raise ExtractorError(
             f"EnergyVision {contract_id} is not sold in {region!r}; "
             f"published for {sorted(contract.regions)}"
         )
-    url = await _resolve_card_url(session, contract)
+    url = await _resolve_card_url(session, contract, card)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, url)
+    return parse_snapshot(contract_id, text, url, region=region)
 
 
 async def fetch_for_month(
@@ -444,71 +495,143 @@ async def fetch_for_month(
     month rather than caching it as absent.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
-    if contract is None or region not in contract.regions:
+    if contract is None:
+        return None
+    card = contract.card(region)
+    if card is None:
         return None
     first = date(year_month.year, year_month.month, 1)
-    url = (
-        f"{_SITE_BASE}/sites/default/files/inline-files/"
-        f"EV-{first.month:02d}{first.year % 100:02d}-{contract.code}-{contract.token}.pdf"
-    )
-    try:
-        text = await fetch_pdf_text_layout(session, url)
-        snap = parse_snapshot(contract_id, text, url)
-    except ExtractorError as err:
-        # A timeout, a reset or a 5xx says nothing about the month: raise,
-        # so the month cache retries it instead of caching it as absent.
-        if is_transient_fetch_error(str(err)):
-            raise
-        return None
-    # Every card prints "geldig ... tot en met" so valid_until is parsed and the
-    # authoritative tier of the cross-check applies. It is what catches a CDN
-    # serving the current card under an archived name.
-    return archive_validity_check(snap, text, first)
+    for url in _archive_card_urls(contract, card, first):
+        try:
+            text = await fetch_pdf_text_layout(session, url)
+            snap = parse_snapshot(contract_id, text, url, region=region)
+        except ExtractorError as err:
+            # A timeout, a reset or a 5xx says nothing about the month: raise,
+            # so the month cache retries it instead of caching it as absent.
+            if is_transient_fetch_error(str(err)):
+                raise
+            continue
+        # Every card prints "geldig ... tot en met" so valid_until is parsed and
+        # the authoritative tier of the cross-check applies. It is what catches
+        # a CDN serving the current card under an archived name. A candidate
+        # that turns out to hold another month's card is not the end of the
+        # search: try the next one before giving the month up.
+        checked = archive_validity_check(snap, text, first)
+        if checked is not None:
+            return checked
+    return None
 
 
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - the listing key is region-independent.
+    region: str,
 ) -> str | None:
-    """Cheap freshness key: HEAD the listing page. Its ETag / Last-Modified
-    flips when EnergyVision rotates the monthly cards, which is exactly when
-    the resolved PDF URL changes."""
-    if contract_id not in _CONTRACTS_BY_ID:
+    """Cheap freshness key: HEAD the page this card is advertised on. Its
+    ETag / Last-Modified flips when EnergyVision rotates the monthly cards,
+    which is exactly when the resolved PDF URL changes.
+
+    The page is per region, not per supplier: the Brussels cards are
+    advertised on the Brusol site and rotate on their own schedule.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    card = None if contract is None else contract.card(region)
+    if card is None:
         return None
     return await head_freshness_key(
-        session, _LISTING_URL, prefer=("ETag", "Last-Modified")
+        session, card.index_url, prefer=("ETag", "Last-Modified")
+    )
+
+
+def _index_urls() -> tuple[str, ...]:
+    """Every page a current card is advertised on, in registration order and
+    without repeats."""
+    seen: dict[str, None] = {}
+    for contract in _CONTRACTS:
+        for card in contract.cards.values():
+            seen.setdefault(card.index_url, None)
+    return tuple(seen)
+
+
+def _card_href_re(code: str, token: str) -> re.Pattern[str]:
+    """Match one card's href on an index page.
+
+    The href is site-relative on the EnergyVision listing and absolute on the
+    Brusol pages, so the site prefix is optional. The directory is not
+    anchored: EnergyVision keeps every card in one ``inline-files`` folder
+    while Brusol files each one under the month it uploaded it.
+    """
+    return re.compile(
+        rf'href="((?:https?://[^"/]+)?/sites/default/files/[^"]*?'
+        rf'EV-\d{{4}}-{re.escape(code)}-{re.escape(token)}[^"]*\.pdf)"',
+        re.IGNORECASE,
     )
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Return the residential electricity product codes on the listing so
-    live_check can flag a new SKU. Diffed against :data:`DISCOVER_IDS`.
+    """Return the residential electricity product codes currently advertised,
+    so live_check can flag a new SKU. Diffed against :data:`DISCOVER_IDS`.
 
-    Both language tokens are walked: the Flemish cards are published only as
-    ``-nl`` and the Walloon ones only as ``-WAL-fr``, so matching one token
-    would silently drop a whole region's catalogue from the drift check.
+    Every index page is walked and so is every token in use: a product is
+    published for one region in one language, so matching one page or one
+    token would silently drop a whole region's catalogue from the drift
+    check. The tokens come from the registered cards rather than a literal,
+    so a card added with a new token extends the check with it.
+
+    Only pages advertising the CURRENT cards are read. Brusol also publishes
+    an archive page, and reading that would report every product it has ever
+    sold as a new SKU.
     """
-    try:
-        html = await fetch_text(session, _LISTING_URL)
-    except ExtractorError:
-        return set()
-    return set(re.findall(r"inline-files/EV-\d{4}-([A-Z0-9]+)-(?:nl|WAL-fr)", html))
+    tokens = "|".join(
+        sorted(
+            {re.escape(card.token) for c in _CONTRACTS for card in c.cards.values()},
+            key=lambda token: (-len(token), token),
+        )
+    )
+    found: set[str] = set()
+    for url in _index_urls():
+        try:
+            html = await fetch_text(session, url)
+        except ExtractorError:
+            continue
+        found |= set(re.findall(rf"EV-\d{{4}}-([A-Z0-9]+)-(?:{tokens})", html))
+    return found
+
+
+def _archive_card_urls(
+    contract: _ContractDef, card: _CardDef, first: date
+) -> tuple[str, ...]:
+    """The URLs an archived card for ``first`` could sit at, in order.
+
+    EnergyVision keeps every month in one ``inline-files`` folder, so the
+    filename locates the card on its own. Brusol files each card under the
+    month it UPLOADED it, which is usually the month before delivery and
+    sometimes the delivery month itself, so both are tried; measured over
+    March to September 2026, the pair covers every card published.
+    """
+    stamp = f"{first.month:02d}{first.year % 100:02d}"
+    name = f"EV-{stamp}-{contract.code}-{card.token}.pdf"
+    if not card.archive_by_upload_month:
+        return (f"{card.site}/sites/default/files/inline-files/{name}",)
+    previous = date(first.year, first.month, 1) - timedelta(days=1)
+    return tuple(
+        f"{card.site}/sites/default/files/{folder:%Y-%m}/{name}"
+        for folder in (previous, first)
+    )
 
 
 async def _resolve_card_url(
-    session: aiohttp.ClientSession, contract: _ContractDef
+    session: aiohttp.ClientSession, contract: _ContractDef, card: _CardDef
 ) -> str:
-    html = await fetch_text(session, _LISTING_URL)
-    match = re.search(
-        rf'href="(/sites/default/files/inline-files/EV-\d{{4}}-'
-        rf'{re.escape(contract.code)}-{re.escape(contract.token)}[^"]*\.pdf)"',
-        html,
-        re.IGNORECASE,
-    )
+    html = await fetch_text(session, card.index_url)
+    match = _card_href_re(contract.code, card.token).search(html)
     if not match:
-        raise ExtractorError(f"EnergyVision: no listing entry for card {contract.code}")
-    return _SITE_BASE + match.group(1)
+        raise ExtractorError(
+            f"EnergyVision: no listing entry for card {contract.code} "
+            f"({card.token}) on {card.index_url}"
+        )
+    href = match.group(1)
+    return href if href.startswith("http") else card.site + href
 
 
 # ---- snapshot parser ---------------------------------------------------------
@@ -519,11 +642,33 @@ def parse_snapshot(
     text: str,
     source_url: str,
     publication_label: str = "",
+    *,
+    region: str | None = None,
 ) -> SupplierSnapshot:
+    """Parse one card. ``region`` says which of the contract's cards this is.
+
+    Keyword-only, and defaulted to the contract's own region where it has
+    exactly one: ``region`` and ``source_url`` are both ``str``, so a
+    positional argument in the wrong slot would parse a Brussels card as a
+    Flemish one rather than raise. A contract sold in more than one region
+    has to be told, because the card decides the DSO and tax block.
+    """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         raise ExtractorError(f"unknown EnergyVision contract {contract_id!r}")
-    if REGION_WALLONIA in contract.regions:
+    if region is None:
+        if len(contract.regions) != 1:
+            raise ExtractorError(
+                f"EnergyVision {contract_id} is sold in "
+                f"{sorted(contract.regions)}; parse_snapshot needs the region"
+            )
+        region = next(iter(contract.regions))
+    elif region not in contract.regions:
+        raise ExtractorError(
+            f"EnergyVision {contract_id} is not sold in {region!r}; "
+            f"published for {sorted(contract.regions)}"
+        )
+    if region == REGION_WALLONIA:
         return _parse_wallonia(contract_id, text, source_url, publication_label)
     energy: EnergyRates
     if contract.kind == "dynamic":
