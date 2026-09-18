@@ -29,22 +29,24 @@ integration tracks six of them:
 - **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.
 - **GS1JV** ("Électricité bon marché 1 an fixe", Wallonia) - the same fixed shape on a
   1-year lock, off a French card.
-- **GS1800V** ("Goedkope stroom met 1.800 kWh vast", Flanders) - the tiered shape: the
-  year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
-  `1,12 x Belpex-RLP-M + 20 EUR/MWh`.
+- **GS1800V** ("Goedkope stroom met 1.800 kWh vast", Flanders and Brussels) - the tiered
+  shape: the year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
+  `1,12 x Belpex-RLP-M + 20 EUR/MWh`. The Brussels card prices it identically.
 - **GSVI3** ("Goedkope stroom met vaste injectieprijs 3 jaar", Flanders) - the same shape
   on a 1.000 kWh tranche at 9,54 c€/kWh with a `1,15` coefficient, and a feed-in price
   fixed for the term instead of indexed.
 - **GSLP** ("Goedkope stroom + Laadpunt", Flanders) - the 1.000 kWh tranche again, with the
   charging point's much larger 410 €/yr standing charge.
 
-Region is a property of the product, not a variant of one card: EnergyVision publishes each
-product for exactly one region in exactly one language (`-nl` for the Flemish cards,
-`-WAL-fr` for the Walloon one), and there is no card for the other pairing. `_ContractDef`
-therefore carries both a `regions` frozenset and the filename `token`, and `fetch` rejects a
-region the contract is not sold in, naming the regions it is. The two publications share no
-wording, so the Walloon card has its own parser set (the `*_fr` helpers) rather than
-bilingual alternations - see [Wallonia](#wallonia-gs1jv) below. Gas (GSG / GS1JVG) stays out
+A product is published once per region, one card each (`-nl` for the Flemish cards,
+`-WAL-fr` for the Walloon one, `-BXL-nl` for the Brussels ones), so `_ContractDef` carries a
+`_CardDef` per region and derives `regions` from its keys; `fetch` rejects a region the
+contract is not sold in, naming the regions it is. Most products are sold in one region,
+but GS1800V is sold in two. The Flemish and Walloon publications share no wording, so the
+Walloon card has its own parser set (the `*_fr` helpers) rather than bilingual alternations
+- see [Wallonia](#wallonia-gs1jv) below. The Dutch Brussels card is the opposite case and
+needs no parser of its own for the energy leg - see
+[Brussels](#brussels-is-published-as-brusol-on-another-site) below. Gas (GSG / GS1JVG) stays out
 of scope, and so do GSEZ / GSEZLP: they are tiered like the three above but also price
 self-consumed solar ("Groene stroom uit zonnepanelen op je dak 20 €cent/kWh"), a third
 energy leg with no representation in the model. GRSO is a transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py`) lists all of
@@ -73,17 +75,39 @@ header via `_publication_label` (`providers/energyvision.py`).
 
 ## Contracts
 
-Three contracts are declared in the `EXTRACTOR`, built from `_CONTRACTS`:
+The contracts are declared in the `EXTRACTOR`, built from `_CONTRACTS`. Each carries one
+`_CardDef` per region it is sold in, and the card, not the contract, says which filename
+token, which site and which archive layout that region's publication uses:
 
-| contract id | label | TariffKind | code | token | regions | quarter_hourly |
-| --- | --- | --- | --- | --- | --- | --- |
-| `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | `nl` | flanders | True |
-| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | `nl` | flanders | n/a |
-| `energyvision_fixed_1y` | EnergyVision 1 an fixe | fixed | GS1JV | `WAL-fr` | wallonia | n/a |
+| contract id | label | TariffKind | code | region → token | quarter_hourly |
+| --- | --- | --- | --- | --- | --- |
+| `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | flanders → `nl` | True |
+| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | flanders → `nl` | n/a |
+| `energyvision_fixed_1y` | EnergyVision 1 an fixe | fixed | GS1JV | wallonia → `WAL-fr` | n/a |
+| `energyvision_tiered_1800` | EnergyVision 1.800 kWh vast | spot_monthly | GS1800V | flanders → `nl`, brussels → `BXL-nl` | n/a |
+| `energyvision_fixed_injection_3y` | EnergyVision vaste injectieprijs 3 jaar | spot_monthly | GSVI3 | flanders → `nl` | n/a |
+| `energyvision_laadpunt` | EnergyVision Laadpunt | spot_monthly | GSLP | flanders → `nl` | n/a |
 
 Contract ids carry no region token, per the project convention: the region lives only in
-the `regions` frozenset. The Walloon product is a separate contract rather than the Flemish
-one in another region because it is a different product (a 1-year lock, not 3).
+the keys of `cards`, which `regions` is derived from. The Walloon product is a separate
+contract rather than the Flemish one in another region because it is a different product
+(a 1-year lock, not 3). GS1800V is the opposite case: the same product in two regions, so
+it is one contract with two cards.
+
+### Brussels is published as Brusol, on another site
+
+EnergyVision sells in Brussels under the **Brusol** brand, on `brusol.be`, and nothing on
+`energyvision.be` links to it. Two consequences worth knowing before hunting for a card:
+
+- A Brussels card is never on the tariefkaart listing. Brusol has no equivalent listing
+  either: each product's current card is advertised on the page you sign up for it from
+  (`_BRUSOL_GS1800V_URL`). Its archive page exists but stopped being updated in May 2026
+  and lists every product Brusol has ever sold, so it is the wrong page for both jobs.
+- The Brussels cards are published in both languages and the **Dutch one is worded exactly
+  like the Flemish card of the same product**, down to the energy figures. So `-BXL-nl` is
+  the card this module reads and `_extract_tiered` parses it unchanged; the `-BXL-fr`
+  variant would have needed a French parser set for nothing. Only the network row and the
+  tax block are the region's own.
 
 `quarter_hourly=True` on the dynamic card (`providers/energyvision.py`): it bills "op
 kwartierbasis" on the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table,
@@ -97,27 +121,53 @@ leg pays for the key, not about whether the index is hourly.
 
 ### Resolve + download (`fetch`, `_resolve_card_url`)
 
-`fetch` (`providers/energyvision.py`) validates the contract id and region, then
-`_resolve_card_url` (`providers/energyvision.py`) GETs the listing HTML and regexes the
-first `href="/sites/default/files/inline-files/EV-<4 digits>-<CODE>-<token>...pdf"` for the
-contract's code and language token. The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix. The
-resolved absolute URL is layout-extracted with `fetch_pdf_text_layout` (the layout
-extractor keeps column alignment, important for the DSO table), then parsed.
+`fetch` (`providers/energyvision.py`) looks the contract's card up by region, refusing a
+region it is not sold in, then `_resolve_card_url` GETs that card's `index_url` and regexes
+the first `href=".../sites/default/files/<any path>/EV-<4 digits>-<CODE>-<token>...pdf"`.
+The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is
+optional because the EnergyVision listing writes site-relative hrefs and Brusol absolute
+ones; and the directory is not anchored because Brusol files each card under the month it
+uploaded it. The resolved absolute URL is layout-extracted with `fetch_pdf_text_layout`
+(the layout extractor keeps column alignment, important for the DSO table), then parsed.
 
 ### Probe
 
-`EXTRACTOR.probe` = `probe` (`providers/energyvision.py`): a cheap
-`head_freshness_key` HEAD on the listing page (ETag / Last-Modified). That key flips when
-EnergyVision rotates the monthly cards, which is exactly when the resolved PDF URL changes,
-so the coordinator re-fetches on a month roll rather than on the time-based TTL.
+`EXTRACTOR.probe` = `probe` (`providers/energyvision.py`): a cheap `head_freshness_key`
+HEAD on the card's own `index_url` (ETag / Last-Modified). That key flips when EnergyVision
+rotates the monthly cards, which is exactly when the resolved PDF URL changes, so the
+coordinator re-fetches on a month roll rather than on the time-based TTL.
+
+The page is per region, not per supplier, and the two sites do not behave alike: Brusol's
+pages are Drupal dynamic pages and send neither header, so a **Brussels entry has no probe
+key and falls back to the 24h TTL**, the path Engie and Luminus take. `probe` returns
+`None` to say so, which is the documented way of saying it; it does not refetch the card
+every tick.
 
 ### Discover + archive
 
-`discover` (`providers/energyvision.py`) returns the residential NL electricity product
-codes on the listing (`EV-<MMYY>-<CODE>-nl`), which live_check diffs against `DISCOVER_IDS`
-to flag a new SKU. `EXTRACTOR.fetch_for_month` is `None`: the listing only exposes the
-current month and old versioned URLs are not reliably reachable, so past months bill at the
-current snapshot as a proxy, the same as Ecofix / energie.be.
+`discover` (`providers/energyvision.py`) walks every registered card's `index_url` and
+returns the product codes advertised there, which live_check diffs against `DISCOVER_IDS`
+to flag a new SKU. The token alternation is built from the registered cards rather than
+written out, so a card added with a new token extends the check with it. Only pages
+advertising CURRENT cards are read: Brusol's archive page would report every product it has
+ever sold as a new SKU.
+
+`fetch_for_month` builds the archived URL rather than scraping, through
+`_archive_card_urls`:
+
+| card | layout | candidates tried |
+| --- | --- | --- |
+| EnergyVision (`nl`, `WAL-fr`) | one flat folder | `inline-files/EV-<MMYY>-<CODE>-<token>.pdf` |
+| Brusol (`BXL-nl`) | filed by UPLOAD month | `<delivery month - 1>/…` then `<delivery month>/…` |
+
+Brusol's upload month is usually the month before delivery and sometimes the delivery month
+itself: measured over March to September 2026, the April card sits under `2026-04` and the
+May one under `2026-04` as well, so one candidate would lose a month and both are tried. A
+month before the product existed answers Drupal's HTML 404, which `fetch_pdf_text_layout`
+rejects on the magic bytes, and that becomes "no archive here". Every card prints its
+validity, so `archive_validity_check`'s authoritative tier applies in both regions; a
+candidate that turns out to hold another month's card is skipped rather than ending the
+search.
 
 ## Parsing
 
@@ -206,9 +256,10 @@ formula", `test_missing_dynamic_injection_is_fatal`) rather than silently credit
 ## Taxes
 
 `_extract_taxes` (`providers/energyvision.py`) passes this card's anchors to the shared
-`flanders_tax_overlay` helper (`providers/_pdf.py`), which parses the Flanders levy block
-into a `TaxOverlay`. The helper owns which rows may be missing; a lost GSC/WKC row now
-reports "GSC/WKK levies" rather than the generic "tax block" this extractor used for both. All card values are VAT-inclusive (the federal excise and energy fund
+`regional_tax_overlay` helper (`providers/_pdf.py`), naming Flanders as the region whose
+renewables field the levy lands in. The helper owns which rows may be missing; a lost
+GSC/WKC row now reports "GSC/WKK levies" rather than the generic "tax block" this extractor
+used for both. All card values are VAT-inclusive (the federal excise and energy fund
 are VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
 | overlay field | card row | regex | required |
@@ -226,6 +277,22 @@ bills the domiciled one, and its regex anchors on "Standaard tarief gedomiciliee
 0-20.000 kWh band (5,03288 c€/kWh). All c€/kWh values are divided by 100.
 `test_taxes_flanders_renewables_combined_gsc_wkc`, `test_taxes_federal_excise`,
 `test_taxes_energy_contribution` and `test_taxes_energy_fund_domiciled_zero` pin the block.
+
+### Brussels
+
+`_extract_brussels_taxes` calls the same helper with `region=REGION_BRUSSELS` and two
+anchors only:
+
+| overlay field | card row | regex | required |
+| --- | --- | --- | --- |
+| `federal_excise` | Bijzondere accijns | `_FLAT_EXCISE_RE`, then `_EXCISE_RE` | yes |
+| `brussels_renewables` | Kosten Groene stroom | `_BRUSSELS_GREEN_RE` | yes |
+
+Nothing else is looked for. Brussels levies no energy fund, that being Flemish, and the
+federal energy contribution was abolished on 2026-08-01 and is printed by no current card,
+so both read zero because the levy does not exist rather than because a row went missing.
+`_BRUSSELS_GREEN_RE` requires the literal "Kosten" in front, which is what keeps it off the
+page-1 energy rows that name the same product without it.
 
 ## DSO overlay
 
@@ -473,12 +540,17 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_fixed_3y_jul.pdf` | the GS3JV "Goedkope stroom 3 jaar vast" card, July 2026 |
 | `energyvision_fixed_1y_wal_jul.pdf` | the GS1JV "Électricité bon marché 1 an fixe" Walloon card, July 2026 |
 | `energyvision_fixed_1y_wal_aug.pdf` | the same card for August 2026, carrying the rewritten tax block |
+| `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |
+| `energyvision_tiered_1800_bxl_sep.pdf` | the Brusol GS1800V card for Brussels, same month |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on
 purpose: the July one pins the tiered excise and the printed connection fee, the August one
 pins the flat excise and the two absent rows, so a future parser change cannot silently
-regress either card generation.
+regress either card generation. The two GS1800V fixtures are the same month of the same
+product in two regions, and `test_brussels_energy_leg_is_the_flemish_one_figure_for_figure`
+compares them: it is what says the Brussels card may keep sharing the Flemish energy
+parser, and it will fail the day the two publications diverge.
 
 ## When the card changes, look here
 

@@ -1890,10 +1890,22 @@ async def test_deprecated_supplier_issue_names_the_successor_in_both_regions(
 def test_successor_is_dropped_when_it_does_not_serve_the_region() -> None:
     """A withdrawal names one successor nationally while our coverage is per
     region, so the card must not send a user to a supplier the config flow
-    would refuse. EnergyVision sells nothing in Brussels."""
-    assert _successor_for("energyvision", "flanders") is not None
-    assert _successor_for("energyvision", "wallonia") is not None
-    assert _successor_for("energyvision", "brussels") is None
+    would refuse.
+
+    Derived from the registry rather than pinned to an example. This test
+    used to assert that EnergyVision resolves to nothing in Brussels, which
+    stopped being true the day its Brussels cards were added: the rule held
+    throughout and only the example had rotted, so the example is gone.
+    """
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    for extractor in all_extractors():
+        for region in ("flanders", "wallonia", "brussels"):
+            resolved = _successor_for(extractor.id, region)
+            assert (resolved is not None) == (region in extractor.regions()), (
+                f"{extractor.id} in {region}: resolved={resolved is not None}, "
+                f"serves={region in extractor.regions()}"
+            )
     # Unset or unknown successors resolve to None rather than raising.
     assert _successor_for(None, "flanders") is None
     assert _successor_for("no_such_supplier", "flanders") is None

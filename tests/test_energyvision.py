@@ -92,14 +92,26 @@ _TIERED_VI3 = "energyvision_fixed_injection_3y"
 _TIERED_LP = "energyvision_laadpunt"
 
 
-def _tiered(contract_id: str, fixture: str) -> SupplierSnapshot:
+def _tiered(
+    contract_id: str, fixture: str, region: str = "flanders"
+) -> SupplierSnapshot:
     return parse_snapshot(
-        contract_id, fixture_text(fixture, layout=True), f"test://{contract_id}"
+        contract_id,
+        fixture_text(fixture, layout=True),
+        f"test://{contract_id}",
+        region=region,
     )
 
 
 def _tiered_1800() -> SupplierSnapshot:
     return _tiered(_TIERED_1800, "energyvision_tiered_1800_sep.pdf")
+
+
+def _bxl_1800() -> SupplierSnapshot:
+    """The Brussels twin of the 1.800 kWh card, published as Brusol."""
+    return _tiered(
+        _TIERED_1800, "energyvision_tiered_1800_bxl_sep.pdf", region="brussels"
+    )
 
 
 # ---- dynamic card (GSDYN) ---------------------------------------------------
@@ -387,14 +399,16 @@ def test_energyvision_is_registered() -> None:
     }
 
 
-def test_each_contract_serves_exactly_one_region() -> None:
-    # EnergyVision publishes each product for one region in one language, so
-    # a contract is never offered in a region whose card does not exist.
+def test_each_contract_is_offered_exactly_where_a_card_exists() -> None:
+    # A contract is never offered in a region whose card does not exist, and
+    # never withheld from one that has it: GS1800V is published for Flanders
+    # on energyvision.be and for Brussels, as Brusol, on brusol.be.
     regions = {c.id: c.regions for c in EXTRACTORS["energyvision"].contracts}
     assert regions[_DYNAMIC] == frozenset({"flanders"})
     assert regions[_FIXED] == frozenset({"flanders"})
     assert regions[_FIXED_WAL] == frozenset({"wallonia"})
-    for tiered in (_TIERED_1800, _TIERED_VI3, _TIERED_LP):
+    assert regions[_TIERED_1800] == frozenset({"flanders", "brussels"})
+    for tiered in (_TIERED_VI3, _TIERED_LP):
         assert regions[tiered] == frozenset({"flanders"})
 
 
@@ -869,3 +883,146 @@ def test_an_archived_month_carries_its_whole_card_not_just_the_energy_block() ->
     energy = snap.energy
     assert isinstance(energy, SpotMonthlyRates)
     assert energy.tier_kwh == pytest.approx(1800.0)
+
+
+# ---- Brussels (Brusol) card: GS1800V -----------------------------------------
+
+
+def test_brussels_energy_leg_is_the_flemish_one_figure_for_figure() -> None:
+    """The Dutch Brussels card is worded exactly like the Flemish card of the
+    same product and prices it identically, which is why it goes through the
+    same parser rather than a second set of regexes. If the two ever diverge
+    this test says so before a Brussels entry is billed a Flemish rate."""
+    bxl, vl = _bxl_1800().energy, _tiered_1800().energy
+    assert isinstance(bxl, SpotMonthlyRates) and isinstance(vl, SpotMonthlyRates)
+    assert (bxl.factor, bxl.base) == (vl.factor, vl.base)
+    assert (bxl.tier_kwh, bxl.tier_rate) == (vl.tier_kwh, vl.tier_rate)
+    assert bxl.yearly_fixed_fee == vl.yearly_fixed_fee == 50.0
+    assert bxl.rlp_indexed is True
+
+
+def test_brussels_injection_keeps_its_one_cent_floor() -> None:
+    inj = _bxl_1800().injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-0.015)
+    assert inj.minimum == pytest.approx(0.01)
+    assert inj.spp_indexed is True
+
+
+def test_brussels_card_prints_no_welcome_credit() -> None:
+    """The Flemish September card grants 200 EUR; the Brussels one prints the
+    footnote and no amount, so there is nothing to bill."""
+    assert _tiered_1800().welcome_credit_eur == pytest.approx(200.0)
+    assert _bxl_1800().welcome_credit_eur is None
+
+
+def test_brussels_dsos_are_sibelga_alone() -> None:
+    snap = _bxl_1800()
+    assert set(snap.dsos) == {"sibelga"}
+
+
+def test_brussels_sibelga_columns() -> None:
+    """SIBELGA 9,96 9,96 7,53 7,53 14,73 50,08 100,15 2,27, the same
+    eight-column layout Engie's Brussels card prints. The two flat annual
+    euros are the metering fee and the power term, billed together, so the
+    fee is 14,73 + 50,08 and the above-13 kVA band 14,73 + 100,15."""
+    o = _bxl_1800().dsos["sibelga"]
+    assert o.distribution_single == pytest.approx(0.0996)
+    assert o.distribution_peak == pytest.approx(0.0996)
+    assert o.distribution_offpeak == pytest.approx(0.0753)
+    assert o.distribution_exclusive_night == pytest.approx(0.0753)
+    assert o.transport == pytest.approx(0.0227)
+    assert o.data_management_per_year == pytest.approx(64.81)
+    assert o.brussels_power_term_above_13kva == pytest.approx(114.88)
+    # Brussels levies no capacity tariff; that is Flanders only.
+    assert o.capacity_eur_per_kw_year is None
+
+
+def test_brussels_osp_table_is_read_off_the_dutch_block() -> None:
+    assert _bxl_1800().dsos["sibelga"].brussels_osp_by_tier == {
+        "le1_44": 0.0,
+        "le6": 13.36,
+        "le9_6": 21.37,
+        "le13": 26.71,
+        "le18": 39.94,
+        "le36": 53.30,
+        "le56": 106.59,
+        "gt56": 173.25,
+    }
+
+
+def test_brussels_taxes() -> None:
+    """Two rows: the flat federal excise and the Brussels green levy. The
+    energy fund is Flemish and the federal contribution was abolished on
+    2026-08-01, so neither is on the card and both read zero."""
+    taxes = _bxl_1800().taxes
+    assert taxes.federal_excise == pytest.approx(0.04876)
+    assert taxes.brussels_renewables == pytest.approx(0.02737)
+    assert taxes.flanders_renewables == 0.0
+    assert taxes.wallonia_renewables == 0.0
+    assert taxes.energy_contribution == 0.0
+    assert taxes.energy_fund_eur_per_month == 0.0
+    assert taxes.vat_rate == 0.0
+
+
+def test_brussels_publication_metadata() -> None:
+    snap = _bxl_1800()
+    assert snap.publication_label == "september 2026"
+    # The archive cross-check leans on this: without it a CDN serving the
+    # current card under an archived name would price a past month at today's
+    # rates.
+    assert snap.valid_until == date(2026, 9, 30)
+
+
+def test_a_brussels_card_missing_the_sibelga_row_is_refused() -> None:
+    text = fixture_text("energyvision_tiered_1800_bxl_sep.pdf", layout=True)
+    row = [line for line in text.splitlines() if line.strip().startswith("SIBELGA")]
+    assert len(row) == 1, "the fixture stopped printing exactly one SIBELGA row"
+    with pytest.raises(ExtractorError, match="Sibelga row"):
+        parse_snapshot(
+            _TIERED_1800,
+            text.replace(row[0], ""),
+            "test://bxl",
+            region="brussels",
+        )
+
+
+def test_a_multi_region_contract_must_be_told_which_card_it_is_reading() -> None:
+    """region and source_url are both str, so a positional argument in the
+    wrong slot would silently parse a Brussels card as a Flemish one. The
+    region is keyword-only and, where the contract is sold in more than one,
+    mandatory."""
+    with pytest.raises(ExtractorError, match="needs the region"):
+        parse_snapshot(
+            _TIERED_1800,
+            fixture_text("energyvision_tiered_1800_bxl_sep.pdf", layout=True),
+            "test://bxl",
+        )
+
+
+def test_a_region_the_contract_is_not_sold_in_is_refused() -> None:
+    with pytest.raises(ExtractorError, match="not sold in 'brussels'"):
+        parse_snapshot(_DYNAMIC, _dyn_text(), "test://dyn", region="brussels")
+
+
+def test_brussels_archive_tries_both_upload_directories() -> None:
+    """Brusol files a card under the month it uploaded it, which is usually
+    the month before delivery and sometimes the delivery month: the April
+    2026 card sits under 2026-04 and the May one under 2026-04 as well. One
+    candidate would lose a month, so both are tried."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    contract = ev._CONTRACTS_BY_ID[_TIERED_1800]
+    urls = ev._archive_card_urls(contract, contract.cards["brussels"], date(2026, 5, 1))
+    assert urls == (
+        "https://www.brusol.be/sites/default/files/2026-04/EV-0526-GS1800V-BXL-nl.pdf",
+        "https://www.brusol.be/sites/default/files/2026-05/EV-0526-GS1800V-BXL-nl.pdf",
+    )
+    # Flanders keeps the flat folder, where the filename locates the month.
+    assert ev._archive_card_urls(
+        contract, contract.cards["flanders"], date(2026, 5, 1)
+    ) == (
+        "https://www.energyvision.be/sites/default/files/inline-files/"
+        "EV-0526-GS1800V-nl.pdf",
+    )

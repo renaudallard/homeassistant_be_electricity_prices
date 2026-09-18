@@ -33,11 +33,19 @@ suffixes (the fixed card ships as ``EV-0726-GS3JV-nl_0.pdf``), so a
 constructed URL would miss it. The fetch therefore scrapes the current
 card href off the tariefkaart listing page (the Mega / Frank shape).
 
-A product is published per region, one card each, and a card is never
-bilingual: the Flemish cards are ``-nl`` and the Walloon ones ``-WAL-fr``.
+A product is published per region, one card each: the Flemish cards are
+``-nl``, the Walloon ones ``-WAL-fr`` and the Brussels ones ``-BXL-nl``.
 So ``_ContractDef`` holds a ``_CardDef`` per region rather than one filename
 token, and that card says which site, which index page and which archive
 layout the region's publication uses.
+
+Brussels is not on this site at all. EnergyVision sells there as **Brusol**,
+on ``brusol.be``, which advertises each current card on the page you sign up
+from and files the archived ones under the month it uploaded them rather than
+the month they price. The Brussels cards are published in both languages and
+the Dutch one is worded exactly like the Flemish card of the same product, so
+the energy leg needs no second parser; only the Sibelga network row and the
+Brussels tax block are the region's own.
 
 The residential electricity products supported:
 
@@ -55,12 +63,14 @@ The residential electricity products supported:
   Dutch ones. Parsed by the ``*_fr`` helpers below. This is where DATS 24's
   Walloon customers land after the 2026-08-31 transfer.
 
-* ``GS1800V`` / ``GSVI3`` / ``GSLP`` (Flanders): the tiered range, which
-  bills a first tranche of the YEAR at a flat rate and the remainder on
-  ``factor x Belpex-RLP-M + 20 EUR/MWh``. Parsed as a ``SpotMonthlyRates``
-  leg carrying the tranche, which ``resolve_volume_tier`` folds into the
-  coefficients against the entry's annual volume. GSVI3 fixes its feed-in
-  price instead of indexing it, which is the only shape difference.
+* ``GS1800V`` (Flanders and Brussels) / ``GSVI3`` / ``GSLP`` (Flanders):
+  the tiered range, which bills a first tranche of the YEAR at a flat rate
+  and the remainder on ``factor x Belpex-RLP-M + 20 EUR/MWh``. Parsed as a
+  ``SpotMonthlyRates`` leg carrying the tranche, which ``resolve_volume_tier``
+  folds into the coefficients against the entry's annual volume. GSVI3 fixes
+  its feed-in price instead of indexing it, which is the only shape
+  difference. The two GS1800V cards print the same energy leg figure for
+  figure and differ only below it.
 
 Out of scope: gas (``GSG``, ``GS1JVG``) and the two tiered products that also
 price self-consumed solar (``GSEZ``, ``GSEZLP``): their "Groene stroom uit
@@ -84,6 +94,8 @@ from ..const import (
     DSO_ORES,
     DSO_RESA,
     DSO_REW,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
@@ -96,6 +108,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     numeric_row,
+    parse_sibelga_row,
     parse_sign,
     parse_valid_until,
     tier_bound_kwh,
@@ -123,6 +136,19 @@ _SITE_BASE = "https://www.energyvision.be"
 # One listing page carries every card on the EnergyVision site, Flemish and
 # Walloon alike, so the freshness probe covers both.
 _LISTING_URL = f"{_SITE_BASE}/nl-be/tariefkaart"
+
+# EnergyVision sells in Brussels under the Brusol brand, off its own site.
+# Nothing on energyvision.be links to it.
+_BRUSOL_SITE = "https://www.brusol.be"
+# Brusol has no equivalent of the tariefkaart listing: each product's current
+# card is advertised on the page you sign up for it from. It does publish an
+# archive page, but that one stopped being updated in May 2026 and lists every
+# product it has ever sold, so it is the wrong page to read for either job.
+# The FR path segment on the NL page is Brusol's own alias, not a typo.
+_BRUSOL_GS1800V_URL = (
+    f"{_BRUSOL_SITE}/nl/%C3%A9lectricit%C3%A9-et-gaz"
+    "/schrijf-je-in-voor-goedkope-stroom-van-brusol"
+)
 
 
 @dataclass(frozen=True)
@@ -208,12 +234,25 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # The tiered range. All three share one shape and differ only in the
     # tranche, the flat rate, the coefficient, the standing charge and how the
     # feed-in is priced, so one parser reads the three of them.
+    # Sold in Flanders and, as Brusol, in Brussels. The Dutch Brussels card
+    # is worded exactly like the Flemish one and prints the same energy leg
+    # figure for figure, so it goes through the same parser; only the network
+    # and tax blocks are the region's own. The Brussels product is open to
+    # households with EnergyVision/Brusol panels on the roof.
     _ContractDef(
         "energyvision_tiered_1800",
         "EnergyVision 1.800 kWh vast",
         "spot_monthly",
         "GS1800V",
-        {REGION_FLANDERS: _FLANDERS_CARD},
+        {
+            REGION_FLANDERS: _FLANDERS_CARD,
+            REGION_BRUSSELS: _CardDef(
+                token="BXL-nl",
+                site=_BRUSOL_SITE,
+                index_url=_BRUSOL_GS1800V_URL,
+                archive_by_upload_month=True,
+            ),
+        },
     ),
     _ContractDef(
         "energyvision_fixed_injection_3y",
@@ -358,6 +397,13 @@ _FLAT_EXCISE_RE = re.compile(rf"Bijzondere\s+accijns\s+{_NUM}", re.IGNORECASE)
 _FUND_RE = re.compile(
     rf"Standaard\s+tarief\s+gedomicilieerd\s*:\s*{_NUM}\s*€\s*/\s*maand",
     re.IGNORECASE,
+)
+
+# Taxes (Brussels). One green levy instead of the Flemish GSC + WKC pair:
+# "Kosten Groene stroom 2,737 €cent/kWh". The "Kosten" is what keeps this off
+# the page-1 energy rows, which name the same product without it.
+_BRUSSELS_GREEN_RE = re.compile(
+    rf"Kosten\s+Groene\s+stroom\s+{_NUM}\s*€?\s*cent", re.IGNORECASE
 )
 
 _LABEL_RE = re.compile(r"Tariefkaart\s+([A-Za-z]+\s+20\d{2})", re.IGNORECASE)
@@ -533,6 +579,11 @@ async def probe(
 
     The page is per region, not per supplier: the Brussels cards are
     advertised on the Brusol site and rotate on their own schedule.
+
+    Brusol's pages are Drupal dynamic pages and answer with neither header,
+    so Brussels has no probe key and falls back to the 24h TTL, the path
+    Engie and Luminus take. Returning None for that is the documented way to
+    say so; it does not refetch the card every tick.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     card = None if contract is None else contract.card(region)
@@ -677,12 +728,15 @@ def parse_snapshot(
         energy, injection = _extract_tiered(text)
     else:
         energy, injection = _extract_fixed(text)
+    # The energy leg is worded identically in both regions and needs no
+    # branch; the network and tax blocks are each region's own.
+    brussels = region == REGION_BRUSSELS
     return SupplierSnapshot(
         supplier="energyvision",
         contract=contract_id,
         energy=energy,
-        dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
+        dsos=_extract_brussels_dsos(text) if brussels else _extract_dsos(text),
+        taxes=_extract_brussels_taxes(text) if brussels else _extract_taxes(text),
         source_url=source_url,
         publication_label=publication_label or _publication_label(text),
         valid_until=parse_valid_until(text),
@@ -888,6 +942,36 @@ def _extract_taxes(text: str) -> TaxOverlay:
         contribution=_CONTRIB_RE,
         fund=_FUND_RE,
     )
+
+
+def _extract_brussels_taxes(text: str) -> TaxOverlay:
+    """The Brussels tax block, VAT-inclusive like the Flemish one.
+
+    Two rows only. Brussels levies no energy fund, and the federal energy
+    contribution was abolished on 2026-08-01 and is printed by no current
+    card, so both are left at zero rather than looked for: on this card an
+    absent row is the levy not existing, not a layout drift.
+    """
+    return regional_tax_overlay(
+        text,
+        supplier="EnergyVision",
+        region=REGION_BRUSSELS,
+        excise=(_FLAT_EXCISE_RE, _EXCISE_RE),
+        renewables=(_BRUSSELS_GREEN_RE,),
+    )
+
+
+def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The Sibelga row, in the eight-column layout Engie's cards also print.
+
+    Mandatory: this runs only on a Brussels card, where a missing row is a
+    drift that would leave the entry with no network cost at all. Refusing
+    keeps the last good card serving.
+    """
+    overlay = parse_sibelga_row(text)
+    if overlay is None:
+        raise ExtractorError("EnergyVision: Sibelga row not found")
+    return {DSO_SIBELGA: overlay}
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:

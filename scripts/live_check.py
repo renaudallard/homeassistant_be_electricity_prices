@@ -1282,16 +1282,15 @@ async def _check_energyknights(
 async def _check_energyvision(
     session: aiohttp.ClientSession, energyvision: types.ModuleType
 ) -> None:
-    # Each product is published for exactly one region (the Flemish cards in
-    # Dutch, the Walloon one in French), so walk the contract's own regions
-    # rather than assuming Flanders: fetching a Walloon contract as flanders
-    # raises, and its card carries Walloon DSOs and CV instead of GSC/WKC.
+    # Each product is published per region (the Flemish cards in Dutch, the
+    # Walloon one in French, the Brussels ones as Brusol), so walk the
+    # contract's own regions rather than assuming Flanders: fetching a
+    # contract as a region it is not sold in raises, and each region's card
+    # carries its own DSOs and its own green levy.
     for contract in energyvision.EXTRACTOR.contracts:
         cid = contract.id
         for region in sorted(contract.regions):
             prefix = f"energyvision/{cid}/{region}"
-            flanders = region == "flanders"
-            expected_dso_keys = _FLUVIUS_KEYS if flanders else _WALLONIA_DSO_KEYS
             try:
                 snap = await _fetch_with_retry(
                     partial(energyvision.fetch, session, cid, region)
@@ -1300,26 +1299,11 @@ async def _check_energyvision(
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dso_keys <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                (
-                    snap.taxes.flanders_renewables
-                    if flanders
-                    else snap.taxes.wallonia_renewables
-                )
-                > 0,
-                detail=str(snap.taxes),
-            )
+            # The three region-level assertions, off the shared map rather
+            # than a copy of it here: this check carried its own two-region
+            # conditional, which would have asked a Brussels card for Walloon
+            # DSOs and a Walloon levy.
+            _expect_region_basics(prefix, region, snap)
             _expect(
                 f"{prefix}: vat_rate is 0.0 (VAT-inclusive card)",
                 snap.taxes.vat_rate == 0.0,

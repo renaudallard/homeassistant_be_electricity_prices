@@ -310,9 +310,11 @@ other date-sensitive spot in this script pins Brussels the same way, for the sam
 
 The gate covers the **eight supplier-families that pick a card from a set of several advertised
 ones** -- Bolt, Cociter (variable + trihoraire + dynamic), EBEM, Ecopower (definitive + dynamic),
-Eneco, EnergyVision and Frank (one row per product code), and Mega, seventeen rows in all. That shape
-is the one that can silently resolve an older card, because the older card is still there and
-still parses.
+Eneco, EnergyVision and Frank (one row per product code, and for EnergyVision per region too,
+since its Brussels cards are advertised on a different site), and Mega. That shape is the one
+that can silently resolve an older card, because the older card is still there and still parses.
+The row count is deliberately not written down here: it is one row per advertised card and it
+moves whenever a supplier adds a product or a region, which is not worth a doc edit to restate.
 
 Engie, Luminus, OCTA+ and TotalEnergies get no freshness ROW, because each constructs one URL per
 contract from static constants or a parameter-only API query: there is no candidate set to choose
