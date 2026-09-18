@@ -77,7 +77,7 @@ from ..const import (
 )
 from ._pdf import (
     NUM_NO_THOUSANDS,
-    flanders_tax_overlay,
+    regional_tax_overlay,
     NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
@@ -508,9 +508,10 @@ _FUND_RE = re.compile(
 
 def _extract_taxes(text: str) -> TaxOverlay:
     """All values on the card are VAT-inclusive (6% BTW)."""
-    return flanders_tax_overlay(
+    return regional_tax_overlay(
         text,
         supplier="Frank Energie",
+        region=REGION_FLANDERS,
         excise=(_EXCISE_RE,),
         renewables=(_GSC_RE, _WKK_RE),
         contribution=_ENERGY_CONTRIB_RE,

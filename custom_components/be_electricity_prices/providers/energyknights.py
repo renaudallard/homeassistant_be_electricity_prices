@@ -112,7 +112,7 @@ from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
-    flanders_tax_overlay,
+    regional_tax_overlay,
     head_freshness_key,
     parse_sign,
     parse_valid_until,
@@ -921,9 +921,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
     5,0329 / 1,06. The energy fund is the single exemption, per the card's own
     footnote (1) "Bedrag niet onderworpen aan BTW", and flanders_tax_overlay
     leaves it unscaled."""
-    return flanders_tax_overlay(
+    return regional_tax_overlay(
         text,
         supplier="Energy Knights",
+        region=REGION_FLANDERS,
         excise=(_EXCISE_RE,),
         renewables=(_GSC_RE, _WKK_RE),
         contribution=_CONTRIB_RE,

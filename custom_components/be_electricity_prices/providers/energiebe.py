@@ -77,7 +77,7 @@ from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
     archive_validity_check,
-    flanders_tax_overlay,
+    regional_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
@@ -629,9 +629,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
     have gone offline the moment its card dropped the row the way theirs did.
     The shared helper holds that policy now.
     """
-    return flanders_tax_overlay(
+    return regional_tax_overlay(
         text,
         supplier="energie.be",
+        region=REGION_FLANDERS,
         excise=(_EXCISE_RE,),
         renewables=(_GSC_RE, _WKK_RE),
         contribution=_CONTRIB_RE,

@@ -47,6 +47,11 @@ import aiohttp
 import pypdf
 from homeassistant.util import dt as dt_util
 
+from ..const import (
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from .base import (
     CardNotReadableError,
     DsoOverlay,
@@ -1349,18 +1354,23 @@ def parse_valid_until(text: str) -> date | None:
     return max(candidates) if candidates else None
 
 
-def flanders_tax_overlay(
+def regional_tax_overlay(
     text: str,
     *,
     supplier: str,
+    region: str,
     excise: Sequence[re.Pattern[str]],
     renewables: Sequence[re.Pattern[str]],
     contribution: re.Pattern[str] | None = None,
     fund: re.Pattern[str] | None = None,
 ) -> TaxOverlay:
-    """The tax block of a Flanders-only, VAT-inclusive card.
+    """The tax block of a single-region, VAT-inclusive card.
 
-    Every Flemish card carries the same four rows and the same policy about
+    ``region`` decides which of the three regional renewables fields the
+    parsed levy lands in; the other two stay zero, which is the honest value
+    on a card that prices one region.
+
+    Every such card carries the same four rows and the same policy about
     which of them may be missing. Only the anchors differ, so the callers pass
     compiled patterns and this holds the policy:
 
@@ -1368,7 +1378,8 @@ def flanders_tax_overlay(
       wins, so a card printing both the flat August-2026 row and the tiered
       one being phased out resolves to the flat rate.
     * ``renewables``: MANDATORY, and ALL of them must match. Summed. Some
-      cards print GSC and WKK separately, others one pre-summed row.
+      cards print GSC and WKK separately, others one pre-summed row, and a
+      Brussels card prints a single "groene stroom" cost.
     * ``contribution``: OPTIONAL, absent means 0.0. The federal levy dropped
       to zero on 2026-08-01 and suppliers answered by deleting the row, so an
       absent row is the abolished levy, not a layout drift.
@@ -1380,25 +1391,32 @@ def flanders_tax_overlay(
     zero while the third still raised on it, so that one would have gone
     offline the moment its card dropped the row like the others' did.
     """
+    if region not in (REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS):
+        # Silently zeroing all three fields would under-bill by the whole
+        # green levy, so a region that names no field is a programming error.
+        raise ExtractorError(f"{supplier}: unknown region {region!r}")
     excise_match = next((m for p in excise if (m := p.search(text))), None)
     if excise_match is None:
         raise ExtractorError(f"{supplier}: could not parse the tax block")
     renewables_matches = [p.search(text) for p in renewables]
     if not renewables or any(m is None for m in renewables_matches):
-        # Flanders-only cards always bill the green-certificate levies; a miss
-        # is a layout drift that would silently under-bill, so fail loud and
-        # let the coordinator keep serving its cached snapshot.
+        # These cards always bill a green-certificate levy; a miss is a layout
+        # drift that would silently under-bill, so fail loud and let the
+        # coordinator keep serving its cached snapshot.
         raise ExtractorError(f"{supplier}: could not parse the GSC/WKK levies")
     contribution_match = contribution.search(text) if contribution else None
     fund_match = fund.search(text) if fund else None
+    levy = sum(
+        to_float(m.group(1)) / 100.0 for m in renewables_matches if m is not None
+    )
     return TaxOverlay(
         federal_excise=to_float(excise_match.group(1)) / 100.0,
         energy_contribution=(
             to_float(contribution_match.group(1)) / 100.0 if contribution_match else 0.0
         ),
-        flanders_renewables=sum(
-            to_float(m.group(1)) / 100.0 for m in renewables_matches if m is not None
-        ),
+        flanders_renewables=levy if region == REGION_FLANDERS else 0.0,
+        wallonia_renewables=levy if region == REGION_WALLONIA else 0.0,
+        brussels_renewables=levy if region == REGION_BRUSSELS else 0.0,
         energy_fund_eur_per_month=(
             to_float(fund_match.group(1)) if fund_match else 0.0
         ),

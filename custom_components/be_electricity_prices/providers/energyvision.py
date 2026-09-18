@@ -90,7 +90,7 @@ from ..const import (
 from ._pdf import (
     NUM_NO_THOUSANDS,
     archive_validity_check,
-    flanders_tax_overlay,
+    regional_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
@@ -879,9 +879,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
     phased out: a card carrying both is mid-transition and the flat rate is
     authoritative. GSC and WKK arrive pre-summed in one row here.
     """
-    return flanders_tax_overlay(
+    return regional_tax_overlay(
         text,
         supplier="EnergyVision",
+        region=REGION_FLANDERS,
         excise=(_FLAT_EXCISE_RE, _EXCISE_RE),
         renewables=(_GSC_WKC_RE,),
         contribution=_CONTRIB_RE,
