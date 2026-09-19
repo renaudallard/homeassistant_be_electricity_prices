@@ -346,12 +346,12 @@ def test_flexy_renewables_survives_number_before_verbruik_layout() -> None:
 
 
 def test_wallonia_renewable_shares_a_line_with_the_maandprijs_row() -> None:
-    # Flexy Online prints the Wallonia figure on the SAME line as the row
-    # above it, "Maandprijs: 4,32 4,32 4,32 / 3,05", where Flexy breaks the
-    # line after the empty-column slash. The scan skips Maandprijs rows, so
-    # the shared line took the 3,05 with it and the next line accepted was
-    # the injection row, billing a feed-in price as the levy: 5,81 c€/kWh
-    # against the card's 3,05, about 97 EUR a year on 3500 kWh.
+    # The Wallonia figure can land on the line straight after a Maandprijs
+    # row that ends in an empty-column slash, which is what this card does:
+    # "Maandprijs: 4,32 4,32 4,32 /" and then "3,05". The scan skips
+    # Maandprijs rows, so that pair took the 3,05 with it and the next line
+    # accepted was the injection row, billing a feed-in price as the levy:
+    # 5,81 c€/kWh against the card's 3,05, about 97 EUR a year on 3500 kWh.
     base = _layout(_FLEXY)
     assert "Maandprijs: 4,32 4,32 4,32 /\n3,05" in base
     assert parse_snapshot(

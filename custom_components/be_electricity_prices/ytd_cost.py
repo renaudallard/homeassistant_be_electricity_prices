@@ -1115,8 +1115,11 @@ async def _compute_current_year_cost(
                 # Accumulated per month by the walks, on each month's own
                 # card, which is what the backfill has always done. Reading
                 # today's levy against the window's whole volume priced a
-                # past month's kWh at a rate it never carried; the levy moves
-                # on 54 of the archived rows.
+                # past month's kWh at a rate it never carried. The levy moves
+                # inside the year on about a fifth of the archived series,
+                # 49 of 255 on a replay of the whole card archive; the "54
+                # rows" this used to say was a count of series read as a count
+                # of rows.
                 + stats.get(
                     "green_component_ytd_eur",
                     stats.get("consumption_ytd_kwh", 0.0)
