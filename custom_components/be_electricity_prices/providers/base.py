@@ -1240,7 +1240,11 @@ def resolve_excise_band(
     """Resolve a degressive excise schedule to one rate, or leave the card alone.
 
     A card without ``federal_excise_bands`` prints one rate and is returned
-    unchanged (identity), which is every residential card.
+    unchanged (identity), which is every residential card from August 2026 on,
+    when the scheme flattened and the tranche table came off them. Before
+    that the Engie and Mega residential cards printed the same four tranches
+    the professional ones do, and they reach the blend below like any other
+    schedule: 203 archived Engie rows and 151 Mega ones carry bands.
 
     A card that prints a schedule bills it per tranche, so the rate the engine
     reads is the blend over the entry's estimated annual volume rather than
