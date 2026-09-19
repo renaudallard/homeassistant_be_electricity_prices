@@ -81,6 +81,25 @@ def test_the_per_day_figure_beside_it_is_not_mistaken_for_the_term() -> None:
         pytest.approx(0.1294270),
         pytest.approx(0.2588540),
     )
+    # Against the real sheet the anchors do the work, so the SIZE bound was
+    # only ever detectable together with a broken anchor: `None` satisfies
+    # the assertion above too. Drive _parse on rows that match and carry the
+    # wrong magnitude, which is the bound on its own.
+    assert brugel._parse(_row_sheet("0,1294270", "0,2588540")) is None
+    assert brugel._parse(_row_sheet("472,40", "944,80")) is None
+    assert brugel._parse(_row_sheet("47,24", "94,48")) == (
+        pytest.approx(47.24),
+        pytest.approx(94.48),
+    )
+
+
+def _row_sheet(low: str, high: str) -> str:
+    """The two rows the parser anchors on, carrying whatever figures a test
+    wants to put past the anchors."""
+    return (
+        f"Puissance mise à disposition inférieure ou égale à 13 kVA {low}\n"
+        f"Puissance mise à disposition supérieure à 13 kVA {high}\n"
+    )
 
 
 def test_a_sheet_that_cannot_be_read_yields_nothing() -> None:
@@ -319,3 +338,25 @@ async def test_a_backfill_fetches_the_term_for_every_year_it_prices() -> None:
     # Every year the hours span, not today's.
     assert "for hour in hours" in source
     assert "REGION_BRUSSELS" in source, "fetched for every region, not just Brussels"
+
+
+def test_both_signals_have_to_agree_before_a_card_is_touched() -> None:
+    """A card is completed only when it carries NEITHER half of the term.
+
+    ``docs/providers/bolt.md`` says two signals have to agree, and they catch
+    different cards: the band above 13 kVA says the card already prints the
+    power part, and the size of the metering figure says the same thing for a
+    card printing one combined number. Only Bolt's card fails both.
+
+    The size guard was doing all the work on the archive, so the band signal
+    could be removed with every test still green. This drives the one case
+    that separates them: a band present beside a metering figure small enough
+    for the size guard to wave through.
+    """
+    terms = (47.24, 94.48)
+    banded = _brussels_card(fixed_term=14.73, vat_rate=0.0, above=112.04)
+    assert resolve_brussels_power_term(banded, terms=terms) is banded
+
+    # The same small figure with no band is Bolt's card, and is completed.
+    bolt = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    assert resolve_brussels_power_term(bolt, terms=terms) is not bolt
