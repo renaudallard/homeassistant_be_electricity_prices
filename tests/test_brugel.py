@@ -296,3 +296,26 @@ async def test_one_request_per_year_and_no_search_for_the_link() -> None:
     missing = _Session(b"", status=404)
     assert await brugel.ensure_power_term(missing, 2031) is None  # type: ignore[arg-type]
     assert missing.calls == 1, f"{missing.calls} requests for a sheet that is not there"
+
+
+async def test_a_backfill_fetches_the_term_for_every_year_it_prices() -> None:
+    """``_resolve_snapshot`` asks the cache for the DELIVERY month's year.
+
+    The coordinator tick only ever fetches the current one, so a run
+    rebuilding rows in a finished year found nothing cached and priced those
+    months without Sibelga's power term, while the live sensor beside them
+    carried it. Sized by the window, so an ordinary year-to-date run still
+    asks for one year.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import backfill
+
+    source = inspect.getsource(backfill._build_context)
+    assert "ensure_power_term(" in source, (
+        "the backfill never fetches the term, so a past-year window prices "
+        "Brussels rows without it"
+    )
+    # Every year the hours span, not today's.
+    assert "for hour in hours" in source
+    assert "REGION_BRUSSELS" in source, "fetched for every region, not just Brussels"

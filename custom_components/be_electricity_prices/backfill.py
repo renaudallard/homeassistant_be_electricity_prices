@@ -82,6 +82,7 @@ from .const import (
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
+    REGION_BRUSSELS,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
@@ -104,6 +105,7 @@ from .energy_meters import (
     _partial_register_pair,
     _sum_hourly_kwh,
 )
+from .brugel import ensure_power_term
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -439,7 +441,10 @@ def _recorder_models() -> tuple[Any, Any, Any, Any]:
 
 
 async def _build_context(
-    hass: HomeAssistant, entry: ConfigEntry, coordinator: BePricesCoordinator
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    hours: list[datetime],
 ) -> _BackfillContext:
     """Resolve the per-run inputs shared by both passes.
 
@@ -472,6 +477,14 @@ async def _build_context(
     signing = await signing_month_snapshot(
         hass, coordinator._session, extractor, contract, region, entry, snap
     )
+    # Sibelga's power term for every year this run prices, not just the
+    # current one. _resolve_snapshot asks the cache for the DELIVERY month's
+    # year, so a run reaching back into a finished year found nothing there
+    # and rebuilt those rows without the term, disagreeing with the live
+    # sensor beside them. The coordinator tick only ever fetches this year.
+    if region == REGION_BRUSSELS:
+        for year in sorted({dt_util.as_local(hour).year for hour in hours}):
+            await ensure_power_term(coordinator._session, year)
     return _BackfillContext(
         region=region,
         dso=entry.data[CONF_DSO],
@@ -594,7 +607,7 @@ async def _backfill_price_sensors(
         StatisticMeanType,
         async_import_statistics,
     ) = _recorder_models()
-    ctx = await _build_context(hass, entry, coordinator)
+    ctx = await _build_context(hass, entry, coordinator, hours)
     region = ctx.region
     dso = ctx.dso
     meter = ctx.meter
@@ -758,7 +771,7 @@ async def _backfill_cost_sensor(
         StatisticMeanType,
         async_import_statistics,
     ) = _recorder_models()
-    ctx = await _build_context(hass, entry, coordinator)
+    ctx = await _build_context(hass, entry, coordinator, hours)
     region = ctx.region
     dso = ctx.dso
     meter = ctx.meter
