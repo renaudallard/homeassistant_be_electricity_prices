@@ -920,3 +920,39 @@ def test_brussels_osp_reads_the_dutch_block() -> None:
 
 def test_brussels_osp_is_none_off_a_card_without_the_block() -> None:
     assert parse_brussels_osp("SIBELGA 9,96 9,96 7,53 7,53 14,73 2,27") is None
+
+
+def test_the_vreg_ceiling_is_read_from_either_language() -> None:
+    """Luminus and Frank state the maximumtarief in a footnote, not a column.
+
+    The regulator caps what a digital-meter connection pays in network
+    charges, and ``fees._capped_capacity_annual`` applies it. Cards that
+    print it as a column of the DSO table were read; these two state it once
+    below the table and it went unread, so the cap never bound on 15
+    contracts. It bites where the capacity term dominates, which is a
+    low-volume connection on a high peak.
+    """
+    from custom_components.be_electricity_prices.providers._pdf import (
+        parse_vreg_network_ceiling,
+    )
+
+    french = (
+        "le tarif de gestion des données s’élève à 18,56 € par an. Un tarif "
+        "maximal de 0,3472738 €/kWh (hors gestion des données) s’applique aux "
+        "compteurs digitaux."
+    )
+    dutch = (
+        "* Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh "
+        "(excl. databeheer)."
+    )
+    assert parse_vreg_network_ceiling(french) == pytest.approx(0.3472738)
+    assert parse_vreg_network_ceiling(dutch) == pytest.approx(0.3472738)
+
+    # Wrapped across lines by the text layer, as the cards do it.
+    assert parse_vreg_network_ceiling(
+        "Un tarif\nmaximal de\n0,3472738 €/kWh"
+    ) == pytest.approx(0.3472738)
+
+    # A card that does not state it leaves the cap off rather than
+    # inventing a ceiling.
+    assert parse_vreg_network_ceiling("no ceiling on this card") is None

@@ -76,6 +76,7 @@ from ._pdf import (
     to_float,
     vat_multiplier,
     is_transient_fetch_error,
+    parse_vreg_network_ceiling,
 )
 from .base import (
     Contract,
@@ -905,6 +906,9 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
             quarter_data_mgmt = to_float(footnote.group(1))
 
     out: dict[str, DsoOverlay] = {}
+    # One VREG figure for the whole region, stated once in a footnote rather
+    # than per area, so it goes on every Fluvius overlay this card produces.
+    ceiling = parse_vreg_network_ceiling(text)
     for label, key in _FLANDERS_LABELS.items():
         # Eight figures on a static card, four on a dynamic one, which
         # prints neither the analog-meter columns nor the prosumer rate.
@@ -922,6 +926,7 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
             ),
             capacity_eur_per_kw_year=nums[1],
             prosumer_eur_per_kva_year=prosumer,
+            network_ceiling_eur_per_kwh=ceiling,
         )
     return out
 

@@ -1516,7 +1516,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # being read and it names the index "Epex" alone. A v63 row resolves the
 # coefficients against the plain arithmetic mean, which sits 2,4 to 7,6 percent
 # below the index Mega settles at, about 21 EUR a year at 3500 kWh.
-_SNAPSHOT_SCHEMA_VERSION = 64
+# v65: Luminus and Frank carry network_ceiling_eur_per_kwh. Both state the
+# VREG maximumtarief in a footnote under the DSO table rather than as a column
+# of it, so it was never read and the cap never bound on their 15 Flemish
+# contracts. A v64 row has no ceiling, and a low-volume connection on a high
+# peak is billed a capacity term the regulator caps.
+_SNAPSHOT_SCHEMA_VERSION = 65
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

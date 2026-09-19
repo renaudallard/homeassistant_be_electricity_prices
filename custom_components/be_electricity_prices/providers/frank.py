@@ -87,6 +87,7 @@ from ._pdf import (
     parse_valid_until,
     to_float,
     is_transient_fetch_error,
+    parse_vreg_network_ceiling,
 )
 from .base import (
     Contract,
@@ -529,6 +530,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         raise ExtractorError("could not locate Frank Energie DSO table")
     section = text[section_start : section_end if section_end > section_start else None]
 
+    # Read off the WHOLE card, not the digital-meter section: the footnote
+    # stating it sits below the table.
+    ceiling = parse_vreg_network_ceiling(text)
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLUVIUS_LABELS.items():
         escaped = _LABEL_PATTERNS.get(label) or re.escape(label).replace(
@@ -552,6 +556,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=0.0,
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,
+            # One VREG figure for the whole region, stated once in a footnote
+            # rather than per area, so every Fluvius overlay carries it.
+            network_ceiling_eur_per_kwh=ceiling,
         )
     missing = [key for key in _FLUVIUS_LABELS.values() if key not in out]
     if missing:

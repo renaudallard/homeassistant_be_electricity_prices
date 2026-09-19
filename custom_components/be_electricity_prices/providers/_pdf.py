@@ -1250,6 +1250,37 @@ def archive_validity_check(
     return snap
 
 
+# "Un tarif maximal de 0,3472738 €/kWh (hors gestion des données) s'applique
+# aux compteurs digitaux", and in Dutch "Voor digitale meters geldt een
+# maximumtarief van 0,3472738 EUR/kWh (excl. databeheer)". One VREG figure for
+# the whole of Flanders, so a card that states it once states it for every
+# Fluvius area on it.
+_VREG_CEILING_RE = re.compile(
+    r"(?:tarif\s+maximal|maximum\s*tarief)\s+(?:de\s+|van\s+)?"
+    r"([\d.]+,\d+|[\d,]+\.\d+)\s*(?:EUR|€)\s*/\s*kWh",
+    re.IGNORECASE,
+)
+
+
+def parse_vreg_network_ceiling(text: str) -> float | None:
+    """The VREG maximumtarief a Flemish card states, in EUR/kWh.
+
+    The regulator caps what a digital-meter connection pays in network
+    charges: the capacity term plus the per-kWh network term together may not
+    exceed this times the volume. ``fees._capped_capacity_annual`` applies it
+    and several cards print it as a column of their DSO table, which those
+    extractors read. Luminus and Frank state it once in a footnote instead,
+    and it went unread there, so the cap never bound on 15 contracts. It bites
+    where the capacity term dominates, which is a low-volume connection on a
+    high peak.
+
+    ``None`` when the card does not state it, which leaves the cap off as
+    before rather than inventing a ceiling.
+    """
+    match = _VREG_CEILING_RE.search(re.sub(r"\s+", " ", text))
+    return to_float(match.group(1)) if match else None
+
+
 def parse_valid_until(text: str) -> date | None:
     """Best-effort parse of a "valid until" date from a tariff card.
 
