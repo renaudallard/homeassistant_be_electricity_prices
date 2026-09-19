@@ -1001,6 +1001,44 @@ def test_a_page_break_in_the_realized_sentence_does_not_kill_the_block() -> None
     assert rates["injection"] == pytest.approx(0.0363)
 
 
+def test_a_full_page_footer_between_the_anchors_still_matches() -> None:
+    """The real July 2026 Walloon Smart card, whose footer runs to 543 chars.
+
+    The spliced footer is not just a few colons: it carries the energy-mix
+    paragraph, the publication line, the page number and the whole company
+    address block. On this card and on the January one it puts 543 and 547
+    characters between the two anchors, past the 400 the gap used to allow,
+    so the override no-opped and July was billed on the 12-month forecast
+    instead of June's settled 17,99 c€/kWh, about 11% low for the month.
+    """
+    from custom_components.be_electricity_prices.providers.mega import _realized_rates
+
+    footer = (
+        "\nSources d'énergie pour :\nvotre produit : \n 100% verte\n"
+        "la région wallonne (telles qu'approuvées par la CWaPE) : 89,5% verte\n"
+        "et 10,5% grise\nPrix du \nmois 07/2026\n - \n"
+        "TVA 6% incluse - Publié le 30-06-2026\n1\n/\n3\nPower Online SA\n \n| \n"
+        "Rue Natalis, 2 - 4020 Liège \n| \nTVA BE0535.615.192 \n| \n"
+        "IBAN BE96 3631 2058 6905 \n| \ninfo@mega.be \n| \n04 268\n20 00\n"
+        "www.mega.be\n \n2026 (basés sur les dernières valeurs connues des "
+        "paramètres de la formule tarifaire de ce produit) "
+    )
+    spliced = (
+        "Les derniers prix constatés et utilisés pour le calcul de votre "
+        "facture de régularisation pour le mois de juin"
+        + footer
+        + "sont les suivants (c€/kWh) : Compteur mono-\nhoraire : 17.99; "
+        "Jour : 20.78; Nuit : 15.82; Exclusif nuit : 15.82 ; Injection : 3.63."
+    )
+    assert len(footer) > 400, "the footer must overrun the old bound"
+    rates = _realized_rates(spliced)
+    assert rates["mono"] == pytest.approx(0.1799)
+    assert rates["peak"] == pytest.approx(0.2078)
+    assert rates["offpeak"] == pytest.approx(0.1582)
+    assert rates["exclusive_night"] == pytest.approx(0.1582)
+    assert rates["injection"] == pytest.approx(0.0363)
+
+
 def test_a_collided_value_token_is_refused_not_truncated() -> None:
     """The June 2026 Flanders cards collide two runs in the text layer.
 

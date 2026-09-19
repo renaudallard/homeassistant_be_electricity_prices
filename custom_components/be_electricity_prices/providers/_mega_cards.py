@@ -427,8 +427,16 @@ def _realized_rates(text: str) -> dict[str, float]:
     # for that month, so one month of a year-to-date walk sits on the
     # simulation table while its neighbours use the realized rates. Both
     # anchors are specific enough that a non-greedy bounded gap is safe.
+    #
+    # The bound was 400, which two Walloon Smart cards (January and July
+    # 2026) overran: their spliced footer puts 547 and 543 characters between
+    # the anchors, so both silently fell back to the simulation table and
+    # billed July on a forecast instead of June's settled 17,99 c€/kWh. The
+    # measured worst case is 547, so 1200 leaves better than twice the
+    # headroom while staying far short of the next occurrence of either
+    # anchor on any archived card.
     block = re.search(
-        r"derniers prix constat.{0,400}?sont les suivants \(c€/kWh\)\s*:(.{0,400})",
+        r"derniers prix constat.{0,1200}?sont les suivants \(c€/kWh\)\s*:(.{0,400})",
         text,
         re.S | re.I,
     )
