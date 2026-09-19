@@ -8115,11 +8115,24 @@ async def test_the_projection_nets_each_side_on_its_own_shape(
     peak = static_breakdown(snap, "ores", "wallonia", "peak")
     offpeak = static_breakdown(snap, "ores", "wallonia", "offpeak")
     assert peak is not None and offpeak is not None
-    # Drawn at the peak rate, exported at the off-peak one, netted once.
-    expected = (
-        diag["annual_kwh"] * peak.all_in - diag["annual_injection_kwh"] * offpeak.all_in
-    )
-    assert got == pytest.approx(expected, rel=0.01)
+    # Drawn at the peak rate, exported at the off-peak one: each side on its
+    # own shape, which is what this test is here for.
+    #
+    # The clamp then goes per register, as the meter and the live sensor do.
+    # Everything drawn sits on the day register and everything exported on the
+    # night one, so the night register ends the year negative and is forfeited
+    # whole rather than paying off the day register. That is the corrected
+    # behaviour: the annual estimate used to net the two totals and clamp once.
+    day_register = diag["annual_kwh"] * peak.all_in
+    night_register = -diag["annual_injection_kwh"] * offpeak.all_in
+    assert night_register < 0.0, "the setup must drive one register negative"
+    assert got == pytest.approx(day_register, rel=0.01)
+
+    # The export was still valued at the off-peak rate on the way to being
+    # written off, which is the shape pricing this test pins: netting once
+    # would have credited it and landed somewhere else entirely.
+    netted_once = day_register + night_register
+    assert got != pytest.approx(netted_once, rel=0.01)
     # And the two rates really do differ, or the assertion proves nothing.
     assert peak.all_in != pytest.approx(offpeak.all_in)
 

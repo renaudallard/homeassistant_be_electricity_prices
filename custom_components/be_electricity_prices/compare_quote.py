@@ -1074,6 +1074,7 @@ def _annual_bill(
     meter: Any = METER_MONO,
     include_capacity: bool = True,
     welcome_credit_eur: float = 0.0,
+    register_weights: tuple[tuple[float, float], tuple[float, float]] | None = None,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
@@ -1155,13 +1156,40 @@ def _annual_bill(
             billable = max(consumption_kwh - injection_kwh, 0.0)
             return fees + per_kwh * billable - welcome_credit_eur
         # A reversing meter nets against the rate in force at the time, which
-        # is what the live sensor bills: it nets each hour and clamps the year
-        # once. Netting the two annual totals first and pricing the residue at
-        # the CONSUMPTION-weighted rate prices exported kWh at hours they were
-        # never produced in, and the two shapes are opposites, evening-heavy
-        # against a midday bell. Splitting the term is the same sum written
-        # per side: consumption at its own weighted rate, export credited at
-        # its own, with the single annual clamp the live path also applies.
+        # is what the live sensor bills. Netting the two annual totals first
+        # and pricing the residue at the CONSUMPTION-weighted rate prices
+        # exported kWh at hours they were never produced in, and the two
+        # shapes are opposites, evening-heavy against a midday bell. So the
+        # term is split, consumption at its own weighted rate and export
+        # credited at its own.
+        #
+        # The clamp goes PER REGISTER, which is what the meter does and what
+        # ``spot_stats._NetAllocation.billed`` bills: each register nets on its
+        # own and a register that ends the year negative is forfeited, not
+        # carried across to shelter the other one. Clamping the annual total
+        # once instead let a day register running backwards pay off the night
+        # register, which no Belgian meter does: measured at 345 EUR a year
+        # too low on an ordinary pre-2024 net-metering install.
+        #
+        # ``register_weights`` is ((day, night) of consumption, (day, night) of
+        # export) as :func:`_register_weights` returns them, which is hours a
+        # year or those hours under the household's own shape, NOT shares: they
+        # are normalised here so the caller can pass the helper's output
+        # straight through. Without them, or on a single-register meter, the
+        # two clamps are the same sum and the annual one stands.
+        if register_weights is not None and meter in (METER_BI, METER_DYNAMIC):
+            cons_w, inj_w = register_weights
+            cons_total = sum(cons_w)
+            inj_total = sum(inj_w)
+            if cons_total > 0.0 and inj_total > 0.0:
+                billed = 0.0
+                for cons_side, inj_side in zip(cons_w, inj_w, strict=True):
+                    billed += max(
+                        consumption_kwh * (cons_side / cons_total) * per_kwh
+                        - injection_kwh * (inj_side / inj_total) * export_per_kwh,
+                        0.0,
+                    )
+                return fees + billed - welcome_credit_eur
         netted = consumption_kwh * per_kwh - injection_kwh * export_per_kwh
         return fees + max(netted, 0.0) - welcome_credit_eur
     if regime == "injection" and injection_price is not None:

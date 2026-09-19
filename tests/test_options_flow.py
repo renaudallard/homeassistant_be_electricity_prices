@@ -2758,6 +2758,65 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 1e-6
 
 
+def test_compensation_clamps_each_register_not_the_annual_total() -> None:
+    """A reversing meter forfeits a register that ends the year negative.
+
+    ``spot_stats._NetAllocation.billed`` sums ``max(0, ...)`` per register,
+    which is what the meter does: a day register running backwards is not
+    carried across to pay off the night one. The annual estimate netted the
+    two totals and clamped once, so a day surplus sheltered the night
+    consumption, quoting an ordinary pre-2024 net-metering install about
+    345 EUR a year under what it accrues.
+    """
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+    from tests import make_entry, make_snapshot
+
+    snap = make_snapshot()
+    entry = make_entry(
+        region="flanders", dso="fluvius_antwerpen", solar_regime="compensation"
+    )
+
+    # Half the consumption and nearly all the export on the day register, so
+    # day nets negative while night stays positive.
+    weights = ((1.0, 1.0), (9.0, 1.0))
+
+    def _bill(register_weights: object) -> float:
+        return _annual_bill(
+            snap,
+            entry,
+            0.0,
+            0.30,  # consumption rate
+            3000.0,  # kWh drawn
+            2500.0,  # kWh exported
+            export_per_kwh=0.30,
+            meter="bi",
+            include_capacity=False,
+            register_weights=register_weights,  # type: ignore[arg-type]
+        )
+
+    single = _bill(None)
+    per_register = _bill(weights)
+
+    # day: 1500 * 0,30 - 2250 * 0,30 = -225 -> forfeited, billed 0
+    # night: 1500 * 0,30 -  250 * 0,30 = +375
+    assert per_register - single == pytest.approx(225.0)
+    assert per_register > single
+
+    # A single-register meter has nothing to split, so both clamps agree.
+    assert _annual_bill(
+        snap,
+        entry,
+        0.0,
+        0.30,
+        3000.0,
+        2500.0,
+        export_per_kwh=0.30,
+        meter="mono",
+        include_capacity=False,
+        register_weights=weights,  # type: ignore[arg-type]
+    ) == pytest.approx(single)
+
+
 def test_compare_ytd_prorates_capacity_per_month_like_the_live_sensor() -> None:
     """The Flanders capacity leg accrues per month, not by day-of-year.
 

@@ -332,6 +332,17 @@ async def _compute_projected_year_cost(
         hour_weights,
         annual.kwh,
     )
+    # Under compensation each meter register nets on its own, so the bill needs
+    # the household's own day/night split of both sides rather than two annual
+    # totals; see the clamp in _annual_bill.
+    register_weights = None
+    if regime == SOLAR_REGIME_COMPENSATION and export_per_kwh is not None:
+        from .compare_quote import _register_weights
+
+        register_weights = (
+            _register_weights(region, hour_weights),
+            _register_weights(region, inj_hour_weights),
+        )
     projected = _annual_bill(
         priced,
         entry,
@@ -343,6 +354,7 @@ async def _compute_projected_year_cost(
         export_per_kwh=export_per_kwh,
         meter=meter,
         welcome_credit_eur=welcome_credit,
+        register_weights=register_weights,
     )
     breakdown["welcome_credit_eur"] = welcome_credit
 
