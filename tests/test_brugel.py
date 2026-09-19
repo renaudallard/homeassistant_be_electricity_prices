@@ -244,3 +244,32 @@ async def test_a_good_sheet_is_fetched_once_and_kept() -> None:
         pytest.approx(94.48),
     )
     assert session.calls == after_first, "a cached year was fetched twice"
+
+
+def test_the_sheet_is_fetched_before_the_card_is_resolved() -> None:
+    """The resolver reads the cache synchronously and cannot await.
+
+    ``_resolve_snapshot`` calls ``cached_power_term``, so the term has to
+    already be there when ``_set_snapshot`` runs. Fetching afterwards left
+    the card resolved without it for the whole tick that fetched it, 50,07
+    EUR a year short on a Brussels Bolt entry, and the tick disagreed with
+    the one after it, which is the shape of a bug nobody can reproduce.
+
+    Held on the source rather than by driving a tick: the defect is an
+    ordering one and nothing but the order can express it.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+
+    body = inspect.getsource(BePricesCoordinator._update_body)
+    fetch = body.index("ensure_power_term(")
+    resolve = body.index("_maybe_refresh_snapshot()")
+    assert fetch < resolve, (
+        "ensure_power_term must run before the snapshot is resolved, "
+        "or the tick that fetched the card bills without the term"
+    )
+    # And the resolver really does read it synchronously, which is why.
+    from custom_components.be_electricity_prices import snapshot_store
+
+    assert "cached_power_term(" in inspect.getsource(snapshot_store._resolve_snapshot)

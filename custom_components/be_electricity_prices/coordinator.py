@@ -873,6 +873,19 @@ class BePricesCoordinator(
         # tranche and the network ceiling against it; _reresolve_snapshot
         # below catches the card that was already in hand.
         await self._ensure_annual_volume()
+        # Sibelga's power term, for a Brussels entry whose card prints only the
+        # metering half of the fixed charge. One small PDF a year, cached for
+        # the life of the process, and the resolver leaves the card alone
+        # until it is there, so a slow or blocked Brugel costs nothing but the
+        # gap the entry already had.
+        #
+        # Before the snapshot for the same reason the volume is: _resolve_snapshot
+        # reads it out of the cache synchronously and cannot await, so fetching
+        # afterwards left the card resolved without the term for the whole tick
+        # that fetched it, 50,07 EUR/year short on a Brussels Bolt entry and
+        # disagreeing with what the next tick would say.
+        if self.entry.data.get(CONF_REGION) == REGION_BRUSSELS:
+            await ensure_power_term(self._session, dt_util.now().year)
         if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             self._refresh_custom_snapshot()
         else:
@@ -1032,14 +1045,6 @@ class BePricesCoordinator(
                 await self._ensure_spp_weights()
             if wants_rlp:
                 await self._ensure_rlp_weights(blend)
-
-        # Sibelga's power term, for a Brussels entry whose card prints only the
-        # metering half of the fixed charge. One small PDF a year, cached for
-        # the life of the process, and the resolver leaves the card alone
-        # until it is there, so a slow or blocked Brugel costs nothing but the
-        # gap the entry already had.
-        if self.entry.data.get(CONF_REGION) == REGION_BRUSSELS:
-            await ensure_power_term(self._session, dt_util.now().year)
 
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
