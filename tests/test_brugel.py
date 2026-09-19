@@ -273,3 +273,26 @@ def test_the_sheet_is_fetched_before_the_card_is_resolved() -> None:
     from custom_components.be_electricity_prices import snapshot_store
 
     assert "cached_power_term(" in inspect.getsource(snapshot_store._resolve_snapshot)
+
+
+async def test_one_request_per_year_and_no_search_for_the_link() -> None:
+    """Brugel's theme page carries no PDF href, so searching it never worked.
+
+    The fallback fetched the page on every cold start, matched nothing (it is
+    rendered client side, and serves no link to curl or to a browser user
+    agent either), and charged 71 KB to the one request the setup budget can
+    least afford. One address, one request.
+    """
+    import pathlib as _pathlib
+
+    sheet = _pathlib.Path("tmp/audit_2026_09_19/Z/brugel_2026.pdf")
+    if not sheet.exists():
+        pytest.skip("the archived Brugel sheet is not on this machine")
+    session = _Session(sheet.read_bytes())
+    assert await brugel.ensure_power_term(session, 2026) is not None  # type: ignore[arg-type]
+    assert session.calls == 1, f"{session.calls} requests for one sheet"
+
+    # And a miss costs one request too, not one plus a search.
+    missing = _Session(b"", status=404)
+    assert await brugel.ensure_power_term(missing, 2031) is None  # type: ignore[arg-type]
+    assert missing.calls == 1, f"{missing.calls} requests for a sheet that is not there"

@@ -70,14 +70,6 @@ _URL = (
     "https://brugel.brussels/publication/document/notype/{published}"
     "/fr/Tarif-distribution-Elec-{year}.pdf"
 )
-# Where the year's sheet is linked when the direct address stops working. The
-# numeric suffix belongs to Brugel's CMS and will change with the regulatory
-# period, so the theme page is the stable half and the link is found by name.
-_INDEX_URL = "https://brugel.brussels/themes/tarifs-de-distribution-12"
-_LINK_RE = re.compile(
-    r'href="([^"]*Tarif-distribution-Elec-(\d{4})\.pdf)"', re.IGNORECASE
-)
-
 _TIMEOUT: Final = 30
 # A regulated annual term is tens of euro. The bound is sized on the slip it
 # catches, a factor of ten or a column read as a rate, not on what the charge
@@ -153,41 +145,32 @@ async def ensure_power_term(
 
 
 async def _sheet_text(session: aiohttp.ClientSession, year: int) -> str | None:
-    """The year's tariff sheet as text, by direct address then by name."""
-    for url in await _candidate_urls(session, year):
-        try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
-                if r.status != 200:
-                    continue
+    """The year's tariff sheet as text, by its published address.
+
+    One address and no fallback. A search of Brugel's own theme page for the
+    year's link was tried: the page is rendered client side and carries no
+    PDF href at all, to curl or to a browser user agent, so the pattern
+    could never match and every cold start paid 71 KB to find that out on a
+    request the setup budget could least afford. A future address change
+    wants a source that actually serves links, not this one.
+    """
+    url = _URL.format(published=year - 1, year=year)
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
+            if r.status == 200:
                 payload = await r.read()
-            return await asyncio.to_thread(extract_pdf_text, payload)
-        except Exception as err:  # noqa: BLE001 - see ensure_power_term
-            # Broad on purpose. The reader raises ExtractorError for a body
-            # that is not a PDF, which is what a maintenance page or a
-            # captive portal answers with a 200, and ExtractorError is not a
-            # ValueError: catching a tuple let it escape to the coordinator
-            # tick, where the only handler is for UpdateFailed, so one bad
-            # response took every entity on the device unavailable.
-            _LOGGER.debug("Brugel sheet %s unreadable: %s", url, err)
+                return await asyncio.to_thread(extract_pdf_text, payload)
+            _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
+    except Exception as err:  # noqa: BLE001 - see ensure_power_term
+        # Broad on purpose. The reader raises ExtractorError for a body
+        # that is not a PDF, which is what a maintenance page or a
+        # captive portal answers with a 200, and ExtractorError is not a
+        # ValueError: catching a tuple let it escape to the coordinator
+        # tick, where the only handler is for UpdateFailed, so one bad
+        # response took every entity on the device unavailable.
+        _LOGGER.debug("Brugel sheet %s unreadable: %s", url, err)
     _LOGGER.warning("Brugel %d distribution tariff sheet could not be read", year)
     return None
-
-
-async def _candidate_urls(session: aiohttp.ClientSession, year: int) -> list[str]:
-    direct = _URL.format(published=year - 1, year=year)
-    try:
-        async with session.get(
-            _INDEX_URL, timeout=aiohttp.ClientTimeout(_TIMEOUT)
-        ) as r:
-            html = await r.text() if r.status == 200 else ""
-    except (aiohttp.ClientError, TimeoutError, OSError, UnicodeDecodeError):
-        html = ""
-    named = [
-        href if href.startswith("http") else f"https://brugel.brussels{href}"
-        for href, found in _LINK_RE.findall(html)
-        if int(found) == year
-    ]
-    return [direct, *[u for u in named if u != direct]]
 
 
 def _parse(text: str) -> tuple[float, float] | None:
