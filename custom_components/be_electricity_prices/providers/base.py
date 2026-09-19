@@ -996,6 +996,20 @@ class SupplierSnapshot:
     # the base, for the reason ``direct_debit_discount_eur`` above is, and
     # applied and cleared by the same ``resolve_direct_debit``.
     welcome_credit_direct_debit_eur: float | None = None
+    # True when the card grants the WHOLE credit only to a direct-debit
+    # payer, rather than a larger one: "Si vous souscrivez a un nouveau
+    # contrat Smart Fixed ET OPTEZ POUR LA DOMICILIATION, vous beneficiez
+    # d'une ristourne composee d'une reduction de 9.434 c EUR/kWh ... et
+    # d'une reduction de 153.7 EUR". There is no reduced version to fall back
+    # to: a household paying another way gets nothing, so the base, the
+    # per-kWh leg and the cap all go, not just a supplement.
+    #
+    # A fact about the card, so it is parsed rather than listed: Mega's
+    # pro Cosy Flex printed the supplement wording in some months and this
+    # one in others, and a static list would bill one of the two wrongly
+    # every time the card changed. ``resolve_direct_debit`` settles it and
+    # clears the flag, like every other per-entry answer here.
+    welcome_credit_requires_direct_debit: bool = False
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
@@ -1351,8 +1365,24 @@ def resolve_direct_debit(
     """
     discount = snapshot.direct_debit_discount_eur
     supplement = snapshot.welcome_credit_direct_debit_eur
-    if discount is None and supplement is None:
+    conditional = snapshot.welcome_credit_requires_direct_debit
+    if discount is None and supplement is None and not conditional:
         return snapshot
+    if conditional and not direct_debit:
+        # The whole offer was conditional, so nothing survives: clearing only
+        # the supplement would leave the base and the per-kWh leg crediting a
+        # household the card grants nothing, worth 522,58 EUR on Cosy Flex at
+        # 3500 kWh. The cap goes with them so no later reader sees a ceiling
+        # over an absent credit.
+        return replace(
+            snapshot,
+            direct_debit_discount_eur=None,
+            welcome_credit_direct_debit_eur=None,
+            welcome_credit_requires_direct_debit=False,
+            welcome_credit_eur=None,
+            welcome_credit_eur_per_kwh=None,
+            welcome_credit_cap_eur=None,
+        )
     # The welcome credit's own direct-debit part is settled here too: same
     # per-entry answer, same reason for baking it once, and Mega's card
     # states it the same way ("une reduction de base de 37.1 EUR + 5.3 EUR
@@ -1366,12 +1396,14 @@ def resolve_direct_debit(
             snapshot,
             direct_debit_discount_eur=None,
             welcome_credit_direct_debit_eur=None,
+            welcome_credit_requires_direct_debit=False,
             welcome_credit_eur=credit or snapshot.welcome_credit_eur,
         )
     return replace(
         snapshot,
         direct_debit_discount_eur=None,
         welcome_credit_direct_debit_eur=None,
+        welcome_credit_requires_direct_debit=False,
         welcome_credit_eur=credit or snapshot.welcome_credit_eur,
         energy=replace(
             energy,

@@ -745,8 +745,14 @@ async def test_options_flow_brussels_branch_asks_connection_power(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "mono"}
     )
-    # Brussels has no Wallonia tariff-mode / Flanders capacity step; the
-    # connection-power step comes straight after the meter step.
+    # Smart Fixed grants its whole ristourne only to a direct-debit payer, so
+    # the flow asks that first.
+    assert result["step_id"] == "direct_debit"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"direct_debit": True}
+    )
+    # Brussels has no Wallonia tariff-mode / Flanders capacity step, so the
+    # connection-power step comes next.
     assert result["step_id"] == "connection_power"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"connection_kva_tier": "le9_6"}

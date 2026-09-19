@@ -105,6 +105,7 @@ from ._mega_overlays import (
     _extract_supplier_prosumer,
     _extract_wallonia_dsos,
     extract_ristourne,
+    ristourne_requires_direct_debit,
 )
 from ._mega_cards import (
     _FR_MONTH_NAMES,
@@ -902,6 +903,7 @@ def parse_snapshot(
         welcome_credit_eur_per_kwh=ristourne["welcome_credit_eur_per_kwh"],
         welcome_credit_cap_eur=ristourne["welcome_credit_cap_eur"],
         welcome_credit_direct_debit_eur=ristourne["welcome_credit_direct_debit_eur"],
+        welcome_credit_requires_direct_debit=ristourne_requires_direct_debit(text),
         welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
 
@@ -915,25 +917,35 @@ def parse_snapshot(
 # ---- DSO row parsers ----------------------------------------------------------
 
 
-# The products whose ristourne is larger for a direct-debit payer. Listed
+# The products whose ristourne depends on how the household pays. Listed
 # rather than derived because the flow has to know before any card is
 # fetched, which is the same reason offers_quarter_hourly reads the
 # registry; a product dropping the difference drops off this list and the
 # flow stops asking. Measured across every archived month of each card.
+#
+# Two ways a card can depend on it, and the list is the union: fourteen
+# grant a direct-debit payer a LARGER credit and print the supplement, and
+# four grant the whole thing to nobody else (Cosy Flex, Smart Fixed and
+# their pro twins). Pro Cosy Flex has printed both wordings in different
+# months, which is why which one applies is parsed off the card and only
+# whether to ask is listed here.
 _DIRECT_DEBIT_RISTOURNE: frozenset[str] = frozenset(
     {
         "mega_cosy_fixed",
+        "mega_cosy_flex",
         "mega_offpeak_fixed",
         "mega_offpeak_flex",
         "mega_offpeak_impact_var",
         "mega_online_fixed",
         "mega_online_flex",
+        "mega_smart_fixed",
         "mega_smart_flex",
         "mega_zen_fixed",
         "mega_pro_cosy_fixed",
         "mega_pro_cosy_flex",
         "mega_pro_offpeak_fixed",
         "mega_pro_online_fixed",
+        "mega_pro_smart_fixed",
         "mega_pro_smart_flex",
         "mega_pro_zen_fixed",
     }
@@ -965,14 +977,15 @@ EXTRACTOR = SupplierExtractor(
             # Billing that figure bills last month's index, so the re-price
             # needs the optional key step on every solar regime.
             month_indexed_energy=c.kind in ("variable", "tou_impact"),
-            # Fourteen of the cards price a direct-debit payer differently,
+            # Seventeen of the cards price a direct-debit payer differently,
             # and say so in the ristourne paragraph: "soit une reduction de
             # base de 37.1 EUR + 5.3 EUR supplementaires en cas de paiement
-            # par domiciliation bancaire". The supplement is parsed onto the
-            # snapshot, and the flow only asks how a household pays when this
-            # flag is set, so without it resolve_direct_debit had nothing to
-            # apply and the supplement was billed to nobody: 42,40 EUR of a
-            # 215,18 EUR credit on Cosy Fixed.
+            # par domiciliation bancaire", or, on four of them, by granting
+            # the whole ristourne to nobody else. Which of the two is parsed
+            # onto the snapshot, and the flow only asks how a household pays
+            # when this flag is set, so without it resolve_direct_debit had
+            # nothing to apply: 42,40 EUR of a 215,18 EUR credit on Cosy
+            # Fixed, and the entire 522,58 EUR on Cosy Flex.
             direct_debit_discount=c.contract_id in _DIRECT_DEBIT_RISTOURNE,
         )
         for c in _CONTRACTS

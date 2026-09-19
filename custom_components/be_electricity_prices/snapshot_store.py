@@ -1538,7 +1538,14 @@ class _MigratingStore(Store[dict[str, Any]]):
 # ceiling and the direct-debit supplement the card prints beside the base. A
 # v66 row has none of them and quotes Mega against Frank and EnergyVision as
 # though nobody was ever granted one.
-_SNAPSHOT_SCHEMA_VERSION = 67
+# v68: Mega's cards carry welcome_credit_requires_direct_debit. Four of them
+# grant the whole ristourne only to a direct-debit payer ("Si vous souscrivez
+# a un nouveau contrat Cosy Flex et optez pour la domiciliation, vous
+# beneficiez d'une ristourne composee de ..."), stating no reduced
+# alternative, where the other thirteen grant a larger one. A v67 row has the
+# euros and not the condition, so it credits 522,58 EUR at 3500 kWh to a
+# household the card grants nothing.
+_SNAPSHOT_SCHEMA_VERSION = 68
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1633,6 +1640,9 @@ def _snapshot_to_dict(
         "welcome_credit_eur_per_kwh": snap.welcome_credit_eur_per_kwh,
         "welcome_credit_cap_eur": snap.welcome_credit_cap_eur,
         "welcome_credit_direct_debit_eur": snap.welcome_credit_direct_debit_eur,
+        "welcome_credit_requires_direct_debit": (
+            snap.welcome_credit_requires_direct_debit
+        ),
         "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
@@ -1710,6 +1720,9 @@ def _snapshot_from_dict(
         welcome_credit_eur_per_kwh=data.get("welcome_credit_eur_per_kwh"),
         welcome_credit_cap_eur=data.get("welcome_credit_cap_eur"),
         welcome_credit_direct_debit_eur=data.get("welcome_credit_direct_debit_eur"),
+        welcome_credit_requires_direct_debit=bool(
+            data.get("welcome_credit_requires_direct_debit")
+        ),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 

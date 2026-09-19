@@ -557,7 +557,23 @@ credit, the way it already settles the standing charge's own direct-debit cut.
 The cards state the flat half three ways, and all three are read: the total with the split
 beside it, the total alone where there is no split, and a flat-only ristourne with no
 per-kWh term at all. Where a card prints both a total and the split, the two agree, which
-is how the reading was checked across the range. A future card that pro-rates without a cap, or caps a
+is how the reading was checked across the range.
+
+A fourth shape makes the payment method decide the whole offer instead of a share of it:
+*"Si vous souscrivez a un nouveau contrat Cosy Flex **et optez pour la domiciliation**,
+vous beneficiez d'une ristourne composee de ..."*, with no reduced alternative stated, so
+a household paying another way is granted nothing. `ristourne_requires_direct_debit`
+(`_mega_overlays.py`) reads it and `resolve_direct_debit` drops the base, the per-kWh leg
+and the cap together. Cosy Flex, Smart Fixed and both their pro twins state it; pro Cosy
+Flex has printed each wording in different months, which is why it is parsed off the card
+rather than listed. The two readings are exclusive and the supplement wins: a card
+printing it is offering the rest a smaller credit, not none.
+
+Seventeen products therefore depend on how the household pays, and the flow asks only
+where `direct_debit_discount` is set in the registry (`_DIRECT_DEBIT_RISTOURNE`,
+`mega.py`). A product whose card states either dependence and which is missing from that
+set is never asked, so the resolver is handed a default and the card's wording never
+reaches the bill. A future card that pro-rates without a cap, or caps a
 lump, is what would split them.
 
 The cap counts only the three components the card names. Not the energy fund, the

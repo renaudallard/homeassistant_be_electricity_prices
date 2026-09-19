@@ -266,6 +266,15 @@ _RISTOURNE_DIRECT_DEBIT_RE = re.compile(
 _RISTOURNE_CAP_RE = re.compile(
     r"ristourne\s+est\s+plafonn[ée]e?\s+[àa]\s+([\d.,]+)\s*€", re.IGNORECASE
 )
+# Shape D: the whole offer hangs on the direct debit instead of growing with
+# it, and prints no reduced alternative. "Si vous souscrivez a un nouveau
+# contrat Cosy Flex ET OPTEZ POUR LA DOMICILIATION, vous beneficiez d'une
+# ristourne (*) composee de ...". Cosy Flex, Smart Fixed and both their pro
+# twins say this; every other card grants a base either way.
+_RISTOURNE_CONDITIONAL_RE = re.compile(
+    r"souscrivez[^.]{0,160}?optez\s+pour\s+la\s+domiciliation[^.]{0,160}?ristourne",
+    re.IGNORECASE,
+)
 
 
 def extract_ristourne(text: str) -> dict[str, float | None]:
@@ -278,6 +287,9 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
     A card stating a per-kWh reduction and no flat one, or the other way
     round, is read for whichever half it prints: the two are independent
     lines of the same offer and Mega varies which appear per product.
+
+    Whether a household gets any of it is a separate question, and a
+    separate function: see :func:`ristourne_requires_direct_debit`.
     """
     flat = re.sub(r"\s+", " ", text)
     per_kwh = _RISTOURNE_PER_KWH_RE.search(flat)
@@ -309,6 +321,25 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
             to_float(supplement.group(1)) if supplement else None
         ),
     }
+
+
+def ristourne_requires_direct_debit(text: str) -> bool:
+    """True when the card grants its whole ristourne only to a direct-debit payer.
+
+    Separate from :func:`extract_ristourne` because it answers a different
+    question about the same paragraph: that one reads how much, this one
+    reads who gets it. Folding a bool into a dict of euros would widen the
+    dict's type for every caller and every field.
+
+    A card stating the supplement is offering the rest a SMALLER credit, not
+    none, so the two readings are exclusive and the supplement wins: it is
+    the more specific of the two, and a card printing both would be stating
+    a reduced amount for the very household this would zero.
+    """
+    flat = re.sub(r"\s+", " ", text)
+    if _RISTOURNE_DIRECT_DEBIT_RE.search(flat):
+        return False
+    return _RISTOURNE_CONDITIONAL_RE.search(flat) is not None
 
 
 def _extract_energy_contribution(text: str) -> float:

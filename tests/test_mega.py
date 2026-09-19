@@ -45,7 +45,9 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     FixedRates,
     ImpactRates,
+    SupplierSnapshot,
     VariableRates,
+    resolve_direct_debit,
 )
 from custom_components.be_electricity_prices.providers.mega import (
     _find_pdf_url,
@@ -1691,6 +1693,61 @@ def test_the_ristourne_is_read_in_all_three_phrasings() -> None:
     assert none["welcome_credit_eur_per_kwh"] is None
 
 
+def test_a_ristourne_conditional_on_direct_debit_is_granted_to_nobody_else() -> None:
+    """Four cards hang the WHOLE ristourne on the direct debit, not a share.
+
+    "Si vous souscrivez a un nouveau contrat Smart Fixed ET OPTEZ POUR LA
+    DOMICILIATION, vous beneficiez d'une ristourne composee de ..." states no
+    reduced alternative, so a household paying another way gets none of it.
+    The parser read the euros and nothing read the condition, so the whole
+    credit was granted to every entry: 428,77 EUR on this card at 3500 kWh,
+    and 522,58 on the September Cosy Flex.
+
+    Shape D only. A card printing the supplement is offering the rest a
+    SMALLER credit, which the supplement already expresses, and zeroing that
+    one would take away a reduction the card grants in writing. Smart Flex is
+    that card, from the same family and the same month.
+    """
+    conditional = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+    )
+    assert conditional.welcome_credit_requires_direct_debit
+    assert conditional.welcome_credit_direct_debit_eur is None
+
+    supplemented = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    assert not supplemented.welcome_credit_requires_direct_debit
+    assert supplemented.welcome_credit_direct_debit_eur == pytest.approx(42.4)
+
+    def credited(snapshot: SupplierSnapshot, *, direct_debit: bool) -> float:
+        resolved = resolve_direct_debit(snapshot, direct_debit=direct_debit)
+        # Answered for this entry either way, so no later reader applies it
+        # twice.
+        assert not resolved.welcome_credit_requires_direct_debit
+        assert resolved.welcome_credit_direct_debit_eur is None
+        total = (resolved.welcome_credit_eur or 0.0) + (
+            resolved.welcome_credit_eur_per_kwh or 0.0
+        ) * 3500.0
+        cap = resolved.welcome_credit_cap_eur
+        return min(total, cap) if cap is not None else total
+
+    # 143,10 + 0,08162 x 3500, under the 848 ceiling, or nothing at all.
+    assert credited(conditional, direct_debit=True) == pytest.approx(428.77)
+    assert credited(conditional, direct_debit=False) == pytest.approx(0.0)
+    assert (
+        resolve_direct_debit(conditional, direct_debit=False).welcome_credit_cap_eur
+        is None
+    )
+
+    # The supplement card keeps its base: the difference is the supplement,
+    # not the offer.
+    assert credited(supplemented, direct_debit=True) - credited(
+        supplemented, direct_debit=False
+    ) == pytest.approx(42.4)
+    assert credited(supplemented, direct_debit=False) > 0.0
+
+
 def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
     """Mega's residential cards print the same four tranches Engie's do.
 
@@ -1731,19 +1788,22 @@ def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
 
 
 def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> None:
-    """The supplement is parsed off the card; the flow asks off the registry.
+    """The dependence is parsed off the card; the flow asks off the registry.
 
-    Fourteen Mega cards state "soit une reduction de base de 37.1 EUR +
-    5.3 EUR supplementaires en cas de paiement par domiciliation bancaire".
-    The supplement reached the snapshot and a schema bump, but no Mega
-    contract carried ``direct_debit_discount``, so the flow never asked how
-    the household pays, ``_direct_debit`` was always False and
-    ``resolve_direct_debit`` had nothing to apply. The supplement was billed
-    to nobody: 42,40 EUR of a 215,18 EUR credit on Cosy Fixed.
+    Seventeen Mega cards make the ristourne depend on how the household
+    pays, two ways. Fourteen state "soit une reduction de base de 37.1 EUR +
+    5.3 EUR supplementaires en cas de paiement par domiciliation bancaire",
+    and four grant the whole thing to a direct-debit payer and nobody else
+    (pro Cosy Flex has printed each wording in different months, so it is on
+    both counts). The amounts reached the snapshot and a schema bump, but no
+    Mega contract carried ``direct_debit_discount``, so the flow never asked
+    how the household pays, ``_direct_debit`` was always False and
+    ``resolve_direct_debit`` had nothing to apply: 42,40 EUR of a 215,18 EUR
+    credit on Cosy Fixed, and every euro of Smart Fixed's.
 
     The registry half has to agree with the card half, which is what this
-    pins: every product whose card states a supplement is flagged, and no
-    product without one is.
+    pins: every product whose card states either dependence is flagged, and
+    no product without one is.
     """
     from custom_components.be_electricity_prices.providers import (
         EXTRACTORS,
@@ -1755,7 +1815,7 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
 
     flagged = {c.id for c in EXTRACTORS["mega"].contracts if c.direct_debit_discount}
     assert flagged == _DIRECT_DEBIT_RISTOURNE
-    assert len(flagged) == 14
+    assert len(flagged) == 17
 
     # Every id on the list is a real contract, so a rename cannot leave a
     # product silently unflagged.
@@ -1763,5 +1823,16 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
     assert _DIRECT_DEBIT_RISTOURNE <= known
 
     assert offers_direct_debit("mega", "mega_cosy_fixed") is True
-    # Smart Fixed states no supplement, so the flow does not ask for it.
-    assert offers_direct_debit("mega", "mega_smart_fixed") is False
+    # The four whose whole ristourne hangs on the answer. Smart Fixed was
+    # read as needing no question because it prints no supplement, which is
+    # true and is not what its card says: it grants the credit only to a
+    # direct-debit payer, so the unasked question was worth all of it.
+    for conditional in (
+        "mega_cosy_flex",
+        "mega_smart_fixed",
+        "mega_pro_cosy_flex",
+        "mega_pro_smart_fixed",
+    ):
+        assert offers_direct_debit("mega", conditional) is True
+    # Dynamic grants no ristourne at all, so nothing turns on the answer.
+    assert offers_direct_debit("mega", "mega_dynamic") is False

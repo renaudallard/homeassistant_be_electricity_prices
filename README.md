@@ -105,7 +105,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House · the same eight as **pro** contracts, minus Direct Online and Basic Online | [`engie.py`](./custom_components/be_electricity_prices/providers/engie.py) · [notes](./docs/providers/engie.md)
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch Korting · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic | [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
-| **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
+| **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary, and seventeen cards price it on whether the household pays by direct debit · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
 | **OCTA+** | Fixed · Fixed Impact *(Wallonia, CWaPE 3-band)* · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
 | **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before)* · Energreen | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
@@ -368,9 +368,13 @@ formula** supplier, which has no card and asks for the whole set.
 5. **Direct debit** *(only where the card prices it)* — whether you pay your
    supplier by direct debit. Some cards charge a lower yearly standing
    charge when the invoice is settled that way: Brusol Groene stroom is
-   250 € a year and 230 € on domiciliëring. The reduction is read off the
-   card, not typed, and nothing else on the bill changes. The box is hidden
-   on every contract whose card grants none, and an answer given on one
+   250 € a year and 230 € on domiciliëring. On seventeen Mega cards it is
+   the first-year ristourne that depends on it instead, either as a larger
+   credit (42,40 € more on Cosy Fixed) or, on Cosy Flex, Smart Fixed and
+   both their pro twins, as the whole credit, which those cards grant to a
+   direct-debit payer and to nobody else. The amounts are read off the card,
+   not typed, and nothing else on the bill changes. The box is hidden on
+   every contract whose card grants none, and an answer given on one
    contract is dropped when you switch to another, so it cannot come back
    into force later.
 6. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
