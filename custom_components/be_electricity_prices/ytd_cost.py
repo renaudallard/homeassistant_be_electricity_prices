@@ -536,6 +536,7 @@ async def _ytd_hourly_energy(
     # capped against, and the card names exactly this component, not the
     # network or tax legs beside it and not the feed-in line either.
     energy_component = 0.0
+    green_component = 0.0
     # How much of the window actually got an energy price. A YTD that is low
     # because the spot cache is thin looks identical to a low one that is
     # correct, so report the coverage instead of leaving the user to guess.
@@ -596,6 +597,10 @@ async def _ytd_hourly_energy(
         # An unpriced hour carries a zero energy component, so it adds nothing
         # here either: what could not be charged cannot be credited against.
         energy_component += kwh_cons * bd.energy
+        # On the HOUR's own card, the way the backfill accumulates it: the
+        # green levy belongs to the delivery month, and a welcome credit is
+        # capped against what the window was actually charged.
+        green_component += kwh_cons * renewables_eur_per_kwh(snap_h.taxes, region)
         if regime == SOLAR_REGIME_COMPENSATION:
             # Yearly net metering: the hour's net lands in a register and is
             # priced by _NetAllocation after the walk, on the profile when it
@@ -690,6 +695,7 @@ async def _ytd_hourly_energy(
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
         breakdown["energy_component_ytd_eur"] = energy_component
+        breakdown["green_component_ytd_eur"] = green_component
     return energy_cost
 
 
@@ -1099,8 +1105,16 @@ async def _compute_current_year_cost(
                 # for exactly this sum.
                 stats.get("energy_component_ytd_eur", 0.0)
                 + static_fees.supplier_fee
-                + stats.get("consumption_ytd_kwh", 0.0)
-                * renewables_eur_per_kwh(snapshot.taxes, region),
+                # Accumulated per month by the walks, on each month's own
+                # card, which is what the backfill has always done. Reading
+                # today's levy against the window's whole volume priced a
+                # past month's kWh at a rate it never carried; the levy moves
+                # on 54 of the archived rows.
+                + stats.get(
+                    "green_component_ytd_eur",
+                    stats.get("consumption_ytd_kwh", 0.0)
+                    * renewables_eur_per_kwh(snapshot.taxes, region),
+                ),
             )
         stats["welcome_credit_eur"] = credit
         return energy + fees - credit
@@ -1275,6 +1289,7 @@ async def _compute_current_year_cost(
     # the feed-in credit: the cap base of a welcome credit (see the hourly
     # walk above, which keeps the same running sum for the same reason).
     energy_component = 0.0
+    green_component = 0.0
     netting = _NetAllocation()
     # A flat energy leg can still carry a monthly-indexed feed-in credit
     # (energie.be Vast). The daily walk has no spot of its own, so resolve the
@@ -1300,6 +1315,7 @@ async def _compute_current_year_cost(
             if bi_capable
             else total_cons * single_bd.energy
         )
+        green_component += total_cons * renewables_eur_per_kwh(snap_d.taxes, region)
         if regime == SOLAR_REGIME_COMPENSATION:
             # Yearly net metering, per register, priced after the walk by
             # _NetAllocation: on the day's RLP mass when the profile is
@@ -1420,6 +1436,7 @@ async def _compute_current_year_cost(
 
     stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
     stats["energy_component_ytd_eur"] = energy_component
+    stats["green_component_ytd_eur"] = green_component
     if breakdown is not None:
         # The per-day counterpart of hours_seen / hours_elapsed above: the
         # static branch reported no coverage at all, so a gap here was

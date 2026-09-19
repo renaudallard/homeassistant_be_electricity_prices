@@ -1885,3 +1885,78 @@ def test_backfilled_feed_in_bills_the_printed_indicative_beside_a_formula() -> N
         today=date(2026, 1, 31),
     )
     assert rate == pytest.approx(0.05)
+
+
+async def test_the_credit_cap_reads_each_month_own_green_levy(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The welcome credit is capped against what the window was charged.
+
+    The green levy is part of that base, and the backfill has always summed
+    it on each hour's own card. The year-to-date walk multiplied the whole
+    window's volume by TODAY's levy instead, pricing a past month's kWh at a
+    rate it never carried. Latent while no card granting a credit has moved
+    its levy, and wrong the moment one does.
+    """
+    from custom_components.be_electricity_prices import energy_meters, ytd_cost
+
+    freezer.move_to("2026-03-31 23:00:00+02:00")
+    january = make_snapshot(
+        energy=FixedRates(single=0.20),
+        taxes=TaxOverlay(
+            federal_excise=0.05, energy_contribution=0.0, wallonia_renewables=0.010
+        ),
+        welcome_credit_eur=500.0,
+    )
+    today_card = make_snapshot(
+        energy=FixedRates(single=0.20),
+        taxes=TaxOverlay(
+            federal_excise=0.05, energy_contribution=0.0, wallonia_renewables=0.040
+        ),
+        welcome_credit_eur=500.0,
+    )
+
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+        contract_start_date="2026-01-01",
+    )
+    entry.add_to_hass(hass)
+
+    per_day = {date(2026, 1, 1) + timedelta(days=i): 10.0 for i in range(90)}
+
+    async def fake_daily(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+
+    async def noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    breakdown: dict[str, Any] = {}
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", AsyncMock(return_value={})),
+        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(
+            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=january)
+        ),
+        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+    ):
+        await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            today_card,
+            entry,
+            breakdown=breakdown,
+        )
+
+    volume = breakdown["consumption_ytd_kwh"]
+    assert volume > 0.0
+    # Each month's own levy, which every month here carries at 0,010.
+    assert breakdown["green_component_ytd_eur"] == pytest.approx(volume * 0.010)
+    # Not today's card at 0,040, which is what the cap used to be built on.
+    assert breakdown["green_component_ytd_eur"] != pytest.approx(volume * 0.040)
