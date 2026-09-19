@@ -118,8 +118,10 @@ class Contract:
     # delivery month's mean and its card prints last month's figure: Cociter
     # Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and
     # SmartFlex, OCTA+ Smart Variable / Flux / Eco Flux, Eneco Flex and Flex
-    # One, and every Mega Flex plus Off-peak Impact, whose cards name the
-    # settled month outright ("pour le mois de <MONTH>"). The re-price needs ENTSO-E spots the kind never collects a key for,
+    # One, TotalEnergies's four BELPEXM_RLP variable cards, and every Mega
+    # Flex plus Off-peak Impact, whose cards name the settled month outright
+    # ("pour le mois de <MONTH>"). The re-price needs ENTSO-E spots the kind
+    # never collects a key for,
     # so the config flow offers the optional key step on EVERY solar regime,
     # not only the injection one the flag above serves. Same registry-versus-
     # parser agreement as that flag: the live check holds each fetched card's

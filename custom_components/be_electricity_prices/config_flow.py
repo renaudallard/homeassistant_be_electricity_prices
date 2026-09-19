@@ -536,11 +536,14 @@ class _WizardStepsMixin:
         """An ENTSO-E key is offered after the solar step, skippable, when
         the chosen contract prices something off the day-ahead market that
         its kind does not already collect a key for: an energy leg indexed on
-        the delivery month's mean (Cociter Variable, Engie's EPEXDAM cards,
-        Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable and Flux, Eneco
-        Flex), on ANY solar regime, or an index-linked feed-in credit on the
-        injection regime. A key already collected (dynamic or spot-monthly
-        energy) skips the step."""
+        the delivery month's mean, on ANY solar regime, or an index-linked
+        feed-in credit on the injection regime. A key already collected
+        (dynamic or spot-monthly energy) skips the step.
+
+        Which products those are is the registry's ``month_indexed_energy``
+        and ``spot_indexed_injection``, not a list kept here: the list ran a
+        supplier behind twice, and a contract missing from it is a household
+        billing last month's index with no step that could fix it."""
         if self._data.get(CONF_API_KEY):
             return False
         supplier = self._data.get(CONF_SUPPLIER)

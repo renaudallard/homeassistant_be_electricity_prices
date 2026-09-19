@@ -29,6 +29,7 @@ from custom_components.be_electricity_prices.providers import (
     luminus,
     mega,
     octaplus,
+    totalenergies,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_aligned,
@@ -252,6 +253,33 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "mega_smart_fixed",
         lambda: mega.parse_snapshot(
             "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), REGION_WALLONIA
+        ),
+    ),
+    (
+        "totalenergies",
+        "totalenergies_mycomfort",
+        lambda: totalenergies.parse_snapshot(
+            "totalenergies_mycomfort",
+            fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+            REGION_FLANDERS,
+        ),
+    ),
+    (
+        "totalenergies",
+        "totalenergies_mycomfort_fixed",
+        lambda: totalenergies.parse_snapshot(
+            "totalenergies_mycomfort_fixed",
+            fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True),
+            REGION_WALLONIA,
+        ),
+    ),
+    (
+        "totalenergies",
+        "totalenergies_impact",
+        lambda: totalenergies.parse_snapshot(
+            "totalenergies_impact",
+            fixture_text("totalenergies_impact_w.pdf", layout=True),
+            REGION_WALLONIA,
         ),
     ),
 ]

@@ -228,6 +228,31 @@ The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
 `_extract_fee_and_renewables` and is shared across all kinds
 (`totalenergies.py`).
 
+### Month-indexed energy on the variable cards
+
+Electricité Variable, myComfort, myDrive and myEssential print a
+`factor * BELPEXM_RLP + base` formula beside their four meter columns and state
+that the rates above it are computed on the *previous* month's index. The pairs
+are read by `_consumption_month_formula` and attached by `_with_month_formula`
+(`totalenergies.py`), which sets `month_indexed` and `rlp_indexed`, so the
+delivery month's own mean re-prices the leg instead of the card's stale row.
+The scaling is the dynamic branch's, because it is the same card printing the
+same kind of formula: `factor * vat * 10`, `base * vat / 100`. Dividing both by
+100 instead put the mono column at 0.02275 EUR/kWh against the 0.18140 it
+prints, about 555 EUR a year at 3500 kWh.
+
+The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
+`totalenergies.py`), without which the config flow never offers the optional
+ENTSO-E key on the no-solar and compensation regimes and the re-price has no
+spots to resolve against: the parser half alone reached only the injection
+regime, through `spot_indexed_injection`.
+
+Impact is the exception. Its card prints the same formula and the same
+"dernière valeur connue du BELPEX_M_RLP (du mois précédent)" note, but over
+three CWaPE band columns rather than four meter ones, which
+`_consumption_month_formula` does not solve, so it parses no formula and
+carries no flag. It bills the printed row, a month behind.
+
 ### DSO overlay coverage
 
 | Region | Sub-areas mapped | Row width | Fields surfaced |

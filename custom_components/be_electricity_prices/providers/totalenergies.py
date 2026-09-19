@@ -939,6 +939,22 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     }
 
 
+# The variable products whose energy leg is a BELPEXM_RLP formula the parser
+# reads, so the re-price needs spots the kind never collects a key for. Impact
+# prints the same formula and the same "du mois precedent" note, but over a
+# three-band layout `_extract_energy` does not solve, so it parses no formula
+# and carries no flag: a flag with nothing to resolve would offer a key that
+# changes nothing. The fixed cards and myDynamic are neither.
+_MONTH_INDEXED_ENERGY: frozenset[str] = frozenset(
+    {
+        "totalenergies_electricite_variable",
+        "totalenergies_mycomfort",
+        "totalenergies_mydrive",
+        "totalenergies_myessential",
+    }
+)
+
+
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=12.8,
     id="totalenergies",
@@ -954,6 +970,7 @@ EXTRACTOR = SupplierExtractor(
             # fetches spots for. myDynamic collects the key via its own
             # BELPEXH energy formula.
             spot_indexed_injection=c.kind != "dynamic",
+            month_indexed_energy=c.contract_id in _MONTH_INDEXED_ENERGY,
         )
         for c in _CONTRACTS
     ),
