@@ -208,7 +208,7 @@ async def test_a_body_that_is_not_a_sheet_never_raises(label: str, body: bytes) 
     first refresh it became ConfigEntryNotReady and the entry never set up.
     """
     session = _Session(body)
-    assert await brugel.ensure_power_term(session, 2026) is None, label
+    assert await brugel.ensure_power_term(session, 2026) is None, label  # type: ignore[arg-type]
     assert brugel.cached_power_term(2026) is None
 
 
@@ -217,12 +217,12 @@ async def test_a_failure_is_only_attempted_once() -> None:
     the next tick tried again: a blocked Brugel cost a download an hour
     forever."""
     session = _Session(b"<html>nope</html>")
-    await brugel.ensure_power_term(session, 2026)
+    await brugel.ensure_power_term(session, 2026)  # type: ignore[arg-type]
     assert 2026 in brugel._failed_at
     after_first = session.calls
     assert after_first > 0
 
-    await brugel.ensure_power_term(session, 2026)
+    await brugel.ensure_power_term(session, 2026)  # type: ignore[arg-type]
     assert session.calls == after_first, "the backoff did not hold"
 
 
@@ -234,12 +234,12 @@ async def test_a_good_sheet_is_fetched_once_and_kept() -> None:
     if not sheet.exists():
         pytest.skip("the archived Brugel sheet is not on this machine")
     session = _Session(sheet.read_bytes())
-    assert await brugel.ensure_power_term(session, 2026) == (
+    assert await brugel.ensure_power_term(session, 2026) == (  # type: ignore[arg-type]
         pytest.approx(47.24),
         pytest.approx(94.48),
     )
     after_first = session.calls
-    assert await brugel.ensure_power_term(session, 2026) == (
+    assert await brugel.ensure_power_term(session, 2026) == (  # type: ignore[arg-type]
         pytest.approx(47.24),
         pytest.approx(94.48),
     )

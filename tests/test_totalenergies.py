@@ -492,6 +492,7 @@ def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
 
     # The index the printed mono rate implies, in EUR/kWh as the engine holds
     # spots. Everything else on the card must resolve at that same index.
+    assert energy.formula_factor is not None and energy.formula_base is not None
     index = (energy.current - energy.formula_base) / energy.formula_factor
 
     for printed, factor, base in (
@@ -510,4 +511,5 @@ def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
     # And the resolved rate is a plausible Belgian energy leg. A unit slip of
     # the kind this test exists for lands three orders of magnitude out, so
     # the bound is sized on that and leaves every real tariff alone.
-    assert 0.05 <= energy.formula_factor * index + energy.formula_base <= 0.60
+    resolved = energy.formula_factor * index + energy.formula_base
+    assert 0.05 <= resolved <= 0.60
