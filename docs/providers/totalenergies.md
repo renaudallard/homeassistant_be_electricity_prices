@@ -247,11 +247,15 @@ ENTSO-E key on the no-solar and compensation regimes and the re-price has no
 spots to resolve against: the parser half alone reached only the injection
 regime, through `spot_indexed_injection`.
 
-Impact is the exception. Its card prints the same formula and the same
-"dernière valeur connue du BELPEX_M_RLP (du mois précédent)" note, but over
-three CWaPE band columns rather than four meter ones, which
-`_consumption_month_formula` does not solve, so it parses no formula and
-carries no flag. It bills the printed row, a month behind.
+Impact prints the same formula the same way, but once per CWaPE band rather
+than once per meter column, because its ENERGY leg does not band at all: the
+three bands are the network side, and the card shows one rate for all of them.
+`_consumption_month_formula` returns the pairs it finds and
+`_with_month_formula` puts a single repeated pair on the one rate the leg has,
+leaving the peak, off-peak and night coefficients unset, because that leg has
+no such columns to re-price. Its September 2026 Wallonia card inverts to
+135,07 EUR/MWh, the same index the four sibling cards solve to that month, and
+requiring four pairs left it alone on the previous month's row.
 
 ### DSO overlay coverage
 

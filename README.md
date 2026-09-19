@@ -386,8 +386,9 @@ formula** supplier, which has no card and asks for the whole set.
    card prints last month's figure, on any solar regime — Cociter Variable
    and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
    OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, EBEM
-   Groen Variabel and B@sic+, TotalEnergies Electricité Variable, myComfort,
-   myDrive and myEssential, every Mega Flex and Off-peak Impact card — and on
+   Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
+   myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
+   card — and on
    the injection regime for a contract whose injection is itself
    index-linked, which is most static cards and not the handful it once was
    — every Bolt card and both Cociter variable cards index it per hour, while

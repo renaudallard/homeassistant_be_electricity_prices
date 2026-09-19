@@ -454,33 +454,48 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
 _RLP_FORMULA_RE = re.compile(r"\d+\.\d+")
 
 
-def _consumption_month_formula(
-    text: str,
-) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]] | None:
-    """The four ``factor * BELPEXM_RLP + base`` pairs, or ``None``.
+def _consumption_month_formula(text: str) -> list[tuple[float, float]] | None:
+    """The ``factor * BELPEXM_RLP + base`` pairs the card prints, in column
+    order, or ``None`` for a layout this cannot read.
 
-    Verified on the September 2026 cards by inverting each column against its
-    own printed rate: all four solve to the same index to within
+    Two layouts. The four meter columns of a standard variable card print
+    four pairs, verified on the September 2026 cards by inverting each
+    against its own printed rate: all four solve to the same index to within
     0,3 EUR/MWh, which four independent columns only do when the pairing is
-    right.
+    right. Impact prints ONE pair repeated once per CWaPE band, because its
+    energy leg does not band at all (the bands are the network side), and it
+    inverts to the same 135,07 EUR/MWh the four sibling cards do for the same
+    month.
+
+    Any other count is refused rather than guessed at: a layout that moved,
+    or a four-column card of which one column was read, and billing a
+    mispaired coefficient is worse than billing the printed row.
     """
     index = text.find("BELPEXM_RLP")
     if index < 0:
         return None
     line_start = text.rfind("\n", 0, text.rfind("\n", 0, index)) + 1
-    line_end = text.find("\n", text.find("\n", index) + 1)
-    if line_end < 0:
-        return None
-    block = re.sub(r"\s+", " ", text[line_start:line_end])
+    # The formula can be the last thing on the page (Impact keeps it on one
+    # line), and a missing newline after it is the end of the text, not a
+    # layout this cannot read.
+    after = text.find("\n", index)
+    line_end = text.find("\n", after + 1) if after >= 0 else -1
+    block = re.sub(r"\s+", " ", text[line_start : line_end if line_end >= 0 else None])
     numbers = [float(n) for n in _RLP_FORMULA_RE.findall(block)]
     factors = [n for n in numbers if n < 1.0]
     bases = [n for n in numbers if n >= 1.0]
-    if len(factors) != 4 or len(bases) != 4:
+    if len(factors) != len(bases) or not factors:
         return None
-    return (
-        (factors[0], factors[1], factors[2], factors[3]),
-        (bases[0], bases[1], bases[2], bases[3]),
-    )
+    pairs = list(zip(factors, bases, strict=True))
+    if len(pairs) == 4:
+        return pairs
+    if len(pairs) == 3 and len(set(pairs)) == 1:
+        # Impact's three CWaPE bands, all printing the one formula its energy
+        # leg has. Three IDENTICAL pairs and no other count: a single pair is
+        # a four-column card of which one column was read, and returning it
+        # would put one meter's coefficients on every meter.
+        return pairs[:1]
+    return None
 
 
 def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
@@ -489,13 +504,20 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     Returns ``rates`` untouched for any other shape, and for a layout
     :func:`_consumption_month_formula` cannot read, which leaves the card
     billing its printed row exactly as before.
+
+    A card printing ONE formula gets it on the single rate and nothing else.
+    Impact is that card: it repeats the pair once per CWaPE band because its
+    ENERGY leg does not band at all, the bands being the network side, and
+    its leg carries no peak, off-peak or night column to hold a coefficient
+    for. It solves to the same index as the four-column cards, 135,07 EUR/MWh
+    on the September 2026 Wallonia set, so leaving it out kept one product of
+    the range a month behind the rest.
     """
     if not isinstance(rates, VariableRates):
         return rates
     pairs = _consumption_month_formula(text)
     if pairs is None:
         return rates
-    factors, bases = pairs
     # Same conversion the dynamic branch above states, because it is the same
     # card printing the same kind of formula: the PDF yields c EUR/kWh HTVA
     # from an index in EUR/MWh, while the engine holds spots in EUR/kWh.
@@ -509,21 +531,31 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     # 3500 kWh. With this conversion it reproduces the printed figure exactly,
     # which is what says both the scale and the VAT reading are right.
     vat = _vat_multiplier(text)
+    # BELPEXM_RLP is the day-ahead weighted by the residual load profile,
+    # which the injection leg's plain BELPEXM is not: the guard on
+    # _MONTH_FORMULA_RE exists to keep the two apart.
+    if len(pairs) == 1:
+        factor, base = pairs[0]
+        return replace(
+            rates,
+            month_indexed=True,
+            rlp_indexed=True,
+            formula_factor=factor * vat * 10.0,
+            formula_base=base * vat / 100.0,
+        )
+    (fm, bm), (fp, bp), (fo, bo), (fn, bn) = pairs
     return replace(
         rates,
         month_indexed=True,
-        # BELPEXM_RLP is the day-ahead weighted by the residual load profile,
-        # which the injection leg's plain BELPEXM is not: the guard on
-        # _MONTH_FORMULA_RE exists to keep the two apart.
         rlp_indexed=True,
-        formula_factor=factors[0] * vat * 10.0,
-        formula_base=bases[0] * vat / 100.0,
-        formula_factor_peak=factors[1] * vat * 10.0,
-        formula_base_peak=bases[1] * vat / 100.0,
-        formula_factor_offpeak=factors[2] * vat * 10.0,
-        formula_base_offpeak=bases[2] * vat / 100.0,
-        formula_factor_exclusive_night=factors[3] * vat * 10.0,
-        formula_base_exclusive_night=bases[3] * vat / 100.0,
+        formula_factor=fm * vat * 10.0,
+        formula_base=bm * vat / 100.0,
+        formula_factor_peak=fp * vat * 10.0,
+        formula_base_peak=bp * vat / 100.0,
+        formula_factor_offpeak=fo * vat * 10.0,
+        formula_base_offpeak=bo * vat / 100.0,
+        formula_factor_exclusive_night=fn * vat * 10.0,
+        formula_base_exclusive_night=bn * vat / 100.0,
     )
 
 
@@ -940,14 +972,14 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 # The variable products whose energy leg is a BELPEXM_RLP formula the parser
-# reads, so the re-price needs spots the kind never collects a key for. Impact
-# prints the same formula and the same "du mois precedent" note, but over a
-# three-band layout `_extract_energy` does not solve, so it parses no formula
-# and carries no flag: a flag with nothing to resolve would offer a key that
-# changes nothing. The fixed cards and myDynamic are neither.
+# reads, so the re-price needs spots the kind never collects a key for. Every
+# variable card is one, Impact included: it prints the pair once per CWaPE
+# band rather than once per meter column, and solves to the same index as the
+# other four. The fixed cards and myDynamic are neither.
 _MONTH_INDEXED_ENERGY: frozenset[str] = frozenset(
     {
         "totalenergies_electricite_variable",
+        "totalenergies_impact",
         "totalenergies_mycomfort",
         "totalenergies_mydrive",
         "totalenergies_myessential",

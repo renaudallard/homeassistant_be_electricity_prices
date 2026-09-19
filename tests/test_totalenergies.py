@@ -455,18 +455,36 @@ def test_variable_cards_carry_the_delivery_month_formula() -> None:
         "BELPEXM_RLP + 2.26 BELPEXM_RLP + 2.26 2.26 BELPEXM_RLP + 2.16\n"
     )
     pairs = _consumption_month_formula(block)
-    assert pairs == ((0.1099, 0.1212, 0.1, 0.1056), (2.26, 2.26, 2.26, 2.16))
+    assert pairs == [(0.1099, 2.26), (0.1212, 2.26), (0.1, 2.26), (0.1056, 2.16)]
 
     # Each column solves to the same index against its own printed rate.
     printed = (0.1800, 0.1961, 0.1660, 0.1729)
-    factors, bases = pairs
-    implied = [(printed[i] * 100 - bases[i]) / factors[i] for i in range(4)]
+    implied = [
+        (printed[i] * 100 - base) / factor for i, (factor, base) in enumerate(pairs)
+    ]
     assert max(implied) - min(implied) < 1.0
 
+    # Impact prints the one formula its energy leg has once per CWaPE band,
+    # and means it once.
+    impact = (
+        "Heures PIC Heures MEDIUM Heures ECO\nConsommation**\nTarif mensuel\n"
+        "14,77 14,77 14,77\n100,00 3,26\n"
+        "0.1099 * BELPEXM_RLP + 2.33 0.1099 * BELPEXM_RLP + 2.33 "
+        "0.1099 * BELPEXM_RLP + 2.33 Formule tarifaire\n"
+    )
+    assert _consumption_month_formula(impact) == [(0.1099, 2.33)]
+
     # A layout this cannot read leaves the card on its printed row rather
-    # than billing a half-read formula.
+    # than billing a half-read formula. One pair is the four-column card with
+    # one column read, not Impact, so it stays refused.
     assert _consumption_month_formula("no formula here") is None
     assert _consumption_month_formula("0.1099 * BELPEXM_RLP + 2.26") is None
+    assert (
+        _consumption_month_formula(
+            "0.1099 * BELPEXM_RLP + 2.26 0.1212 * BELPEXM_RLP + 2.26"
+        )
+        is None
+    )
 
 
 def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
