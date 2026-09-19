@@ -8407,6 +8407,39 @@ def test_welcome_credit_accrues_pro_rata_and_totals_the_printed_amount() -> None
     )
 
 
+def test_every_half_of_a_welcome_credit_moves_onto_the_entry_basis() -> None:
+    """A professional card prints excluding VAT, the credit included.
+
+    The four halves are added together and then compared against the
+    ceiling, so grossing the flat one alone mixes two bases inside one sum.
+    Measured on Mega's professional Smart Flex: 38 EUR short at 3500 kWh and
+    168 at 20.000, where the ceiling binds and was still the card's ex-VAT
+    figure.
+    """
+    from custom_components.be_electricity_prices.providers.base import apply_vat
+
+    card = make_snapshot(
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0, vat_rate=0.21),
+        welcome_credit_eur=95.0,
+        welcome_credit_eur_per_kwh=0.052,
+        welcome_credit_cap_eur=800.0,
+        welcome_credit_direct_debit_eur=5.0,
+    )
+    grossed = apply_vat(card, include_vat=True)
+    assert grossed.welcome_credit_eur == pytest.approx(95.0 * 1.21)
+    assert grossed.welcome_credit_eur_per_kwh == pytest.approx(0.052 * 1.21)
+    assert grossed.welcome_credit_cap_eur == pytest.approx(800.0 * 1.21)
+    assert grossed.welcome_credit_direct_debit_eur == pytest.approx(5.0 * 1.21)
+
+    # A residential card prints VAT-inclusive and is returned untouched.
+    residential = make_snapshot(
+        welcome_credit_eur=37.1,
+        welcome_credit_eur_per_kwh=0.04929,
+        welcome_credit_cap_eur=848.0,
+    )
+    assert apply_vat(residential, include_vat=True) is residential
+
+
 def test_a_credit_stated_per_kwh_is_measured_on_the_volume() -> None:
     """Mega states most of its ristourne as a reduction on the energy price.
 

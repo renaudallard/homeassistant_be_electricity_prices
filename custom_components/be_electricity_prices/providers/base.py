@@ -1137,10 +1137,32 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
         # A credit against energy, the standing charge and the green
         # contribution, which are all billed with VAT, so it moves onto the
         # entry's basis with them rather than staying as the card printed it.
+        #
+        # ALL FOUR halves of it, because they are added together and then
+        # compared against the ceiling: grossing the flat one alone left a
+        # professional entry crediting a per-kWh term and a ceiling still as
+        # the card printed them, 38 EUR short at 3500 kWh and 168 at 20.000
+        # where the ceiling binds. The supplement travels with the base it is
+        # added to, and resolve_direct_debit runs after this.
         welcome_credit_eur=(
             None
             if snapshot.welcome_credit_eur is None
             else snapshot.welcome_credit_eur * factor
+        ),
+        welcome_credit_eur_per_kwh=(
+            None
+            if snapshot.welcome_credit_eur_per_kwh is None
+            else snapshot.welcome_credit_eur_per_kwh * factor
+        ),
+        welcome_credit_cap_eur=(
+            None
+            if snapshot.welcome_credit_cap_eur is None
+            else snapshot.welcome_credit_cap_eur * factor
+        ),
+        welcome_credit_direct_debit_eur=(
+            None
+            if snapshot.welcome_credit_direct_debit_eur is None
+            else snapshot.welcome_credit_direct_debit_eur * factor
         ),
     )
 
