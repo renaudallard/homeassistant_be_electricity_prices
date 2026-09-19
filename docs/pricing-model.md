@@ -549,6 +549,17 @@ l'energie ... pour votre premiere annee de consommation nette d'electricite"* pl
 cut off the standing charge, under a ceiling, so the amount depends on how much the
 household uses. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on
 NET consumption, what was drawn less what was put back, because the card says *"nette"*.
+
+That volume is the first contract YEAR's, not the window being shown. `first_year_net_kwh`
+(`fees.py`) resolves it from the entry's own yearly figure (`entry_annual_kwh`, the same
+cascade the excise band and the volume tier read) scaled by the window's export share, and
+the accrual inside `_welcome_credit_eur` is what places the result in the window. The three
+windowed callers, the year-to-date sensor, the backfill accrual and the compare page's
+year-to-date column, each convert; `_year_ahead_welcome_credit` does not, because the bill
+it quotes is already an annual one. Passing the window's own volume billed the per-kWh leg
+on whatever share of a year had elapsed: at the March anniversary of a 3500 kWh Mega Smart
+Flex entry the engine credited 114,03 EUR against the card's 291,50, and a 20.000 kWh one
+took 326,78 against its own 848,00 ceiling.
 The flat half may also depend on how the household pays: *"une reduction de base de 37.1 EUR
 + 5.3 EUR supplementaires en cas de paiement par domiciliation bancaire"*, which
 `welcome_credit_direct_debit_eur` holds and `resolve_direct_debit` settles once onto the

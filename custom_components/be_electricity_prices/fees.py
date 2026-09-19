@@ -363,13 +363,54 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 _WELCOME_YEAR_DAYS = 365
 
 
+def first_year_net_kwh(
+    annual_kwh: float,
+    window_consumption_kwh: float,
+    window_injection_kwh: float,
+) -> float:
+    """The first contract year's NET consumption, in kWh.
+
+    What a per-kWh welcome credit multiplies: Mega's ristourne is a reduction
+    *"sur le prix de l'energie ... pour votre PREMIERE ANNEE de consommation
+    nette d'electricite"*, so the quantity is a year's worth, and net because
+    the card says *"nette"*.
+
+    The three windowed callers were passing their own window's net volume
+    instead. A year-to-date window is not the contract year and is usually
+    shorter, so the per-kWh leg was billed on whatever share of a year had
+    elapsed: at the March anniversary of a 3500 kWh Smart Flex entry the
+    engine credited 114,03 EUR where the card grants 291,50, and a 20.000 kWh
+    one took 326,78 against its own 848,00 ceiling. A pro-rata card is worse
+    still, dividing the same partial volume by the days again, though no card
+    in the registry is both pro-rata and per-kWh today.
+
+    ``annual_kwh`` is the entry's own yearly volume, resolved by
+    :func:`entry_annual_kwh` from a measured full year, then the figure typed
+    on the card, then the household default. That cascade already answers
+    "how much does this household use in a year" for the excise band, the
+    volume tier and the compare page, and annualising the window instead
+    would multiply up whatever season it happened to cover.
+
+    The export share is the window's own, because nothing else measures one:
+    a site that put back a fifth of what it drew is credited on four fifths
+    of its year. A window with no consumption in it has no share to take, so
+    the gross year stands.
+    """
+    if window_consumption_kwh <= 0.0:
+        return max(annual_kwh, 0.0)
+    net_share = (
+        max(window_consumption_kwh - window_injection_kwh, 0.0) / window_consumption_kwh
+    )
+    return max(annual_kwh, 0.0) * net_share
+
+
 def _welcome_credit_eur(
     snapshot: SupplierSnapshot,
     start: date | None,
     window_start: date,
     today: date,
     eligible_eur: float,
-    credited_kwh: float = 0.0,
+    first_year_kwh: float = 0.0,
 ) -> float:
     """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
 
@@ -408,9 +449,11 @@ def _welcome_credit_eur(
     a lump, or as both: Mega's ristourne is *"une reduction de 4.929 c EUR/kWh
     ... sur le prix de l'energie ... pour votre premiere annee de consommation
     nette d'electricite"* plus a flat cut off the standing charge, the whole
-    thing *"plafonne a 848 EUR"*. ``credited_kwh`` is the NET consumption the
-    window is being credited on, which is what that per-kWh term multiplies,
-    and ``welcome_credit_cap_eur`` is the card's own ceiling on the total.
+    thing *"plafonne a 848 EUR"*. ``first_year_kwh`` is that first year's NET
+    consumption, which is what the per-kWh term multiplies and which
+    :func:`first_year_net_kwh` resolves; it is a YEAR's volume, not this
+    window's, and the accrual below is what places the result in the window.
+    ``welcome_credit_cap_eur`` is the card's own ceiling on the total.
     The ceiling is the card's and applies before ``eligible_eur`` prorates the
     running figure, because it caps the whole credit rather than this window's
     share of it.
@@ -419,8 +462,8 @@ def _welcome_credit_eur(
     """
     amount = snapshot.welcome_credit_eur or 0.0
     per_kwh = snapshot.welcome_credit_eur_per_kwh
-    if per_kwh and credited_kwh > 0.0:
-        amount += per_kwh * credited_kwh
+    if per_kwh and first_year_kwh > 0.0:
+        amount += per_kwh * first_year_kwh
     ceiling = snapshot.welcome_credit_cap_eur
     if ceiling is not None:
         amount = min(amount, ceiling)
@@ -454,7 +497,7 @@ def _year_ahead_welcome_credit(
     start: date | None,
     today: date,
     eligible_eur: float,
-    credited_kwh: float = 0.0,
+    first_year_kwh: float = 0.0,
 ) -> float:
     """The welcome credit the coming year takes off a bill quoted today, in EUR.
 
@@ -470,6 +513,9 @@ def _year_ahead_welcome_credit(
 
     ``start`` is ``today`` for a card the household has not signed, which is
     what a quote is, and the entry's own start date for the contract it holds.
+    ``first_year_kwh`` already IS a year here, because the bill being quoted
+    is an annual one, which is why this one never needed
+    :func:`first_year_net_kwh`.
     """
     return _welcome_credit_eur(
         snapshot,
@@ -477,5 +523,5 @@ def _year_ahead_welcome_credit(
         today,
         today + timedelta(days=_WELCOME_YEAR_DAYS),
         eligible_eur,
-        credited_kwh,
+        first_year_kwh,
     )

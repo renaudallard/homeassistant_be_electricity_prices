@@ -8477,6 +8477,119 @@ def test_a_credit_stated_per_kwh_is_measured_on_the_volume() -> None:
     assert _credit(0.0) == pytest.approx(37.1)
 
 
+def test_a_per_kwh_welcome_credit_rides_the_first_year_not_the_window() -> None:
+    """The card measures it over a YEAR: "pour votre premiere annee de
+    consommation nette d'electricite".
+
+    Every windowed caller was passing its own window's net volume instead, so
+    the per-kWh leg was billed on whatever share of a year had elapsed. On
+    Mega's Smart Flex, whose credit lands whole at the anniversary, a March
+    anniversary read a January-to-March window and credited 114,03 EUR where
+    the card grants 291,50; a 20.000 kWh entry took 326,78 against its own
+    848,00 ceiling. A pro-rata card divides the same partial volume by the
+    days a second time, which no card in the registry does today.
+    """
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _welcome_credit_eur,
+        first_year_net_kwh,
+    )
+
+    # Smart Flex, direct debit settled: 68,90 flat plus 6,36 c EUR/kWh.
+    snap = make_snapshot(
+        welcome_credit_eur=68.9,
+        welcome_credit_eur_per_kwh=0.0636,
+        welcome_credit_cap_eur=848.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    year, window_start, today = 3500.0, date(2026, 1, 1), date(2026, 3, 15)
+    # What the window itself drew, at a flat rate: 74 of 365 days.
+    window_kwh = year * 74 / 365
+
+    on_the_year = _welcome_credit_eur(
+        snap,
+        date(2025, 3, 15),
+        window_start,
+        today,
+        10_000.0,
+        first_year_net_kwh(year, window_kwh, 0.0),
+    )
+    assert on_the_year == pytest.approx(68.9 + 0.0636 * 3500)
+    # The window basis is what it used to pass, and it is short by 177,47.
+    on_the_window = _welcome_credit_eur(
+        snap, date(2025, 3, 15), window_start, today, 10_000.0, window_kwh
+    )
+    assert on_the_year - on_the_window == pytest.approx(177.47, abs=0.01)
+
+    # The ceiling binds on a big connection, which the window basis never
+    # reached: 326,78 against 848,00.
+    big = 20_000.0
+    assert _welcome_credit_eur(
+        snap,
+        date(2025, 3, 15),
+        window_start,
+        today,
+        99_999.0,
+        first_year_net_kwh(big, big * 74 / 365, 0.0),
+    ) == pytest.approx(848.0)
+
+
+def test_the_first_year_volume_takes_the_window_export_share() -> None:
+    """ "consommation NETTE": a site is credited on what it drew less what it
+    put back, and the only export share anything measures is the window's."""
+    from custom_components.be_electricity_prices.fees import first_year_net_kwh
+
+    # No export: the yearly volume stands as it is.
+    assert first_year_net_kwh(3500.0, 900.0, 0.0) == pytest.approx(3500.0)
+    # A fifth put back over the window scales the year by four fifths.
+    assert first_year_net_kwh(3500.0, 1000.0, 200.0) == pytest.approx(2800.0)
+    # Exporting more than it drew floors at zero rather than going negative.
+    assert first_year_net_kwh(3500.0, 500.0, 900.0) == 0.0
+    # A window with nothing in it has no share to take, so the year stands.
+    assert first_year_net_kwh(3500.0, 0.0, 0.0) == pytest.approx(3500.0)
+
+
+def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
+    """The leaf was right and the wiring was where this went wrong before.
+
+    ``first_year_net_kwh`` can be perfect and a caller still hand
+    ``_welcome_credit_eur`` its own window's volume, which is the defect it
+    exists to fix and which no test of the helper alone can see. Three
+    windowed callers spend it: the year-to-date sensor, the backfill accrual
+    and the compare page's year-to-date column. Each has to convert, and the
+    one forwarder that does not (``_year_ahead_welcome_credit``) is quoting
+    an annual bill, so its volume already is a year.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import (
+        backfill,
+        compare_quote,
+        fees,
+        ytd_cost,
+    )
+
+    windowed: dict[str, Any] = {
+        "ytd_cost": ytd_cost._compute_current_year_cost,
+        "backfill": backfill._backfill_cost_sensor,
+        "compare_quote": compare_quote._ytd_welcome_credit,
+    }
+    for name, func in windowed.items():
+        source = inspect.getsource(func)
+        assert "_welcome_credit_eur(" in source, name
+        assert "first_year_net_kwh(" in source, (
+            f"{name} calls _welcome_credit_eur without converting its window "
+            "volume to the first contract year"
+        )
+
+    # The year-ahead forwarder is the deliberate exception.
+    ahead = inspect.getsource(fees._year_ahead_welcome_credit)
+    assert "_welcome_credit_eur(" in ahead
+    assert "first_year_net_kwh(" not in ahead
+
+
 def test_the_direct_debit_part_of_a_credit_is_settled_once() -> None:
     """ "une reduction de base de 37.1 EUR + 5.3 EUR supplementaires en cas de
     paiement par domiciliation bancaire": how the household pays is a

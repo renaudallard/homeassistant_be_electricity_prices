@@ -7024,7 +7024,14 @@ def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:
 
 def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     """Not the year-ahead figure the annual rows carry: what these days have
-    actually accrued, and nothing for a card that grants none."""
+    actually accrued, and nothing for a card that grants none.
+
+    The per-kWh term is the one part that is NOT window-scoped: the card
+    measures it over the first contract year, so it rides ``annual_kwh``
+    while the accrual below places the result in the window. The case below
+    has none, and ``test_a_per_kwh_welcome_credit_rides_the_first_year``
+    covers one that does.
+    """
     from datetime import date, datetime
 
     from homeassistant.util import dt as dt_util
@@ -7063,6 +7070,7 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
         date(2026, 1, 1),
         now,
         *args,
+        annual_kwh=3500.0,
         window_start=date(2026, 1, 1),
         fee_proration=0.71,
     )
@@ -7078,6 +7086,7 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
         date(2026, 1, 1),
         now,
         *args,
+        annual_kwh=3500.0,
         window_start=date(2026, 1, 1),
         fee_proration=0.71,
     )

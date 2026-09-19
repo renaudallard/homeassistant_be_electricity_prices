@@ -1256,6 +1256,7 @@ def _ytd_welcome_credit(
     consumption_kwh: float,
     injection_kwh: float = 0.0,
     *,
+    annual_kwh: float,
     window_start: date,
     fee_proration: float,
 ) -> float:
@@ -1270,8 +1271,13 @@ def _ytd_welcome_credit(
     Same eligible base as the annual helper, over the window rather than the
     year: the standing charge is prorated the way the bill beside it prorates
     it, since the cap is what these days were actually charged.
+
+    The per-kWh term is the exception and rides ``annual_kwh``, because the
+    card measures it over the first contract YEAR whatever window is being
+    shown. Passing the window's own volume here made this column disagree
+    with the annual one beside it by most of the credit.
     """
-    from .fees import _welcome_credit_eur
+    from .fees import _welcome_credit_eur, first_year_net_kwh
     from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
     if not getattr(credited, "welcome_credit_eur", None):
@@ -1303,7 +1309,7 @@ def _ytd_welcome_credit(
         window_start,
         when_now.date(),
         eligible,
-        max(consumption_kwh - injection_kwh, 0.0),
+        first_year_net_kwh(annual_kwh, consumption_kwh, injection_kwh),
     )
 
 

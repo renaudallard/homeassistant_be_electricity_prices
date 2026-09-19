@@ -88,6 +88,7 @@ from .fees import (
     _compensation_kva,
     _prosumer_monthly_fee,
     _welcome_credit_eur,
+    first_year_net_kwh,
 )
 from .injection import (
     _historical_injection_rate,
@@ -112,6 +113,7 @@ from .providers.base import (
     SupplierSnapshot,
     TimeOfUseRates,
 )
+from .snapshot_store import entry_annual_kwh
 from .spot_stats import (
     _NetAllocation,
     _bucket_by_local_month,
@@ -1115,12 +1117,16 @@ async def _compute_current_year_cost(
                     stats.get("consumption_ytd_kwh", 0.0)
                     * renewables_eur_per_kwh(snapshot.taxes, region),
                 ),
-                # "consommation nette d'electricite": what was drawn less
-                # what was put back, floored at zero.
-                max(
-                    stats.get("consumption_ytd_kwh", 0.0)
-                    - stats.get("injection_ytd_kwh", 0.0),
-                    0.0,
+                # The FIRST CONTRACT YEAR's net volume, not this window's.
+                # The card's per-kWh term is a yearly one ("pour votre
+                # premiere annee de consommation nette d'electricite"), and
+                # the accrual inside places it in the window; passing the
+                # year-to-date volume instead billed it on whatever share of
+                # a year had gone by.
+                first_year_net_kwh(
+                    entry_annual_kwh(entry),
+                    stats.get("consumption_ytd_kwh", 0.0),
+                    stats.get("injection_ytd_kwh", 0.0),
                 ),
             )
         stats["welcome_credit_eur"] = credit
