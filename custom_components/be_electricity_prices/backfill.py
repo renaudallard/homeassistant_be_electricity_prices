@@ -819,6 +819,9 @@ async def _backfill_cost_sensor(
     running_energy_component = 0.0
     running_supplier_fee = 0.0
     running_green = 0.0
+    # Net of what was exported, which is the volume the welcome
+    # credit's per-kWh term is measured on.
+    running_net_kwh = 0.0
     # The window the credit accrues over is the sensor's own, whichever year
     # the caller anchored the hours on, and the first year it counts from is
     # the entry's own start date, as on the live side.
@@ -868,6 +871,7 @@ async def _backfill_cost_sensor(
             # walk: nothing was charged, so nothing can be credited against.
             running_energy_component += cons * bd.energy
             running_green += cons * renewables_eur_per_kwh(snap_h.taxes, region)
+            running_net_kwh += cons - inj
             if is_compensation:
                 netting.add(
                     _register_for(local, meter, dso_mode, region),
@@ -982,6 +986,7 @@ async def _backfill_cost_sensor(
             credit_window_start,
             local.date(),
             running_energy_component + running_supplier_fee + running_green,
+            max(running_net_kwh, 0.0),
         )
         state = round(displayed_energy + running_fees - credit, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but

@@ -7024,7 +7024,12 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     )
     granted = _ytd_welcome_credit(
         snap,
-        SimpleNamespace(welcome_credit_eur=200.0, welcome_credit_kind="pro_rata"),
+        SimpleNamespace(
+            welcome_credit_eur=200.0,
+            welcome_credit_kind="pro_rata",
+            welcome_credit_eur_per_kwh=None,
+            welcome_credit_cap_eur=None,
+        ),
         date(2026, 1, 1),
         now,
         *args,
@@ -7035,7 +7040,11 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     assert granted == pytest.approx(200.0 * 258 / 365, abs=0.01)
     none = _ytd_welcome_credit(
         snap,
-        SimpleNamespace(welcome_credit_eur=None),
+        SimpleNamespace(
+            welcome_credit_eur=None,
+            welcome_credit_eur_per_kwh=None,
+            welcome_credit_cap_eur=None,
+        ),
         date(2026, 1, 1),
         now,
         *args,

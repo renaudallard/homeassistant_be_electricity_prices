@@ -8407,6 +8407,62 @@ def test_welcome_credit_accrues_pro_rata_and_totals_the_printed_amount() -> None
     )
 
 
+def test_a_credit_stated_per_kwh_is_measured_on_the_volume() -> None:
+    """Mega states most of its ristourne as a reduction on the energy price.
+
+    "une reduction de 4.929 c EUR/kWh ... sur le prix de l'energie ... pour
+    votre premiere annee de consommation nette d'electricite", beside a flat
+    cut off the standing charge and under a ceiling. A flat amount alone
+    cannot express that, so the credit is the flat part plus the per-kWh one
+    times the NET volume, capped by what the card allows.
+    """
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+
+    def _credit(kwh: float, cap: float | None = None) -> float:
+        snap = make_snapshot(
+            welcome_credit_eur=37.1,
+            welcome_credit_eur_per_kwh=0.04929,
+            welcome_credit_cap_eur=cap,
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        )
+        # The anniversary falls inside this window, so the lump lands whole.
+        return _welcome_credit_eur(
+            snap, date(2026, 1, 1), date(2026, 12, 1), date(2027, 1, 5), 10_000.0, kwh
+        )
+
+    # 37,1 flat plus 4,929 c EUR/kWh over 3500 kWh net.
+    assert _credit(3500.0) == pytest.approx(37.1 + 0.04929 * 3500)
+    # The volume moves it, which is the whole point of the per-kWh term.
+    assert _credit(7000.0) > _credit(3500.0)
+    # And the card's own ceiling binds: "plafonne a 848 EUR".
+    assert _credit(100_000.0, 848.0) == pytest.approx(848.0)
+    # Without a volume there is only the flat part, which is what a card
+    # stating no per-kWh term has always given.
+    assert _credit(0.0) == pytest.approx(37.1)
+
+
+def test_the_direct_debit_part_of_a_credit_is_settled_once() -> None:
+    """ "une reduction de base de 37.1 EUR + 5.3 EUR supplementaires en cas de
+    paiement par domiciliation bancaire": how the household pays is a
+    per-entry answer, so it is baked into the credit and cleared, the way the
+    standing charge's own direct-debit cut already is."""
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_direct_debit,
+    )
+
+    card = make_snapshot(welcome_credit_eur=37.1, welcome_credit_direct_debit_eur=5.3)
+    paying = resolve_direct_debit(card, direct_debit=True)
+    assert paying.welcome_credit_eur == pytest.approx(42.4)
+    assert paying.welcome_credit_direct_debit_eur is None
+
+    not_paying = resolve_direct_debit(card, direct_debit=False)
+    assert not_paying.welcome_credit_eur == pytest.approx(37.1)
+    assert not_paying.welcome_credit_direct_debit_eur is None
+
+
 def test_welcome_credit_expires_after_the_first_year() -> None:
     """*"Dit geldt enkel tijdens je eerste inschrijvingsjaar"*. A negative fee
     would have kept taking it off every year with nothing to flag it, which is

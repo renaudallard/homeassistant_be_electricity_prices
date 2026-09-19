@@ -1704,6 +1704,7 @@ class _SweepEngine:
                 dso_mode,
                 hour_weights,
                 annual_kwh,
+                rolling_inj_kwh,
             )
         return _HouseholdQuote(
             region=region,
@@ -1941,6 +1942,7 @@ class _SweepEngine:
             dso_mode,
             hh.hour_weights,
             hh.annual_kwh,
+            hh.rolling_inj_kwh,
         )
         annual = _annual_bill(
             resolved,
@@ -2559,6 +2561,7 @@ class _CompareStepsMixin(OptionsFlow):
                         other_dso_mode,
                         hour_weights,
                         annual_kwh,
+                        rolling_inj_kwh,
                     )
 
         # Per-supplier injection price (only used in the "injection"
@@ -2686,6 +2689,7 @@ class _CompareStepsMixin(OptionsFlow):
                     dso_mode,
                     hour_weights,
                     annual_kwh,
+                    rolling_inj_kwh,
                 ),
             )
         placeholders["solar_note"] = _whatif_note(
@@ -2941,6 +2945,7 @@ class _CompareStepsMixin(OptionsFlow):
                     dso_mode,
                     hour_weights,
                     ytd_kwh,
+                    ytd_inj_kwh,
                     window_start=ytd_from,
                     fee_proration=fee_proration,
                 ),
@@ -2972,6 +2977,7 @@ class _CompareStepsMixin(OptionsFlow):
                     other_dso_mode,
                     hour_weights,
                     ytd_kwh,
+                    ytd_inj_kwh,
                     window_start=ytd_from,
                     fee_proration=fee_proration,
                 ),

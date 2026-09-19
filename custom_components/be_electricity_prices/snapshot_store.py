@@ -1526,7 +1526,13 @@ class _MigratingStore(Store[dict[str, Any]]):
 # beside the words "calcules sur base de la derniere valeur connue du
 # BELPEX_M_RLP (du mois precedent)", so a v65 row bills a month behind where
 # the formula indexes on the delivery month.
-_SNAPSHOT_SCHEMA_VERSION = 66
+# v67: Mega's cards carry their ristourne. It is a reduction on the ENERGY
+# PRICE plus a flat cut off the standing charge, capped, and granted only
+# after twelve uninterrupted months, so the snapshot gains a per-kWh term, a
+# ceiling and the direct-debit supplement the card prints beside the base. A
+# v66 row has none of them and quotes Mega against Frank and EnergyVision as
+# though nobody was ever granted one.
+_SNAPSHOT_SCHEMA_VERSION = 67
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1618,6 +1624,9 @@ def _snapshot_to_dict(
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
         "welcome_credit_eur": snap.welcome_credit_eur,
         "direct_debit_discount_eur": snap.direct_debit_discount_eur,
+        "welcome_credit_eur_per_kwh": snap.welcome_credit_eur_per_kwh,
+        "welcome_credit_cap_eur": snap.welcome_credit_cap_eur,
+        "welcome_credit_direct_debit_eur": snap.welcome_credit_direct_debit_eur,
         "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
@@ -1692,6 +1701,9 @@ def _snapshot_from_dict(
         ),
         welcome_credit_eur=data.get("welcome_credit_eur"),
         direct_debit_discount_eur=data.get("direct_debit_discount_eur"),
+        welcome_credit_eur_per_kwh=data.get("welcome_credit_eur_per_kwh"),
+        welcome_credit_cap_eur=data.get("welcome_credit_cap_eur"),
+        welcome_credit_direct_debit_eur=data.get("welcome_credit_direct_debit_eur"),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 

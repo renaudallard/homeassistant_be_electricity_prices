@@ -79,6 +79,7 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
     require_contract,
@@ -103,6 +104,7 @@ from ._mega_overlays import (
     _extract_renewables,
     _extract_supplier_prosumer,
     _extract_wallonia_dsos,
+    extract_ristourne,
 )
 from ._mega_cards import (
     _FR_MONTH_NAMES,
@@ -864,6 +866,11 @@ def parse_snapshot(
         brussels_renewables = _extract_renewables(text, "Bruxelles")
         dsos = _extract_brussels_dsos(text)
 
+    # Mega grants a first-year ristourne on most of its range and states it in
+    # prose under the tariff table. It is granted "apres douze mois
+    # ininterrompus" and paid on the first regularisation invoice after that,
+    # which is the anniversary shape rather than a daily accrual.
+    ristourne = extract_ristourne(text)
     return SupplierSnapshot(
         supplier="mega",
         contract=contract_id,
@@ -891,6 +898,11 @@ def parse_snapshot(
         supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
             text, region, contract.kind
         ),
+        welcome_credit_eur=ristourne["welcome_credit_eur"],
+        welcome_credit_eur_per_kwh=ristourne["welcome_credit_eur_per_kwh"],
+        welcome_credit_cap_eur=ristourne["welcome_credit_cap_eur"],
+        welcome_credit_direct_debit_eur=ristourne["welcome_credit_direct_debit_eur"],
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
 
 

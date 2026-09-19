@@ -1620,3 +1620,68 @@ def test_every_mega_formula_card_can_collect_a_key() -> None:
     for contract in EXTRACTORS["mega"].contracts:
         expected = contract.kind in ("variable", "tou_impact")
         assert contract.month_indexed_energy is expected, contract.id
+
+
+def test_the_ristourne_is_read_in_all_three_phrasings() -> None:
+    """Mega grants a first-year ristourne and states it three ways.
+
+    It is a reduction on the ENERGY PRICE plus a flat cut off the standing
+    charge, capped, and granted only "apres douze mois ininterrompus", so it
+    is an anniversary credit rather than a daily accrual. None of it was read,
+    and the compare page ranked Mega against Frank and EnergyVision as though
+    nobody was ever granted one: about 215 EUR on a 3500 kWh Cosy Fixed entry
+    paying by direct debit.
+    """
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        extract_ristourne,
+    )
+
+    # A: a total with the split spelled out beside it.
+    a = extract_ristourne(
+        "vous beneficiez d'une ristourne (*) composee d'une reduction de 4.929 "
+        "c€/kWh (TVA de 6% incluse) sur le prix de l'energie de Online Flex, "
+        "pour votre premiere annee de consommation nette d'electricite et "
+        "d'une reduction de 42.4 € (TVA de 6% incluse) sur la redevance fixe "
+        "de Online Flex (soit une reduction de base de 37.1€ + 5.3€ "
+        "supplementaires en cas de paiement par domiciliation bancaire). "
+        "Le montant total de la ristourne est plafonne a 848 € (TVA de 6% incluse)."
+    )
+    assert a["welcome_credit_eur_per_kwh"] == pytest.approx(0.04929)
+    assert a["welcome_credit_eur"] == pytest.approx(37.1)
+    assert a["welcome_credit_direct_debit_eur"] == pytest.approx(5.3)
+    assert a["welcome_credit_cap_eur"] == pytest.approx(848.0)
+    # The card agrees with itself: base plus supplement is the printed total.
+    base, supplement = a["welcome_credit_eur"], a["welcome_credit_direct_debit_eur"]
+    assert base is not None and supplement is not None
+    assert base + supplement == pytest.approx(42.4)
+
+    # B: no parenthetical, so the printed figure IS the base. Reading only
+    # the split dropped 159 EUR of Cosy Flex's credit.
+    b = extract_ristourne(
+        "vous beneficiez d'une ristourne (*) composee d'une reduction de 10.388 "
+        "c€/kWh (TVA de 6% incluse) sur le prix de l'energie de Cosy Flex, pour "
+        "votre premiere annee de consommation nette d'electricite et d'une "
+        "reduction de 159 € (TVA de 6% incluse) sur la redevance fixe de Cosy "
+        "Flex comme mentionne sur la carte tarifaire. Le montant total de la "
+        "ristourne est plafonne a 848 € (TVA de 6% incluse)."
+    )
+    assert b["welcome_credit_eur_per_kwh"] == pytest.approx(0.10388)
+    assert b["welcome_credit_eur"] == pytest.approx(159.0)
+    assert b["welcome_credit_direct_debit_eur"] is None
+
+    # C: flat only, comma decimals, and the card states no ceiling.
+    c = extract_ristourne(
+        "vous beneficiez d'une ristourne (*) de 63,6 € (TVAC) pour votre "
+        "premiere annee de souscription a ce produit (soit une reduction de "
+        "base de 58,3 € + 5,3 € supplementaires en cas de paiement par "
+        "domiciliation bancaire)."
+    )
+    assert c["welcome_credit_eur"] == pytest.approx(58.3)
+    assert c["welcome_credit_direct_debit_eur"] == pytest.approx(5.3)
+    assert c["welcome_credit_eur_per_kwh"] is None
+    assert c["welcome_credit_cap_eur"] is None
+
+    # A card granting none says so rather than inventing a zero credit.
+    none = extract_ristourne("no ristourne on this card")
+    assert none["welcome_credit_eur"] is None
+    assert none["welcome_credit_eur_per_kwh"] is None

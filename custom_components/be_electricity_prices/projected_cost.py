@@ -331,6 +331,7 @@ async def _compute_projected_year_cost(
         dso_mode,
         hour_weights,
         annual.kwh,
+        annual_inj,
     )
     # Under compensation each meter register nets on its own, so the bill needs
     # the household's own day/night split of both sides rather than two annual

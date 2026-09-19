@@ -970,6 +970,27 @@ class SupplierSnapshot:
     # applies it, clearing this field as it goes so no later reader can apply
     # it twice.
     direct_debit_discount_eur: float | None = None
+    # A welcome credit that is a reduction on the ENERGY PRICE rather than a
+    # lump: Mega's ristourne is "une reduction de 4.929 c EUR/kWh (TVA de 6%
+    # incluse) sur le prix de l'energie ... pour votre premiere annee de
+    # consommation nette d'electricite", beside a flat cut off the standing
+    # charge. So the amount depends on how much the household uses, and
+    # ``welcome_credit_eur`` alone cannot express it.
+    #
+    # In EUR/kWh, on NET consumption: the card says "consommation nette", and
+    # a household that exports is credited on what it drew less what it put
+    # back.
+    welcome_credit_eur_per_kwh: float | None = None
+    # What the whole credit may not exceed: "Le montant total de la ristourne
+    # est plafonne a 848 EUR (TVA de 6% incluse)". None where the card states
+    # no ceiling, which is every other card granting one.
+    welcome_credit_cap_eur: float | None = None
+    # The part of the credit a household only gets by paying by direct debit:
+    # "soit une reduction de base de 37.1 EUR + 5.3 EUR supplementaires en cas
+    # de paiement par domiciliation bancaire". Held as the SUPPLEMENT beside
+    # the base, for the reason ``direct_debit_discount_eur`` above is, and
+    # applied and cleared by the same ``resolve_direct_debit``.
+    welcome_credit_direct_debit_eur: float | None = None
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
@@ -1302,14 +1323,29 @@ def resolve_direct_debit(
     which would flow straight into the yearly-cost sensors.
     """
     discount = snapshot.direct_debit_discount_eur
-    if discount is None:
+    supplement = snapshot.welcome_credit_direct_debit_eur
+    if discount is None and supplement is None:
         return snapshot
+    # The welcome credit's own direct-debit part is settled here too: same
+    # per-entry answer, same reason for baking it once, and Mega's card
+    # states it the same way ("une reduction de base de 37.1 EUR + 5.3 EUR
+    # supplementaires en cas de paiement par domiciliation bancaire").
+    credit = snapshot.welcome_credit_eur or 0.0
+    if direct_debit and supplement:
+        credit += supplement
     energy = snapshot.energy
-    if not direct_debit:
-        return replace(snapshot, direct_debit_discount_eur=None)
+    if not direct_debit or discount is None:
+        return replace(
+            snapshot,
+            direct_debit_discount_eur=None,
+            welcome_credit_direct_debit_eur=None,
+            welcome_credit_eur=credit or snapshot.welcome_credit_eur,
+        )
     return replace(
         snapshot,
         direct_debit_discount_eur=None,
+        welcome_credit_direct_debit_eur=None,
+        welcome_credit_eur=credit or snapshot.welcome_credit_eur,
         energy=replace(
             energy,
             yearly_fixed_fee=max(0.0, energy.yearly_fixed_fee - discount),

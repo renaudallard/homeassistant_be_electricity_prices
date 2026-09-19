@@ -1254,6 +1254,7 @@ def _ytd_welcome_credit(
     dso_mode: Any,
     hour_weights: dict[int, float] | None,
     consumption_kwh: float,
+    injection_kwh: float = 0.0,
     *,
     window_start: date,
     fee_proration: float,
@@ -1294,7 +1295,16 @@ def _ytd_welcome_credit(
         * fee_proration
         + consumption_kwh * renewables_eur_per_kwh(snapshot.taxes, region)
     )
-    return _welcome_credit_eur(credited, start, window_start, when_now.date(), eligible)
+    # Net of export: the card measures its per-kWh term on
+    # "consommation nette d'electricite".
+    return _welcome_credit_eur(
+        credited,
+        start,
+        window_start,
+        when_now.date(),
+        eligible,
+        max(consumption_kwh - injection_kwh, 0.0),
+    )
 
 
 def _annual_welcome_credit(
@@ -1309,6 +1319,7 @@ def _annual_welcome_credit(
     dso_mode: Any,
     hour_weights: dict[int, float] | None,
     consumption_kwh: float,
+    injection_kwh: float = 0.0,
 ) -> float:
     """The welcome credit the coming year takes off ``snapshot``'s annual quote.
 
@@ -1347,7 +1358,13 @@ def _annual_welcome_credit(
         + float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
         + consumption_kwh * renewables_eur_per_kwh(snapshot.taxes, region)
     )
-    return _year_ahead_welcome_credit(credited, start, when_now.date(), eligible)
+    return _year_ahead_welcome_credit(
+        credited,
+        start,
+        when_now.date(),
+        eligible,
+        max(consumption_kwh - injection_kwh, 0.0),
+    )
 
 
 async def _read_total_kwh(

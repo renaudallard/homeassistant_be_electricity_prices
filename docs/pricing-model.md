@@ -539,10 +539,25 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
 | `pro_rata` | EnergyVision, four cards | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
-| `anniversary` | Frank Energie, three tiers | the whole amount, in the window the first anniversary falls in and no other | none; that card states none |
+| `anniversary` | Frank Energie, three tiers · Mega, 17 of 21 contracts | the whole amount, in the window the first anniversary falls in and no other | Frank's card states none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
 
 The two rules travel together on one field because each card states one complete rule
-rather than two independent ones. A future card that pro-rates without a cap, or caps a
+rather than two independent ones.
+
+Mega's ristourne is not a lump. It is *"une reduction de 4.929 c EUR/kWh ... sur le prix de
+l'energie ... pour votre premiere annee de consommation nette d'electricite"* plus a flat
+cut off the standing charge, under a ceiling, so the amount depends on how much the
+household uses. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on
+NET consumption, what was drawn less what was put back, because the card says *"nette"*.
+The flat half may also depend on how the household pays: *"une reduction de base de 37.1 EUR
++ 5.3 EUR supplementaires en cas de paiement par domiciliation bancaire"*, which
+`welcome_credit_direct_debit_eur` holds and `resolve_direct_debit` settles once onto the
+credit, the way it already settles the standing charge's own direct-debit cut.
+
+The cards state the flat half three ways, and all three are read: the total with the split
+beside it, the total alone where there is no split, and a flat-only ristourne with no
+per-kWh term at all. Where a card prints both a total and the split, the two agree, which
+is how the reading was checked across the range. A future card that pro-rates without a cap, or caps a
 lump, is what would split them.
 
 The cap counts only the three components the card names. Not the energy fund, the

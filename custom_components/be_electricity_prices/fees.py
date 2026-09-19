@@ -369,6 +369,7 @@ def _welcome_credit_eur(
     window_start: date,
     today: date,
     eligible_eur: float,
+    credited_kwh: float = 0.0,
 ) -> float:
     """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
 
@@ -403,10 +404,27 @@ def _welcome_credit_eur(
     No cap either, because that card states none: the two rules travel together
     on ``welcome_credit_kind`` because each card states one complete rule.
 
+    A card may state the credit as a reduction on the ENERGY PRICE instead of
+    a lump, or as both: Mega's ristourne is *"une reduction de 4.929 c EUR/kWh
+    ... sur le prix de l'energie ... pour votre premiere annee de consommation
+    nette d'electricite"* plus a flat cut off the standing charge, the whole
+    thing *"plafonne a 848 EUR"*. ``credited_kwh`` is the NET consumption the
+    window is being credited on, which is what that per-kWh term multiplies,
+    and ``welcome_credit_cap_eur`` is the card's own ceiling on the total.
+    The ceiling is the card's and applies before ``eligible_eur`` prorates the
+    running figure, because it caps the whole credit rather than this window's
+    share of it.
+
     Returns a POSITIVE number; the caller subtracts it.
     """
-    amount = snapshot.welcome_credit_eur
-    if not amount or amount <= 0.0:
+    amount = snapshot.welcome_credit_eur or 0.0
+    per_kwh = snapshot.welcome_credit_eur_per_kwh
+    if per_kwh and credited_kwh > 0.0:
+        amount += per_kwh * credited_kwh
+    ceiling = snapshot.welcome_credit_cap_eur
+    if ceiling is not None:
+        amount = min(amount, ceiling)
+    if amount <= 0.0:
         return 0.0
     if start is None:
         return 0.0
@@ -436,6 +454,7 @@ def _year_ahead_welcome_credit(
     start: date | None,
     today: date,
     eligible_eur: float,
+    credited_kwh: float = 0.0,
 ) -> float:
     """The welcome credit the coming year takes off a bill quoted today, in EUR.
 
@@ -458,4 +477,5 @@ def _year_ahead_welcome_credit(
         today,
         today + timedelta(days=_WELCOME_YEAR_DAYS),
         eligible_eur,
+        credited_kwh,
     )

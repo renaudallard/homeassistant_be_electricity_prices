@@ -177,6 +177,100 @@ def _extract_federal_excise(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
+# The ristourne, which Mega grants on a new subscription and no other
+# supplier in the registry states this way. From the Online Flex card:
+#
+#   "vous beneficiez d'une ristourne (*) composee d'une reduction de 4.929
+#    c EUR/kWh (TVA de 6% incluse) sur le prix de l'energie ... pour votre
+#    premiere annee de consommation nette d'electricite et d'une reduction de
+#    42.4 EUR ... sur la redevance fixe (soit une reduction de base de 37.1 EUR
+#    + 5.3 EUR supplementaires en cas de paiement par domiciliation bancaire)
+#    ... Le montant total de la ristourne est plafonne a 848 EUR"
+#
+# and the footnote that sets the rule:
+#
+#   "(*) La ristourne vous est uniquement accordee apres douze mois
+#    ininterrompus de consommation ... et est octroyee sur la premiere facture
+#    de regularisation apres cette periode"
+#
+# which is the ANNIVERSARY shape, not a daily accrual. The numbers print with
+# dot decimals here where the tariff rows use commas; to_float reads both.
+_RISTOURNE_PER_KWH_RE = re.compile(
+    r"ristourne[\s\S]{0,200}?r[ée]duction\s+de\s+([\d.,]+)\s*c€?\s*/?\s*kWh",
+    re.IGNORECASE,
+)
+_RISTOURNE_BASE_RE = re.compile(
+    r"r[ée]duction\s+de\s+base\s+de\s+([\d.,]+)\s*€", re.IGNORECASE
+)
+# Three phrasings across the range, and the flat part has to be read from
+# whichever one the product uses:
+#
+#   A  "une reduction de 42.4 EUR ... sur la redevance fixe ... (soit une
+#       reduction de base de 37.1 EUR + 5.3 EUR supplementaires ...)"
+#   B  "une reduction de 159 EUR ... sur la redevance fixe ... comme mentionne"
+#       with no parenthetical at all, so the figure IS the base
+#   C  "une ristourne (*) de 63,6 EUR (TVAC) ... (soit une reduction de base de
+#       58,3 EUR + 5,3 EUR supplementaires ...)", flat only, no per-kWh term
+#
+# A and C carry the split and are read by _RISTOURNE_BASE_RE above; B does not,
+# and reading only the split dropped its whole flat half, 159 EUR on Cosy Flex.
+_RISTOURNE_FIXED_RE = re.compile(
+    r"r[ée]duction\s+de\s+([\d.,]+)\s*€[^.]{0,120}?sur\s+la\s+redevance\s+fixe",
+    re.IGNORECASE,
+)
+_RISTOURNE_DIRECT_DEBIT_RE = re.compile(
+    r"\+\s*([\d.,]+)\s*€\s*suppl[ée]mentaires?\s+en\s+cas\s+de\s+paiement"
+    r"\s+par\s+domiciliation",
+    re.IGNORECASE,
+)
+_RISTOURNE_CAP_RE = re.compile(
+    r"ristourne\s+est\s+plafonn[ée]e?\s+[àa]\s+([\d.,]+)\s*€", re.IGNORECASE
+)
+
+
+def extract_ristourne(text: str) -> dict[str, float | None]:
+    """Mega's first-year ristourne, or all-``None`` when the card grants none.
+
+    Returned as the four snapshot fields it fills, so the caller does not
+    restate which is which. The per-kWh reduction prints in c€/kWh and scales
+    to EUR/kWh; the rest are already EUR.
+
+    A card stating a per-kWh reduction and no flat one, or the other way
+    round, is read for whichever half it prints: the two are independent
+    lines of the same offer and Mega varies which appear per product.
+    """
+    flat = re.sub(r"\s+", " ", text)
+    per_kwh = _RISTOURNE_PER_KWH_RE.search(flat)
+    base = _RISTOURNE_BASE_RE.search(flat)
+    supplement = _RISTOURNE_DIRECT_DEBIT_RE.search(flat)
+    cap = _RISTOURNE_CAP_RE.search(flat)
+    if per_kwh is None and base is None and _RISTOURNE_FIXED_RE.search(flat) is None:
+        return {
+            "welcome_credit_eur": None,
+            "welcome_credit_eur_per_kwh": None,
+            "welcome_credit_cap_eur": None,
+            "welcome_credit_direct_debit_eur": None,
+        }
+    fixed = _RISTOURNE_FIXED_RE.search(flat)
+    return {
+        # The split when the card prints one, the whole figure when it does
+        # not. A card stating both agrees with itself: base + supplement is
+        # the total, which is how the two readings were checked.
+        "welcome_credit_eur": (
+            to_float(base.group(1))
+            if base
+            else (to_float(fixed.group(1)) if fixed else None)
+        ),
+        "welcome_credit_eur_per_kwh": (
+            to_float(per_kwh.group(1)) / 100.0 if per_kwh else None
+        ),
+        "welcome_credit_cap_eur": to_float(cap.group(1)) if cap else None,
+        "welcome_credit_direct_debit_eur": (
+            to_float(supplement.group(1)) if supplement else None
+        ),
+    }
+
+
 def _extract_energy_contribution(text: str) -> float:
     """Federal energy contribution; same row as the excise.
 

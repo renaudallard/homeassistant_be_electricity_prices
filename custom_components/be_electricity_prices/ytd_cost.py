@@ -1115,6 +1115,13 @@ async def _compute_current_year_cost(
                     stats.get("consumption_ytd_kwh", 0.0)
                     * renewables_eur_per_kwh(snapshot.taxes, region),
                 ),
+                # "consommation nette d'electricite": what was drawn less
+                # what was put back, floored at zero.
+                max(
+                    stats.get("consumption_ytd_kwh", 0.0)
+                    - stats.get("injection_ytd_kwh", 0.0),
+                    0.0,
+                ),
             )
         stats["welcome_credit_eur"] = credit
         return energy + fees - credit
@@ -1435,6 +1442,10 @@ async def _compute_current_year_cost(
         energy_ytd_raw = energy_cost
 
     stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
+    # Unconditionally, like the consumption beside it: the welcome credit's
+    # per-kWh term is measured on NET consumption, so this is read on every
+    # path and not only on the ones a caller is diagnosing.
+    stats["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
     stats["energy_component_ytd_eur"] = energy_component
     stats["green_component_ytd_eur"] = green_component
     if breakdown is not None:
