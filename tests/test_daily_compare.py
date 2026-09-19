@@ -1171,3 +1171,51 @@ def test_a_row_priced_from_a_reading_is_tagged_in_the_ranking() -> None:
     mega = next(line for line in text.splitlines() if "Mega" in line)
     assert "`OCR`" in ecofix
     assert "`OCR`" not in mega
+
+
+def test_every_annual_row_on_the_page_clamps_per_register() -> None:
+    """The compare page prices each row through ``_annual_bill``.
+
+    Under compensation that function clamps per meter register, but only when
+    the caller hands it the household's day/night split; without it the whole
+    year is netted and clamped once, which is the shape a reversing meter
+    does not have. The clamp shipped wired into the projection alone, so the
+    page kept the old arithmetic and printed an annual figure beside a
+    year-to-date computed by the real walk: measured at 60,00 against 356,51
+    on a net-exporting bi-hourly Walloon install, and the ranking inverted.
+
+    Source-level on purpose. The defect was a call site nobody passed the
+    argument at, so what has to be pinned is that no call site is missed
+    again, not the arithmetic of any one of them.
+    """
+    import inspect
+    import re
+
+    from custom_components.be_electricity_prices import compare_flow
+
+    source = inspect.getsource(compare_flow)
+    calls = [m.start() for m in re.finditer(r"\b_annual_bill\(", source)]
+    assert calls, "the page no longer prices rows through _annual_bill"
+
+    missing = []
+    for start in calls:
+        # Each call ends at the matching close paren; scan with a depth count
+        # so a nested call cannot end it early.
+        depth, i = 0, source.index("(", start)
+        while i < len(source):
+            if source[i] == "(":
+                depth += 1
+            elif source[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        body = source[start:i]
+        if "register_weights=" not in body:
+            missing.append(source[:start].count("\n") + 1)
+
+    assert not missing, (
+        f"{len(missing)} of {len(calls)} _annual_bill calls on the compare page "
+        f"pass no register_weights, so those rows are netted and clamped once: "
+        f"lines {missing}"
+    )

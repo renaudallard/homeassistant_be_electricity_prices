@@ -130,6 +130,7 @@ from .compare_quote import (
     _consumption_weighted_spot,
     _covers_a_year,
     _populate_charts,
+    _register_weights,
     _ranking_table,
     _read_total_kwh,
     _row_label,
@@ -675,6 +676,10 @@ class _HouseholdQuote:
     baseline_snapshot: Any
     hour_weights: Any
     inj_hour_weights: Any
+    # (day, night) of consumption and of export, for the per-register
+    # clamp a reversing meter is billed on. Computed once because every
+    # annual row on this page needs the same pair.
+    register_weights: Any
     current_per_kwh: float | None
     current_export_per_kwh: float | None
     # The card the household's welcome credit is read off (the signing
@@ -1736,6 +1741,10 @@ class _SweepEngine:
             baseline_snapshot=baseline_snapshot,
             hour_weights=hour_weights,
             inj_hour_weights=inj_hour_weights,
+            register_weights=(
+                _register_weights(region, hour_weights),
+                _register_weights(region, inj_hour_weights),
+            ),
             current_per_kwh=current_per_kwh,
             current_export_per_kwh=current_export_per_kwh,
             signing_snapshot=signing_snapshot,
@@ -1793,6 +1802,7 @@ class _SweepEngine:
                     raw_snapshot=hh.raw_snapshot,
                 ),
                 export_per_kwh=hh.current_export_per_kwh,
+                register_weights=hh.register_weights,
                 meter=hh.current_meter,
                 welcome_credit_eur=hh.own_welcome_credit,
             )
@@ -1966,6 +1976,7 @@ class _SweepEngine:
             # hours the household draws them instead of the hours the panels
             # produce. Omitted, a compensation row came out 23% low.
             export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
+            register_weights=hh.register_weights,
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )
@@ -2627,6 +2638,7 @@ class _CompareStepsMixin(OptionsFlow):
                 rolling_inj_kwh,
                 current_inj_price,
                 export_per_kwh=current_export_per_kwh,
+                register_weights=hh.register_weights,
                 meter=current_meter,
                 welcome_credit_eur=hh.own_welcome_credit,
             )
@@ -2635,7 +2647,7 @@ class _CompareStepsMixin(OptionsFlow):
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter, welcome_credit_eur=other_welcome_credit):.2f}"
+                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, register_weights=hh.register_weights, meter=meter, welcome_credit_eur=other_welcome_credit):.2f}"
             )
 
         # A what-if moves BOTH sides together, so the printed supplier delta
@@ -2673,6 +2685,7 @@ class _CompareStepsMixin(OptionsFlow):
                 rolling_inj_kwh,
                 baseline_inj_price,
                 export_per_kwh=current_export_per_kwh,
+                register_weights=hh.register_weights,
                 meter=current_meter,
                 # The same first-year share the what-if side carries, on the
                 # card as configured: a what-if moves the regime or the meter,
@@ -2736,6 +2749,7 @@ class _CompareStepsMixin(OptionsFlow):
                 rolling_inj_kwh,
                 compare_inj_price,
                 export_per_kwh=other_export_per_kwh,
+                register_weights=hh.register_weights,
                 meter=meter,
                 welcome_credit_eur=other_welcome_credit,
             ) - _annual_bill(
@@ -2747,6 +2761,7 @@ class _CompareStepsMixin(OptionsFlow):
                 rolling_inj_kwh,
                 current_inj_price,
                 export_per_kwh=current_export_per_kwh,
+                register_weights=hh.register_weights,
                 meter=current_meter,
                 welcome_credit_eur=hh.own_welcome_credit,
             )
@@ -2925,6 +2940,7 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_inj_kwh,
                 current_inj_price,
                 export_per_kwh=current_export_per_kwh,
+                register_weights=hh.register_weights,
                 fee_proration=fee_proration,
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
@@ -2959,6 +2975,7 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_inj_kwh,
                 compare_inj_price,
                 export_per_kwh=other_export_per_kwh,
+                register_weights=hh.register_weights,
                 fee_proration=fee_proration,
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
