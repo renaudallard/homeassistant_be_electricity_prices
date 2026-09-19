@@ -5866,6 +5866,76 @@ async def test_cohort_freezes_the_feed_in_coefficients(
     assert legs.injection.current == 0.058
 
 
+async def test_the_cohort_credit_keeps_the_delivery_month_index(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A signing cohort locks the feed-in COEFFICIENTS, never the index.
+
+    The energy leg beside it already re-splices the delivery month's settled
+    index: the signing card says what the contract pays per unit of index and
+    the month says what the index settled at. The injection leg carried the
+    signing month's index across instead, so a cohort's credit swung on
+    whether the Synergrid profile happened to be loaded, 62 EUR on a Trevion
+    LifePowr entry signed in the spring, where the contract's own formula
+    answers the same either way.
+    """
+    from custom_components.be_electricity_prices.cohort import (
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=DynamicRates(factor=1.06, base=0.01272),
+        injection=InjectionRates(
+            factor=0.50, base=-0.05, current=0.07, index_realised=0.222
+        ),
+    )
+    signing = make_snapshot(
+        energy=DynamicRates(factor=1.1342, base=0.00742),
+        injection=InjectionRates(
+            factor=0.10, base=-0.013, current=0.05, index_realised=0.111
+        ),
+    )
+    june = make_snapshot(
+        energy=DynamicRates(factor=1.06, base=0.01272),
+        injection=InjectionRates(
+            factor=0.99, base=-0.99, current=0.06, index_realised=0.0545
+        ),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signing
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-03-10")
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        # The signing month resolves to the signing card, the delivery month
+        # to June's; identity with the current card is what says "no archive".
+        return signing if _a[5] == date(2026, 3, 1) else june
+
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+        _for_month,
+    ):
+        eff = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            _fixed_extractor(_ffm),
+            "test",
+            "wallonia",
+            date(2026, 6, 1),
+            today,
+            entry,
+        )
+    assert eff.injection is not None
+    # The contract's own coefficients, from the signing card...
+    assert eff.injection.factor == pytest.approx(0.10)
+    assert eff.injection.base == pytest.approx(-0.013)
+    # ...against June's settled index, not March's.
+    assert eff.injection.index_realised == pytest.approx(0.0545)
+
+
 async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     hass: HomeAssistant, freezer: Any
 ) -> None:

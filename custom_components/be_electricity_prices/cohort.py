@@ -803,7 +803,19 @@ async def _effective_snapshot_for_month(
     if legs.injection is not None:
         # The feed-in coefficients lock with the offtake ones, so the credit
         # for a past month is billed off the signing card too (issue #85).
-        changes["injection"] = legs.injection
+        #
+        # The INDEX still belongs to the delivery month, exactly as on the
+        # energy leg above: the signing card holds what the contract pays per
+        # unit of index, the month holds what the index settled at. Carrying
+        # the signing month's index across made a cohort's credit swing on
+        # whether the Synergrid profile happened to be loaded, 62 EUR on a
+        # Trevion LifePowr entry signed in the spring, where the contract's
+        # own formula answers the same either way.
+        injection = replace(
+            legs.injection,
+            index_realised=getattr(snap_m.injection, "index_realised", None),
+        )
+        changes["injection"] = injection
     return replace(snap_m, **changes)  # type: ignore[arg-type]
 
 
