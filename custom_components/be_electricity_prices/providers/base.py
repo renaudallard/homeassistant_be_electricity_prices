@@ -1336,7 +1336,17 @@ def resolve_federal_excise(
 
     Left alone: a professional card, whose scheme bands the levy by annual
     volume and is a different rate entirely, and any card carrying
-    ``federal_excise_bands`` for the same reason.
+    ``federal_excise_bands``.
+
+    Those two were the same card when this was written and are not any more.
+    Mega's and Engie's RESIDENTIAL cards print a four-tier table too, for
+    January to July 2026, and the bands guard now catches them. It is still
+    the right answer and for a different reason: those months are outside the
+    window below, where the rate above is the FLAT one the August measure
+    set, so a banded card is a month this constant does not describe rather
+    than a scheme it does not apply to. Measured over the 317 residential
+    cards the archive holds for August to December 2026, none carries a band
+    table, because the measure that flattened the levy took it off the card.
     """
     taxes = snapshot.taxes
     if professional or taxes.federal_excise_bands:
