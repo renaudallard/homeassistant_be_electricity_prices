@@ -2758,6 +2758,47 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 1e-6
 
 
+def test_impact_mode_is_not_offered_to_a_meter_that_cannot_register_it() -> None:
+    """Tarif Impact bills the three CWaPE bands, which only an SMR3 meter has.
+
+    The step offered all three modes whatever the meter answered, so a
+    household could pick mono and then Impact, a pair no Walloon connection
+    has. The network leg then banded the day against a flat single rate and
+    the Walloon terme fixe dropped with it, about 61 EUR a year under-billed
+    on 3500 kWh.
+    """
+    from custom_components.be_electricity_prices.const import (
+        CONF_DSO_TARIFF_MODE,
+        CONF_METER,
+        DSO_MODE_BI_HORAIRE,
+        DSO_MODE_IMPACT,
+    )
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _dso_tariff_mode_schema,
+    )
+
+    def _options(meter: str) -> list[str]:
+        schema = _dso_tariff_mode_schema({CONF_METER: meter})
+        for key, value in schema.schema.items():
+            if str(key) == CONF_DSO_TARIFF_MODE:
+                return list(value.config["options"])
+        raise AssertionError("the mode key is missing from the schema")
+
+    assert DSO_MODE_IMPACT in _options("dynamic")
+    assert DSO_MODE_IMPACT in _options("bi")
+    assert DSO_MODE_IMPACT not in _options("mono")
+    assert DSO_MODE_IMPACT not in _options("exclusive_night")
+
+    # A mode carried over from an earlier answer cannot survive as the
+    # default on a meter that can no longer register it.
+    schema = _dso_tariff_mode_schema(
+        {CONF_METER: "mono", CONF_DSO_TARIFF_MODE: DSO_MODE_IMPACT}
+    )
+    for key in schema.schema:
+        if str(key) == CONF_DSO_TARIFF_MODE:
+            assert key.default() == DSO_MODE_BI_HORAIRE
+
+
 def test_compensation_clamps_each_register_not_the_annual_total() -> None:
     """A reversing meter forfeits a register that ends the year negative.
 

@@ -695,17 +695,36 @@ def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
 _IMPACT_DEFAULT_CONTRACTS: frozenset[str] = frozenset({"totalenergies_impact"})
 
 
+# Tarif Impact bills the three CWaPE bands, which only a communicating meter
+# configured in SMR3 registers: the cards say so ("reservee aux clients wallons
+# disposant d'un compteur communicant configure en SMR3"). A single-register or
+# exclusive-night meter cannot be that meter, so the mode is not offered to
+# one. Offering it anyway let a household answer mono and then Impact, a pair
+# no connection has, and the network leg then banded the day (0,0783 / 0,1357 /
+# 0,1931 against a flat 0,1472) while the Walloon terme fixe dropped with it:
+# about 61 EUR a year under-billed on 3500 kWh.
+_IMPACT_CAPABLE_METERS: frozenset[str] = frozenset({METER_BI, METER_DYNAMIC})
+
+
 def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Wallonia-only step: which DSO-side billing mode applies?"""
+    modes = [
+        mode
+        for mode in DSO_TARIFF_MODES
+        if mode != DSO_MODE_IMPACT
+        or defaults.get(CONF_METER) in _IMPACT_CAPABLE_METERS
+    ]
     current = defaults.get(CONF_DSO_TARIFF_MODE)
     if not current and defaults.get(CONF_CONTRACT) in _IMPACT_DEFAULT_CONTRACTS:
         current = DSO_MODE_IMPACT
     current = current or DSO_MODE_BI_HORAIRE
+    if current not in modes:
+        current = DSO_MODE_BI_HORAIRE
     return vol.Schema(
         {
             vol.Required(CONF_DSO_TARIFF_MODE, default=current): SelectSelector(
                 SelectSelectorConfig(
-                    options=list(DSO_TARIFF_MODES),
+                    options=modes,
                     mode=SelectSelectorMode.LIST,
                     translation_key="dso_tariff_mode",
                 )
