@@ -1728,3 +1728,40 @@ def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
     # The August flattening keeps its single rate and no schedule.
     flat = "Accise spéciale\n(c€/kWh)\n4.876\n"
     assert _extract_federal_excise(flat) == (pytest.approx(0.04876), None)
+
+
+def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> None:
+    """The supplement is parsed off the card; the flow asks off the registry.
+
+    Fourteen Mega cards state "soit une reduction de base de 37.1 EUR +
+    5.3 EUR supplementaires en cas de paiement par domiciliation bancaire".
+    The supplement reached the snapshot and a schema bump, but no Mega
+    contract carried ``direct_debit_discount``, so the flow never asked how
+    the household pays, ``_direct_debit`` was always False and
+    ``resolve_direct_debit`` had nothing to apply. The supplement was billed
+    to nobody: 42,40 EUR of a 215,18 EUR credit on Cosy Fixed.
+
+    The registry half has to agree with the card half, which is what this
+    pins: every product whose card states a supplement is flagged, and no
+    product without one is.
+    """
+    from custom_components.be_electricity_prices.providers import (
+        EXTRACTORS,
+        offers_direct_debit,
+    )
+    from custom_components.be_electricity_prices.providers.mega import (
+        _DIRECT_DEBIT_RISTOURNE,
+    )
+
+    flagged = {c.id for c in EXTRACTORS["mega"].contracts if c.direct_debit_discount}
+    assert flagged == _DIRECT_DEBIT_RISTOURNE
+    assert len(flagged) == 14
+
+    # Every id on the list is a real contract, so a rename cannot leave a
+    # product silently unflagged.
+    known = {c.id for c in EXTRACTORS["mega"].contracts}
+    assert _DIRECT_DEBIT_RISTOURNE <= known
+
+    assert offers_direct_debit("mega", "mega_cosy_fixed") is True
+    # Smart Fixed states no supplement, so the flow does not ask for it.
+    assert offers_direct_debit("mega", "mega_smart_fixed") is False

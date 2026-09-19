@@ -915,6 +915,31 @@ def parse_snapshot(
 # ---- DSO row parsers ----------------------------------------------------------
 
 
+# The products whose ristourne is larger for a direct-debit payer. Listed
+# rather than derived because the flow has to know before any card is
+# fetched, which is the same reason offers_quarter_hourly reads the
+# registry; a product dropping the difference drops off this list and the
+# flow stops asking. Measured across every archived month of each card.
+_DIRECT_DEBIT_RISTOURNE: frozenset[str] = frozenset(
+    {
+        "mega_cosy_fixed",
+        "mega_offpeak_fixed",
+        "mega_offpeak_flex",
+        "mega_offpeak_impact_var",
+        "mega_online_fixed",
+        "mega_online_flex",
+        "mega_smart_flex",
+        "mega_zen_fixed",
+        "mega_pro_cosy_fixed",
+        "mega_pro_cosy_flex",
+        "mega_pro_offpeak_fixed",
+        "mega_pro_online_fixed",
+        "mega_pro_smart_flex",
+        "mega_pro_zen_fixed",
+    }
+)
+
+
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=2.1,
     id="mega",
@@ -940,6 +965,15 @@ EXTRACTOR = SupplierExtractor(
             # Billing that figure bills last month's index, so the re-price
             # needs the optional key step on every solar regime.
             month_indexed_energy=c.kind in ("variable", "tou_impact"),
+            # Fourteen of the cards price a direct-debit payer differently,
+            # and say so in the ristourne paragraph: "soit une reduction de
+            # base de 37.1 EUR + 5.3 EUR supplementaires en cas de paiement
+            # par domiciliation bancaire". The supplement is parsed onto the
+            # snapshot, and the flow only asks how a household pays when this
+            # flag is set, so without it resolve_direct_debit had nothing to
+            # apply and the supplement was billed to nobody: 42,40 EUR of a
+            # 215,18 EUR credit on Cosy Fixed.
+            direct_debit_discount=c.contract_id in _DIRECT_DEBIT_RISTOURNE,
         )
         for c in _CONTRACTS
     ),
