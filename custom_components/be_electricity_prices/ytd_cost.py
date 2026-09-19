@@ -1086,7 +1086,12 @@ async def _compute_current_year_cost(
         card prints today, where the own contract reads the month it signed.
         """
         credit = 0.0
-        if signing_snapshot.welcome_credit_eur:
+        # Either half: a card stating a per-kWh reduction and no flat one is
+        # a credit, and the backfill below never tested the flat half at all.
+        if (
+            signing_snapshot.welcome_credit_eur
+            or signing_snapshot.welcome_credit_eur_per_kwh
+        ):
             credit = _welcome_credit_eur(
                 signing_snapshot,
                 _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),

@@ -8633,6 +8633,43 @@ def test_an_anniversary_credit_waits_as_long_as_the_card_says() -> None:
     ) == pytest.approx(200.0)
 
 
+def test_a_credit_with_no_flat_half_is_still_a_credit() -> None:
+    """``extract_ristourne`` reads "whichever half it prints".
+
+    A card stating a per-kWh reduction and no flat one is a credit, and the
+    two guards that gated on ``welcome_credit_eur`` alone turned it into
+    none, while the backfill beside them tested nothing and paid it. No card
+    in the registry is that shape today; the three paths would have
+    disagreed about the first one that is.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import compare_quote, ytd_cost
+    from custom_components.be_electricity_prices.compare_quote import (
+        _grants_a_welcome_credit,
+    )
+
+    per_kwh_only = make_snapshot(
+        welcome_credit_eur=None, welcome_credit_eur_per_kwh=0.04929
+    )
+    flat_only = make_snapshot(welcome_credit_eur=37.1)
+    neither = make_snapshot()
+    assert _grants_a_welcome_credit(per_kwh_only)
+    assert _grants_a_welcome_credit(flat_only)
+    assert not _grants_a_welcome_credit(neither)
+
+    # And the year-to-date sensor asks the same question, not the flat half.
+    source = inspect.getsource(ytd_cost._compute_current_year_cost)
+    assert "signing_snapshot.welcome_credit_eur_per_kwh" in source
+    # Neither compare helper tests the flat field by itself any more.
+    for func in (
+        compare_quote._ytd_welcome_credit,
+        compare_quote._annual_welcome_credit,
+    ):
+        body = inspect.getsource(func)
+        assert 'getattr(credited, "welcome_credit_eur", None)' not in body
+
+
 def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     """The leaf was right and the wiring was where this went wrong before.
 

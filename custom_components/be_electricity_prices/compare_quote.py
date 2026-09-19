@@ -1288,6 +1288,21 @@ def _annual_fees(
     return static + capacity + prosumer
 
 
+def _grants_a_welcome_credit(snapshot: Any) -> bool:
+    """Whether the card grants a credit at all, either half of it.
+
+    ``extract_ristourne`` reads a card stating a per-kWh reduction and no
+    flat one, which it says in so many words, so testing the flat half alone
+    turns such a card into no credit. No card in the registry is that shape
+    today, and the backfill beside these two never tested it, so the three
+    paths would have disagreed about the first one that is.
+    """
+    return bool(
+        getattr(snapshot, "welcome_credit_eur", None)
+        or getattr(snapshot, "welcome_credit_eur_per_kwh", None)
+    )
+
+
 def _ytd_welcome_credit(
     snapshot: Any,
     credited: Any,
@@ -1327,7 +1342,7 @@ def _ytd_welcome_credit(
     from .fees import _welcome_credit_eur, first_year_net_kwh
     from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
-    if not getattr(credited, "welcome_credit_eur", None):
+    if not _grants_a_welcome_credit(credited):
         return 0.0
     energy_per_kwh = _tou_weighted_per_kwh(
         snapshot,
@@ -1396,7 +1411,7 @@ def _annual_welcome_credit(
     from .fees import _year_ahead_welcome_credit
     from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
-    if not getattr(credited, "welcome_credit_eur", None):
+    if not _grants_a_welcome_credit(credited):
         return 0.0
     energy_per_kwh = _tou_weighted_per_kwh(
         snapshot,
