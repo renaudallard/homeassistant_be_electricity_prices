@@ -781,12 +781,41 @@ def _extract_wallonia_renewables(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
+def _row_value(text: str, label: str) -> "re.Match[str] | None":
+    """The number belonging to ``label``, printed after it or above it.
+
+    The column reconstruction does not always keep a value on its label's
+    line. On the January to May 2026 Smart Variable cards the Flemish block
+    reads "Region flamande / 1,166 / Couts energie verte / Couts cogeneration
+    0,430": the cogeneration value follows its label and the green-energy one
+    sits on the line before. Reading only the first form dropped 1,166 c€/kWh
+    and billed the cogeneration row alone, about 41 EUR a year at 3500 kWh.
+
+    The value-above form is anchored on the label with nothing but whitespace
+    between them, so a figure belonging to another row cannot be picked up.
+    The same label also heads the block and opens the footnote that explains
+    it, and there it is followed by its unit or by prose rather than by a
+    figure; those occurrences are skipped, or the number ending the tax table
+    just above the heading would be read as the row (measured: 0,2042 picked
+    up as the green-energy cost).
+    """
+    after = re.search(rf"{label}\s+(\d+(?:[.,]\d+)?)", text)
+    if after is not None:
+        return after
+    for match in re.finditer(rf"(\d+(?:[.,]\d+)?)\s*\n\s*{label}", text):
+        tail = text[match.end() : match.end() + 12].lstrip()
+        if tail.startswith("(") or tail[:3].lower() == "les":
+            continue
+        return match
+    return None
+
+
 def _extract_flanders_renewables(text: str) -> float:
     """Flanders cards split renewables across two rows:
     ``Coûts énergie verte`` and ``Coûts cogénération``.
     """
-    green = re.search(r"Coûts énergie verte\s+(\d+(?:[.,]\d+)?)", text)
-    cogen = re.search(r"Coûts cogénération\s+(\d+(?:[.,]\d+)?)", text)
+    green = _row_value(text, "Coûts énergie verte")
+    cogen = _row_value(text, "Coûts cogénération")
     if green is None and cogen is None:
         # Called only for Flanders, where the green-energy / cogeneration
         # surcharge is mandatory; both gone means the block drifted, so

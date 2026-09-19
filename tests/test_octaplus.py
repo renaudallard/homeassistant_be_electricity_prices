@@ -322,6 +322,42 @@ def test_missing_regional_renewables_raises() -> None:
         _extract_flanders_renewables("no green energy row")
 
 
+def test_green_energy_cost_is_read_when_it_sits_above_its_label() -> None:
+    """The January to May 2026 Smart Variable cards print it on the line above.
+
+    The Flemish block reads "Region flamande / 1,166 / Couts energie verte /
+    Couts cogeneration 0,430": the cogeneration value follows its label and
+    the green-energy one precedes it. Reading only the label-then-value form
+    dropped 1,166 c€/kWh and billed the cogeneration row alone, 0,430 against
+    a card total of 1,596, about 41 EUR a year at 3500 kWh.
+    """
+    both_after = (
+        "Région flamande\nCoûts énergie verte 1,166\nCoûts cogénération 0,430\n"
+    )
+    assert _extract_flanders_renewables(both_after) == pytest.approx(0.01596)
+
+    green_above = (
+        "Région flamande\n1,166\nCoûts énergie verte\nCoûts cogénération 0,430\n"
+    )
+    assert _extract_flanders_renewables(green_above) == pytest.approx(0.01596)
+
+
+def test_the_green_energy_heading_is_not_read_as_the_row() -> None:
+    """The same label heads the block and opens the footnote under it.
+
+    In both places it is followed by its unit or by prose, never by a figure,
+    and the tax table above the heading ends in one. Taking the first match
+    read 0,2042 as the green-energy cost.
+    """
+    with_heading = (
+        "consommation entre 50.000 & 1.000.000 kWh 4,7467 0,2042\n"
+        "Coûts énergie verte\n(c€/kWh)\n"
+        "Les coûts « énergie verte » et « cogénération » peuvent être adaptés\n"
+        "Région flamande\n1,166\nCoûts énergie verte\nCoûts cogénération 0,430\n"
+    )
+    assert _extract_flanders_renewables(with_heading) == pytest.approx(0.01596)
+
+
 def test_missing_federal_tax_tier_raises() -> None:
     # The federal excise + energy contribution are mandatory; a layout
     # drift on the tier row must fail loud, not silently zero them.
