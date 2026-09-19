@@ -1050,17 +1050,25 @@ def _extract_federal_excise(
     """Federal excise, mandatory across regions.
 
     Returns ``(rate, bands)``. ``bands`` is None whenever the card prices
-    one rate, which is every residential card; the coordinator resolves a
-    banded card against the entry's annual volume.
+    one rate; the coordinator resolves a banded card against the entry's
+    annual volume.
 
-    Three card shapes. Until July 2026 the residential excise was
-    degressive and printed as four consumption tiers, of which the
-    residential one is 0-3.000 kWh. From 1 August 2026 the federal scheme
-    folded the separate energy contribution into the excise and flattened
-    it, so the residential card prints one rate under "Toutes
-    consommations". Try the flat form first: a card that carries both would
-    be the tiered one being phased out, and the flat row is the
-    authoritative single rate when it is present.
+    Three card shapes. Until July 2026 the residential excise was degressive
+    and printed as four consumption tiers, and the whole table is read: the
+    first two tiers carry the same rate so a household under 20.000 kWh is
+    billed exactly as before, while one above it was being billed the
+    0-3.000 rate on every kWh. That is 5,03288 c€/kWh where the card says
+    4,81876 above 20.000 and 4,74668 above 50.000, about 11 EUR a year at
+    25.000 kWh and 64 at 50.000, which a heat pump and a car reach.
+
+    From 1 August 2026 the federal scheme folded the separate energy
+    contribution into the excise and flattened it, so the residential card
+    prints one rate under "Toutes consommations". Try the flat form first: a
+    card that carries both would be the tiered one being phased out, and the
+    flat row is the authoritative single rate when it is present.
+
+    Mega's residential cards print the 0-3.000 row alone, so there is no
+    table to read there and its parser keeps the single rate.
 
     Professional cards kept the schedule the residential ones lost, in
     three bands (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh), and the
@@ -1082,13 +1090,16 @@ def _extract_federal_excise(
     )
     if flat:
         return to_float(flat.group(1)) / 100.0, None
-    match = re.search(
-        r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,.]+)",
-        text,
-    )
-    if not match:
+    tiers = _EXCISE_TIER_RE.findall(text)
+    if not tiers:
         raise ExtractorError("Engie: federal excise (0-3000 kWh tier) not found")
-    return to_float(match.group(1)) / 100.0, None
+    if len(tiers) < 2:
+        # One row is a rate, not a schedule: the card prices every kWh at it.
+        return to_float(tiers[0][2]) / 100.0, None
+    bands = tuple(
+        (tier_bound_kwh(upper), to_float(rate) / 100.0) for _lower, upper, rate in tiers
+    )
+    return bands[0][1], bands
 
 
 def _extract_energy_contribution(text: str) -> float:

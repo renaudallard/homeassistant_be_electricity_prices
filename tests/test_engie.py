@@ -621,6 +621,37 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     assert _extract_energy_contribution(july) == pytest.approx(0.0020417)
 
 
+def test_residential_degressive_excise_is_read_as_a_schedule() -> None:
+    """The residential card printed four tranches until August 2026.
+
+    Only the 0-3.000 row was read and the rest discarded, so every kWh was
+    billed the first tranche's rate. The first two tranches carry the same
+    rate, so a household under 20.000 kWh was unaffected, but above it the
+    card says 4,81876 and then 4,74668 where 5,03288 was being charged:
+    about 11 EUR a year at 25.000 kWh and 64 at 50.000, which a heat pump
+    and a car reach.
+    """
+    from custom_components.be_electricity_prices.providers.engie import (
+        _extract_federal_excise,
+    )
+
+    card = (
+        "Accise fédérale(11) (c€/kWh)\n"
+        "Consommation entre 0 et 3.000 kWh 5,03288\n"
+        "Consommation entre 3.000 et 20.000 kWh 5,03288\n"
+        "Consommation entre 20.000 et 50.000 kWh 4,81876\n"
+        "Consommation entre 50.000 et 1.000.000 kWh 4,74668\n"
+    )
+    rate, bands = _extract_federal_excise(card)
+    assert rate == pytest.approx(0.0503288)
+    assert bands == (
+        (3000.0, pytest.approx(0.0503288)),
+        (20000.0, pytest.approx(0.0503288)),
+        (50000.0, pytest.approx(0.0481876)),
+        (1000000.0, pytest.approx(0.0474668)),
+    )
+
+
 # ---- professional cards ------------------------------------------------------
 
 

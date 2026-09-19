@@ -848,8 +848,10 @@ class TaxOverlay:
     energy_contribution: float
     # Degressive excise bands as ((upper_kwh, eur_per_kwh), ...) ascending,
     # for a card that prints the special excise as a tariff schedule by
-    # annual consumption instead of one rate. Professional cards do; every
-    # residential card prints a single rate and leaves this None. The
+    # annual consumption instead of one rate. Professional cards do, and so
+    # did Engie's residential cards until the scheme flattened in August
+    # 2026; Mega's residential card prints the 0-3.000 row by itself, which
+    # is a rate rather than a schedule and leaves this None. The
     # schedule is billed PER TRANCHE, so :func:`resolve_excise_band` blends
     # it over the entry's annual volume into ``federal_excise`` and the
     # pricing engine keeps reading one rate, knowing nothing about bands.
