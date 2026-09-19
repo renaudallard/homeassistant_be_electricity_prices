@@ -847,7 +847,7 @@ def parse_snapshot(
         federal_excise = excise_bands[0][1]
         energy_contribution = to_float(tiers[0][3]) / 100.0
     else:
-        federal_excise = _extract_federal_excise(text)
+        federal_excise, excise_bands = _extract_federal_excise(text)
         energy_contribution = _extract_energy_contribution(text)
     region_connection_fee = (
         _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0

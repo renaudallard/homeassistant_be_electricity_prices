@@ -1067,8 +1067,10 @@ def _extract_federal_excise(
     card that carries both would be the tiered one being phased out, and the
     flat row is the authoritative single rate when it is present.
 
-    Mega's residential cards print the 0-3.000 row alone, so there is no
-    table to read there and its parser keeps the single rate.
+    Mega's residential cards print the same four rows, read by its own
+    parser; the claim that they print the 0-3.000 row alone was made here
+    from a check whose pattern could not match a bound with a thousands dot,
+    so it only ever saw the first row.
 
     Professional cards kept the schedule the residential ones lost, in
     three bands (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh), and the

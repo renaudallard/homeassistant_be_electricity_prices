@@ -56,6 +56,7 @@ from ..const import (
 )
 from ._pdf import (
     parse_brussels_osp,
+    tier_bound_kwh,
     to_float,
 )
 from .base import (
@@ -146,11 +147,43 @@ def _extract_pro_excise_tiers(text: str) -> list[tuple[str, str, str, str]]:
     return tiers
 
 
-def _extract_federal_excise(text: str) -> float:
+# The residential tier table, which wraps its label across a line:
+#
+#   Consommation entre 3000 et
+#   20.000 kWh
+#   5.03288
+#   0.20417
+#
+# Four rows on every Mega residential card from January to July 2026, the
+# same schedule and the same rates Engie's cards print.
+_RESIDENTIAL_TIER_RE = re.compile(
+    r"Consommation\s+entre\s+([\d.]+)\s+et\s*\n?\s*([\d.]+)\s*kWh\s*\n\s*([\d.,]+)",
+    re.IGNORECASE,
+)
+
+
+def _extract_federal_excise(
+    text: str,
+) -> tuple[float, tuple[tuple[float, float], ...] | None]:
     """Federal excise, uniform across regions.
 
-    Two card shapes. Until July 2026 the excise was degressive and printed
-    as consumption tiers, of which 0-3000 kWh is the residential one. From
+    Returns ``(rate, bands)``; ``bands`` is None when the card prices one
+    rate, and the coordinator resolves a banded card against the entry's
+    annual volume.
+
+    Three card shapes. Until July 2026 the excise was degressive and printed
+    as four consumption tiers, and the whole table is read: the first two
+    carry the same rate so a household under 20.000 kWh is billed exactly as
+    before, while above it the card says 4,81876 and then 4,74668 where the
+    0-3.000 rate was being charged on every kWh. About 11 EUR a year at
+    25.000 kWh and 64 at 50.000.
+
+    Reading only the first row was fixed for Engie and left here on the
+    stated ground that Mega's residential card prints the 0-3.000 row by
+    itself. It does not: 151 archived residential cards print the same four
+    rows Engie's do. That claim was made from a check whose pattern could
+    not match a bound with a thousands dot, so it only ever saw the first
+    row. From
     1 August 2026 the federal scheme folded the separate energy
     contribution into the excise and flattened it, so the card prints a
     single value under an "Accise speciale (c€/kWh)" heading. Mega renders
@@ -167,14 +200,21 @@ def _extract_federal_excise(text: str) -> float:
         text,
     )
     if flat is not None:
-        return to_float(flat.group(1)) / 100.0
+        return to_float(flat.group(1)) / 100.0, None
+    tiers = _RESIDENTIAL_TIER_RE.findall(text)
+    if len(tiers) > 1:
+        bands = tuple(
+            (tier_bound_kwh(upper), to_float(rate) / 100.0)
+            for _lower, upper, rate in tiers
+        )
+        return bands[0][1], bands
     match = re.search(
         r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*([\d.,]+)",
         text,
     )
     if match is None:
         raise ExtractorError("Mega: federal excise (0-3000 kWh tier) not found")
-    return to_float(match.group(1)) / 100.0
+    return to_float(match.group(1)) / 100.0, None
 
 
 # The ristourne, which Mega grants on a new subscription and no other

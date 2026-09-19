@@ -760,11 +760,15 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     )
 
     august = "Accise spéciale\n(c€/kWh)\n4.876\n*\n"
-    assert _extract_federal_excise(august) == pytest.approx(0.04876)
+    # The reader returns (rate, bands); the flat row is a rate, not a
+    # schedule, so it carries no bands.
+    assert _extract_federal_excise(august) == (pytest.approx(0.04876), None)
     assert _extract_energy_contribution(august) == 0.0
 
     july = "Consommation entre\n0 et 3000 kWh\n5,0329\n0,20417\n"
-    assert _extract_federal_excise(july) == pytest.approx(0.050329)
+    # A single tier row on its own is likewise a rate rather than a
+    # schedule; the four-row table is covered by its own test.
+    assert _extract_federal_excise(july) == (pytest.approx(0.050329), None)
     assert _extract_energy_contribution(july) == pytest.approx(0.0020417)
 
 
@@ -1685,3 +1689,42 @@ def test_the_ristourne_is_read_in_all_three_phrasings() -> None:
     none = extract_ristourne("no ristourne on this card")
     assert none["welcome_credit_eur"] is None
     assert none["welcome_credit_eur_per_kwh"] is None
+
+
+def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
+    """Mega's residential cards print the same four tranches Engie's do.
+
+    Only the 0-3.000 row was read, so every kWh was billed at that rate. The
+    first two tranches carry the same figure, so a household under 20.000 kWh
+    is unaffected; above it the card says 4,81876 and then 4,74668, which is
+    about 11 EUR a year at 25.000 kWh and 64 at 50.000.
+
+    Engie's half of this was fixed on the stated ground that Mega's card
+    prints the first row by itself. It does not, on 151 archived residential
+    cards: that claim came from a check whose pattern could not match a bound
+    with a thousands dot, so it only ever saw the first row. The label here
+    wraps mid-row exactly as the cards print it.
+    """
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        _extract_federal_excise,
+    )
+
+    card = (
+        "Accise spéciale\nCotisation sur\nl'énergie\n(c€/kWh)\n(c€/kWh)\n"
+        "Consommation entre 0 et 3000 kWh\n5.03288\n0.20417\n"
+        "Consommation entre 3000 et\n20.000 kWh\n5.03288\n0.20417\n"
+        "Consommation entre 20.000 et\n50.000 kWh\n4.81876\n0.20417\n"
+        "Consommation entre 50.000 et\n1.000.000 kWh\n4.74668\n0.20417\n"
+    )
+    rate, bands = _extract_federal_excise(card)
+    assert rate == pytest.approx(0.0503288)
+    assert bands == (
+        (3000.0, pytest.approx(0.0503288)),
+        (20000.0, pytest.approx(0.0503288)),
+        (50000.0, pytest.approx(0.0481876)),
+        (1000000.0, pytest.approx(0.0474668)),
+    )
+
+    # The August flattening keeps its single rate and no schedule.
+    flat = "Accise spéciale\n(c€/kWh)\n4.876\n"
+    assert _extract_federal_excise(flat) == (pytest.approx(0.04876), None)
