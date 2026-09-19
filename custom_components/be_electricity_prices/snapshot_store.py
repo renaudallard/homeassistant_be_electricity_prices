@@ -1521,7 +1521,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # of it, so it was never read and the cap never bound on their 15 Flemish
 # contracts. A v64 row has no ceiling, and a low-volume connection on a high
 # peak is billed a capacity term the regulator caps.
-_SNAPSHOT_SCHEMA_VERSION = 65
+# v66: TotalEnergies' variable cards carry month_indexed and rlp_indexed with
+# the four per-meter BELPEXM_RLP coefficient pairs. The card prints its rates
+# beside the words "calcules sur base de la derniere valeur connue du
+# BELPEX_M_RLP (du mois precedent)", so a v65 row bills a month behind where
+# the formula indexes on the delivery month.
+_SNAPSHOT_SCHEMA_VERSION = 66
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

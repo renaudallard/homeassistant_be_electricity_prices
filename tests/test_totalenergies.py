@@ -428,3 +428,42 @@ def test_impact_preselects_the_incitative_network_mode() -> None:
         )({})["dso_tariff_mode"]
         == "bi_horaire"
     )
+
+
+def test_variable_cards_carry_the_delivery_month_formula() -> None:
+    """The printed row is an indicative at LAST month's index.
+
+    The card says so beside it: "les prix mensuels calcules sur base de la
+    derniere valeur connue du BELPEX_M_RLP (du mois precedent)". The formula
+    in the table above indexes on the DELIVERY month, which is what an entry
+    with an ENTSO-E key should be billed on; the printed row stays as the
+    keyless fallback.
+
+    The table flattens into two lines, four factors on the first and four
+    bases on the second, one column per meter reading. Verified by inverting
+    each column against its own printed rate: all four solve to the same
+    index to within 0,3 EUR/MWh, which four independent columns only do when
+    the pairing is right.
+    """
+    from custom_components.be_electricity_prices.providers.totalenergies import (
+        _consumption_month_formula,
+    )
+
+    block = (
+        "Consommation**\nTarif mensuel\n18,00 19,61 16,60 17,29\n100,00 1,57\n"
+        "0.1099 * 0.1212 * 0.1 * BELPEXM_RLP + 0.1056 * Formule tarifaire\n"
+        "BELPEXM_RLP + 2.26 BELPEXM_RLP + 2.26 2.26 BELPEXM_RLP + 2.16\n"
+    )
+    pairs = _consumption_month_formula(block)
+    assert pairs == ((0.1099, 0.1212, 0.1, 0.1056), (2.26, 2.26, 2.26, 2.16))
+
+    # Each column solves to the same index against its own printed rate.
+    printed = (0.1800, 0.1961, 0.1660, 0.1729)
+    factors, bases = pairs
+    implied = [(printed[i] * 100 - bases[i]) / factors[i] for i in range(4)]
+    assert max(implied) - min(implied) < 1.0
+
+    # A layout this cannot read leaves the card on its printed row rather
+    # than billing a half-read formula.
+    assert _consumption_month_formula("no formula here") is None
+    assert _consumption_month_formula("0.1099 * BELPEXM_RLP + 2.26") is None

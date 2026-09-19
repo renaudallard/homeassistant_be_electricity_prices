@@ -49,7 +49,7 @@ pattern as Engie/Luminus.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -390,12 +390,18 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     if kind == "variable":
         realized = _realized_monthly_consumption(text)
         if realized is not None:
-            return VariableRates(
-                current=realized[0],
-                peak=realized[1],
-                offpeak=realized[2],
-                exclusive_night=realized[3],
-                yearly_fixed_fee=yearly_fee,
+            # The realized row is that indicative, so it is what a keyless
+            # entry keeps; the formula beside it is what re-prices the
+            # delivery month for one carrying an ENTSO-E key.
+            return _with_month_formula(
+                VariableRates(
+                    current=realized[0],
+                    peak=realized[1],
+                    offpeak=realized[2],
+                    exclusive_night=realized[3],
+                    yearly_fixed_fee=yearly_fee,
+                ),
+                text,
             )
 
     # Static / variable table row: 4 space-separated values (mono / jour /
@@ -418,13 +424,93 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     peak = to_float(consumption_match.group(2)) / 100.0
     offpeak = to_float(consumption_match.group(3)) / 100.0
     excl_night = to_float(consumption_match.group(4)) / 100.0
-    return fixed_or_variable_rates(
+    rates = fixed_or_variable_rates(
         kind,
         single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
+    )
+    return _with_month_formula(rates, text)
+
+
+# The variable cards index on BELPEXM_RLP over the DELIVERY month and print,
+# beside the formula, "les prix mensuels calcules sur base de la derniere
+# valeur connue du BELPEX_M_RLP (du mois precedent)". So the printed row is an
+# indicative at LAST month's index, the same shape Cociter, Engie and Mega
+# print, and billing it bills a month behind.
+#
+# The table flattens into two lines, the four factors on the first and the
+# four bases on the second, one column per meter reading:
+#
+#   0.1099 * 0.1212 * 0.1 * BELPEXM_RLP + 0.1056 * Formule tarifaire
+#   BELPEXM_RLP + 2.26 BELPEXM_RLP + 2.26 2.26 BELPEXM_RLP + 2.16
+#
+# A factor is below 1 and a base above it on every card seen, which is what
+# separates the two runs without depending on where the index token lands.
+# Anything but four of each is a layout this cannot read, and the caller then
+# keeps the printed row rather than billing a half-read formula.
+_RLP_FORMULA_RE = re.compile(r"\d+\.\d+")
+
+
+def _consumption_month_formula(
+    text: str,
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]] | None:
+    """The four ``factor * BELPEXM_RLP + base`` pairs, or ``None``.
+
+    Verified on the September 2026 cards by inverting each column against its
+    own printed rate: all four solve to the same index to within
+    0,3 EUR/MWh, which four independent columns only do when the pairing is
+    right.
+    """
+    index = text.find("BELPEXM_RLP")
+    if index < 0:
+        return None
+    line_start = text.rfind("\n", 0, text.rfind("\n", 0, index)) + 1
+    line_end = text.find("\n", text.find("\n", index) + 1)
+    if line_end < 0:
+        return None
+    block = re.sub(r"\s+", " ", text[line_start:line_end])
+    numbers = [float(n) for n in _RLP_FORMULA_RE.findall(block)]
+    factors = [n for n in numbers if n < 1.0]
+    bases = [n for n in numbers if n >= 1.0]
+    if len(factors) != 4 or len(bases) != 4:
+        return None
+    return (
+        (factors[0], factors[1], factors[2], factors[3]),
+        (bases[0], bases[1], bases[2], bases[3]),
+    )
+
+
+def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
+    """Attach the delivery-month formula to a variable leg, if the card has one.
+
+    Returns ``rates`` untouched for any other shape, and for a layout
+    :func:`_consumption_month_formula` cannot read, which leaves the card
+    billing its printed row exactly as before.
+    """
+    if not isinstance(rates, VariableRates):
+        return rates
+    pairs = _consumption_month_formula(text)
+    if pairs is None:
+        return rates
+    factors, bases = pairs
+    return replace(
+        rates,
+        month_indexed=True,
+        # BELPEXM_RLP is the day-ahead weighted by the residual load profile,
+        # which the injection leg's plain BELPEXM is not: the guard on
+        # _MONTH_FORMULA_RE exists to keep the two apart.
+        rlp_indexed=True,
+        formula_factor=factors[0] / 100.0,
+        formula_base=bases[0] / 100.0,
+        formula_factor_peak=factors[1] / 100.0,
+        formula_base_peak=bases[1] / 100.0,
+        formula_factor_offpeak=factors[2] / 100.0,
+        formula_base_offpeak=bases[2] / 100.0,
+        formula_factor_exclusive_night=factors[3] / 100.0,
+        formula_base_exclusive_night=bases[3] / 100.0,
     )
 
 
