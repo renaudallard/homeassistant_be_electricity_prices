@@ -73,6 +73,7 @@ from .const import (
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._pdf import fetch_text, is_transient_fetch_error
+from .brugel import cached_power_term
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
@@ -94,6 +95,7 @@ from .providers.base import (
     resolve_settlement_grid,
     resolve_direct_debit,
     resolve_volume_tier,
+    resolve_brussels_power_term,
 )
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
@@ -1219,10 +1221,14 @@ def _resolve_snapshot(
     toepassing op het exclusief nacht tarief". Folding it there billed a night
     circuit a share of a tranche it never receives.
     """
-    resolved = apply_vat(snap, include_vat=_include_vat(entry))
+    # Before apply_vat, which resolves the card's own basis away: the term
+    # Brugel publishes is stated excluding VAT and has to be put onto the
+    # basis the card printed on before anything else moves it.
+    month = delivery_month or dt_util.now().date()
+    resolved = resolve_brussels_power_term(snap, terms=cached_power_term(month.year))
+    resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
     # than by the card that prints them.
-    month = delivery_month or dt_util.now().date()
     professional = is_professional(snap.supplier, snap.contract)
     resolved = resolve_federal_contribution(resolved, month, professional=professional)
     resolved = resolve_federal_excise(resolved, month, professional=professional)

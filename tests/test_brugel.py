@@ -1,0 +1,158 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Brugel's published Sibelga power term, and the card it completes."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+
+from custom_components.be_electricity_prices import brugel
+from custom_components.be_electricity_prices.const import DSO_SIBELGA
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    TaxOverlay,
+    resolve_brussels_power_term,
+)
+from tests import make_snapshot
+
+# The two rows as the 2026 sheet prints them, under "1.2. Sans mesure de
+# pointe", which is the block a residential connection is billed on. The dashes
+# are the MT columns a household has none of, and the figure repeats once per
+# BT column.
+_SHEET = (
+    "Grille tarifaire - Electricité\n"
+    "Distribution Électricité Année 2026\n"
+    "prix hors TVA\n"
+    "1.2. Sans mesure de pointe (**)\n"
+    "Puissance mise à disposition inférieure ou égale à 13 kVA EUR / an (°)"
+    " - - - 47,24 47,24\n"
+    "EUR / jour - - - 0,1294270 0,1294270\n"
+    "Puissance mise à disposition supérieure à 13 kVA EUR / an (°)"
+    " - - - 94,48 94,48\n"
+    "EUR / jour - - - 0,2588540 0,2588540\n"
+)
+
+
+@pytest.fixture(autouse=True)
+def _clear_brugel_cache() -> Iterator[None]:
+    """The module caches per year for the life of the process."""
+    brugel._cache.clear()
+    brugel._failed_at.clear()
+    yield
+    brugel._cache.clear()
+    brugel._failed_at.clear()
+
+
+def test_the_power_term_is_read_off_the_published_sheet() -> None:
+    """47,24 and 94,48 EUR/year, excluding VAT, for 2026."""
+    assert brugel._parse(_SHEET) == (pytest.approx(47.24), pytest.approx(94.48))
+
+
+def test_the_per_day_figure_beside_it_is_not_mistaken_for_the_term() -> None:
+    """Each row is followed by the same charge per DAY, three orders of
+    magnitude smaller. Anchoring on the label alone and taking the first
+    number on the block would read 0,1294270 as an annual term."""
+    assert brugel._parse(_SHEET) != (
+        pytest.approx(0.1294270),
+        pytest.approx(0.2588540),
+    )
+
+
+def test_a_sheet_that_cannot_be_read_yields_nothing() -> None:
+    """Never a guess: the caller then bills what it billed before."""
+    assert brugel._parse("no tariff table here") is None
+    assert brugel._parse("Puissance mise à disposition inférieure") is None
+    # A pair the wrong way round is two columns read out of order.
+    assert (
+        brugel._parse(
+            "Puissance mise à disposition inférieure ou égale à 13 kVA 94,48\n"
+            "Puissance mise à disposition supérieure à 13 kVA 47,24\n"
+        )
+        is None
+    )
+
+
+def _brussels_card(*, fixed_term: float, vat_rate: float, above: float | None = None):
+    return make_snapshot(
+        dsos={
+            DSO_SIBELGA: DsoOverlay(
+                distribution_single=0.0996,
+                transport=0.0227,
+                data_management_per_year=fixed_term,
+                brussels_power_term_above_13kva=above,
+            )
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.05, energy_contribution=0.0, vat_rate=vat_rate
+        ),
+    )
+
+
+def test_a_card_printing_only_the_metering_half_is_completed() -> None:
+    """Bolt prints 14,73 where Engie, Mega, TotalEnergies and EnergyVision
+    print the 64,80 sum and a 114,88 band above 13 kVA. The household pays
+    Sibelga either way, so the entry was about 50 EUR a year short."""
+    out = resolve_brussels_power_term(
+        _brussels_card(fixed_term=14.73, vat_rate=0.0), terms=(47.24, 94.48)
+    )
+    overlay = out.dsos[DSO_SIBELGA]
+    # The published figures are ex-VAT and a residential card is VAT-inclusive.
+    assert overlay.data_management_per_year == pytest.approx(64.80, abs=0.01)
+    assert overlay.brussels_power_term_above_13kva == pytest.approx(114.88, abs=0.01)
+
+
+def test_a_professional_card_takes_the_figures_on_its_own_basis() -> None:
+    """A professional card prints excluding VAT, which is what Brugel
+    publishes, so nothing is grossed: 13,90 + 47,24 is the 61,14 its peers
+    print."""
+    out = resolve_brussels_power_term(
+        _brussels_card(fixed_term=13.90, vat_rate=0.21), terms=(47.24, 94.48)
+    )
+    overlay = out.dsos[DSO_SIBELGA]
+    assert overlay.data_management_per_year == pytest.approx(61.14, abs=0.01)
+    assert overlay.brussels_power_term_above_13kva == pytest.approx(108.38, abs=0.01)
+
+
+def test_a_card_that_already_carries_the_term_is_left_alone() -> None:
+    """Both signals have to agree, so a complete card is untouched and the
+    workaround retires itself if Bolt completes its row."""
+    complete = _brussels_card(fixed_term=64.80, vat_rate=0.0, above=114.88)
+    assert resolve_brussels_power_term(complete, terms=(47.24, 94.48)) is complete
+
+    # No band above 13 kVA, but a fixed term already larger than the power
+    # part alone: it cannot be the metering half by itself.
+    summed = _brussels_card(fixed_term=64.80, vat_rate=0.0)
+    out = resolve_brussels_power_term(summed, terms=(47.24, 94.48))
+    assert out.dsos[DSO_SIBELGA].data_management_per_year == pytest.approx(64.80)
+
+
+def test_without_the_sheet_the_card_bills_exactly_as_before() -> None:
+    """Before the sheet is fetched, and if Brugel cannot be read at all."""
+    card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    assert resolve_brussels_power_term(card, terms=None) is card
+    assert brugel.cached_power_term(2026) is None

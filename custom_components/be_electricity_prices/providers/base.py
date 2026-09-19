@@ -49,6 +49,7 @@ from typing import Any, Literal, Protocol
 import aiohttp
 
 from ..const import (
+    DSO_SIBELGA,
     FEDERAL_CONTRIBUTION_ZEROED_FROM,
     FEDERAL_EXCISE_KNOWN_FROM,
     FEDERAL_EXCISE_KNOWN_UNTIL,
@@ -56,6 +57,7 @@ from ..const import (
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGIONS,
+    VAT_RATE_REDUCED,
     WELCOME_CREDIT_PRO_RATA,
 )
 
@@ -1350,6 +1352,60 @@ def resolve_direct_debit(
             energy,
             yearly_fixed_fee=max(0.0, energy.yearly_fixed_fee - discount),
         ),
+    )
+
+
+def resolve_brussels_power_term(
+    snapshot: SupplierSnapshot, *, terms: tuple[float, float] | None
+) -> SupplierSnapshot:
+    """Add Sibelga's "Puissance mise a disposition" to a card that omits it.
+
+    Sibelga's fixed charge has two regulated parts, a metering one and a power
+    one. Engie, Mega, TotalEnergies and EnergyVision print the sum and the
+    band above 13 kVA beside it; Bolt's card prints the metering part alone,
+    under a heading calling it the whole "Terme fixe GRD". The household pays
+    the DSO either way, so a Brussels Bolt entry was about 50 EUR a year short
+    with nothing on screen to say so.
+
+    ``terms`` is the ``(at_or_below_13kva, above_13kva)`` pair Brugel
+    publishes, EUR/year excluding VAT, from :mod:`..brugel`. ``None`` leaves
+    the card exactly as it was, which is what happens before the sheet has
+    been fetched and if it cannot be read at all.
+
+    Applied only to a card that is missing the term, on two signals that have
+    to agree: it prints no band above 13 kVA, which every card carrying the
+    full charge does print, and its fixed term is smaller than the power part
+    alone, so it cannot already contain it. A card that starts printing the
+    sum therefore stops being adjusted without an edit here.
+
+    The published figures are "prix hors TVA" and a residential card prints
+    VAT-inclusive, so they are put onto the card's own basis before being
+    added. That is the same 6% the card's own professional edition differs by.
+    """
+    if terms is None:
+        return snapshot
+    overlay = snapshot.dsos.get(DSO_SIBELGA)
+    if overlay is None or overlay.brussels_power_term_above_13kva is not None:
+        return snapshot
+    low, high = terms
+    if snapshot.taxes.vat_rate <= 0.0:
+        # A VAT-inclusive card, so the ex-VAT figures have to be grossed.
+        low *= 1.0 + VAT_RATE_REDUCED
+        high *= 1.0 + VAT_RATE_REDUCED
+    metering = overlay.data_management_per_year
+    if metering >= low:
+        # Big enough to already include the power part: leave it alone.
+        return snapshot
+    return replace(
+        snapshot,
+        dsos={
+            **snapshot.dsos,
+            DSO_SIBELGA: replace(
+                overlay,
+                data_management_per_year=metering + low,
+                brussels_power_term_above_13kva=metering + high,
+            ),
+        },
     )
 
 

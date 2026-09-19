@@ -125,10 +125,24 @@ for the Sibelga row**, ending at the metering term, with no ≤13 kVA column any
 document, so its Brussels `data_management_per_year` is that term alone and a Bolt Brussels entry
 under-states the annual network fee against an Engie or Mega quote for the same connection.
 
-There is nothing to read, and `providers/base.py` is explicit that no EUR value lives in Python
-source — every number in a `SupplierSnapshot` comes from a live fetch. Sourcing the term from the
-Brugel/Sibelga publication the way the Brussels OSP table is handled would be a real fix; putting
-the figure in the extractor would not. Left as a known gap.
+There is nothing to read on the card, and `providers/base.py` is explicit that no EUR value lives
+in Python source: every number in a `SupplierSnapshot` comes from a live fetch. So the term is read
+from the regulator that sets it. **Closed**: `brugel.py` fetches Brugel's published "Grille
+tarifaire - Electricite" for the year, one small PDF stating "prix hors TVA", and reads the two
+`Puissance mise a disposition` rows out of its "Sans mesure de pointe" block (47,24 and 94,48
+EUR/year for 2026). `resolve_brussels_power_term` adds them to a Sibelga overlay that is missing
+them, on the card's own VAT basis, and `_resolve_snapshot` applies it, so every path prices the
+same completed overlay.
+
+Two signals have to agree before a card is touched: it prints no band above 13 kVA, which every
+card carrying the full charge does print, and its fixed term is smaller than the power part alone,
+so it cannot already contain it. Bolt completing its row therefore retires the workaround with no
+edit here, and the peers are untouched today. The fetch never raises: until the sheet has been read
+the card bills exactly what it billed before, which is the gap this closes rather than a new
+failure mode.
+
+Sibelga's own site answers 403 to this integration, which is why the regulator's publication is the
+source and not the operator's.
 
 | id | label | registered kind | folder / slug | `spot_indexed_injection` | `quarter_hourly_option` | Notes |
 | --- | --- | --- | --- | --- | --- | --- |

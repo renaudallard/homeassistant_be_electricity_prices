@@ -281,6 +281,12 @@ SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_imp
 # excluding it, so the pro extractors gross their values back up by it;
 # three of them declared their own copy with the same comment.
 VAT_RATE_STANDARD: Final = 0.21
+# The reduced rate Belgian residential electricity is sold at, and the basis
+# every residential card in the registry prints on. Needed where a figure read
+# from a source publishing "prix hors TVA" has to be put onto a card's own
+# basis: Bolt's two Brussels cards state the same Sibelga metering term as
+# 14,73 residential and 13,90 professional, whose ratio is this rate.
+VAT_RATE_REDUCED: Final = 0.06
 
 # Contract kinds whose energy leg cannot be priced without an ENTSO-E spot:
 # dynamic resolves per slot, spot_monthly against the delivery month's mean.

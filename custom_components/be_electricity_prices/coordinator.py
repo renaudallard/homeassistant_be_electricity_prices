@@ -116,12 +116,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import EntsoeAuthError, EntsoeError
+from .brugel import ensure_power_term
 from .const import (
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
+    REGION_BRUSSELS,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
@@ -1030,6 +1032,14 @@ class BePricesCoordinator(
                 await self._ensure_spp_weights()
             if wants_rlp:
                 await self._ensure_rlp_weights(blend)
+
+        # Sibelga's power term, for a Brussels entry whose card prints only the
+        # metering half of the fixed charge. One small PDF a year, cached for
+        # the life of the process, and the resolver leaves the card alone
+        # until it is there, so a slow or blocked Brugel costs nothing but the
+        # gap the entry already had.
+        if self.entry.data.get(CONF_REGION) == REGION_BRUSSELS:
+            await ensure_power_term(self._session, dt_util.now().year)
 
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
