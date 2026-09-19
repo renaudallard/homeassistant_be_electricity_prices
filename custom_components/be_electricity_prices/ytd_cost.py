@@ -1246,8 +1246,16 @@ async def _compute_current_year_cost(
             # Treating the month as "no rate to apply" matches dynamic
             # / TOU behaviour and keeps the YTD loop running instead of
             # tearing the whole tick down with UpdateFailed.
-            _LOGGER.debug(
-                "static_breakdown missing DSO %s for %s/%s/%s; falling back",
+            #
+            # At WARNING, not DEBUG: the month is dropped from the year
+            # whole, network leg and taxes included, and the fees beside it
+            # bill zero for it. Measured on a Flemish entry that lost one
+            # month's row, 2622,54 EUR against 1854,40, and nothing on
+            # screen said so. Nobody reads a debug log to find out why a
+            # year-to-date figure is a third light.
+            _LOGGER.warning(
+                "static_breakdown missing DSO %s for %s/%s/%s; that month is "
+                "dropped from the year-to-date figure",
                 dso,
                 snap_m.supplier,
                 snap_m.contract,
