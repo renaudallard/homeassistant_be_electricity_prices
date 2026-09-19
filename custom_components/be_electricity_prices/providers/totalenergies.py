@@ -496,6 +496,19 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     if pairs is None:
         return rates
     factors, bases = pairs
+    # Same conversion the dynamic branch above states, because it is the same
+    # card printing the same kind of formula: the PDF yields c EUR/kWh HTVA
+    # from an index in EUR/MWh, while the engine holds spots in EUR/kWh.
+    #
+    #   factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
+    #   base_eur_kwh   = base_cents * vat / 100
+    #
+    # Dividing both by 100 instead left the factor a thousand times too small
+    # and dropped the VAT: the September card's mono column resolved to
+    # 0,02275 EUR/kWh against the 0,18140 it prints, about 555 EUR a year at
+    # 3500 kWh. With this conversion it reproduces the printed figure exactly,
+    # which is what says both the scale and the VAT reading are right.
+    vat = _vat_multiplier(text)
     return replace(
         rates,
         month_indexed=True,
@@ -503,14 +516,14 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
         # which the injection leg's plain BELPEXM is not: the guard on
         # _MONTH_FORMULA_RE exists to keep the two apart.
         rlp_indexed=True,
-        formula_factor=factors[0] / 100.0,
-        formula_base=bases[0] / 100.0,
-        formula_factor_peak=factors[1] / 100.0,
-        formula_base_peak=bases[1] / 100.0,
-        formula_factor_offpeak=factors[2] / 100.0,
-        formula_base_offpeak=bases[2] / 100.0,
-        formula_factor_exclusive_night=factors[3] / 100.0,
-        formula_base_exclusive_night=bases[3] / 100.0,
+        formula_factor=factors[0] * vat * 10.0,
+        formula_base=bases[0] * vat / 100.0,
+        formula_factor_peak=factors[1] * vat * 10.0,
+        formula_base_peak=bases[1] * vat / 100.0,
+        formula_factor_offpeak=factors[2] * vat * 10.0,
+        formula_base_offpeak=bases[2] * vat / 100.0,
+        formula_factor_exclusive_night=factors[3] * vat * 10.0,
+        formula_base_exclusive_night=bases[3] * vat / 100.0,
     )
 
 

@@ -467,3 +467,47 @@ def test_variable_cards_carry_the_delivery_month_formula() -> None:
     # than billing a half-read formula.
     assert _consumption_month_formula("no formula here") is None
     assert _consumption_month_formula("0.1099 * BELPEXM_RLP + 2.26") is None
+
+
+def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
+    """The formula has to land on the card's own printed rate, not near it.
+
+    The PDF yields c EUR/kWh excluding VAT from an index in EUR/MWh, while
+    the engine holds spots in EUR/kWh, so the factor carries a thousand and a
+    hundred and the VAT: exactly what the dynamic branch of the same file
+    already states. Dividing both halves by 100 instead left the factor a
+    thousand times too small and dropped the VAT, resolving the mono column to
+    0,02275 EUR/kWh against a printed 0,18140. That is about 555 EUR a year
+    at 3500 kWh, and it reached any variable entry carrying an ENTSO-E key.
+
+    Parsing the pair correctly is not enough to catch that, which is why this
+    asserts the RESOLVED rate. The card's own printed row is the ground truth:
+    it is that formula evaluated at the last known index, so resolving the
+    formula at the index the row implies must return the row.
+    """
+    text = fixture_text("totalenergies_mycomfort_v.pdf", layout=True)
+    energy = parse_snapshot("totalenergies_mycomfort", text, "flanders", "t://").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+
+    # The index the printed mono rate implies, in EUR/kWh as the engine holds
+    # spots. Everything else on the card must resolve at that same index.
+    index = (energy.current - energy.formula_base) / energy.formula_factor
+
+    for printed, factor, base in (
+        (energy.current, energy.formula_factor, energy.formula_base),
+        (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.offpeak, energy.formula_factor_offpeak, energy.formula_base_offpeak),
+        (
+            energy.exclusive_night,
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+        ),
+    ):
+        assert printed is not None and factor is not None and base is not None
+        assert factor * index + base == pytest.approx(printed, abs=2e-4)
+
+    # And the resolved rate is a plausible Belgian energy leg. A unit slip of
+    # the kind this test exists for lands three orders of magnitude out, so
+    # the bound is sized on that and leaves every real tariff alone.
+    assert 0.05 <= energy.formula_factor * index + energy.formula_base <= 0.60
