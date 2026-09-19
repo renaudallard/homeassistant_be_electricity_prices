@@ -708,11 +708,16 @@ _IMPACT_CAPABLE_METERS: frozenset[str] = frozenset({METER_BI, METER_DYNAMIC})
 
 def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Wallonia-only step: which DSO-side billing mode applies?"""
+    # Only when the meter is KNOWN and cannot register the bands. A caller
+    # with no meter answer yet keeps the full list: the step runs after the
+    # meter one in the flow, but the schema is also built for a contract
+    # alone, and dropping Impact there would defeat the card-driven
+    # pre-selection below.
+    meter = defaults.get(CONF_METER)
     modes = [
         mode
         for mode in DSO_TARIFF_MODES
-        if mode != DSO_MODE_IMPACT
-        or defaults.get(CONF_METER) in _IMPACT_CAPABLE_METERS
+        if mode != DSO_MODE_IMPACT or meter is None or meter in _IMPACT_CAPABLE_METERS
     ]
     current = defaults.get(CONF_DSO_TARIFF_MODE)
     if not current and defaults.get(CONF_CONTRACT) in _IMPACT_DEFAULT_CONTRACTS:
