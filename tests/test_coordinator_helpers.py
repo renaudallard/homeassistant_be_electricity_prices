@@ -5866,6 +5866,63 @@ async def test_cohort_freezes_the_feed_in_coefficients(
     assert legs.injection.current == 0.058
 
 
+async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With no signing month named there is no cohort lock, so each delivery
+    month is billed on the card that was in force for it.
+
+    The month-indexed leg was always built from the CURRENT card, so a
+    year-to-date walk re-priced January on September's coefficients. They move
+    every month on these products: Engie's January card reads
+    "2,4016 + (0,1200 x EPEXDAM)" against September's "1,8432 + (0,1177 x
+    EPEXDAM)". Worth about 12 EUR a year on Direct Online, and it reached only
+    entries carrying an ENTSO-E key, so the option sold as making past months
+    more accurate made them less.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=VariableRates(
+            current=0.20, month_indexed=True, formula_factor=1.177, formula_base=0.0184
+        )
+    )
+    january = make_snapshot(
+        energy=VariableRates(
+            current=0.15, month_indexed=True, formula_factor=1.200, formula_base=0.0240
+        )
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return today
+
+    _monthly_snapshots(hass).clear()
+    # No contract_start_date: no cohort, so nothing is locked.
+    entry = _entry(contract="test", api_key="k")
+
+    legs = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        entry,
+        today,
+        month_snapshot=january,
+    )
+    assert legs.energy is not None
+    assert legs.energy.factor == pytest.approx(1.200)
+    assert legs.energy.base == pytest.approx(0.0240)
+
+    # The live path names no month, and there the current card IS that month's.
+    live = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+    )
+    assert live.energy is not None
+    assert live.energy.factor == pytest.approx(1.177)
+
+
 async def test_cohort_leaves_a_printed_only_feed_in_alone(
     hass: HomeAssistant, freezer: Any
 ) -> None:

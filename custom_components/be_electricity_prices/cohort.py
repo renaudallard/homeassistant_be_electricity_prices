@@ -495,6 +495,7 @@ async def _cohort_legs(
     region: str,
     entry: ConfigEntry,
     current_snapshot: "SupplierSnapshot",
+    month_snapshot: "SupplierSnapshot | None" = None,
 ) -> _CohortLegs:
     """Resolve the legs a contract actually bills at.
 
@@ -545,7 +546,22 @@ async def _cohort_legs(
         return _CohortLegs(None, None)
     start = _tariff_card_month(entry)
     if start is None:
-        return _CohortLegs(_month_indexed_leg(current_snapshot, entry), None)
+        # No signing month named, so there is no cohort lock and every month is
+        # billed on its own card. ``month_snapshot`` is the card that was in
+        # force for the delivery month; the live path leaves it unset, where
+        # the current card IS that card.
+        #
+        # Taking the leg from the current card regardless billed a past month
+        # on today's coefficients. They move every month on these products:
+        # Engie's January card reads "2,4016 + (0,1200 x EPEXDAM)" against
+        # September's "1,8432 + (0,1177 x EPEXDAM)", so a year-to-date walk
+        # re-priced January on September's formula. Measured at about 12 EUR a
+        # year on Direct Online and up to 29 on the professional Flow, and it
+        # reached only entries that had typed an ENTSO-E key, which is to say
+        # the option offered to make past months MORE accurate made them less.
+        return _CohortLegs(
+            _month_indexed_leg(month_snapshot or current_snapshot, entry), None
+        )
     now = dt_util.now()
     this_month = date(now.year, now.month, 1)
     # Resolve the archived signing-month card first, as the base the typed
@@ -761,7 +777,14 @@ async def _effective_snapshot_for_month(
         cached_only=cached_only,
     )
     legs = await _cohort_legs(
-        hass, session, extractor, contract, region, entry, current_snapshot
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        entry,
+        current_snapshot,
+        month_snapshot=snap_m,
     )
     if legs.energy is None and legs.injection is None:
         return snap_m
