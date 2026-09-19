@@ -212,9 +212,10 @@ class _IssuesMixin:
     def _sync_impact_gap_issue(self) -> None:
         """Flag an Impact DSO mode the supplier's card cannot price.
 
-        Only Luminus' Wallonia DYNAMIC card prints the CWaPE Tarif Impact
-        block; its static, variable and TOU Wallonia cards omit it, so the
-        overlay's pic / medium / eco stay None. ``network_eur_per_kwh`` then
+        Ten Walloon contracts omit the CWaPE Tarif Impact block: Cociter
+        Tarif Variable and nine Luminus products, all of Luminus' Wallonia
+        range but the dynamic card, which is the one that does print it. On
+        those the overlay's pic / medium / eco stay None. ``network_eur_per_kwh`` then
         falls back to the bi-horaire branch while ``_routed_rate`` keeps
         routing the ENERGY side through ``dso_impact_band``. The two schedules
         agree for most of the day but not between 22:00 and 01:00, where the
