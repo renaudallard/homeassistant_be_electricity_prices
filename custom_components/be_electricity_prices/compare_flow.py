@@ -872,15 +872,22 @@ class _SweepEngine:
         hist_spots = dict(getattr(coord, "_historical_spots", {}) or {})
         hist_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
         own_ytd: float | None = None
-        if hh.current_snapshot is not None and not _needs_missing_spots(
-            hh.current_snapshot, hh.quote_entry, hist_spots
+        # Judged on the same raw card the walk below is handed, so the guard
+        # and the thing it guards agree about whether a spot is needed: the
+        # cohort splice can turn a spot-monthly leg into a variable one, which
+        # answers "no spots needed" for a walk that still needs them.
+        if hh.raw_snapshot is not None and not _needs_missing_spots(
+            hh.raw_snapshot, hh.quote_entry, hist_spots
         ):
             with contextlib.suppress(Exception):
                 own_ytd = await _compute_current_year_cost(
                     self.hass,
                     session,
                     get_extractor(current[CONF_SUPPLIER]),
-                    hh.current_snapshot,
+                    # The raw card, for the reason the other call site gives:
+                    # the cohort splice is not idempotent through the month
+                    # walk, and this figure sits beside the sensor's.
+                    hh.raw_snapshot,
                     hh.quote_entry,
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
@@ -2830,11 +2837,17 @@ class _CompareStepsMixin(OptionsFlow):
                     self.hass,
                     session,
                     current_extractor,
-                    # Already cohort-spliced, and _compute_current_year_cost
-                    # re-resolves the cohort itself from the same entry, so
-                    # this is idempotent; the DSO and tax overlays are the
-                    # raw card's either way.
-                    current_snapshot,
+                    # The RAW card, which is what the coordinator hands the
+                    # same function for the current_year_cost sensor. Handing
+                    # it the cohort-spliced one instead is not idempotent, for
+                    # all that it re-resolves the cohort itself: the splice has
+                    # already turned a spot-monthly leg into a variable one, so
+                    # the month-indexed re-price finds nothing to do and every
+                    # past month falls back to the figure its card printed,
+                    # which is the PREVIOUS month's index. The page's own row
+                    # and the sensor beside it then answered differently on all
+                    # 29 month-indexed contracts.
+                    raw_snapshot,
                     quote_entry,
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,

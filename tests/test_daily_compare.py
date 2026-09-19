@@ -186,6 +186,61 @@ def test_the_ranking_carries_the_year_to_date_and_is_not_recorded() -> None:
     assert "cheapest_annual_eur" not in PotentialSavingSensor._unrecorded_attributes
 
 
+async def test_the_own_row_year_to_date_is_priced_on_the_raw_card(
+    hass: HomeAssistant,
+) -> None:
+    """The page's own row must answer the same question as the sensor.
+
+    ``_compute_current_year_cost`` re-resolves the cohort itself, so the page
+    handed it the already-spliced card and called that idempotent. It is not:
+    the splice has turned a spot-monthly leg into a variable one by then, the
+    month-indexed re-price finds nothing to do, and every past month falls
+    back to the figure its card printed, which is the PREVIOUS month's index.
+    The coordinator hands the same function ``coord._snapshot``, so the page
+    hands it the raw card too.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    spliced = object()
+    raw = object()
+    sweep = {
+        "region": "wallonia",
+        "rows": [RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)],
+        "labels": {},
+        "household": SimpleNamespace(
+            today_local=dt_util.now().date(),
+            ytd_from=date(dt_util.now().year, 1, 1),
+            current_snapshot=spliced,
+            raw_snapshot=raw,
+            quote_entry=entry,
+            peak_kw=4.0,
+        ),
+    }
+    seen: list[object] = []
+
+    async def _capture(_hass, _session, _extractor, snapshot, *a, **k):  # type: ignore[no-untyped-def]
+        seen.append(snapshot)
+        return 708.11
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _capture,
+        ),
+        patch.object(cf, "_coordinator_rlp_weights", lambda *_a, **_k: None),
+        patch.object(cf, "_coordinator_rlp_index_weights", lambda *_a, **_k: None),
+    ):
+        await engine.fill_ytd_column(sweep, None)
+
+    assert seen, "the own row's year-to-date was never computed"
+    assert seen[0] is raw
+    assert seen[0] is not spliced
+
+
 async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
     hass: HomeAssistant,
 ) -> None:
@@ -214,6 +269,7 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
             today_local=dt_util.now().date(),
             ytd_from=date(dt_util.now().year, 1, 1),
             current_snapshot=object(),
+            raw_snapshot=object(),
             quote_entry=entry,
             peak_kw=4.0,
         ),
@@ -299,6 +355,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
         today_local=dt_util.now().date(),
         ytd_from=date(dt_util.now().year, 1, 1),
         current_snapshot=object(),
+        raw_snapshot=object(),
         quote_entry=entry,
         peak_kw=4.0,
         current_meter="dynamic",
@@ -416,6 +473,7 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
         today_local=today,
         ytd_from=ytd_window_start(entry, today),
         current_snapshot=object(),
+        raw_snapshot=object(),
         quote_entry=entry,
         peak_kw=4.0,
         current_meter="mono",
@@ -494,6 +552,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
             today_local=dt_util.now().date(),
             ytd_from=date(dt_util.now().year, 1, 1),
             current_snapshot=object(),
+            raw_snapshot=object(),
             quote_entry=entry,
             peak_kw=4.0,
         ),
