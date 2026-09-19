@@ -627,6 +627,18 @@ def _extract_wallonia_renewables(text: str) -> float:
         if not line:
             continue
         if any(line.startswith(p) for p in skip_prefixes):
+            # On the Online cards the right-hand value is not always given a
+            # line of its own: Flexy Online prints
+            # "Maandprijs: 5,11 5,11 5,11 / 3,05", where the Flemish columns,
+            # the empty-column slash and the Wallonia value share one line.
+            # Skipping the whole line there dropped the only figure we want
+            # and the scan fell through to the injection row below it, which
+            # billed a feed-in price as the levy. Take a value that follows
+            # the final column separator, and only in that position, so a
+            # date or a formula on a skipped line cannot be mistaken for it.
+            tail = re.search(r"/\s*(\d+,\d+)\s*$", line)
+            if tail:
+                return to_float(tail.group(1)) / 100.0
             continue
         if any(marker in line for marker in stop_markers):
             break

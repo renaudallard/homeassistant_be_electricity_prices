@@ -345,6 +345,30 @@ def test_flexy_renewables_survives_number_before_verbruik_layout() -> None:
     assert snap_reflow.taxes.flanders_renewables == pytest.approx(0.016)
 
 
+def test_wallonia_renewable_shares_a_line_with_the_maandprijs_row() -> None:
+    # Flexy Online prints the Wallonia figure on the SAME line as the row
+    # above it, "Maandprijs: 4,32 4,32 4,32 / 3,05", where Flexy breaks the
+    # line after the empty-column slash. The scan skips Maandprijs rows, so
+    # the shared line took the 3,05 with it and the next line accepted was
+    # the injection row, billing a feed-in price as the levy: 5,81 c€/kWh
+    # against the card's 3,05, about 97 EUR a year on 3500 kWh.
+    base = _layout(_FLEXY)
+    assert "Maandprijs: 4,32 4,32 4,32 /\n3,05" in base
+    assert parse_snapshot(
+        "ecofix_flexy", base, "wallonia", "test://f"
+    ).taxes.wallonia_renewables == pytest.approx(0.0305)
+
+    joined = base.replace(
+        "Maandprijs: 4,32 4,32 4,32 /\n3,05",
+        "Maandprijs: 4,32 4,32 4,32 / 3,05",
+        1,
+    )
+    assert joined != base, "the reflow did not change the card"
+    assert parse_snapshot(
+        "ecofix_flexy_online", joined, "wallonia", "test://fo"
+    ).taxes.wallonia_renewables == pytest.approx(0.0305)
+
+
 # ---- ORES sub-area drift detection -----------------------------------------
 
 
@@ -393,10 +417,13 @@ def test_flexy_swapped_fee_and_renewable_columns_are_rejected() -> None:
 
 
 def test_flexy_online_reads_the_flexy_card_unchanged() -> None:
-    """Flexy Online's card is laid out exactly like Flexy's, so it parses on
-    Flexy's own branch and needs no fixture of its own. What this pins is the
-    dispatch, not the product: fed one card's text both ids read it the same
-    way. The products themselves price differently, each card carrying its own
+    """Fed ONE card's text, both ids read it the same way: what this pins is
+    the dispatch, not the product. It does not say the two cards are laid out
+    alike, and they are not. Flexy Online keeps the Wallonia renewable on the
+    Maandprijs line where Flexy breaks the line before it, which is a real
+    difference this test cannot see and
+    ``test_wallonia_renewable_shares_a_line_with_the_maandprijs_row`` covers.
+    The products also price differently, each card carrying its own
     coefficients and fee."""
     text = _layout(_FLEXY)
     as_flexy = parse_snapshot("ecofix_flexy", text, "flanders")
