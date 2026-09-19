@@ -1146,10 +1146,17 @@ def _annual_bill(
     - ``"compensation"``: meter is netted 1:1 (Walloon pre-2024
       installations until 2030); surplus injection is forfeited, never paid
       out, so the year is clamped at zero. With ``export_per_kwh``, the all-in
-      rate weighted by the EXPORT shape, each side is priced on its own shape
-      and the netting matches the live sensor's per-hour one; without it the
-      annual totals are netted first and the residue takes ``per_kwh``, which
-      is what every quote did before. Fees include the prosumer charge.
+      rate weighted by the EXPORT shape, each side is priced on its own shape;
+      without it the annual totals are netted first and the residue takes
+      ``per_kwh``, which is what every quote did before. Fees include the
+      prosumer charge.
+
+      Matching the live sensor also needs ``register_weights``, and that is a
+      separate condition this used to fold into the one above: the sensor
+      forfeits each register on its own, so a quote given the export shape and
+      no weights still clamps the year once and lets one register pay off
+      another. ``test_compensation_clamps_each_register_not_the_annual_total``
+      carries the measurement.
     - ``"injection"``: consumption is billed at ``per_kwh`` AND
       injection is credited at ``injection_price``; the credit is
       subtracted from the cost and can drive the bill negative when
