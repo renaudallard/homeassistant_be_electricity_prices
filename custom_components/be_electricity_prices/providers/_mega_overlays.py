@@ -42,6 +42,7 @@ replaced.
 from __future__ import annotations
 
 import re
+from typing import Final
 
 from ..const import (
     DSO_AIEG,
@@ -321,6 +322,47 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
             to_float(supplement.group(1)) if supplement else None
         ),
     }
+
+
+# How long the card makes the household wait. The footnote is "La ristourne
+# vous est uniquement accordee apres DOUZE mois ininterrompus de consommation
+# ... et octroyee sur la premiere facture de regularisation apres cette
+# periode", and four products say "quatorze" instead: Zen Fixed and pro Zen
+# Fixed on every archived card, Smart Flex and pro Smart Flex on 30 of their
+# 54. Spelled out in words on every card seen, with digits allowed in case a
+# later one prints them.
+_RISTOURNE_MONTHS_WORDS: Final = {
+    "six": 6,
+    "douze": 12,
+    "quatorze": 14,
+    "dix-huit": 18,
+    "vingt-quatre": 24,
+}
+_RISTOURNE_MONTHS_RE = re.compile(
+    r"ristourne[^.]{0,120}?accord[ée]e?\s+apr[èe]s\s+([\w-]+)\s+mois", re.IGNORECASE
+)
+
+
+def ristourne_wait_months(text: str) -> int:
+    """How many uninterrupted months the card grants its ristourne after.
+
+    Twelve unless the card says otherwise, which is what every card said
+    until Zen Fixed and Smart Flex started saying fourteen. The wait is when
+    it is PAID; the amount stays measured over the first year, which is a
+    different sentence on the same card ("pour votre premiere annee de
+    consommation nette").
+
+    An unreadable or unknown figure reads twelve rather than failing the
+    fetch: the credit is one invoice line and the rest of the card is a
+    year's pricing.
+    """
+    match = _RISTOURNE_MONTHS_RE.search(re.sub(r"\s+", " ", text))
+    if match is None:
+        return 12
+    word = match.group(1).lower()
+    if word.isdigit():
+        return int(word)
+    return _RISTOURNE_MONTHS_WORDS.get(word, 12)
 
 
 def ristourne_requires_direct_debit(text: str) -> bool:

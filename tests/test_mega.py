@@ -1787,6 +1787,51 @@ def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
     assert _extract_federal_excise(flat) == (pytest.approx(0.04876), None)
 
 
+def test_the_ristourne_wait_is_read_off_the_card() -> None:
+    """ "apres QUATORZE mois ininterrompus" on four of the cards.
+
+    Zen Fixed and pro Zen Fixed say it on every archived card, Smart Flex and
+    pro Smart Flex on 30 of their 54, and every other card says douze. Paid
+    at a flat 365 days regardless, a December signing on Zen Fixed had its
+    320,65 EUR credited to the wrong calendar year.
+
+    Read off the card rather than listed, for the reason the direct-debit
+    condition beside it is: the same product has printed each figure in
+    different months.
+    """
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        ristourne_wait_months,
+    )
+
+    assert (
+        parse_snapshot(
+            "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+        ).welcome_credit_after_months
+        == 14
+    )
+    assert (
+        parse_snapshot(
+            "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+        ).welcome_credit_after_months
+        == 12
+    )
+
+    assert (
+        ristourne_wait_months(
+            "(*) La ristourne vous est uniquement accordee apres quatorze mois "
+            "ininterrompus de consommation au tarif Zen Fixed de Mega."
+        )
+        == 14
+    )
+    # A card that says nothing about a wait grants at the year, which is what
+    # every card said before these four.
+    assert ristourne_wait_months("no ristourne footnote here") == 12
+    # A word nothing maps to reads the year rather than failing the fetch:
+    # the credit is one invoice line and the rest of the card is a year's
+    # pricing.
+    assert ristourne_wait_months("La ristourne est accordee apres trente mois") == 12
+
+
 def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> None:
     """The dependence is parsed off the card; the flow asks off the registry.
 

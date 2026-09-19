@@ -33,6 +33,7 @@ why they must not be duplicated per caller."""
 
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -360,7 +361,28 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 # The first subscription year, counted as a flat 365 days from the start date
 # so the span and the daily rate agree: a full year then accrues exactly the
 # amount the card printed, whatever leap day it happened to span.
+#
+# The span a PRO-RATA credit accrues over, and nothing else. When an
+# ANNIVERSARY card pays out is its own stated wait, which is not always a
+# year: see ``welcome_credit_after_months``.
 _WELCOME_YEAR_DAYS = 365
+
+
+def _months_after(start: date, months: int) -> date:
+    """``start`` advanced by whole calendar months.
+
+    The card counts in months ("apres quatorze mois ininterrompus"), so this
+    does too rather than multiplying out an average one: fourteen months from
+    1 December is 1 February, not 1 February give or take two days. A day that
+    the target month does not have (the 31st of a 30-day month) lands on its
+    last, which is the only reading that keeps the result inside the month
+    the card names.
+    """
+    total = start.month - 1 + months
+    year = start.year + total // 12
+    month = total % 12 + 1
+    day = min(start.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 def first_year_net_kwh(
@@ -472,10 +494,11 @@ def _welcome_credit_eur(
     if start is None:
         return 0.0
     if snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
-        # The day the first year completes. Credited in whichever window
-        # contains it and in no other, which is what stops a figure that resets
-        # every 1 January from granting the same lump a second time.
-        anniversary = start + timedelta(days=_WELCOME_YEAR_DAYS)
+        # The day the wait the card states completes. Credited in whichever
+        # window contains it and in no other, which is what stops a figure
+        # that resets every 1 January from granting the same lump a second
+        # time.
+        anniversary = _months_after(start, snapshot.welcome_credit_after_months)
         if window_start <= anniversary <= today:
             return amount
         return 0.0

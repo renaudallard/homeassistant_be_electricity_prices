@@ -106,6 +106,7 @@ from ._mega_overlays import (
     _extract_wallonia_dsos,
     extract_ristourne,
     ristourne_requires_direct_debit,
+    ristourne_wait_months,
 )
 from ._mega_cards import (
     _FR_MONTH_NAMES,
@@ -869,8 +870,9 @@ def parse_snapshot(
 
     # Mega grants a first-year ristourne on most of its range and states it in
     # prose under the tariff table. It is granted "apres douze mois
-    # ininterrompus" and paid on the first regularisation invoice after that,
-    # which is the anniversary shape rather than a daily accrual.
+    # ininterrompus", or fourteen on Zen Fixed and Smart Flex, and paid on the
+    # first regularisation invoice after that, which is the anniversary shape
+    # rather than a daily accrual.
     ristourne = extract_ristourne(text)
     return SupplierSnapshot(
         supplier="mega",
@@ -904,6 +906,7 @@ def parse_snapshot(
         welcome_credit_cap_eur=ristourne["welcome_credit_cap_eur"],
         welcome_credit_direct_debit_eur=ristourne["welcome_credit_direct_debit_eur"],
         welcome_credit_requires_direct_debit=ristourne_requires_direct_debit(text),
+        welcome_credit_after_months=ristourne_wait_months(text),
         welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
 

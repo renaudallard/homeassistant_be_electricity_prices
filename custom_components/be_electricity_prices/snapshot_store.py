@@ -1545,7 +1545,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # alternative, where the other thirteen grant a larger one. A v67 row has the
 # euros and not the condition, so it credits 522,58 EUR at 3500 kWh to a
 # household the card grants nothing.
-_SNAPSHOT_SCHEMA_VERSION = 68
+# v69: Mega's cards carry welcome_credit_after_months. Zen Fixed and Smart
+# Flex, and their pro twins, grant the ristourne "apres QUATORZE mois
+# ininterrompus" where every other card says twelve, and it is paid on the
+# first regularisation invoice after that. A v68 row waits a year, so a
+# December signing is credited 320,65 EUR in the wrong calendar year.
+_SNAPSHOT_SCHEMA_VERSION = 69
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1643,6 +1648,7 @@ def _snapshot_to_dict(
         "welcome_credit_requires_direct_debit": (
             snap.welcome_credit_requires_direct_debit
         ),
+        "welcome_credit_after_months": snap.welcome_credit_after_months,
         "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
@@ -1723,6 +1729,7 @@ def _snapshot_from_dict(
         welcome_credit_requires_direct_debit=bool(
             data.get("welcome_credit_requires_direct_debit")
         ),
+        welcome_credit_after_months=int(data.get("welcome_credit_after_months") or 12),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 

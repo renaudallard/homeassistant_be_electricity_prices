@@ -1010,6 +1010,17 @@ class SupplierSnapshot:
     # every time the card changed. ``resolve_direct_debit`` settles it and
     # clears the flag, like every other per-entry answer here.
     welcome_credit_requires_direct_debit: bool = False
+    # How many uninterrupted months an ANNIVERSARY credit is granted after:
+    # "La ristourne vous est uniquement accordee apres DOUZE mois
+    # ininterrompus de consommation ... et octroyee sur la premiere facture de
+    # regularisation apres cette periode". Twelve unless the card says
+    # otherwise, which Mega's Zen Fixed and Smart Flex do: they say fourteen.
+    #
+    # Only WHEN it is paid. The amount stays measured over the first year,
+    # which is a different sentence on the same card, so this moves the lump
+    # into a later window without changing it. Inert on a pro-rata card,
+    # which accrues by the day and never waits.
+    welcome_credit_after_months: int = 12
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:

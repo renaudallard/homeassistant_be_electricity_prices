@@ -102,6 +102,8 @@ def make_snapshot(
     welcome_credit_eur_per_kwh: float | None = None,
     welcome_credit_cap_eur: float | None = None,
     welcome_credit_direct_debit_eur: float | None = None,
+    welcome_credit_requires_direct_debit: bool = False,
+    welcome_credit_after_months: int = 12,
 ) -> SupplierSnapshot:
     """SupplierSnapshot with sensible defaults for tests.
 
@@ -131,6 +133,8 @@ def make_snapshot(
         welcome_credit_eur_per_kwh=welcome_credit_eur_per_kwh,
         welcome_credit_cap_eur=welcome_credit_cap_eur,
         welcome_credit_direct_debit_eur=welcome_credit_direct_debit_eur,
+        welcome_credit_requires_direct_debit=welcome_credit_requires_direct_debit,
+        welcome_credit_after_months=welcome_credit_after_months,
     )
 
 

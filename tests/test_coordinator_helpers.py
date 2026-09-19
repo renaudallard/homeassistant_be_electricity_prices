@@ -8551,6 +8551,67 @@ def test_the_first_year_volume_takes_the_window_export_share() -> None:
     assert first_year_net_kwh(3500.0, 0.0, 0.0) == pytest.approx(3500.0)
 
 
+def test_an_anniversary_credit_waits_as_long_as_the_card_says() -> None:
+    """Four Mega cards say FOURTEEN months, not twelve.
+
+    "La ristourne vous est uniquement accordee apres quatorze mois
+    ininterrompus de consommation au tarif Zen Fixed de Mega et octroyee sur
+    la premiere facture de regularisation apres cette periode". Zen Fixed and
+    pro Zen Fixed say it on every archived card, Smart Flex and pro Smart
+    Flex on 30 of their 54. Paying at 365 days put a December signing's
+    320,65 EUR in the wrong calendar year, credited to a year the household
+    was not paid in and missing from the one it was.
+
+    Only WHEN, not how much: the amount is measured over the first year,
+    which is a different sentence on the same card.
+    """
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _months_after,
+        _welcome_credit_eur,
+    )
+
+    def _year(months: int, calendar: int) -> float:
+        snap = make_snapshot(
+            welcome_credit_eur=74.2,
+            welcome_credit_eur_per_kwh=0.0583,
+            welcome_credit_cap_eur=848.0,
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+            welcome_credit_after_months=months,
+        )
+        return _welcome_credit_eur(
+            snap,
+            date(2025, 12, 1),
+            date(calendar, 1, 1),
+            date(calendar, 12, 31),
+            99_999.0,
+            3500.0,
+        )
+
+    whole = 74.2 + 0.0583 * 3500
+    # Twelve months from 1 December 2025 is 1 December 2026.
+    assert _year(12, 2026) == pytest.approx(whole)
+    assert _year(12, 2027) == 0.0
+    # Fourteen is 1 February 2027, a calendar year later.
+    assert _year(14, 2026) == 0.0
+    assert _year(14, 2027) == pytest.approx(whole)
+    # Granted once and in one window, whichever wait applies.
+    assert _year(14, 2028) == 0.0
+
+    # Counted in whole months, as the card counts. A day the target month
+    # does not have lands on its last, inside the month the card names.
+    assert _months_after(date(2025, 12, 1), 14) == date(2027, 2, 1)
+    assert _months_after(date(2025, 12, 31), 14) == date(2027, 2, 28)
+    assert _months_after(date(2024, 2, 29), 12) == date(2025, 2, 28)
+    # A pro-rata card never waits, so the field cannot touch it.
+    accruing = make_snapshot(welcome_credit_eur=200.0, welcome_credit_after_months=14)
+    assert _welcome_credit_eur(
+        accruing, date(2026, 1, 1), date(2026, 1, 1), date(2026, 12, 31), 99_999.0
+    ) == pytest.approx(200.0)
+
+
 def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     """The leaf was right and the wiring was where this went wrong before.
 

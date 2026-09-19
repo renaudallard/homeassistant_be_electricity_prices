@@ -544,6 +544,16 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 The two rules travel together on one field because each card states one complete rule
 rather than two independent ones.
 
+How long an anniversary card makes the household wait is its own, and not always a year:
+Mega's Zen Fixed and Smart Flex, and their pro twins, grant the ristourne *"apres QUATORZE
+mois ininterrompus de consommation ... et octroyee sur la premiere facture de
+regularisation apres cette periode"* where every other card says douze.
+`welcome_credit_after_months` holds it, `ristourne_wait_months` (`_mega_overlays.py`) reads
+it, and `_months_after` (`fees.py`) counts in whole calendar months because the card does.
+It moves only WHEN the lump lands, never how much: the amount is measured over the first
+year, which is a different sentence on the same card. Paying at a flat 365 days put a
+December signing's 320,65 EUR in the calendar year before the one it was paid in.
+
 Mega's ristourne is not a lump. It is *"une reduction de 4.929 c EUR/kWh ... sur le prix de
 l'energie ... pour votre premiere annee de consommation nette d'electricite"* plus a flat
 cut off the standing charge, under a ceiling, so the amount depends on how much the
