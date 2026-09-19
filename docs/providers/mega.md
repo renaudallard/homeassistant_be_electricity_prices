@@ -157,6 +157,16 @@ Consequences of having no listing:
   product name the listing shows (that is what hid Zen Fixed's return), and a
   listed one must, or it is reported as new every day.
 
+The variable formula line names its index `Epex` and nothing more, but the
+card says which one in a paragraph of its own: "Il est base sur la moyenne des
+valeurs quart-horaires Day-Ahead EPEX SPOT Belgium, ponderee par le RLP (publie
+par Synergrid), sur le mois de fourniture", against "ponderee par le SPP" on
+the injection formula beside it. So the offtake leg carries `rlp_indexed` and
+the credit keeps the SPP weighting. `_rlp_indexed()` reads the clause from the
+card rather than listing products, because the SME cards drop it and settle on
+the plain arithmetic mean; reading every card as a plain mean billed 2,4 to 7,6
+percent low, about 21 EUR a year at 3500 kWh.
+
 SME Fixed and SME Flex are "Carte tarifaire PME" cards, added for the
 September 2026 month and flagged by the catalog check the day they appeared
 (issue #82). They are the only pair with no residential edition at all, and

@@ -1039,6 +1039,32 @@ def test_a_full_page_footer_between_the_anchors_still_matches() -> None:
     assert rates["injection"] == pytest.approx(0.0363)
 
 
+def test_variable_index_is_rlp_weighted_when_the_card_says_so() -> None:
+    """Mega's formula line names the index "Epex" and nothing more.
+
+    A paragraph of its own says which Epex: "Il est base sur la moyenne des
+    valeurs quart-horaires Day-Ahead EPEX SPOT Belgium, ponderee par le RLP
+    (publie par Synergrid), sur le mois de fourniture", against "ponderee par
+    le SPP" on the injection formula beside it. Resolving the coefficients
+    against the plain arithmetic mean billed 2,4 to 7,6 percent under the
+    index Mega settles at, about 21 EUR a year at 3500 kWh.
+    """
+    text = fixture_text("mega_smart_flex_w.pdf")
+    energy = parse_snapshot("mega_smart_flex", text, "wallonia", "test://m").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.rlp_indexed is True
+
+    # Read from the card, not assumed per product: Mega drops the clause on
+    # its SME cards, and those keep the plain mean.
+    without = text.replace("pondérée par le RLP", "pondérée par le XXX", 1)
+    assert without != text, "the clause was not removed"
+    plain = parse_snapshot("mega_smart_flex", without, "wallonia", "test://m").energy
+    assert isinstance(plain, VariableRates)
+    assert plain.month_indexed is True
+    assert plain.rlp_indexed is False
+
+
 def test_a_collided_value_token_is_refused_not_truncated() -> None:
     """The June 2026 Flanders cards collide two runs in the text layer.
 

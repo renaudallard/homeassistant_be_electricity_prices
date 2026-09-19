@@ -1510,7 +1510,13 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Belpex_RLP_VL for energy and the Belpex_SPP_BE for the credit. A v62 row was
 # computed from the spot cache on hourly prices, while the card defines both
 # indices on quarter-hour ones.
-_SNAPSHOT_SCHEMA_VERSION = 63
+# v64: Mega's variable cards carry rlp_indexed. The card says its monthly
+# index is "la moyenne des valeurs quart-horaires Day-Ahead EPEX SPOT Belgium,
+# ponderee par le RLP (publie par Synergrid)", where only the formula line was
+# being read and it names the index "Epex" alone. A v63 row resolves the
+# coefficients against the plain arithmetic mean, which sits 2,4 to 7,6 percent
+# below the index Mega settles at, about 21 EUR a year at 3500 kWh.
+_SNAPSHOT_SCHEMA_VERSION = 64
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

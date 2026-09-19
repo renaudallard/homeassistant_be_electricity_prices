@@ -150,6 +150,25 @@ _IMPACT_BAND_RES = {
 }
 
 
+# "ponderee par le RLP (publie par Synergrid)". Accents survive the text
+# layer inconsistently and the line wraps, so tolerate both spellings and any
+# run of whitespace.
+_RLP_CLAUSE_RE = re.compile(
+    r"pond[\u00e9e]r[\u00e9e]e?\s+par\s+le\s+RLP", re.IGNORECASE
+)
+
+
+def _rlp_indexed(text: str) -> bool:
+    """Whether the card says its monthly index is weighted by the RLP profile.
+
+    Read from the card rather than assumed per product: Mega prints the clause
+    on its variable residential and professional cards and drops it on the SME
+    ones, and a product that stops printing it should go back to the plain
+    mean without an edit here.
+    """
+    return bool(_RLP_CLAUSE_RE.search(re.sub(r"\s+", " ", text)))
+
+
 def _variable_cohort_coefficients(
     text: str, *, professional: bool = False
 ) -> tuple[float | None, float | None]:
@@ -166,12 +185,20 @@ def _variable_cohort_coefficients(
     prints "TVA N% incluse" (it prints "Hors TVA"), so the shared call baked
     6% into an ex-VAT formula and inflated a pro entry's whole energy leg.
 
-    The card names the index "Epex" and nothing more. Its INJECTION formula, a
-    paragraph away, spells out "la moyenne des valeurs quart-horaires Day-Ahead
-    EPEX SPOT Belgium, ponderee par le SPP" and writes "Epex SPP", so the
-    silence here is the card distinguishing the two rather than omitting a
-    weighting. These resolve against the plain arithmetic monthly mean, which
-    is what ``rlp_indexed`` being unset asks for.
+    The formula line names the index "Epex" and nothing more, but the card
+    does say which Epex elsewhere: a paragraph of its own reads "Le prix de
+    l'electricite variable est indexe mensuellement selon la formule
+    tarifaire. Il est base sur la moyenne des valeurs quart-horaires Day-Ahead
+    EPEX SPOT Belgium, ponderee par le RLP (publie par Synergrid), sur le mois
+    de fourniture." The INJECTION formula, a paragraph away, says "ponderee par
+    le SPP" and writes "Epex SPP". So the pair is RLP for offtake and SPP for
+    feed-in, which is what the two profiles are for, and the silence on the
+    formula line is shorthand rather than a plain mean.
+
+    Reading it as a plain mean billed 2,4 to 7,6 percent under the index Mega
+    settles at, about 21 EUR a year at 3500 kWh. :func:`_rlp_indexed` reads the
+    clause from the card, so a product that drops it, as the SME cards do,
+    keeps the plain mean.
     """
     match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
     if match is None:
@@ -347,6 +374,7 @@ def _extract_energy(
         # optional and fall back to the mono pair, so the mono coefficients
         # alone decide.
         month_indexed=f_factor is not None,
+        rlp_indexed=_rlp_indexed(text),
         formula_factor=f_factor,
         formula_base=f_base,
         formula_factor_peak=bands.get("peak", (None, None))[0],
