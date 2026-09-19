@@ -475,9 +475,12 @@ def _welcome_credit_eur(
     A card that grants its credit at the ANNIVERSARY instead (Frank Energie's
     Dynamisch Korting: *"De korting wordt toegekend via de factuur na een jaar
     ononderbroken verbruik"*) is a lump rather than an accrual, so it lands
-    whole in the window the first anniversary falls in and nothing before it.
-    No cap either, because that card states none: the two rules travel together
-    on ``welcome_credit_kind`` because each card states one complete rule.
+    whole in the window the wait completes in and nothing before it. Frank's
+    card states no ceiling and none is applied; Mega's is the same kind and
+    does state one ("plafonne a 848 EUR"), which ``welcome_credit_cap_eur``
+    carries and which binds above. The ELIGIBLE-charge cap is the one the
+    anniversary shape has no use for, because there is no running figure to
+    hold against the days it accrued over.
 
     A card may state the credit as a reduction on the ENERGY PRICE instead of
     a lump, or as both: Mega's ristourne is *"une reduction de 4.929 c EUR/kWh
