@@ -635,13 +635,23 @@ async def _cohort_legs(
     )
     energy = manual if manual is not None else archived
     if energy is None:
-        # Nothing to freeze a rate from: signed this month, a supplier with
-        # no archive, or a month the archive does not hold. That must not
-        # switch a month-indexed card onto its printed figure, which is LAST
-        # month's index by the card's own words: the coefficients the current
-        # card prints are the ones an archived card would have been re-priced
-        # from anyway, so the delivery month keeps its own mean, exactly as it
-        # does for an entry that names no cohort month at all.
+        # Nothing to freeze a rate from. Four ways, not the three this used
+        # to list: signed this month, a supplier with no archive, a month the
+        # archive does not hold, and a card that WAS retrieved but exposes no
+        # re-priceable leg (_cohort_energy_from_archived returns None for a
+        # variable card whose coefficients would not parse and for a TOU or
+        # Impact card printing resolved bands with no formula behind them, and
+        # a spot-monthly leg is dropped above without a key).
+        #
+        # The current card either way, and for the same reason in all four:
+        # this must not switch a month-indexed card onto its printed figure,
+        # which is LAST month's index by the card's own words. The
+        # coefficients the current card prints are the ones an archived card
+        # would have been re-priced from anyway, so the delivery month keeps
+        # its own mean, exactly as it does for an entry that names no cohort
+        # month at all. In the keyless case _month_indexed_leg returns None
+        # too, so the entry keeps the printed rate, which is the same answer
+        # the gate above reached.
         energy = _month_indexed_leg(current_snapshot, entry)
     if manual is not None:
         source = "hand-entered signing rate"
