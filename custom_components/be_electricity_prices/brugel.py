@@ -43,12 +43,16 @@ comes from a live fetch. The regulator publishes it, so the regulator is what
 this asks. ``docs/providers/bolt.md`` named this as the fix that would be a
 real one.
 
-Never raises. A download or parse failure logs and leaves the term unknown,
-and the caller then bills exactly what it billed before.
+Never raises, and that is load-bearing: the fetch runs inside the coordinator
+tick, whose only handler is for ``UpdateFailed``, so anything escaping here
+takes every entity on the device unavailable and turns a first refresh into
+ConfigEntryNotReady. A download or parse failure logs and leaves the term
+unknown, and the caller then bills exactly what it billed before.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -132,8 +136,14 @@ async def ensure_power_term(
             return None
         del _failed_at[year]
 
-    text = await _sheet_text(session, year)
-    pair = _parse(text) if text else None
+    try:
+        text = await _sheet_text(session, year)
+        pair = _parse(text) if text else None
+    except Exception as err:  # noqa: BLE001 - the docstring promises no raise
+        # The backoff is recorded below whatever happened, so a failure that
+        # reaches here still costs one attempt rather than one per tick.
+        _LOGGER.warning("Brugel %d tariff sheet could not be read: %s", year, err)
+        pair = None
     if pair is None:
         _failed_at[year] = dt_util.utcnow()
         return None
@@ -150,8 +160,14 @@ async def _sheet_text(session: aiohttp.ClientSession, year: int) -> str | None:
                 if r.status != 200:
                     continue
                 payload = await r.read()
-            return extract_pdf_text(payload)
-        except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
+            return await asyncio.to_thread(extract_pdf_text, payload)
+        except Exception as err:  # noqa: BLE001 - see ensure_power_term
+            # Broad on purpose. The reader raises ExtractorError for a body
+            # that is not a PDF, which is what a maintenance page or a
+            # captive portal answers with a 200, and ExtractorError is not a
+            # ValueError: catching a tuple let it escape to the coordinator
+            # tick, where the only handler is for UpdateFailed, so one bad
+            # response took every entity on the device unavailable.
             _LOGGER.debug("Brugel sheet %s unreadable: %s", url, err)
     _LOGGER.warning("Brugel %d distribution tariff sheet could not be read", year)
     return None

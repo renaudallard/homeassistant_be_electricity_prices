@@ -156,3 +156,91 @@ def test_without_the_sheet_the_card_bills_exactly_as_before() -> None:
     card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
     assert resolve_brussels_power_term(card, terms=None) is card
     assert brugel.cached_power_term(2026) is None
+
+
+class _Response:
+    """Whatever Brugel answered, as an async context manager."""
+
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self._body = body
+        self.status = status
+
+    async def read(self) -> bytes:
+        return self._body
+
+    async def text(self) -> str:
+        return self._body.decode("utf-8", "replace")
+
+    async def __aenter__(self) -> "_Response":
+        return self
+
+    async def __aexit__(self, *_a: object) -> bool:
+        return False
+
+
+class _Session:
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self._body = body
+        self._status = status
+        self.calls = 0
+
+    def get(self, *_a: object, **_k: object) -> _Response:
+        self.calls += 1
+        return _Response(self._body, self._status)
+
+
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        ("a maintenance page answered with 200", b"<html>maintenance</html>"),
+        ("a truncated download", b"%PDF-1.7 truncated"),
+        ("an empty body", b""),
+    ],
+)
+async def test_a_body_that_is_not_a_sheet_never_raises(label: str, body: bytes) -> None:
+    """The docstring promises this never raises, and it has to be true.
+
+    The reader raises ExtractorError for a body that is not a PDF, and
+    ExtractorError is not a ValueError: catching a tuple of the usual network
+    errors let it escape ``ensure_power_term`` into the coordinator tick,
+    whose only handler is for ``UpdateFailed``. One maintenance page from
+    Brugel therefore took every entity on the device unavailable, and on a
+    first refresh it became ConfigEntryNotReady and the entry never set up.
+    """
+    session = _Session(body)
+    assert await brugel.ensure_power_term(session, 2026) is None, label
+    assert brugel.cached_power_term(2026) is None
+
+
+async def test_a_failure_is_only_attempted_once() -> None:
+    """The backoff used to sit below the raise, so it was never recorded and
+    the next tick tried again: a blocked Brugel cost a download an hour
+    forever."""
+    session = _Session(b"<html>nope</html>")
+    await brugel.ensure_power_term(session, 2026)
+    assert 2026 in brugel._failed_at
+    after_first = session.calls
+    assert after_first > 0
+
+    await brugel.ensure_power_term(session, 2026)
+    assert session.calls == after_first, "the backoff did not hold"
+
+
+async def test_a_good_sheet_is_fetched_once_and_kept() -> None:
+    """A success is cached for the life of the process: the figure is annual."""
+    import pathlib as _pathlib
+
+    sheet = _pathlib.Path("tmp/audit_2026_09_19/Z/brugel_2026.pdf")
+    if not sheet.exists():
+        pytest.skip("the archived Brugel sheet is not on this machine")
+    session = _Session(sheet.read_bytes())
+    assert await brugel.ensure_power_term(session, 2026) == (
+        pytest.approx(47.24),
+        pytest.approx(94.48),
+    )
+    after_first = session.calls
+    assert await brugel.ensure_power_term(session, 2026) == (
+        pytest.approx(47.24),
+        pytest.approx(94.48),
+    )
+    assert session.calls == after_first, "a cached year was fetched twice"
