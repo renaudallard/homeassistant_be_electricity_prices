@@ -1008,14 +1008,18 @@ def test_a_page_break_in_the_realized_sentence_does_not_kill_the_block() -> None
 
 
 def test_a_full_page_footer_between_the_anchors_still_matches() -> None:
-    """The real July 2026 Walloon Smart card, whose footer runs to 543 chars.
+    """The real Walloon Smart Flex card published in July 2026, whose footer
+    runs to 543 characters.
 
     The spliced footer is not just a few colons: it carries the energy-mix
     paragraph, the publication line, the page number and the whole company
-    address block. On this card and on the January one it puts 543 and 547
-    characters between the two anchors, past the 400 the gap used to allow,
-    so the override no-opped and July was billed on the 12-month forecast
-    instead of June's settled 17,99 c€/kWh, about 11% low for the month.
+    address block. On this card it puts 543 characters between the two
+    anchors, past the 400 the gap used to allow, so the override no-opped and
+    the month was billed on the 12-month forecast, 0,1593 against the 17,99
+    c EUR/kWh June actually settled at, 11,5% low.
+
+    One card of the 149 carrying both anchors runs past 400, and it is this
+    one; the next longest gap is 190.
     """
     from custom_components.be_electricity_prices.providers.mega import _realized_rates
 

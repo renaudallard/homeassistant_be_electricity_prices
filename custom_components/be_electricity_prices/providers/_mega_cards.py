@@ -456,13 +456,14 @@ def _realized_rates(text: str) -> dict[str, float]:
     # simulation table while its neighbours use the realized rates. Both
     # anchors are specific enough that a non-greedy bounded gap is safe.
     #
-    # The bound was 400, which two Walloon Smart cards (January and July
-    # 2026) overran: their spliced footer puts 547 and 543 characters between
-    # the anchors, so both silently fell back to the simulation table and
-    # billed July on a forecast instead of June's settled 17,99 c€/kWh. The
-    # measured worst case is 547, so 1200 leaves better than twice the
-    # headroom while staying far short of the next occurrence of either
-    # anchor on any archived card.
+    # The bound was 400, which the Walloon Smart Flex card published in July
+    # 2026 overran: its spliced footer puts 543 characters between the
+    # anchors, so it silently fell back to the simulation table and billed
+    # June on a forecast, 0,1593 against the 0,17990 that month settled at,
+    # 11,5% low. That card is the only one of the 149 carrying both anchors
+    # that runs past 400, and the next longest gap is 190, so 1200 leaves
+    # better than twice the headroom while staying far short of the next
+    # occurrence of either anchor on any archived card.
     block = re.search(
         r"derniers prix constat.{0,1200}?sont les suivants \(c€/kWh\)\s*:(.{0,400})",
         text,
