@@ -1002,6 +1002,7 @@ async def _backfill_cost_sensor(
                 ctx.annual_kwh,
                 running_consumption_kwh,
                 running_consumption_kwh - running_net_kwh,
+                compensation=is_compensation,
             ),
         )
         state = round(displayed_energy + running_fees - credit, 4)

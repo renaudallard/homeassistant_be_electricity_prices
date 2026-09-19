@@ -1257,6 +1257,7 @@ def _ytd_welcome_credit(
     injection_kwh: float = 0.0,
     *,
     annual_kwh: float,
+    regime: str,
     window_start: date,
     fee_proration: float,
 ) -> float:
@@ -1301,15 +1302,20 @@ def _ytd_welcome_credit(
         * fee_proration
         + consumption_kwh * renewables_eur_per_kwh(snapshot.taxes, region)
     )
-    # Net of export: the card measures its per-kWh term on
-    # "consommation nette d'electricite".
+    # "consommation nette d'electricite", which is the volume the energy
+    # price was charged on: netted only where the meter nets it.
     return _welcome_credit_eur(
         credited,
         start,
         window_start,
         when_now.date(),
         eligible,
-        first_year_net_kwh(annual_kwh, consumption_kwh, injection_kwh),
+        first_year_net_kwh(
+            annual_kwh,
+            consumption_kwh,
+            injection_kwh,
+            compensation=regime == SOLAR_REGIME_COMPENSATION,
+        ),
     )
 
 

@@ -1127,6 +1127,7 @@ async def _compute_current_year_cost(
                     entry_annual_kwh(entry),
                     stats.get("consumption_ytd_kwh", 0.0),
                     stats.get("injection_ytd_kwh", 0.0),
+                    compensation=regime == SOLAR_REGIME_COMPENSATION,
                 ),
             )
         stats["welcome_credit_eur"] = credit

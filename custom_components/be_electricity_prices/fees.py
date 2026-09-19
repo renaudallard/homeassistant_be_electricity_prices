@@ -389,6 +389,8 @@ def first_year_net_kwh(
     annual_kwh: float,
     window_consumption_kwh: float,
     window_injection_kwh: float,
+    *,
+    compensation: bool,
 ) -> float:
     """The first contract year's NET consumption, in kWh.
 
@@ -413,12 +415,22 @@ def first_year_net_kwh(
     volume tier and the compare page, and annualising the window instead
     would multiply up whatever season it happened to cover.
 
-    The export share is the window's own, because nothing else measures one:
-    a site that put back a fifth of what it drew is credited on four fifths
-    of its year. A window with no consumption in it has no share to take, so
-    the gross year stands.
+    "Nette" is about the volume the energy price was actually charged on,
+    which is what a reduction "sur le prix de l'energie" can come off, and
+    only the COMPENSATION regime bills a netted one: the Walloon reversing
+    meter turns back, so the register that is billed already carries the
+    export. On the injection regime the household is billed its gross draw
+    and credited for what it put back on a separate line, and on no-solar
+    there is nothing to net. Taking the export off on all three credited a
+    3500 kWh site exporting 2500 on 1000 kWh of ristourne, 123,23 EUR less
+    than the card grants it.
+
+    Under compensation the export share is the window's own, because nothing
+    else measures one: a site that put back a fifth of what it drew is
+    credited on four fifths of its year. A window with no consumption in it
+    has no share to take, so the gross year stands.
     """
-    if window_consumption_kwh <= 0.0:
+    if not compensation or window_consumption_kwh <= 0.0:
         return max(annual_kwh, 0.0)
     net_share = (
         max(window_consumption_kwh - window_injection_kwh, 0.0) / window_consumption_kwh

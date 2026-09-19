@@ -557,8 +557,14 @@ December signing's 320,65 EUR in the calendar year before the one it was paid in
 Mega's ristourne is not a lump. It is *"une reduction de 4.929 c EUR/kWh ... sur le prix de
 l'energie ... pour votre premiere annee de consommation nette d'electricite"* plus a flat
 cut off the standing charge, under a ceiling, so the amount depends on how much the
-household uses. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on
-NET consumption, what was drawn less what was put back, because the card says *"nette"*.
+household uses. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on the volume the
+energy price was actually charged on, because the card says *"nette"* and a reduction
+*"sur le prix de l'energie"* can only come off what that price billed. Only the
+compensation regime bills a netted register: the Walloon reversing meter turns back, so
+what is billed already carries the export. The injection regime bills the gross draw and
+credits the export on a separate line, and no-solar has nothing to net, so on those two
+the export never comes off. Taking it off on all three credited a 3500 kWh site exporting
+2500 on 1000 kWh of ristourne, 123,23 EUR under what the card grants it.
 
 That volume is the first contract YEAR's, not the window being shown. `first_year_net_kwh`
 (`fees.py`) resolves it from the entry's own yearly figure (`entry_annual_kwh`, the same

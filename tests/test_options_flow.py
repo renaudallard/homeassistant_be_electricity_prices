@@ -7071,6 +7071,7 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
         now,
         *args,
         annual_kwh=3500.0,
+        regime="none",
         window_start=date(2026, 1, 1),
         fee_proration=0.71,
     )
@@ -7087,6 +7088,7 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
         now,
         *args,
         annual_kwh=3500.0,
+        regime="none",
         window_start=date(2026, 1, 1),
         fee_proration=0.71,
     )

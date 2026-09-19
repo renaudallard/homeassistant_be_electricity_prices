@@ -8514,7 +8514,7 @@ def test_a_per_kwh_welcome_credit_rides_the_first_year_not_the_window() -> None:
         window_start,
         today,
         10_000.0,
-        first_year_net_kwh(year, window_kwh, 0.0),
+        first_year_net_kwh(year, window_kwh, 0.0, compensation=False),
     )
     assert on_the_year == pytest.approx(68.9 + 0.0636 * 3500)
     # The window basis is what it used to pass, and it is short by 177,47.
@@ -8532,23 +8532,44 @@ def test_a_per_kwh_welcome_credit_rides_the_first_year_not_the_window() -> None:
         window_start,
         today,
         99_999.0,
-        first_year_net_kwh(big, big * 74 / 365, 0.0),
+        first_year_net_kwh(big, big * 74 / 365, 0.0, compensation=False),
     ) == pytest.approx(848.0)
 
 
-def test_the_first_year_volume_takes_the_window_export_share() -> None:
-    """ "consommation NETTE": a site is credited on what it drew less what it
-    put back, and the only export share anything measures is the window's."""
+def test_the_first_year_volume_nets_only_where_the_meter_nets() -> None:
+    """ "consommation nette" is the volume the energy price was charged on.
+
+    Only the compensation regime bills a netted register: the Walloon
+    reversing meter turns back, so what is billed already carries the export.
+    On the injection regime the household is billed its gross draw and
+    credited for what it put back on a separate line, and on no-solar there
+    is nothing to net. Netting on all three credited a 3500 kWh site
+    exporting 2500 on 1000 kWh of ristourne, 123,23 EUR under the card.
+    """
     from custom_components.be_electricity_prices.fees import first_year_net_kwh
 
+    # Compensation, a fifth put back over the window: four fifths of the year.
+    assert first_year_net_kwh(
+        3500.0, 1000.0, 200.0, compensation=True
+    ) == pytest.approx(2800.0)
     # No export: the yearly volume stands as it is.
-    assert first_year_net_kwh(3500.0, 900.0, 0.0) == pytest.approx(3500.0)
-    # A fifth put back over the window scales the year by four fifths.
-    assert first_year_net_kwh(3500.0, 1000.0, 200.0) == pytest.approx(2800.0)
+    assert first_year_net_kwh(3500.0, 900.0, 0.0, compensation=True) == pytest.approx(
+        3500.0
+    )
     # Exporting more than it drew floors at zero rather than going negative.
-    assert first_year_net_kwh(3500.0, 500.0, 900.0) == 0.0
+    assert first_year_net_kwh(3500.0, 500.0, 900.0, compensation=True) == 0.0
     # A window with nothing in it has no share to take, so the year stands.
-    assert first_year_net_kwh(3500.0, 0.0, 0.0) == pytest.approx(3500.0)
+    assert first_year_net_kwh(3500.0, 0.0, 0.0, compensation=True) == pytest.approx(
+        3500.0
+    )
+
+    # Injection and no-solar bill the gross draw, so the export never comes
+    # off however much of it there is.
+    assert first_year_net_kwh(
+        3500.0, 1000.0, 800.0, compensation=False
+    ) == pytest.approx(3500.0)
+    # What the gate is worth on Online Flex, 4,929 c EUR/kWh over 2500 kWh.
+    assert 0.04929 * (3500.0 - 1000.0) == pytest.approx(123.23, abs=0.01)
 
 
 def test_an_anniversary_credit_waits_as_long_as_the_card_says() -> None:
