@@ -556,8 +556,11 @@ December signing's 320,65 EUR in the calendar year before the one it was paid in
 
 Mega's ristourne is not a lump. It is *"une reduction de 4.929 c EUR/kWh ... sur le prix de
 l'energie ... pour votre premiere annee de consommation nette d'electricite"* plus a flat
-cut off the standing charge, under a ceiling, so the amount depends on how much the
-household uses. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on the volume the
+cut off the standing charge, so the amount depends on how much the household uses. Most
+cards put a ceiling over the total and some do not: of the 371 archived Mega cards granting
+a credit, 74 state none at all (every Off-peak Fixed, Off-peak Flex, Off-peak Impact and pro
+Off-peak Fixed, and three pro Cosy Fixed), and those are billed uncapped because that is what
+their card says. `welcome_credit_eur_per_kwh` carries the per-kWh half and is measured on the volume the
 energy price was actually charged on, because the card says *"nette"* and a reduction
 *"sur le prix de l'energie"* can only come off what that price billed. Only the
 compensation regime bills a netted register: the Walloon reversing meter turns back, so
