@@ -707,29 +707,33 @@ _IMPACT_CAPABLE_METERS: frozenset[str] = frozenset({METER_BI, METER_DYNAMIC})
 
 
 def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Wallonia-only step: which DSO-side billing mode applies?"""
-    # Only when the meter is KNOWN and cannot register the bands. A caller
-    # with no meter answer yet keeps the full list: the step runs after the
-    # meter one in the flow, but the schema is also built for a contract
-    # alone, and dropping Impact there would defeat the card-driven
-    # pre-selection below.
-    meter = defaults.get(CONF_METER)
-    modes = [
-        mode
-        for mode in DSO_TARIFF_MODES
-        if mode != DSO_MODE_IMPACT or meter is None or meter in _IMPACT_CAPABLE_METERS
-    ]
+    """Wallonia-only step: which DSO-side billing mode applies?
+
+    Every mode is offered whatever the meter step answered, and a mono meter
+    beside Impact is not the contradiction it looks like: the two describe
+    different sides of the bill, the meter being the SUPPLIER's register
+    configuration and the mode the DSO's. TotalEnergies Impact is exactly that
+    pair, and is the reason the pre-selection below exists: the product
+    registers as ``variable``, so ``_meter_schema`` offers all four meters and
+    defaults to mono, while its card prints only the CWaPE bands.
+
+    Filtering Impact out for a mono meter was tried and reverted. It removed
+    the mode from the one product the pre-selection is for, landing a TE
+    Impact entry on bi_horaire, which that card costs EUR 113 a year at
+    3500 kWh, the figure the comment above measures. The products that truly
+    cannot take another meter, Mega Off-peak Impact and OCTA+ Fixed Impact,
+    register as ``tou_impact`` and ``_meter_schema`` already offers them the
+    dynamic meter alone.
+    """
     current = defaults.get(CONF_DSO_TARIFF_MODE)
     if not current and defaults.get(CONF_CONTRACT) in _IMPACT_DEFAULT_CONTRACTS:
         current = DSO_MODE_IMPACT
     current = current or DSO_MODE_BI_HORAIRE
-    if current not in modes:
-        current = DSO_MODE_BI_HORAIRE
     return vol.Schema(
         {
             vol.Required(CONF_DSO_TARIFF_MODE, default=current): SelectSelector(
                 SelectSelectorConfig(
-                    options=modes,
+                    options=list(DSO_TARIFF_MODES),
                     mode=SelectSelectorMode.LIST,
                     translation_key="dso_tariff_mode",
                 )

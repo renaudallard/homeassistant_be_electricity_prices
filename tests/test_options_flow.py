@@ -2758,16 +2758,23 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 1e-6
 
 
-def test_impact_mode_is_not_offered_to_a_meter_that_cannot_register_it() -> None:
-    """Tarif Impact bills the three CWaPE bands, which only an SMR3 meter has.
+def test_impact_stays_on_offer_for_a_mono_meter() -> None:
+    """A mono meter beside Impact is not a contradiction.
 
-    The step offered all three modes whatever the meter answered, so a
-    household could pick mono and then Impact, a pair no Walloon connection
-    has. The network leg then banded the day against a flat single rate and
-    the Walloon terme fixe dropped with it, about 61 EUR a year under-billed
-    on 3500 kWh.
+    The meter step answers for the SUPPLIER's register configuration and the
+    mode for the DSO's. TotalEnergies Impact is exactly that pair: it
+    registers as ``variable``, so the meter step offers all four and defaults
+    to mono, while its card prints only the CWaPE bands, which is why the
+    mode step pre-selects Impact for it.
+
+    Filtering Impact out for a mono meter removed the mode from the one
+    product that pre-selection is for, landing the entry on bi_horaire and
+    costing EUR 113 a year at 3500 kWh on that card. The products that truly
+    cannot take another meter register as ``tou_impact``, and the meter step
+    offers those the dynamic meter alone, so the mode never needs to.
     """
     from custom_components.be_electricity_prices.const import (
+        CONF_CONTRACT,
         CONF_DSO_TARIFF_MODE,
         CONF_METER,
         DSO_MODE_BI_HORAIRE,
@@ -2775,28 +2782,45 @@ def test_impact_mode_is_not_offered_to_a_meter_that_cannot_register_it() -> None
     )
     from custom_components.be_electricity_prices.flow_schemas import (
         _dso_tariff_mode_schema,
+        _meter_schema,
     )
 
-    def _options(meter: str) -> list[str]:
-        schema = _dso_tariff_mode_schema({CONF_METER: meter})
+    def _mode(defaults: dict[str, object]) -> tuple[list[str], str]:
+        schema = _dso_tariff_mode_schema(defaults)
         for key, value in schema.schema.items():
             if str(key) == CONF_DSO_TARIFF_MODE:
-                return list(value.config["options"])
+                return list(value.config["options"]), key.default()
         raise AssertionError("the mode key is missing from the schema")
 
-    assert DSO_MODE_IMPACT in _options("dynamic")
-    assert DSO_MODE_IMPACT in _options("bi")
-    assert DSO_MODE_IMPACT not in _options("mono")
-    assert DSO_MODE_IMPACT not in _options("exclusive_night")
+    # TE Impact: the meter step really does hand this step a mono answer...
+    meters = _meter_schema("totalenergies", "totalenergies_impact", {})
+    for key, value in meters.schema.items():
+        if str(key) == CONF_METER:
+            assert key.default() == "mono"
+            assert "mono" in value.config["options"]
 
-    # A mode carried over from an earlier answer cannot survive as the
-    # default on a meter that can no longer register it.
-    schema = _dso_tariff_mode_schema(
-        {CONF_METER: "mono", CONF_DSO_TARIFF_MODE: DSO_MODE_IMPACT}
+    # ...and Impact has to survive it, pre-selected.
+    options, default = _mode(
+        {CONF_CONTRACT: "totalenergies_impact", CONF_METER: "mono"}
     )
-    for key in schema.schema:
-        if str(key) == CONF_DSO_TARIFF_MODE:
-            assert key.default() == DSO_MODE_BI_HORAIRE
+    assert DSO_MODE_IMPACT in options
+    assert default == DSO_MODE_IMPACT
+
+    # An ordinary Walloon card still opens on the standard configuration.
+    options, default = _mode({CONF_CONTRACT: "eneco_power_flex", CONF_METER: "mono"})
+    assert DSO_MODE_IMPACT in options
+    assert default == DSO_MODE_BI_HORAIRE
+
+    # The products that cannot take another meter are gated at the METER
+    # step instead, which is where that belongs.
+    for supplier, contract in (
+        ("mega", "mega_offpeak_impact_var"),
+        ("octaplus", "octaplus_fixed_impact"),
+    ):
+        schema = _meter_schema(supplier, contract, {})
+        for key, value in schema.schema.items():
+            if str(key) == CONF_METER:
+                assert list(value.config["options"]) == ["dynamic"]
 
 
 def test_compensation_clamps_each_register_not_the_annual_total() -> None:
