@@ -1176,6 +1176,19 @@ context):
   different number whenever the tariff moves within the year. Without the
   profile loaded the slices are priced as metered, still clamped per register.
   The coordinator fetches the profile for every compensation entry.
+
+  The compare page and the projection reach the same clamp through
+  `_annual_bill` (`compare_quote.py`), and have to divide the year into the
+  SAME registers or they forfeit a different quantity than the meter does.
+  `_register_weights` therefore reads its registers off the meter and the DSO
+  mode exactly as `_register_for` does, and the clamp fires on how many came
+  back rather than on a meter list of its own. Asking the meter instead left
+  a mono entry under Tarif Impact (TotalEnergies Impact is that pair, and the
+  config flow offers it deliberately) with no per-register clamp at all, so a
+  midday band running backwards paid off the evening one and a matched
+  3500 kWh install billed no energy; a bi-hourly one split its year day and
+  night where the engine split it into the three CWaPE bands, 85,79 EUR out
+  on the same install.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
   from `_historical_injection_rate` (`injection.py`).
 

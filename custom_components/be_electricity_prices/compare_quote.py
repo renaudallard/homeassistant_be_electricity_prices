@@ -60,8 +60,11 @@ from .const import (
     MEASURED_FULL_YEAR_DAYS,
     MEASURED_MIN_DAYS,
     MEASURED_YEAR_GAP_DAYS,
+    DSO_MODE_BI_HORAIRE,
+    DSO_MODE_IMPACT,
     METER_BI,
     METER_DYNAMIC,
+    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -156,13 +159,42 @@ def _slot_weights(
     return weighted
 
 
-@lru_cache(maxsize=8)
-def _register_hours(region: str, year: int) -> tuple[dict[int, float], ...]:
-    """Per meter register (day, night), how many hours of ``year`` each clock
-    hour spends in it on the region's own day/night schedule, counted off
-    ``is_offpeak`` the way :func:`_tou_slot_hours` counts the TOU slots."""
-    from .pricing import is_offpeak
+@lru_cache(maxsize=16)
+def _register_hours(
+    region: str, year: int, meter: str, dso_mode: str
+) -> tuple[dict[int, float], ...]:
+    """Per meter register, how many hours of ``year`` each clock hour spends
+    in it, counted off the same rule the engine bills by.
 
+    The registers are whatever :func:`spot_stats._register_for` would put an
+    hour in, and that is the point: the clamp below forfeits a register that
+    ends the year negative, so it has to divide the year the way the meter
+    does. A dedicated night circuit is one register, Tarif Impact is the
+    three CWaPE bands whatever meter the supplier registers (an SMR3 meter
+    counts per band, and a mono meter beside Impact is a real pair, which is
+    what TotalEnergies Impact is), a bi-hourly or digital meter is day and
+    night, and anything else is one.
+
+    Restating the meter gate here instead let a mono Impact entry take the
+    annual clamp, which lets one band pay off another, and a bi-hourly one
+    split its year day/night while the engine split it three ways.
+    """
+    from .pricing import dso_impact_band, is_offpeak
+
+    days = float((date(year + 1, 1, 1) - date(year, 1, 1)).days)
+    if meter != METER_EXCLUSIVE_NIGHT and dso_mode == DSO_MODE_IMPACT:
+        # The CWaPE bands are the same every day of the week, so each clock
+        # hour belongs to exactly one and carries the whole year of it.
+        bands: dict[str, dict[int, float]] = {
+            band: dict.fromkeys(range(24), 0.0) for band in ("pic", "medium", "eco")
+        }
+        for hour in range(24):
+            bands[dso_impact_band(datetime.combine(date(year, 1, 1), time(hour)))][
+                hour
+            ] = days
+        return tuple(bands.values())
+    if meter not in (METER_BI, METER_DYNAMIC):
+        return (dict.fromkeys(range(24), days),)
     day: dict[int, float] = dict.fromkeys(range(24), 0.0)
     night: dict[int, float] = dict.fromkeys(range(24), 0.0)
     when = datetime.combine(date(year, 1, 1), time())
@@ -174,14 +206,18 @@ def _register_hours(region: str, year: int) -> tuple[dict[int, float], ...]:
 
 
 def _register_weights(
-    region: str, hour_weights: dict[int, float] | None = None
-) -> tuple[float, float]:
-    """Weight of the day and night registers, the way
-    :func:`_tou_slot_weights` weights the TOU slots."""
-    day, night = _slot_weights(
-        _register_hours(region, dt_util.now().year), hour_weights
+    region: str,
+    hour_weights: dict[int, float] | None = None,
+    *,
+    meter: str = METER_BI,
+    dso_mode: str = DSO_MODE_BI_HORAIRE,
+) -> tuple[float, ...]:
+    """Weight of each meter register, the way :func:`_tou_slot_weights`
+    weights the TOU slots. Two on a bi-hourly meter, three under Tarif
+    Impact, one otherwise."""
+    return _slot_weights(
+        _register_hours(region, dt_util.now().year, meter, dso_mode), hour_weights
     )
-    return day, night
 
 
 def _hour_weighted_mean(
@@ -379,8 +415,14 @@ def _compare_injection_credit(
         if meter not in (METER_BI, METER_DYNAMIC):
             # One register: the card's own rate for it, as the live path.
             return _floor_injection(inj.current, inj)
+        # The CARD's own day and night injection rates, which follow the
+        # day/night schedule whatever the DSO mode is, so this asks for the
+        # two registers by name rather than taking whatever the meter has.
         wd, wn = _register_weights(
-            entry.data.get(CONF_REGION, REGION_FLANDERS), inj_hour_weights
+            entry.data.get(CONF_REGION, REGION_FLANDERS),
+            inj_hour_weights,
+            meter=METER_BI,
+            dso_mode=DSO_MODE_BI_HORAIRE,
         )
         return float((inj.peak * wd + inj.offpeak * wn) / (wd + wn))
     if (
@@ -1074,7 +1116,7 @@ def _annual_bill(
     meter: Any = METER_MONO,
     include_capacity: bool = True,
     welcome_credit_eur: float = 0.0,
-    register_weights: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    register_weights: tuple[tuple[float, ...], tuple[float, ...]] | None = None,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
@@ -1177,7 +1219,11 @@ def _annual_bill(
         # are normalised here so the caller can pass the helper's output
         # straight through. Without them, or on a single-register meter, the
         # two clamps are the same sum and the annual one stands.
-        if register_weights is not None and meter in (METER_BI, METER_DYNAMIC):
+        # Whatever registers the meter has, which _register_weights now
+        # decides the same way _register_for does. Gating on the meter here
+        # instead let a mono Impact entry (TotalEnergies Impact is one) take
+        # the annual clamp, where a band running backwards pays off another.
+        if register_weights is not None and len(register_weights[0]) > 1:
             cons_w, inj_w = register_weights
             cons_total = sum(cons_w)
             inj_total = sum(inj_w)

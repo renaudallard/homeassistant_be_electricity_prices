@@ -341,8 +341,8 @@ async def _compute_projected_year_cost(
         from .compare_quote import _register_weights
 
         register_weights = (
-            _register_weights(region, hour_weights),
-            _register_weights(region, inj_hour_weights),
+            _register_weights(region, hour_weights, meter=meter, dso_mode=dso_mode),
+            _register_weights(region, inj_hour_weights, meter=meter, dso_mode=dso_mode),
         )
     projected = _annual_bill(
         priced,

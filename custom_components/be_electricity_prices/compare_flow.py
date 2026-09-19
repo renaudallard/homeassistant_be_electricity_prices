@@ -1742,8 +1742,12 @@ class _SweepEngine:
             hour_weights=hour_weights,
             inj_hour_weights=inj_hour_weights,
             register_weights=(
-                _register_weights(region, hour_weights),
-                _register_weights(region, inj_hour_weights),
+                _register_weights(
+                    region, hour_weights, meter=current_meter, dso_mode=dso_mode
+                ),
+                _register_weights(
+                    region, inj_hour_weights, meter=current_meter, dso_mode=dso_mode
+                ),
             ),
             current_per_kwh=current_per_kwh,
             current_export_per_kwh=current_export_per_kwh,

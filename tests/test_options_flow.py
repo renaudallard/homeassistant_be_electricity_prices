@@ -2874,6 +2874,16 @@ def test_compensation_clamps_each_register_not_the_annual_total() -> None:
     assert per_register > single
 
     # A single-register meter has nothing to split, so both clamps agree.
+    # Built the way the callers build them, because that is what decides how
+    # many registers there are: a mono meter on the day/night schedule has
+    # one, so the pair the clamp iterates is a pair of one.
+    from custom_components.be_electricity_prices.compare_quote import _register_weights
+
+    mono_weights = (
+        _register_weights("flanders", None, meter="mono"),
+        _register_weights("flanders", None, meter="mono"),
+    )
+    assert len(mono_weights[0]) == 1
     assert _annual_bill(
         snap,
         entry,
@@ -2884,8 +2894,82 @@ def test_compensation_clamps_each_register_not_the_annual_total() -> None:
         export_per_kwh=0.30,
         meter="mono",
         include_capacity=False,
-        register_weights=weights,  # type: ignore[arg-type]
+        register_weights=mono_weights,
     ) == pytest.approx(single)
+
+
+def test_tarif_impact_clamps_the_three_cwape_bands_the_engine_bills() -> None:
+    """Under Impact the meter counts per CWaPE band, whatever the supplier
+    registers.
+
+    ``spot_stats._register_for`` puts an hour in ``pic`` / ``medium`` / ``eco``
+    whenever the DSO mode is Impact, so that is what nets and what is
+    forfeited. The estimate asked the METER instead: a mono meter beside
+    Impact, which is exactly what TotalEnergies Impact is, got no per-register
+    clamp at all and let a midday band running backwards pay off the evening
+    one, and a bi-hourly one split its year day/night where the engine split
+    it three ways.
+
+    Measured on a matched 3500 kWh install with an evening-heavy draw and a
+    midday export: the mono entry forfeited its whole energy term, and the
+    bi-hourly one was 85,79 EUR out.
+    """
+    from custom_components.be_electricity_prices.compare_quote import (
+        _annual_bill,
+        _register_weights,
+    )
+    from custom_components.be_electricity_prices.spot_stats import _register_for
+    from tests import make_entry, make_snapshot
+
+    cons_shape = {h: (2.0 if 17 <= h < 22 else 1.0) for h in range(24)}
+    inj_shape = {h: (4.0 if 11 <= h < 17 else 0.2) for h in range(24)}
+
+    # The registers have to be the ones the engine bills, or the clamp
+    # forfeits a different quantity than the meter does.
+    for meter in ("mono", "bi", "dynamic", "exclusive_night"):
+        for mode in ("impact", "bi_horaire", "simple"):
+            engine = {
+                _register_for(datetime(2026, 1, 1, hour), meter, mode, "wallonia")
+                for hour in range(24)
+            }
+            weights = _register_weights("wallonia", None, meter=meter, dso_mode=mode)
+            assert len(weights) == len(engine), (meter, mode, engine, weights)
+
+    snap = make_snapshot()
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        solar_regime="compensation",
+        dso_tariff_mode="impact",
+    )
+
+    def _bill(meter: str, mode: str) -> float:
+        return _annual_bill(
+            snap,
+            entry,
+            0.0,
+            0.30,
+            3500.0,
+            3500.0,
+            export_per_kwh=0.30,
+            meter=meter,
+            include_capacity=False,
+            register_weights=(
+                _register_weights("wallonia", cons_shape, meter=meter, dso_mode=mode),
+                _register_weights("wallonia", inj_shape, meter=meter, dso_mode=mode),
+            ),
+        )
+
+    banded = _bill("mono", "impact")
+    # Same three bands whatever the supplier registers.
+    assert _bill("bi", "impact") == pytest.approx(banded)
+    assert _bill("dynamic", "impact") == pytest.approx(banded)
+    # A mono entry used to get one register, so nothing was ever forfeited
+    # and a matched install billed no energy at all.
+    assert _bill("mono", "bi_horaire") == pytest.approx(0.0)
+    assert banded > 0.0
+    # And a bi-hourly one split the year the wrong way.
+    assert banded - _bill("bi", "bi_horaire") == pytest.approx(85.79, abs=0.01)
 
 
 def test_compare_ytd_prorates_capacity_per_month_like_the_live_sensor() -> None:
