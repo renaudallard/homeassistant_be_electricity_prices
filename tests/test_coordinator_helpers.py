@@ -5994,6 +5994,50 @@ async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     assert live.energy.factor == pytest.approx(1.177)
 
 
+def test_the_month_is_priced_on_its_own_card_at_the_only_site_that_can() -> None:
+    """``_cohort_legs`` honours ``month_snapshot``; something has to pass it.
+
+    ``test_a_past_month_is_re_priced_on_its_own_card_not_todays`` calls
+    ``_cohort_legs`` directly and proves the parameter is read.
+    ``_effective_snapshot_for_month`` is its only caller, and reverting that
+    line to ``month_snapshot=None`` left the whole cohort slice green: the
+    half nobody was billing on ships untested, which is the half the users
+    have. Held on the source, because the wiring is the whole claim.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import cohort
+
+    source = inspect.getsource(cohort._effective_snapshot_for_month)
+    assert "month_snapshot=snap_m" in source, (
+        "_effective_snapshot_for_month must hand _cohort_legs the month's own "
+        "card, or every past month re-prices on today's"
+    )
+
+
+def test_the_one_to_one_page_prices_the_raw_card_not_the_spliced_one() -> None:
+    """The 1:1 compare page walks the same engine the sensor does.
+
+    Handing it the cohort-spliced card is not idempotent: the splice has
+    already turned a spot-monthly leg into a variable one, so the
+    month-indexed re-price finds nothing to do and every past month falls
+    back to the figure its card printed, which is the previous month's index.
+    The ranking page's half of that fix is covered by a behavioural test; the
+    1:1 page's site could be reverted to ``current_snapshot`` with nothing
+    failing, and it is the one the commit is named after.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import compare_flow
+
+    source = inspect.getsource(compare_flow)
+    site = source.index("The RAW card, which is what the coordinator hands the")
+    # The snapshot argument sits between that comment and the entry beside it.
+    argument = source[site : source.index("quote_entry,", site)]
+    assert "raw_snapshot," in argument, "the 1:1 page stopped passing the raw card"
+    assert "current_snapshot," not in argument
+
+
 async def test_cohort_leaves_a_printed_only_feed_in_alone(
     hass: HomeAssistant, freezer: Any
 ) -> None:
