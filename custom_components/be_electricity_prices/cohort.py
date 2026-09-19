@@ -296,6 +296,13 @@ def _cohort_energy_from_archived(
     coefficients against the CURRENT month's mean (a SpotMonthlyRates leg)
     rather than freeze the archived card's stale resolved rate, which would
     pin the signing-month index.
+
+    A spot-monthly leg is returned whole, ``index_realised`` included, and
+    that value is the SIGNING month's. It never reaches a bill:
+    :func:`_effective_snapshot_for_month` replaces it with the delivery
+    month's before pricing, which is where that split belongs, and every
+    other consumer ignores the field. Said out loud because the paragraph
+    above reads as though the leg carried no index at all.
     ``None`` when the archived card exposes no re-priceable rate (a variable
     card whose coefficients couldn't be parsed, or a TOU / Impact card that
     prints resolved bands without a monthly formula behind them).
