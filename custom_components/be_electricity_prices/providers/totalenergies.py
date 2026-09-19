@@ -447,11 +447,15 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
 #   0.1099 * 0.1212 * 0.1 * BELPEXM_RLP + 0.1056 * Formule tarifaire
 #   BELPEXM_RLP + 2.26 BELPEXM_RLP + 2.26 2.26 BELPEXM_RLP + 2.16
 #
+# Every dot-decimal number in the formula block, in the order printed. Not a
+# formula pattern despite where it is used, which is what the name used to
+# claim, and energyvision.py has a real one under that name.
+#
 # A factor is below 1 and a base above it on every card seen, which is what
 # separates the two runs without depending on where the index token lands.
-# Anything but four of each is a layout this cannot read, and the caller then
-# keeps the printed row rather than billing a half-read formula.
-_RLP_FORMULA_RE = re.compile(r"\d+\.\d+")
+# A count the caller does not recognise is a layout it cannot read, and it
+# then keeps the printed row rather than billing a half-read formula.
+_DOT_DECIMAL_RE = re.compile(r"\d+\.\d+")
 
 
 def _consumption_month_formula(text: str) -> list[tuple[float, float]] | None:
@@ -481,7 +485,7 @@ def _consumption_month_formula(text: str) -> list[tuple[float, float]] | None:
     after = text.find("\n", index)
     line_end = text.find("\n", after + 1) if after >= 0 else -1
     block = re.sub(r"\s+", " ", text[line_start : line_end if line_end >= 0 else None])
-    numbers = [float(n) for n in _RLP_FORMULA_RE.findall(block)]
+    numbers = [float(n) for n in _DOT_DECIMAL_RE.findall(block)]
     factors = [n for n in numbers if n < 1.0]
     bases = [n for n in numbers if n >= 1.0]
     if len(factors) != len(bases) or not factors:
