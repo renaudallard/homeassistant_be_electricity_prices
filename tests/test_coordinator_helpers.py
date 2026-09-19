@@ -5981,7 +5981,8 @@ async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
         today,
         month_snapshot=january,
     )
-    assert legs.energy is not None
+    # A month-indexed variable card re-prices as the monthly-mean leg.
+    assert isinstance(legs.energy, SpotMonthlyRates)
     assert legs.energy.factor == pytest.approx(1.200)
     assert legs.energy.base == pytest.approx(0.0240)
 
@@ -5989,7 +5990,7 @@ async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     live = await _cohort_legs(
         hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
     )
-    assert live.energy is not None
+    assert isinstance(live.energy, SpotMonthlyRates)
     assert live.energy.factor == pytest.approx(1.177)
 
 
