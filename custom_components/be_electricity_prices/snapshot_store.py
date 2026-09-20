@@ -96,6 +96,7 @@ from .providers.base import (
     resolve_direct_debit,
     resolve_volume_tier,
     resolve_brussels_power_term,
+    resolve_vreg_network_ceiling,
 )
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
@@ -1226,6 +1227,11 @@ def _resolve_snapshot(
     # basis the card printed on before anything else moves it.
     month = delivery_month or dt_util.now().date()
     resolved = resolve_brussels_power_term(snap, terms=cached_power_term(month.year))
+    # Before apply_vat for the same reason, and the month decides it the way
+    # it decides the two federal levies below: the VREG sets one ceiling for
+    # all of Flanders per calendar year, so a card stating another one is out
+    # of date rather than different.
+    resolved = resolve_vreg_network_ceiling(resolved, month)
     resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
     # than by the card that prints them.

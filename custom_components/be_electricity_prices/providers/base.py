@@ -54,10 +54,14 @@ from ..const import (
     FEDERAL_EXCISE_KNOWN_FROM,
     FEDERAL_EXCISE_KNOWN_UNTIL,
     FEDERAL_EXCISE_RESIDENTIAL_TVAC,
+    FLUVIUS_KEYS,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGIONS,
     VAT_RATE_REDUCED,
+    VREG_NETWORK_CEILING_HTVA,
+    VREG_NETWORK_CEILING_KNOWN_FROM,
+    VREG_NETWORK_CEILING_KNOWN_UNTIL,
     WELCOME_CREDIT_PRO_RATA,
 )
 
@@ -1435,6 +1439,58 @@ def resolve_direct_debit(
             yearly_fixed_fee=max(0.0, energy.yearly_fixed_fee - discount),
         ),
     )
+
+
+def resolve_vreg_network_ceiling(
+    snapshot: SupplierSnapshot, delivery_month: date
+) -> SupplierSnapshot:
+    """Bill the VREG's maximumtarief, not a stale card's copy of it.
+
+    The cap is a rule about the Flemish DISTRIBUTION network: the capacity
+    term plus the per-kWh network term together, excluding data management,
+    may not exceed it times the volume. ``fees._capped_capacity_annual``
+    applies it. One rate for the whole of Flanders, so a card stating another
+    one is wrong rather than different, which is the same reasoning
+    :func:`resolve_federal_excise` follows for the excise.
+
+    Only the Fluvius overlays, because only Flanders has this instrument. A
+    Wallonia or Brussels overlay is left alone even on a card that prints the
+    footnote over all three regions, which Bolt's does.
+
+    Put onto the CARD's own basis, not grossed: the ceiling is compared
+    against ``distribution_single + transport`` as printed and the difference
+    is grossed where that comparison happens (``_vat_dso`` says so), so a
+    VAT-inclusive card takes the figure times 1,06 and an ex-VAT one takes it
+    as the regulator publishes it. Same treatment, and for the same reason, as
+    :func:`resolve_brussels_power_term`.
+
+    Identity outside the window the constants name, and identity on a card
+    already stating the figure, so this is free for the five suppliers that
+    read it correctly and fills it for the two that do not. It moves a bill
+    only where the cap binds, which is a low-volume connection on a high peak:
+    around 515 kWh a year at the 2,5 kW floor on Fluvius Zenne-Dijle.
+    """
+    month = (delivery_month.year, delivery_month.month)
+    if not (
+        VREG_NETWORK_CEILING_KNOWN_FROM <= month < VREG_NETWORK_CEILING_KNOWN_UNTIL
+    ):
+        return snapshot
+    ceiling = VREG_NETWORK_CEILING_HTVA
+    if snapshot.taxes.vat_rate <= 0.0:
+        # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed.
+        ceiling *= 1.0 + VAT_RATE_REDUCED
+    changed = {
+        key: replace(overlay, network_ceiling_eur_per_kwh=ceiling)
+        for key, overlay in snapshot.dsos.items()
+        if key in FLUVIUS_KEYS
+        and (
+            overlay.network_ceiling_eur_per_kwh is None
+            or abs(overlay.network_ceiling_eur_per_kwh - ceiling) > 5e-7
+        )
+    }
+    if not changed:
+        return snapshot
+    return replace(snapshot, dsos={**snapshot.dsos, **changed})
 
 
 def resolve_brussels_power_term(

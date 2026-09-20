@@ -121,11 +121,13 @@ def _load_providers() -> dict[str, types.ModuleType]:
 
     const = _load("be_pkg.const", PKG / "const.py")
     global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
-    global _EXCISE_KNOWN_UNTIL
+    global _EXCISE_KNOWN_UNTIL, _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
     _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
     _EXCISE_KNOWN_UNTIL = const.FEDERAL_EXCISE_KNOWN_UNTIL
+    _VREG_CEILING_HTVA = const.VREG_NETWORK_CEILING_HTVA
+    _VREG_CEILING_KNOWN_UNTIL = const.VREG_NETWORK_CEILING_KNOWN_UNTIL
     _EXPECTED_DSOS.update(
         {
             "flanders": const.FLUVIUS_KEYS,
@@ -154,6 +156,10 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _render_through = pdf.render_through
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
+    global _parse_vreg_ceiling
+    # The extractors' own reader, so the consensus row below sees exactly what
+    # a card gives the parser rather than a second pattern that could drift.
+    _parse_vreg_ceiling = pdf.parse_vreg_network_ceiling
     _EXTRACTOR_ERROR = base.ExtractorError
     # The integration is loaded under a synthetic ``be_pkg`` package, so a
     # plain ``import custom_components...`` does NOT work here: it raises
@@ -232,6 +238,16 @@ _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
 _EXCISE_KNOWN_UNTIL: tuple[int, int] = (2026, 8)
+_VREG_CEILING_HTVA: float = 0.3276168
+_VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
+
+
+def _no_vreg_ceiling(_text: str) -> float | None:
+    """Placeholder until ``_load_providers`` swaps in the extractors' reader."""
+    return None
+
+
+_parse_vreg_ceiling: Callable[[str], float | None] = _no_vreg_ceiling
 
 # The DSO set and the renewables field a region's card must carry. Seven
 # checks each restated these as local literals, in two arity groups, and the
@@ -2106,6 +2122,135 @@ def _check_excise_window(today: date | None = None) -> None:
     )
 
 
+def _check_vreg_ceiling_window(today: date | None = None) -> None:
+    """Ask for the VREG ceiling window to be extended before it lapses.
+
+    ``resolve_vreg_network_ceiling`` bills the regulator's maximumtarief
+    instead of a card's copy of it, but only for months inside
+    ``VREG_NETWORK_CEILING_KNOWN_FROM`` .. ``_KNOWN_UNTIL``, because the
+    distribution tariffs are set per calendar year and encoding next year's
+    before it is published would bill a prediction. Past the window every card
+    is read as printed again, which puts Mega and Bolt back on a figure 1,7
+    times too tight and drops the cap entirely for the ten suppliers that
+    print none.
+
+    Nothing in the code can know next year's rate, so this asks a person, the
+    way the excise window above does.
+    """
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    lapses = date(*_VREG_CEILING_KNOWN_UNTIL, 1)
+    if today < lapses - _EXCISE_WINDOW_NOTICE:
+        return
+    left = (lapses - today).days
+    when = (
+        f"in {left} days"
+        if left > 0
+        else f"{-left} days ago, and it is billing cards as printed"
+    )
+    _record(
+        "_federal: the VREG ceiling window needs extending",
+        False,
+        f"the regulator's maximumtarief is applied to months before "
+        f"{lapses.isoformat()}, which lapses {when}. Read the new figure off the "
+        "fleet's Flemish cards, check the majority the way "
+        "_check_vreg_ceiling_consensus does, then move VREG_NETWORK_CEILING_HTVA "
+        "and VREG_NETWORK_CEILING_KNOWN_UNTIL (const.py) and re-pin the test. "
+        "Mind the basis: the constant is EXCLUDING VAT as the regulator sets it "
+        f"({_VREG_CEILING_HTVA} = {_VREG_CEILING_HTVA * 1.06:.7f} including the "
+        "6% residential rate, which is what most cards print)",
+        kind="tax",
+    )
+
+
+def _check_vreg_ceiling_consensus(archive: Path | None) -> None:
+    """Assert the Flemish cards that print a ceiling agree with the constant.
+
+    The maximumtarief is one rate for the whole of Flanders, so a card stating
+    another one is wrong. Read from the card TEXT, not from the archived
+    snapshot: the resolver overwrites the parsed field, so a check on the
+    snapshot would be tautological, and the field only started being parsed at
+    schema 65 so older rows carry ``None`` whatever their card said.
+
+    Two things it catches. A single supplier drifting, which is what Bolt does
+    at 0,2035480 against the others' 0,3472738. And the constant itself going
+    stale, which shows as the MAJORITY disagreeing: that is the signal to move
+    the window rather than to file against a card.
+
+    Only what the shared reader sees. Mega states the same wrong figure in a
+    phrasing ``parse_vreg_network_ceiling`` does not match ("Ce tarif maximum
+    est de ..."), so it is absent here rather than reported; widening that
+    pattern would change what every extractor using it parses, and the
+    resolver already bills the regulator's figure either way.
+
+    Either VAT basis is accepted, because a professional card prints the
+    regulator's ex-VAT figure and a residential one the same figure grossed.
+    """
+    if archive is None:
+        return
+    rows = [
+        row
+        for row in sorted(archive.glob("cards/*/*/flanders/????-??.json"))
+        if (registered := _CONTRACTS_BY_ID.get(row.parts[-3])) is not None
+        and not getattr(registered, "professional", False)
+    ]
+    if not rows:
+        return
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.stem] = counts.get(row.stem, 0) + 1
+    month = max(counts, key=lambda stem: (counts[stem], stem))
+    printed: dict[str, float] = {}
+    for row in rows:
+        if row.stem != month or row.parts[-4] in printed:
+            continue
+        try:
+            sources = json.loads(row.read_text(encoding="utf-8"))["_sources"]
+            texts = [archive / s["text"] for s in sources if s.get("text")]
+        except (KeyError, TypeError, ValueError):
+            continue
+        for path in reversed(texts):
+            if not path.exists():
+                continue
+            value = _parse_vreg_ceiling(path.read_text(encoding="utf-8"))
+            if value is not None:
+                printed[row.parts[-4]] = value
+            break
+    if not printed:
+        return
+    tvac = _VREG_CEILING_HTVA * 1.06
+    agree = {
+        name
+        for name, value in printed.items()
+        if min(abs(value - tvac), abs(value - _VREG_CEILING_HTVA)) < 5e-6
+    }
+    odd = sorted(set(printed) - agree)
+    if not odd:
+        return
+    detail = ", ".join(f"{name}={printed[name]:.7f}" for name in odd)
+    if len(odd) > len(agree):
+        _record(
+            "_federal: the VREG ceiling constant disagrees with the fleet",
+            False,
+            f"{len(odd)} of {len(printed)} Flemish cards printing a "
+            f"maximumtarief for {month} disagree with VREG_NETWORK_CEILING_HTVA "
+            f"({_VREG_CEILING_HTVA} ex-VAT, {tvac:.7f} incl.): {detail}. A "
+            "majority means the regulator moved it and the constant needs "
+            "updating, not that the cards are wrong",
+            kind="tax",
+        )
+        return
+    _record(
+        "_federal: every Flemish card agrees on the VREG ceiling",
+        False,
+        f"{month}: {detail} against the fleet's {tvac:.7f} including VAT "
+        f"({_VREG_CEILING_HTVA} excluding it) on {len(agree)} other suppliers. "
+        "The ceiling is one rate for all of Flanders, so these cards are "
+        "stale; resolve_vreg_network_ceiling already bills the regulator's "
+        "figure, so this is a card to report rather than money lost",
+        kind="tax",
+    )
+
+
 def _check_federal_tax_consensus(
     archive: Path | None, today: date | None = None
 ) -> None:
@@ -3812,6 +3957,24 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:  # noqa: BLE001
                 _record(
                     "_federal: excise window check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
+            try:
+                _check_vreg_ceiling_window()
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_federal: VREG ceiling window check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
+            try:
+                _check_vreg_ceiling_consensus(texts)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_federal: VREG ceiling consensus check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                     kind="catalog",

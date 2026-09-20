@@ -525,6 +525,37 @@ FEDERAL_EXCISE_RESIDENTIAL_TVAC: Final = 0.04876
 FEDERAL_EXCISE_KNOWN_FROM: Final = (2026, 8)
 FEDERAL_EXCISE_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
 
+# The VREG maximumtarief: what a Flemish digital-meter connection may be
+# charged in DISTRIBUTION network costs per kWh, the capacity term and the
+# per-kWh network term together and excluding the data-management fee. In
+# EUR/kWh EXCLUDING VAT, as the regulator sets it, with the months it is
+# known to cover.
+#
+# One rate for the whole of Flanders, exactly like the excise above, so two
+# cards disagreeing about it is one of them being wrong rather than a
+# difference between suppliers. Five of the seven that state it agree:
+# Luminus, Frank and energie.be print 0,3472738 including the 6%, energie.be's
+# professional card and Ecopower print this figure, and DATS 24 settles that
+# it is not a per-DSO term by printing it as a COLUMN of its DSO table with
+# eight identical copies, one per Fluvius area (34,73 c EUR/kWh on a card
+# whose footer reads "Alle prijzen, tarieven en kortingen zijn inclusief 6%
+# btw").
+#
+# Mega and Bolt print 0,1920264 / 0,2035480 instead, and that reading is the
+# one to distrust: Bolt prints its figure on the Wallonia and Brussels cards
+# too, where no VREG tariff applies, and on its professional card without the
+# VAT conversion Mega does make, so it is boilerplate rather than a reading of
+# the regulator. Billing their figure would cap about 1,7 times too tight and
+# UNDER-bill, which is why it is not simply wired from the card.
+#
+# Same discipline as the excise. Only a value IN EFFECT and cross-checked
+# against the fleet belongs here; past the end of the window the card is read
+# as before, and the live check's consensus row is what says it has moved.
+# Distribution tariffs are set per calendar year, so the window ends with one.
+VREG_NETWORK_CEILING_HTVA: Final = 0.3276168
+VREG_NETWORK_CEILING_KNOWN_FROM: Final = (2026, 1)
+VREG_NETWORK_CEILING_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
+
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps

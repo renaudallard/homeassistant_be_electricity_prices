@@ -274,6 +274,30 @@ resolver is identity.
 
 ### The Flemish network ceiling
 
+The ceiling is the VREG's, not the card's. It is one rate for the whole of
+Flanders per calendar year, so a card stating another one is wrong rather than
+different, which is the reasoning `resolve_federal_excise` already follows for
+the excise. `VREG_NETWORK_CEILING_HTVA` (`const.py`) holds it EXCLUDING VAT as
+the regulator sets it, with a `KNOWN_FROM` / `KNOWN_UNTIL` window, and
+`resolve_vreg_network_ceiling` (`providers/base.py`) puts it on every Fluvius
+overlay inside that window.
+
+Five suppliers read it correctly and are unaffected: Luminus, Frank and
+energie.be print 0,3472738 including the 6%, and energie.be's professional
+card and Ecopower print the 0,3276168 behind it. DATS 24 is what settles that
+it is not a per-DSO term, printing it as a COLUMN of its DSO table with eight
+identical copies, one per Fluvius area. Mega and Bolt print 0,2035480 instead,
+which would cap about 1,7 times too tight and UNDER-bill; Bolt prints that
+figure on its Wallonia and Brussels cards too, where no VREG tariff exists,
+and on its professional card without the VAT conversion Mega does make, so it
+is boilerplate rather than a reading. Ten further suppliers print no ceiling
+at all, so the cap simply never bound for their Flemish entries.
+
+It is resolved BEFORE `apply_vat`, which rewrites `vat_rate` to 0 for an entry
+that deducts VAT: a resolver running after it would read an ex-VAT card as
+VAT-inclusive and put the ceiling 6% above the rate it is compared against.
+Only the Fluvius overlays are touched, whatever regions the card covers.
+
 The Flemish cards print a `maximumtarief` per kWh, and Ecopower states what it
 does: *"zou u met het capaciteitstarief en het nettarief per kWh meer
 nettarieven betalen dan met het maximumtarief? Dan betaalt u het

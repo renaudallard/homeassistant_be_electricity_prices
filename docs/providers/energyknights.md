@@ -305,11 +305,13 @@ users with no distribution charge at all, which prices lower than the truth.
 
 Two fields the card does not supply:
 
-- `network_ceiling_eur_per_kwh` - no Energy Knights card prints the VREG `maximumtarief`,
-  so the capacity charge is uncapped here where energie.be, DATS 24, Ecopower and
-  EnergyVision cap it. The ceiling binds only below roughly 450 kWh/year at the 2,5 kW
-  floor, so the practical impact is small, but it is a regulated rule that applies
-  whether or not the card prints it.
+- `network_ceiling_eur_per_kwh` - no Energy Knights card prints the VREG `maximumtarief`.
+  It is a regulated rule that applies whether or not the card prints it, so
+  `resolve_vreg_network_ceiling` (`providers/base.py`) now supplies it from
+  `VREG_NETWORK_CEILING_HTVA` for every Fluvius overlay, here and on the nine other
+  suppliers whose Flemish cards state none. The ceiling binds only below roughly
+  450 kWh/year at the 2,5 kW floor, so the practical impact is small; see
+  [the pricing model](../pricing-model.md).
 - `prosumer_eur_per_kva_year` - the card **does** print it (54,63 EUR/kVA/jaar for
   Antwerpen, in the classic-meter table), but `fees.py` gates the prosumer fee to
   Wallonia and this is a Flanders-only supplier, so it is left `None`.

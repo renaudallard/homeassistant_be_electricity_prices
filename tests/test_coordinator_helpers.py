@@ -331,6 +331,190 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
         )
 
 
+def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
+    """One rate for the whole of Flanders, so a card stating another is wrong.
+
+    Five suppliers print 0,3472738 including the 6% (Luminus, Frank and
+    energie.be) or 0,3276168 excluding it (energie.be's professional card and
+    Ecopower), and DATS 24 settles that it is not a per-DSO term by printing
+    it as a COLUMN of its DSO table with eight identical copies, one per
+    Fluvius area. Mega and Bolt print 0,2035480, which would cap about 1,7
+    times too tight and UNDER-bill; Bolt prints it on its Wallonia and
+    Brussels cards too, where no VREG tariff exists.
+
+    Ten other suppliers print no ceiling at all, so the cap simply never bound
+    for their Flemish entries.
+    """
+    from custom_components.be_electricity_prices.const import (
+        DSO_FLUVIUS_ANTWERPEN,
+        DSO_ORES,
+        DSO_SIBELGA,
+        VREG_NETWORK_CEILING_HTVA,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_vreg_network_ceiling,
+    )
+
+    tvac = VREG_NETWORK_CEILING_HTVA * 1.06
+
+    def _card(ceiling: float | None, *, vat_rate: float = 0.0) -> Any:
+        return make_snapshot(
+            taxes=TaxOverlay(
+                federal_excise=0.05, energy_contribution=0.0, vat_rate=vat_rate
+            ),
+            dsos={
+                DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                    distribution_single=0.0535,
+                    transport=0.0,
+                    capacity_eur_per_kw_year=52.37,
+                    network_ceiling_eur_per_kwh=ceiling,
+                ),
+                # A Walloon overlay on the same card: no VREG tariff applies.
+                DSO_ORES: DsoOverlay(distribution_single=0.10, transport=0.0145),
+                DSO_SIBELGA: DsoOverlay(distribution_single=0.09, transport=0.0145),
+            },
+        )
+
+    inside = date(2026, 9, 1)
+
+    # A card printing none is filled, on its own VAT basis.
+    filled = resolve_vreg_network_ceiling(_card(None), inside)
+    assert filled.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
+        pytest.approx(tvac)
+    )
+    # An ex-VAT card takes the figure as the regulator publishes it, because
+    # the ceiling is compared against distribution_single as printed.
+    pro = resolve_vreg_network_ceiling(_card(None, vat_rate=0.21), inside)
+    assert pro.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
+        pytest.approx(VREG_NETWORK_CEILING_HTVA)
+    )
+
+    # Mega's and Bolt's figure is corrected, which is the whole point.
+    corrected = resolve_vreg_network_ceiling(_card(0.2035480), inside)
+    assert corrected.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
+        pytest.approx(tvac)
+    )
+
+    # Only the Flemish overlays: the other two are untouched objects.
+    for snapshot in (filled, corrected):
+        for key in (DSO_ORES, DSO_SIBELGA):
+            assert snapshot.dsos[key].network_ceiling_eur_per_kwh is None
+
+    # A card already stating it is identity, not a copy, so this is free for
+    # the five suppliers that read it correctly.
+    agrees = _card(tvac)
+    assert resolve_vreg_network_ceiling(agrees, inside) is agrees
+
+    # Outside the window the card is read as before, the way the excise
+    # constant beside it stops at the end of its own.
+    for outside in (date(2025, 12, 1), date(2027, 1, 1)):
+        untouched = _card(None)
+        assert resolve_vreg_network_ceiling(untouched, outside) is untouched
+
+
+def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
+    """The resolver is only worth having if _resolve_snapshot calls it.
+
+    It also has to run BEFORE apply_vat, which resolves the card's own basis
+    away: the ceiling is stored as the card would print it and grossed where
+    it is compared, so a professional entry must come out on the regulator's
+    ex-VAT figure and a residential one 6% above it. Reverting either the
+    call or its position is invisible to a test of the resolver alone, which
+    is how this kind of fix has gone wrong before.
+    """
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.const import (
+        DSO_FLUVIUS_ANTWERPEN,
+        VREG_NETWORK_CEILING_HTVA,
+    )
+
+    def _resolved(*, vat_rate: float, include_vat: bool) -> float | None:
+        card = make_snapshot(
+            taxes=TaxOverlay(
+                federal_excise=0.05, energy_contribution=0.0, vat_rate=vat_rate
+            ),
+            dsos={
+                DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                    distribution_single=0.0535,
+                    transport=0.0,
+                    capacity_eur_per_kw_year=52.37,
+                )
+            },
+        )
+        entry = SimpleNamespace(
+            data={
+                "supplier": "test",
+                "contract": "test",
+                "region": "flanders",
+                "dso": DSO_FLUVIUS_ANTWERPEN,
+                "include_vat": include_vat,
+            }
+        )
+        out = snapshot_store._resolve_snapshot(
+            entry,  # type: ignore[arg-type]
+            card,
+            delivery_month=date(2026, 9, 1),
+        )
+        return out.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh
+
+    # A residential card prints VAT-inclusive, so the ceiling is grossed.
+    assert _resolved(vat_rate=0.0, include_vat=True) == pytest.approx(
+        VREG_NETWORK_CEILING_HTVA * 1.06
+    )
+    # A professional card prints ex-VAT and keeps the regulator's own figure,
+    # on the same basis as the distribution rate it is measured against.
+    assert _resolved(vat_rate=0.21, include_vat=True) == pytest.approx(
+        VREG_NETWORK_CEILING_HTVA
+    )
+    # And the business that DEDUCTS VAT is what pins the position: apply_vat
+    # rewrites vat_rate to 0 for that entry, so a resolver running after it
+    # would read the ex-VAT card as VAT-inclusive and gross a figure that is
+    # already ex-VAT, putting the ceiling 6% above the rate it is compared
+    # against.
+    assert _resolved(vat_rate=0.21, include_vat=False) == pytest.approx(
+        VREG_NETWORK_CEILING_HTVA
+    )
+
+
+def test_the_vreg_ceiling_constant_is_what_the_fleet_prints() -> None:
+    """The constant is a number typed into source, so it is held against real
+    cards: two suppliers that read the ceiling off their own footnote must
+    agree with it to the last decimal, or the figure here is wrong."""
+    from custom_components.be_electricity_prices.const import (
+        FLUVIUS_KEYS,
+        VREG_NETWORK_CEILING_HTVA,
+    )
+    from custom_components.be_electricity_prices.providers.energiebe import (
+        parse_snapshot as energiebe_parse,
+    )
+    from custom_components.be_electricity_prices.providers.frank import (
+        parse_snapshot as frank_parse,
+    )
+    from tests import fixture_text
+
+    cards = (
+        energiebe_parse(fixture_text("energiebe_dynamic_jul.pdf", layout=True), "t://"),
+        frank_parse(
+            fixture_text("frank_dynamic_apr.pdf", layout=True),
+            "t://",
+            "frank_dynamic",
+            "april 2026",
+        ),
+    )
+    for snapshot in cards:
+        # Both print VAT-inclusive, so the regulator's ex-VAT figure grossed.
+        assert snapshot.taxes.vat_rate == 0.0
+        printed = {
+            overlay.network_ceiling_eur_per_kwh
+            for key, overlay in snapshot.dsos.items()
+            if key in FLUVIUS_KEYS
+        }
+        assert len(printed) == 1, "the card states one ceiling for every area"
+        assert printed.pop() == pytest.approx(VREG_NETWORK_CEILING_HTVA * 1.06)
+
+
 def test_the_flemish_network_ceiling_caps_the_capacity_charge() -> None:
     """Ecopower states the rule on its card: "zou u met het capaciteitstarief
     en het nettarief per kWh meer nettarieven betalen dan met het
