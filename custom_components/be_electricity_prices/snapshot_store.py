@@ -97,6 +97,7 @@ from .providers.base import (
     resolve_volume_tier,
     resolve_brussels_power_term,
     resolve_vreg_network_ceiling,
+    resolve_welcome_credit_meter,
 )
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
@@ -1244,6 +1245,12 @@ def _resolve_snapshot(
     # the fee travels across that conversion but a reduction still waiting to
     # be applied would not.
     resolved = resolve_direct_debit(resolved, direct_debit=_direct_debit(entry, snap))
+    # Beside the direct-debit answer and for the same reason: which meter the
+    # entry has decides whether the card grants the credit at all, and baking
+    # it here keeps the six cost paths reading one credit.
+    resolved = resolve_welcome_credit_meter(
+        resolved, entry.data.get(CONF_METER, METER_MONO)
+    )
     resolved = resolve_volume_tier(
         resolve_excise_band(resolved, annual_kwh),
         annual_kwh,
@@ -1556,7 +1563,14 @@ class _MigratingStore(Store[dict[str, Any]]):
 # ininterrompus" where every other card says twelve, and it is paid on the
 # first regularisation invoice after that. A v68 row waits a year, so a
 # December signing is credited 320,65 EUR in the wrong calendar year.
-_SNAPSHOT_SCHEMA_VERSION = 69
+# v70: Luminus's cards carry their new-customer campaign, as
+# welcome_credit_pct_of_energy, welcome_credit_kwh and
+# welcome_credit_excludes_night_meter. Six September 2026 contracts run one
+# ("remise de 33% sur les couts energetiques ... pour la conclusion d'un
+# contrat ... en septembre 2026", or 750 kWh paid as a cashback), and a v69
+# row carries none of it, so a household that signed in that month is
+# credited nothing where its card grants up to 254,56 EUR at 3500 kWh.
+_SNAPSHOT_SCHEMA_VERSION = 70
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1655,6 +1669,11 @@ def _snapshot_to_dict(
             snap.welcome_credit_requires_direct_debit
         ),
         "welcome_credit_after_months": snap.welcome_credit_after_months,
+        "welcome_credit_pct_of_energy": snap.welcome_credit_pct_of_energy,
+        "welcome_credit_kwh": snap.welcome_credit_kwh,
+        "welcome_credit_excludes_night_meter": (
+            snap.welcome_credit_excludes_night_meter
+        ),
         "welcome_credit_kind": snap.welcome_credit_kind,
     }
 
@@ -1736,6 +1755,11 @@ def _snapshot_from_dict(
             data.get("welcome_credit_requires_direct_debit")
         ),
         welcome_credit_after_months=int(data.get("welcome_credit_after_months") or 12),
+        welcome_credit_pct_of_energy=data.get("welcome_credit_pct_of_energy"),
+        welcome_credit_kwh=data.get("welcome_credit_kwh"),
+        welcome_credit_excludes_night_meter=bool(
+            data.get("welcome_credit_excludes_night_meter")
+        ),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
     )
 

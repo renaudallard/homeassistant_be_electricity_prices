@@ -62,10 +62,13 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._pdf import (
     FR_MONTHS,
     require_contract,
+    tier_bound_kwh,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text,
@@ -340,7 +343,103 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=injection,
+        **_extract_promo(text),  # type: ignore[arg-type]
     )
+
+
+# ---- promotional credits -----------------------------------------------------
+
+# Luminus runs occasional new-customer campaigns and prints them in one
+# regular sentence:
+#
+#   "(***) En tant que nouveau client, vous beneficiez d'une remise de 33% sur
+#    les couts energetiques, non-valable sur un compteur exclusif nuit, sur
+#    votre consommation annuel en heures pleines et creuses pendant 12 mois
+#    pour la conclusion d'un contrat Luminus Comfy Electricite en septembre
+#    2026."
+#
+# followed by how it is paid: "repartie au pro rata sur vos prochains
+# decomptes" for a percentage, or "accordee 12 mois apres la date de debut via
+# un cashback" for a volume.
+#
+# These are SIGNING-MONTH offers, which is what "pour la conclusion d'un
+# contrat ... en septembre 2026" says, so an entry is credited off the card of
+# the month it SIGNED, which `signing_month_snapshot` already resolves. Across
+# the nine archived months of 2026 exactly one carried a campaign, on six
+# contracts, so the normal answer here is no promo at all.
+_PROMO_GATE = "pour la conclusion d'un contrat"
+_PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
+_PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
+# The volume carries a thousands separator on the cards that print one:
+# May 2026 Comfy says "une remise de 1.000 kWh", where a plain decimal
+# read gives 1,0 kWh. tier_bound_kwh is the shared reader for exactly
+# that, written for the excise tranche bounds ("20.000 kWh").
+_PROMO_KWH_RE = re.compile(r"remise\s+de\s+(\d[\d\s.,]*\d|\d)\s*kWh", re.IGNORECASE)
+_PROMO_NIGHT_RE = re.compile(
+    r"non[-\s]valable\s+sur\s+un\s+compteur\s+exclusif\s+nuit", re.IGNORECASE
+)
+_PROMO_CASHBACK_RE = re.compile(
+    r"accord[ée]e?\s+(\d+)\s+mois\s+apr[eè]s[^.]{0,60}?cashback", re.IGNORECASE
+)
+
+
+def _extract_promo(text: str) -> dict[str, object]:
+    """Luminus's new-customer campaign, or ``{}`` when the card runs none.
+
+    Returned as the snapshot fields it fills, so the caller does not restate
+    which is which. Two shapes are read, both verified against the September
+    2026 cards and against Luminus's own published conditions: a PERCENTAGE of
+    the energy cost paid across the invoices it covers (33% on Comfy, 29% on
+    ComfyFlex), and a VOLUME of free energy paid as a cashback after a stated
+    wait (750 kWh on MaxxFix, MaxxFlex and both Plus cards).
+
+    Scoped to the campaign SENTENCE, not the card. The cards print standing
+    loyalty discounts in the same block and in nearly the same words, and
+    those are a different thing: "12 mois apres la date de debut, une
+    reduction de 5 % sur les couts energetiques ... pendant 12 mois ... au
+    pro rata de la consommation de votre 2e annee". They are a year-2 and
+    year-3 benefit this does not model, they also say "pendant 12 mois", and
+    they carry their own exclusive-night exclusion. Reading the card as a
+    whole picked that exclusion up and attached it to the campaign, and a
+    looser amount pattern would have read 5% as a welcome credit. The gate
+    phrase is what separates them, because only a campaign is tied to the
+    month of signing.
+
+    A promo stated without that gate is left alone rather than guessed at:
+    Luminus Dynamic prints "Reduction unique Cashback de 130 EUR TVA incl.
+    apres 12 mois" with no signing condition, so nothing on the card says
+    whether an existing customer gets it too.
+    """
+    flat = re.sub(r"\s+", " ", text)
+    gate = flat.find(_PROMO_GATE)
+    if gate < 0:
+        return {}
+    anchor = _PROMO_ANCHOR_RE.search(flat, 0, gate)
+    if anchor is None:
+        return {}
+    sentence = flat[anchor.start() : flat.find(".", gate) + 1]
+    payout = flat[len(sentence) + anchor.start() :][:240]
+
+    out: dict[str, object] = {}
+    pct = _PROMO_PCT_RE.search(sentence)
+    kwh = _PROMO_KWH_RE.search(sentence)
+    if pct is not None:
+        out["welcome_credit_pct_of_energy"] = to_float(pct.group(1)) / 100.0
+    if kwh is not None:
+        out["welcome_credit_kwh"] = tier_bound_kwh(kwh.group(1))
+    if not out:
+        return {}
+    cashback = _PROMO_CASHBACK_RE.search(payout)
+    if cashback is not None:
+        out["welcome_credit_kind"] = WELCOME_CREDIT_ANNIVERSARY
+        out["welcome_credit_after_months"] = int(cashback.group(1))
+    else:
+        # "repartie au pro rata sur vos prochains decomptes": paid across the
+        # invoices of the period it covers, not at its end.
+        out["welcome_credit_kind"] = WELCOME_CREDIT_PRO_RATA
+    if _PROMO_NIGHT_RE.search(sentence):
+        out["welcome_credit_excludes_night_meter"] = True
+    return out
 
 
 # ---- energy + tax block -------------------------------------------------------

@@ -8861,6 +8861,125 @@ def test_an_anniversary_credit_waits_as_long_as_the_card_says() -> None:
     ) == pytest.approx(200.0)
 
 
+def test_a_percentage_campaign_is_credited_against_the_realised_rate() -> None:
+    """Luminus states its campaign as a share of the energy cost, not in euro.
+
+    "- 33,00 % De remise sur votre consommation annuel en heures pleines et
+    creuses pendant 12 mois", paid "au pro rata sur vos prochains decomptes".
+    A percentage meets a rate to become money, and the rate used is the
+    household's OWN realised one over the window, which is what makes this
+    work on every rate shape: it blends a bi-hourly card by the hours actually
+    drawn rather than needing register weights, and a variable or spot-priced
+    card by what it really billed.
+
+    Worth 254,56 EUR on the September Comfy card at 3500 kWh.
+    """
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+        WELCOME_CREDIT_PRO_RATA,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _welcome_credit_eur,
+        window_energy_rate,
+    )
+
+    rate = 0.22040  # Comfy Flanders, September 2026
+    card = make_snapshot(
+        welcome_credit_pct_of_energy=0.33,
+        welcome_credit_kind=WELCOME_CREDIT_PRO_RATA,
+    )
+    credited = _welcome_credit_eur(
+        card,
+        date(2026, 9, 1),
+        date(2026, 9, 1),
+        date(2027, 8, 31),
+        99_999.0,
+        3500.0,
+        window_energy_rate(rate * 3500.0, 3500.0),
+    )
+    assert credited == pytest.approx(0.33 * rate * 3500.0)
+    assert credited == pytest.approx(254.56, abs=0.01)
+
+    # A volume of free energy is that same rate times the volume, and is NOT
+    # scaled by the year: the card grants 750 kWh once, not 750 a year.
+    volume = make_snapshot(
+        welcome_credit_kwh=750.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=12,
+    )
+    lump = _welcome_credit_eur(
+        volume,
+        date(2026, 9, 1),
+        date(2027, 1, 1),
+        date(2027, 12, 31),
+        99_999.0,
+        3500.0,
+        window_energy_rate(rate * 3500.0, 3500.0),
+    )
+    assert lump == pytest.approx(750.0 * rate)
+
+    # Without a rate there is no money in it, which is what a window that
+    # drew nothing means.
+    assert (
+        _welcome_credit_eur(
+            card,
+            date(2026, 9, 1),
+            date(2026, 9, 1),
+            date(2027, 8, 31),
+            99_999.0,
+            3500.0,
+            0.0,
+        )
+        == 0.0
+    )
+    assert window_energy_rate(100.0, 0.0) == 0.0
+    assert window_energy_rate(771.40, 3500.0) == pytest.approx(0.22040)
+
+
+def test_a_campaign_the_card_denies_a_night_meter_is_not_credited() -> None:
+    """ "non-valable sur un compteur exclusif nuit", which Luminus's published
+    conditions repeat. Which meter the entry has is a per-entry answer, so it
+    is settled once in the snapshot rather than at the six places that spend
+    the credit."""
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_welcome_credit_meter,
+    )
+
+    card = make_snapshot(
+        welcome_credit_pct_of_energy=0.33,
+        welcome_credit_eur=50.0,
+        welcome_credit_excludes_night_meter=True,
+    )
+    for meter in ("mono", "bi", "dynamic"):
+        kept = resolve_welcome_credit_meter(card, meter)
+        assert kept.welcome_credit_pct_of_energy == pytest.approx(0.33)
+        assert kept.welcome_credit_eur == pytest.approx(50.0)
+        # Answered for this entry, so no later reader applies it twice.
+        assert kept.welcome_credit_excludes_night_meter is False
+
+    dropped = resolve_welcome_credit_meter(card, "exclusive_night")
+    assert dropped.welcome_credit_pct_of_energy is None
+    assert dropped.welcome_credit_eur is None
+    assert dropped.welcome_credit_excludes_night_meter is False
+
+    # A card stating no exclusion is identity on every meter.
+    plain = make_snapshot(welcome_credit_eur=50.0)
+    assert resolve_welcome_credit_meter(plain, "exclusive_night") is plain
+
+
+def test_the_entry_resolver_settles_the_campaign_meter() -> None:
+    """The resolver is only worth having if _resolve_snapshot calls it."""
+    import inspect
+
+    from custom_components.be_electricity_prices import snapshot_store
+
+    source = inspect.getsource(snapshot_store._resolve_snapshot)
+    assert "resolve_welcome_credit_meter(" in source, (
+        "a campaign the card denies an exclusive-night connection would be "
+        "credited to it"
+    )
+
+
 def test_a_credit_with_no_flat_half_is_still_a_credit() -> None:
     """``extract_ristourne`` reads "whichever half it prints".
 

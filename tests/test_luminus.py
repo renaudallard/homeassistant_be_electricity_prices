@@ -628,3 +628,112 @@ async def test_archive_swallows_failures_and_unsold_regions(
     )
     assert len(asked) == 1
     assert EXTRACTORS["luminus"].fetch_for_month is luminus.fetch_for_month
+
+
+def test_the_new_customer_campaign_is_read_off_the_card() -> None:
+    """Luminus prints a signing-month campaign and the integration bills it.
+
+    "En tant que nouveau client, vous beneficiez d'une remise de 11% sur les
+    couts energetiques, non-valable sur un compteur exclusif nuit, ... pendant
+    12 mois pour la conclusion d'un contrat Luminus Comfy Electricite en avril
+    2026." Worth 254,56 EUR on the September card at 3500 kWh, and nothing was
+    read at all.
+    """
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    april = parse_snapshot(
+        "luminus_comfy", fixture_text("luminus_comfy_w.pdf"), "wallonia"
+    )
+    assert april.welcome_credit_pct_of_energy == pytest.approx(0.11)
+    assert april.welcome_credit_kind == "pro_rata"
+    assert april.welcome_credit_excludes_night_meter is True
+
+    # A volume campaign is a cashback at the wait the card states.
+    maxxflex = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w.pdf"), "wallonia"
+    )
+    assert maxxflex.welcome_credit_kwh == pytest.approx(750.0)
+    assert maxxflex.welcome_credit_kind == "anniversary"
+    assert maxxflex.welcome_credit_after_months == 12
+
+    # The thousands separator. May's Comfy grants "une remise de 1.000 kWh",
+    # which a plain decimal read turns into 1,0 kWh: 232 EUR of credit into
+    # 23 cents. tier_bound_kwh is the shared reader for that, written for the
+    # excise tranche bounds.
+    may = parse_snapshot(
+        "luminus_comfy", fixture_text("luminus_comfy_w_may.pdf"), "wallonia"
+    )
+    assert may.welcome_credit_kwh == pytest.approx(1000.0)
+
+    # A card running no campaign says so; most months are this.
+    for fixture, contract in (
+        ("luminus_dynamic_w.pdf", "luminus_dynamic"),
+        ("luminus_smartflex_w.pdf", "luminus_smartflex"),
+    ):
+        snap = parse_snapshot(contract, fixture_text(fixture), "wallonia")
+        assert snap.welcome_credit_pct_of_energy is None, contract
+        assert snap.welcome_credit_kwh is None, contract
+
+    assert _extract_promo("no promo block on this card") == {}
+
+
+def test_the_standing_loyalty_discount_is_not_read_as_a_campaign() -> None:
+    """The cards print year-2 and year-3 loyalty discounts in the same block
+    and in nearly the same words, and they are a different thing.
+
+    "(*) 12 mois apres la date de debut, une reduction de 5 % sur les couts
+    energetiques de votre consommation annuelle, non-valable sur un compteur
+    exclusif nuit, applicable au tarif Luminus Comfy+ Electricite PENDANT 12
+    mois ... au pro rata de la consommation de votre 2e annee."
+
+    It says "pendant 12 mois" like a campaign does and carries its own
+    exclusive-night exclusion, so reading the card as a whole attributed that
+    exclusion to the campaign and a looser amount pattern would have billed
+    5% as a welcome credit. Only the signing gate separates them.
+    """
+    plus = parse_snapshot(
+        "luminus_comfyflex_plus",
+        fixture_text("luminus_comfyflex_plus_w.pdf"),
+        "wallonia",
+    )
+    # Its campaign is the volume one, and it states no night exclusion.
+    assert plus.welcome_credit_kwh == pytest.approx(750.0)
+    assert plus.welcome_credit_pct_of_energy is None
+    assert plus.welcome_credit_excludes_night_meter is False
+
+
+def test_the_campaign_is_read_from_its_own_sentence_not_the_card() -> None:
+    """A loyalty clause worded the campaign's way must not be billed as one.
+
+    On the real cards the two happen to differ in word order, the campaign
+    saying "remise de 33%" and the loyalty "10 % de remise" or "reduction de
+    5 %", so scanning the whole card gets the right answer by luck rather
+    than by rule. That luck is one reworded footnote from being wrong, and a
+    loyalty discount billed as a welcome credit is money.
+
+    So the campaign is read from its own sentence, anchored between "En tant
+    que nouveau client" and the signing gate. This text is constructed, not a
+    card: it is the real structure with the loyalty clause worded the way the
+    campaign is, which is exactly the case the scope rule exists for.
+    """
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    card = (
+        "(*) 12 mois apres la date de debut, une remise de 5 % sur les couts "
+        "energetiques de votre consommation annuelle, non-valable sur un "
+        "compteur exclusif nuit, applicable pendant 12 mois. Cette remise sera "
+        "repartie au pro rata de la consommation de votre 2e annee. "
+        "(***) En tant que nouveau client, vous beneficiez d'une remise de 33% "
+        "sur les couts energetiques, sur votre consommation annuel en heures "
+        "pleines et creuses pendant 12 mois pour la conclusion d'un contrat "
+        "Luminus Comfy Electricite en septembre 2026. Cette remise sera "
+        "repartie au pro rata sur vos prochains decomptes."
+    )
+    promo = _extract_promo(card)
+    assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.33)
+    # The loyalty clause's own night exclusion is not the campaign's.
+    assert "welcome_credit_excludes_night_meter" not in promo

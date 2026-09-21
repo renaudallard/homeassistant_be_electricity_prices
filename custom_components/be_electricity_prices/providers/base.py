@@ -1014,6 +1014,29 @@ class SupplierSnapshot:
     # every time the card changed. ``resolve_direct_debit`` settles it and
     # clears the flag, like every other per-entry answer here.
     welcome_credit_requires_direct_debit: bool = False
+    # A credit stated as a PERCENTAGE of the supplier's energy cost rather
+    # than in euro or per kWh, as a fraction: Luminus's September 2026
+    # campaign is "- 33,00 % De remise sur votre consommation annuel en heures
+    # pleines et creuses pendant 12 mois" on Comfy and 29% on ComfyFlex.
+    #
+    # Kept as a ratio and resolved against the household's OWN realised energy
+    # rate where the credit is computed, not baked into a per-kWh figure here.
+    # A baked figure would be right only for a fixed card: ComfyFlex is
+    # variable and the rate moves every month, and a cohort re-prices it
+    # again. The ratio is also why this is not VAT-scaled; it is dimensionless
+    # and lands on a rate that already carries the entry's basis.
+    welcome_credit_pct_of_energy: float | None = None
+    # A credit stated as a VOLUME of free energy, credited at that same rate:
+    # "3 mois d'electricite gratuite, Cashback de 750 kWh apres 12 mois" on
+    # MaxxFix and MaxxFlex. In kWh, so not VAT-scaled either.
+    welcome_credit_kwh: float | None = None
+    # True when the card excludes an exclusive-night-only connection from the
+    # credit: "non-valable sur un compteur exclusif nuit", which Luminus's
+    # own conditions repeat ("ne s'applique pas si vous consommez uniquement
+    # via un compteur exclusif nuit"). Which meter this entry has is a
+    # per-entry answer, so ``resolve_welcome_credit_meter`` settles it and
+    # clears the flag, like every other one here.
+    welcome_credit_excludes_night_meter: bool = False
     # How many uninterrupted months an ANNIVERSARY credit is granted after:
     # "La ristourne vous est uniquement accordee apres DOUZE mois
     # ininterrompus de consommation ... et octroyee sur la premiere facture de
@@ -1438,6 +1461,40 @@ def resolve_direct_debit(
             energy,
             yearly_fixed_fee=max(0.0, energy.yearly_fixed_fee - discount),
         ),
+    )
+
+
+def resolve_welcome_credit_meter(
+    snapshot: SupplierSnapshot, meter: str
+) -> SupplierSnapshot:
+    """Drop a welcome credit the card does not grant this meter.
+
+    Luminus excludes an exclusive-night-only connection from its percentage
+    campaign in as many words, and its published conditions repeat it. Which
+    meter the entry has is a per-entry answer, so it is settled once here
+    rather than at the places that spend the credit, for the reason
+    :func:`resolve_direct_debit` is: a transform that has to reach every cost
+    path is baked into the snapshot the entry reads.
+
+    Identity on every card that states no such exclusion, and on every meter
+    but the excluded one, so this is free for every existing entry. The flag
+    is cleared either way, the way the direct-debit answer is, so no later
+    reader can apply it twice.
+    """
+    if not snapshot.welcome_credit_excludes_night_meter:
+        return snapshot
+    if meter != METER_EXCLUSIVE_NIGHT:
+        return replace(snapshot, welcome_credit_excludes_night_meter=False)
+    # The whole credit, not just the percentage leg: the card's exclusion is
+    # of the offer, and a card stating one has no other credit to keep.
+    return replace(
+        snapshot,
+        welcome_credit_excludes_night_meter=False,
+        welcome_credit_eur=None,
+        welcome_credit_eur_per_kwh=None,
+        welcome_credit_cap_eur=None,
+        welcome_credit_pct_of_energy=None,
+        welcome_credit_kwh=None,
     )
 
 

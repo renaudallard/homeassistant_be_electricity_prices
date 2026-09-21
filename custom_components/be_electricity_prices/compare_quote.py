@@ -1346,7 +1346,7 @@ def _ytd_welcome_credit(
     shown. Passing the window's own volume here made this column disagree
     with the annual one beside it by most of the credit.
     """
-    from .fees import _welcome_credit_eur, first_year_net_kwh
+    from .fees import _welcome_credit_eur, first_year_net_kwh, window_energy_rate
     from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
     if not _grants_a_welcome_credit(credited):
@@ -1384,6 +1384,7 @@ def _ytd_welcome_credit(
             injection_kwh,
             compensation=regime == SOLAR_REGIME_COMPENSATION,
         ),
+        window_energy_rate(consumption_kwh * energy_per_kwh, consumption_kwh),
     )
 
 
@@ -1415,7 +1416,7 @@ def _annual_welcome_credit(
     so the energy leg is re-walked on its ``energy`` component with the same
     weights the all-in rate carries.
     """
-    from .fees import _year_ahead_welcome_credit
+    from .fees import _year_ahead_welcome_credit, window_energy_rate
     from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
     if not _grants_a_welcome_credit(credited):
@@ -1444,6 +1445,7 @@ def _annual_welcome_credit(
         when_now.date(),
         eligible,
         max(consumption_kwh - injection_kwh, 0.0),
+        window_energy_rate(consumption_kwh * energy_per_kwh, consumption_kwh),
     )
 
 

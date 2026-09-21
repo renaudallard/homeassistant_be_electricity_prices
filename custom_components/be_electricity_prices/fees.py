@@ -438,6 +438,23 @@ def first_year_net_kwh(
     return max(annual_kwh, 0.0) * net_share
 
 
+def window_energy_rate(energy_component_eur: float, consumption_kwh: float) -> float:
+    """The supplier's energy cost per kWh over a window, as it was billed.
+
+    What a percentage credit is a percentage OF, and what a volume of free
+    energy is worth. Derived from the window rather than read off the card on
+    purpose: it is already blended across whatever registers, slots or spot
+    hours the household actually drew on, so a bi-hourly card needs no
+    register weights here and a variable or dynamic one needs no rate lookup.
+
+    Zero when the window drew nothing, which leaves both credits at zero
+    rather than dividing by it.
+    """
+    if consumption_kwh <= 0.0:
+        return 0.0
+    return max(energy_component_eur, 0.0) / consumption_kwh
+
+
 def _welcome_credit_eur(
     snapshot: SupplierSnapshot,
     start: date | None,
@@ -445,6 +462,7 @@ def _welcome_credit_eur(
     today: date,
     eligible_eur: float,
     first_year_kwh: float = 0.0,
+    energy_eur_per_kwh: float = 0.0,
 ) -> float:
     """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
 
@@ -491,6 +509,15 @@ def _welcome_credit_eur(
     :func:`first_year_net_kwh` resolves; it is a YEAR's volume, not this
     window's, and the accrual below is what places the result in the window.
     ``welcome_credit_cap_eur`` is the card's own ceiling on the total.
+
+    A card may state the credit as a PERCENTAGE of the energy cost instead
+    (Luminus Comfy: *"- 33,00 % De remise sur votre consommation annuel en
+    heures pleines et creuses pendant 12 mois"*), or as a VOLUME of free
+    energy (*"Cashback de 750 kWh apres 12 mois"*). Both need a rate, and
+    ``energy_eur_per_kwh`` is the supplier's energy component per kWh over
+    this window, as the caller billed it. A percentage then folds into the
+    per-kWh leg and a volume into the flat one, so neither opens a path of
+    its own and both inherit the cap, the accrual and the VAT basis.
     The ceiling is the card's and applies before ``eligible_eur`` prorates the
     running figure, because it caps the whole credit rather than this window's
     share of it.
@@ -498,9 +525,21 @@ def _welcome_credit_eur(
     Returns a POSITIVE number; the caller subtracts it.
     """
     amount = snapshot.welcome_credit_eur or 0.0
-    per_kwh = snapshot.welcome_credit_eur_per_kwh
+    per_kwh = snapshot.welcome_credit_eur_per_kwh or 0.0
+    # A percentage of the energy cost is a per-kWh credit once it meets a
+    # rate, so it joins the leg above rather than opening a second path. The
+    # rate is the household's OWN realised one over the window, which is what
+    # makes this work on every rate shape: it blends a bi-hourly card by the
+    # hours actually drawn instead of needing register weights, and a variable
+    # or spot-priced card by what it really billed.
+    if snapshot.welcome_credit_pct_of_energy and energy_eur_per_kwh > 0.0:
+        per_kwh += snapshot.welcome_credit_pct_of_energy * energy_eur_per_kwh
     if per_kwh and first_year_kwh > 0.0:
         amount += per_kwh * first_year_kwh
+    # A volume of free energy, credited at that same rate. Not scaled by the
+    # year: the card grants 750 kWh once, not 750 kWh a year.
+    if snapshot.welcome_credit_kwh and energy_eur_per_kwh > 0.0:
+        amount += snapshot.welcome_credit_kwh * energy_eur_per_kwh
     ceiling = snapshot.welcome_credit_cap_eur
     if ceiling is not None:
         amount = min(amount, ceiling)
@@ -536,6 +575,7 @@ def _year_ahead_welcome_credit(
     today: date,
     eligible_eur: float,
     first_year_kwh: float = 0.0,
+    energy_eur_per_kwh: float = 0.0,
 ) -> float:
     """The welcome credit the coming year takes off a bill quoted today, in EUR.
 
@@ -562,4 +602,5 @@ def _year_ahead_welcome_credit(
         today + timedelta(days=_WELCOME_YEAR_DAYS),
         eligible_eur,
         first_year_kwh,
+        energy_eur_per_kwh,
     )

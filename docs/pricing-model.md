@@ -627,7 +627,44 @@ Seventeen products therefore depend on how the household pays, and the flow asks
 where `direct_debit_discount` is set in the registry (`_DIRECT_DEBIT_RISTOURNE`,
 `mega.py`). A product whose card states either dependence and which is missing from that
 set is never asked, so the resolver is handed a default and the card's wording never
-reaches the bill. A future card that pro-rates without a cap, or caps a
+reaches the bill.
+
+Luminus states its credit two further ways, as a new-customer CAMPAIGN tied to the month
+of signing: *"En tant que nouveau client, vous beneficiez d'une remise de 33% sur les
+couts energetiques, non-valable sur un compteur exclusif nuit, ... pendant 12 mois pour la
+conclusion d'un contrat Luminus Comfy Electricite en septembre 2026"*, or as a volume,
+*"une remise de 750 kWh"* paid *"12 mois apres la date de debut via un cashback"*.
+`welcome_credit_pct_of_energy` and `welcome_credit_kwh` carry them.
+
+Both need a rate to become money, and the rate is the household's OWN realised one over
+the window (`window_energy_rate`, `fees.py`): the supplier's energy component divided by
+what the window drew. That is what makes them work on every rate shape, blending a
+bi-hourly card by the hours actually drawn rather than needing register weights, and a
+variable or spot-priced card by what it really billed. A percentage then folds into the
+per-kWh leg and a volume into the flat one, so neither opens a path of its own and both
+inherit the cap, the accrual and the VAT basis. The percentage is paid *"au pro rata sur
+vos prochains decomptes"*, which is the pro-rata kind, where a volume is a cashback at the
+wait the card states.
+
+Two rules the cards make necessary:
+
+- The campaign is read from **its own sentence**, anchored between *"En tant que nouveau
+  client"* and the signing gate. The same block prints standing loyalty discounts in
+  nearly the same words, *"12 mois apres la date de debut, une reduction de 5 % sur les
+  couts energetiques ... pendant 12 mois ... au pro rata de la consommation de votre 2e
+  annee"*, which are a year-2 and year-3 benefit this does not model. They also say
+  "pendant 12 mois" and carry their own exclusive-night exclusion, so reading the card as
+  a whole attributed that exclusion to the campaign.
+- `welcome_credit_excludes_night_meter` is settled by `resolve_welcome_credit_meter`
+  against the entry's own meter, beside the direct-debit answer and for the same reason.
+
+What a past month can be credited is bounded by what was CAPTURED. Luminus's own archive
+endpoint serves a month's tariff without its campaign, so a signing before the project's
+archive began capturing live texts cannot be recovered: the promo exists only on the live
+card during its own month. The archive has captured since September 2026, `_month_cache`
+asks it before the supplier's own archive, and `archive_cards.py` replays every stored
+text through the current extractor whenever the parser changes, so months from then on
+resolve for every entry whatever date it was installed. A future card that pro-rates without a cap, or caps a
 lump, is what would split them.
 
 The cap counts only the three components the card names. Not the energy fund, the

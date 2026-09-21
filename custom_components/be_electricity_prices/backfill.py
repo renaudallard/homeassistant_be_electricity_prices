@@ -113,6 +113,7 @@ from .fees import (
     _prosumer_monthly_fee,
     _welcome_credit_eur,
     first_year_net_kwh,
+    window_energy_rate,
 )
 from .injection import (
     _historical_injection_rate,
@@ -1017,6 +1018,7 @@ async def _backfill_cost_sensor(
                 running_consumption_kwh - running_net_kwh,
                 compensation=is_compensation,
             ),
+            window_energy_rate(running_energy_component, running_consumption_kwh),
         )
         state = round(displayed_energy + running_fees - credit, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but
