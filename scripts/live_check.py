@@ -599,6 +599,38 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
 }
 
 
+# A VREG ceiling a card prints that the fleet contradicts, already looked at:
+# the integration bills the regulator's figure through
+# resolve_vreg_network_ceiling, so no household sees the card's. Same class as
+# a known tax block, and reported the same way. Keyed on the exact figure, so
+# a supplier that changes it by a digit stops matching and files.
+#
+# The expiry is the one the constant carries
+# (VREG_NETWORK_CEILING_KNOWN_UNTIL): when the window lapses every card is
+# read as printed again and each of these has to be looked at afresh.
+_KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
+    ("bolt", 0.2035480): (
+        date(2027, 1, 1),
+        "prints a figure five other suppliers contradict, on its Wallonia and "
+        "Brussels cards too where no VREG tariff applies; billed from the "
+        "regulator either way",
+    ),
+}
+
+
+def _vreg_ceiling_allowance(supplier: str, printed: float, today: date) -> str | None:
+    """The reason this exact ceiling is allowed today, or ``None``.
+
+    Matched on the figure rather than the supplier, for the reason
+    :func:`_tax_block_allowance` is: an allowance covers the disagreement that
+    was looked at and nothing else.
+    """
+    known = _KNOWN_VREG_CEILINGS.get((supplier, round(printed, 7)))
+    if known is None or today >= known[0]:
+        return None
+    return known[1]
+
+
 def _tax_block_allowance(
     supplier: str, excise: float, contribution: float, today: date
 ) -> str | None:
@@ -2162,7 +2194,9 @@ def _check_vreg_ceiling_window(today: date | None = None) -> None:
     )
 
 
-def _check_vreg_ceiling_consensus(archive: Path | None) -> None:
+def _check_vreg_ceiling_consensus(
+    archive: Path | None, today: date | None = None
+) -> None:
     """Assert the Flemish cards that print a ceiling agree with the constant.
 
     The maximumtarief is one rate for the whole of Flanders, so a card stating
@@ -2187,6 +2221,7 @@ def _check_vreg_ceiling_consensus(archive: Path | None) -> None:
     """
     if archive is None:
         return
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     rows = [
         row
         for row in sorted(archive.glob("cards/*/*/flanders/????-??.json"))
@@ -2239,16 +2274,26 @@ def _check_vreg_ceiling_consensus(archive: Path | None) -> None:
             kind="tax",
         )
         return
-    _record(
-        "_federal: every Flemish card agrees on the VREG ceiling",
-        False,
-        f"{month}: {detail} against the fleet's {tvac:.7f} including VAT "
-        f"({_VREG_CEILING_HTVA} excluding it) on {len(agree)} other suppliers. "
-        "The ceiling is one rate for all of Flanders, so these cards are "
-        "stale; resolve_vreg_network_ceiling already bills the regulator's "
-        "figure, so this is a card to report rather than money lost",
-        kind="tax",
-    )
+    # One row per supplier, so an allowance can cover the one that was looked
+    # at without silencing the next card to drift.
+    for name in odd:
+        line = (
+            f"{month}: {name} prints {printed[name]:.7f} against the fleet's "
+            f"{tvac:.7f} including VAT ({_VREG_CEILING_HTVA} excluding it) on "
+            f"{len(agree)} other suppliers. The ceiling is one rate for all of "
+            "Flanders, so this card is stale; resolve_vreg_network_ceiling "
+            "already bills the regulator's figure, so it is a card to report "
+            "rather than money lost"
+        )
+        allowed = _vreg_ceiling_allowance(name, printed[name], today)
+        if allowed is not None:
+            line = f"{_ALLOWED_TAX_MARKER}: {line}; {allowed}"
+        _record(
+            f"{name}/VREG ceiling disagrees for {month}",
+            False,
+            line,
+            kind="tax",
+        )
 
 
 def _check_federal_tax_consensus(

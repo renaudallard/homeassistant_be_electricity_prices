@@ -1037,11 +1037,12 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 
-The tax report carries two kinds of row: a supplier whose federal block disagrees with the
-month's consensus (`_check_federal_tax_consensus`), and the standing request to extend the
-excise window before it lapses (`_check_excise_window`, silent until eight weeks out). Both are
-supplier- or maintainer-side rather than a break here, which is why they share a thread and fail
-no pull request.
+The tax report carries four kinds of row: a supplier whose federal block disagrees with the
+month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
+(`_check_vreg_ceiling_consensus`), and the standing requests to extend each window before it
+lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until eight weeks out).
+All are supplier- or maintainer-side rather than a break here, which is why they share a thread
+and fail no pull request.
 
 A disagreement that has been looked at and decided goes in `_KNOWN_TAX_BLOCKS`
 (`scripts/live_check.py`) and is then reported in its own section without filing: the
@@ -1053,6 +1054,15 @@ none. Two properties keep the allowance from becoming a mute button. It is keyed
 again, which is how Bolt and Trevion were seen correcting themselves between August and
 September. And each entry carries an expiry, all of them 2027-01-01, when the excise steps down
 and every card in the country has to be reprinted anyway.
+
+`_KNOWN_VREG_CEILINGS` is the same mechanism for the same reason, and shipped a day later than
+the check it quiets: Bolt prints 0,2035480 where five other suppliers print 0,3472738, and
+`resolve_vreg_network_ceiling` bills the regulator's figure regardless, so the card is worth
+reporting and not worth failing a run over daily. Keyed on the exact (supplier, ceiling) pair
+and expiring with `VREG_NETWORK_CEILING_KNOWN_UNTIL`, which is the month the constant stops
+being applied at all and every allowance under it has to be looked at again. A MAJORITY
+disagreeing is never allowed: that says the regulator moved and the constant is stale, so it
+stays a hard failure naming the constant rather than the cards.
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,

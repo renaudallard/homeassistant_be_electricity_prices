@@ -36,7 +36,9 @@ body and the actual failures were only visible in the run log.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 import subprocess
 import sys
 from datetime import date, datetime
@@ -44,6 +46,7 @@ from types import SimpleNamespace
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 import pytest
@@ -2392,3 +2395,104 @@ def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> No
     assert _failures(lambda: lc._validate_energy("x", "c", slipped)) == [
         "dynamic base in [-0.10, 0.10] EUR/kWh"
     ]
+
+
+def test_a_known_vreg_ceiling_is_allowed_and_expires() -> None:
+    """Bolt's ceiling is wrong, already looked at, and not billed.
+
+    ``resolve_vreg_network_ceiling`` bills the regulator's figure, so no
+    household sees the card's. Reported the way a known tax block is, in its
+    own section and setting no exit bit, rather than failing the run every
+    day about a card nothing can make the supplier reprint.
+
+    Not a mute button, for the two reasons the tax allowance is not: it is
+    keyed on the exact figure, so a supplier changing it by a digit files
+    again, and it expires.
+    """
+    live = date(2026, 9, 21)
+    assert lc._vreg_ceiling_allowance("bolt", 0.2035480, live) is not None, (
+        "the disagreement that was looked at should be allowed"
+    )
+    # A digit's difference is a different card and is not covered.
+    assert lc._vreg_ceiling_allowance("bolt", 0.2035481, live) is None
+    # Nor does it cover another supplier printing the same wrong figure.
+    assert lc._vreg_ceiling_allowance("mega", 0.2035480, live) is None
+    # And it lapses rather than standing forever.
+    assert lc._vreg_ceiling_allowance("bolt", 0.2035480, date(2027, 1, 1)) is None
+
+
+def test_every_vreg_ceiling_allowance_expires_with_the_constant() -> None:
+    """The constant is only applied inside its own window, so past that every
+    card is read as printed again and each allowance has to be looked at
+    afresh. An allowance outliving the window would be asserting something
+    about a period the code no longer takes a view on."""
+    from custom_components.be_electricity_prices.const import (
+        VREG_NETWORK_CEILING_KNOWN_UNTIL,
+    )
+
+    lapses = date(*VREG_NETWORK_CEILING_KNOWN_UNTIL, 1)
+    assert lc._KNOWN_VREG_CEILINGS, "no allowance to check"
+    for (supplier, printed), (expires, why) in lc._KNOWN_VREG_CEILINGS.items():
+        assert expires <= lapses, f"{supplier} {printed} outlives the window"
+        assert why.strip(), f"{supplier} {printed} carries no reason"
+
+
+def test_the_ceiling_consensus_uses_the_allowance(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    """The allowance is only worth having if the check consults it.
+
+    Testing ``_vreg_ceiling_allowance`` alone proves the lookup, not that
+    anything calls it, which is the half that decides whether a run files an
+    issue every day about a card nothing can make the supplier reprint.
+    """
+    archive = tmp_path / "electricity"
+    texts = archive / "texts" / "2026-09"
+    texts.mkdir(parents=True)
+
+    def _card(name: str, ceiling: str) -> None:
+        text = texts / f"{name}.txt"
+        text.write_text(
+            "Un tarif maximal de " + ceiling + " €/kWh (hors gestion des "
+            "données) s'applique aux compteurs digitaux.",
+            encoding="utf-8",
+        )
+        row = archive / "cards" / name / f"{name}_fix" / "flanders" / "2026-09.json"
+        row.parent.mkdir(parents=True, exist_ok=True)
+        row.write_text(
+            json.dumps({"_sources": [{"text": f"texts/2026-09/{name}.txt"}]}),
+            encoding="utf-8",
+        )
+
+    _card("bolt", "0,2035480")
+    _card("luminus", "0,3472738")
+    _card("frank", "0,3472738")
+
+    monkeypatch.setattr(
+        lc,
+        "_CONTRACTS_BY_ID",
+        {
+            f"{n}_fix": SimpleNamespace(professional=False)
+            for n in ("bolt", "luminus", "frank")
+        },
+    )
+    monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
+
+    lc._check_vreg_ceiling_consensus(archive, date(2026, 9, 21))
+    rows = _rows("bolt/VREG ceiling")
+    assert len(rows) == 1, [c.label for c in lc.CHECKS]
+    assert rows[0].expected is True, (
+        "a known ceiling must report as expected, or the run files an issue "
+        "about it every day"
+    )
+
+    # And past the expiry the same card is a real failure again.
+    lc.CHECKS.clear()
+    lc._check_vreg_ceiling_consensus(archive, date(2027, 1, 2))
+    assert _rows("bolt/VREG ceiling")[0].expected is False
+
+
+def _read_ceiling(text: str) -> float | None:
+    """The shared reader, on the shape these fake cards print."""
+    found = re.search(r"tarif maximal de\s+([\d.,]+)\s*€", text)
+    return float(found.group(1).replace(",", ".")) if found else None
