@@ -32,7 +32,7 @@ from custom_components.be_electricity_prices import (
     compare_placeholders,
     snapshot_resolve,
 )
-from custom_components.be_electricity_prices.compare_quote import RankedRow
+from custom_components.be_electricity_prices.compare_table import RankedRow
 
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -2619,7 +2619,7 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
 
     The invariant: the target's price does not depend on what the household
     next door is configured as."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
 
@@ -2713,7 +2713,7 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     open the dialog. The helper prices the coming year once per kind of
     day, so the slot durations are weighted by how many weekdays, weekend
     days and public holidays the year actually holds."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
@@ -2881,7 +2881,9 @@ def test_compensation_clamps_each_register_not_the_annual_total() -> None:
     # Built the way the callers build them, because that is what decides how
     # many registers there are: a mono meter on the day/night schedule has
     # one, so the pair the clamp iterates is a pair of one.
-    from custom_components.be_electricity_prices.compare_quote import _register_weights
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _register_weights,
+    )
 
     mono_weights = (
         _register_weights("flanders", None, meter="mono"),
@@ -2918,8 +2920,8 @@ def test_tarif_impact_clamps_the_three_cwape_bands_the_engine_bills() -> None:
     midday export: the mono entry forfeited its whole energy term, and the
     bi-hourly one was 85,79 EUR out.
     """
-    from custom_components.be_electricity_prices.compare_quote import (
-        _annual_bill,
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+    from custom_components.be_electricity_prices.compare_weighting import (
         _register_weights,
     )
     from custom_components.be_electricity_prices.spot_stats import _register_for
@@ -3031,7 +3033,7 @@ def test_compare_injection_credit_weights_slots_by_export_shape() -> None:
     which resolves each hour's own slot and multiplies by that hour's exported
     kWh. Measured over a year of modelled Brussels export on this card the gap
     was 11,22 EUR on 3500 kWh, and always in the same direction."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3093,7 +3095,7 @@ def test_compare_injection_credit_averages_a_register_pair_over_the_year(
     day rate on a weekday afternoon and the night rate on a Sunday, 25 % apart
     on the same card. Average the two registers over the year on the region's
     own schedule, by the export shape when the household has one."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.pricing import is_offpeak
@@ -3174,7 +3176,7 @@ def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
     share of the week those hours occupy, so a peak-expensive card was quoted
     well under what the sensor beside it bills. The live year-to-date has
     always weighted each hour by its own kWh."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
@@ -3219,7 +3221,7 @@ def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
     # bands across the week (the energy TOU slots and the bi-horaire network
     # bands don't align, so a single sample per energy slot mis-prices the
     # network).
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
@@ -3263,7 +3265,7 @@ def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
     # SmartFlex's seasonal per-kWh estimate must not depend on the hour the
     # user opened the dialog, and must sit between the pure-offpeak and
     # pure-peak all-in (a season/hour-blended average).
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
@@ -3303,7 +3305,7 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
     # A Fixed/Variable contract compared on a bi-hourly meter must time-
     # weight peak vs off-peak, not return whichever slot the dialog opened
     # in, so the per-kWh is independent of when_now.
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers._rates import FixedRates
@@ -3368,7 +3370,7 @@ def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     and the one current_year_cost bills on."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3423,7 +3425,7 @@ def test_compare_prices_a_dynamic_energy_leg_on_the_consumption_shape() -> None:
     The clock mean assumes a household that consumes uniformly around the
     clock. It does not: consumption is evening-heavy while the day-ahead curve
     troughs at midday, so the clock mean under-quotes the energy leg."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _consumption_weighted_spot,
     )
 
@@ -3463,7 +3465,7 @@ def test_compare_floored_injection_averages_the_slot_rates() -> None:
     per slot. The page has to quote the number the entry bills."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3543,7 +3545,7 @@ def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
     helper, which resolves the credit at the current slot. That valued a
     whole year of export at one hour's spot, and the answer moved every time
     the page was reopened."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import InjectionRates
@@ -3607,7 +3609,7 @@ def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> No
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3636,7 +3638,7 @@ def test_compare_keeps_the_indicative_when_the_spp_profile_is_missing() -> None:
     profile the card's own printed indicative is the honest answer."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3662,7 +3664,7 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
     # live current-slot rate the way the live helper would.
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -3681,7 +3683,7 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
     # The weights are counted off tou_slot itself over a year, so holidays sit
     # in the weekend slot the cards give them; the triple written out by hand
     # here used to ignore them and covered only two of the three rules.
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_slot_weights,
     )
 
@@ -3702,7 +3704,7 @@ def test_tou_slot_weights_cover_every_weekend_rule() -> None:
     does not say. The midday block is when a solar household exports."""
     from typing import get_args
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_slot_weights,
     )
     from custom_components.be_electricity_prices.providers._rates import WeekendRule
@@ -3726,7 +3728,7 @@ def test_tou_slot_weights_follow_the_measured_export_shape() -> None:
     """A household exporting only at midday must weight the slot the midday
     block is in, which on SmartFlex is off-peak in summer and transition in
     winter. A week anchored in January answered transition for the whole year."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_slot_weights,
     )
 
@@ -4992,7 +4994,7 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     from datetime import UTC, datetime as dt
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers.base import (
@@ -5060,7 +5062,7 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     assert on_window_mean - export_weighted > 0.02
     # And it equals what the shared export-weighting helper computes, so the
     # raw snapshot really did route through that branch.
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _export_weighted_credit,
     )
 
@@ -5110,9 +5112,7 @@ def test_the_comparison_chart_keeps_both_rows_for_one_supplier() -> None:
     value overwrote the first while the first label survived. Comparing two
     contracts from a single supplier did exactly that.
     """
-    from custom_components.be_electricity_prices.compare_quote import (
-        _populate_charts,
-    )
+    from custom_components.be_electricity_prices.compare_table import _populate_charts
 
     base = {
         "current_annual": "1200",
@@ -5296,7 +5296,7 @@ def test_card_caveat_names_the_supplier_whose_card_omits_the_walloon_fee() -> No
     contract they are being quoted."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import _card_caveats
+    from custom_components.be_electricity_prices.compare_table import _card_caveats
 
     missing = SimpleNamespace(
         taxes=SimpleNamespace(region_connection_fee_unavailable=True)
@@ -5323,7 +5323,7 @@ def test_vintage_note_names_the_older_card_only_when_they_differ() -> None:
     calendar rather than the offer, so it is disclosed, not corrected."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import _vintage_note
+    from custom_components.be_electricity_prices.compare_table import _vintage_note
 
     april = SimpleNamespace(
         valid_until=date(2026, 4, 30), publication_label="Avril 2026"
@@ -5351,7 +5351,7 @@ def test_vintage_note_prints_no_stamp_when_the_older_card_has_no_label() -> None
     empty too, and neither may render as an empty bracket."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import _vintage_note
+    from custom_components.be_electricity_prices.compare_table import _vintage_note
 
     older = SimpleNamespace(valid_until=date(2026, 4, 30), publication_label="")
     newer = SimpleNamespace(valid_until=date(2026, 8, 31), publication_label="08/2026")
@@ -5369,7 +5369,7 @@ def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
     against a baseline that is not."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_quote import _card_caveats
+    from custom_components.be_electricity_prices.compare_table import _card_caveats
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
@@ -5464,7 +5464,7 @@ def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -6121,7 +6121,7 @@ def test_row_label_dedupes_the_supplier() -> None:
     No truncation any more: the name used to be elided to a fixed width so
     columns lined up inside a code fence, which cost exactly the tails these
     names disambiguate on - Agilior Online GREEN against Agilior Online."""
-    from custom_components.be_electricity_prices.compare_quote import _row_label
+    from custom_components.be_electricity_prices.compare_table import _row_label
 
     assert _row_label("Eneco", "Eneco Zon & Wind Vast") == "Eneco Zon & Wind Vast"
     assert _row_label("Bolt", "Fix") == "Bolt Fix"
@@ -6152,7 +6152,7 @@ def test_ranking_table_keeps_every_row_visible_and_wraps() -> None:
     Emitted as wrapping markdown, not an aligned block: a Home Assistant
     dialog renders a code fence monospace and never wraps, so 68 columns
     meant scrolling sideways to read a row."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_table import (
         RankedRow,
         _ranking_table,
     )
@@ -6180,7 +6180,7 @@ def test_ranking_table_keeps_every_row_visible_and_wraps() -> None:
 def test_ranking_row_carries_ytd_only_when_it_has_one() -> None:
     """A row that cannot honestly carry a year-to-date figure says nothing
     rather than printing a proxied number beside a real one."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_table import (
         RankedRow,
         _ranking_table,
     )
@@ -6195,7 +6195,7 @@ def test_ranking_row_carries_ytd_only_when_it_has_one() -> None:
 def test_ranking_table_is_empty_for_no_rows() -> None:
     """An empty cell renders nothing here and is explained by the step above,
     which knows the region and the group; this helper does not."""
-    from custom_components.be_electricity_prices.compare_quote import _ranking_table
+    from custom_components.be_electricity_prices.compare_table import _ranking_table
 
     assert _ranking_table([]) == ""
 
@@ -7283,7 +7283,7 @@ def test_the_compare_credit_refuses_a_plain_mean_for_a_month_index() -> None:
     print a current. That is what makes it worth a test rather than a
     differential: nothing priced can see it.
     """
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -7508,7 +7508,7 @@ def test_a_month_indexed_credit_is_quoted_at_the_month_it_settles_on() -> None:
     printed figure on an unbaked snapshot. The gap is the coefficient times one
     month of index drift.
     """
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.injection import (
@@ -7550,7 +7550,7 @@ def test_a_per_slot_credit_is_quoted_on_the_month_it_settles_on() -> None:
     and a triplet resolved on last month's index. Each band re-prices on the
     delivery month, so the quote weights this month's three rates rather than
     last month's."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -7599,7 +7599,7 @@ def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
     says so: consumption monthly on BELIX, injection per hour. A signing
     cohort re-prices the ENERGY leg to a monthly one, and the feed-in must not
     follow it onto that index."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -7659,7 +7659,7 @@ def test_the_quoted_rate_tracks_the_year_it_stands_in_for() -> None:
     """
     from datetime import timedelta
 
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.pricing import (
@@ -7910,7 +7910,7 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
     from statistics import fmean
 
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.injection import (

@@ -38,7 +38,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.compare_quote import (
+from custom_components.be_electricity_prices.compare_table import (
     DailyCompare,
     RankedRow,
 )
@@ -1163,7 +1163,7 @@ def test_a_row_priced_from_a_reading_is_tagged_in_the_ranking() -> None:
     """A figure someone might switch supplier over must not hide that it was
     read off a picture of the card. The live entry gets a Repairs card saying
     so; the ranking row says it inline."""
-    from custom_components.be_electricity_prices.compare_quote import _ranking_table
+    from custom_components.be_electricity_prices.compare_table import _ranking_table
 
     rows = (
         RankedRow(label="Eneco Zon & Wind Flex", annual=1200.0, is_own=True),

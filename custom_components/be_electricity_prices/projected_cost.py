@@ -186,8 +186,10 @@ async def _compute_projected_year_cost(
     from .compare_quote import (
         _annual_bill,
         _annual_volume,
-        _compare_injection_credit,
         _covers_a_year,
+    )
+    from .compare_weighting import (
+        _compare_injection_credit,
         _tou_weighted_per_kwh,
     )
     from .energy_meters import _measured_hour_weights, _measured_kwh
@@ -343,7 +345,7 @@ async def _compute_projected_year_cost(
     # totals; see the clamp in _annual_bill.
     register_weights = None
     if regime == SOLAR_REGIME_COMPENSATION and export_per_kwh is not None:
-        from .compare_quote import _register_weights
+        from .compare_weighting import _register_weights
 
         register_weights = (
             _register_weights(region, hour_weights, meter=meter, dso_mode=dso_mode),

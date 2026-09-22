@@ -38,8 +38,8 @@ from .compare_flow import _CompareStepsMixin, _REFRESH_FIELD, _YTD_FIELD
 from .compare_engine import _SweepEngine
 from .compare_inputs import _candidate_label
 from .compare_inputs import _effective_regime
-from .compare_quote import RankedRow
-from .compare_quote import _ranking_table
+from .compare_table import RankedRow
+from .compare_table import _ranking_table
 from .const import COMPARE_SWEEP_BUDGET_S
 from .const import CONF_API_KEY
 from .const import CONF_METER

@@ -63,7 +63,7 @@ from collections.abc import Sequence
 from .providers.base import SupplierSnapshot
 from .compare_quote import _annual_volume
 from .compare_quote import _annual_welcome_credit
-from .compare_quote import _consumption_weighted_spot
+from .compare_weighting import _consumption_weighted_spot
 from .flow_schemas import _contract_has_spot_injection
 from .flow_schemas import _contract_kind
 from .compare_quote import _covers_a_year
@@ -72,10 +72,10 @@ from .energy_meters import _measured_hour_weights
 from .energy_meters import _measured_kwh
 from .cohort import _parse_iso_date
 from .compare_quote import _read_total_kwh
-from .compare_quote import _register_weights
+from .compare_weighting import _register_weights
 from .spot_stats import _rlp_blend_for
-from .compare_quote import _solar_note
-from .compare_quote import _tou_weighted_per_kwh
+from .compare_table import _solar_note
+from .compare_weighting import _tou_weighted_per_kwh
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from datetime import date
 from datetime import datetime

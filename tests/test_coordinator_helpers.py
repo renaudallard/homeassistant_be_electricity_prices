@@ -10093,7 +10093,7 @@ def test_annual_bill_subtracts_a_welcome_credit_last() -> None:
 def test_weighted_per_kwh_can_return_the_energy_component_alone() -> None:
     """The cap of a welcome credit wants the supplier's energy component, not
     the all-in rate, weighted exactly the way the all-in one is."""
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.pricing import static_breakdown

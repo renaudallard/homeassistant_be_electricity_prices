@@ -372,7 +372,7 @@ def test_compare_honours_the_entry_level_spp_opt_in() -> None:
     two-day day-ahead window mean while the sensor beside it used the month's
     SPP-weighted one.
     """
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers.custom import (

@@ -33,7 +33,7 @@ the result page prints them; none of it decides anything on its own.
 
 from __future__ import annotations
 
-from .compare_quote import _row_label
+from .compare_table import _row_label
 from .const import CONF_ANNUAL_CONSUMPTION_KWH
 from .const import CONF_CONTRACT
 from .const import CONF_DSO_TARIFF_MODE

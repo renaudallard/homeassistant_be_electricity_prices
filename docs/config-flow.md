@@ -1,8 +1,8 @@
 # Config and options flow
 
 This document covers the config-flow package -- `config_flow.py` plus the
-modules split out of it (`flow_schemas.py`, `flow_prefill.py`, `compare_quote.py`
-and the compare branch: `compare_flow.py`, `compare_sweep_flow.py`,
+modules split out of it (`flow_schemas.py`, `flow_prefill.py`, `compare_quote.py`,
+`compare_weighting.py`, `compare_table.py`, and the compare branch: `compare_flow.py`, `compare_sweep_flow.py`,
 `compare_engine.py`, `compare_household.py`, `compare_inputs.py` and
 `compare_placeholders.py`) -- the multi-step wizard that turns a user's
 supplier, region, DSO, meter, solar, and sensor choices into a config entry. It

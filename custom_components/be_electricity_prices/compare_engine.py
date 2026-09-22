@@ -41,12 +41,12 @@ from .compare_inputs import _coordinator_rlp_weights
 from .compare_inputs import _coordinator_spp_weights
 from .compare_inputs import _needs_missing_spots
 from .compare_inputs import _settlement_of
-from .compare_quote import DailyCompare
-from .compare_quote import RankedRow
+from .compare_table import DailyCompare
+from .compare_table import RankedRow
 from .compare_quote import _annual_bill
 from .compare_quote import _annual_welcome_credit
-from .compare_quote import _compare_injection_credit
-from .compare_quote import _tou_weighted_per_kwh
+from .compare_weighting import _compare_injection_credit
+from .compare_weighting import _tou_weighted_per_kwh
 from .const import CONF_CONTRACT
 from .const import CONF_METER
 from .const import CONF_REGION

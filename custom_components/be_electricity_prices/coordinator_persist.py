@@ -536,7 +536,10 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
     scheduled run replaces it, so an old ranking is a dated answer rather than
     a wrong one.
     """
-    from .compare_quote import DailyCompare, RankedRow
+    from .compare_table import (
+        DailyCompare,
+        RankedRow,
+    )
 
     ran_at_raw = blob.get("ran_at")
     if not isinstance(ran_at_raw, str):

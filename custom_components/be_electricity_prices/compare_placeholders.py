@@ -47,16 +47,16 @@ from .const import SOLAR_REGIME_INJECTION
 from .const import SPOT_PRICED_CONTRACT_KINDS
 from .compare_quote import _annual_bill
 from .compare_quote import _annual_welcome_credit
-from .compare_quote import _card_caveats
-from .compare_quote import _compare_injection_credit
+from .compare_table import _card_caveats
+from .compare_weighting import _compare_injection_credit
 from .flow_schemas import _contract_kind
 from .cohort import _parse_iso_date
-from .compare_quote import _populate_charts
-from .compare_quote import _solar_note
-from .compare_quote import _tou_weighted_per_kwh
-from .compare_quote import _uncredited_note
-from .compare_quote import _vintage_note
-from .compare_quote import _whatif_note
+from .compare_table import _populate_charts
+from .compare_table import _solar_note
+from .compare_weighting import _tou_weighted_per_kwh
+from .compare_table import _uncredited_note
+from .compare_table import _vintage_note
+from .compare_table import _whatif_note
 from .compare_quote import _ytd_welcome_credit
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util

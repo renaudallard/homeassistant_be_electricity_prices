@@ -5339,7 +5339,7 @@ async def test_fill_profiles_refreshes_only_when_a_profile_landed(
 
 
 def _ranking(ran_at: datetime) -> Any:
-    from custom_components.be_electricity_prices.compare_quote import (
+    from custom_components.be_electricity_prices.compare_table import (
         DailyCompare,
         RankedRow,
     )

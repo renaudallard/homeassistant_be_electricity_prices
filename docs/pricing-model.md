@@ -1063,7 +1063,7 @@ convex and the two orders give different money:
   each slot at its own rate; the compare estimate (`_compare_injection_credit`,
   `compare_quote.py`) has to collapse the window to one number, so it takes
   the mean of the floored rates weighted by the household's own export shape
-  (`_export_weighted_credit`, `compare_quote.py`), which is the basis the
+  (`_export_weighted_credit`, `compare_weighting.py`), which is the basis the
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
@@ -1091,7 +1091,7 @@ holds every call to it.
 
 When the compare page has no measured export shape it falls back to weighting
 each slot by how long it is active, and those durations are counted off
-`pricing.tou_slot` itself over a year (`_tou_slot_hours`, `compare_quote.py`)
+`pricing.tou_slot` itself over a year (`_tou_slot_hours`, `compare_weighting.py`)
 rather than written out a second time. Three things depend on that. A seasonal
 rule has no representative week at all: Luminus SmartFlex moves its 11:00-17:00
 block between super-creuses and creuses on 21 March and 20 September, so the
@@ -1109,7 +1109,7 @@ anyone remembering to come back, which is how the third one went unweighted.
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable and Variable Trihoraire, every Bolt fixed and variable card |
 | (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed`; or the per-slot triplet with its three `factor_*` / `base_*` pairs and `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions), Trevion Flex/LifePowr; Engie Empower Flextime per slot |
-| (e) Register pair | `current` + `peak` + `offpeak`, flagged `bi_hourly` | No | Trevion Groene Energie Vast: one feed-in rate per meter register beside the consumption rates. A bi-hourly or digital meter is credited by register on the region's day/night schedule, a single-register meter at `current`; a pair without the flag is shape (a). Every path asks per register, the per-day year-to-date walk included, which takes one hour inside each block; the compare estimate and the projection, which multiply one rate by a whole year's export, average the two registers by the household's export shape on that schedule (`_register_weights`, `compare_quote.py`) rather than take the register the clock is in |
+| (e) Register pair | `current` + `peak` + `offpeak`, flagged `bi_hourly` | No | Trevion Groene Energie Vast: one feed-in rate per meter register beside the consumption rates. A bi-hourly or digital meter is credited by register on the region's day/night schedule, a single-register meter at `current`; a pair without the flag is shape (a). Every path asks per register, the per-day year-to-date walk included, which takes one hour inside each block; the compare estimate and the projection, which multiply one rate by a whole year's export, average the two registers by the household's export shape on that schedule (`_register_weights`, `compare_weighting.py`) rather than take the register the clock is in |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
 decides WHICH mean and is deliberately not allowed to answer with an hour's
