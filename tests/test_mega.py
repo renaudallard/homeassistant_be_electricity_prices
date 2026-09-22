@@ -871,7 +871,7 @@ def test_injection_vat_is_read_off_the_card_not_the_edition() -> None:
 def test_injection_vat_falls_back_to_the_edition_without_the_sentence() -> None:
     """A card that prints neither sentence keeps the old assumption rather
     than silently dropping to exempt."""
-    from custom_components.be_electricity_prices.providers.mega import (
+    from custom_components.be_electricity_prices.providers._mega_cards import (
         _injection_vat_applies,
     )
 

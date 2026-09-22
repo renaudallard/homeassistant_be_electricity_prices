@@ -1167,7 +1167,7 @@ def test_pro_injection_vat_expectation_matches_the_cards() -> None:
     the check that was missing when the extractor was corrected and the live
     run started failing three rows a day (issue #71).
     """
-    from custom_components.be_electricity_prices.providers.mega import (
+    from custom_components.be_electricity_prices.providers._mega_cards import (
         _injection_vat_applies,
     )
     from tests import fixture_text
@@ -1200,7 +1200,7 @@ def test_the_vat_check_reads_the_contract_shape_it_is_actually_given() -> None:
     from custom_components.be_electricity_prices.providers import mega
     from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import InjectionRates
-    from custom_components.be_electricity_prices.providers.mega import (
+    from custom_components.be_electricity_prices.providers._mega_cards import (
         _injection_vat_applies,
     )
     from tests import fixture_text
