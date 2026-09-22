@@ -651,7 +651,10 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     # recording them would write a fresh states row every tick even for a flat
     # contract whose price never moves; keep them out of history too.
     # The current_year_cost diagnostic breakdown (YTD/today kWh, raw energy,
-    # fees) climbs every tick as well, so keep it out of the recorder too.
+    # fees, the components, the credit, the coverage counts) climbs every tick
+    # as well, so keep it out of the recorder too; only the billed peak stays,
+    # because the capacity sensor publishes it as history and it moves only
+    # when a peak does.
     _unrecorded_attributes = frozenset(
         {
             "today",
@@ -669,6 +672,15 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "fees_ytd_eur",
             "hours_seen",
             "hours_priced",
+            "hours_elapsed",
+            "days_seen",
+            "days_elapsed",
+            "energy_component_ytd_eur",
+            "green_component_ytd_eur",
+            "capacity_ytd_eur",
+            "prosumer_ytd_eur",
+            "standing_charges_ytd_eur",
+            "welcome_credit_eur",
             "energy_basis",
             "fee_basis",
             "volume_basis",

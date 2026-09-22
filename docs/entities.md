@@ -256,8 +256,13 @@ helpers (`today`, `tomorrow`, `cheapest_4h_today`, `most_expensive_4h_today`),
 the diagnostic fields behind `current_year_cost`, and every attribute the
 projection publishes. All of them are re-emitted on each tick and none is
 queried as history, so keeping them out of state-attribute storage stops
-long-term-database bloat. Add new attribute names here as they are added to a
-sensor: the set is the only thing preventing them being recorded.
+long-term-database bloat. The one diagnostic key left recorded is
+`billed_peak_kw`, which the capacity sensor publishes as history and which
+moves only when a peak does. Add new attribute names here as they are added to
+a sensor: the set is the only thing preventing them being recorded, and
+`test_the_diagnostic_breakdowns_are_not_recorded` reads the breakdown keys off
+the source, so one added to the year-to-date walk or the projection without an
+entry here fails the suite.
 
 ### `projected_year_cost`: why no device class
 

@@ -5498,23 +5498,48 @@ def test_projected_year_cost_sensor_metadata() -> None:
     assert getattr(desc, "last_reset_fn", None) is None
 
 
-def test_projection_attributes_are_not_recorded() -> None:
-    """Every attribute the projection publishes stays out of the recorder.
+def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
+    """Every key the year-to-date walk and the projection publish stays out
+    of the recorder.
 
-    They are basis strings and slowly-moving figures re-emitted on every tick;
-    recording them would bloat the database for no query anyone runs."""
+    They climb or are re-emitted on every tick, so recording any one of them
+    writes a fresh attributes row an hour for no query anyone runs. The list
+    this used to hold named the projection's keys by hand and missed its
+    welcome credit, and ten of the year-to-date keys were never excluded at
+    all, so the keys are read off every store into a breakdown in the package
+    instead. The billed peak is the one exception: the capacity sensor
+    publishes it as history, and it moves only when a peak does.
+    """
+    import ast
+    import pathlib
+
     from custom_components.be_electricity_prices.sensor import BePriceSensor
 
-    for name in (
-        "energy_basis",
-        "fee_basis",
-        "volume_basis",
-        "injection_basis",
-        "annual_kwh",
-        "annual_injection_kwh",
-        "contract_basis",
-    ):
-        assert name in BePriceSensor._unrecorded_attributes, name
+    pkg = pathlib.Path(__file__).resolve().parent.parent / (
+        "custom_components/be_electricity_prices"
+    )
+    keys: set[str] = set()
+    for path in pkg.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AugAssign):
+                targets = [node.target]
+            else:
+                continue
+            for target in targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id in ("breakdown", "stats")
+                    and isinstance(target.slice, ast.Constant)
+                    and isinstance(target.slice.value, str)
+                ):
+                    keys.add(target.slice.value)
+    # The scan reads both families, or it proves nothing.
+    assert {"hours_elapsed", "days_seen", "energy_basis"} <= keys
+    recorded = keys - BePriceSensor._unrecorded_attributes - {"billed_peak_kw"}
+    assert not recorded, sorted(recorded)
 
 
 def test_the_federal_contribution_is_dropped_from_the_months_it_is_not_levied() -> None:
