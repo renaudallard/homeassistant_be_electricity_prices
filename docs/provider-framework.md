@@ -153,7 +153,7 @@ month at the current rate. Return-value semantics:
 - A `SupplierSnapshot` for the requested month when the archive resolves.
 - An `ExtractorError` for a transient fetch failure (a timeout, a reset, a 5xx,
   an anti-bot 403, per `is_transient_fetch_error`). The month cache
-  (`_snapshot_for_month`, `snapshot_store.py`) writes its retry marker only
+  (`_snapshot_for_month`, `snapshot_months.py`) writes its retry marker only
   when the fetcher RAISES; a `None` is cached as the month's answer for the
   provisional TTL and, through a backfill, can reach the recorder. Every
   provider re-raises such a failure around its network calls, the way

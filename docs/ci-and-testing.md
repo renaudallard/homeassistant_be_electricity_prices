@@ -805,7 +805,7 @@ succeeds, so a day without the token loses nothing for good. `_prune` drops mani
 older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
-digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
+digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
 plus the installed `pypdf` and `pdfplumber` versions, since a reader release lays a card out
 differently and a stored text is served to every replay and to the live check for as long as the
 card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
@@ -874,7 +874,7 @@ carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TE
 so a mostly-refused page is no row rather than a row of silent misses. The row it produces
 marks the SOURCE it read that way, as `"ocr"` on the `_sources` entry beside the pdf digest it
 describes; the key is absent otherwise, so every row already stored is unchanged. An installation
-asks the sources (`_row_read_by_ocr`, `snapshot_store.py`) to know whether to tell its user the
+asks the sources (`_row_read_by_ocr`, `snapshot_months.py`) to know whether to tell its user the
 figures came from a reading.
 
 The mark belongs to the document, not to the row, because a row can read two and only one of them

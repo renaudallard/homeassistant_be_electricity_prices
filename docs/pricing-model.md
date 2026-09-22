@@ -199,7 +199,7 @@ TotalEnergies), so pricing their cards as printed billed a levy nobody
 charges, roughly 7 EUR/year at 3.500 kWh.
 `resolve_federal_contribution` (`providers/base.py`) zeroes it for a delivery
 month at or after `FEDERAL_CONTRIBUTION_ZEROED_FROM` (`const.py`), and
-`_resolve_snapshot` (`snapshot_store.py`) applies it once on the way from a
+`_resolve_snapshot` (`snapshot_resolve.py`) applies it once on the way from a
 stored card to a priced one, beside `apply_vat` and the two resolvers below.
 Running there rather than in the parsers keeps the archive holding what each
 card actually printed, needs no schema bump, and reaches every path that
@@ -226,7 +226,7 @@ differently (about 5,49 EUR/year at 3.500 kWh).
 `resolve_federal_excise` (`providers/base.py`) writes the law's figure for a
 delivery month inside the window `FEDERAL_EXCISE_KNOWN_FROM` ..
 `FEDERAL_EXCISE_KNOWN_UNTIL` (`const.py`), applied beside the contribution in
-`_resolve_snapshot` (`snapshot_store.py`), and it is identity for a card that
+`_resolve_snapshot` (`snapshot_resolve.py`), and it is identity for a card that
 already prints it. On the card's OWN VAT basis: most print the levy including
 VAT and Ecopower prints it excluding, the engine grossing it later, so writing
 one number into both would be 6% wrong for one of them. A professional card is
@@ -484,7 +484,7 @@ can turn a spot-monthly leg into a fixed one: the fee travels across that conver
 reduction still waiting to be applied would not. The result floors at zero, since a
 reduction larger than the charge it comes off would pay the household to be supplied.
 
-`_direct_debit` (`snapshot_store.py`) requires the stored answer AND the registry flag of
+`_direct_debit` (`snapshot_resolve.py`) requires the stored answer AND the registry flag of
 the card in hand, so on the comparison page the household's payment method reaches a target
 whose card prices it and nowhere else.
 

@@ -23,16 +23,18 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Snapshot persistence and the cross-entry caches.
+"""The cross-entry snapshot caches.
 
-Split out of coordinator.py. Holds the on-disk Store and its schema version,
-the shared snapshot / lock / failed-fetch dicts that let several entries on the
-same (supplier, contract, region) tuple share one fetch, and the per-entry VAT
-and excise-band resolution applied on load.
+Split out of coordinator.py. Holds the shared snapshot / lock / failed-fetch
+dicts that let several entries on the same (supplier, contract, region) tuple
+share one fetch, the per-month dicts beside them, and the generation counter
+both are gated on so a fetch that finishes after its tuple was evicted knows
+not to write.
 
-_SNAPSHOT_SCHEMA_VERSION lives here with the (de)serialisation it guards: the
-persisted snapshot holds the card AS PARSED, so any change to what an extractor
-produces has to move this number with it."""
+The three jobs this file used to do alongside them have their own modules:
+snapshot_codec for the Store and the schema version, snapshot_resolve for the
+per-entry VAT and excise-band resolution applied on load, and snapshot_months
+for reading a month's card off the card archive."""
 
 from __future__ import annotations
 

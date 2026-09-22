@@ -231,7 +231,7 @@ estimate and both comparison quotes) instead of teaching each of them about it. 
 BEFORE the tranche, which can turn a spot-monthly leg into a fixed one: the fee travels
 across that conversion but a reduction still waiting to be applied would not.
 
-`_direct_debit` (`snapshot_store.py`) requires both halves, the stored answer and the
+`_direct_debit` (`snapshot_resolve.py`) requires both halves, the stored answer and the
 registry flag of the CARD IN HAND, exactly as `_quarter_hourly` does. On the comparison page
 that is what carries the household's payment method onto a target whose card prices it and
 nowhere else: unlike the settlement grid, which is a property of the product and must be
@@ -702,7 +702,7 @@ step. The box after it, `CONF_CARD_ARCHIVE` (default on), is the one
 opt-out of the same step: it lets the entry keep the month cache from asking
 the repository's card archive for a past month the supplier no longer serves,
 which is the only call the integration makes to GitHub;
-`_card_archive_may_hold` (`snapshot_store.py`) reads it, and a caller with
+`_card_archive_may_hold` (`snapshot_months.py`) reads it, and a caller with
 no entry in hand keeps the default. Those months are then priced on the
 current card, as they were before the archive existed.
  `async_run_daily_compare` (`compare_flow.py`) drives

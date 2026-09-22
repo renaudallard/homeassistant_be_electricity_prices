@@ -73,7 +73,10 @@ relative to that package directory.
 | `coordinator_issues.py` | `_IssuesMixin`: the seven Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
 | `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill, and the Synergrid SPP refresh. |
 | `coordinator_peak.py` | `_PeakMixin`: the Flemish capacity peak (`_track_monthly_peak`) and its 12-month history. |
-| `snapshot_store.py` | Snapshot serialization to and from `.storage`, the schema-version gate, `_resolve_snapshot` (per-entry VAT and excise-band resolution), and the shared cross-entry snapshot cache with its lock, negative-fetch cache and eviction. |
+| `snapshot_store.py` | The shared cross-entry snapshot cache with its lock, negative-fetch cache and eviction, and the tuple generation counter both caches are gated on. |
+| `snapshot_codec.py` | Snapshot serialization to and from `.storage`, `_SNAPSHOT_SCHEMA_VERSION` and the schema-version gate, and the Store that drops a blob written under an older storage version. |
+| `snapshot_resolve.py` | `_resolve_snapshot`: the per-entry VAT, excise-band, settlement-grid and direct-debit resolution applied to a parsed card on load. |
+| `snapshot_months.py` | One month's card: the archive reader, the per-month cache it fills and the blob those rows persist to. |
 | `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
 | `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
 | `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
