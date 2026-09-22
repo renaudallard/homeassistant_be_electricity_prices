@@ -768,6 +768,10 @@
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) berechnet Lastschrift anders und dieser Eintrag wurde nicht gefragt",
       "description": "Die Tarifkarte von {contract} berechnet einen Haushalt, der per Lastschrift zahlt, anders: Bei Megas Cosy Flex und Smart Fixed sowie deren Geschäftsausgaben wird die gesamte Willkommensgutschrift nur einem Lastschriftzahler gewährt, auf den übrigen Karten kommt ein Zuschlag hinzu.\n\nDieser Eintrag wurde angelegt, bevor die Frage gestellt wurde, also ist keine Antwort gespeichert und die Gutschrift wird ausgelassen statt geraten. Wenn Sie per Lastschrift zahlen, sind das bis zu 522 € pro Jahr bei 3500 kWh. Öffnen Sie die Optionen der Integration und antworten Sie „Ich zahle per Lastschrift“, damit sie berechnet wird. Dieser Hinweis verschwindet, sobald eine Antwort gespeichert ist, gleich welche."
+    },
+    "brussels_power_term_missing": {
+      "title": "{supplier} ({contract}) wird ohne Sibelgas Leistungsentgelt berechnet",
+      "description": "Sibelgas jährliche Grundgebühr besteht aus zwei regulierten Teilen, einem für die Messung und einem für die bereitgestellte Leistung. Die Karte von {contract} druckt nur die Messhälfte, daher ergänzt die Integration den Rest mit der von Brugel veröffentlichten Zahl, und dieses Blatt konnte nicht gelesen werden.\n\nDie Preise dieses Eintrags schließen den Leistungsteil daher aus, was rund 50 € pro Jahr zu wenig berechnet. Alles übrige auf der Karte wird normal berechnet. Das Blatt wird alle sechs Stunden erneut versucht, und dieser Hinweis verschwindet, sobald es gelesen werden kann."
     }
   },
   "entity": {

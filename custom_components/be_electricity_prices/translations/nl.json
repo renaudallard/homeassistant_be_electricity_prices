@@ -768,6 +768,10 @@
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) rekent domiciliëring anders aan en deze ingave is niets gevraagd",
       "description": "De tariefkaart van {contract} rekent een gezin dat met domiciliëring betaalt anders aan: op Cosy Flex en Smart Fixed van Mega en hun zakelijke edities wordt de volledige welkomstkorting alleen aan een domiciliëringsbetaler toegekend, en op de andere kaarten komt er een supplement bij.\n\nDeze ingave is aangemaakt voordat de vraag werd gesteld, dus er is geen antwoord opgeslagen en de korting wordt weggelaten in plaats van geraden. Als u wel met domiciliëring betaalt, gaat het om tot €522 per jaar bij 3500 kWh. Open de opties van de integratie en antwoord \"Ik betaal met domiciliëring\" om ze aan te rekenen. Deze melding verdwijnt zodra er een antwoord is opgeslagen, welk ook."
+    },
+    "brussels_power_term_missing": {
+      "title": "{supplier} ({contract}) wordt aangerekend zonder het vermogensterm van Sibelga",
+      "description": "De jaarlijkse vaste vergoeding van Sibelga bestaat uit twee gereglementeerde delen, een voor de meting en een voor het ter beschikking gestelde vermogen. De kaart van {contract} drukt enkel de meethelft af, dus vult de integratie de rest aan met het cijfer dat Brugel publiceert, en die fiche kon niet gelezen worden.\n\nDe prijzen voor deze ingave sluiten het vermogensdeel daarom uit, wat ongeveer €50 per jaar te weinig aanrekent. Al de rest op de kaart wordt normaal berekend. De fiche wordt om de zes uur opnieuw geprobeerd en deze melding verdwijnt zodra ze gelezen kan worden."
     }
   },
   "entity": {

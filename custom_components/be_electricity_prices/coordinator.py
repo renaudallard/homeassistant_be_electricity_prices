@@ -1357,6 +1357,7 @@ class BePricesCoordinator(
         self._sync_connection_fee_issue()
         self._sync_prosumer_gap_issue()
         self._sync_direct_debit_unanswered_issue()
+        self._sync_brussels_power_term_issue()
 
         # Compute static peak/offpeak breakdowns for the Energy Dashboard.
         # These are the constant all-in rates for day and night, independent

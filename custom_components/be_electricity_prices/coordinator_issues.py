@@ -45,6 +45,8 @@ from .const import (
     CONF_CONTRACT,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
@@ -323,6 +325,37 @@ class _IssuesMixin:
         if extractor is None or extractor.deprecated_until is None:
             return False
         return dt_util.now().date() > extractor.deprecated_until
+
+    def _sync_brussels_power_term_issue(self) -> None:
+        """Flag a Brussels entry billing without Sibelga's power term.
+
+        Sibelga's fixed charge has a metering part and a power part. Four
+        suppliers print the sum and the band above 13 kVA; Bolt prints the
+        metering half alone, so ``resolve_brussels_power_term`` completes it
+        from the figure Brugel publishes. When that sheet cannot be read the
+        card is billed as printed, about 50,07 EUR a year short.
+
+        The signal needs no threshold and no guess about how big a metering
+        figure should be. A card that carries the power part prints the band,
+        and the resolver sets the band on any card it completes, so a resolved
+        Brussels snapshot with no band is a card billing without the term.
+        Measured over the 349 archived Brussels rows: every supplier that
+        prints the sum prints the band on 100% of its rows, and Bolt prints it
+        on none of its 44.
+
+        Says what the cost excludes rather than inventing the figure, like the
+        four sibling gaps, and clears itself the moment Brugel answers, which
+        the tick retries every six hours.
+        """
+        overlay = (
+            self._snapshot.dsos.get(DSO_SIBELGA) if self._snapshot is not None else None
+        )
+        self._sync_issue(
+            "brussels_power_term_missing",
+            self.entry.data.get(CONF_REGION) == REGION_BRUSSELS
+            and overlay is not None
+            and overlay.brussels_power_term_above_13kva is None,
+        )
 
     def _sync_direct_debit_unanswered_issue(self) -> None:
         """Flag an entry on a card that prices direct debit but was never asked.

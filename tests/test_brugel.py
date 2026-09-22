@@ -426,3 +426,91 @@ async def test_a_restart_does_not_bill_a_brussels_entry_without_the_term(
     again = coord._snapshot
     coord._reresolve_snapshot()
     assert coord._snapshot is again
+
+
+async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> None:
+    """Four suppliers print Sibelga's fixed charge whole and Bolt prints the
+    metering half alone, so the power part is completed from Brugel's sheet.
+    When that sheet cannot be read the card is billed as printed, 50,07 EUR a
+    year short, and the four sibling gaps all raise a Repairs card where this
+    said nothing.
+
+    The signal needs no threshold: a card carrying the power part prints the
+    band above 13 kVA, and the resolver sets that band on any card it
+    completes, so a resolved Brussels snapshot without one is billing short.
+    Measured over the 349 archived Brussels rows: every supplier printing the
+    sum prints the band on all of its rows, Bolt on none of its 44.
+    """
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_brussels_power_term,
+    )
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "region": "brussels",
+            "dso": DSO_SIBELGA,
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"brussels_power_term_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    coord._snapshot = resolve_brussels_power_term(card, terms=None)
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # Brugel answers: the term lands and the notice clears by itself.
+    coord._snapshot = resolve_brussels_power_term(card, terms=(47.24, 94.48))
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # A card that prints the whole charge never needed it and never says so.
+    coord._snapshot = resolve_brussels_power_term(
+        _brussels_card(fixed_term=64.80, vat_rate=0.0, above=114.88), terms=None
+    )
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_the_power_term_notice_is_silent_outside_brussels(hass: Any) -> None:
+    """Sibelga is Brussels only, so a Flemish or Walloon entry has no term to
+    miss and raising there would be noise on most of the fleet."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    coord._sync_brussels_power_term_issue()
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, f"brussels_power_term_missing_{entry.entry_id}"
+        )
+        is None
+    )

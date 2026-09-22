@@ -678,7 +678,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Thirteen repair issues surface
+TimeoutError` rather than trailing off after the colon. Fourteen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -750,10 +750,15 @@ successful refresh:
   payer differently and this entry has no stored answer, which an entry
   created before the question existed does not. The credit is left out
   rather than guessed, so answer it in the options to have it billed.
+- **`brussels_power_term_missing_<entry>`** — the card prints only the
+  metering half of Sibelga's fixed charge and Brugel's sheet, which supplies
+  the power half, could not be read. About 50 EUR a year is left out rather
+  than guessed; the sheet is retried every six hours.
 
-  The first five of those six are not failures either: each clears when the
-  supplier prints the missing row again, and the last one clears as soon as
-  the question is answered.
+  The first five of those seven are not failures either: each clears when the
+  supplier prints the missing row again, the direct-debit one clears as soon
+  as the question is answered, and the Brussels one as soon as Brugel's sheet
+  can be read.
 
 ### `be_electricity_prices.refresh` service
 

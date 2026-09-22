@@ -2540,6 +2540,7 @@ _REPAIR_ISSUE_KINDS = (
     "connection_fee_missing",
     "prosumer_tariff_missing",
     "direct_debit_unanswered",
+    "brussels_power_term_missing",
 )
 
 
