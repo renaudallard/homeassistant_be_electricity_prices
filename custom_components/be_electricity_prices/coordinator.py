@@ -63,17 +63,19 @@ from .injection import (
 )
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
-    _MigratingStore,
     _bump_tuple_generation,
-    archived_months_present,
     _drop_monthly_rows,
     _shared_failed_fetches,
     _shared_snapshots,
+    archived_months_present,
+    monthly_rows_to_store,
+    restore_monthly_rows,
+)
+from .snapshot_codec import (
+    _MigratingStore,
     _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
     _snapshot_to_dict,
-    monthly_rows_to_store,
-    restore_monthly_rows,
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,

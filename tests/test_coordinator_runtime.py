@@ -59,15 +59,17 @@ from custom_components.be_electricity_prices.coordinator_issues import (
     _successor_for,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
-    _SNAPSHOT_SCHEMA_VERSION,
     _monthly_fetched_at,
     _monthly_snapshots,
+    _resolve_snapshot,
     _shared_failed_fetches,
     _shared_lock,
-    _resolve_snapshot,
     _shared_snapshots,
-    _snapshot_to_dict,
     evict_shared_caches,
+)
+from custom_components.be_electricity_prices.snapshot_codec import (
+    _SNAPSHOT_SCHEMA_VERSION,
+    _snapshot_to_dict,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -5550,7 +5552,7 @@ async def test_a_blob_below_the_replay_floor_is_still_refused(
     through _resolve_snapshot would gross a professional entry's rates by its
     VAT rate a second time. A pre-v16 blob is not stale, it is wrong.
     """
-    from custom_components.be_electricity_prices.snapshot_store import (
+    from custom_components.be_electricity_prices.snapshot_codec import (
         _DEGRADED_MIN_SCHEMA_VERSION,
     )
 
@@ -6099,7 +6101,7 @@ async def test_a_withdrawn_suppliers_refused_blob_is_replayed(
     held nothing after the first restart past a schema bump, asked nobody and
     sat in SETUP_RETRY for good with no card saying so. With no fetch left to
     heal with, the refused blob is replayed the way an unreadable card's is."""
-    from custom_components.be_electricity_prices.snapshot_store import (
+    from custom_components.be_electricity_prices.snapshot_codec import (
         _snapshot_to_dict,
     )
 
@@ -6229,6 +6231,8 @@ async def test_a_replayed_ocr_blob_keeps_its_marker(
     )
     from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
+    )
+    from custom_components.be_electricity_prices.snapshot_codec import (
         _snapshot_to_dict,
     )
 

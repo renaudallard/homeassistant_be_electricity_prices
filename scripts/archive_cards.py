@@ -114,7 +114,7 @@ from custom_components.be_electricity_prices.providers.base import (  # noqa: E4
     SupplierExtractor,
     SupplierSnapshot,
 )
-from custom_components.be_electricity_prices.snapshot_store import (  # noqa: E402
+from custom_components.be_electricity_prices.snapshot_codec import (  # noqa: E402
     _snapshot_to_dict,
 )
 from homeassistant.helpers.json import json_dumps  # noqa: E402

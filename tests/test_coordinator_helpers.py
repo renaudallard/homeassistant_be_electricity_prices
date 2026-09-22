@@ -99,14 +99,16 @@ from custom_components.be_electricity_prices.injection import (
 )
 from custom_components.be_electricity_prices.snapshot_store import (
     ArchivedCard,
-    _DEGRADED_MIN_SCHEMA_VERSION,
-    _SNAPSHOT_SCHEMA_VERSION,
     _archived_card_from_github,
-    _energy_kind,
     _monthly_failed_fetches,
     _monthly_fetched_at,
     _monthly_snapshots,
     _snapshot_for_month,
+)
+from custom_components.be_electricity_prices.snapshot_codec import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
+    _energy_kind,
     _snapshot_from_dict,
     _snapshot_to_dict,
 )

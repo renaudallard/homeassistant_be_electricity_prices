@@ -51,15 +51,17 @@ from .providers.base import (
     ExtractorError,
 )
 from .snapshot_store import (
-    card_for_unreadable_month,
-    _DEGRADED_MIN_SCHEMA_VERSION,
-    _SNAPSHOT_SCHEMA_VERSION,
     _SharedSnapshot,
-    _snapshot_from_dict,
-    fetch_shared,
     _resolve_snapshot,
     _shared_failed_fetches,
+    card_for_unreadable_month,
     entry_annual_kwh,
+    fetch_shared,
+)
+from .snapshot_codec import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
+    _snapshot_from_dict,
 )
 
 from datetime import date, datetime, timedelta
