@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from custom_components.be_electricity_prices.providers.base import InjectionRates
+import pytest
+
+from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    ImpactRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    TimeOfUseRates,
+    VariableRates,
+)
 from custom_components.be_electricity_prices.snapshot_store import (
     _snapshot_from_dict,
     _snapshot_to_dict,
@@ -35,6 +46,35 @@ def test_a_field_this_version_does_not_know_is_dropped_not_refused() -> None:
     row = _snapshot_to_dict(make_snapshot(injection=InjectionRates(current=0.05)), NOW)
     row["injection"]["from_the_future"] = True
     assert _snapshot_from_dict(row).injection == InjectionRates(current=0.05)
+
+
+@pytest.mark.parametrize(
+    "energy",
+    [
+        FixedRates(single=0.20),
+        VariableRates(current=0.21),
+        DynamicRates(factor=1.0, base=0.02),
+        TimeOfUseRates(peak=0.25, offpeak=0.18, transition=0.21),
+        ImpactRates(eco=0.15, medium=0.20, pic=0.28),
+        SpotMonthlyRates(factor=1.0, base=0.01),
+    ],
+    ids=["fixed", "variable", "dynamic", "tou", "impact", "spot_monthly"],
+)
+def test_every_energy_kind_survives_a_field_from_a_later_version(
+    energy: EnergyRates,
+) -> None:
+    """Each of the six energy kinds is rebuilt by its own `_known_fields` call,
+    and the test beside this one exercises exactly one of them, because
+    `make_snapshot`'s default leg is `FixedRates`.
+
+    Deleting any of the other five calls left that test green: 4 passed with
+    the variable, dynamic, TOU, Impact or spot-monthly guard removed. A field
+    added to one of those rate classes later would then take the whole row
+    down on every older reader, which is the failure this rule exists to stop.
+    """
+    row = _snapshot_to_dict(make_snapshot(energy=energy), NOW)
+    row["energy"]["from_the_future"] = 1
+    assert _snapshot_from_dict(row).energy == energy
 
 
 def test_every_leg_of_a_row_survives_a_field_from_a_later_version() -> None:
