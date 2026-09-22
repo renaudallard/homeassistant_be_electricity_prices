@@ -41,14 +41,7 @@ from typing import Any
 import aiohttp
 
 from ..const import (
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
+    FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
 from ._pdf import (
@@ -92,16 +85,13 @@ _PUBLISHED_INDEX_TAIL = (
     rf"({_MONTH})\s+(20\d{{2}})\s*\(\s*(\d+(?:[.,]\d+)?)\s*\u20ac/MWh"
 )
 
-_DSOS = {
-    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
-    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
-    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
-    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
-    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
-    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
-    "Fluvius West": DSO_FLUVIUS_WEST,
-    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
-}
+# The card spells its eight Fluvius areas exactly the way the shared table
+# does, so it uses the shared table. Six other providers alias it the same
+# way; this one arrived as a contributor PR carrying its own copy, and a copy
+# is a relabel away from being wrong on its own: the loop below adds no row
+# for a label that has moved, so seven areas keep their overlay and the eighth
+# prices without one.
+_DSOS = FLUVIUS_CARD_LABELS
 
 
 @dataclass(frozen=True)
