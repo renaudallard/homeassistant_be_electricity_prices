@@ -39,6 +39,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import date, datetime
@@ -2490,6 +2491,69 @@ def test_the_ceiling_consensus_uses_the_allowance(
     lc.CHECKS.clear()
     lc._check_vreg_ceiling_consensus(archive, date(2027, 1, 2))
     assert _rows("bolt/VREG ceiling")[0].expected is False
+
+
+def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) -> None:
+    """The majority branch tells the maintainer the regulator moved and the
+    constant needs updating. Only four suppliers print the sentence this reader
+    matches and two are absent from some months, so without a quorum a month
+    that captured one stale card and none of the agreeing ones would say the
+    fleet had moved to it. Bolt's figure is the one at stake, and adopting it
+    caps about 1,7 times too tight."""
+    archive = tmp_path / "electricity"
+    texts = archive / "texts" / "2026-09"
+    texts.mkdir(parents=True)
+
+    def _card(name: str, ceiling: str) -> None:
+        (texts / f"{name}.txt").write_text(
+            "Un tarif maximal de " + ceiling + " €/kWh (hors gestion des "
+            "données) s'applique aux compteurs digitaux.",
+            encoding="utf-8",
+        )
+        row = archive / "cards" / name / f"{name}_fix" / "flanders" / "2026-09.json"
+        row.parent.mkdir(parents=True, exist_ok=True)
+        row.write_text(
+            json.dumps({"_sources": [{"text": f"texts/2026-09/{name}.txt"}]}),
+            encoding="utf-8",
+        )
+
+    def _run(cards: dict[str, str]) -> None:
+        for name in list(archive.glob("cards/*")):
+            shutil.rmtree(name)
+        for name, ceiling in cards.items():
+            _card(name, ceiling)
+        monkeypatch.setattr(
+            lc,
+            "_CONTRACTS_BY_ID",
+            {f"{n}_fix": SimpleNamespace(professional=False) for n in cards},
+        )
+        monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
+        lc.CHECKS.clear()
+        lc._check_vreg_ceiling_consensus(archive, date(2026, 9, 21))
+
+    # One stale card and nothing to compare it against: no fleet, so no verdict
+    # about the constant. The per-supplier row still files, which is the claim
+    # the evidence supports.
+    _run({"bolt": "0,2035480"})
+    assert not _rows("_federal: the VREG ceiling constant disagrees")
+    assert len(_rows("bolt/VREG ceiling")) == 1
+
+    # Two stale against one agreeing is still not a fleet.
+    _run({"bolt": "0,2035480", "mega": "0,1920264", "luminus": "0,3472738"})
+    assert not _rows("_federal: the VREG ceiling constant disagrees")
+
+    # Three stale against the two that agree is: the constant is now the
+    # minority reading and a human should look at the regulator's sheet.
+    _run(
+        {
+            "bolt": "0,2035480",
+            "mega": "0,1920264",
+            "energiebe": "0,1920264",
+            "luminus": "0,3472738",
+            "frank": "0,3472738",
+        }
+    )
+    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
 
 
 def _read_ceiling(text: str) -> float | None:

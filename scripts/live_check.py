@@ -240,6 +240,11 @@ _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 _EXCISE_KNOWN_UNTIL: tuple[int, int] = (2026, 8)
 _VREG_CEILING_HTVA: float = 0.3276168
 _VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
+# How many agreeing cards it takes before a disagreeing majority is read as
+# the regulator having moved. Two is the smallest number that is a fleet
+# rather than a card: with one, any month that captured a single agreeing
+# supplier and two stale ones would rewrite the constant.
+_VREG_CONSENSUS_QUORUM: int = 2
 
 
 def _no_vreg_ceiling(_text: str) -> float | None:
@@ -2262,7 +2267,19 @@ def _check_vreg_ceiling_consensus(
     if not odd:
         return
     detail = ", ".join(f"{name}={printed[name]:.7f}" for name in odd)
-    if len(odd) > len(agree):
+    # A majority needs a fleet to be a majority OF. Only four suppliers print
+    # the sentence this reader matches, and two of them are absent from some
+    # months, so a month where the agreeing cards happen not to be captured
+    # leaves one stale card as "the fleet" and this tells the maintainer to
+    # adopt its figure. Bolt's is the figure in question, and it prints the
+    # same number on Wallonia and Brussels where no VREG tariff applies, so
+    # adopting it would cap about 1,7 times too tight and under-bill by up to
+    # 59,43 EUR a year. Below the quorum the per-supplier rows still file, and
+    # those say the card is stale, which is the claim the evidence supports.
+    #
+    # The federal twin guards the same way, by refusing to rank a top pair
+    # that is only as large as its runner-up.
+    if len(odd) > len(agree) and len(agree) >= _VREG_CONSENSUS_QUORUM:
         _record(
             "_federal: the VREG ceiling constant disagrees with the fleet",
             False,

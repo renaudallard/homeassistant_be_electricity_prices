@@ -1064,6 +1064,15 @@ being applied at all and every allowance under it has to be looked at again. A M
 disagreeing is never allowed: that says the regulator moved and the constant is stale, so it
 stays a hard failure naming the constant rather than the cards.
 
+That verdict needs a fleet to be a majority of, so it is held behind a quorum
+(`_VREG_CONSENSUS_QUORUM`, two agreeing cards). Only four suppliers print the sentence the
+shared reader matches and two of them are missing from some months, so without it a month that
+captured one stale card and none of the agreeing ones would report that the fleet had moved to
+that card, and point the maintainer at Bolt's figure: about 1,7 times too tight, and worth up to
+59,43 EUR a year of under-billing if it were adopted. Below the quorum the per-supplier rows
+still file, which is the claim the evidence supports. `_check_federal_tax_consensus` guards the
+same way, by refusing to rank a top pair only as large as its runner-up.
+
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
 which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A
