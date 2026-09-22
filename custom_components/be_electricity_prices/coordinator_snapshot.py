@@ -262,12 +262,18 @@ class _SnapshotMixin:
         """
         self._snapshot_raw = snap
         # The volume is resolved HERE and handed down, not read back through
-        # entry.runtime_data inside _resolve_snapshot: Home Assistant assigns
-        # runtime_data only after the first refresh returns, so on that tick
-        # the resolver could not see the measurement, resolved the tranche
-        # against the household default, and the stamp below then claimed
-        # the measured figure had been used, which is exactly what stopped
-        # _reresolve_snapshot from ever correcting it.
+        # entry.runtime_data inside _resolve_snapshot. Home Assistant assigned
+        # runtime_data only after the first refresh returned at the time, so on
+        # that tick the resolver could not see the measurement, resolved the
+        # tranche against the household default, and the stamp below then
+        # claimed the measured figure had been used, which is exactly what
+        # stopped _reresolve_snapshot from ever correcting it.
+        #
+        # Past tense, like the docstring above says it: that is the defect this
+        # shape was written for, not a rule about what the current core does.
+        # Resolving here and handing the figure down is right whatever the core
+        # does with runtime_data, because it is the only way the stamp can
+        # record what the resolver actually used.
         annual_kwh = entry_annual_kwh(self.entry, self)
         self._snapshot = (
             None
