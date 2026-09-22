@@ -347,7 +347,6 @@ class _IssuesMixin:
         calendar year and moves by a few percent where the gap between a
         metering figure and a complete one is fourfold. With no figure at all
         this stays silent, which is the honest answer to a question nothing can
-        this stays silent, which is the honest answer to a question nothing can
         settle, and which means a process whose very first Brugel fetch failed
         says nothing until one succeeds. That window is the one where the term
         has never been seen at all; the fetch retries every six hours and logs
