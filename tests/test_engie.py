@@ -1039,3 +1039,32 @@ async def test_archive_offset_counts_from_the_brussels_date(
         is None
     )
     assert asked and "monthOffset=1&" in asked[0]
+
+
+def test_the_two_epexdam_sets_are_two_objects() -> None:
+    """A card can index its feed-in credit on the monthly EPEXDAM and still
+    print an energy rate published in advance, which is why the ENDEX101
+    products are in neither set. The two flags are independent properties.
+
+    This shipped as ``frozenset(_EPEXDAM_INJECTION_CONTRACTS)`` under a comment
+    claiming the memberships could move apart. They could not: ``frozenset(x)``
+    on a frozenset returns THE SAME OBJECT, so adding an id to one literal
+    moved both flags and every test stayed green. Identity is the whole claim,
+    so identity is what this asserts.
+    """
+    from custom_components.be_electricity_prices.providers.engie import (
+        _EPEXDAM_ENERGY_CONTRACTS,
+        _EPEXDAM_INJECTION_CONTRACTS,
+    )
+
+    assert _EPEXDAM_ENERGY_CONTRACTS is not _EPEXDAM_INJECTION_CONTRACTS
+    # Equal today, which is the state the registry flags reflect.
+    assert _EPEXDAM_ENERGY_CONTRACTS == _EPEXDAM_INJECTION_CONTRACTS
+
+    # And every id in both is a real contract, so a rename cannot leave a
+    # product silently unflagged on either side.
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    known = {c.id for c in EXTRACTORS["engie"].contracts}
+    assert _EPEXDAM_INJECTION_CONTRACTS <= known
+    assert _EPEXDAM_ENERGY_CONTRACTS <= known

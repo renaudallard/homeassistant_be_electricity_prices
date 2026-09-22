@@ -1336,15 +1336,32 @@ _EPEXDAM_INJECTION_CONTRACTS: frozenset[str] = frozenset(
 )
 
 # The variable contracts whose ENERGY is indexed on the delivery month's mean.
-# The same ten today, and written out anyway rather than aliased: the two are
+# The same ten today, and written OUT rather than derived: the two are
 # independent properties of a card and one set serving both says they cannot
 # move apart. They can. A card may index the feed-in credit on the monthly
 # EPEXDAM and still print an energy rate published in advance, which is
 # exactly why the ENDEX101 products are in neither set, and the reverse is the
-# ordinary shape at five other suppliers. With one set a product that gained
-# or lost one of the two would silently get both flags or neither, and the
-# registry check that would catch it covers five of these ten offline.
-_EPEXDAM_ENERGY_CONTRACTS: frozenset[str] = frozenset(_EPEXDAM_INJECTION_CONTRACTS)
+# ordinary shape at five other suppliers.
+#
+# Spelled out, because `frozenset(x)` on a frozenset returns THE SAME OBJECT.
+# This was written as `frozenset(_EPEXDAM_INJECTION_CONTRACTS)` under a comment
+# claiming the two could move apart, and they could not: adding an id to one
+# literal moved both flags, and no test noticed. A second literal is the only
+# form of this that is actually two sets.
+_EPEXDAM_ENERGY_CONTRACTS: frozenset[str] = frozenset(
+    {
+        "engie_empower_variable",
+        "engie_empower_flextime",
+        "engie_flow",
+        "engie_direct_online",
+        "engie_basic_online",
+        "engie_empty_house",
+        "engie_pro_empower_variable",
+        "engie_pro_empower_flextime",
+        "engie_pro_flow",
+        "engie_pro_empty_house",
+    }
+)
 
 
 EXTRACTOR = SupplierExtractor(
