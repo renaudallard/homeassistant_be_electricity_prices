@@ -235,6 +235,12 @@ class _TickMixin:
         # date: the card month decides and the start date is its fallback
         # (_tariff_card_month), so an entry carrying just the card month is on
         # a cohort like any other (issue #96).
+        #
+        # Not cached_only on the first tick, unlike the month cards the walk
+        # below defers: the price table this tick publishes is built from the
+        # signing card, so deferring it would serve a cohort entry the current
+        # card's rate until the fill came back. _persisted_months keeps that
+        # one row on disk, so only an entry's first setup fetches it.
         cohort = await _cohort_legs(
             self.hass,
             self._session,
