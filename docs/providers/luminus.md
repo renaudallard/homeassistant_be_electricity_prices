@@ -171,18 +171,18 @@ Fields pulled and their helpers:
 
 | Field | Helper | Source |
 | --- | --- | --- |
-| Energy rates | `_extract_energy` | `luminus.py` |
-| Injection | `_extract_injection` | `luminus.py` |
+| Energy rates | `_extract_energy` | `_luminus_cards.py` |
+| Injection | `_extract_injection` | `_luminus_cards.py` |
 | Publication label | `_extract_publication_month` | `luminus.py` |
-| Per-kWh taxes (excise, contribution, connection) | `_extract_per_kwh_taxes` | `luminus.py` |
-| Energy fund (Flanders only) | `_extract_energy_fund` | `luminus.py` |
-| Flanders renewables | `_extract_flanders_renewables` | `luminus.py` |
-| Wallonia renewables | `_extract_wallonia_renewables` | `luminus.py` |
-| Flanders DSO overlay | `_extract_flanders_dsos` | `luminus.py` |
-| Wallonia DSO overlay | `_extract_wallonia_dsos` | `luminus.py` |
-| Yearly fixed fee | `_extract_yearly_fee` | `luminus.py` |
-| Exclusive-night fee | `_extract_excl_night_fee` | `luminus.py` |
-| VAT multiplier | `_vat_multiplier` | `luminus.py` |
+| Per-kWh taxes (excise, contribution, connection) | `_extract_per_kwh_taxes` | `_luminus_overlays.py` |
+| Energy fund (Flanders only) | `_extract_energy_fund` | `_luminus_overlays.py` |
+| Flanders renewables | `_extract_flanders_renewables` | `_luminus_overlays.py` |
+| Wallonia renewables | `_extract_wallonia_renewables` | `_luminus_overlays.py` |
+| Flanders DSO overlay | `_extract_flanders_dsos` | `_luminus_overlays.py` |
+| Wallonia DSO overlay | `_extract_wallonia_dsos` | `_luminus_overlays.py` |
+| Yearly fixed fee | `_extract_yearly_fee` | `_luminus_cards.py` |
+| Exclusive-night fee | `_extract_excl_night_fee` | `_luminus_cards.py` |
+| VAT multiplier | `_vat_multiplier` | `_luminus_cards.py` |
 | `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 
 ### Numeric token
@@ -275,7 +275,7 @@ prints `0,1019 x Belpex H + 2,4591` at 6% VAT, yielding `factor == 1.08014` and
 `0.1019 * 1.06 * 10`) so a `1.06 <-> 10` unit-conversion swap cannot cancel out
 and pass (`test_luminus.py`).
 
-The VAT rate is read by `_vat_multiplier` (`luminus.py`), which wraps the
+The VAT rate is read by `_vat_multiplier` (`_luminus_cards.py`), which wraps the
 shared `vat_multiplier` helper with two Luminus-specific patterns
 (`TVA sur les prix ... N %` and `TVA N %`) and the shared 1.06 default
 (`_pdf.py`).
@@ -285,13 +285,13 @@ shared `vat_multiplier` helper with two Luminus-specific patterns
 The DSO table is parsed per region. Distribution values are stored in EUR/kWh
 (divide by 100); capacity, data-management and prosumer fees stay in their EUR/yr
 units. Distribution already includes transport on the Flanders side (same
-convention as Engie), so `transport` is set to `0.0` there (`luminus.py`,
+convention as Engie), so `transport` is set to `0.0` there (`_luminus_overlays.py`,
 `luminus.py`).
 
-### Flanders (`_extract_flanders_dsos`, `luminus.py`)
+### Flanders (`_extract_flanders_dsos`, `_luminus_overlays.py`)
 
 Eight Fluvius sub-areas mapped by printed label to canonical key
-(`_FLANDERS_LABELS`, `luminus.py`). Watch the two label-to-key surprises:
+(`_FLANDERS_LABELS`, `_luminus_overlays.py`). Watch the two label-to-key surprises:
 
 | Printed label | Canonical key |
 | --- | --- |
@@ -328,7 +328,7 @@ monthly-regime column. `_extract_flanders_dsos` reads that footnote when
 (footnote) vs static `18.92` (table), and the dynamic prosumer is `None` while
 static is `54.63` (illustrative).
 
-### Wallonia (`_extract_wallonia_dsos`, `luminus.py`)
+### Wallonia (`_extract_wallonia_dsos`, `_luminus_overlays.py`)
 
 Five DSO sub-areas mapped by printed label (`_WALLONIA_LABELS`,
 `luminus.py`):
@@ -360,15 +360,15 @@ ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
 
 ## Tax overlay
 
-`_extract_per_kwh_taxes` (`luminus.py`) reads the
+`_extract_per_kwh_taxes` (`_luminus_overlays.py`) reads the
 `3 Taxes et redevances : WAL|FL|BRU` block via `_tax_block_values`
 (`luminus.py`). That helper anchors on the colon after the label because
 `Taxes et redevances` also appears in the `Composition du prix` legend without a
 colon or region (`luminus.py`); the block runs until
 `INFORMATION SUR VOTRE TARIF` or `Conditions`. Inside the block, values sit alone
 on their own lines, and the parser collects that contiguous run of `-` /
-`_NUM` tokens (`luminus.py`). The label order and matching value order are
-documented in the `_tax_block_values` docstring (`luminus.py`): BTNR,
+`_NUM` tokens (`_luminus_overlays.py`). The label order and matching value order are
+documented in the `_tax_block_values` docstring (`_luminus_overlays.py`): BTNR,
 BTR, excise, contribution, and (Wallonia only) connection.
 
 | TaxOverlay field | Source | Notes |
@@ -390,11 +390,11 @@ Flanders green `0.0117` + cogen `0.0039` = `0.0156`.
 
 The energy fund uses the BTR (Basse tension résidentiel) value, not BTNR
 (non-residential) which is printed first; a `-` means no fee
-(`_extract_energy_fund`, `luminus.py`). In both fixture regions today BTR
+(`_extract_energy_fund`, `_luminus_overlays.py`). In both fixture regions today BTR
 is `-`, so `energy_fund_eur_per_month` is `0.0` (`test_luminus.py`).
 
 Flanders renewables splits across green-energy + cogeneration
-(`_extract_flanders_renewables`, `luminus.py`): the primary regex sums
+(`_extract_flanders_renewables`, `_luminus_overlays.py`): the primary regex sums
 both `Coûts énergie verte` and `Coûts cogénération`; a fallback handles cards
 that print only the green line. Both regional renewables helpers raise on a miss
 (the caller has already gated on region, so a miss is layout drift not a fee-free
@@ -407,7 +407,7 @@ injection shapes in the project taxonomy, selected by contract kind:
 
 - **fixed / variable / tou -> monthly-indicative-only.** The extractor reads the
   applicable `Tarif de l'énergie injectée` row and stores it as
-  `InjectionRates.current` (`luminus.py`). `factor` / `base` stay `None`,
+  `InjectionRates.current` (`_luminus_cards.py`). `factor` / `base` stay `None`,
   so the pricing engine credits the indicative and never needs a spot.
 - **dynamic -> hourly `factor*spot + base`.** `_INJECTION_FORMULA_RE`
   (`luminus.py`) parses `Injection (...) = <factor> x Belpex H <sign>
@@ -451,13 +451,13 @@ prosumer term is the DSO-side Wallonia `prosumer_eur_per_kva_year`.
 
 ## Yearly fees and exclusive-night circuit
 
-`_extract_yearly_fee` (`luminus.py`) captures the
+`_extract_yearly_fee` (`_luminus_cards.py`) captures the
 `Redevance fixe (€/an)` line and raises on a miss (a regex miss is layout drift,
 not a fee-free contract; the comment notes dropping this would silently lose
 ~70 EUR/year from the user's annual estimate). Illustrative: ~65 EUR static,
 ~75 EUR dynamic.
 
-`_extract_excl_night_fee` (`luminus.py`) reads the third column of the
+`_extract_excl_night_fee` (`_luminus_cards.py`) reads the third column of the
 `Redevance fixe` row on static/variable cards (`mono | bi | exclusif nuit`, e.g.
 `65,00 65,00 -`). A `-` means the exclusive-night circuit carries no separate
 abonnement, so it must bill `0`, not the standard fee (it is billed once on the
@@ -493,7 +493,7 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   INTERGEM, in the shared `FLUVIUS_CARD_LABELS` (`const.py`, aliased at
   `luminus.py`).
 - **Trailing-period token hazard** in the dynamic formula, guarded by the
-  digit-anchored `_NUM` (`luminus.py`).
+  digit-anchored `_NUM` (`_luminus_overlays.py`).
 - **Padded publication parens** on the May 2026 cards (`(mai 2026 )`),
   tolerated by optional whitespace (`luminus.py`).
 - **Numeric-token double-occurrence in the TOU row**: the three-figure width
@@ -527,13 +527,13 @@ variable parse paths already covered by the fixtures above.
 | Symptom | First place to look | Why |
 | --- | --- | --- |
 | Every field misses / fetch fails | `fetch` + `fetch_pdf_text` (`luminus.py`, `_pdf.py`) | URL construction, slug/tabValue, PDF magic-byte validation |
-| Energy rates wrong / missing | `_extract_energy` (`luminus.py`) | four-column vs three-column row, unit /100, TOU lookahead |
+| Energy rates wrong / missing | `_extract_energy` (`_luminus_cards.py`) | four-column vs three-column row, unit /100, TOU lookahead |
 | Dynamic factor/base off by ~1.06 or ~10 | dynamic branch (`luminus.py`) | VAT multiplier + mWh->kWh + c->EUR conversion |
-| Injection wrong or raising | `_extract_injection` (`luminus.py`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |
-| A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`luminus.py`, `567-618`, `621-627`, `630-683`) | printed label renamed, or column count changed |
+| Injection wrong or raising | `_extract_injection` (`_luminus_cards.py`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |
+| A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`_luminus_overlays.py`, `567-618`, `621-627`, `630-683`) | printed label renamed, or column count changed |
 | Dynamic data-management fee wrong (Flanders) | footnote regex (`luminus.py`) | `quart d'heure ... gestion des données` phrasing drift |
-| Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`luminus.py`) | colon anchor, value-run boundary, BTNR/BTR ordering |
-| Yearly / exclusive-night fee wrong | `_extract_yearly_fee` / `_extract_excl_night_fee` (`luminus.py`) | `Redevance fixe` line format, third-column `-` handling |
+| Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`_luminus_overlays.py`) | colon anchor, value-run boundary, BTNR/BTR ordering |
+| Yearly / exclusive-night fee wrong | `_extract_yearly_fee` / `_extract_excl_night_fee` (`_luminus_cards.py`) | `Redevance fixe` line format, third-column `-` handling |
 | Publication label empty | `_extract_publication_month` (`luminus.py`) | parens padding / month spelling |
 | A new product appears / a slug 404s | `_CONTRACTS` + `discover` (`luminus.py`, `148-162`) | add a `_ContractDef`; sitemap slug directory |
 

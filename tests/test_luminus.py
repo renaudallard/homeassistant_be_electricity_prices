@@ -308,7 +308,7 @@ def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
     rather than the energy block would hand it the INJECTION one.
     """
     from custom_components.be_electricity_prices.providers._rates import VariableRates
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _monthly_energy_coefficients,
     )
 
@@ -641,7 +641,7 @@ def test_the_new_customer_campaign_is_read_off_the_card() -> None:
     2026." Worth 254,56 EUR on the September card at 3500 kWh, and nothing was
     read at all.
     """
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
@@ -720,7 +720,7 @@ def test_the_campaign_is_read_from_its_own_sentence_not_the_card() -> None:
     card: it is the real structure with the loyalty clause worded the way the
     campaign is, which is exactly the case the scope rule exists for.
     """
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
@@ -752,7 +752,7 @@ def test_the_signing_gate_is_read_whichever_apostrophe_the_card_prints() -> None
     anchor to a gate in a later sentence and swallowed the loyalty clauses the
     scope rule exists to keep out.
     """
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
@@ -802,7 +802,7 @@ def test_the_campaign_scope_is_one_sentence_on_a_card_carrying_two() -> None:
     """
     import re
 
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
@@ -839,7 +839,7 @@ def test_a_campaign_stated_only_in_euro_is_read() -> None:
     sentence with the conditions of another is what marked the 11% campaign as
     a cashback at the wait quoted after the flat one.
     """
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
@@ -882,7 +882,7 @@ def test_an_anchor_without_a_gate_cannot_borrow_the_next_sentence_s() -> None:
     Pairing each GATE with the LAST anchor before it cannot cross a sentence
     boundary, because the nearest anchor is the one the gate belongs to.
     """
-    from custom_components.be_electricity_prices.providers.luminus import (
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
         _extract_promo,
     )
 
