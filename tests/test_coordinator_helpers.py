@@ -9624,15 +9624,20 @@ def test_the_month_bucket_is_not_decided_by_the_current_card() -> None:
     from custom_components.be_electricity_prices import ytd_cost
 
     src = inspect.getsource(ytd_cost._ytd_hourly_energy)
-    line = next(
-        ln for ln in src.splitlines() if ln.strip().startswith("month_bucket =")
+
+    # Pinned on the DEPENDENCY, not on the line that holds it. Reading one
+    # line starting "month_bucket =" was weak both ways: hoisting the same
+    # condition onto a line above reintroduces the defect and keeps the line
+    # clean, and any reformatting of a line already 87 characters against
+    # ruff's 88 would have failed a correct rewrite.
+    assert "_injection_on_month_mean(snapshot)" not in src, (
+        "the bucket is being decided from the CURRENT card again, wherever "
+        "the condition now sits"
     )
-    assert "snapshot" not in line, line
-    assert "monthly_mean" not in line, line
-    assert "_bucket_by_local_month(historical_spots)" in line, line
+    assert "_bucket_by_local_month(historical_spots)" in src
 
     # And the per-hour resolution still asks the month's own card, which is
-    # the half that was already right.
+    # the half that was always right.
     assert "monthly_mean=_injection_on_month_mean(snap_h)" in src
 
 
