@@ -2704,6 +2704,65 @@ async def test_save_persistent_skipped_after_runtime_data_swapped(
     assert saved is False, "obsolete coordinator must not overwrite the cache file"
 
 
+async def test_save_persistent_skipped_once_the_entry_is_unloaded(
+    hass: HomeAssistant,
+) -> None:
+    """A tick that resumes after the entry was removed must not write: it
+    would recreate the storage blob async_remove_entry just deleted, and the
+    reload guards beside this one do not fire on a removal, since the entry's
+    data is unchanged. Deleting the guard left every test green."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    saved: list[object] = []
+
+    async def _fake_save(payload: object) -> None:
+        saved.append(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        coord._unloaded = True
+        await coord._save_persistent()
+        assert saved == [], "an unloaded coordinator must not write its file"
+        # The same coordinator writes while it is live, so the silence above
+        # is the guard's and not a save that could not have happened anyway.
+        coord._unloaded = False
+        await coord._save_persistent()
+    assert len(saved) == 1
+
+
+async def test_unloading_an_entry_mutes_its_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """The one path that sets ``_unloaded``, run for real.
+
+    No test unloaded an entry at all, so the flag the persistence and Repairs
+    guards key on was never set by the code that owns it, and a regression in
+    async_unload_entry would have left a slow tick free to write after it.
+    """
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+    coord = entry.runtime_data
+    assert isinstance(coord, BePricesCoordinator)
+    assert coord._unloaded is False
+
+    assert await hass.config_entries.async_unload(entry.entry_id) is True
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.NOT_LOADED
+    assert coord._unloaded is True
+
+
 async def test_save_persistent_runs_during_first_refresh(
     hass: HomeAssistant,
 ) -> None:
