@@ -663,7 +663,7 @@ def test_pro_formula_is_not_vat_scaled() -> None:
 
 
 def test_pro_card_without_htva_is_refused() -> None:
-    from custom_components.be_electricity_prices.providers.bolt import (
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
         _consumption_formula,
     )
 
@@ -1215,13 +1215,15 @@ def test_residential_cards_print_no_vat_phrase_so_the_fallback_is_the_rate() -> 
     read: "TVAC" and "HTVA" are all they say. The residential rate is named
     in the module for that reason, rather than being the helper's default
     by accident."""
-    from custom_components.be_electricity_prices.providers import bolt
+    from custom_components.be_electricity_prices.providers import _bolt_cards
     from custom_components.be_electricity_prices.providers._pdf import vat_multiplier
 
     for name in ("bolt_fix.pdf", "bolt_variable.pdf"):
         text = fixture_text(name, layout=True)
-        assert bolt._VAT_PHRASE_RE.search(text) is None, name
+        assert _bolt_cards._VAT_PHRASE_RE.search(text) is None, name
         assert (
-            vat_multiplier(text, bolt._VAT_PHRASE_RE, default=bolt._RESIDENTIAL_VAT)
+            vat_multiplier(
+                text, _bolt_cards._VAT_PHRASE_RE, default=_bolt_cards._RESIDENTIAL_VAT
+            )
             == 1.06
         )
