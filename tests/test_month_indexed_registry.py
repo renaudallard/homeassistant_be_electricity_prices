@@ -24,6 +24,7 @@ from custom_components.be_electricity_prices.flow_schemas import (
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
     cociter,
+    ebem,
     eneco,
     engie,
     luminus,
@@ -67,6 +68,26 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "cociter_dynamic",
         lambda: cociter.parse_snapshot(
             fixture_text("cociter_dyn_2604.pdf"), "cociter_dynamic", "t", "2026-04"
+        ),
+    ),
+    (
+        "ebem",
+        "ebem_variable",
+        lambda: ebem.parse_snapshot(
+            "ebem_variable",
+            fixture_text("ebem_variable_2026-05.pdf", layout=True),
+            "t://v",
+            "2026-05",
+        ),
+    ),
+    (
+        "ebem",
+        "ebem_dynamic",
+        lambda: ebem.parse_snapshot(
+            "ebem_dynamic",
+            fixture_text("ebem_dynamic_2026-05.pdf", layout=True),
+            "t://v",
+            "2026-05",
         ),
     ),
     (
@@ -297,6 +318,45 @@ def test_registry_flag_matches_what_the_card_parses(
         f"{contract_id}: card parses month_indexed={parsed}, "
         f"registry says {contract.month_indexed_energy}"
     )
+
+
+def test_every_supplier_that_flags_a_card_is_in_the_case_list() -> None:
+    """The case list above is hand written, so what it does NOT cover is
+    invisible: 34 contracts carry the flag and the list pins seventeen of them.
+
+    Per-contract coverage is not on offer offline, because a fixture is a card
+    somebody saved. What is on offer is per SUPPLIER, and that is where this
+    breaks in practice: five suppliers gate the flag on a hand-maintained id
+    set and two set it from the kind, so a wrong predicate takes the whole
+    supplier with it. TotalEnergies is the precedent, with the twin unset on
+    all nine of its contracts until the nightly check found it.
+
+    So every supplier with a flagged contract owes this list one case, and
+    one of an unflagged contract where it sells one, which is what makes a
+    predicate that answers True to everything fail here rather than in the
+    morning's CI issue.
+    """
+    covered: dict[str, set[bool]] = {}
+    for supplier, contract_id, _parse in _CASES:
+        contract = next(
+            c for c in EXTRACTORS[supplier].contracts if c.id == contract_id
+        )
+        covered.setdefault(supplier, set()).add(contract.month_indexed_energy)
+
+    for supplier, extractor in sorted(EXTRACTORS.items()):
+        flags = {c.month_indexed_energy for c in extractor.contracts}
+        if True not in flags:
+            continue
+        seen = covered.get(supplier, set())
+        assert True in seen, (
+            f"{supplier} flags a card month-indexed and the case list pins "
+            "none of its contracts against a parsed card"
+        )
+        if False in flags:
+            assert False in seen, (
+                f"{supplier} sells an unflagged card too and the case list "
+                "pins none, so a predicate answering True to everything passes"
+            )
 
 
 def test_month_indexed_energy_is_never_set_on_a_spot_priced_kind() -> None:
