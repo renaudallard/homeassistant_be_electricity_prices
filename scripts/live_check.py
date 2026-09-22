@@ -123,12 +123,14 @@ def _load_providers() -> dict[str, types.ModuleType]:
     const = _load("be_pkg.const", PKG / "const.py")
     global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
     global _EXCISE_KNOWN_UNTIL, _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL
+    global _MAX_WELCOME_CREDIT_MONTHS
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
     _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
     _EXCISE_KNOWN_UNTIL = const.FEDERAL_EXCISE_KNOWN_UNTIL
     _VREG_CEILING_HTVA = const.VREG_NETWORK_CEILING_HTVA
     _VREG_CEILING_KNOWN_UNTIL = const.VREG_NETWORK_CEILING_KNOWN_UNTIL
+    _MAX_WELCOME_CREDIT_MONTHS = const.MAX_QUOTED_WELCOME_WAIT_MONTHS
     _EXPECTED_DSOS.update(
         {
             "flanders": const.FLUVIUS_KEYS,
@@ -3383,7 +3385,10 @@ def _validate_snapshot(
 _MAX_WELCOME_CREDIT_EUR: float = 2000.0
 _MAX_WELCOME_CREDIT_PER_KWH: float = 1.0
 _MAX_WELCOME_CREDIT_KWH: float = 10_000.0
-_MAX_WELCOME_CREDIT_MONTHS: int = 24
+# Not a unit slip: the longest wait the year-ahead quote reaches, filled from
+# const.MAX_QUOTED_WELCOME_WAIT_MONTHS by the loader. A card stating a longer
+# one is quoted no credit at all, which nothing else would notice.
+_MAX_WELCOME_CREDIT_MONTHS: int = 14
 # And a floor under each, because the slip this repository actually had ran the
 # other way: TotalEnergies' month factor came out a thousand times too SMALL
 # and every upper bound was satisfied (issue #103). A credit read that way is
@@ -3420,9 +3425,10 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
     The near risk is named in the commit that added the campaign: Luminus
     prints a 5% year-2 loyalty discount, a 10% year-3 one and the campaign
     itself in nearly the same words, and only the scope rule keeps a loyalty
-    discount from being read as a welcome credit. A share above 1, a flat
-    amount ten times the largest printed, or a wait beyond two years all mean
-    the wrong sentence was read.
+    discount from being read as a welcome credit. A share above 1 or a flat
+    amount ten times the largest printed means the wrong sentence was read,
+    and a wait longer than the year-ahead quote reaches means either that or
+    a card the quote credits nothing for.
     """
     flat = getattr(snap, "welcome_credit_eur", None)
     per_kwh = getattr(snap, "welcome_credit_eur_per_kwh", None)

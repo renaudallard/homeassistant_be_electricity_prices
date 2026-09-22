@@ -334,6 +334,16 @@ SPOT_PRICED_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "spot_monthly")
 WELCOME_CREDIT_PRO_RATA: Final = "pro_rata"
 WELCOME_CREDIT_ANNIVERSARY: Final = "anniversary"
 
+# The longest wait a year-ahead welcome-credit quote reaches out to. The quote
+# window is stretched to meet the anniversary a card states, and because the
+# test that pays the lump is "is the anniversary inside the window", a window
+# defined as reaching it can never fail: a card saying thirty months would have
+# pulled year-three money into a figure named for one year. Fourteen is the
+# longest any card states and the case the stretch was added for. Past it the
+# credit is not quoted at all, so the live check fails such a card rather than
+# let the figure drop unnoticed.
+MAX_QUOTED_WELCOME_WAIT_MONTHS: Final = 14
+
 # The third partition of TariffKind, after the two above: which kinds may be
 # RANKED against one another. The ranking page sorts its rows on one annual
 # figure, and that figure only means the same thing down a column of contracts

@@ -1534,6 +1534,8 @@ def test_the_loader_binds_what_the_providers_use(
                     assert vars(mod)[name] is cls, (mod_name, name)
         parse = sys.modules["be_pkg.providers._parse"]
         assert lc._parse_vreg_ceiling is parse.parse_vreg_network_ceiling
+        const = sys.modules["be_pkg.const"]
+        assert lc._MAX_WELCOME_CREDIT_MONTHS == const.MAX_QUOTED_WELCOME_WAIT_MONTHS
     finally:
         for name in set(sys.modules) - before:
             if name == "be_pkg" or name.startswith("be_pkg."):
@@ -2636,6 +2638,19 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
         )
 
 
+def test_the_wait_bound_is_where_the_quote_stops() -> None:
+    """The year-ahead quote credits nothing past this many months, and the
+    live check has to fail exactly there: a card moving from fourteen to
+    fifteen was quoted 0,00 EUR instead of 278,25 on Mega Zen Fixed while a
+    twenty-four-month bound passed it. The loader binds the bound from const;
+    this holds the default the other tests run against to the same value."""
+    from custom_components.be_electricity_prices.const import (
+        MAX_QUOTED_WELCOME_WAIT_MONTHS,
+    )
+
+    assert lc._MAX_WELCOME_CREDIT_MONTHS == MAX_QUOTED_WELCOME_WAIT_MONTHS
+
+
 def test_a_welcome_credit_is_gated_at_all() -> None:
     """Nothing gated any of the twelve credit fields: blanking every one of
     them on a real Mega card produced no new failure, while a unit slip on the
@@ -2681,6 +2696,9 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
     # A volume read off the wrong row, and a wait no card states.
     assert _fails(welcome_credit_kwh=750_000.0)
     assert _fails(welcome_credit_after_months=120)
+    # And a wait the year-ahead quote does not reach, which it credits nothing.
+    assert _fails(welcome_credit_after_months=15)
+    assert not _fails(welcome_credit_after_months=14)
     # A ceiling under the amount it caps is two figures read out of order.
     assert _fails(welcome_credit_eur=159.0, welcome_credit_cap_eur=84.8)
     # A card granting nothing is not a failure: most of the fleet grants none.
