@@ -535,6 +535,47 @@ def test_publication_month_reads_fiche_tarifaire_banner() -> None:
     assert _extract_publication_month("FICHE TARIFAIRE AOÛT 2026") == "08/2026"
 
 
+def test_dynamic_formulas_read_the_belpex_spelling() -> None:
+    """The January and February 2026 cards name the quarter-hourly index Belpex.
+
+    The Dynamic card of January 2026 prints both formulas that way,
+    "suivante: Belpex 15' * 1,083 + 4,17" and "(en €/MWh) : Belpex 15' * 1 -
+    13,89", where every later card says "Epex 15'". Only Epex was accepted, so
+    the injection search ran on to the AMR fallback clause further down and
+    billed its CONSUMPTION formula, "Epex 15' * 1,02 + 11,60", as the feed-in
+    credit, and the consumption picker took that clause's injection formula,
+    "Epex 15' * 1 - 9,59", as the energy price.
+    """
+    snap = parse_snapshot(
+        "octaplus_dynamic", _text("octaplus_dynamic_v_jan.pdf"), "flanders"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.14798)
+    assert snap.energy.base == pytest.approx(0.0044202)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert snap.injection.base == pytest.approx(-0.01389)
+
+
+def test_an_unread_injection_formula_is_not_taken_from_the_amr_clause() -> None:
+    """A spelling the pattern does not know must leave the credit unread.
+
+    The injection formula follows its lead-in within 252 characters on every
+    card in the archive, while the AMR clause that quotes the consumption
+    formula sits some 2.600 further on. Reading nothing is what the live check
+    reports; reading the next formula in the document is a credit nobody
+    notices is wrong.
+    """
+    text = _text("octaplus_dynamic_v_jan.pdf")
+    assert "Belpex 15' * 1 - 13,89" in text
+    snap = parse_snapshot(
+        "octaplus_dynamic",
+        text.replace("Belpex 15' * 1 - 13,89", "Belpex 15' fois 1 moins 13,89"),
+        "flanders",
+    )
+    assert snap.injection is None or snap.injection.factor is None
+
+
 def test_dynamic_injection_survives_reworded_lead_in() -> None:
     # The 2026 dynamic card reworded the injection lead-in from "Le prix
     # de votre injection ..." to "les prix de l'électricité injectée sont

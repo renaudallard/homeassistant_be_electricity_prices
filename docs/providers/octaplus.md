@@ -183,7 +183,9 @@ to 0, so a layout drift surfaces instead of silently dropping the annual fee.
 By kind:
 
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
-  (`_EPEX_FORMULA`). The consumption formula is picked by
+  (`_EPEX_FORMULA`), which also accepts `Belpex 15'`, the name the January and
+  February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`).
+  The consumption formula is picked by
   `_dynamic_consumption_formula`, which first locates the injection
   formula (the one after the `Le prix de votre injection` lead-in) and skips it,
   so reordering the two paragraphs cannot bind the injection formula as the
@@ -278,7 +280,8 @@ falls back to the printed estimate rather than billing two meter types on a
 third one's formula (`test_disagreeing_meter_formulas_keep_the_estimate`).
 
 For `dynamic`, the injection
-formula is found after the `_INJECTION_LEAD` prose and yields `factor` and `base`
+formula is found within 500 characters after the `_INJECTION_LEAD` prose
+(`_injection_formula`; 174 to 252 on every archived card) and yields `factor` and `base`
 that are NOT VAT-adjusted (injection is VAT-exempt, `base.py`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
@@ -288,6 +291,13 @@ that are NOT VAT-adjusted (injection is VAT-exempt, `base.py`);
 votre injection` or the 2026 rewording `les prix de l'électricité injectée sont
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
+
+The window is bounded because the same card quotes, some 2.600 characters
+further on, the formulas it would bill an AMR meter on, the consumption one
+first. An open search walked into that clause whenever the real formula went
+unread, which is what the January 2026 cards did, and credited the consumption
+formula as the feed-in. Bounded, such a card reads no formula, which the live
+check reports (`test_an_unread_injection_formula_is_not_taken_from_the_amr_clause`).
 
 ### Supplier PV forfait (`_extract_supplier_prosumer`, `_octaplus_overlays.py`)
 
@@ -453,6 +463,7 @@ cards):
 | `octaplus_smartvariable_w.pdf` | OCTA+ Smart Variable, Wallonia. Variable-kind path. |
 | `octaplus_fixed_w_aug.pdf` | OCTA+ Fixed, Wallonia, **August 2026 redesign**. `Epex SPP M * 0,8560 - 16,20` in place of April's three `Epex SPP x` rows. Kept as served, not re-rendered: ghostscript reorders the DSO and tax column headers. |
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
+| `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
 in the test helper `_text` (`test_octaplus.py`), matching the production

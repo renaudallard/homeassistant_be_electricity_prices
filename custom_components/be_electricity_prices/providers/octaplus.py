@@ -417,8 +417,12 @@ def _vat_multiplier(text: str) -> float:
     return vat_multiplier(text, r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
 
 
+# The January and February 2026 cards name the quarter-hourly index Belpex in
+# the injection formula ("Belpex 15' * 1 - 13,89"); every other formula on
+# every card says Epex.
 _EPEX_FORMULA = (
-    rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
+    rf"(?:Bel|E)pex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*"
+    rf"([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
 )
 # The 2026 template reworded the injection lead-in from "Le prix de votre
 # injection est indexé ..." to "les prix de l'électricité injectée sont
@@ -462,6 +466,20 @@ _INJECTION_LEAD = (
 )
 
 
+def _injection_formula(text: str) -> re.Match[str] | None:
+    """The feed-in formula a dynamic card prints after its lead-in, or None.
+
+    It follows the lead-in within a sentence: 174 to 252 characters on every
+    card archived since January 2026. The gap is bounded because the same card
+    goes on to quote the formulas it would bill an AMR meter on, the
+    CONSUMPTION one first, about 2.600 characters later. An open search walked
+    into that clause whenever the real formula went unread and billed the
+    consumption formula as the credit; bounded, such a card reads no formula,
+    which the live check reports.
+    """
+    return re.search(rf"{_INJECTION_LEAD}.{{0,500}}?{_EPEX_FORMULA}", text, re.S)
+
+
 def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
     """First 'Epex 15' formula that is not the injection one.
 
@@ -471,14 +489,9 @@ def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
     paragraphs can't silently bind the injection formula as the
     consumption rate.
     """
-    inj_start: int | None = None
-    marker = re.search(_INJECTION_LEAD, text, re.S)
-    if marker is not None:
-        inj_m = re.search(_EPEX_FORMULA, text[marker.start() :])
-        if inj_m is not None:
-            inj_start = marker.start() + inj_m.start()
+    inj = _injection_formula(text)
     for m in re.finditer(_EPEX_FORMULA, text):
-        if m.start() == inj_start:
+        if inj is not None and m.start(1) == inj.start(1):
             continue
         return m
     return None
@@ -653,11 +666,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # Injection formula appears after the prose
         # "Le prix de votre injection est indexé ..."
         # so we anchor on that lead-in to skip the consumption formula.
-        inj = re.search(
-            rf"{_INJECTION_LEAD}.*?{_EPEX_FORMULA}",
-            text,
-            re.S,
-        )
+        inj = _injection_formula(text)
         if inj is not None:
             f_pdf = to_float(inj.group(1))
             b_eur_mwh = parse_sign(inj.group(2)) * to_float(inj.group(3))
