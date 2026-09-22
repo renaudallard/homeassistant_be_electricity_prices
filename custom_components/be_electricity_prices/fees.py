@@ -640,7 +640,16 @@ def _year_ahead_welcome_credit(
     is the day a card that grants its credit *"na een jaar ononderbroken
     verbruik"* pays it out to a customer who signs today: a strict 365-day
     window would drop that lump by one day and quote the tier as though its
-    whole reason for existing were not there. A pro-rata card accrues its
+    whole reason for existing were not there.
+
+    And out to the card's OWN anniversary where it states a longer wait, for
+    exactly that reason rather than a new one. Four Mega cards pay after
+    fourteen months, whose anniversary is 426 days out, so Zen Fixed and its
+    pro twin were quoted zero where all fifteen siblings got theirs: 320,65 and
+    344,85 EUR withheld, silently, while the page ranked them against cards
+    paying at twelve. The extra day was already an admission that the bill's
+    window and the card's payout date are different things; a card that says
+    fourteen months is owed the same reading as one that says twelve. A pro-rata card accrues its
     full year inside the same window, so a fresh signing is credited the
     printed amount and an existing customer whatever share of the first year
     is still ahead of them; ``eligible_eur`` caps it the way the first-year
@@ -652,11 +661,19 @@ def _year_ahead_welcome_credit(
     is an annual one, which is why this one never needed
     :func:`first_year_net_kwh`.
     """
+    ends = today + timedelta(days=_WELCOME_YEAR_DAYS)
+    wait = snapshot.welcome_credit_after_months
+    if (
+        snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY
+        and wait
+        and start is not None
+    ):
+        ends = max(ends, _months_after(start, wait))
     return _welcome_credit_eur(
         snapshot,
         start,
         today,
-        today + timedelta(days=_WELCOME_YEAR_DAYS),
+        ends,
         eligible_eur,
         first_year_kwh,
         energy_eur_per_kwh,

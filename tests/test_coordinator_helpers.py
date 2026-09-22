@@ -9496,6 +9496,50 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     assert own is snap
 
 
+def test_a_year_ahead_quote_reaches_the_wait_the_card_states() -> None:
+    """Four Mega cards pay the ristourne after fourteen months, 426 days out,
+    so a strict 365-day window quoted Zen Fixed and its pro twin at zero while
+    the page ranked them against fifteen siblings paying at twelve.
+
+    The window already ran one day past the year for exactly this reason: a
+    card paying "na een jaar" pays on day 366, and dropping it by one day
+    quotes the tier as though its whole reason for existing were not there. A
+    card that says fourteen months is owed the same reading.
+    """
+    from datetime import date
+
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _year_ahead_welcome_credit,
+    )
+
+    def quoted(months: int) -> float:
+        card = make_snapshot(
+            welcome_credit_eur=200.0,
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+            welcome_credit_after_months=months,
+        )
+        return _year_ahead_welcome_credit(
+            card, date(2026, 9, 22), date(2026, 9, 22), 99_999.0, 3500.0, 0.20
+        )
+
+    # Twelve months lands on day 366, which the window already reached.
+    assert quoted(12) == pytest.approx(200.0)
+    # Fourteen is 426 days out and was dropped whole.
+    assert quoted(14) == pytest.approx(200.0)
+
+    # The window follows the card and does not simply grow: a wait no card
+    # states is still the card's own, and an accruing credit is untouched by
+    # any of this because it does not wait at all.
+    assert quoted(24) == pytest.approx(200.0)
+    accruing = make_snapshot(welcome_credit_eur=200.0, welcome_credit_after_months=14)
+    assert _year_ahead_welcome_credit(
+        accruing, date(2026, 9, 22), date(2026, 9, 22), 99_999.0, 3500.0, 0.20
+    ) == pytest.approx(200.0)
+
+
 def test_a_volume_cashback_is_valued_at_the_rate_its_card_names() -> None:
     """The four cards granting one say which rate to value it at, and it is
     not the household's blended one: "le prix unitaire en EUR/kWh TTC du cout
