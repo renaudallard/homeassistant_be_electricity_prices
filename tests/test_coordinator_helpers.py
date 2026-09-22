@@ -9530,10 +9530,17 @@ def test_a_year_ahead_quote_reaches_the_wait_the_card_states() -> None:
     # Fourteen is 426 days out and was dropped whole.
     assert quoted(14) == pytest.approx(200.0)
 
-    # The window follows the card and does not simply grow: a wait no card
-    # states is still the card's own, and an accruing credit is untouched by
-    # any of this because it does not wait at all.
-    assert quoted(24) == pytest.approx(200.0)
+    # And it stops there. The window is stretched to MEET the anniversary, so
+    # the test that pays the lump can never fail for one: a card saying
+    # twenty-four or thirty months would have pulled year-two and year-three
+    # money into a figure named for one year. Fourteen is the longest any card
+    # states, and past it the quote is the same zero it was before the
+    # extension existed.
+    assert quoted(15) == 0.0
+    assert quoted(24) == 0.0
+    assert quoted(30) == 0.0
+
+    # An accruing credit is untouched by any of this, because it does not wait.
     accruing = make_snapshot(welcome_credit_eur=200.0, welcome_credit_after_months=14)
     assert _year_ahead_welcome_credit(
         accruing, date(2026, 9, 22), date(2026, 9, 22), 99_999.0, 3500.0, 0.20

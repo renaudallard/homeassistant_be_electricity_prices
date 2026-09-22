@@ -374,6 +374,18 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 # ANNIVERSARY card pays out is its own stated wait, which is not always a
 # year: see ``welcome_credit_after_months``.
 _WELCOME_YEAR_DAYS = 365
+# The longest wait a year-ahead quote will still reach out to. The window is
+# stretched to meet the anniversary a card states, and because the test that
+# pays the lump is "is the anniversary inside the window", a window DEFINED as
+# reaching it can never fail: a card saying thirty months would have pulled
+# year-three money into a figure named for one year. Nothing else bounds it;
+# the reader takes whatever integer the card prints.
+#
+# Fourteen is the longest any card states and the case the extension was added
+# for. Beyond it the credit is simply not quoted, which is the same answer the
+# window gave before the extension existed, and the live check's own
+# twenty-four-month bound reports a card that goes further.
+_MAX_QUOTED_WAIT_MONTHS = 14
 
 
 def _months_after(start: date, months: int) -> date:
@@ -673,6 +685,7 @@ def _year_ahead_welcome_credit(
     if (
         snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY
         and wait
+        and wait <= _MAX_QUOTED_WAIT_MONTHS
         and start is not None
     ):
         ends = max(ends, _months_after(start, wait))
