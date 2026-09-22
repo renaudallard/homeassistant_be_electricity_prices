@@ -34,18 +34,19 @@ way for the user to clear it."""
 
 from __future__ import annotations
 
+from .brugel import any_cached_power_term, cached_power_term
 from .providers import get as get_extractor
 from .providers import offers_direct_debit
 
 from .providers.base import (
     SupplierExtractor,
+    omits_brussels_power_term,
 )
 
 from .const import (
     CONF_CONTRACT,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
-    DSO_SIBELGA,
     REGION_BRUSSELS,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -335,26 +336,39 @@ class _IssuesMixin:
         from the figure Brugel publishes. When that sheet cannot be read the
         card is billed as printed, about 50,07 EUR a year short.
 
-        The signal needs no threshold and no guess about how big a metering
-        figure should be. A card that carries the power part prints the band,
-        and the resolver sets the band on any card it completes, so a resolved
-        Brussels snapshot with no band is a card billing without the term.
-        Measured over the 349 archived Brussels rows: every supplier that
-        prints the sum prints the band on 100% of its rows, and Bolt prints it
-        on none of its 44.
+        Asks the resolver's own rule rather than half of it. This keyed on the
+        band alone, and the resolver takes TWO signals: no band, AND a metering
+        figure too small to already include the power part. A card printing one
+        combined number and no band is correctly priced and was being told it
+        was 50 EUR a year short. No such card is in the 349 archived Brussels
+        rows, which is what the first version of this leaned on, but the
+        resolver's second signal exists because that shape is anticipated.
 
-        Says what the cost excludes rather than inventing the figure, like the
-        four sibling gaps, and clears itself the moment Brugel answers, which
-        the tick retries every six hours.
+        The comparator is Brugel's own published figure, not a guess about how
+        big a metering charge should be: the delivery year's where we have it,
+        and otherwise the most recent year we hold, because the term is set per
+        calendar year and moves by a few percent where the gap between a
+        metering figure and a complete one is fourfold. With no figure at all
+        this stays silent, which is the honest answer to a question nothing can
+        this stays silent, which is the honest answer to a question nothing can
+        settle, and which means a process whose very first Brugel fetch failed
+        says nothing until one succeeds. That window is the one where the term
+        has never been seen at all; the fetch retries every six hours and logs
+        its own warning meanwhile.
+
+        Says what the cost excludes rather than inventing it, like the four
+        sibling gaps, and clears the moment Brugel answers, which the tick
+        retries every six hours.
         """
-        overlay = (
-            self._snapshot.dsos.get(DSO_SIBELGA) if self._snapshot is not None else None
-        )
+        if self.entry.data.get(CONF_REGION) != REGION_BRUSSELS:
+            self._sync_issue("brussels_power_term_missing", False)
+            return
+        year = dt_util.now().year
+        terms = cached_power_term(year) or any_cached_power_term()
         self._sync_issue(
             "brussels_power_term_missing",
-            self.entry.data.get(CONF_REGION) == REGION_BRUSSELS
-            and overlay is not None
-            and overlay.brussels_power_term_above_13kva is None,
+            self._snapshot is not None
+            and omits_brussels_power_term(self._snapshot, terms=terms),
         )
 
     def _sync_direct_debit_unanswered_issue(self) -> None:

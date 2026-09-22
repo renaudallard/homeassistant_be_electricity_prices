@@ -1626,6 +1626,50 @@ def resolve_vreg_network_ceiling(
     return replace(snapshot, dsos={**snapshot.dsos, **changed})
 
 
+def _brussels_terms_on_card_basis(
+    snapshot: SupplierSnapshot, terms: tuple[float, float]
+) -> tuple[float, float]:
+    """Brugel's ex-VAT pair put onto the basis this card prints on."""
+    low, high = terms
+    if snapshot.taxes.vat_rate <= 0.0:
+        # A VAT-inclusive card, so the ex-VAT figures have to be grossed.
+        low *= 1.0 + VAT_RATE_REDUCED
+        high *= 1.0 + VAT_RATE_REDUCED
+    return low, high
+
+
+def omits_brussels_power_term(
+    snapshot: SupplierSnapshot, *, terms: tuple[float, float] | None
+) -> bool:
+    """Whether this card prints the metering half of Sibelga's charge alone.
+
+    TWO signals, and both are needed. The band above 13 kVA says the card
+    already carries the power part, which is how the four suppliers printing
+    the sum are recognised. The SIZE of the metering figure says the same thing
+    for a card that prints one combined number and no band, which is the shape
+    the band signal alone cannot see: 64,80 with no band is a complete charge,
+    not a short one, and completing it would bill the power part twice.
+    ``docs/providers/bolt.md`` records that both have to agree, and
+    ``test_both_signals_have_to_agree_before_a_card_is_touched`` pins it.
+
+    Shared with the Repairs card that discloses the gap, which asked the band
+    alone and so told a correctly priced card it was 50 EUR a year short. One
+    rule, one place, for the reason every other per-entry transform is baked
+    once.
+
+    ``terms`` is the figure to compare the metering half against. ``None``
+    means nothing is known to compare it to, and the honest answer is then that
+    we cannot tell, so this says no.
+    """
+    overlay = snapshot.dsos.get(DSO_SIBELGA)
+    if overlay is None or overlay.brussels_power_term_above_13kva is not None:
+        return False
+    if terms is None:
+        return False
+    low, _high = _brussels_terms_on_card_basis(snapshot, terms)
+    return overlay.data_management_per_year < low
+
+
 def resolve_brussels_power_term(
     snapshot: SupplierSnapshot, *, terms: tuple[float, float] | None
 ) -> SupplierSnapshot:
@@ -1656,17 +1700,11 @@ def resolve_brussels_power_term(
     if terms is None:
         return snapshot
     overlay = snapshot.dsos.get(DSO_SIBELGA)
-    if overlay is None or overlay.brussels_power_term_above_13kva is not None:
+    if not omits_brussels_power_term(snapshot, terms=terms):
         return snapshot
-    low, high = terms
-    if snapshot.taxes.vat_rate <= 0.0:
-        # A VAT-inclusive card, so the ex-VAT figures have to be grossed.
-        low *= 1.0 + VAT_RATE_REDUCED
-        high *= 1.0 + VAT_RATE_REDUCED
+    assert overlay is not None
+    low, high = _brussels_terms_on_card_basis(snapshot, terms)
     metering = overlay.data_management_per_year
-    if metering >= low:
-        # Big enough to already include the power part: leave it alone.
-        return snapshot
     return replace(
         snapshot,
         dsos={

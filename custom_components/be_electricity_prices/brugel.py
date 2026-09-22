@@ -129,6 +129,21 @@ def cached_power_term(year: int) -> tuple[float, float] | None:
     return _cache.get(year)
 
 
+def any_cached_power_term() -> tuple[float, float] | None:
+    """The most recent term this process holds, for any year, or ``None``.
+
+    Not for pricing, which must use the delivery year's own figure and nothing
+    else. This is for asking whether a card's printed fixed charge looks like
+    the metering half alone, a question whose answer needs SOME figure of the
+    right order and does not change between adjacent years: the term is set per
+    calendar year and moves by a few percent, where the gap between a metering
+    figure and a complete one is fourfold.
+    """
+    if not _cache:
+        return None
+    return _cache[max(_cache)]
+
+
 async def ensure_power_term(
     session: aiohttp.ClientSession, year: int
 ) -> tuple[float, float] | None:

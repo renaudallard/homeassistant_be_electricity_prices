@@ -466,6 +466,9 @@ async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> N
     issue_id = f"brussels_power_term_missing_{entry.entry_id}"
     registry = ir.async_get(hass)
 
+    # This year's sheet cannot be read, and last year's is still in hand: the
+    # metering figure can be recognised for what it is, and the entry is short.
+    brugel._cache[dt_util.now().year - 1] = (46.10, 92.20)
     card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
     coord._snapshot = resolve_brussels_power_term(card, terms=None)
     coord._sync_brussels_power_term_issue()
@@ -479,6 +482,27 @@ async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> N
     # A card that prints the whole charge never needed it and never says so.
     coord._snapshot = resolve_brussels_power_term(
         _brussels_card(fixed_term=64.80, vat_rate=0.0, above=114.88), terms=None
+    )
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # And the shape the band signal ALONE cannot see: one combined number, no
+    # band. Correctly priced, and the first version of this card told it that
+    # it was 50 EUR a year short. The resolver has always used two signals and
+    # this now asks the same question it does.
+    brugel._cache.clear()
+    brugel._cache[dt_util.now().year] = (47.24, 94.48)
+    coord._snapshot = resolve_brussels_power_term(
+        _brussels_card(fixed_term=64.80, vat_rate=0.0), terms=None
+    )
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # With no term known for any year there is nothing to compare a metering
+    # figure against, so it says nothing rather than guessing.
+    brugel._cache.clear()
+    coord._snapshot = resolve_brussels_power_term(
+        _brussels_card(fixed_term=14.73, vat_rate=0.0), terms=None
     )
     coord._sync_brussels_power_term_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
