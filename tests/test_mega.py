@@ -1752,6 +1752,39 @@ def test_a_ristourne_conditional_on_direct_debit_is_granted_to_nobody_else() -> 
     assert credited(supplemented, direct_debit=False) > 0.0
 
 
+def test_a_conditional_offer_clears_every_shape_of_the_credit() -> None:
+    """The clear listed three amounts and left the share and the volume behind,
+    so a card both direct-debit-conditional and percentage-stated would credit
+    a household its own terms grant nothing.
+
+    No card is both shapes today. The same gap existed for the per-kWh leg
+    until a card turned up that was, which is the reason to close it on the
+    shape rather than on the card.
+    """
+    from dataclasses import replace
+
+    card = replace(
+        parse_snapshot(
+            "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+        ),
+        welcome_credit_pct_of_energy=0.33,
+        welcome_credit_kwh=750.0,
+    )
+    assert card.welcome_credit_requires_direct_debit
+
+    withheld = resolve_direct_debit(card, direct_debit=False)
+    assert withheld.welcome_credit_eur is None
+    assert withheld.welcome_credit_eur_per_kwh is None
+    assert withheld.welcome_credit_cap_eur is None
+    assert withheld.welcome_credit_pct_of_energy is None
+    assert withheld.welcome_credit_kwh is None
+
+    # And a payer keeps every one of them.
+    granted = resolve_direct_debit(card, direct_debit=True)
+    assert granted.welcome_credit_pct_of_energy == pytest.approx(0.33)
+    assert granted.welcome_credit_kwh == pytest.approx(750.0)
+
+
 def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
     """Mega's residential cards print the same four tranches Engie's do.
 

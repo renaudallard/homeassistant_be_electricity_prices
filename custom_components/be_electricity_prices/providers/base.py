@@ -1426,6 +1426,13 @@ def resolve_direct_debit(
         # household the card grants nothing, worth 522,58 EUR on Cosy Flex at
         # 3500 kWh. The cap goes with them so no later reader sees a ceiling
         # over an absent credit.
+        #
+        # All five amounts, the way resolve_welcome_credit_meter clears all
+        # five: this listed three and left the share and the volume behind,
+        # which a card both direct-debit-conditional and percentage-stated
+        # would have credited to a household its own terms grant nothing. No
+        # card is both shapes today, and the same gap existed for the per-kWh
+        # leg until a card turned up that was.
         return replace(
             snapshot,
             direct_debit_discount_eur=None,
@@ -1434,6 +1441,8 @@ def resolve_direct_debit(
             welcome_credit_eur=None,
             welcome_credit_eur_per_kwh=None,
             welcome_credit_cap_eur=None,
+            welcome_credit_pct_of_energy=None,
+            welcome_credit_kwh=None,
         )
     # The welcome credit's own direct-debit part is settled here too: same
     # per-entry answer, same reason for baking it once, and Mega's card
