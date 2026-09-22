@@ -1335,6 +1335,17 @@ _EPEXDAM_INJECTION_CONTRACTS: frozenset[str] = frozenset(
     }
 )
 
+# The variable contracts whose ENERGY is indexed on the delivery month's mean.
+# The same ten today, and written out anyway rather than aliased: the two are
+# independent properties of a card and one set serving both says they cannot
+# move apart. They can. A card may index the feed-in credit on the monthly
+# EPEXDAM and still print an energy rate published in advance, which is
+# exactly why the ENDEX101 products are in neither set, and the reverse is the
+# ordinary shape at five other suppliers. With one set a product that gained
+# or lost one of the two would silently get both flags or neither, and the
+# registry check that would catch it covers five of these ten offline.
+_EPEXDAM_ENERGY_CONTRACTS: frozenset[str] = frozenset(_EPEXDAM_INJECTION_CONTRACTS)
+
 
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=0.3,
@@ -1350,7 +1361,7 @@ EXTRACTOR = SupplierExtractor(
             # The EPEXDAM cards index BOTH legs on the delivery month, so the
             # one set drives both flags.
             spot_indexed_injection=c.contract_id in _EPEXDAM_INJECTION_CONTRACTS,
-            month_indexed_energy=c.contract_id in _EPEXDAM_INJECTION_CONTRACTS,
+            month_indexed_energy=c.contract_id in _EPEXDAM_ENERGY_CONTRACTS,
         )
         for c in _CONTRACTS
     ),
