@@ -9489,6 +9489,39 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     assert own is snap
 
 
+def test_the_month_bucket_is_not_decided_by_the_current_card() -> None:
+    """The walk prices each month off that month's own archived card and asks
+    THAT card, at ``snap_h``, whether it wants a month mean. The bucket those
+    means are looked up in was built from what TODAY's card wants, so a card
+    that has since dropped its monthly formula left the bucket empty under a
+    month still asking for one, while the backfill beside it buckets
+    internally and kept answering.
+
+    Worth 0,003026 EUR/kWh on an Eneco month and up to 20,8% on Ecopower's SPP
+    shape. Nothing in the archive is in that state today and Ecopower has
+    already moved a card the other way, so it is one ordinary revision away.
+
+    Pinned on the source because the wiring IS the claim: the two walks agree
+    on every card that exists, which is exactly why no priced comparison can
+    see it.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import ytd_cost
+
+    src = inspect.getsource(ytd_cost._ytd_hourly_energy)
+    line = next(
+        ln for ln in src.splitlines() if ln.strip().startswith("month_bucket =")
+    )
+    assert "snapshot" not in line, line
+    assert "monthly_mean" not in line, line
+    assert "_bucket_by_local_month(historical_spots)" in line, line
+
+    # And the per-hour resolution still asks the month's own card, which is
+    # the half that was already right.
+    assert "monthly_mean=_injection_on_month_mean(snap_h)" in src
+
+
 async def test_a_cold_tick_does_not_credit_a_campaign_off_the_wrong_month(
     hass: HomeAssistant, freezer: Any
 ) -> None:

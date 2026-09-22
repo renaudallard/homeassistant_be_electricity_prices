@@ -508,16 +508,26 @@ async def _ytd_hourly_energy(
     month_spp: dict[tuple[int, int, bool], float | None] = {}
     # Bucket the year's spots by local month once so each month's mean is a
     # lookup rather than a full-year rescan (the loop reads up to twelve
-    # distinct months). TWO independent readers, and gating on the first alone
-    # is what dropped the second: a month-priced ENERGY leg, and a feed-in
-    # credit that settles on a month index whatever the energy does (Eneco Fix
-    # prices energy without a mean and indexes its credit on one). A dynamic
-    # contract with a per-hour credit reads neither, and skips the scan.
-    month_bucket = (
-        _bucket_by_local_month(historical_spots)
-        if historical_spots and (monthly_mean or _injection_on_month_mean(snapshot))
-        else {}
-    )
+    # distinct months). TWO independent readers: a month-priced ENERGY leg,
+    # and a feed-in credit that settles on a month index whatever the energy
+    # does (Eneco Fix prices energy without a mean and indexes its credit on
+    # one).
+    #
+    # Built whenever there are spots to bucket, and no longer gated on what
+    # the CURRENT card needs. The walk prices each month off that month's own
+    # archived card and asks it, at ``snap_h``, whether it wants a month mean;
+    # the gate asked today's card the same question and answered for all of
+    # them. A card that has since dropped its monthly formula therefore left
+    # the bucket empty under a month that still wanted one, and the backfill
+    # beside this buckets internally and did not agree: 0,003026 EUR/kWh on an
+    # Eneco month, and up to 20,8% on Ecopower's SPP shape. Nothing in the
+    # archive is in that state today, and Ecopower has already moved a card
+    # the other way, so it is one ordinary revision away.
+    #
+    # The cost of dropping the gate is one linear pass over the cached year
+    # for the dynamic contracts that read neither, which is not worth a
+    # divergence between two walks of the same bill.
+    month_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
     # A static card whose injection is a per-hour spot formula with no printed
     # indicative (Cociter Tarif Variable) keeps that hourly index even on the
     # monthly-mean path, which it reaches only via a signing-cohort re-price of
