@@ -2493,6 +2493,63 @@ def test_the_ceiling_consensus_uses_the_allowance(
     assert _rows("bolt/VREG ceiling")[0].expected is False
 
 
+def test_a_card_pricing_direct_debit_must_be_offered_the_question() -> None:
+    """The dependence is parsed off the card; whether the flow ASKS comes from
+    the registry. Unflagged and card-conditional is unrecoverable: the question
+    is never put, the stored answer can only be False, resolve_direct_debit
+    clears the base, the per-kWh leg and the cap, and there is no box to tick
+    to get any of it back. 522,58 EUR a year on a Cosy Flex at 3.500 kWh.
+
+    Nothing checked it. The unit test beside the registry compares the flag set
+    against the frozenset the registry is built from, which is a tautology, and
+    then a hand-written list of ids an eighteenth product would not be on.
+    """
+
+    def verdict(*, prices_it: bool, offered: bool) -> bool:
+        lc.CHECKS.clear()
+        lc._CONTRACTS_BY_ID["x_fix"] = SimpleNamespace(direct_debit_discount=offered)
+        snap = SimpleNamespace(
+            welcome_credit_requires_direct_debit=prices_it,
+            welcome_credit_direct_debit_eur=None,
+            direct_debit_discount_eur=None,
+        )
+        lc._expect_direct_debit_registry("x/fix", "x_fix", snap)
+        return all(c.ok for c in lc.CHECKS)
+
+    assert verdict(prices_it=True, offered=True)
+    assert verdict(prices_it=False, offered=False)
+    # The direction that costs the household the whole credit with no way back.
+    assert not verdict(prices_it=True, offered=False)
+    # The reverse is neither wrong nor rare and is deliberately not asserted:
+    # 21 archived rows are flagged while that month's card states nothing,
+    # because a product printing the supplement in some months prints none in
+    # others. A symmetric check would file those every night.
+    assert verdict(prices_it=False, offered=True)
+
+    # A supplement states the dependence just as a conditional flag does.
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID["x_fix"] = SimpleNamespace(direct_debit_discount=False)
+    lc._expect_direct_debit_registry(
+        "x/fix",
+        "x_fix",
+        SimpleNamespace(
+            welcome_credit_requires_direct_debit=False,
+            welcome_credit_direct_debit_eur=5.3,
+            direct_debit_discount_eur=None,
+        ),
+    )
+    assert [c for c in lc.CHECKS if not c.ok]
+
+    # A contract this build does not ship is left alone, like every other
+    # registry check here.
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.pop("x_fix", None)
+    lc._expect_direct_debit_registry(
+        "x/fix", "x_fix", SimpleNamespace(welcome_credit_requires_direct_debit=True)
+    )
+    assert lc.CHECKS == []
+
+
 def test_a_welcome_credit_is_gated_at_all() -> None:
     """Nothing gated any of the twelve credit fields: blanking every one of
     them on a real Mega card produced no new failure, while a unit slip on the

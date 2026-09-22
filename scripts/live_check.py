@@ -3353,6 +3353,7 @@ def _validate_snapshot(
         no_standing_charge=no_standing_charge,
     )
     _expect_welcome_credit(prefix, contract_id, snap)
+    _expect_direct_debit_registry(prefix, contract_id, snap)
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
@@ -3370,6 +3371,8 @@ _MAX_WELCOME_CREDIT_EUR: float = 2000.0
 _MAX_WELCOME_CREDIT_PER_KWH: float = 1.0
 _MAX_WELCOME_CREDIT_KWH: float = 10_000.0
 _MAX_WELCOME_CREDIT_MONTHS: int = 24
+
+
 def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
     """Bounds and self-consistency for whatever welcome credit a card grants.
 
@@ -3428,6 +3431,50 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
             float(cap) >= float(flat),
             detail=f"cap={cap}, flat={flat}",
         )
+
+
+def _expect_direct_debit_registry(prefix: str, contract_id: str, snap: object) -> None:
+    """A card that prices a direct-debit payer has to be flagged in the
+    registry, for the same reason the month-indexed pair does and with a
+    sharper consequence one way round.
+
+    The dependence is parsed off the card; whether the flow ASKS comes from
+    ``Contract.direct_debit_discount``. Unflagged and card-conditional is the
+    bad direction: the question is never put, so the stored answer can only be
+    False, ``resolve_direct_debit`` clears the base, the per-kWh leg and the
+    cap, and the household has no box to tick to get any of it back. That is
+    522,58 EUR a year on a Cosy Flex at 3.500 kWh, unrecoverable.
+
+    The reverse is neither wrong nor rare, so it is not asserted: 21 archived
+    rows are flagged while that month's card states nothing, because a product
+    that printed the supplement in some months prints nothing in others, and
+    Mega's pro Cosy Flex has printed each wording in different months. A
+    symmetric check would file those every night, and a check that cries about
+    a shape the fleet really has is a check people learn to ignore.
+
+    Nothing checked this. The unit test beside the registry compares the flag
+    set with the very frozenset the registry is built from, which is a
+    tautology, and then a hand-written list of ids, which an eighteenth
+    product would not be on.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or snap is None:
+        return
+    conditional = bool(getattr(snap, "welcome_credit_requires_direct_debit", False))
+    supplement = getattr(snap, "welcome_credit_direct_debit_eur", None)
+    discount = getattr(snap, "direct_debit_discount_eur", None)
+    prices_it = conditional or supplement is not None or discount is not None
+    offered = bool(getattr(contract, "direct_debit_discount", False))
+    _expect(
+        f"{prefix}: a card pricing direct debit is offered the question",
+        offered or not prices_it,
+        detail=(
+            f"card prices it (conditional={conditional}, "
+            f"supplement={supplement}, standing charge={discount}) but the "
+            f"registry's direct_debit_discount is {offered}, so the flow never "
+            "asks and the answer can only be no"
+        ),
+    )
 
 
 def _expect_month_indexed_registry(
