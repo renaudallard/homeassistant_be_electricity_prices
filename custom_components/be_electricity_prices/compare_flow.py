@@ -543,6 +543,7 @@ def _quote_entry(
     dso_mode: str | None = None,
     *,
     quarter_hourly: bool | None = None,
+    meter: str | None = None,
 ) -> ConfigEntry:
     """``entry`` itself when the what-if matches it, else a proxy holding
     the overridden regime, DSO tariff mode and settlement.
@@ -564,6 +565,15 @@ def _quote_entry(
     quarter-hourly tariff. ``None`` leaves the household's answer in place,
     which is what the own side wants.
 
+    ``meter`` is the TARGET's, for the same reason and with the same reach: a
+    dynamic or TOU product is only sold on a digital meter, and ``_target_side``
+    already prices the rate and the volume on that one. Two resolvers read the
+    meter straight off ``entry.data`` instead, so the credit a card denies an
+    exclusive-night connection and the volume tranche an energie.be card bands
+    were both settled on the HOUSEHOLD's meter while everything else on the row
+    used the target's. ``None`` leaves the household's answer in place, which
+    is what the own side wants.
+
     Direct debit is deliberately NOT in that list and rides along inherited.
     It is the one of these that is a fact about the household rather than
     about the product: someone who pays by direct debit would still do so at
@@ -582,6 +592,8 @@ def _quote_entry(
         entry.data.get(CONF_QUARTER_HOURLY, False)
     ):
         overrides[CONF_QUARTER_HOURLY] = quarter_hourly
+    if meter is not None and meter != entry.data.get(CONF_METER, METER_MONO):
+        overrides[CONF_METER] = meter
     if not overrides:
         return entry
     # The yearly volume is the one site fact that does NOT live in entry.data:
@@ -800,7 +812,11 @@ class _SweepEngine:
         )
         dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
         target_entry = _quote_entry(
-            self.config_entry, hh.regime, dso_mode, quarter_hourly=quarter_hourly
+            self.config_entry,
+            hh.regime,
+            dso_mode,
+            quarter_hourly=quarter_hourly,
+            meter=meter,
         )
         return meter, dso_mode, target_entry, _resolve_snapshot(target_entry, snap)
 
@@ -2466,7 +2482,9 @@ class _CompareStepsMixin(OptionsFlow):
         # the mode for that card and lets the user say otherwise, which is the
         # decision this flow has no step to ask about.
         other_dso_mode = DSO_MODE_IMPACT if other_kind == "tou_impact" else dso_mode
-        target_entry = _quote_entry(self.config_entry, regime, other_dso_mode)
+        target_entry = _quote_entry(
+            self.config_entry, regime, other_dso_mode, meter=meter
+        )
         other_export_per_kwh: float | None = None
 
         # Other supplier: fetch + compute.
@@ -2539,6 +2557,7 @@ class _CompareStepsMixin(OptionsFlow):
                     self.config_entry,
                     regime,
                     quarter_hourly=_settlement_of(self._compare),
+                    meter=meter,
                 ),
                 fetched_snapshot,
             )

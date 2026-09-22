@@ -7255,6 +7255,49 @@ def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -
     assert credited() == 0.0
 
 
+def test_the_quote_proxy_carries_the_targets_meter() -> None:
+    """``_target_side`` forces METER_DYNAMIC where the candidate's kind is only
+    sold on a digital meter, and prices the rate and the volume on it. Two
+    resolvers read the meter straight off ``entry.data`` instead
+    (``resolve_welcome_credit_meter`` and ``resolve_volume_tier``), so the
+    credit a card denies an exclusive-night connection and the tranche an
+    energie.be card bands were settled on the HOUSEHOLD's meter while the rest
+    of the row used the target's.
+
+    Fifth instance of this class, which is why the override rides the proxy
+    beside the regime, the DSO mode and the settlement rather than being
+    passed to the two resolvers by hand.
+    """
+    from custom_components.be_electricity_prices.compare_flow import _quote_entry
+    from custom_components.be_electricity_prices.const import (
+        CONF_METER,
+        METER_DYNAMIC,
+        METER_EXCLUSIVE_NIGHT,
+        SOLAR_REGIME_NONE,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "luminus",
+            "contract": "luminus_comfy",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            CONF_METER: METER_EXCLUSIVE_NIGHT,
+        },
+    )
+
+    # A candidate whose kind forces the digital meter: the proxy says so.
+    target = _quote_entry(entry, SOLAR_REGIME_NONE, meter=METER_DYNAMIC)
+    assert target is not entry
+    assert target.data[CONF_METER] == METER_DYNAMIC
+
+    # The household's own side is untouched: its meter is a fact, not a
+    # hypothesis, and quoting it against itself must stay on the real entry.
+    assert _quote_entry(entry, SOLAR_REGIME_NONE) is entry
+    assert _quote_entry(entry, SOLAR_REGIME_NONE, meter=METER_EXCLUSIVE_NIGHT) is entry
+
+
 def test_the_annual_credit_nets_the_export_only_where_the_meter_nets() -> None:
     """The rule reached the three windowed callers through first_year_net_kwh
     and never arrived here, because this one open-coded the subtraction and
