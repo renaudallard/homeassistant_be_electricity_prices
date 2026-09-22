@@ -2610,6 +2610,25 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
     # A card granting nothing is not a failure: most of the fleet grants none.
     assert not _fails()
 
+    # The slip this repository actually had ran the OTHER way: TotalEnergies'
+    # month factor came out a thousand times too small and every upper bound
+    # was satisfied. A credit read that way is money the household silently
+    # does not get, which is the loss this gate exists to catch.
+    assert _fails(welcome_credit_eur=0.159)
+    assert _fails(welcome_credit_eur_per_kwh=0.00010388)
+    assert _fails(welcome_credit_kwh=0.75)
+    # The supplement cannot share the flat ceiling: its largest real value is
+    # 42,40, so 2.000 sits 47 times above it and a x10 slip would pass.
+    assert _fails(welcome_credit_direct_debit_eur=424.0) == []
+    assert _fails(welcome_credit_direct_debit_eur=4240.0)
+
+    # Zero is exempt, because zero is no credit rather than a small one, and a
+    # card granting none does not always say so with None: EnergyVision's
+    # 3-year fixed card carries a flat credit of exactly 0,0.
+    assert not _fails(welcome_credit_eur=0.0)
+    # A negative one is neither.
+    assert _fails(welcome_credit_eur=-159.0)
+
 
 def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) -> None:
     """The majority branch tells the maintainer the regulator moved and the

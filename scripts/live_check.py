@@ -3379,6 +3379,27 @@ _MAX_WELCOME_CREDIT_EUR: float = 2000.0
 _MAX_WELCOME_CREDIT_PER_KWH: float = 1.0
 _MAX_WELCOME_CREDIT_KWH: float = 10_000.0
 _MAX_WELCOME_CREDIT_MONTHS: int = 24
+# And a floor under each, because the slip this repository actually had ran the
+# other way: TotalEnergies' month factor came out a thousand times too SMALL
+# and every upper bound was satisfied (issue #103). A credit read that way is
+# money the household silently does not get, which is the loss this gate exists
+# to catch and the one the upper bounds cannot see.
+#
+# A tenth of the smallest figure any card prints, so a x10 slip trips and a
+# supplier genuinely cutting an offer does not: the smallest flat credit on the
+# fleet is 15,00 EUR, the smallest per-kWh leg 0,003, the smallest volume 750
+# kWh. Zero is exempt, because zero is not a small credit but no credit, and a
+# card granting none does NOT always say so with None: EnergyVision's 3-year
+# fixed card carries a flat credit of exactly 0,0. Checked against all 1.689
+# archived rows before shipping the floor, which is how that card was found
+# and how a nightly issue about it was avoided.
+_MIN_WELCOME_CREDIT_EUR: float = 1.5
+_MIN_WELCOME_CREDIT_PER_KWH: float = 0.0003
+_MIN_WELCOME_CREDIT_KWH: float = 75.0
+# The supplement is the one field that cannot share the flat ceiling: its
+# largest real value is 42,40, so 2.000 sits 47 times above it and a x10 slip
+# passes. Bounded on its own scale.
+_MAX_WELCOME_SUPPLEMENT_EUR: float = 500.0
 
 
 def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
@@ -3405,18 +3426,29 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
     pct = getattr(snap, "welcome_credit_pct_of_energy", None)
     kwh = getattr(snap, "welcome_credit_kwh", None)
     months = getattr(snap, "welcome_credit_after_months", None)
-    for label, value, ceiling in (
-        ("flat", flat, _MAX_WELCOME_CREDIT_EUR),
-        ("supplement", supplement, _MAX_WELCOME_CREDIT_EUR),
-        ("cap", cap, _MAX_WELCOME_CREDIT_EUR),
-        ("per-kWh", per_kwh, _MAX_WELCOME_CREDIT_PER_KWH),
-        ("volume", kwh, _MAX_WELCOME_CREDIT_KWH),
+    for label, value, floor, ceiling in (
+        ("flat", flat, _MIN_WELCOME_CREDIT_EUR, _MAX_WELCOME_CREDIT_EUR),
+        (
+            "supplement",
+            supplement,
+            _MIN_WELCOME_CREDIT_EUR,
+            _MAX_WELCOME_SUPPLEMENT_EUR,
+        ),
+        ("cap", cap, _MIN_WELCOME_CREDIT_EUR, _MAX_WELCOME_CREDIT_EUR),
+        (
+            "per-kWh",
+            per_kwh,
+            _MIN_WELCOME_CREDIT_PER_KWH,
+            _MAX_WELCOME_CREDIT_PER_KWH,
+        ),
+        ("volume", kwh, _MIN_WELCOME_CREDIT_KWH, _MAX_WELCOME_CREDIT_KWH),
     ):
         if value is None:
             continue
+        amount = float(value)
         _expect(
-            f"{prefix}: welcome credit {label} in [0, {ceiling}]",
-            0.0 <= float(value) <= ceiling,
+            f"{prefix}: welcome credit {label} is 0 or in [{floor}, {ceiling}]",
+            amount == 0.0 or floor <= amount <= ceiling,
             detail=f"{label}={value}",
         )
     if pct is not None:
