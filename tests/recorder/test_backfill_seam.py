@@ -59,7 +59,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     do_adhoc_statistics,
 )
 
-from custom_components.be_electricity_prices.backfill import _seed_short_term_sum
+from custom_components.be_electricity_prices.backfill_cost import _seed_short_term_sum
 from custom_components.be_electricity_prices.coordinator_data import ytd_window_reset
 
 

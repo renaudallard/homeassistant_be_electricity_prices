@@ -432,7 +432,7 @@ a coordinator (`backfill.py`).
 ### Statistic ids and the two statistic shapes
 
 The statistic id is the sensor's entity id, resolved from the entity registry by
-unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill.py`). When the
+unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill_window.py`). When the
 entity is not registered yet (the auto path can fire before platform setup
 completes), the sensor is skipped silently and reported with a 0 count rather
 than fabricating a slug that would diverge from a user-renamed entity.
@@ -459,14 +459,14 @@ intra-hour spread to record.
 
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
-injected each past hour. `_backfill_cost_sensor` (`backfill.py`) recovers
+injected each past hour. `_backfill_cost_sensor` (`backfill_cost.py`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
 UTC-hour totals (`backfill.py`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
-`_hour_iter` grid (`backfill.py`).
+`_hour_iter` grid (`backfill_window.py`).
 
 ### Billing each past hour at its historical rate
 
@@ -541,7 +541,7 @@ or 0.0`), a table `async_import_statistics` never writes. Left alone, the live
 chain restarts at zero directly after a backfilled row carrying the whole year, so
 the first compiled hour reports `change = 0 - <year to date>` and the Energy
 dashboard's Cost card shows roughly **minus one annual bill** for that day.
-`_seed_short_term_sum` (`backfill.py`) writes one short-term row at the last
+`_seed_short_term_sum` (`backfill_cost.py`) writes one short-term row at the last
 backfilled instant to hand the platform its resume point. That row must carry
 `last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
 missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
@@ -551,7 +551,7 @@ effort and swallows recorder errors, since failing to seed is no worse than not
 trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
 real recorder.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py`)
+`_backfill_cost_sensor` runs one running total per hour (`backfill_cost.py`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)
@@ -560,7 +560,7 @@ are prorated per hour as `annual_static / days_in_year / hours_per_local_date`
 count makes every local day, including the 23-hour and 25-hour DST seam days, sum
 to exactly `annual / days_in_year`, matching the live per-day proration at the
 seam. The Walloon prosumer fee (compensation regime, gated to Wallonia at
-`backfill.py`) is prorated the same way against `days_in_full_month`. The
+`backfill_cost.py`) is prorated the same way against `days_in_full_month`. The
 compensation regime clamps the displayed energy term at zero (`backfill.py`),
 because a Walloon reversing meter forfeits surplus injection past consumption.
 A welcome credit (see [pricing-model.md](pricing-model.md#welcome-credits)) is
@@ -598,7 +598,7 @@ hour.
 ### `clear=True` is series-scoped and guarded
 
 The recorder's only public deletion primitive here is `clear_statistics`, which
-is series-scoped, not range-scoped: `_clear_all` (`backfill.py`) deletes the
+is series-scoped, not range-scoped: `_clear_all` (`backfill_window.py`) deletes the
 entire series for the given statistic ids. `backfill_range` therefore refuses the
 narrow-window-plus-clear combination: if `clear=True` and the window starts after
 Jan 1 of the end year, it raises `ServiceValidationError` (`backfill.py`),

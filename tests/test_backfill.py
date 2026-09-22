@@ -768,6 +768,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     closed month cached this thinly is refused by the coverage gate, which
     test_hour_spot_refuses_a_thinly_cached_closed_month pins for the energy
     leg and which the injection leg now shares."""
+    from custom_components.be_electricity_prices import backfill_window
     from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
@@ -828,7 +829,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
         captured.append((metadata["statistic_id"], list(statistics)))
 
     with (
-        patch.object(bf, "_month_snapshot_cache", _fake_cache),
+        patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -855,6 +856,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     rate. This pass dropped the hour whole instead, so every metered kWh
     inside an ENTSO-E gap cost the persisted series nothing at all and the
     imported rows disagreed with the compiled ones at the seam."""
+    from custom_components.be_electricity_prices import backfill_window
     from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
@@ -896,7 +898,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
 
     coord._ensure_spp_weights = _ensure
     with (
-        patch.object(bf, "_month_snapshot_cache", _fake_cache),
+        patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -1582,7 +1584,7 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
     """
     from datetime import UTC, datetime
 
-    from custom_components.be_electricity_prices.backfill import (
+    from custom_components.be_electricity_prices.backfill_cost import (
         _injection_rate_for_hour,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -1619,7 +1621,7 @@ async def test_backfill_injection_replays_floored_quarters() -> None:
     already floored slot rates. Pricing the backfilled hour off the mean spot
     instead puts a step in the series exactly where the backfill hands over.
     """
-    from custom_components.be_electricity_prices.backfill import (
+    from custom_components.be_electricity_prices.backfill_cost import (
         _injection_rate_for_hour,
     )
     from custom_components.be_electricity_prices.providers._rates import (
@@ -1741,6 +1743,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     imported rows ended a quarter of a 200 EUR credit (49,32 EUR) ABOVE the
     live sensor, and the seed row then handed the live chain a sum the sensor
     stepped down from. Per-day and per-hour kinds alike."""
+    from custom_components.be_electricity_prices import backfill_window
     from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
 
@@ -1821,7 +1824,9 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
         # The signing month's card is the current one here; what is under test
         # is that the backfill reads the same card the live walk does.
-        patch.object(bf, "signing_month_snapshot", AsyncMock(return_value=snap)),
+        patch.object(
+            backfill_window, "signing_month_snapshot", AsyncMock(return_value=snap)
+        ),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
