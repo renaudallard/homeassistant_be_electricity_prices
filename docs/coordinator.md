@@ -2,10 +2,12 @@
 
 This document covers `coordinator.py`, the `DataUpdateCoordinator` that drives the integration. It fetches the supplier tariff snapshot (with a cheap freshness probe, an on-disk cache, and a fallback TTL), fetches the ENTSO-E day-ahead spot curve for spot-indexed contracts, calls `pricing.compute_breakdown` to build the hour-by-hour (or quarter-hour) price table, computes the year-to-date bill from the HA recorder, and publishes a single `CoordinatorData` object that every entity reads. It also owns the Repairs issues, the shared cross-entry caches, and the persistence layer. Line references are into `coordinator.py` unless another file is named.
 
-`BePricesCoordinator` is composed from four mixins, split out purely for file size along seams the class already had:
+`BePricesCoordinator` is composed from six mixins, split out purely for file size along seams the class already had:
 
 ```
 class BePricesCoordinator(
+    _TickMixin,         coordinator_tick.py       one update tick, and the fills it defers
+    _PersistMixin,      coordinator_persist.py    the Store, written and read back
     _SnapshotMixin,     coordinator_snapshot.py   probe / TTL / shared cache
     _IssuesMixin,       coordinator_issues.py     the Repairs handlers
     _SpotsMixin,        coordinator_spots.py      ENTSO-E fetching
@@ -14,7 +16,9 @@ class BePricesCoordinator(
 )
 ```
 
-No mixin defines `__init__`, so `super().__init__` still resolves to `DataUpdateCoordinator`, and none of them inherits `DataUpdateCoordinator` itself: that needs `CoordinatorData`, which stays here because `sensor`, `binary_sensor` and `diagnostics` import it from this module and inheriting would close a cycle. Cross-mixin calls are satisfied by `TYPE_CHECKING` stubs, and entry-owned state is declared as bare annotations with no value, so `hasattr` and the instance dict behave exactly as they did on the single class. Below the mixins sit plain-function leaf modules the tick calls: `snapshot_store`, `cohort`, `injection`, `fees`, `ytd_cost`, `energy_meters` and `spot_stats`.
+`CoordinatorData` lives in `coordinator_data.py`.
+
+No mixin defines `__init__`, so `super().__init__` still resolves to `DataUpdateCoordinator`, and none of them inherits `DataUpdateCoordinator` itself: that would parametrise it with `CoordinatorData` and close a cycle back to this module. The record lives one module down precisely so the mixins, `sensor`, `binary_sensor` and `diagnostics` can all read it without depending on the class it is mixed into. Cross-mixin calls are satisfied by `TYPE_CHECKING` stubs, and entry-owned state is declared as bare annotations with no value, so `hasattr` and the instance dict behave exactly as they did on the single class. Below the mixins sit plain-function leaf modules the tick calls: `snapshot_store`, `snapshot_months`, `cohort`, `injection`, `fees`, `ytd_cost`, `energy_meters` and `spot_stats`.
 
 Related docs:
 
@@ -48,7 +52,7 @@ await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
 The attribute is still absent, HA's `UNDEFINED` sentinel, in three windows: before that line, after a first refresh that raised `ConfigEntryNotReady` on anything but an unreadable card (setup deletes it again, the way HA drops it on unload), and after an unload or mid-reload. Every reader therefore keeps its guard:
 
-- `_save_persistent` reads `runtime_data` defensively (`coordinator.py`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`.
+- `_save_persistent` reads `runtime_data` defensively (`coordinator_persist.py`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`.
 - `async_unload_entry` (`__init__.py`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
 
 Never read `entry.runtime_data` as "this coordinator" without the type check.
@@ -57,7 +61,7 @@ Never read `entry.runtime_data` as "this coordinator" without the type check.
 
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
-- `self._supplier_tuple` (`coordinator.py`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py`) and `_save_persistent` (`coordinator.py`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
+- `self._supplier_tuple` (`coordinator.py`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py`) and `_save_persistent` (`coordinator_persist.py`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
 - `self._entry_data_signature` (`coordinator.py`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py`). `_async_options_updated` (`__init__.py`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
@@ -77,7 +81,7 @@ Other important instance fields set in `__init__`:
 
 ### 1.4 Restoring from disk
 
-`async_load_persistent` (`coordinator.py`) runs before the first refresh and rehydrates `self._snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key`, the monthly peak, `_historical_spots`, `_historical_spot_quarters`, `daily_compare` and the archived per-month cards from the Store. An hour carrying any impossible quarter loses the whole list, not the offending slot, because a short list would silently re-weight the hour's mean; its hourly value stays if that passed its own check, so the hour prices energy as it always did and credits feed-in off the mean the slots refine. Neither `STORAGE_VERSION` nor `_SNAPSHOT_SCHEMA_VERSION` moved for the new key: a version mismatch discards the whole blob, the load path reads named keys and ignores unknown ones, and a missing key simply refills. Two guards apply:
+`async_load_persistent` (`coordinator_persist.py`) runs before the first refresh and rehydrates `self._snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key`, the monthly peak, `_historical_spots`, `_historical_spot_quarters`, `daily_compare` and the archived per-month cards from the Store. An hour carrying any impossible quarter loses the whole list, not the offending slot, because a short list would silently re-weight the hour's mean; its hourly value stays if that passed its own check, so the hour prices energy as it always did and credits feed-in off the mean the slots refine. Neither `STORAGE_VERSION` nor `_SNAPSHOT_SCHEMA_VERSION` moved for the new key: a version mismatch discards the whole blob, the load path reads named keys and ignores unknown ones, and a missing key simply refills. Two guards apply:
 
 - **Tuple mismatch** (`coordinator.py`): if the persisted blob's stamped `(supplier, contract, region)` differs from the current entry, the snapshot and the historical spots are discarded (the peak is supplier-agnostic and kept). This handles a slow tick that saved a pre-OptionsFlow blob after the reload swapped the entry.
 - **Corrupt blob** (`coordinator.py`): a `KeyError`/`ValueError`/`TypeError` while decoding drops the cached snapshot and logs a warning; the next refresh repopulates.
@@ -86,7 +90,7 @@ Loading an offline boot from disk lets the entry serve last-known prices before 
 
 ## 2. The refresh path
 
-The base class calls `_async_update_data` (`coordinator.py`) every tick. It wraps `_update_body` (`coordinator.py`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py`). The body runs these steps in order.
+The base class calls `_async_update_data` (`coordinator.py`) every tick. It wraps `_update_body` (`coordinator_tick.py`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator_tick.py`). The body runs these steps in order.
 
 ```
 _update_body (coordinator.py)
@@ -281,7 +285,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 
 `_ensure_historical_spots` (`coordinator_spots.py`) fills `self._historical_spots` for every local hour in `[Jan 1, today]`, fetching missing week-sized chunks from ENTSO-E and handing whatever ENTSO-E could not answer to the keyless fallback in a single request. It runs only for dynamic or spot-indexed-injection contracts (`coordinator_spots.py`) and needs the entry's API key (`coordinator_spots.py`), returning early if there is none. Details:
 
-- **The FIRST tick asks for the delivery month, not the year.** `async_config_entry_first_refresh` runs inside setup, and setup is what the config flow's final step waits on, so a cold cache spent that step fetching 35 week-chunks: minutes of spinner on a fresh install, and far longer with ENTSO-E down. The first tick fetches `[month start, today]` -- the window the monthly mean computed straight after cannot do without -- clears `_year_spots_deferred` and schedules `_fill_year_spots` (`coordinator.py`) as an entry-tied background task, which walks `[Jan 1, today]` and then requests a refresh. What the deferral costs is one tick of the year-to-date's past hours, which bill their network and tax legs and forfeit only the energy term exactly as a cold cache already makes them; the requested refresh puts them back. Entry-tied, so unloading cancels it and a user who walks away from a fresh install mid-backfill leaves no fetch running.
+- **The FIRST tick asks for the delivery month, not the year.** `async_config_entry_first_refresh` runs inside setup, and setup is what the config flow's final step waits on, so a cold cache spent that step fetching 35 week-chunks: minutes of spinner on a fresh install, and far longer with ENTSO-E down. The first tick fetches `[month start, today]` -- the window the monthly mean computed straight after cannot do without -- clears `_year_spots_deferred` and schedules `_fill_year_spots` (`coordinator_tick.py`) as an entry-tied background task, which walks `[Jan 1, today]` and then requests a refresh. What the deferral costs is one tick of the year-to-date's past hours, which bill their network and tax legs and forfeit only the energy term exactly as a cold cache already makes them; the requested refresh puts them back. Entry-tied, so unloading cancels it and a user who walks away from a fresh install mid-backfill leaves no fetch running.
 - **And bounded, because scoping the window is not the same as bounding the wait.** Each week-chunk carries a 30 s client timeout, and a chunk that times out is logged and followed by the next one rather than ending the walk, so the running month is about 180 s against a source that hangs instead of refusing -- inside the same 300 s bootstrap budget. The first tick's fill runs under `_FIRST_TICK_SPOT_BUDGET` (45 s, `coordinator.py`); on the deadline it keeps every chunk that did land, since they are merged one at a time, logs what it gave up on and leaves the rest to `_fill_year_spots`. It only ever bites on a source that hangs, which is exactly the case where waiting buys nothing. The today/tomorrow curve is deliberately NOT bounded: it is what the live price table is built from, one request plus one fallback, and an entry that skipped it would publish no price at all.
 - **One walk at a time.** `_ensure_historical_spots` is a thin wrapper holding `_spot_fetch_lock` around `_walk_historical_spots`. Three callers reach it from outside the tick -- the statistics backfill, the compare page, and that deferred year-fill -- and nothing serialised them, so two could walk the same empty cache at once and each fetch what the other was already fetching. Whichever arrives second finds the days present and returns without a request.
 
@@ -299,7 +303,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 
 ## 4. The published data dict
 
-`CoordinatorData` (`coordinator.py`) is the contract with the entity platforms. Entities read fields either directly (via a description `value_fn`) or from the current-slot `PriceBreakdown`. Every field:
+`CoordinatorData` (`coordinator_data.py`) is the contract with the entity platforms. Entities read fields either directly (via a description `value_fn`) or from the current-slot `PriceBreakdown`. Every field:
 
 | Key | Type | Meaning | Read by |
 |-----|------|---------|---------|
@@ -331,7 +335,7 @@ The current-slot sensors (`current_price`, `energy_component`, `network_componen
 
 ## 5. Slot selection and the live price table
 
-`_build_hourly` (`coordinator.py`) builds the UTC-keyed `hourly` table:
+`_build_hourly` (`coordinator_tick.py`) builds the UTC-keyed `hourly` table:
 
 - **Dynamic** (`coordinator.py`): one breakdown per spot returned by ENTSO-E; the table's resolution follows the spot grid (15-minute for quarter-hourly suppliers).
 - **Static/TOU/Impact** (`coordinator.py`): iterate UTC from local midnight to the start of the day after tomorrow, one slot per clock hour, so DST seams keep the wall-clock gap correct (47 slots spring-forward, 49 fall-back, 48 otherwise). The local-midnight anchor makes `today_min`/`today_max`/`today_average` cover the full local day rather than "now to midnight".
@@ -377,7 +381,7 @@ The same charge is accrued into the running bill by `_ytd_capacity`, which walks
 
 `_compute_current_year_cost` (`ytd_cost.py`) computes the running bill from the year-to-date window start to today. That is 1 January of the local year unless the entry ticked `ytd_from_contract_start` beside a contract start date, in which case `ytd_window_start` (`cohort.py`) returns the later of the two -- clamped to 1 January, because the sensor is a TOTAL the recorder buckets per calendar year and a window reaching into a previous year would have the compiler see a reset that never happened. Every leg reads that one helper: the hourly and daily energy walks, `_walk_ytd_months` (so fees pro-rate over the days the contract actually covers rather than billing a full year against half of one), the historical spot fetch, the statistics backfill, and the `last_reset` the sensor publishes. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_months.py`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py`) instead, which splices the signing cohort's energy leg AND its feed-in coefficients onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
 
-**The FIRST tick prices the year from the cards already in hand.** The walk above is one archived PDF per elapsed month, and it runs inside config-entry setup: a Frank Energie card takes about 25 s to lay out on a Raspberry Pi, so a September start spent 226 s there and Home Assistant cancelled the whole of bootstrap stage 2 over it (issue #88). The first tick therefore passes `cached_only` (`coordinator.py`), which answers every month from the cache and never reaches the network (`snapshot_months.py`), clears `_month_cards_deferred` and schedules `_fill_month_cards` (`coordinator.py`) as an entry-tied background task. That walks the same months for real and requests a refresh, but only when it retrieved a card the tick did not have -- a warm cache changes nothing and an extra full tick per entry per restart would buy nothing. What the deferral costs is the months the cache is missing: they bill their fees, network and tax legs off the current card rather than their own, which is what a supplier with no archive bills all year. A row the cache *does* hold is handed back even past its TTL, since a caller that cannot fetch keeps what it has rather than forfeiting a month it is already holding. `cached_only` stops at the year-to-date walk: `_cohort_legs` still resolves the signing month, because the live price table is built from it on the same tick and its row is in the cache by then.
+**The FIRST tick prices the year from the cards already in hand.** The walk above is one archived PDF per elapsed month, and it runs inside config-entry setup: a Frank Energie card takes about 25 s to lay out on a Raspberry Pi, so a September start spent 226 s there and Home Assistant cancelled the whole of bootstrap stage 2 over it (issue #88). The first tick therefore passes `cached_only` (`coordinator_tick.py`), which answers every month from the cache and never reaches the network (`snapshot_months.py`), clears `_month_cards_deferred` and schedules `_fill_month_cards` (`coordinator_tick.py`) as an entry-tied background task. That walks the same months for real and requests a refresh, but only when it retrieved a card the tick did not have -- a warm cache changes nothing and an extra full tick per entry per restart would buy nothing. What the deferral costs is the months the cache is missing: they bill their fees, network and tax legs off the current card rather than their own, which is what a supplier with no archive bills all year. A row the cache *does* hold is handed back even past its TTL, since a caller that cannot fetch keeps what it has rather than forfeiting a month it is already holding. `cached_only` stops at the year-to-date walk: `_cohort_legs` still resolves the signing month, because the live price table is built from it on the same tick and its row is in the cache by then.
 
 Settled months are also written to disk (section 10), so the fill has nothing left to fetch after the first day and a restart costs one card, not one per month.
 
@@ -508,7 +512,7 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py`, de
 
 ## 10. Persistence
 
-`_save_persistent` (`coordinator.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
+`_save_persistent` (`coordinator_persist.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
 
 - **Identity guard** (`coordinator.py`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).

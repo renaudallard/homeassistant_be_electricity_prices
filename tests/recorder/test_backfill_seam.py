@@ -60,7 +60,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 )
 
 from custom_components.be_electricity_prices.backfill import _seed_short_term_sum
-from custom_components.be_electricity_prices.coordinator import ytd_window_reset
+from custom_components.be_electricity_prices.coordinator_data import ytd_window_reset
 
 
 def jan1_reset() -> datetime:

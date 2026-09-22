@@ -789,7 +789,7 @@ adoption: stamped as fetched today, a row adopted on its 29th day was held to 59
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of
 download and parse on a Raspberry Pi while every compensation entry wants it,
-so the tick schedules `_fill_profiles` (`coordinator.py`) and prices the
+so the tick schedules `_fill_profiles` (`coordinator_tick.py`) and prices the
 plain arithmetic mean meanwhile -- the same degradation a failed fetch already
 has. **And one file serves every entry**: `_shared_profile`
 (`coordinator_spots.py`) keys a process-wide row by `(kind, year, blend)`

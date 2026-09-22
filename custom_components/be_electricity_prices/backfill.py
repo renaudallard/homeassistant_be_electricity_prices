@@ -95,10 +95,8 @@ from .cohort import (
     signing_month_snapshot,
     ytd_window_start,
 )
-from .coordinator import (
-    BePricesCoordinator,
-    ytd_window_reset,
-)
+from .coordinator import BePricesCoordinator
+from .coordinator_data import ytd_window_reset
 from .energy_meters import (
     _hourly_consumption_sensors,
     _hourly_injection_sensors,

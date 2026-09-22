@@ -158,7 +158,7 @@ async def test_the_slot_push_follows_the_resolution_the_table_ends_up_with(
     on a stale quarter for up to 45 minutes. The push has to follow the
     resolution the table ends up with."""
     from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
-    from custom_components.be_electricity_prices.coordinator import CoordinatorData
+    from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 
     registered: list[dict[str, Any]] = []
     cancelled: list[dict[str, Any]] = []

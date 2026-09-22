@@ -44,7 +44,7 @@ from custom_components.be_electricity_prices.compare_quote import (
 )
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.pricing import MeterType
-from custom_components.be_electricity_prices.coordinator import CoordinatorData
+from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.sensor import (
     PotentialSavingSensor,
     async_setup_entry,

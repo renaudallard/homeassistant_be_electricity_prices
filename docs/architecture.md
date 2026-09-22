@@ -68,7 +68,10 @@ relative to that package directory.
 | Module | Responsibility |
 | --- | --- |
 | `__init__.py` | Integration entry point. Registers domain services once at `async_setup`, sets up and tears down each config entry (`async_setup_entry` / `async_unload_entry` / `async_remove_entry`), owns the slot-boundary push and one-shot backfill scheduling, and implements the `refresh`, `cheapest_window`, `most_expensive_window`, and `backfill_statistics` service handlers. |
-| `coordinator.py` | The `DataUpdateCoordinator` subclass and `CoordinatorData`. Owns `__init__`, the tick (`_async_update_data` / `_update_body`), the per-slot price table, and persistence. The four mixins below carry the rest of the class; the leaf modules under them are plain functions the tick calls. |
+| `coordinator.py` | The `DataUpdateCoordinator` subclass. Owns `__init__`, the framework hook `_async_update_data` and the forced refresh; the six mixins below carry the rest of the class, and the leaf modules under them are plain functions the tick calls. |
+| `coordinator_data.py` | `CoordinatorData`, the record every sensor reads, and the year and month window helpers that say which day a running total started from. A leaf, so a mixin that builds one can import it. |
+| `coordinator_tick.py` | `_TickMixin`: one update tick start to finish, the per-slot price table it builds, and the background fills the first tick defers so setup fits Home Assistant's stage-2 budget. |
+| `coordinator_persist.py` | `_PersistMixin`: what the entry keeps in its Store between restarts and how each row is re-checked against the schema version and the clock before it is trusted. |
 | `coordinator_snapshot.py` | `_SnapshotMixin`: the snapshot fetch / freshness state machine. Probe, TTL, the shared cross-entry cache and its adoption, and the negative-fetch cache. |
 | `coordinator_issues.py` | `_IssuesMixin`: the seven Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
 | `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill, and the Synergrid SPP refresh. |
@@ -247,7 +250,7 @@ Numbered walkthrough:
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator_persist.py`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
 4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
@@ -264,7 +267,7 @@ Numbered walkthrough:
 7. For each slot the coordinator calls `compute_breakdown` (`pricing.py`), which fuses the chosen
    DSO overlay, the taxes, the meter type, the DSO tariff mode, and (for dynamic) the slot spot
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
-8. The result is packed into `CoordinatorData` (`coordinator.py`): the `hourly` table keyed by
+8. The result is packed into `CoordinatorData` (`coordinator_data.py`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
    suppliers, `coordinator.py`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.

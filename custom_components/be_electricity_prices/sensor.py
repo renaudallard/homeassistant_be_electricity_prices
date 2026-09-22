@@ -66,8 +66,10 @@ from .cohort import (
 )
 from .coordinator import (
     BePricesCoordinator,
-    CoordinatorData,
     supplier_device_info,
+)
+from .coordinator_data import (
+    CoordinatorData,
     month_window_reset,
     ytd_window_reset,
 )

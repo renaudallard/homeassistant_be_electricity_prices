@@ -429,7 +429,7 @@ async def test_the_tick_hands_the_quarter_cache_to_the_year_cost(
     spy = AsyncMock(return_value=0.0)
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator."
+            "custom_components.be_electricity_prices.coordinator_tick."
             "_compute_current_year_cost",
             spy,
         ),
@@ -998,7 +998,7 @@ async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     with (
         _patch_spot_fetch(_fake_fetch),
         patch(
-            "custom_components.be_electricity_prices.coordinator._cohort_legs",
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
             new=_cohort,
         ),
         patch(
@@ -3430,7 +3430,7 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator._cohort_legs",
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
             new=_cohort,
         ),
         patch(
@@ -4090,9 +4090,11 @@ def test_every_repair_is_invoked_by_the_coordinator() -> None:
     from custom_components.be_electricity_prices import coordinator_issues
 
     pkg = _pathlib.Path(inspect.getfile(coordinator_issues)).parent
+    # Every coordinator module, by glob: the tick moved to its own file once
+    # already, and a hand-written list of files silently stops covering the
+    # one the calls went to.
     called = "".join(
-        (pkg / name).read_text()
-        for name in ("coordinator.py", "coordinator_snapshot.py", "coordinator_peak.py")
+        path.read_text() for path in sorted(pkg.glob("coordinator*.py"))
     )
     defined = {
         name
@@ -5133,7 +5135,7 @@ async def test_the_first_tick_prices_the_year_from_cards_in_hand(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator"
+            "custom_components.be_electricity_prices.coordinator_tick"
             "._compute_current_year_cost",
             _ytd,
         ),
@@ -5187,7 +5189,7 @@ async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
     _monthly_snapshots(hass).clear()
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_tick.get_extractor",
         return_value=extractor,
     ):
         await coord._fill_month_cards()
@@ -5249,7 +5251,7 @@ async def test_the_first_tick_gives_up_on_a_hanging_source(
     coord._ensure_historical_spots = _hangs  # type: ignore[method-assign,assignment]
 
     with (
-        patch(f"{_COORD}._FIRST_TICK_SPOT_BUDGET", 0.05),
+        patch(f"{_COORD}_tick._FIRST_TICK_SPOT_BUDGET", 0.05),
         patch.object(coord._store, "async_save", AsyncMock()),
         patch.object(entry, "async_create_background_task", _capture_task),
     ):

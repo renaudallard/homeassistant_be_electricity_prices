@@ -4896,7 +4896,9 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     import inspect
 
     from custom_components.be_electricity_prices import backfill, sensor
-    from custom_components.be_electricity_prices.coordinator import ytd_window_reset
+    from custom_components.be_electricity_prices.coordinator_data import (
+        ytd_window_reset,
+    )
 
     every = (
         *sensor.SENSORS,
@@ -9421,7 +9423,7 @@ async def test_month_window_is_a_no_op_on_the_year_when_omitted() -> None:
     """The override defaults to None and the year-to-date figure must be the
     number it always was; every existing entry gets the second pass for free
     and the first one unchanged."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.coordinator_data import (
         month_window_reset,
         month_window_start,
     )

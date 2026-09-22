@@ -36,7 +36,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
-from custom_components.be_electricity_prices.coordinator import CoordinatorData
+from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.sensor import (
     ContractEndDateSensor,
     async_setup_entry,

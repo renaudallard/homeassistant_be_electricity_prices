@@ -35,7 +35,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.coordinator import CoordinatorData
+from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.diagnostics import (
     async_get_config_entry_diagnostics,
 )

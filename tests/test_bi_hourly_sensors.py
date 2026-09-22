@@ -12,7 +12,7 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
-from custom_components.be_electricity_prices.coordinator import CoordinatorData
+from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.sensor import async_setup_entry
 from tests import make_entry
 

@@ -39,7 +39,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .coordinator import BePricesCoordinator, CoordinatorData, supplier_device_info
+from .coordinator import (
+    BePricesCoordinator,
+    supplier_device_info,
+)
+from .coordinator_data import CoordinatorData
 
 
 def _has_tomorrow(data: CoordinatorData) -> bool:
