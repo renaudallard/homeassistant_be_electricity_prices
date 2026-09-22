@@ -63,14 +63,7 @@ import re
 import aiohttp
 
 from ..const import (
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
+    FLUVIUS_CARD_TOKENS,
     REGION_FLANDERS,
 )
 from ._pdf import (
@@ -163,16 +156,7 @@ _PROF_MARKER = "dynamisch tarief professioneel"
 # labels across the number row ("Fluvius (Halle-\n<numbers>\nVilvoorde)" and
 # the Midden-Vlaanderen row), so each entry anchors on the leading token and
 # grabs the four digital-meter columns that follow, wherever they land.
-_DSO_ROWS: tuple[tuple[str, str], ...] = (
-    ("Antwerpen", DSO_FLUVIUS_ANTWERPEN),
-    ("Halle", DSO_FLUVIUS_HALLE_VILVOORDE),
-    ("Imewo", DSO_FLUVIUS_IMEWO),
-    ("Kempen", DSO_FLUVIUS_IVEKA),
-    ("Limburg", DSO_FLUVIUS_LIMBURG),
-    ("Midden", DSO_FLUVIUS_INTERGEM),
-    ("West", DSO_FLUVIUS_WEST),
-    ("Zenne-Dijle", DSO_FLUVIUS_ZENNE_DIJLE),
-)
+_DSO_ROWS = FLUVIUS_CARD_TOKENS
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).

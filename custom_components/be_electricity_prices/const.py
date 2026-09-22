@@ -117,6 +117,24 @@ FLUVIUS_CARD_LABELS: Final[dict[str, str]] = {
     "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
+# The same eight areas again, as the LEADING TOKEN of each label and in the
+# order a card prints them. energie.be and Energy Knights both wrap two of
+# these labels across the number row ("Fluvius (Halle-" then the figures then
+# "Vilvoorde)"), so their readers anchor on the token and take the four
+# digital-meter columns that follow, wherever they land. A tuple because the
+# order is part of the reading, and shared because both had their own copy of
+# it and a relabel would have had to be made twice.
+FLUVIUS_CARD_TOKENS: Final[tuple[tuple[str, str], ...]] = (
+    ("Antwerpen", DSO_FLUVIUS_ANTWERPEN),
+    ("Halle", DSO_FLUVIUS_HALLE_VILVOORDE),
+    ("Imewo", DSO_FLUVIUS_IMEWO),
+    ("Kempen", DSO_FLUVIUS_IVEKA),
+    ("Limburg", DSO_FLUVIUS_LIMBURG),
+    ("Midden", DSO_FLUVIUS_INTERGEM),
+    ("West", DSO_FLUVIUS_WEST),
+    ("Zenne-Dijle", DSO_FLUVIUS_ZENNE_DIJLE),
+)
+
 # DSO selection per region. Flanders has eight Fluvius sub-areas with
 # materially different distribution rates; Wallonia DSOs are uniform per
 # operator; Brussels has one (Sibelga).

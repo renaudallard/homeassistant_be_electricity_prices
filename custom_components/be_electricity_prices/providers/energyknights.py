@@ -96,14 +96,7 @@ from datetime import date
 import aiohttp
 
 from ..const import (
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
+    FLUVIUS_CARD_TOKENS,
     REGION_FLANDERS,
 )
 from ._pdf import (
@@ -443,16 +436,7 @@ _CLASSIC_RE = re.compile(
 
 # Row label prefix -> canonical DSO key. Anchored on the leading token so a
 # wrapped label ("Fluvius (Halle-" / "Vilvoorde)") still binds to its figures.
-_DSO_ROWS: tuple[tuple[str, str], ...] = (
-    ("Antwerpen", DSO_FLUVIUS_ANTWERPEN),
-    ("Halle", DSO_FLUVIUS_HALLE_VILVOORDE),
-    ("Imewo", DSO_FLUVIUS_IMEWO),
-    ("Kempen", DSO_FLUVIUS_IVEKA),
-    ("Limburg", DSO_FLUVIUS_LIMBURG),
-    ("Midden", DSO_FLUVIUS_INTERGEM),
-    ("West", DSO_FLUVIUS_WEST),
-    ("Zenne-Dijle", DSO_FLUVIUS_ZENNE_DIJLE),
-)
+_DSO_ROWS = FLUVIUS_CARD_TOKENS
 
 # Excise, taken from the first consumption band. The card prints three bands
 # and they have not always been equal: every month from 2024-06 to 2026-07 read
