@@ -543,7 +543,7 @@ def _quote_entry(
     dso_mode: str | None = None,
     *,
     quarter_hourly: bool | None = None,
-    meter: str | None = None,
+    meter: str | None,
 ) -> ConfigEntry:
     """``entry`` itself when the what-if matches it, else a proxy holding
     the overridden regime, DSO tariff mode and settlement.
@@ -564,6 +564,15 @@ def _quote_entry(
     a Bolt card per quarter-hour because the user happens to be on Frank's
     quarter-hourly tariff. ``None`` leaves the household's answer in place,
     which is what the own side wants.
+
+    ``meter`` has no default, so every call site has to name it. Its sibling
+    ``regime`` is positional-and-required and mypy refuses a site that drops
+    it; this one shipped defaulted, and a site that stopped passing it would
+    have reverted the target to the household's meter in silence, which is the
+    exact defect the argument was added to fix. Mutation found the asymmetry:
+    removing ``regime=`` failed type checking, removing ``meter=`` left 155
+    tests green. ``None`` still means "the household's own", and the own side
+    now says that out loud.
 
     ``meter`` is the TARGET's, for the same reason and with the same reach: a
     dynamic or TOU product is only sold on a digital meter, and ``_target_side``
@@ -1225,7 +1234,8 @@ class _SweepEngine:
         # the household's own meters, which are facts, not hypotheses.
         stored_regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
         regime = _effective_regime(current, self._compare)
-        quote_entry = _quote_entry(self.config_entry, regime)
+        # The household's own side: its meter is a fact, not a hypothesis.
+        quote_entry = _quote_entry(self.config_entry, regime, meter=None)
         overridden = quote_entry is not self.config_entry
 
         now_utc = dt_util.utcnow()

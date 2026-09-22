@@ -7347,7 +7347,10 @@ def test_the_quote_proxy_carries_the_targets_meter() -> None:
 
     # The household's own side is untouched: its meter is a fact, not a
     # hypothesis, and quoting it against itself must stay on the real entry.
-    assert _quote_entry(entry, SOLAR_REGIME_NONE) is entry
+    # It says meter=None out loud, because the argument is required: a site
+    # that simply stopped passing it would have reverted the TARGET to the
+    # household's meter in silence, which is the defect this fixed.
+    assert _quote_entry(entry, SOLAR_REGIME_NONE, meter=None) is entry
     assert _quote_entry(entry, SOLAR_REGIME_NONE, meter=METER_EXCLUSIVE_NIGHT) is entry
 
 
