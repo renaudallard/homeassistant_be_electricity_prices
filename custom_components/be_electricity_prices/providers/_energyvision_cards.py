@@ -42,7 +42,9 @@ from ._rates import SpotMonthlyRates
 from .base import ExtractorError
 import re
 from ._parse import SIGN_CHARS
-from ._energyvision_overlays import _NUM
+from ._pdf import NUM_NO_THOUSANDS
+
+_NUM = NUM_NO_THOUSANDS
 
 
 def _direct_debit_discount(text: str, fee: float) -> float | None:

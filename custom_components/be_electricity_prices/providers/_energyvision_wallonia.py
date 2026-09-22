@@ -47,13 +47,15 @@ from .base import walloon_dso_overlay
 import re
 from ._energyvision_cards import _spp_injection
 from ._energyvision_cards import _tiered_legs
-from ._energyvision_overlays import _NUM
+from ._pdf import NUM_NO_THOUSANDS
 from ..const import DSO_AIEG
 from ..const import DSO_AIESH
 from ..const import DSO_ORES
 from ..const import DSO_RESA
 from ..const import DSO_REW
 from ._parse import SIGN_CHARS
+
+_NUM = NUM_NO_THOUSANDS
 
 
 def _parse_wallonia(
