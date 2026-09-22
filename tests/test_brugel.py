@@ -27,8 +27,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 from homeassistant.util import dt as dt_util
@@ -62,12 +64,22 @@ _SHEET = (
 
 @pytest.fixture(autouse=True)
 def _clear_brugel_cache() -> Iterator[None]:
-    """The module caches per year for the life of the process."""
+    """The module caches per year for the life of the process.
+
+    ``_locks`` belongs in this list as much as the two caches do, and more
+    dangerously: an uncontended ``asyncio.Lock`` never binds an event loop, so
+    one left behind is invisible until a test actually contends it, and the
+    next test in the file then dies with "bound to a different event loop".
+    The lock shipped without a test for exactly that reason, and the test it
+    needs is the one that trips over it.
+    """
     brugel._cache.clear()
     brugel._failed_at.clear()
+    brugel._locks.clear()
     yield
     brugel._cache.clear()
     brugel._failed_at.clear()
+    brugel._locks.clear()
 
 
 def test_the_power_term_is_read_off_the_published_sheet() -> None:
@@ -538,3 +550,44 @@ async def test_the_power_term_notice_is_silent_outside_brussels(hass: Any) -> No
         )
         is None
     )
+
+
+async def test_one_fetch_per_year_however_many_entries_ask() -> None:
+    """Entries tick together and a backfill asks for several years at once, so
+    without the lock a cold start opens the same download once per Brussels
+    entry. The answer is identical either way; what it costs is the setup
+    budget, where the sheet's 30 s ceiling is 10% of the 300 s HA allows.
+    """
+    calls: list[int] = []
+
+    async def _slow_sheet(_session: object, year: int) -> str:
+        calls.append(year)
+        await asyncio.sleep(0.05)
+        return _SHEET
+
+    with patch.object(brugel, "_sheet_text", _slow_sheet):
+        got = await asyncio.gather(
+            *(brugel.ensure_power_term(cast(Any, None), 2026) for _ in range(4))
+        )
+
+    assert calls == [2026], "one download, however many entries asked"
+    assert got == [(47.24, 94.48)] * 4, "and every caller gets the answer"
+
+    # Asking again costs nothing at all: the answer is cached, so the lock is
+    # never even reached.
+    calls.clear()
+    with patch.object(brugel, "_sheet_text", _slow_sheet):
+        await brugel.ensure_power_term(cast(Any, None), 2026)
+    assert calls == []
+
+    # A different year is a different lock, so a backfill spanning two still
+    # fetches both, concurrently.
+    brugel._cache.clear()
+    calls.clear()
+    with patch.object(brugel, "_sheet_text", _slow_sheet):
+        await asyncio.gather(
+            brugel.ensure_power_term(cast(Any, None), 2026),
+            brugel.ensure_power_term(cast(Any, None), 2026),
+            brugel.ensure_power_term(cast(Any, None), 2027),
+        )
+    assert sorted(calls) == [2026, 2027]
