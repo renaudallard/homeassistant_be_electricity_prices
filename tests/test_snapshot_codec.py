@@ -37,6 +37,31 @@ def test_a_field_this_version_does_not_know_is_dropped_not_refused() -> None:
     assert _snapshot_from_dict(row).injection == InjectionRates(current=0.05)
 
 
+def test_every_leg_of_a_row_survives_a_field_from_a_later_version() -> None:
+    """Every archived row is read by every installed version, so a field added
+    later reaches an older reader as an unexpected keyword: TypeError, the card
+    dropped, the entry back on the supplier tier, and a debug line as the only
+    trace. The failure lands on the users who did not upgrade.
+
+    The injection leg had that rule and it is one of the eight dataclasses a
+    row is rebuilt from. Nothing is exposed today; the next field added to an
+    overlay or a rate class is.
+    """
+    row = _snapshot_to_dict(make_snapshot(injection=InjectionRates(current=0.05)), NOW)
+    row["energy"]["from_the_future"] = 1
+    row["taxes"]["from_the_future"] = 2
+    for overlay in row["dsos"].values():
+        overlay["from_the_future"] = 3
+    row["injection"]["from_the_future"] = 4
+
+    rebuilt = _snapshot_from_dict(row)
+    original = make_snapshot(injection=InjectionRates(current=0.05))
+    assert rebuilt.energy == original.energy
+    assert rebuilt.taxes == original.taxes
+    assert rebuilt.dsos == original.dsos
+    assert rebuilt.injection == original.injection
+
+
 def test_a_settled_index_is_written_only_when_the_month_has_one() -> None:
     """Same rule as the register pair, and for the same reason: the card
     archive holds 1.686 rows and 1.683 of them carry an injection leg, so a

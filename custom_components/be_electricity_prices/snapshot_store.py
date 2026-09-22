@@ -1597,7 +1597,6 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
 _INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised")
-_INJECTION_FIELDS = frozenset(f.name for f in fields(InjectionRates))
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 
 
@@ -1617,15 +1616,30 @@ def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
     return data
 
 
+def _known_fields(cls: type, data: dict[str, Any], what: str) -> dict[str, Any]:
+    """``data`` with the keys ``cls`` does not declare taken out.
+
+    Every archived row is read by EVERY installed version, so a field added
+    later arrives at an older reader as an unexpected keyword and takes the
+    whole row down with a TypeError: the card is dropped, the entry falls back
+    to the supplier tier, and the only trace is a debug line.
+
+    This was the injection leg's rule alone, and the injection leg is one of
+    the eight dataclasses a row is rebuilt from. Nothing is exposed today, but
+    the next field added to an overlay or a rate class is, and the failure
+    lands on users who are not the ones upgrading.
+    """
+    known = {f.name for f in fields(cls)}
+    unknown = sorted(set(data) - known)
+    if unknown:
+        _LOGGER.debug("%s carries fields this version does not know: %s", what, unknown)
+    return {k: v for k, v in data.items() if k in known}
+
+
 def _injection_from_dict(data: dict[str, Any]) -> InjectionRates:
     """Rebuild the injection leg, dropping a field this version does not
     know: a row written by a later version is still a card."""
-    unknown = sorted(set(data) - _INJECTION_FIELDS)
-    if unknown:
-        _LOGGER.debug(
-            "injection carries fields this version does not know: %s", unknown
-        )
-    return InjectionRates(**{k: v for k, v in data.items() if k in _INJECTION_FIELDS})
+    return InjectionRates(**_known_fields(InjectionRates, data, "injection"))
 
 
 def _snapshot_to_dict(
@@ -1684,6 +1698,7 @@ def _taxes_from_dict(data: dict[str, Any]) -> TaxOverlay:
     JSON has no tuples: a banded excise round-trips as a list of lists and
     has to be put back the way the dataclass declares it.
     """
+    data = _known_fields(TaxOverlay, data, "taxes")
     bands = data.get("federal_excise_bands")
     if bands is None:
         return TaxOverlay(**data)
@@ -1712,16 +1727,22 @@ def _snapshot_from_dict(
     energy_args = data["energy"]
     energy: EnergyRates
     if energy_kind == "fixed":
+        energy_args = _known_fields(FixedRates, energy_args, energy_kind)
         energy = FixedRates(**energy_args)
     elif energy_kind == "variable":
+        energy_args = _known_fields(VariableRates, energy_args, energy_kind)
         energy = VariableRates(**energy_args)
     elif energy_kind == "dynamic":
+        energy_args = _known_fields(DynamicRates, energy_args, energy_kind)
         energy = DynamicRates(**energy_args)
     elif energy_kind == "tou":
+        energy_args = _known_fields(TimeOfUseRates, energy_args, energy_kind)
         energy = TimeOfUseRates(**energy_args)
     elif energy_kind == "tou_impact":
+        energy_args = _known_fields(ImpactRates, energy_args, energy_kind)
         energy = ImpactRates(**energy_args)
     elif energy_kind == "spot_monthly":
+        energy_args = _known_fields(SpotMonthlyRates, energy_args, energy_kind)
         energy = SpotMonthlyRates(**energy_args)
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
@@ -1737,7 +1758,10 @@ def _snapshot_from_dict(
         supplier=data["supplier"],
         contract=data["contract"],
         energy=energy,
-        dsos={k: DsoOverlay(**v) for k, v in data["dsos"].items()},
+        dsos={
+            k: DsoOverlay(**_known_fields(DsoOverlay, v, "dso overlay"))
+            for k, v in data["dsos"].items()
+        },
         taxes=_taxes_from_dict(data["taxes"]),
         source_url=data["source_url"],
         publication_label=data.get("publication_label", ""),
