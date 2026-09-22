@@ -792,7 +792,7 @@ download and parse on a Raspberry Pi while every compensation entry wants it,
 so the tick schedules `_fill_profiles` (`coordinator_tick.py`) and prices the
 plain arithmetic mean meanwhile -- the same degradation a failed fetch already
 has. **And one file serves every entry**: `_shared_profile`
-(`coordinator_spots.py`) keys a process-wide row by `(kind, year, blend)`
+(`coordinator_profiles.py`) keys a process-wide row by `(kind, year, blend)`
 behind a lock, so N entries scheduling their fill at the same moment cost one
 download rather than N. The row carries the instant it was fetched and is
 re-used only inside the caller's own refresh window, so an entry set up a month

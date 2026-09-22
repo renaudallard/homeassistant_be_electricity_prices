@@ -74,7 +74,8 @@ relative to that package directory.
 | `coordinator_persist.py` | `_PersistMixin`: what the entry keeps in its Store between restarts and how each row is re-checked against the schema version and the clock before it is trusted. |
 | `coordinator_snapshot.py` | `_SnapshotMixin`: the snapshot fetch / freshness state machine. Probe, TTL, the shared cross-entry cache and its adoption, and the negative-fetch cache. |
 | `coordinator_issues.py` | `_IssuesMixin`: the seven Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
-| `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill, and the Synergrid SPP refresh. |
+| `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill. |
+| `coordinator_profiles.py` | `_ProfilesMixin`: the Synergrid load and production profiles, shared across entries and persisted, and the weighted monthly means they buy. |
 | `coordinator_peak.py` | `_PeakMixin`: the Flemish capacity peak (`_track_monthly_peak`) and its 12-month history. |
 | `snapshot_store.py` | The shared cross-entry snapshot cache with its lock, negative-fetch cache and eviction, and the tuple generation counter both caches are gated on. |
 | `snapshot_codec.py` | Snapshot serialization to and from `.storage`, `_SNAPSHOT_SCHEMA_VERSION` and the schema-version gate, and the Store that drops a blob written under an older storage version. |
@@ -307,7 +308,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py`). That file is rewritten whole on every tick, so what goes in it has to be
   worth writing hourly: the two Synergrid profiles are national and change monthly, and live in
-  one installation-wide store instead (`_profile_store`, `coordinator_spots.py`).
+  one installation-wide store instead (`_profile_store`, `coordinator_profiles.py`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`

@@ -28,9 +28,7 @@ from custom_components.be_electricity_prices.spot_stats import (
     _rlp_weighted_month_mean,
 )
 from custom_components.be_electricity_prices.providers._rates import RlpBlend
-from custom_components.be_electricity_prices.coordinator_spots import (
-    _profile_store,
-)
+from custom_components.be_electricity_prices.coordinator_profiles import _profile_store
 from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
 
 
@@ -385,7 +383,7 @@ async def test_ensure_rlp_weights_fetches_when_stale(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await coord._ensure_rlp_weights()
@@ -411,7 +409,7 @@ async def test_two_entries_share_one_profile_download(
     coord_b = BePricesCoordinator(hass, second)
     fake = {(9, 15, 10): 2.0}
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await asyncio.gather(
@@ -429,7 +427,7 @@ async def test_two_entries_share_one_profile_download(
     third.add_to_hass(hass)
     coord_c = BePricesCoordinator(hass, third)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await coord_c._ensure_rlp_weights("distinct")
@@ -448,7 +446,7 @@ async def test_one_download_serves_every_blend(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(distinct=1.0, columns=2.0, flanders=3.0),
     ) as mock:
         await coord._ensure_rlp_weights("distinct")
@@ -472,7 +470,7 @@ async def test_ensure_rlp_weights_backs_off_after_failure(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=AsyncMock(return_value={}),
     ) as mock:
         await coord._ensure_rlp_weights()
@@ -517,7 +515,7 @@ async def test_the_shared_store_carries_the_profiles_across_a_restart(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(distinct=1.0, columns=2.0, flanders=3.0),
     ) as mock:
         await coord._ensure_rlp_weights("flanders")
@@ -528,7 +526,7 @@ async def test_the_shared_store_carries_the_profiles_across_a_restart(
     reloaded = BePricesCoordinator(hass, entry)
     await reloaded.async_load_persistent()
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await reloaded._ensure_rlp_weights("flanders")
@@ -563,7 +561,7 @@ async def test_a_blob_written_before_the_shared_store_is_adopted(
     )
     await coord.async_load_persistent()
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await coord._ensure_rlp_weights("columns")
@@ -599,13 +597,13 @@ async def test_the_older_one_curve_blob_is_adopted_for_the_blend_it_names(
         }
     )
     await coord.async_load_persistent()
-    from custom_components.be_electricity_prices.coordinator_spots import (
+    from custom_components.be_electricity_prices.coordinator_profiles import (
         _profile_cache,
     )
 
     assert _profile_cache(hass)[("rlp", 2026, "columns")][0] == {(9, 15, 10): 2.0}
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_blends",
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
         new=_fake_blends(),
     ) as mock:
         await coord._ensure_rlp_weights("columns")

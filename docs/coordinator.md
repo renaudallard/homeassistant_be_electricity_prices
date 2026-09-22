@@ -16,6 +16,11 @@ class BePricesCoordinator(
 )
 ```
 
+`_SpotsMixin` in turn mixes in `_ProfilesMixin` (`coordinator_profiles.py`), which
+holds the Synergrid load and production profiles and the weighted monthly means
+they buy. It sits under the spots rather than beside them because the profiles
+exist to weight a spot curve and nothing else reads them.
+
 `CoordinatorData` lives in `coordinator_data.py`.
 
 No mixin defines `__init__`, so `super().__init__` still resolves to `DataUpdateCoordinator`, and none of them inherits `DataUpdateCoordinator` itself: that would parametrise it with `CoordinatorData` and close a cycle back to this module. The record lives one module down precisely so the mixins, `sensor`, `binary_sensor` and `diagnostics` can all read it without depending on the class it is mixed into. Cross-mixin calls are satisfied by `TYPE_CHECKING` stubs, and entry-owned state is declared as bare annotations with no value, so `hasattr` and the instance dict behave exactly as they did on the single class. Below the mixins sit plain-function leaf modules the tick calls: `snapshot_store`, `snapshot_months`, `cohort`, `injection`, `fees`, `ytd_cost`, `energy_meters` and `spot_stats`.

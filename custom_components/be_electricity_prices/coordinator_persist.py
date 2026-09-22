@@ -42,9 +42,9 @@ from .const import CONF_CONTRACT
 from .const import CONF_REGION
 from .const import CONF_SUPPLIER
 from datetime import UTC
-from .coordinator_spots import _load_profile_cache
-from .coordinator_spots import _save_profile_cache
-from .coordinator_spots import _seed_profile_cache
+from .coordinator_profiles import _load_profile_cache
+from .coordinator_profiles import _save_profile_cache
+from .coordinator_profiles import _seed_profile_cache
 from .snapshot_codec import _snapshot_from_dict
 from .snapshot_codec import _snapshot_to_dict
 from .coordinator_spots import _spot_is_sane

@@ -6002,14 +6002,14 @@ async def test_an_adopted_profile_row_keeps_its_own_age(
     old, while the shared layer's own rule and the docs say monthly. The
     entry has to carry the row's stamp, so it asks again when the row is
     due, not when the adoption is."""
-    from custom_components.be_electricity_prices import coordinator_spots as cs
+    from custom_components.be_electricity_prices import coordinator_profiles as cp
 
     freezer.move_to("2026-06-29 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     fetched = dt_util.utcnow() - timedelta(days=29)
-    cs._profile_cache(hass)[("spp", 2026, "")] = ({(6, 1, 12): 1.0}, fetched)
+    cp._profile_cache(hass)[("spp", 2026, "")] = ({(6, 1, 12): 1.0}, fetched)
     downloads = 0
 
     async def _fake_fetch(session: Any, year: int) -> dict[Any, float]:
@@ -6017,7 +6017,7 @@ async def test_an_adopted_profile_row_keeps_its_own_age(
         downloads += 1
         return {(6, 1, 13): 2.0}
 
-    with patch.object(cs, "fetch_spp_weights", _fake_fetch):
+    with patch.object(cp, "fetch_spp_weights", _fake_fetch):
         await coord._ensure_spp_weights()
         assert downloads == 0
         assert coord._spp_fetched_at == fetched
