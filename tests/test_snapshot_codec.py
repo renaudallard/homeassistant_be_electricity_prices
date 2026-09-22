@@ -16,7 +16,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TimeOfUseRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.snapshot_store import (
+from custom_components.be_electricity_prices.snapshot_codec import (
     _snapshot_from_dict,
     _snapshot_to_dict,
 )

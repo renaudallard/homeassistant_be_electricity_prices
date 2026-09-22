@@ -102,9 +102,9 @@ def _card_archive_holds_nothing() -> Iterator[None]:
     test about the tier patches the same name itself and its patch wins."""
     from unittest.mock import AsyncMock, patch
 
-    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices import snapshot_months
 
     with patch.object(
-        snapshot_store, "_archived_card_from_github", AsyncMock(return_value=None)
+        snapshot_months, "_archived_card_from_github", AsyncMock(return_value=None)
     ):
         yield

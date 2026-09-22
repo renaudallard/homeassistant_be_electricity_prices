@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from custom_components.be_electricity_prices import cohort, snapshot_resolve
 from custom_components.be_electricity_prices import (
+    snapshot_codec,
+    snapshot_months,
     snapshot_store,
 )
 from custom_components.be_electricity_prices import ytd_cost
@@ -100,11 +102,13 @@ from custom_components.be_electricity_prices.injection import (
     _injection_varies_intraday,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
-    ArchivedCard,
-    _archived_card_from_github,
     _monthly_failed_fetches,
     _monthly_fetched_at,
     _monthly_snapshots,
+)
+from custom_components.be_electricity_prices.snapshot_months import (
+    ArchivedCard,
+    _archived_card_from_github,
     _snapshot_for_month,
 )
 from custom_components.be_electricity_prices.snapshot_codec import (
@@ -2722,7 +2726,7 @@ async def test_an_archive_row_says_whether_its_card_was_read_by_ocr(
     async def _body(*_args: object, **_kw: object) -> str:
         return json.dumps(row)
 
-    with patch.object(snapshot_store, "fetch_text", _body):
+    with patch.object(snapshot_months, "fetch_text", _body):
         card = await _archived_card_from_github(
             MagicMock(), "ecofix", "ecofix_flexy", "flanders", date(2026, 9, 1)
         )
@@ -2857,7 +2861,7 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
     )
     _monthly_snapshots(hass).clear()
     github = AsyncMock(return_value=None)
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
@@ -2906,7 +2910,7 @@ async def test_snapshot_for_month_reads_the_repository_archive(
     )
     _monthly_snapshots(hass).clear()
     github = AsyncMock(return_value=_archive_row(stored))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         for _ in range(2):
             snap = await _snapshot_for_month(
                 hass,
@@ -2951,7 +2955,7 @@ async def test_the_branch_is_asked_first_and_the_supplier_for_what_it_lacks(
     _monthly_snapshots(hass).clear()
     held = {date(2026, 9, 1): stored}
     github = AsyncMock(side_effect=lambda *a: _archive_row(held.get(a[4])))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
@@ -2992,7 +2996,7 @@ async def test_a_blip_on_the_branch_still_asks_the_supplier(
     _monthly_snapshots(hass).clear()
     _monthly_failed_fetches(hass).clear()
     github = AsyncMock(side_effect=ExtractorError("network error fetching x: reset"))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 9, 1), current
         )
@@ -3022,7 +3026,7 @@ async def test_repository_archive_failure_is_retried_not_cached(
     _monthly_snapshots(hass).clear()
     _monthly_failed_fetches(hass).clear()
     github = AsyncMock(side_effect=ExtractorError("network error fetching x: reset"))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         for _ in range(2):
             snap = await _snapshot_for_month(
                 hass,
@@ -3055,7 +3059,7 @@ async def test_the_running_month_never_reaches_the_repository_archive(
     _monthly_snapshots(hass).clear()
     _monthly_fetched_at(hass).clear()
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), extractor, "test", "wallonia", date(2026, 10, 1), current
         )
@@ -3096,7 +3100,7 @@ async def test_months_before_the_captures_began_are_not_asked_for(
     _monthly_snapshots(hass).clear()
     _monthly_fetched_at(hass).clear()
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass, MagicMock(), without, "test", "wallonia", date(2026, 7, 1), current
         )
@@ -3141,7 +3145,7 @@ async def test_an_entry_can_switch_the_repository_archive_off(
     entry = MockConfigEntry(domain=DOMAIN, data={CONF_CARD_ARCHIVE: False})
     _monthly_snapshots(hass).clear()
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
             MagicMock(),
@@ -3169,7 +3173,7 @@ async def test_cached_only_never_asks_the_repository_archive(
     )
     _monthly_snapshots(hass).clear()
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
             MagicMock(),
@@ -3199,7 +3203,7 @@ async def test_custom_supplier_asks_no_archive(hass: HomeAssistant) -> None:
     )
     _monthly_snapshots(hass).clear()
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
-    with patch.object(snapshot_store, "_archived_card_from_github", github):
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
             hass,
             MagicMock(),
@@ -3235,7 +3239,7 @@ async def test_archived_card_from_github_tells_absent_from_transient(
     it, the same split the supplier archives get."""
 
     fetch = AsyncMock(side_effect=ExtractorError(error))
-    with patch.object(snapshot_store, "fetch_text", fetch):
+    with patch.object(snapshot_months, "fetch_text", fetch):
         if raises:
             with pytest.raises(ExtractorError):
                 await _archived_card_from_github(
@@ -3262,7 +3266,7 @@ async def test_archived_card_from_github_reads_down_to_the_degraded_schema() -> 
     when = datetime(2026, 1, 15, tzinfo=UTC)
 
     async def _read(body: str) -> SupplierSnapshot | None:
-        with patch.object(snapshot_store, "fetch_text", AsyncMock(return_value=body)):
+        with patch.object(snapshot_months, "fetch_text", AsyncMock(return_value=body)):
             card = await _archived_card_from_github(
                 MagicMock(), "acme", "acme_fix", "wallonia", date(2026, 1, 1)
             )
@@ -7709,11 +7713,11 @@ def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:
     raw = make_snapshot(
         taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0, vat_rate=0.21)
     )
-    payload = snapshot_store._snapshot_to_dict(
+    payload = snapshot_codec._snapshot_to_dict(
         raw, datetime(2026, 8, 5, tzinfo=UTC), probe_key="k"
     )
     assert "published_vat_rate" in payload["taxes"]
-    assert snapshot_store._snapshot_from_dict(payload).taxes.vat_rate == pytest.approx(
+    assert snapshot_codec._snapshot_from_dict(payload).taxes.vat_rate == pytest.approx(
         0.21
     )
 
@@ -7723,7 +7727,7 @@ def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:
             k: v for k, v in payload["taxes"].items() if k != "published_vat_rate"
         },
     }
-    restored = snapshot_store._snapshot_from_dict(old).taxes
+    restored = snapshot_codec._snapshot_from_dict(old).taxes
     assert restored.published_vat_rate == 0.0
     assert (restored.published_vat_rate or restored.vat_rate) == pytest.approx(0.21)
 

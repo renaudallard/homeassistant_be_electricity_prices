@@ -67,6 +67,8 @@ from .snapshot_store import (
     _drop_monthly_rows,
     _shared_failed_fetches,
     _shared_snapshots,
+)
+from .snapshot_months import (
     archived_months_present,
     monthly_rows_to_store,
     restore_monthly_rows,

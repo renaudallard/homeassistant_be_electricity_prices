@@ -2050,7 +2050,7 @@ async def _refresh_with_unreadable_card(
 ) -> None:
     """One tick whose card is page images, with ``archived`` on the branch."""
     from custom_components.be_electricity_prices import (
-        snapshot_store,
+        snapshot_months,
     )
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
@@ -2067,7 +2067,7 @@ async def _refresh_with_unreadable_card(
             return_value=make_stub_extractor(fetch=_textless_fetch),
         ),
         patch.object(
-            snapshot_store,
+            snapshot_months,
             "_archived_card_from_github",
             AsyncMock(return_value=archived),
         ),
@@ -2083,7 +2083,7 @@ async def test_an_unreadable_card_is_priced_off_the_archives_reading(
     images, but the repository's daily walk reads one with OCR and files an
     ordinary row; the entry is priced off that instead of going dark, and is
     told plainly that is what happened."""
-    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -2114,7 +2114,7 @@ async def test_a_row_the_card_itself_was_read_from_raises_no_ocr_notice(
 ) -> None:
     """A month the branch holds from back when the card still had a text
     layer is an ordinary card, and says nothing about OCR."""
-    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -2138,14 +2138,14 @@ async def test_a_readable_card_clears_the_ocr_notice(hass: HomeAssistant) -> Non
     the extractor cards and left this one, so every Ecofix entry kept telling
     the user its figures were read off a picture for the life of the entry,
     on the sensor and in Repairs, once Ecofix published text again."""
-    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices import snapshot_months
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
     )
     from custom_components.be_electricity_prices.snapshot_store import (
-        ArchivedCard,
         _shared_failed_fetches,
     )
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = make_entry()
     entry.add_to_hass(hass)
@@ -2163,7 +2163,7 @@ async def test_a_readable_card_clears_the_ocr_notice(hass: HomeAssistant) -> Non
             return_value=make_stub_extractor(fetch=_textless),
         ),
         patch.object(
-            snapshot_store,
+            snapshot_months,
             "_archived_card_from_github",
             AsyncMock(return_value=ArchivedCard(snapshot=snap, read_by_ocr=True)),
         ),
@@ -2200,7 +2200,7 @@ async def test_the_archive_is_not_asked_when_the_household_switched_it_off(
     from contacting GitHub. A card nobody can read is not a reason to
     override that: the entry gets the same card it got before."""
     from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE
-    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = make_entry(**{CONF_CARD_ARCHIVE: False})  # type: ignore[arg-type]
     entry.add_to_hass(hass)
@@ -3506,7 +3506,7 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
 
     with (
         patch(
-            "custom_components.be_electricity_prices.snapshot_store._snapshot_for_month",
+            "custom_components.be_electricity_prices.snapshot_months._snapshot_for_month",
             new=_archived,
         ),
         patch(
@@ -6170,9 +6170,9 @@ async def test_an_ocr_reading_is_not_offered_as_the_entrys_own_row(
     never offered: the tick asks the supplier again, as its docstring always
     said it would."""
     from custom_components.be_electricity_prices.snapshot_store import (
-        ArchivedCard,
         _shared_failed_fetches,
     )
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -6198,7 +6198,7 @@ async def test_an_ocr_reading_survives_a_restart_as_what_it_is(
     """The snapshot was persisted and the flag was not, so a restart on a
     probe-less supplier served the picture's figures as a text card for one
     TTL while the persisted notice stayed up beside them."""
-    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -6229,7 +6229,7 @@ async def test_a_replayed_ocr_blob_keeps_its_marker(
     while the archive answers nothing, served the picture's figures as a text
     card for a tick, saved the blob without the marker, and on a probe-less
     supplier offered the row as its own for the whole TTL."""
-    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices import snapshot_months
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
     )
@@ -6274,7 +6274,7 @@ async def test_a_replayed_ocr_blob_keeps_its_marker(
             return_value=make_stub_extractor(fetch=fetch),
         ),
         patch.object(
-            snapshot_store, "_archived_card_from_github", AsyncMock(return_value=None)
+            snapshot_months, "_archived_card_from_github", AsyncMock(return_value=None)
         ),
         patch.object(coord._store, "async_save", new=_fake_save),
     ):

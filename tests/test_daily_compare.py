@@ -283,7 +283,7 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
             AsyncMock(return_value=708.11),
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
             return_value=[],
         ),
@@ -376,14 +376,14 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
             _capture,
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
             return_value=months,
         ),
         # The January warm-up fetch the pass makes before asking about
         # coverage; its result is discarded, the cache it fills is stubbed.
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             "._snapshot_for_month",
             AsyncMock(return_value=raw),
         ),
@@ -496,12 +496,12 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
             _walk,
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             "._snapshot_for_month",
             _warm,
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
             _present,
         ),
@@ -564,7 +564,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
             _capture,
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
             return_value=[],
         ),
@@ -1123,7 +1123,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
         CardNotReadableError,
         ExtractorError,
     )
-    from custom_components.be_electricity_prices.snapshot_store import ArchivedCard
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
     from tests import make_snapshot
 
     entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
@@ -1136,7 +1136,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
         error_message="card has no text layer",
     )
     with patch(
-        "custom_components.be_electricity_prices.snapshot_store"
+        "custom_components.be_electricity_prices.snapshot_months"
         ".card_for_unreadable_month",
         AsyncMock(return_value=archived),
     ):
@@ -1148,7 +1148,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
     # A supplier that is simply down gets no stale reading.
     down = SimpleNamespace(error=ExtractorError("HTTP 503"), error_message="HTTP 503")
     with patch(
-        "custom_components.be_electricity_prices.snapshot_store"
+        "custom_components.be_electricity_prices.snapshot_months"
         ".card_for_unreadable_month",
         AsyncMock(side_effect=AssertionError("must not ask the archive")),
     ):

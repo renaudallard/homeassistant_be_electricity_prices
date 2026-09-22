@@ -75,7 +75,7 @@ from .providers.base import (
     VariableRates,
     without_welcome_credit,
 )
-from .snapshot_store import _snapshot_for_month
+from .snapshot_months import _snapshot_for_month
 from .snapshot_resolve import _include_vat
 
 

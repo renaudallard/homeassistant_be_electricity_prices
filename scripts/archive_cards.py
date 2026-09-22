@@ -13,7 +13,7 @@ card whose label cannot be read is filed under the month it was seen in.
 Run daily by .github/workflows/archive_cards.yml against the card archive
 in ``be_price_cards``, which the integration reads for any month a
 supplier's own archive cannot serve
-(``snapshot_store._archived_card_from_github``). A month
+(``snapshot_months._archived_card_from_github``). A month
 already on disk is rewritten only when the parse changed, so a quiet day
 leaves nothing to commit, and months older than ``--keep-months`` are
 removed on every run.

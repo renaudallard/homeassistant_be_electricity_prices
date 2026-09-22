@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from custom_components.be_electricity_prices import (
     snapshot_resolve,
-    snapshot_store,
 )
 from custom_components.be_electricity_prices.compare_quote import RankedRow
 
@@ -6429,6 +6428,8 @@ def test_archived_months_present_ignores_a_proxied_month() -> None:
 
     from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.snapshot_months import (
         archived_months_present,
     )
 
@@ -6601,12 +6602,12 @@ async def test_ytd_pass_walks_before_it_judges_coverage(
     with (
         patch.dict(EXTRACTORS, patched),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
             _cov,
         ),
         patch(
-            "custom_components.be_electricity_prices.snapshot_store"
+            "custom_components.be_electricity_prices.snapshot_months"
             "._snapshot_for_month",
             _walk,
         ),
@@ -6650,7 +6651,7 @@ async def test_ytd_pass_walks_before_it_judges_coverage(
 
 def compare_flow_module_coverage() -> Any:
     """The real archived_months_present, captured before patching."""
-    from custom_components.be_electricity_prices.snapshot_store import (
+    from custom_components.be_electricity_prices.snapshot_months import (
         archived_months_present,
     )
 

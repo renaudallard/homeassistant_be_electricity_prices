@@ -53,9 +53,9 @@ from .providers.base import (
 from .snapshot_store import (
     _SharedSnapshot,
     _shared_failed_fetches,
-    card_for_unreadable_month,
     fetch_shared,
 )
+from .snapshot_months import card_for_unreadable_month
 from .snapshot_resolve import (
     _resolve_snapshot,
     entry_annual_kwh,

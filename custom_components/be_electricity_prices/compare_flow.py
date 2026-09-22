@@ -872,7 +872,10 @@ class _SweepEngine:
         self, sweep: dict[str, Any], coord: Any
     ) -> list[RankedRow]:
         """The pass itself; see :meth:`fill_ytd_column`, which memoises it."""
-        from .snapshot_store import _snapshot_for_month, archived_months_present
+        from .snapshot_months import (
+            _snapshot_for_month,
+            archived_months_present,
+        )
         from .ytd_cost import _compute_current_year_cost
 
         hh = sweep["household"]
@@ -1860,7 +1863,7 @@ class _SweepEngine:
         month is served and both honour the entry's card-archive box.
         """
         from .providers.base import CardNotReadableError
-        from .snapshot_store import card_for_unreadable_month
+        from .snapshot_months import card_for_unreadable_month
 
         if not isinstance(fetched.error, CardNotReadableError):
             return None
