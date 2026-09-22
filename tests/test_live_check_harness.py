@@ -2607,6 +2607,48 @@ def test_a_card_pricing_direct_debit_must_be_offered_the_question() -> None:
     assert lc.CHECKS == []
 
 
+def test_the_regional_levies_are_gated() -> None:
+    """Nothing read the Flemish energy fund (10,07 EUR a month, 120,84 EUR a
+    year on 25 September cards), the Walloon connection fee, the flag a
+    Walloon card sets when it prints no fee, or the VAT rate only the resolver
+    may stamp, so a misread or dropped value passed green. The figures below
+    are the ones the archive holds."""
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+
+    def _fails(region: str, **fields: Any) -> list[str]:
+        lc.CHECKS.clear()
+        taxes = TaxOverlay(federal_excise=0.05, energy_contribution=0.0, **fields)
+        lc._expect_regional_levies("x/y", region, taxes)
+        return [c.label for c in lc.CHECKS if not c.ok]
+
+    # Cards read right, and a card with nothing to print.
+    assert not _fails("flanders", energy_fund_eur_per_month=10.07)
+    assert not _fails("wallonia", region_connection_fee=0.00075)
+    assert not _fails("wallonia", region_connection_fee=0.0007)
+    assert not _fails("wallonia", region_connection_fee_unavailable=True)
+    assert not _fails("brussels")
+    # A card covering every region carries the Walloon fee on a Flemish fetch.
+    assert not _fails("flanders", region_connection_fee=0.00075)
+    # The fund ten times off either way, and on a card outside Flanders.
+    assert _fails("flanders", energy_fund_eur_per_month=100.7)
+    assert _fails("flanders", energy_fund_eur_per_month=1.007)
+    assert _fails("wallonia", energy_fund_eur_per_month=10.07)
+    # The fee ten times off either way, and dropped by a Walloon card that
+    # does not say so, which under-bills without a word to the user.
+    assert _fails("wallonia", region_connection_fee=0.0075)
+    assert _fails("wallonia", region_connection_fee=0.00007)
+    assert _fails("wallonia")
+    # The flag belongs to a Walloon card, and means there was no fee to read.
+    assert _fails("flanders", region_connection_fee_unavailable=True)
+    assert _fails(
+        "wallonia",
+        region_connection_fee=0.00075,
+        region_connection_fee_unavailable=True,
+    )
+    # The published rate is stamped by the resolver, never read off a card.
+    assert _fails("flanders", published_vat_rate=0.21)
+
+
 def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     """Every `_expect_*` gate has a test that calls it directly, so deleting
     the CALL from `_validate_snapshot` leaves the suite green: mutation
@@ -2625,6 +2667,7 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     for gate in (
         "_expect_card_period",
         "_expect_energy_contribution",
+        "_expect_regional_levies",
         "_expect_welcome_credit",
         "_expect_direct_debit_registry",
         "_expect_month_indexed_registry",

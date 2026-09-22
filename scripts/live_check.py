@@ -911,6 +911,70 @@ def _expect_energy_contribution(prefix: str, taxes: object) -> None:
     )
 
 
+# The regional levies a card prints, fenced like the welcome credit: five
+# times past the largest figure the archive holds and a fifth under the
+# smallest. The Flemish energy fund is 10,07 EUR a month on every card that
+# prints it, the Walloon connection fee 0,00075 EUR/kWh (0,0007 on
+# TotalEnergies).
+_MIN_ENERGY_FUND_EUR_PER_MONTH = 2.014
+_MAX_ENERGY_FUND_EUR_PER_MONTH = 50.35
+_MIN_CONNECTION_FEE = 0.00014
+_MAX_CONNECTION_FEE = 0.00375
+
+
+def _expect_regional_levies(prefix: str, region: str, taxes: object) -> None:
+    """The levies nothing else read, the energy fund alone worth 120,84 EUR a
+    year on a Flemish card that carries it.
+
+    Zero is always allowed: most cards print no energy fund, and a card for
+    another region no Walloon fee. What is not allowed is a fund outside
+    Flanders; a Walloon card with neither the fee nor the flag saying it could
+    not read one, which under-bills without a word to the user; the flag
+    anywhere but on a Walloon card with no fee; and a published VAT rate,
+    which only the resolver stamps when it grosses a card, and which an
+    extractor must leave at zero for ``published_vat_rate or vat_rate`` to
+    answer.
+    """
+    fund = float(getattr(taxes, "energy_fund_eur_per_month", 0.0))
+    fee = float(getattr(taxes, "region_connection_fee", 0.0))
+    unavailable = bool(getattr(taxes, "region_connection_fee_unavailable", False))
+    _expect(
+        f"{prefix}: energy fund 0 or in [{_MIN_ENERGY_FUND_EUR_PER_MONTH}, "
+        f"{_MAX_ENERGY_FUND_EUR_PER_MONTH}] EUR/month",
+        fund == 0.0
+        or _MIN_ENERGY_FUND_EUR_PER_MONTH <= fund <= _MAX_ENERGY_FUND_EUR_PER_MONTH,
+        detail=f"energy_fund_eur_per_month={fund}",
+    )
+    _expect(
+        f"{prefix}: energy fund only on a Flemish card",
+        fund == 0.0 or region == "flanders",
+        detail=f"region={region} energy_fund_eur_per_month={fund}",
+    )
+    _expect(
+        f"{prefix}: connection fee 0 or in [{_MIN_CONNECTION_FEE}, "
+        f"{_MAX_CONNECTION_FEE}] EUR/kWh",
+        fee == 0.0 or _MIN_CONNECTION_FEE <= fee <= _MAX_CONNECTION_FEE,
+        detail=f"region_connection_fee={fee}",
+    )
+    if region == "wallonia":
+        _expect(
+            f"{prefix}: Walloon connection fee read, or flagged unavailable",
+            fee > 0.0 or unavailable,
+            detail=str(taxes),
+        )
+    _expect(
+        f"{prefix}: connection fee flagged unavailable only on a Walloon card "
+        "without one",
+        not unavailable or (region == "wallonia" and fee == 0.0),
+        detail=str(taxes),
+    )
+    _expect(
+        f"{prefix}: published VAT rate left to the resolver",
+        float(getattr(taxes, "published_vat_rate", 0.0)) == 0.0,
+        detail=str(taxes),
+    )
+
+
 _RETRY_BACKOFF_S: tuple[float, ...] = (1.0, 3.0)
 _RetryT = TypeVar("_RetryT")
 
@@ -989,7 +1053,9 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
-        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+        _validate_snapshot(
+            prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
+        )
 
 
 async def _check_cociter(
@@ -1034,7 +1100,7 @@ async def _check_cociter(
                 snap.supplier_prosumer_eur_per_kva_year is not None,
                 detail=str(snap.supplier_prosumer_eur_per_kva_year),
             )
-        _validate_snapshot(prefix, cid, snap)
+        _validate_snapshot(prefix, cid, snap, region="wallonia")
 
 
 async def _check_dats24(
@@ -1079,6 +1145,7 @@ async def _check_dats24(
             prefix,
             cid,
             snap,
+            region=region,
             # Flanders carries the BE_spotSPP formula plus the printed
             # figure; Wallonia pays no feed-in at all.
             injection_shape="spp" if region == "flanders" else "none",
@@ -1117,7 +1184,7 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
             snap.taxes.federal_excise > 0,
             detail=str(snap.taxes),
         )
-        _validate_snapshot(prefix, cid, snap)
+        _validate_snapshot(prefix, cid, snap, region="flanders")
 
 
 async def _check_trevion(
@@ -1135,7 +1202,9 @@ async def _check_trevion(
             continue
         _expect(f"{prefix}: publication label", bool(snap.publication_label))
         _expect_region_basics(prefix, "flanders", snap)
-        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+        _validate_snapshot(
+            prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
+        )
 
 
 async def _check_two_region_supplier(
@@ -1171,7 +1240,7 @@ async def _check_two_region_supplier(
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect_region_basics(prefix, region_key, snap)
-            _validate_snapshot(prefix, cid, snap)
+            _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
 async def _check_ecofix(
@@ -1263,7 +1332,9 @@ async def _check_ecopower(
             snap.taxes.vat_rate == 0.06,
             detail=str(snap.taxes),
         )
-        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+        _validate_snapshot(
+            prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
+        )
 
 
 async def _check_flanders_card(
@@ -1311,7 +1382,9 @@ async def _check_flanders_card(
         snap.taxes.vat_rate == 0.0,
         detail=str(snap.taxes),
     )
-    _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+    _validate_snapshot(
+        prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
+    )
 
 
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
@@ -1375,6 +1448,7 @@ async def _check_energyvision(
                 prefix,
                 cid,
                 snap,
+                region=region,
                 require_capacity=_CAPACITY_REQUIRED,
                 # The Walloon card of the tiered product prints "Frais fixes
                 # 0 €/an" where the Flemish and Brussels ones charge 50, so
@@ -1517,7 +1591,7 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_snapshot(prefix, cid, snap)
+            _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
 async def _check_totalenergies(
@@ -1544,7 +1618,7 @@ async def _check_totalenergies(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_snapshot(prefix, cid, snap)
+            _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
@@ -1602,7 +1676,7 @@ async def _check_mega_pairs(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_snapshot(prefix, cid, snap)
+            _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
 async def _check_octaplus(
@@ -1639,7 +1713,7 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             _expect_excise_bands(prefix, snap.taxes)
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect_region_basics(prefix, region_key, snap)
-            _validate_snapshot(prefix, cid, snap)
+            _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
 # Each supplier's registered identifier set, in the shape its own
@@ -3344,13 +3418,16 @@ def _validate_snapshot(
     contract_id: str,
     snap: object,
     *,
+    region: str,
     injection_shape: str | None = None,
     require_capacity: frozenset[str] = frozenset(),
     no_standing_charge: bool = False,
 ) -> None:
     """Validate the energy rates and the injection coverage/shape of one
     fetched snapshot. Called by every ``_check_*`` after its
-    supplier-specific DSO / tax assertions. ``injection_shape`` overrides
+    supplier-specific DSO / tax assertions. ``region`` is the one the card
+    was fetched for, which the regional levies are judged by; it has no
+    default, so a new check cannot leave them unjudged. ``injection_shape`` overrides
     the per-contract default (used for region-dependent cases like
     DATS 24, whose Wallonia card pays no feed-in), and
     ``no_standing_charge`` does the same for the abonnement floor, which
@@ -3361,6 +3438,7 @@ def _validate_snapshot(
     # For every supplier, not the three that used to ask for it at their own
     # call sites: the levy is federal and the unit slip it catches is not.
     _expect_energy_contribution(prefix, getattr(snap, "taxes", None))
+    _expect_regional_levies(prefix, region, getattr(snap, "taxes", None))
     _validate_energy(
         prefix,
         contract_id,

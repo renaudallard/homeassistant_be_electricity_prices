@@ -487,7 +487,7 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py`) runs four gates:
+`_validate_snapshot` (`scripts/live_check.py`) runs five gates:
 
 - `_expect_month_indexed_registry` holds the parsed energy's `month_indexed` against the
   registry's `Contract.month_indexed_energy`. The flow offers the optional ENTSO-E key from
@@ -533,6 +533,14 @@ that reads the value 100x too large — and that part still holds.
   nineteen consecutive months, so a flattened card is normal publishing and must not gate CI.
   Only Energy Knights Essentia prints those pairs today; energie.be Variabel and the custom
   supplier publish one formula for every meter and are unaffected.
+- `_expect_regional_levies` (`scripts/live_check.py`) judges the levies nothing else read, by the
+  region the card was fetched for, which `_validate_snapshot` takes as a required keyword so a new
+  check cannot skip it. The Flemish energy fund must be zero or within five times of the 10,07 EUR a
+  month every card that prints it states, and only on a Flemish card; the Walloon connection fee
+  zero or within five times of 0,00075 EUR/kWh, and a Walloon card must carry it or set
+  `region_connection_fee_unavailable`, which is allowed nowhere else and only with no fee;
+  `published_vat_rate` is stamped by the resolver alone, so an extractor must leave it at zero.
+
 - `_validate_injection` (`scripts/live_check.py`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
