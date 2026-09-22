@@ -384,6 +384,47 @@ def test_luminus_discover_matches_registry() -> None:
     assert discovered == known
 
 
+def test_luminus_discover_follows_a_sitemap_index() -> None:
+    """Luminus re-sharded: `sitemap.xml` is now a 709-byte `<sitemapindex>`
+    naming five children, and the product pages moved into
+    `sitemap-products.xml`. The flat reader matched nothing and discovery
+    returned an empty set, which the catalog check only warns about, so it went
+    unnoticed - including by the three tests above, because the fixture beside
+    them froze the old flat shape.
+
+    Measured against the live site: 0 slugs before, 10 after, against 10
+    registered contracts.
+    """
+    index = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<sitemap><loc>https://www.luminus.be/sitemap-products.xml</loc></sitemap>"
+        "<sitemap><loc>https://www.luminus.be/sitemap-support.xml</loc></sitemap>"
+        "</sitemapindex>"
+    )
+    session = _UrlFakeSession(
+        {
+            "sitemap-products.xml": (_read("luminus.html"), 200),
+            "sitemap-support.xml": ("<urlset><loc>/fr/faq/</loc></urlset>", 200),
+            "sitemap.xml": (index, 200),
+        }
+    )
+    discovered = _run(luminus_mod.discover(session))
+    assert discovered == {c.slug for c in luminus_mod._CONTRACTS}
+
+    # One unreadable child is not a reason to report no products at all.
+    partial = _UrlFakeSession(
+        {
+            "sitemap-products.xml": (_read("luminus.html"), 200),
+            "sitemap-support.xml": ("", 404),
+            "sitemap.xml": (index, 200),
+        }
+    )
+    assert _run(luminus_mod.discover(partial)) == {
+        c.slug for c in luminus_mod._CONTRACTS
+    }
+
+
 def test_luminus_discover_surfaces_new_slug() -> None:
     body = _read("luminus.html") + "\n/fr/particuliers/tarifs-energie/newproduct/\n"
     session = _FakeSession(body)

@@ -164,6 +164,14 @@ _PRODUCT_PAGE_RE = re.compile(
 # market, plus the parent index pages.
 _EXCLUDED_SLUGS = frozenset({"tarif-social", "sociaal-tarief"})
 
+# A <loc> in a sitemap or a sitemap index. Luminus re-sharded: what used to be
+# one flat sitemap is now a 709-byte <sitemapindex> naming five children, and
+# the product pages moved into sitemap-products.xml. One level is followed, not
+# recursed: the index names sitemaps and a sitemap names pages, so a second
+# level would be a sitemap of sitemaps, which no generator emits.
+_SITEMAP_LOC_RE = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.IGNORECASE)
+_SITEMAP_INDEX_RE = re.compile(r"<sitemapindex\b", re.IGNORECASE)
+
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Discover Luminus products from the public sitemap.
@@ -172,13 +180,34 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     canonical product directory. Every slug there is a product
     (residential + market only). Excludes the regulated social
     tariff which is not user-selectable.
+
+    Follows a sitemap INDEX one level, because Luminus re-sharded and
+    ``sitemap.xml`` is now 709 bytes naming five children. Against a flat
+    sitemap that check is false and nothing changes; against the index it is
+    the difference between eleven product slugs and none. Discovery returning
+    nothing is only a warning in the catalog check, so this went unnoticed:
+    measured on the released 0.27.2 as well, it has been blind for as long as
+    the split has been live.
     """
     try:
         xml = await fetch_text(session, _SITEMAP_URL)
     except ExtractorError:
         return set()
+    documents = [xml]
+    if _SITEMAP_INDEX_RE.search(xml):
+        documents = []
+        for child in _SITEMAP_LOC_RE.findall(xml):
+            try:
+                documents.append(await fetch_text(session, child))
+            except ExtractorError:
+                # One unreadable child is not a reason to report no products
+                # at all; the others still name theirs.
+                continue
     return {
-        slug for slug in _PRODUCT_PAGE_RE.findall(xml) if slug not in _EXCLUDED_SLUGS
+        slug
+        for document in documents
+        for slug in _PRODUCT_PAGE_RE.findall(document)
+        if slug not in _EXCLUDED_SLUGS
     }
 
 
