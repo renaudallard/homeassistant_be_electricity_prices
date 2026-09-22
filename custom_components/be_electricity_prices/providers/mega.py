@@ -118,6 +118,7 @@ from ._mega_cards import (
     _extract_injection,
     _extract_publication_month,
     _extract_valid_until,
+    _injection_vat_applies,
     _realized_rates,
 )
 from .base import (
@@ -134,7 +135,6 @@ from ._rates import (
     TariffKind,
     VariableRates,
 )
-from ._mega_cards import _injection_vat_applies
 
 _LOGGER = logging.getLogger(__name__)
 

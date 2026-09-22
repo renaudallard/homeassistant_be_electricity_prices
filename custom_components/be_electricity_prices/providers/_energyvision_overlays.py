@@ -32,18 +32,15 @@ its own in French and is read next door.
 
 from __future__ import annotations
 
-from ..const import DSO_SIBELGA
-from ..const import REGION_BRUSSELS
-from ..const import REGION_FLANDERS
-from ._parse import numeric_row
-from ._parse import parse_sibelga_row
-from ._parse import regional_tax_overlay
-from ._parse import to_float
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import TaxOverlay
+from ..const import (
+    DSO_SIBELGA,
+    FLUVIUS_AREA_LABELS_UPPER,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+)
+from ._parse import numeric_row, parse_sibelga_row, regional_tax_overlay, to_float
+from .base import DsoOverlay, ExtractorError, TaxOverlay
 import re
-from ..const import FLUVIUS_AREA_LABELS_UPPER
 from ._pdf import NUM_NO_THOUSANDS
 from .energiebe import _NUM
 

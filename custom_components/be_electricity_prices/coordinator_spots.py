@@ -34,7 +34,7 @@ than aliased so the call sites read unchanged."""
 
 from __future__ import annotations
 
-from datetime import UTC, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import logging
 
@@ -64,7 +64,6 @@ from .synergrid import (
 
 import asyncio
 from collections.abc import Callable, Iterator, Mapping
-from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 import aiohttp
 from homeassistant.config_entries import ConfigEntry

@@ -127,8 +127,7 @@ from .const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from .providers import get as get_extractor
-from .providers import offers_direct_debit, offers_quarter_hourly
+from .providers import get as get_extractor, offers_direct_debit, offers_quarter_hourly
 
 
 # ---- shared schema builders ---------------------------------------------------

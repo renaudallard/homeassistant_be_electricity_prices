@@ -35,66 +35,67 @@ from __future__ import annotations
 
 
 from typing import Any
-from .const import CONF_API_KEY
-from .const import CONF_CONTRACT
-from .const import CONF_CONTRACT_START_DATE
-from .const import CONF_DSO
-from .const import CONF_DSO_TARIFF_MODE
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import CONF_SOLAR_REGIME
-from .const import CONF_SUPPLIER
-from .const import CONF_WHATIF_CONSUMPTION_KWH
-from .const import CONF_WHATIF_INJECTION_KWH
+from .const import (
+    CONF_API_KEY,
+    CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
+    CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
+    CONF_METER,
+    CONF_REGION,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    CONF_WHATIF_CONSUMPTION_KWH,
+    CONF_WHATIF_INJECTION_KWH,
+    DSO_MODE_BI_HORAIRE,
+    MEASURED_FULL_YEAR_DAYS,
+    METER_DYNAMIC,
+    METER_MONO,
+    SMART_METER_CONTRACT_KINDS,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
+    SOLAR_REGIME_NONE,
+    SPOT_PRICED_CONTRACT_KINDS,
+    SUPPLIER_CUSTOM,
+)
 from homeassistant.config_entries import ConfigEntry
-from .const import DSO_MODE_BI_HORAIRE
-from .const import MEASURED_FULL_YEAR_DAYS
-from .const import METER_DYNAMIC
-from .const import METER_MONO
 from .pricing import MeterType
-from .const import SMART_METER_CONTRACT_KINDS
-from .const import SOLAR_REGIME_COMPENSATION
-from .const import SOLAR_REGIME_INJECTION
-from .const import SOLAR_REGIME_NONE
-from .const import SPOT_PRICED_CONTRACT_KINDS
-from .const import SUPPLIER_CUSTOM
 from collections.abc import Sequence
 from .providers.base import SupplierSnapshot
-from .compare_quote import _annual_volume
-from .compare_quote import _annual_welcome_credit
-from .compare_weighting import _consumption_weighted_spot
-from .flow_contracts import _contract_has_spot_injection
-from .flow_contracts import _contract_kind
-from .compare_quote import _covers_a_year
-from .spot_stats import _energy_is_rlp_indexed
-from .energy_meters import _measured_hour_weights
-from .energy_meters import _measured_kwh
-from .cohort import _parse_iso_date
-from .compare_quote import _read_total_kwh
-from .compare_weighting import _register_weights
-from .spot_stats import _rlp_blend_for
+from .compare_quote import (
+    _annual_volume,
+    _annual_welcome_credit,
+    _covers_a_year,
+    _read_total_kwh,
+)
+from .compare_weighting import (
+    _consumption_weighted_spot,
+    _register_weights,
+    _tou_weighted_per_kwh,
+)
+from .flow_contracts import _contract_has_spot_injection, _contract_kind
+from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
+from .energy_meters import _measured_hour_weights, _measured_kwh
+from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
 from .compare_table import _solar_note
-from .compare_weighting import _tou_weighted_per_kwh
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from datetime import date
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from homeassistant.util import dt as dt_util
 from .providers import get as get_extractor
 from dataclasses import replace
-from .cohort import signing_month_snapshot
-from datetime import timedelta
-from .cohort import ytd_window_start
-from .compare_inputs import _HouseholdQuote
-from .compare_inputs import _borrowed_spot_cache
-from .compare_inputs import _credit_index_for
-from .compare_inputs import _effective_regime
-from .compare_inputs import _label_for_contract
-from .compare_inputs import _label_for_supplier
-from .compare_inputs import _months_billed
-from .compare_inputs import _needs_month_mean
-from .compare_inputs import _quote_entry
-from .compare_inputs import _target_dso_mode
-from .compare_inputs import _settlement_of
+from .compare_inputs import (
+    _HouseholdQuote,
+    _borrowed_spot_cache,
+    _credit_index_for,
+    _effective_regime,
+    _label_for_contract,
+    _label_for_supplier,
+    _months_billed,
+    _needs_month_mean,
+    _quote_entry,
+    _settlement_of,
+    _target_dso_mode,
+)
 from homeassistant.core import HomeAssistant
 import logging
 

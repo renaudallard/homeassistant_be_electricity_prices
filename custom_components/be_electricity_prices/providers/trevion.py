@@ -50,9 +50,8 @@ from ._pdf import (
     head_freshness_key,
     is_transient_fetch_error,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, to_float
 from ._validity import archive_validity_check
-from ._parse import to_float
 from .base import (
     DsoOverlay,
     ExtractorError,

@@ -32,17 +32,11 @@ for power, as opposed to what it collects on someone else's behalf.
 
 from __future__ import annotations
 
-from ._parse import parse_sign
-from ._parse import to_float
+from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import vat_multiplier
-from ._rates import EnergyRates
-from ._rates import FixedRates
-from ._rates import InjectionRates
-from ._rates import TariffKind
-from ._rates import VariableRates
+from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
 from .base import ExtractorError
 import re
-from ._parse import SIGN_CHARS
 
 
 def _consumption_formula(

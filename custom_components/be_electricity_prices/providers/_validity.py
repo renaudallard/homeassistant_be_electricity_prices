@@ -40,9 +40,7 @@ from datetime import date
 from homeassistant.util import dt as dt_util
 import calendar
 import re
-from ._pdf import _MONTH_NAMES
-from ._pdf import _MONTH_YEAR_RE
-from ._pdf import _VALID_KEYWORDS
+from ._pdf import _MONTH_NAMES, _MONTH_YEAR_RE, _VALID_KEYWORDS
 
 
 def end_of_month(year: int, month: int) -> date:

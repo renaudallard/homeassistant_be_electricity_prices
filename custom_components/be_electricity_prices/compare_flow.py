@@ -59,8 +59,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .providers import all_extractors
-from .providers import offers_quarter_hourly
+from .providers import all_extractors, offers_quarter_hourly
 
 from .const import (
     CONF_API_KEY,

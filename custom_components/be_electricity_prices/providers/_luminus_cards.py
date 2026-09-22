@@ -32,20 +32,17 @@ Luminus charges for power, as opposed to what it collects for someone else.
 
 from __future__ import annotations
 
-from ..const import WELCOME_CREDIT_ANNIVERSARY
-from ..const import WELCOME_CREDIT_PRO_RATA
-from ._parse import SIGN_CHARS
-from ._parse import numeric_row
-from ._parse import parse_sign
-from ._parse import tier_bound_kwh
-from ._parse import to_float
-from ._rates import DynamicRates
-from ._rates import EnergyRates
-from ._rates import FixedRates
-from ._rates import InjectionRates
-from ._rates import TariffKind
-from ._rates import TimeOfUseRates
-from ._rates import VariableRates
+from ..const import WELCOME_CREDIT_ANNIVERSARY, WELCOME_CREDIT_PRO_RATA
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, tier_bound_kwh, to_float
+from ._rates import (
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    TariffKind,
+    TimeOfUseRates,
+    VariableRates,
+)
 from .base import ExtractorError
 from dataclasses import replace
 import re

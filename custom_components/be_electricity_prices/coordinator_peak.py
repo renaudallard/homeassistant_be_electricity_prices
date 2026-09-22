@@ -35,7 +35,7 @@ stubs live here, with signatures matching DataUpdateCoordinator exactly."""
 
 from __future__ import annotations
 
-from homeassistant.core import State
+from homeassistant.core import HomeAssistant, State
 
 import logging
 
@@ -53,7 +53,6 @@ from .const import (
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .providers.base import SupplierSnapshot

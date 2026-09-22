@@ -34,57 +34,65 @@ this the long half of a backfill.
 
 from __future__ import annotations
 
-from .backfill_window import _build_context
-from .backfill_window import _recorder_models
-from .backfill_window import _stat_id
-from .cohort import _parse_iso_date
-from .cohort import ytd_window_start
-from .const import CONF_CONTRACT_START_DATE
-from .const import METER_MONO
-from .const import REGION_FLANDERS
-from .const import SOLAR_REGIME_COMPENSATION
-from .const import SOLAR_REGIME_INJECTION
+from .backfill_window import (
+    _COST_SENSOR_KEY,
+    _build_context,
+    _recorder_models,
+    _stat_id,
+)
+from .cohort import _parse_iso_date, ytd_window_start
+from .const import (
+    CONF_CONTRACT_START_DATE,
+    METER_MONO,
+    REGION_FLANDERS,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
+)
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .energy_meters import _hourly_consumption_sensors
-from .energy_meters import _hourly_injection_sensors
-from .energy_meters import _partial_register_pair
-from .energy_meters import _sum_hourly_kwh
-from .fees import _annual_static_fees
-from .fees import _capped_capacity_monthly_eur
-from .fees import _compensation_kva
-from .fees import _prosumer_monthly_fee
-from .fees import _welcome_credit_eur
-from .fees import first_year_net_kwh
-from .fees import window_energy_rate
-from .injection import _historical_injection_rate
-from .injection import _injection_is_spot_formula
-from .pricing import MeterType
-from .pricing import compute_breakdown
-from .pricing import compute_network_and_taxes
-from .pricing import renewables_eur_per_kwh
-from .pricing import yearly_fixed_fee_for_meter
-from .spot_stats import _NetAllocation
-from .spot_stats import _bucket_by_local_month
-from .spot_stats import _energy_needs_spot
-from .spot_stats import _hour_spot
-from .spot_stats import _injection_is_spp_indexed
-from .spot_stats import _injection_on_month_mean
-from .spot_stats import _register_for
-from .spot_stats import _rlp_hour_weight
-from .spot_stats import _spp_injection_spot
+from .energy_meters import (
+    _hourly_consumption_sensors,
+    _hourly_injection_sensors,
+    _partial_register_pair,
+    _sum_hourly_kwh,
+)
+from .fees import (
+    _annual_static_fees,
+    _capped_capacity_monthly_eur,
+    _compensation_kva,
+    _prosumer_monthly_fee,
+    _welcome_credit_eur,
+    first_year_net_kwh,
+    window_energy_rate,
+)
+from .injection import _historical_injection_rate, _injection_is_spot_formula
+from .pricing import (
+    MeterType,
+    compute_breakdown,
+    compute_network_and_taxes,
+    renewables_eur_per_kwh,
+    yearly_fixed_fee_for_meter,
+)
+from .spot_stats import (
+    _NetAllocation,
+    _bucket_by_local_month,
+    _energy_needs_spot,
+    _hour_spot,
+    _injection_is_spp_indexed,
+    _injection_on_month_mean,
+    _register_for,
+    _rlp_hour_weight,
+    _spp_injection_spot,
+)
 from .synergrid import SppWeights
-from datetime import date
-from datetime import datetime
+from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from typing import Any
 import calendar
 import logging
-from .backfill_window import _COST_SENSOR_KEY
-from homeassistant.components.recorder.models import StatisticData
-from homeassistant.components.recorder.models import StatisticMetaData
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -34,39 +34,32 @@ backfill are built on this, and neither of them owns it.
 from __future__ import annotations
 
 from .brugel import ensure_power_term
-from .cohort import _month_snapshot_cache
-from .cohort import signing_month_snapshot
-from .const import CONF_API_KEY
-from .const import CONF_CONTRACT
-from .const import CONF_DSO
-from .const import CONF_DSO_TARIFF_MODE
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import CONF_SOLAR_REGIME
-from .const import CONF_SUPPLIER
-from .const import DOMAIN
-from .const import DSO_MODE_BI_HORAIRE
-from .const import METER_MONO
-from .const import REGION_BRUSSELS
-from .const import SOLAR_REGIME_COMPENSATION
+from .cohort import _month_snapshot_cache, signing_month_snapshot
+from .const import (
+    CONF_API_KEY,
+    CONF_CONTRACT,
+    CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
+    CONF_METER,
+    CONF_REGION,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    DOMAIN,
+    DSO_MODE_BI_HORAIRE,
+    METER_MONO,
+    REGION_BRUSSELS,
+    SOLAR_REGIME_COMPENSATION,
+)
 from .coordinator import BePricesCoordinator
 from .injection import _injection_hourly_on_cohort
-from .pricing import DsoTariffMode
-from .pricing import MeterType
+from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .snapshot_resolve import entry_annual_kwh
-from .spot_stats import _energy_is_rlp_indexed
-from .spot_stats import _rlp_blend_for
-from .spot_stats import _spp_weighting_enabled
-from .synergrid import RlpWeights
-from .synergrid import SppWeights
-from collections.abc import Awaitable
-from collections.abc import Callable
+from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
+from .synergrid import RlpWeights, SppWeights
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
+from datetime import UTC, date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er

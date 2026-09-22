@@ -37,24 +37,28 @@ from __future__ import annotations
 
 from .base import DsoOverlay, SupplierSnapshot
 
-from ..const import DSO_SIBELGA
-from ..const import FEDERAL_CONTRIBUTION_ZEROED_FROM
-from ..const import FEDERAL_EXCISE_KNOWN_FROM
-from ..const import FEDERAL_EXCISE_KNOWN_UNTIL
-from ..const import FEDERAL_EXCISE_RESIDENTIAL_TVAC
-from ..const import FLUVIUS_KEYS
-from ..const import METER_EXCLUSIVE_NIGHT
-from ..const import METER_MONO
-from ..const import VAT_RATE_REDUCED
-from ..const import VREG_NETWORK_CEILING_HTVA
-from ..const import VREG_NETWORK_CEILING_KNOWN_FROM
-from ..const import VREG_NETWORK_CEILING_KNOWN_UNTIL
-from ._rates import DynamicRates
-from ._rates import EnergyRates
-from ._rates import FixedRates
-from ._rates import InjectionRates
-from ._rates import SpotMonthlyRates
-from ._rates import VariableRates
+from ..const import (
+    DSO_SIBELGA,
+    FEDERAL_CONTRIBUTION_ZEROED_FROM,
+    FEDERAL_EXCISE_KNOWN_FROM,
+    FEDERAL_EXCISE_KNOWN_UNTIL,
+    FEDERAL_EXCISE_RESIDENTIAL_TVAC,
+    FLUVIUS_KEYS,
+    METER_EXCLUSIVE_NIGHT,
+    METER_MONO,
+    VAT_RATE_REDUCED,
+    VREG_NETWORK_CEILING_HTVA,
+    VREG_NETWORK_CEILING_KNOWN_FROM,
+    VREG_NETWORK_CEILING_KNOWN_UNTIL,
+)
+from ._rates import (
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    VariableRates,
+)
 from dataclasses import replace
 from datetime import date
 from typing import Any

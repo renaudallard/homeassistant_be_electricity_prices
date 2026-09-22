@@ -32,19 +32,19 @@ they are not interchangeable, which is most of why this is the long half.
 
 from __future__ import annotations
 
-from ._parse import parse_sign
-from ._parse import to_float
-from ._rates import DynamicRates
-from ._rates import EnergyRates
-from ._rates import InjectionRates
-from ._rates import TariffKind
-from ._rates import TimeOfUseRates
-from ._rates import VariableRates
-from ._rates import fixed_or_variable_rates
+from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._rates import (
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    TariffKind,
+    TimeOfUseRates,
+    VariableRates,
+    fixed_or_variable_rates,
+)
 from .base import ExtractorError
 from dataclasses import replace
 import re
-from ._parse import SIGN_CHARS
 from ._pdf import vat_multiplier
 
 

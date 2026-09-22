@@ -75,15 +75,15 @@ from ._pdf import (
     head_ok,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS
-from ._validity import scan_month_end
 from ._parse import (
+    SIGN_CHARS,
     numeric_row,
     parse_prosumer_column,
     parse_sign,
     require_contract,
     to_float,
 )
+from ._validity import scan_month_end
 from .base import (
     DsoOverlay,
     ExtractorError,

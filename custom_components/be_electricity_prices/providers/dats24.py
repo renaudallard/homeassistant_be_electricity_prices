@@ -81,13 +81,8 @@ from ._pdf import (
     fetch_pdf_text_layout,
     head_ok,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import parse_valid_until
-from ._parse import (
-    numeric_row,
-    parse_sign,
-    to_float,
-)
 from .base import (
     DsoOverlay,
     ExtractorError,

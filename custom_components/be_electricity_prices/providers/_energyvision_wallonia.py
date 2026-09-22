@@ -33,27 +33,20 @@ language branches inside theirs.
 
 from __future__ import annotations
 
-from ._parse import to_float
-from ._rates import EnergyRates
-from ._rates import FixedRates
-from ._rates import InjectionRates
-from ._rates import SpotMonthlyRates
+from ._parse import SIGN_CHARS, to_float
+from ._rates import EnergyRates, FixedRates, InjectionRates, SpotMonthlyRates
 from ._validity import parse_valid_until
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import SupplierSnapshot
-from .base import TaxOverlay
-from .base import walloon_dso_overlay
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierSnapshot,
+    TaxOverlay,
+    walloon_dso_overlay,
+)
 import re
-from ._energyvision_cards import _spp_injection
-from ._energyvision_cards import _tiered_legs
+from ._energyvision_cards import _spp_injection, _tiered_legs
 from ._pdf import NUM_NO_THOUSANDS
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_ORES
-from ..const import DSO_RESA
-from ..const import DSO_REW
-from ._parse import SIGN_CHARS
+from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 
 _NUM = NUM_NO_THOUSANDS
 

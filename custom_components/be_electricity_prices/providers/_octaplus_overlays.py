@@ -32,19 +32,19 @@ regulator's, reprinted on the supplier's card.
 
 from __future__ import annotations
 
-from ..const import REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    FLUVIUS_CARD_LABELS,
+    REGION_WALLONIA,
+)
 from ._parse import to_float
 from ._rates import TariffKind
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import walloon_dso_overlay
+from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 import re
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_ORES
-from ..const import DSO_RESA
-from ..const import DSO_REW
-from ..const import FLUVIUS_CARD_LABELS
 
 
 def _extract_supplier_prosumer(text: str, kind: TariffKind) -> float | None:

@@ -33,28 +33,25 @@ table in particular is the federal one, and it moved under Engie's feet in
 
 from __future__ import annotations
 
-from ..const import DSO_SIBELGA
-from ._parse import numeric_row
-from ._parse import parse_sibelga_row
-from ._parse import tier_bound_kwh
-from ._parse import to_float
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import walloon_dso_overlay
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+)
+from ._parse import numeric_row, parse_sibelga_row, tier_bound_kwh, to_float
+from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 import re
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_FLUVIUS_ANTWERPEN
-from ..const import DSO_FLUVIUS_HALLE_VILVOORDE
-from ..const import DSO_FLUVIUS_IMEWO
-from ..const import DSO_FLUVIUS_INTERGEM
-from ..const import DSO_FLUVIUS_IVEKA
-from ..const import DSO_FLUVIUS_LIMBURG
-from ..const import DSO_FLUVIUS_WEST
-from ..const import DSO_FLUVIUS_ZENNE_DIJLE
-from ..const import DSO_ORES
-from ..const import DSO_RESA
-from ..const import DSO_REW
 
 
 def _extract_consumption_renewables(text: str) -> float:

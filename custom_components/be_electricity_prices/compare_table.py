@@ -33,8 +33,7 @@ wording change cannot touch a bill.
 
 from __future__ import annotations
 
-from .const import SOLAR_REGIME_COMPENSATION
-from .const import SOLAR_REGIME_INJECTION
+from .const import SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime

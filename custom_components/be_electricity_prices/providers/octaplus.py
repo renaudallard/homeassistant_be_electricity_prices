@@ -66,16 +66,10 @@ from ._pdf import (
     render_pdf,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, fold_accents, parse_sign, require_contract, to_float
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
-)
-from ._parse import (
-    fold_accents,
-    parse_sign,
-    require_contract,
-    to_float,
 )
 from .base import (
     ExtractorError,

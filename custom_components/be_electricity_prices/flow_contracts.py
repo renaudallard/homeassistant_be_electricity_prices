@@ -33,15 +33,13 @@ does its feed-in follow an index. Read-only over the registry.
 
 from __future__ import annotations
 
-from .const import CONF_REGION
-from .const import CONF_SUPPLIER
-from .const import DSO_CHOICES
-from .const import KIND_GROUP
-from .const import SUPPLIER_CUSTOM
-from .providers import all_extractors
-from .providers import effective_kind
-from .providers import get as get_extractor
-from .providers import is_professional
+from .const import CONF_REGION, CONF_SUPPLIER, DSO_CHOICES, KIND_GROUP, SUPPLIER_CUSTOM
+from .providers import (
+    all_extractors,
+    effective_kind,
+    get as get_extractor,
+    is_professional,
+)
 from .providers._rates import Contract
 from .providers.base import ExtractorError
 from homeassistant.helpers.selector import SelectOptionDict

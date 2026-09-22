@@ -34,31 +34,34 @@ code, and how they are shown is somebody else's job.
 from __future__ import annotations
 
 from .compare_household import _HouseholdMixin
-from .compare_inputs import _HouseholdQuote
-from .compare_inputs import _candidate_label
-from .compare_inputs import _coordinator_rlp_index_weights
-from .compare_inputs import _coordinator_rlp_weights
-from .compare_inputs import _coordinator_spp_weights
-from .compare_inputs import _needs_missing_spots
-from .compare_inputs import _settlement_of
-from .compare_table import DailyCompare
-from .compare_table import RankedRow
-from .compare_quote import _annual_bill
-from .compare_quote import _annual_welcome_credit
-from .compare_weighting import _compare_injection_credit
-from .compare_weighting import _tou_weighted_per_kwh
-from .const import CONF_CONTRACT
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import CONF_SUPPLIER
-from .const import DOMAIN
-from .const import METER_MONO
-from .const import SPOT_PRICED_CONTRACT_KINDS
+from .compare_inputs import (
+    _HouseholdQuote,
+    _candidate_label,
+    _coordinator_rlp_index_weights,
+    _coordinator_rlp_weights,
+    _coordinator_spp_weights,
+    _needs_missing_spots,
+    _settlement_of,
+)
+from .compare_table import DailyCompare, RankedRow
+from .compare_quote import _annual_bill, _annual_welcome_credit
+from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
+from .const import (
+    CONF_CONTRACT,
+    CONF_METER,
+    CONF_REGION,
+    CONF_SUPPLIER,
+    DOMAIN,
+    METER_MONO,
+    SPOT_PRICED_CONTRACT_KINDS,
+)
 from .energy_meters import memoise_meter_reads
-from .flow_contracts import _contract_group
-from .flow_contracts import _contract_is_professional
-from .flow_contracts import _contract_kind
-from .flow_contracts import _sweep_candidates
+from .flow_contracts import (
+    _contract_group,
+    _contract_is_professional,
+    _contract_kind,
+    _sweep_candidates,
+)
 from .providers import get as get_extractor
 from .providers._pdf import memoise_text_fetches
 from dataclasses import replace

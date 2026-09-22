@@ -34,23 +34,24 @@ the same month list rather than each deciding what a year is.
 from __future__ import annotations
 
 from .cohort import _effective_snapshot_for_month
-from .const import CONF_CONTRACT
-from .const import CONF_DSO
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import METER_MONO
-from .const import REGION_FLANDERS
-from .fees import _annual_static_fees
-from .fees import _capped_capacity_monthly_eur
-from .fees import _compensation_kva
-from .fees import _prosumer_monthly_fee
-from .pricing import MeterType
-from .pricing import yearly_fixed_fee_for_meter
-from .providers.base import SupplierExtractor
-from .providers.base import SupplierSnapshot
+from .const import (
+    CONF_CONTRACT,
+    CONF_DSO,
+    CONF_METER,
+    CONF_REGION,
+    METER_MONO,
+    REGION_FLANDERS,
+)
+from .fees import (
+    _annual_static_fees,
+    _capped_capacity_monthly_eur,
+    _compensation_kva,
+    _prosumer_monthly_fee,
+)
+from .pricing import MeterType, yearly_fixed_fee_for_meter
+from .providers.base import SupplierExtractor, SupplierSnapshot
 from collections.abc import AsyncIterator
-from datetime import date
-from datetime import timedelta
+from datetime import date, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from typing import NamedTuple

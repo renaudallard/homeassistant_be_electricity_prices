@@ -35,10 +35,9 @@ way for the user to clear it."""
 from __future__ import annotations
 
 from .brugel import any_cached_power_term, cached_power_term
-from .providers import get as get_extractor
-from .providers import offers_direct_debit
+from .providers import get as get_extractor, offers_direct_debit
 
-from .providers.base import SupplierExtractor
+from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .providers._resolve import omits_brussels_power_term
 
 from .const import (
@@ -54,9 +53,6 @@ from .const import (
     DSO_MODE_IMPACT,
     METER_EXCLUSIVE_NIGHT,
 )
-from .providers.base import (
-    ExtractorError,
-)
 from .fees import (
     _compensation_kva,
 )
@@ -70,8 +66,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
-
-from .providers.base import SupplierSnapshot
 
 
 def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | None:

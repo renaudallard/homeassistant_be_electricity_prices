@@ -45,12 +45,8 @@ from ._pdf import (
     FR_MONTHS,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._validity import end_of_month
-from ._parse import (
-    parse_sign,
-    to_float,
-)
 from .base import ExtractorError
 from ._rates import (
     DynamicRates,

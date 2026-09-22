@@ -71,15 +71,10 @@ from ._pdf import (
     is_transient_fetch_error,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
-)
-from ._parse import (
-    numeric_row,
-    parse_sign,
-    to_float,
 )
 from .base import (
     DsoOverlay,

@@ -39,24 +39,24 @@ labelled as what it is.
 
 from __future__ import annotations
 
-from .const import CARD_ARCHIVE_FIRST_MONTH
-from .const import CARD_ARCHIVE_URL
-from .const import CONF_CARD_ARCHIVE
-from .const import DEFAULT_CARD_ARCHIVE
-from .const import SUPPLIER_CUSTOM
-from .providers._pdf import fetch_text
-from .providers._pdf import is_transient_fetch_error
-from .providers.base import ExtractorError
-from .providers.base import SupplierExtractor
-from .providers.base import SupplierSnapshot
-from .snapshot_codec import _DEGRADED_MIN_SCHEMA_VERSION
-from .snapshot_codec import _snapshot_from_dict
-from .snapshot_codec import _snapshot_to_dict
+from .const import (
+    CARD_ARCHIVE_FIRST_MONTH,
+    CARD_ARCHIVE_URL,
+    CONF_CARD_ARCHIVE,
+    DEFAULT_CARD_ARCHIVE,
+    SUPPLIER_CUSTOM,
+)
+from .providers._pdf import fetch_text, is_transient_fetch_error
+from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
+from .snapshot_codec import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _snapshot_from_dict,
+    _snapshot_to_dict,
+)
 from .snapshot_resolve import _resolve_snapshot
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
-from datetime import datetime
+from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util

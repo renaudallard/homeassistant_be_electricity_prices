@@ -32,19 +32,18 @@ editions, so the block reader sits here with the rows it feeds.
 
 from __future__ import annotations
 
-from ._parse import numeric_row
-from ._parse import parse_vreg_network_ceiling
-from ._parse import to_float
+from ._parse import numeric_row, parse_vreg_network_ceiling, to_float
 from ._rates import TariffKind
-from .base import DsoOverlay
-from .base import ExtractorError
+from .base import DsoOverlay, ExtractorError
 import re
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_ORES
-from ..const import DSO_RESA
-from ..const import DSO_REW
-from ..const import FLUVIUS_CARD_LABELS
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    FLUVIUS_CARD_LABELS,
+)
 
 
 def _tax_block_values(text: str) -> list[str]:

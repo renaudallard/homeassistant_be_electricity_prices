@@ -38,9 +38,7 @@ from __future__ import annotations
 
 import logging
 
-from datetime import date
-from datetime import datetime
-from datetime import time
+from datetime import date, datetime, time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util

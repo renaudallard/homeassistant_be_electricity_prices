@@ -36,21 +36,19 @@ from __future__ import annotations
 from .compare_flow import _CompareStepsMixin, _REFRESH_FIELD, _YTD_FIELD
 
 from .compare_engine import _SweepEngine
-from .compare_inputs import _candidate_label
-from .compare_inputs import _effective_regime
-from .compare_table import RankedRow
-from .compare_table import _ranking_table
-from .const import COMPARE_SWEEP_BUDGET_S
-from .const import CONF_API_KEY
-from .const import CONF_METER
-from .const import METER_MONO
-from .const import SOLAR_REGIME_INJECTION
-from .const import SPOT_PRICED_CONTRACT_KINDS
-from .flow_contracts import _contract_has_spot_injection
-from .flow_contracts import _contract_kind
+from .compare_inputs import _candidate_label, _effective_regime
+from .compare_table import RankedRow, _ranking_table
+from .const import (
+    COMPARE_SWEEP_BUDGET_S,
+    CONF_API_KEY,
+    CONF_METER,
+    METER_MONO,
+    SOLAR_REGIME_INJECTION,
+    SPOT_PRICED_CONTRACT_KINDS,
+)
+from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .providers import get as get_extractor
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from typing import Any

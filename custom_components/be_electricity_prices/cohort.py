@@ -36,8 +36,7 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import Awaitable
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date
 from homeassistant.config_entries import ConfigEntry

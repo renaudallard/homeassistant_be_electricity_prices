@@ -35,28 +35,20 @@ longer settled has to be re-fetched rather than believed.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from typing import Any
-from .const import CONF_CONTRACT
-from .const import CONF_REGION
-from .const import CONF_SUPPLIER
-from datetime import UTC
-from .coordinator_profiles import _load_profile_cache
-from .coordinator_profiles import _save_profile_cache
-from .coordinator_profiles import _seed_profile_cache
-from .snapshot_codec import _snapshot_from_dict
-from .snapshot_codec import _snapshot_to_dict
-from .coordinator_spots import _spot_is_sane
-from .coordinator_spots import _spots_for_local_days
-from .cohort import _tariff_card_month
-from datetime import date
-from datetime import datetime
+from .const import CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
+from datetime import UTC, date, datetime, timedelta
+from .coordinator_profiles import (
+    _load_profile_cache,
+    _save_profile_cache,
+    _seed_profile_cache,
+)
+from .snapshot_codec import _snapshot_from_dict, _snapshot_to_dict
+from .coordinator_spots import _spot_is_sane, _spots_for_local_days
+from .cohort import _tariff_card_month, ytd_window_start
 from homeassistant.util import dt as dt_util
-from .snapshot_months import monthly_rows_to_store
-from .snapshot_months import restore_monthly_rows
-from datetime import timedelta
-from .cohort import ytd_window_start
+from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
 from .providers.base import SupplierSnapshot
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant

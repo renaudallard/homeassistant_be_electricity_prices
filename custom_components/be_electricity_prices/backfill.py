@@ -83,6 +83,7 @@ from .pricing import (
 )
 from .providers import get as get_extractor
 from .backfill_window import (
+    _COST_SENSOR_KEY,
     _build_context,
     _clear_all,
     _existing_stat_window,
@@ -96,7 +97,6 @@ from .backfill_cost import (
     _backfill_cost_sensor,
     _injection_rate_for_hour,
 )
-from .backfill_window import _COST_SENSOR_KEY
 
 _LOGGER = logging.getLogger(__name__)
 

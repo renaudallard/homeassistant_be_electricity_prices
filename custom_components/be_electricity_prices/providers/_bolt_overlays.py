@@ -33,31 +33,34 @@ beside the tables they read.
 
 from __future__ import annotations
 
-from ..const import DSO_RESA
-from ..const import DSO_REW
-from ..const import DSO_SIBELGA
-from ..const import REGION_BRUSSELS
-from ..const import REGION_FLANDERS
-from ..const import REGION_WALLONIA
-from ._parse import parse_brussels_osp
-from ._parse import to_float
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import brussels_sibelga_overlay
-from .base import walloon_dso_overlay
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
+from ._parse import parse_brussels_osp, to_float
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    brussels_sibelga_overlay,
+    walloon_dso_overlay,
+)
 import logging
 import re
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_FLUVIUS_ANTWERPEN
-from ..const import DSO_FLUVIUS_HALLE_VILVOORDE
-from ..const import DSO_FLUVIUS_IMEWO
-from ..const import DSO_FLUVIUS_INTERGEM
-from ..const import DSO_FLUVIUS_IVEKA
-from ..const import DSO_FLUVIUS_LIMBURG
-from ..const import DSO_FLUVIUS_WEST
-from ..const import DSO_FLUVIUS_ZENNE_DIJLE
-from ..const import DSO_ORES
 
 _LOGGER = logging.getLogger(__name__)
 

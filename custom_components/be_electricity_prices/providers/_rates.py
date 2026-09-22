@@ -35,8 +35,7 @@ without pulling in the pricing engine.
 from __future__ import annotations
 
 from ..const import REGIONS
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Literal
 
 

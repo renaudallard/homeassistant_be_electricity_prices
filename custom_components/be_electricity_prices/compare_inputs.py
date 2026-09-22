@@ -34,41 +34,38 @@ the result page prints them; none of it decides anything on its own.
 from __future__ import annotations
 
 from .compare_table import _row_label
-from .const import CONF_ANNUAL_CONSUMPTION_KWH
-from .const import CONF_CONTRACT
-from .const import CONF_DSO_TARIFF_MODE
-from .const import CONF_METER
-from .const import CONF_QUARTER_HOURLY
-from .const import CONF_SOLAR_KVA
-from .const import CONF_SOLAR_REGIME
-from .const import CONF_SUPPLIER
-from .const import DSO_MODE_BI_HORAIRE
-from .const import DSO_MODE_IMPACT
-from .const import METER_MONO
-from .const import SOLAR_REGIME_NONE
+from .const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CONTRACT,
+    CONF_DSO_TARIFF_MODE,
+    CONF_METER,
+    CONF_QUARTER_HOURLY,
+    CONF_SOLAR_KVA,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    DSO_MODE_BI_HORAIRE,
+    DSO_MODE_IMPACT,
+    METER_MONO,
+    SOLAR_REGIME_NONE,
+)
 from .injection import _injection_needs_spot
-from .providers import effective_kind
-from .providers import get as get_extractor
-from .providers import offers_quarter_hourly
+from .providers import effective_kind, get as get_extractor, offers_quarter_hourly
 from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
-from .spot_stats import _energy_is_rlp_indexed
-from .spot_stats import _injection_is_spp_indexed
-from .spot_stats import _injection_on_month_mean
-from .spot_stats import _rlp_blend_for
-from .spot_stats import _spp_weighting_enabled
-from .synergrid import RlpWeights
-from .synergrid import SppWeights
-from collections.abc import Mapping
+from .spot_stats import (
+    _energy_is_rlp_indexed,
+    _injection_is_spp_indexed,
+    _injection_on_month_mean,
+    _rlp_blend_for,
+    _spp_weighting_enabled,
+)
+from .synergrid import RlpWeights, SppWeights
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
-from typing import Any
-from typing import cast
-from collections.abc import Iterator
+from typing import Any, cast
 from contextlib import contextmanager
 
 

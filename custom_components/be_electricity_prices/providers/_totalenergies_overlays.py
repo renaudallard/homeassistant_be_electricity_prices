@@ -33,23 +33,25 @@ regulator's calendar rather than the product's.
 
 from __future__ import annotations
 
-from ..const import DSO_SIBELGA
-from ..const import REGION_BRUSSELS
-from ..const import REGION_FLANDERS
-from ._parse import numeric_row
-from ._parse import parse_brussels_osp
-from ._parse import to_float
-from .base import DsoOverlay
-from .base import ExtractorError
-from .base import brussels_sibelga_overlay
-from .base import walloon_dso_overlay
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    FLUVIUS_CARD_LABELS,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+)
+from ._parse import numeric_row, parse_brussels_osp, to_float
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    brussels_sibelga_overlay,
+    walloon_dso_overlay,
+)
 import re
-from ..const import DSO_AIEG
-from ..const import DSO_AIESH
-from ..const import DSO_ORES
-from ..const import DSO_RESA
-from ..const import DSO_REW
-from ..const import FLUVIUS_CARD_LABELS
 
 
 def _extract_fee_and_renewables(text: str) -> tuple[float, float]:

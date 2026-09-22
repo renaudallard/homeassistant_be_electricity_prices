@@ -64,13 +64,8 @@ from ._pdf import (
     head_freshness_key,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, parse_sign, require_contract, to_float
 from ._validity import parse_valid_until
-from ._parse import (
-    parse_sign,
-    require_contract,
-    to_float,
-)
 from .base import (
     ExtractorError,
     SupplierExtractor,

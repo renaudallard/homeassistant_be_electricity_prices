@@ -36,7 +36,7 @@ from .brugel import cached_power_term
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_transient_fetch_error
-from .providers.base import CardNotReadableError
+from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
 
 import logging
 
@@ -46,9 +46,6 @@ from .const import (
     CONF_REGION,
     CONF_SUPPLIER,
     MEASURED_FULL_YEAR_DAYS,
-)
-from .providers.base import (
-    ExtractorError,
 )
 from .snapshot_store import (
     _SharedSnapshot,
@@ -72,8 +69,6 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-
-from .providers.base import SupplierSnapshot
 
 
 # A single failed fetch is almost always a transient CDN timeout that the

@@ -33,67 +33,70 @@ card", so the schemas carry the defaults rather than the steps.
 
 from __future__ import annotations
 
-from .const import CONF_CONTRACT
-from .const import CONF_CUSTOM_DSO_BRUSSELS_OSP
-from .const import CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR
-from .const import CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_ECO
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_PEAK
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_PIC
-from .const import CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE
-from .const import CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR
-from .const import CONF_CUSTOM_DSO_TRANSPORT
-from .const import CONF_CUSTOM_ENERGY_BASE
-from .const import CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT
-from .const import CONF_CUSTOM_ENERGY_FACTOR
-from .const import CONF_CUSTOM_ENERGY_OFFPEAK
-from .const import CONF_CUSTOM_ENERGY_PEAK
-from .const import CONF_CUSTOM_ENERGY_QUARTER_HOURLY
-from .const import CONF_CUSTOM_ENERGY_SINGLE
-from .const import CONF_CUSTOM_INJECTION_BASE
-from .const import CONF_CUSTOM_INJECTION_CURRENT
-from .const import CONF_CUSTOM_INJECTION_FACTOR
-from .const import CONF_CUSTOM_INJECTION_FLOOR
-from .const import CONF_CUSTOM_INJECTION_MODE
-from .const import CONF_CUSTOM_INJECTION_SPP_WEIGHTED
-from .const import CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION
-from .const import CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH
-from .const import CONF_CUSTOM_TAX_FEDERAL_EXCISE
-from .const import CONF_CUSTOM_TAX_REGIONAL_RENEWABLES
-from .const import CONF_CUSTOM_TAX_REGION_CONNECTION_FEE
-from .const import CONF_CUSTOM_VAT_RATE
-from .const import CONF_CUSTOM_YEARLY_FIXED_FEE
-from .const import CONF_DSO_TARIFF_MODE
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import CUSTOM_CONTRACT_DYNAMIC
-from .const import CUSTOM_CONTRACT_FIXED
-from .const import CUSTOM_CONTRACT_MONTHLY
-from .const import CUSTOM_INJECTION_MODES
-from .const import CUSTOM_INJECTION_MODE_CURRENT
-from .const import DEFAULT_CUSTOM_VAT_RATE
-from .const import DSO_MODE_IMPACT
-from .const import METER_BI
-from .const import METER_DYNAMIC
-from .const import METER_EXCLUSIVE_NIGHT
-from .const import METER_MONO
-from .const import REGION_BRUSSELS
-from .const import REGION_FLANDERS
-from .const import REGION_WALLONIA
-from homeassistant.helpers.selector import BooleanSelector
-from homeassistant.helpers.selector import NumberSelector
-from homeassistant.helpers.selector import NumberSelectorConfig
-from homeassistant.helpers.selector import NumberSelectorMode
-from homeassistant.helpers.selector import SelectSelector
-from homeassistant.helpers.selector import SelectSelectorConfig
-from homeassistant.helpers.selector import SelectSelectorMode
+from .const import (
+    CONF_CONTRACT,
+    CONF_CUSTOM_DSO_BRUSSELS_OSP,
+    CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
+    CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
+    CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+    CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
+    CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
+    CONF_CUSTOM_DSO_TRANSPORT,
+    CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_OFFPEAK,
+    CONF_CUSTOM_ENERGY_PEAK,
+    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+    CONF_CUSTOM_ENERGY_SINGLE,
+    CONF_CUSTOM_INJECTION_BASE,
+    CONF_CUSTOM_INJECTION_CURRENT,
+    CONF_CUSTOM_INJECTION_FACTOR,
+    CONF_CUSTOM_INJECTION_FLOOR,
+    CONF_CUSTOM_INJECTION_MODE,
+    CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
+    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
+    CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
+    CONF_CUSTOM_TAX_FEDERAL_EXCISE,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
+    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
+    CONF_CUSTOM_VAT_RATE,
+    CONF_CUSTOM_YEARLY_FIXED_FEE,
+    CONF_DSO_TARIFF_MODE,
+    CONF_METER,
+    CONF_REGION,
+    CUSTOM_CONTRACT_DYNAMIC,
+    CUSTOM_CONTRACT_FIXED,
+    CUSTOM_CONTRACT_MONTHLY,
+    CUSTOM_INJECTION_MODES,
+    CUSTOM_INJECTION_MODE_CURRENT,
+    DEFAULT_CUSTOM_VAT_RATE,
+    DSO_MODE_IMPACT,
+    METER_BI,
+    METER_DYNAMIC,
+    METER_EXCLUSIVE_NIGHT,
+    METER_MONO,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 from typing import Any
 import voluptuous as vol
-from .flow_schemas import _add_manual_num
-from .flow_schemas import _custom_num
+from .flow_schemas import _add_manual_num, _custom_num
 
 
 def _add_custom_num(

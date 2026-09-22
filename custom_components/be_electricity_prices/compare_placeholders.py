@@ -33,46 +33,48 @@ anything, so it lives away from the steps that do.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from homeassistant.config_entries import OptionsFlow
-from .const import CONF_API_KEY
-from .const import CONF_CONTRACT
-from .const import CONF_CONTRACT_START_DATE
-from .const import CONF_METER
-from .const import CONF_SUPPLIER
-from .const import DEFAULT_ANNUAL_CONSUMPTION_KWH
-from .const import METER_MONO
-from .const import SOLAR_REGIME_INJECTION
-from .const import SPOT_PRICED_CONTRACT_KINDS
-from .compare_quote import _annual_bill
-from .compare_quote import _annual_welcome_credit
-from .compare_table import _card_caveats
-from .compare_weighting import _compare_injection_credit
+from .const import (
+    CONF_API_KEY,
+    CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
+    CONF_METER,
+    CONF_SUPPLIER,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    METER_MONO,
+    SOLAR_REGIME_INJECTION,
+    SPOT_PRICED_CONTRACT_KINDS,
+)
+from .compare_quote import _annual_bill, _annual_welcome_credit, _ytd_welcome_credit
+from .compare_table import (
+    _card_caveats,
+    _populate_charts,
+    _solar_note,
+    _uncredited_note,
+    _vintage_note,
+    _whatif_note,
+)
+from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
 from .flow_contracts import _contract_kind
 from .cohort import _parse_iso_date
-from .compare_table import _populate_charts
-from .compare_table import _solar_note
-from .compare_weighting import _tou_weighted_per_kwh
-from .compare_table import _uncredited_note
-from .compare_table import _vintage_note
-from .compare_table import _whatif_note
-from .compare_quote import _ytd_welcome_credit
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from .providers import get as get_extractor
 from .compare_engine import _SweepEngine
-from .compare_inputs import _borrowed_spot_cache
-from .compare_inputs import _coordinator_rlp_index_weights
-from .compare_inputs import _coordinator_rlp_weights
-from .compare_inputs import _coordinator_spp_weights
-from .compare_inputs import _kva
-from .compare_inputs import _label_for_contract
-from .compare_inputs import _label_for_supplier
-from .compare_inputs import _quote_entry
-from .compare_inputs import _target_dso_mode
-from .compare_inputs import _settlement_of
+from .compare_inputs import (
+    _borrowed_spot_cache,
+    _coordinator_rlp_index_weights,
+    _coordinator_rlp_weights,
+    _coordinator_spp_weights,
+    _kva,
+    _label_for_contract,
+    _label_for_supplier,
+    _quote_entry,
+    _settlement_of,
+    _target_dso_mode,
+)
 from collections.abc import Mapping
-from typing import Any
 
 
 class _PlaceholdersMixin(OptionsFlow):

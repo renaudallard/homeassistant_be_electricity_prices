@@ -33,74 +33,78 @@ tick answers from the cache and finishes the slow walks afterwards.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from typing import Any
-from .const import CONF_CONTRACT
-from .const import CONF_DSO
-from .const import CONF_DSO_TARIFF_MODE
-from .const import CONF_METER
-from .const import CONF_REGION
-from .const import CONF_SOLAR_REGIME
-from .const import CONF_SUPPLIER
-from .coordinator_data import CoordinatorData
-from .const import DOMAIN
-from .const import DSO_MODE_BI_HORAIRE
-from .providers import DynamicRates
+from .const import (
+    CONF_CONTRACT,
+    CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
+    CONF_METER,
+    CONF_REGION,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    DOMAIN,
+    DSO_MODE_BI_HORAIRE,
+    METER_MONO,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    RESOLUTION_HOURLY,
+    RESOLUTION_QUARTER,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
+    SUPPLIER_CUSTOM,
+)
+from .coordinator_data import CoordinatorData, month_window_start
+from .providers import (
+    DynamicRates,
+    SpotMonthlyRates,
+    SupplierSnapshot,
+    get as get_extractor,
+)
 from .providers._rates import EnergyRates
-from .api import EntsoeAuthError
-from .api import EntsoeError
+from .api import EntsoeAuthError, EntsoeError
 from collections.abc import Iterable
-from .const import METER_MONO
-from .pricing import PriceBreakdown
-from .const import REGION_BRUSSELS
-from .const import REGION_FLANDERS
-from .const import RESOLUTION_HOURLY
-from .const import RESOLUTION_QUARTER
+from .pricing import (
+    PriceBreakdown,
+    compute_breakdown,
+    static_breakdown,
+    yearly_fixed_fee_for_meter,
+)
 from .snapshot_store import SNAPSHOT_STALE_DAYS
-from .const import SOLAR_REGIME_COMPENSATION
-from .const import SOLAR_REGIME_INJECTION
-from .const import SUPPLIER_CUSTOM
-from .providers import SpotMonthlyRates
-from .providers import SupplierSnapshot
-from datetime import UTC
+from datetime import UTC, date, datetime, timedelta
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from .injection import _bake_monthly_injection
-from .cohort import _cohort_legs
-from .fees import _compute_capacity
+from .injection import (
+    _bake_monthly_injection,
+    _compute_injection_price,
+    _injection_hourly_on_cohort,
+    _injection_needs_month_spot,
+    _injection_needs_spot,
+    _injection_price_for_slot,
+    _injection_varies_intraday,
+)
+from .cohort import (
+    _cohort_legs,
+    _effective_snapshot_for_month,
+    signing_month_snapshot,
+    ytd_window_start,
+)
+from .fees import _compute_capacity, _compute_prosumer
 from .ytd_cost import _compute_current_year_cost
-from .injection import _compute_injection_price
 from .projected_cost import _compute_projected_year_cost
-from .fees import _compute_prosumer
-from .cohort import _effective_snapshot_for_month
-from .spot_stats import _energy_is_quarter_hourly
-from .spot_stats import _energy_is_rlp_indexed
-from .injection import _injection_hourly_on_cohort
-from .spot_stats import _injection_is_spp_indexed
-from .injection import _injection_needs_month_spot
-from .injection import _injection_needs_spot
-from .spot_stats import _injection_on_month_mean
-from .injection import _injection_price_for_slot
-from .injection import _injection_varies_intraday
-from .spot_stats import _rlp_blend_for
-from .spot_stats import _spp_weighting_enabled
+from .spot_stats import (
+    _energy_is_quarter_hourly,
+    _energy_is_rlp_indexed,
+    _injection_is_spp_indexed,
+    _injection_on_month_mean,
+    _rlp_blend_for,
+    _spp_weighting_enabled,
+)
 from .snapshot_months import archived_months_present
 import asyncio
-from .pricing import compute_breakdown
-from datetime import date
-from datetime import datetime
 from homeassistant.util import dt as dt_util
 from .brugel import ensure_power_term
-from .providers import get as get_extractor
-from .coordinator_data import month_window_start
 from dataclasses import replace
-from .cohort import signing_month_snapshot
-from .pricing import static_breakdown
-from datetime import timedelta
-from .pricing import yearly_fixed_fee_for_meter
-from .cohort import ytd_window_start
-from .synergrid import RlpWeights
-from .synergrid import SppWeights
+from .synergrid import RlpWeights, SppWeights
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import aiohttp
