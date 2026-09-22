@@ -2711,10 +2711,24 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
     assert _fails(welcome_credit_eur=0.159)
     assert _fails(welcome_credit_eur_per_kwh=0.00010388)
     assert _fails(welcome_credit_kwh=0.75)
-    # The supplement cannot share the flat ceiling: its largest real value is
-    # 42,40, so 2.000 sits 47 times above it and a x10 slip would pass.
-    assert _fails(welcome_credit_direct_debit_eur=424.0) == []
-    assert _fails(welcome_credit_direct_debit_eur=4240.0)
+    # Every fence used to sit exactly ten times from the figure it was sized
+    # on while the comparison included the fence, so that very slip passed:
+    # 15,00 read as 1,50, 750 kWh as 75, 200,00 as 2.000. The per-kWh floor
+    # let 0,003 / 10 through on float rounding, and the supplement's own
+    # ceiling of 500 let its slip, 42,40 read as 424, through outright. Each
+    # extreme the archive holds must pass, and ten times off it must not.
+    extremes = {
+        "welcome_credit_eur": (15.0, 300.0),
+        "welcome_credit_eur_per_kwh": (0.003, 0.10388),
+        "welcome_credit_direct_debit_eur": (5.0, 42.4),
+        "welcome_credit_kwh": (750.0, 750.0),
+    }
+    for field, (smallest, largest) in extremes.items():
+        assert not _fails(**{field: smallest}), field
+        assert not _fails(**{field: largest}), field
+        assert _fails(**{field: smallest / 10}), field
+        assert _fails(**{field: largest * 10}), field
+    assert _fails(welcome_credit_cap_eur=848.0 * 10)
 
     # Zero is exempt, because zero is no credit rather than a small one, and a
     # card granting none does not always say so with None: EnergyVision's

@@ -3377,14 +3377,16 @@ def _validate_snapshot(
 
 
 # Bounds for the welcome credit, sized on the unit slip each one catches and
-# not on what any card happens to grant. A flat credit of 2.000 EUR is ten
-# times Mega's largest; a per-kWh leg of 1 EUR/kWh is ten times an energy
-# rate; a share above 1 is a percentage that was never divided by a hundred,
-# which is the slip that turns 33% into 3.300%; and 10.000 kWh of free energy
-# is ten times the largest cashback printed.
-_MAX_WELCOME_CREDIT_EUR: float = 2000.0
-_MAX_WELCOME_CREDIT_PER_KWH: float = 1.0
-_MAX_WELCOME_CREDIT_KWH: float = 10_000.0
+# not on what any card happens to grant. Each fence sits five times past the
+# largest figure the archive holds, or a fifth under the smallest: a x10 slip
+# then lands twice beyond it whichever way the float rounds, and a supplier
+# moving an offer by less than that does not trip it. The fences used to sit
+# exactly ten times out, and the comparison includes the fence, so that very
+# slip passed. A share above 1 is a percentage that was never divided by a
+# hundred, the slip that turns 33% into 3.300%.
+_MAX_WELCOME_CREDIT_EUR: float = 1500.0  # EnergyVision's 300,00
+_MAX_WELCOME_CREDIT_PER_KWH: float = 0.5194  # Mega's 0,10388
+_MAX_WELCOME_CREDIT_KWH: float = 3750.0  # Luminus's 750 kWh
 # Not a unit slip: the longest wait the year-ahead quote reaches, filled from
 # const.MAX_QUOTED_WELCOME_WAIT_MONTHS by the loader. A card stating a longer
 # one is quoted no credit at all, which nothing else would notice.
@@ -3395,21 +3397,20 @@ _MAX_WELCOME_CREDIT_MONTHS: int = 14
 # money the household silently does not get, which is the loss this gate exists
 # to catch and the one the upper bounds cannot see.
 #
-# A tenth of the smallest figure any card prints, so a x10 slip trips and a
-# supplier genuinely cutting an offer does not: the smallest flat credit on the
-# fleet is 15,00 EUR, the smallest per-kWh leg 0,003, the smallest volume 750
-# kWh. Zero is exempt, because zero is not a small credit but no credit, and a
+# A fifth of the smallest figure any card prints: the smallest flat credit on
+# the fleet is 15,00 EUR, the smallest per-kWh leg 0,003, the smallest volume
+# 750 kWh. Zero is exempt, because zero is not a small credit but no credit, and a
 # card granting none does NOT always say so with None: EnergyVision's 3-year
 # fixed card carries a flat credit of exactly 0,0. Checked against all 1.689
 # archived rows before shipping the floor, which is how that card was found
 # and how a nightly issue about it was avoided.
-_MIN_WELCOME_CREDIT_EUR: float = 1.5
-_MIN_WELCOME_CREDIT_PER_KWH: float = 0.0003
-_MIN_WELCOME_CREDIT_KWH: float = 75.0
+_MIN_WELCOME_CREDIT_EUR: float = 3.0
+_MIN_WELCOME_CREDIT_PER_KWH: float = 0.0006
+_MIN_WELCOME_CREDIT_KWH: float = 150.0
 # The supplement is the one field that cannot share the flat ceiling: its
-# largest real value is 42,40, so 2.000 sits 47 times above it and a x10 slip
-# passes. Bounded on its own scale.
-_MAX_WELCOME_SUPPLEMENT_EUR: float = 500.0
+# largest real value is 42,40, a thirty-fifth of the flat fence, so a x10 slip
+# would pass there. Five times its own largest.
+_MAX_WELCOME_SUPPLEMENT_EUR: float = 212.0
 
 
 def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
