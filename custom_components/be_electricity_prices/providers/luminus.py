@@ -430,25 +430,11 @@ def _extract_promo(text: str) -> dict[str, object]:
     whether an existing customer gets it too.
     """
     flat = re.sub(r"\s+", " ", text)
-    # Each anchor with the gate that FOLLOWS it, and the first pair stating an
-    # amount wins. A card can carry more than one of these sentences: April's
-    # Comfy prints a flat "remise de 60,00 EUR TVA incl." at 1.283 and the
-    # percentage campaign at 12.513, each with its own gate. Taking the first
-    # gate on the card and the first anchor before it pairs the two sentences
-    # across each other, and because the first gate is curly and the second
-    # straight, a plain string search for one form skipped the near gate and
-    # scoped the campaign from 1.283 to 12.723: the whole card, which pulls
-    # both standing loyalty clauses and their exclusive-night exclusion inside
-    # it. Only word order kept a 5% loyalty discount from being read as the
-    # campaign.
+    # The curly apostrophe matters as much as the pairing: April's Comfy closes
+    # its flat sentence with a curly gate and its percentage one with a
+    # straight gate, so a plain string search for one form skipped the near
+    # gate entirely and scoped the campaign across 11.512 characters.
     #
-    # A card may run more than one campaign at once, and April's Comfy does:
-    # 60,00 EUR flat at 1.283 and 11% of the energy cost at 12.513, both
-    # naming the same product and the same signing month, so they are two
-    # benefits rather than one stated twice. The snapshot holds one field per
-    # shape and the credit engine adds a flat leg to a per-kWh one, so the
-    # union is what the card grants. First of each shape wins, which is the
-    # only reading that cannot double-count a card repeating itself.
     # ONE sentence supplies everything: the amount, the payout wording, the
     # wait and the night exclusion. A card can carry two of these sentences,
     # and April's Comfy does (60,00 EUR flat at 1.283, 11% of the energy cost
@@ -460,14 +446,28 @@ def _extract_promo(text: str) -> dict[str, object]:
     # The percentage and volume shapes are preferred where a card states one,
     # because they are the shapes that ride a year and carry the exclusions.
     # A card whose only campaign is a flat amount is read on its own terms.
+    # Each GATE with the LAST anchor before it, not each anchor with the next
+    # gate. An anchor whose own sentence carries no gate would otherwise borrow
+    # the next sentence's, and its span then runs across everything between the
+    # two: on real wording that reads the standing "remise de 5 %" loyalty
+    # clause as the campaign where the card grants 33%, 215,99 EUR a year on a
+    # 3.500 kWh Comfy, and picks up that clause's exclusive-night exclusion on
+    # the way, which takes a night-metered household to nothing. Pairing from
+    # the gate backwards cannot span a sentence boundary that way, because the
+    # nearest anchor is by definition the one the gate belongs to.
+    starts = [m.start() for m in _PROMO_ANCHOR_RE.finditer(flat)]
+    spans: list[tuple[int, str]] = []
+    for gate_at in _PROMO_GATE_RE.finditer(flat):
+        before = [s for s in starts if s < gate_at.start()]
+        if not before:
+            continue
+        start = before[-1]
+        spans.append((start, flat[start : flat.find(".", gate_at.start()) + 1]))
+
     sentence = payout = ""
     pct = kwh = eur = None
     for want_flat in (False, True):
-        for anchor in _PROMO_ANCHOR_RE.finditer(flat):
-            gate_at = _PROMO_GATE_RE.search(flat, anchor.end())
-            if gate_at is None:
-                continue
-            span = flat[anchor.start() : flat.find(".", gate_at.start()) + 1]
+        for start, span in spans:
             found_pct = _PROMO_PCT_RE.search(span)
             found_kwh = _PROMO_KWH_RE.search(span)
             found_eur = _PROMO_EUR_RE.search(span)
@@ -478,7 +478,7 @@ def _extract_promo(text: str) -> dict[str, object]:
                 continue
             pct, kwh, eur = found_pct, found_kwh, found_eur
             sentence = span
-            payout = flat[anchor.start() + len(span) :][:240]
+            payout = flat[start + len(span) :][:240]
             break
         if sentence:
             break

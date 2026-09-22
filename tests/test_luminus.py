@@ -862,3 +862,38 @@ def test_a_campaign_stated_only_in_euro_is_read() -> None:
     assert april["welcome_credit_pct_of_energy"] == pytest.approx(0.11)
     assert april["welcome_credit_kind"] == "pro_rata"
     assert "welcome_credit_eur" not in april
+
+
+def test_an_anchor_without_a_gate_cannot_borrow_the_next_sentence_s() -> None:
+    """Pairing each anchor with the gate that FOLLOWS it lets an anchor whose
+    own sentence carries no gate borrow the next sentence's, and the span then
+    runs across everything between the two.
+
+    The scope rule was narrowed from "the whole card" to "whatever sits between
+    an anchor and the next gate", which is smaller and still wrong: on this
+    text, real wording throughout, the loyalty clause's 5% is the first
+    percentage in the borrowed span, so the card grants 33% and 5% is read.
+    215,99 EUR a year on a 3.500 kWh Comfy, and the loyalty clause's own
+    exclusive-night exclusion comes with it, taking a night-metered household
+    to nothing.
+
+    Pairing each GATE with the LAST anchor before it cannot cross a sentence
+    boundary, because the nearest anchor is the one the gate belongs to.
+    """
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    card = (
+        "En tant que nouveau client, 12 mois apres la date de debut, une "
+        "remise de 5 % sur les couts energetiques, non-valable sur un compteur "
+        "exclusif nuit, applicable pendant 12 mois au pro rata de la "
+        "consommation de votre 2e annee "
+        "(***) En tant que nouveau client, vous beneficiez d'une remise de 33% "
+        "sur les couts energetiques pendant 12 mois pour la conclusion d'un "
+        "contrat Luminus Comfy Electricite en septembre 2026."
+    )
+    promo = _extract_promo(card)
+    assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.33)
+    # The loyalty clause's exclusion is not the campaign's.
+    assert "welcome_credit_excludes_night_meter" not in promo
