@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one

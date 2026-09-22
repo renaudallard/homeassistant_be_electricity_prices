@@ -57,7 +57,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Protocol
 
 import aiohttp
 
@@ -490,12 +489,6 @@ class SupplierExtractor:
         for c in self.contracts:
             out |= c.regions
         return frozenset(out)
-
-
-class SupplierProtocol(Protocol):
-    """Each supplier module must expose a top-level ``EXTRACTOR`` of this shape."""
-
-    EXTRACTOR: SupplierExtractor
 
 
 class ExtractorError(Exception):
