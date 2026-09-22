@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from custom_components.be_electricity_prices import (
     compare_household,
-    compare_placeholders,
     snapshot_resolve,
 )
 from custom_components.be_electricity_prices.compare_table import RankedRow
@@ -7088,42 +7087,17 @@ def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:
     into the first year that is about 141 EUR missing from a figure printed
     next to figures that have it.
 
-    Read from the source, like its sibling above, so a tenth call added later
-    is held to the same rule rather than to whoever remembers.
+    Read from the source of every compare module, like its sibling above, so
+    a tenth call added later is held to the same rule rather than to whoever
+    remembers, wherever a split puts it.
     """
-    import ast
-    import inspect
+    from tests import compare_page_calls
 
-    from custom_components.be_electricity_prices import (
-        compare_engine,
-        compare_flow,
-        compare_household,
-        compare_sweep_flow,
-    )
-
-    tree = ast.parse(
-        "\n".join(
-            inspect.getsource(m)
-            for m in (
-                compare_flow,
-                compare_engine,
-                compare_household,
-                compare_placeholders,
-                compare_sweep_flow,
-            )
-        )
-    )
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_annual_bill"
-    ]
+    calls = compare_page_calls("_annual_bill")
     assert calls, "the compare page must still price a bill somewhere"
-    for call in calls:
+    for name, call in calls:
         assert "welcome_credit_eur" in {kw.arg for kw in call.keywords}, (
-            f"_annual_bill call at line {call.lineno} omits welcome_credit_eur"
+            f"_annual_bill call at {name}:{call.lineno} omits welcome_credit_eur"
         )
 
 
@@ -7452,15 +7426,7 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     for a card that names a different one is the mispricing this argument was
     added to fix.
     """
-    import ast
-    import inspect
-
-    from custom_components.be_electricity_prices import (
-        compare_engine,
-        compare_flow,
-        compare_household,
-        compare_sweep_flow,
-    )
+    from tests import compare_page_calls
 
     required = {
         "historical_spots",
@@ -7470,31 +7436,13 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
         "rlp_index_weights",
         "spp_weights",
     }
-    tree = ast.parse(
-        "\n".join(
-            inspect.getsource(m)
-            for m in (
-                compare_flow,
-                compare_engine,
-                compare_household,
-                compare_placeholders,
-                compare_sweep_flow,
-            )
-        )
-    )
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_compute_current_year_cost"
-    ]
+    calls = compare_page_calls("_compute_current_year_cost")
     assert calls, "the compare page must still price a year-to-date somewhere"
-    for call in calls:
+    for name, call in calls:
         passed = {kw.arg for kw in call.keywords}
         missing = required - passed
         assert not missing, (
-            f"_compute_current_year_cost call at line {call.lineno} omits {missing}"
+            f"_compute_current_year_cost call at {name}:{call.lineno} omits {missing}"
         )
 
 

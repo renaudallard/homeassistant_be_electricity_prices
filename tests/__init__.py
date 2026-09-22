@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import ast
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -56,6 +57,40 @@ from custom_components.be_electricity_prices.providers._rates import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+PACKAGE = (
+    Path(__file__).resolve().parent.parent
+    / "custom_components"
+    / ("be_electricity_prices")
+)
+
+
+def compare_page_sources() -> dict[str, str]:
+    """The source of every ``compare_*.py`` module, keyed by file name.
+
+    The compare page's source guards read the whole family through this
+    rather than a list of modules: a list goes stale the moment a split moves
+    code into a new file, which the 0.27.5 split did with compare_inputs.py,
+    and a guard that stops reading a file keeps passing while it covers less.
+    """
+    return {
+        path.name: path.read_text(encoding="utf-8")
+        for path in sorted(PACKAGE.glob("compare_*.py"))
+    }
+
+
+def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
+    """Every call to ``function`` in the compare modules, with its file name.
+
+    Read off the syntax tree, so the function's own definition and a docstring
+    that names it are not taken for calls, while a call inside an f-string is.
+    """
+    return [
+        (name, node)
+        for name, source in compare_page_sources().items()
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and getattr(node.func, "id", getattr(node.func, "attr", None)) == function
+    ]
 
 
 @lru_cache(maxsize=None)

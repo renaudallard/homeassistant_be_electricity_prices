@@ -1190,51 +1190,19 @@ def test_every_annual_row_on_the_page_clamps_per_register() -> None:
 
     Source-level on purpose. The defect was a call site nobody passed the
     argument at, so what has to be pinned is that no call site is missed
-    again, not the arithmetic of any one of them.
+    again, not the arithmetic of any one of them, in any compare module.
     """
-    import inspect
-    import re
+    from tests import compare_page_calls
 
-    from custom_components.be_electricity_prices import (
-        compare_engine,
-        compare_flow,
-        compare_household,
-        compare_placeholders,
-        compare_sweep_flow,
-    )
-
-    source = "\n".join(
-        inspect.getsource(m)
-        for m in (
-            compare_flow,
-            compare_engine,
-            compare_household,
-            compare_placeholders,
-            compare_sweep_flow,
-        )
-    )
-    calls = [m.start() for m in re.finditer(r"\b_annual_bill\(", source)]
+    calls = compare_page_calls("_annual_bill")
     assert calls, "the page no longer prices rows through _annual_bill"
-
-    missing = []
-    for start in calls:
-        # Each call ends at the matching close paren; scan with a depth count
-        # so a nested call cannot end it early.
-        depth, i = 0, source.index("(", start)
-        while i < len(source):
-            if source[i] == "(":
-                depth += 1
-            elif source[i] == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            i += 1
-        body = source[start:i]
-        if "register_weights=" not in body:
-            missing.append(source[:start].count("\n") + 1)
-
+    missing = [
+        f"{name}:{call.lineno}"
+        for name, call in calls
+        if "register_weights" not in {kw.arg for kw in call.keywords}
+    ]
     assert not missing, (
         f"{len(missing)} of {len(calls)} _annual_bill calls on the compare page "
         f"pass no register_weights, so those rows are netted and clamped once: "
-        f"lines {missing}"
+        f"{missing}"
     )

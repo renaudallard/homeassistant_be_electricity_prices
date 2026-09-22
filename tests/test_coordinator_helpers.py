@@ -5758,28 +5758,33 @@ def test_every_selector_translation_key_names_a_selector_block() -> None:
     labels shows users the raw enum values. The compare supplier picker named
     `supplier` for a year while no such block existed, and the docs listed it
     among the keys that resolve.
+
+    Read off every SelectSelectorConfig in the package rather than three named
+    modules: the 0.27.5 split moved one into flow_schemas_custom.py, out of
+    the list's sight.
     """
-    import inspect
-    import pathlib
-    import re
+    import ast
 
-    from custom_components.be_electricity_prices import (
-        compare_flow,
-        config_flow,
-        flow_schemas,
-    )
+    from tests import PACKAGE
 
-    base = pathlib.Path(__file__).resolve().parent.parent / (
-        "custom_components/be_electricity_prices"
-    )
-    blocks = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))[
+    blocks = json.loads((PACKAGE / "strings.json").read_text(encoding="utf-8"))[
         "selector"
     ]
-    named = {
-        key
-        for module in (compare_flow, config_flow, flow_schemas)
-        for key in re.findall(r'translation_key="([^"]+)"', inspect.getsource(module))
-    }
+    named: set[str] = set()
+    for path in PACKAGE.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", getattr(node.func, "attr", None))
+                == "SelectSelectorConfig"
+            ):
+                named |= {
+                    kw.value.value
+                    for kw in node.keywords
+                    if kw.arg == "translation_key"
+                    and isinstance(kw.value, ast.Constant)
+                    and isinstance(kw.value.value, str)
+                }
     assert named, "no select selector names a translation key any more"
     assert named <= set(blocks), sorted(named - set(blocks))
 
@@ -6303,26 +6308,9 @@ def test_the_one_to_one_page_prices_the_raw_card_not_the_spliced_one() -> None:
     1:1 page's site could be reverted to ``current_snapshot`` with nothing
     failing, and it is the one the commit is named after.
     """
-    import inspect
+    from tests import compare_page_sources
 
-    from custom_components.be_electricity_prices import (
-        compare_engine,
-        compare_flow,
-        compare_household,
-        compare_placeholders,
-        compare_sweep_flow,
-    )
-
-    source = "\n".join(
-        inspect.getsource(m)
-        for m in (
-            compare_flow,
-            compare_engine,
-            compare_household,
-            compare_placeholders,
-            compare_sweep_flow,
-        )
-    )
+    source = "\n".join(compare_page_sources().values())
     site = source.index("The RAW card, which is what the coordinator hands the")
     # The snapshot argument sits between that comment and the entry beside it.
     argument = source[site : source.index("quote_entry,", site)]
