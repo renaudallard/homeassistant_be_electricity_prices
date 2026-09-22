@@ -4067,6 +4067,41 @@ async def test_prosumer_gap_is_silent_outside_the_compensation_regime(
     )
 
 
+def test_every_repair_is_invoked_by_the_coordinator() -> None:
+    """Each repair has a test that calls its ``_sync_*`` method directly, so
+    deleting the CALL from the coordinator changes nothing any of them sees.
+    Mutation measured that: every leaf of the last batch was guarded and every
+    gap was a call site, and this is the widest instance, nine repairs.
+
+    A repair nothing invokes raises nothing, and the entry then bills the gap in
+    silence, which is the state each of these cards exists to end. Held on the
+    source because the wiring is the whole claim; the individual behaviours are
+    covered where each method is tested.
+    """
+    import inspect
+    import pathlib as _pathlib
+
+    from custom_components.be_electricity_prices import coordinator_issues
+
+    pkg = _pathlib.Path(inspect.getfile(coordinator_issues)).parent
+    called = "".join(
+        (pkg / name).read_text()
+        for name in ("coordinator.py", "coordinator_snapshot.py", "coordinator_peak.py")
+    )
+    defined = {
+        name
+        for name in dir(coordinator_issues._IssuesMixin)
+        if name.startswith("_sync_") and name.endswith("_issue")
+    } - {"_sync_issue"}
+    assert len(defined) >= 9, f"expected the whole family, found {sorted(defined)}"
+
+    # ``self.<name>(``, not ``()``: four of them take an argument.
+    missing = sorted(n for n in defined if f"self.{n}(" not in called)
+    assert missing == [], (
+        f"these repairs are defined and never invoked in production: {missing}"
+    )
+
+
 async def test_a_tick_that_changed_nothing_writes_nothing(
     hass: HomeAssistant,
 ) -> None:
