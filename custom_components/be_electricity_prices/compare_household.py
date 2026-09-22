@@ -48,7 +48,6 @@ from .const import CONF_WHATIF_CONSUMPTION_KWH
 from .const import CONF_WHATIF_INJECTION_KWH
 from homeassistant.config_entries import ConfigEntry
 from .const import DSO_MODE_BI_HORAIRE
-from .const import DSO_MODE_IMPACT
 from .const import MEASURED_FULL_YEAR_DAYS
 from .const import METER_DYNAMIC
 from .const import METER_MONO
@@ -94,6 +93,7 @@ from .compare_inputs import _label_for_supplier
 from .compare_inputs import _months_billed
 from .compare_inputs import _needs_month_mean
 from .compare_inputs import _quote_entry
+from .compare_inputs import _target_dso_mode
 from .compare_inputs import _settlement_of
 from homeassistant.core import HomeAssistant
 import logging
@@ -151,7 +151,7 @@ class _HouseholdMixin:
         meter: MeterType = (
             METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
         )
-        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
+        dso_mode = _target_dso_mode(kind, hh.dso_mode)
         target_entry = _quote_entry(
             self.config_entry,
             hh.regime,
@@ -258,29 +258,6 @@ class _HouseholdMixin:
             current[CONF_CONTRACT],
             quarter_hourly=_settlement_of(self.config_entry.data),
         )
-        # A Tarif Impact product is sold only on the CWaPE incitative
-        # configuration: its energy carries three band rates and no
-        # mono/bi structure at all, so the band schedule prices it whatever
-        # the household is on, while the network leg and the Walloon terme
-        # fixe both follow the mode. Quoting the TARGET on the household's
-        # own mode therefore banded its energy, billed its network off the
-        # standard jour/nuit columns and charged it a fixed term the tariff
-        # does not have. The install flow forces the mode for exactly this
-        # reason; mirror it here, for the target only, the same way the
-        # meter override applies to the target only.
-        #
-        # Gated on the registered kind, which deliberately leaves
-        # totalenergies_impact out: it is registered "variable" and its impact
-        # bands are read only in impact mode, so a household on the standard
-        # configuration quoting it still bills the target's network leg on the
-        # jour/nuit columns, worth about EUR 29/yr on a bi meter and EUR 113 on
-        # a mono one. Not forced, for the reason the comment on
-        # _IMPACT_DEFAULT_CONTRACTS in flow_schemas.py gives: the TE card states only that a
-        # communicating digital meter is required, so a holder on the standard
-        # configuration genuinely exists and forcing would under-bill them by
-        # the same amount in the other direction. The install flow pre-selects
-        # the mode for that card and lets the user say otherwise, which is the
-        # decision this flow has no step to ask about.
         # A spot-indexed-injection side (Cociter Variable) prices its feed-in
         # credit off the hourly day-ahead even though its energy kind is
         # "variable", so it needs spots just like a dynamic side. Asked across

@@ -43,6 +43,7 @@ from .const import CONF_SOLAR_KVA
 from .const import CONF_SOLAR_REGIME
 from .const import CONF_SUPPLIER
 from .const import DSO_MODE_BI_HORAIRE
+from .const import DSO_MODE_IMPACT
 from .const import METER_MONO
 from .const import SOLAR_REGIME_NONE
 from .injection import _injection_needs_spot
@@ -313,6 +314,34 @@ def _months_billed(start: date, today: date) -> float:
         total += ((billed_to - cur).days + 1) / (next_first - first).days
         cur = next_first
     return total
+
+
+def _target_dso_mode(kind: str, dso_mode: str) -> str:
+    """The DSO billing mode a compare TARGET is quoted on.
+
+    A Tarif Impact product is sold only on the CWaPE incitative configuration:
+    its energy carries three band rates and no mono/bi structure at all, so the
+    band schedule prices it whatever the household is on, while the network leg
+    and the Walloon terme fixe both follow the mode. Quoting the target on the
+    household's own mode therefore banded its energy, billed its network off
+    the standard jour/nuit columns and charged it a fixed term the tariff does
+    not have. The install flow forces the mode for exactly this reason; this
+    mirrors it, for the target only, the same way the meter override applies
+    to the target only.
+
+    Gated on the registered kind, which deliberately leaves
+    totalenergies_impact out: it is registered "variable" and its impact bands
+    are read only in impact mode, so a household on the standard configuration
+    quoting it still bills the target's network leg on the jour/nuit columns,
+    worth about EUR 29/yr on a bi meter and EUR 113 on a mono one. Not forced,
+    for the reason the comment on _IMPACT_DEFAULT_CONTRACTS in flow_schemas.py
+    gives: the TE card states only that a communicating digital meter is
+    required, so a holder on the standard configuration genuinely exists and
+    forcing would under-bill them by the same amount in the other direction.
+    The install flow pre-selects the mode for that card and lets the user say
+    otherwise, which is the decision the compare flow has no step to ask about.
+    """
+    return DSO_MODE_IMPACT if kind == "tou_impact" else dso_mode
 
 
 def _quote_entry(
