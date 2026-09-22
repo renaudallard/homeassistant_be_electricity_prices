@@ -50,15 +50,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-
-if TYPE_CHECKING:
-    # Only for annotations: the recorder models are imported inside the
-    # functions that use them, so the module still loads without a recorder.
-    pass
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util import dt as dt_util
 
