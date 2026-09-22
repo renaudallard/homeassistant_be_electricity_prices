@@ -66,12 +66,12 @@
       },
       "direct_debit": {
         "title": "Domiciliation",
-        "description": "Votre fournisseur applique une redevance fixe annuelle réduite lorsque la facture est payée par domiciliation.",
+        "description": "Certaines cartes tarifaires appliquent un prix différent selon que le ménage paie par domiciliation ou non.",
         "data": {
           "direct_debit": "Je paie par domiciliation"
         },
         "data_description": {
-          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une réduction. Brusol Groene stroom : 250 EUR par an, 230 en domiciliation. Rien d'autre ne change sur la facture."
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce qu'elle déplace dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur Brusol Groene stroom c'est la redevance fixe annuelle, 250 EUR par an contre 230."
         }
       },
       "dso_tariff_mode": {
@@ -371,12 +371,12 @@
       },
       "direct_debit": {
         "title": "Domiciliation",
-        "description": "Votre fournisseur applique une redevance fixe annuelle réduite lorsque la facture est payée par domiciliation.",
+        "description": "Certaines cartes tarifaires appliquent un prix différent selon que le ménage paie par domiciliation ou non.",
         "data": {
           "direct_debit": "Je paie par domiciliation"
         },
         "data_description": {
-          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une réduction. Brusol Groene stroom : 250 EUR par an, 230 en domiciliation. Rien d'autre ne change sur la facture."
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce qu'elle déplace dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur Brusol Groene stroom c'est la redevance fixe annuelle, 250 EUR par an contre 230."
         }
       },
       "dso_tariff_mode": {

@@ -66,12 +66,12 @@
       },
       "direct_debit": {
         "title": "Direct debit",
-        "description": "Your supplier charges a lower yearly standing charge when the invoice is paid by direct debit.",
+        "description": "Some tariff cards price a household that pays by direct debit differently.",
         "data": {
           "direct_debit": "I pay by direct debit"
         },
         "data_description": {
-          "direct_debit": "Only shown where the tariff card states a reduction. Brusol Groene stroom: 250 EUR a year, 230 on direct debit. Nothing else on the bill changes."
+          "direct_debit": "Only shown where the tariff card states a difference, and what it moves depends on the card. On Mega's seventeen products it is the welcome ristourne: four grant the whole of it to a direct-debit payer alone, the rest add a supplement. On Brusol Groene stroom it is the yearly standing charge instead, 250 EUR a year against 230."
         }
       },
       "dso_tariff_mode": {
@@ -371,12 +371,12 @@
       },
       "direct_debit": {
         "title": "Direct debit",
-        "description": "Your supplier charges a lower yearly standing charge when the invoice is paid by direct debit.",
+        "description": "Some tariff cards price a household that pays by direct debit differently.",
         "data": {
           "direct_debit": "I pay by direct debit"
         },
         "data_description": {
-          "direct_debit": "Only shown where the tariff card states a reduction. Brusol Groene stroom: 250 EUR a year, 230 on direct debit. Nothing else on the bill changes."
+          "direct_debit": "Only shown where the tariff card states a difference, and what it moves depends on the card. On Mega's seventeen products it is the welcome ristourne: four grant the whole of it to a direct-debit payer alone, the rest add a supplement. On Brusol Groene stroom it is the yearly standing charge instead, 250 EUR a year against 230."
         }
       },
       "dso_tariff_mode": {

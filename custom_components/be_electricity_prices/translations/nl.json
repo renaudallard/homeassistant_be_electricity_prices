@@ -66,12 +66,12 @@
       },
       "direct_debit": {
         "title": "Domiciliëring",
-        "description": "Je leverancier rekent een lagere jaarlijkse vaste vergoeding aan wanneer de factuur via domiciliëring betaald wordt.",
+        "description": "Sommige tariefkaarten rekenen een gezin dat met domiciliëring betaalt anders aan.",
         "data": {
           "direct_debit": "Ik betaal via domiciliëring"
         },
         "data_description": {
-          "direct_debit": "Wordt enkel getoond wanneer de tariefkaart een korting vermeldt. Brusol Groene stroom: 250 EUR per jaar, 230 met domiciliëring. Er verandert niets anders aan je factuur."
+          "direct_debit": "Wordt enkel getoond wanneer de tariefkaart een verschil vermeldt, en wat het verschuift hangt van de kaart af. Bij de zeventien producten van Mega gaat het om de welkomstkorting: vier kennen ze alleen aan een domiciliëringsbetaler toe, de rest legt er een supplement bovenop. Bij Brusol Groene stroom is het de jaarlijkse vaste vergoeding, 250 EUR per jaar tegenover 230."
         }
       },
       "dso_tariff_mode": {
@@ -371,12 +371,12 @@
       },
       "direct_debit": {
         "title": "Domiciliëring",
-        "description": "Je leverancier rekent een lagere jaarlijkse vaste vergoeding aan wanneer de factuur via domiciliëring betaald wordt.",
+        "description": "Sommige tariefkaarten rekenen een gezin dat met domiciliëring betaalt anders aan.",
         "data": {
           "direct_debit": "Ik betaal via domiciliëring"
         },
         "data_description": {
-          "direct_debit": "Wordt enkel getoond wanneer de tariefkaart een korting vermeldt. Brusol Groene stroom: 250 EUR per jaar, 230 met domiciliëring. Er verandert niets anders aan je factuur."
+          "direct_debit": "Wordt enkel getoond wanneer de tariefkaart een verschil vermeldt, en wat het verschuift hangt van de kaart af. Bij de zeventien producten van Mega gaat het om de welkomstkorting: vier kennen ze alleen aan een domiciliëringsbetaler toe, de rest legt er een supplement bovenop. Bij Brusol Groene stroom is het de jaarlijkse vaste vergoeding, 250 EUR per jaar tegenover 230."
         }
       },
       "dso_tariff_mode": {

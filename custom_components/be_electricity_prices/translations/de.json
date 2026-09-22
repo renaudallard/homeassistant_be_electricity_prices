@@ -66,12 +66,12 @@
       },
       "direct_debit": {
         "title": "Lastschrift",
-        "description": "Ihr Lieferant berechnet eine niedrigere jährliche Grundgebühr, wenn die Rechnung per Lastschrift bezahlt wird.",
+        "description": "Manche Tarifkarten berechnen einen Haushalt, der per Lastschrift zahlt, anders.",
         "data": {
           "direct_debit": "Ich zahle per Lastschrift"
         },
         "data_description": {
-          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte eine Ermäßigung nennt. Brusol Groene stroom: 250 EUR pro Jahr, 230 per Lastschrift. Sonst ändert sich nichts an der Rechnung."
+          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte einen Unterschied nennt, und was sie verschiebt, hängt von der Karte ab. Bei Megas siebzehn Produkten ist es die Willkommensgutschrift: vier gewähren sie nur einem Lastschriftzahler, die übrigen legen einen Zuschlag darauf. Bei Brusol Groene stroom ist es die jährliche Grundgebühr, 250 EUR pro Jahr gegenüber 230."
         }
       },
       "dso_tariff_mode": {
@@ -371,12 +371,12 @@
       },
       "direct_debit": {
         "title": "Lastschrift",
-        "description": "Ihr Lieferant berechnet eine niedrigere jährliche Grundgebühr, wenn die Rechnung per Lastschrift bezahlt wird.",
+        "description": "Manche Tarifkarten berechnen einen Haushalt, der per Lastschrift zahlt, anders.",
         "data": {
           "direct_debit": "Ich zahle per Lastschrift"
         },
         "data_description": {
-          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte eine Ermäßigung nennt. Brusol Groene stroom: 250 EUR pro Jahr, 230 per Lastschrift. Sonst ändert sich nichts an der Rechnung."
+          "direct_debit": "Wird nur angezeigt, wenn die Tarifkarte einen Unterschied nennt, und was sie verschiebt, hängt von der Karte ab. Bei Megas siebzehn Produkten ist es die Willkommensgutschrift: vier gewähren sie nur einem Lastschriftzahler, die übrigen legen einen Zuschlag darauf. Bei Brusol Groene stroom ist es die jährliche Grundgebühr, 250 EUR pro Jahr gegenüber 230."
         }
       },
       "dso_tariff_mode": {
