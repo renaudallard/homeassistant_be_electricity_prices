@@ -219,7 +219,7 @@ month spelled out and accented; the fallback maps the folded month name through
 `_FRENCH_MONTHS`. `test_publication_month_reads_fiche_tarifaire_banner`
 exercises both, including accented `FÉVRIER` and `AOÛT`.
 
-### Taxes (`_extract_taxes`, `octaplus.py`)
+### Taxes (`_extract_taxes`, `_octaplus_overlays.py`)
 
 OCTA+ prints four federal-tier rows on page 2; the residential tier is the first
 (`0 & 3.000 kWh`). The regex `0\s*&\s*3\.000\s*kWh\s+<a>\s+<b>` anchors on the
@@ -289,7 +289,7 @@ votre injection` or the 2026 rewording `les prix de l'électricité injectée so
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
 
-### Supplier PV forfait (`_extract_supplier_prosumer`, `octaplus.py`)
+### Supplier PV forfait (`_extract_supplier_prosumer`, `_octaplus_overlays.py`)
 
 Fixed and variable cards print `+ <value> €/kVA par mois` ("Forfait panneaux
 solaires", applicable only under the compensation regime). It is TVAC and must
@@ -309,7 +309,7 @@ exactly like the Cociter Variable and Mega forfaits (see
 
 Region-branched in `parse_snapshot` (`octaplus.py`).
 
-### Wallonia (`_extract_wallonia_dsos`, `octaplus.py`)
+### Wallonia (`_extract_wallonia_dsos`, `_octaplus_overlays.py`)
 
 Five DSO keys via `_WALLONIA_LABELS`: `AIEG` -> `DSO_AIEG`,
 `AIESH` -> `DSO_AIESH`, `ORES\(` -> `DSO_ORES` (eight ORES sub-areas share one
@@ -332,7 +332,7 @@ illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 (`test_wallonia_dsos_extract_full_set`, and the 2026-template variant
 `test_wallonia_dsos_new_2026_template`).
 
-### Flanders (`_extract_flanders_dsos`, `octaplus.py`)
+### Flanders (`_extract_flanders_dsos`, `_octaplus_overlays.py`)
 
 Eight Fluvius sub-areas via `_FLANDERS_LABELS`. Note the label-to-
 key mapping is not one-to-one by name: `Fluvius Kempen` -> `DSO_FLUVIUS_IVEKA`

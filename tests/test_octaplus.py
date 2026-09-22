@@ -46,11 +46,11 @@ from custom_components.be_electricity_prices.providers._rates import (
     FixedRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.octaplus import (
+from custom_components.be_electricity_prices.providers.octaplus import parse_snapshot
+from custom_components.be_electricity_prices.providers._octaplus_overlays import (
     _extract_flanders_renewables,
     _extract_taxes,
     _extract_wallonia_renewables,
-    parse_snapshot,
 )
 from tests import FIXTURES
 
@@ -497,7 +497,7 @@ def test_wallonia_dsos_new_2026_template() -> None:
     # the last two columns (now terme_fixe | transport | prosumer). The
     # parser must still surface every DSO and keep the prosumer forfait
     # (~80 EUR/kVA/an) apart from the transport rate (~2-3 c€/kWh).
-    from custom_components.be_electricity_prices.providers.octaplus import (
+    from custom_components.be_electricity_prices.providers._octaplus_overlays import (
         _extract_wallonia_dsos,
     )
 
