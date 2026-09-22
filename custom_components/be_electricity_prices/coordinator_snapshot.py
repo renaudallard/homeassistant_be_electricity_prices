@@ -118,11 +118,10 @@ class _SnapshotMixin:
     _supplier_tuple: tuple[str, str, str]
 
     if TYPE_CHECKING:
-        # Provided by DataUpdateCoordinator, and by the sibling mixins. Stubs
-        # rather than inheritance: a mixin inheriting
-        # DataUpdateCoordinator[CoordinatorData] would need CoordinatorData,
-        # which lives in coordinator.py and is imported from there by sensor,
-        # binary_sensor and diagnostics: a cycle.
+        # Provided by DataUpdateCoordinator and the sibling mixins, which only
+        # the concrete class composes. Declared for the type checker rather
+        # than inherited, so each mixin is checked on its own while the
+        # composition stays in one place, BePricesCoordinator's bases.
         hass: HomeAssistant
 
         def _supply_ended(self) -> bool: ...

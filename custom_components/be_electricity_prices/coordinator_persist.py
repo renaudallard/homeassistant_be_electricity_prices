@@ -94,9 +94,10 @@ class _PersistMixin:
     hass: HomeAssistant
 
     if TYPE_CHECKING:
-        # Provided by the concrete class, its sibling mixins and
-        # DataUpdateCoordinator. Stubs rather than inheritance, which
-        # would need CoordinatorData and close a cycle.
+        # Provided by DataUpdateCoordinator and the sibling mixins, which only
+        # the concrete class composes. Declared for the type checker rather
+        # than inherited, so each mixin is checked on its own while the
+        # composition stays in one place, BePricesCoordinator's bases.
         def _prune_historical_spots(self) -> None: ...
         def _restore_read_by_ocr(self, blob: dict[str, Any]) -> None: ...
         def _set_snapshot(self, snap: SupplierSnapshot | None) -> None: ...
