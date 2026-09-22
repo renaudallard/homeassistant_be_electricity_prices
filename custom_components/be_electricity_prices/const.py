@@ -121,9 +121,13 @@ FLUVIUS_CARD_LABELS: Final[dict[str, str]] = {
 # order a card prints them. energie.be and Energy Knights both wrap two of
 # these labels across the number row ("Fluvius (Halle-" then the figures then
 # "Vilvoorde)"), so their readers anchor on the token and take the four
-# digital-meter columns that follow, wherever they land. A tuple because the
-# order is part of the reading, and shared because both had their own copy of
-# it and a relabel would have had to be made twice.
+# digital-meter columns that follow, wherever they land. Shared because both
+# had their own copy of it and a relabel would have had to be made twice.
+#
+# A tuple for immutability rather than for order: this said "the order is part
+# of the reading", and it is not. Reparsing all 81 archived energie.be and
+# Energy Knights cards with the entries shuffled gives identical snapshots,
+# because each reader anchors on its own token wherever it appears.
 FLUVIUS_CARD_TOKENS: Final[tuple[tuple[str, str], ...]] = (
     ("Antwerpen", DSO_FLUVIUS_ANTWERPEN),
     ("Halle", DSO_FLUVIUS_HALLE_VILVOORDE),
