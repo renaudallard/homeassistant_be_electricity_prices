@@ -99,6 +99,25 @@ _GT13_RE = re.compile(
 _FAILURE_RETRY_S: Final = 6 * 3600
 _cache: dict[int, tuple[float, float]] = {}
 _failed_at: dict[int, datetime] = {}
+# One fetch per year at a time. Entries tick together and a backfill asks for
+# several years at once, so without this a cold start opens the same download
+# once per Brussels entry: the answer is identical and idempotent, but it is
+# paid out of the setup budget, which is the one place this integration cannot
+# afford a duplicate.
+_locks: dict[int, asyncio.Lock] = {}
+
+
+def _lock(year: int) -> asyncio.Lock:
+    """The lock for ``year``, created on first use.
+
+    Safe to build lazily because every caller is on the event loop: there is
+    no await between the lookup and the insert, so two callers cannot both
+    miss.
+    """
+    lock = _locks.get(year)
+    if lock is None:
+        lock = _locks[year] = asyncio.Lock()
+    return lock
 
 
 def cached_power_term(year: int) -> tuple[float, float] | None:
@@ -122,6 +141,19 @@ async def ensure_power_term(
     hit = _cache.get(year)
     if hit is not None:
         return hit
+    async with _lock(year):
+        # Re-read under the lock: the entry that waited here wants the answer
+        # the first one fetched, not a second download of it.
+        hit = _cache.get(year)
+        if hit is not None:
+            return hit
+        return await _fetch_power_term(session, year)
+
+
+async def _fetch_power_term(
+    session: aiohttp.ClientSession, year: int
+) -> tuple[float, float] | None:
+    """One attempt at the year's sheet, under the caller's lock."""
     failed = _failed_at.get(year)
     if failed is not None:
         if (dt_util.utcnow() - failed).total_seconds() < _FAILURE_RETRY_S:
