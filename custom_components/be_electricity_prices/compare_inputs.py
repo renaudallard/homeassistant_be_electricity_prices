@@ -423,7 +423,9 @@ def _quote_entry(
     # "this entry states this volume" and true of a what-if by construction.
     # The one thing that must not read a proxy is ``_annual_volume``: it treats
     # that key as a figure the user typed and would label a measured or default
-    # volume "entered on the entry". Both of its call sites pass the real entry.
+    # volume "entered on the entry". Every call site passes the real entry: the
+    # compare page's household volume, the coordinator's daily measurement and
+    # the projection, which only the coordinator's tick runs.
     overrides[CONF_ANNUAL_CONSUMPTION_KWH] = entry_annual_kwh(entry)
     # Only entry.data is ever read through this (audited across the quote,
     # fee, injection and year-to-date helpers), so the mapping is a
