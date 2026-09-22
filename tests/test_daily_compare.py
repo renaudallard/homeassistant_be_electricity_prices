@@ -199,11 +199,11 @@ async def test_the_own_row_year_to_date_is_priced_on_the_raw_card(
     The coordinator hands the same function ``coord._snapshot``, so the page
     hands it the raw card too.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
 
     entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     spliced = object()
     raw = object()
     sweep = {
@@ -231,8 +231,12 @@ async def test_the_own_row_year_to_date_is_priced_on_the_raw_card(
             "._compute_current_year_cost",
             _capture,
         ),
-        patch.object(cf, "_coordinator_rlp_weights", lambda *_a, **_k: None),
-        patch.object(cf, "_coordinator_rlp_index_weights", lambda *_a, **_k: None),
+        patch.object(
+            compare_engine, "_coordinator_rlp_weights", lambda *_a, **_k: None
+        ),
+        patch.object(
+            compare_engine, "_coordinator_rlp_index_weights", lambda *_a, **_k: None
+        ),
     ):
         await engine.fill_ytd_column(sweep, None)
 
@@ -252,11 +256,11 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
     not be priced. The number was being computed at the top of the pass, to
     warm the month cache, and thrown away.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
 
     entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     own = RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)
     other = RankedRow(label="Mega Online Fixed", annual=1102.75)
     sweep = {
@@ -287,8 +291,8 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
             ".archived_months_present",
             return_value=[],
         ),
-        patch.object(cf, "get_extractor", return_value=object()),
-        patch.object(cf, "_sweep_rows", return_value={}),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
+        patch.object(compare_engine, "_sweep_rows", return_value={}),
     ):
         rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
 
@@ -310,7 +314,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
     an ex-VAT card's running month carried fees short of VAT: one row, two
     answers, in a column the table sorts.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
     from custom_components.be_electricity_prices.providers.base import (
         ImpactRates,
         TaxOverlay,
@@ -343,7 +347,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
         },
     )
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     # A card printed ex-VAT, so resolving it per entry changes its figures.
     raw = make_snapshot(
         supplier="octaplus",
@@ -387,9 +391,9 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
             "._snapshot_for_month",
             AsyncMock(return_value=raw),
         ),
-        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
         patch.object(
-            cf,
+            compare_engine,
             "_sweep_rows",
             return_value={
                 ("wallonia", "octaplus", "octaplus_fixed_impact"): (raw, False)
@@ -417,7 +421,7 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
     two could never be equal, and no candidate row ever printed a figure for
     exactly the households the option exists for.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
     from custom_components.be_electricity_prices.cohort import ytd_window_start
     from tests import make_snapshot
 
@@ -436,7 +440,7 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
         },
     )
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     # A month cache the way the real one behaves: written by the walk and by
     # the pass's warm-up fetch, read back by the coverage check, per contract.
     cache: dict[str, set[date]] = {}
@@ -505,9 +509,9 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
             ".archived_months_present",
             _present,
         ),
-        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
         patch.object(
-            cf,
+            compare_engine,
             "_sweep_rows",
             return_value={
                 ("wallonia", "engie", "engie_easy_fixed"): (make_snapshot(), False)
@@ -532,7 +536,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     one-to-one page has always passed them; this pass did not, which put the
     household's OWN row at odds with its current_year_cost sensor.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
 
     spots = {datetime(2026, 1, 1, 5, tzinfo=dt_util.UTC): 0.08}
     seen: dict[str, Any] = {}
@@ -543,7 +547,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
 
     entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     sweep = {
         "region": "wallonia",
         "rows": [RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)],
@@ -568,8 +572,8 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
             ".archived_months_present",
             return_value=[],
         ),
-        patch.object(cf, "get_extractor", return_value=object()),
-        patch.object(cf, "_sweep_rows", return_value={}),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
+        patch.object(compare_engine, "_sweep_rows", return_value={}),
     ):
         await engine.fill_ytd_column(sweep, _coord_with_spots(spots))
 
@@ -585,7 +589,7 @@ async def test_a_row_needing_spots_that_are_absent_prints_no_figure(
     The contract-kind test above describes the ENERGY leg only, so a static
     card whose injection alone is spot-indexed walks straight past it.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_inputs
     from custom_components.be_electricity_prices.providers.base import InjectionRates
 
     entry = MockConfigEntry(
@@ -598,16 +602,16 @@ async def test_a_row_needing_spots_that_are_absent_prints_no_figure(
         energy=SimpleNamespace(),
     )
     # Needs spots and has none: no figure.
-    assert cf._needs_missing_spots(snap, entry, {}) is True  # type: ignore[arg-type]
+    assert compare_inputs._needs_missing_spots(snap, entry, {}) is True  # type: ignore[arg-type]
     # The same card once the cache holds something.
     spots = {datetime(2026, 1, 1, tzinfo=dt_util.UTC): 0.08}
-    assert cf._needs_missing_spots(snap, entry, spots) is False  # type: ignore[arg-type]
+    assert compare_inputs._needs_missing_spots(snap, entry, spots) is False  # type: ignore[arg-type]
     # A printed monthly indicative needs no spot at all.
     monthly = SimpleNamespace(
         injection=InjectionRates(current=0.05, factor=1.0, base=0.0),
         energy=SimpleNamespace(),
     )
-    assert cf._needs_missing_spots(monthly, entry, {}) is False  # type: ignore[arg-type]
+    assert compare_inputs._needs_missing_spots(monthly, entry, {}) is False  # type: ignore[arg-type]
 
 
 async def test_the_pass_reads_the_meter_once_for_every_candidate(
@@ -619,7 +623,7 @@ async def test_the_pass_reads_the_meter_once_for_every_candidate(
     memoised it, so pricing N candidates against one household made N+1
     identical full-window queries in a job that runs nightly and unattended.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
     from custom_components.be_electricity_prices.energy_meters import (
         _sum_hourly_kwh,
         memoise_meter_reads,
@@ -660,7 +664,9 @@ async def test_the_pass_reads_the_meter_once_for_every_candidate(
     assert len(reads) == 2
 
     # And the pass turns the memo on rather than leaving it to a caller.
-    assert "memoise_meter_reads" in inspect.getsource(cf._SweepEngine.fill_ytd_column)
+    assert "memoise_meter_reads" in inspect.getsource(
+        compare_engine._SweepEngine.fill_ytd_column
+    )
 
 
 async def test_the_memo_key_separates_households_that_must_not_share(
@@ -965,7 +971,7 @@ async def test_the_sweep_persists_its_ranking_at_once(
     """The sweep runs once a day and takes minutes. Left for the next hourly
     tick to write, a restart inside that window threw away a ranking that had
     just been built."""
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
         async_run_daily_compare,
     )
 
@@ -987,7 +993,7 @@ async def test_the_sweep_persists_its_ranking_at_once(
         rows=(RankedRow(label="Mine", annual=1400.0, is_own=True),), own=1400.0
     )
     with patch(
-        "custom_components.be_electricity_prices.compare_flow._SweepEngine"
+        "custom_components.be_electricity_prices.compare_sweep_flow._SweepEngine"
     ) as engine:
         engine.return_value.run_full_sweep = AsyncMock(return_value=ranking)
         await async_run_daily_compare(hass, entry, coord)
@@ -1006,7 +1012,7 @@ async def test_the_scheduled_sweep_fills_the_year_to_date_column(
     bar, which is the same argument run_full_sweep's own docstring makes for
     doing the expensive thing there.
     """
-    from custom_components.be_electricity_prices.compare_flow import _SweepEngine
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
 
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
@@ -1044,7 +1050,7 @@ async def test_a_failed_year_to_date_pass_keeps_the_annual_ranking(
     """The column is an extra, not the ranking. A pass that raises must leave
     the annual figures standing rather than cost the whole night's sweep,
     which async_run_daily_compare would otherwise discard wholesale."""
-    from custom_components.be_electricity_prices.compare_flow import _SweepEngine
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
 
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
@@ -1077,7 +1083,7 @@ async def test_a_failed_save_does_not_undo_the_published_ranking(
     """The ranking is live in this session either way and the next tick writes
     it again, so a Store that will not write must not cost the run its
     result."""
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
         async_run_daily_compare,
     )
 
@@ -1098,7 +1104,7 @@ async def test_a_failed_save_does_not_undo_the_published_ranking(
         rows=(RankedRow(label="Mine", annual=1400.0, is_own=True),), own=1400.0
     )
     with patch(
-        "custom_components.be_electricity_prices.compare_flow._SweepEngine"
+        "custom_components.be_electricity_prices.compare_sweep_flow._SweepEngine"
     ) as engine:
         engine.return_value.run_full_sweep = AsyncMock(return_value=ranking)
         await async_run_daily_compare(hass, entry, coord)
@@ -1118,7 +1124,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
     broken, where a stale reading would be the wrong answer, which is why the
     fallback tests the exception type rather than its message.
     """
-    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices import compare_engine
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
         ExtractorError,
@@ -1128,7 +1134,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
 
     entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
     entry.add_to_hass(hass)
-    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     archived = ArchivedCard(snapshot=make_snapshot(), read_by_ocr=True)
 
     unreadable = SimpleNamespace(
@@ -1191,9 +1197,24 @@ def test_every_annual_row_on_the_page_clamps_per_register() -> None:
     import inspect
     import re
 
-    from custom_components.be_electricity_prices import compare_flow
+    from custom_components.be_electricity_prices import (
+        compare_engine,
+        compare_flow,
+        compare_household,
+        compare_placeholders,
+        compare_sweep_flow,
+    )
 
-    source = inspect.getsource(compare_flow)
+    source = "\n".join(
+        inspect.getsource(m)
+        for m in (
+            compare_flow,
+            compare_engine,
+            compare_household,
+            compare_placeholders,
+            compare_sweep_flow,
+        )
+    )
     calls = [m.start() for m in re.finditer(r"\b_annual_bill\(", source)]
     assert calls, "the page no longer prices rows through _annual_bill"
 

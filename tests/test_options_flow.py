@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 from custom_components.be_electricity_prices import (
+    compare_household,
+    compare_placeholders,
     snapshot_resolve,
 )
 from custom_components.be_electricity_prices.compare_quote import RankedRow
@@ -5145,7 +5147,9 @@ def test_chart_labels_fall_back_to_what_actually_differs() -> None:
     """Supplier name, then contract name, then which side is which. The last
     case is the same contract quoted against itself under a different meter
     or regime, where nothing about the product distinguishes the two."""
-    from custom_components.be_electricity_prices.compare_flow import _chart_labels
+    from custom_components.be_electricity_prices.compare_placeholders import (
+        _chart_labels,
+    )
 
     own = {"supplier": "eneco", "contract": "power_fix"}
     assert _chart_labels(own, {"supplier": "bolt", "contract": "bolt_fix"}) == (
@@ -5164,7 +5168,7 @@ def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
     dialog could otherwise seed a cache the entry can never refresh."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_inputs import (
         _borrowed_spot_cache,
     )
 
@@ -5202,7 +5206,7 @@ def test_borrowed_spot_cache_restores_in_place() -> None:
     must still see the restored contents."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_inputs import (
         _borrowed_spot_cache,
     )
 
@@ -5226,7 +5230,7 @@ def test_isolating_the_cache_clears_the_completeness_set() -> None:
     walked and return without fetching anything."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_inputs import (
         _borrowed_spot_cache,
     )
 
@@ -5648,7 +5652,7 @@ def test_a_row_is_named_for_the_settlement_it_was_priced_on() -> None:
     hourly one either way, so marking it would advertise a difference this
     column does not carry.
     """
-    from custom_components.be_electricity_prices.compare_flow import _candidate_label
+    from custom_components.be_electricity_prices.compare_inputs import _candidate_label
 
     assert _candidate_label("bolt", "bolt_plenty", False) == "Bolt Plenty Variable"
     assert (
@@ -6553,10 +6557,11 @@ async def test_ytd_pass_walks_before_it_judges_coverage(
     test the year-to-date engine has no recorder history to price and so never
     reaches a month fetch - which is exactly how the vacuous version passed
     for its whole life."""
+    from custom_components.be_electricity_prices import compare_sweep_flow
+
     freezer.move_to("2026-04-29 13:00:00+02:00")
     from dataclasses import replace
 
-    from custom_components.be_electricity_prices import compare_flow
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
     entry = _make_entry()
@@ -6631,9 +6636,9 @@ async def test_ytd_pass_walks_before_it_judges_coverage(
         assert result["step_id"] == "compare_all_result"
         schema = result["data_schema"]
         assert schema is not None
-        assert compare_flow._YTD_FIELD in {str(k) for k in schema.schema}
+        assert compare_sweep_flow._YTD_FIELD in {str(k) for k in schema.schema}
         await hass.config_entries.options.async_configure(
-            result["flow_id"], {compare_flow._YTD_FIELD: True}
+            result["flow_id"], {compare_sweep_flow._YTD_FIELD: True}
         )
 
     assert trace, "the year-to-date pass did nothing at all"
@@ -6666,7 +6671,7 @@ async def test_sweep_scratch_is_region_keyed_and_evicted(hass: HomeAssistant) ->
     fetched for the old one would be re-priced against the new one without
     being re-fetched. Dropped when the entry unloads, or the cards outlive the
     entry that asked for them."""
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_engine import (
         _sweep_rows,
         evict_sweep_rows,
     )
@@ -6863,7 +6868,7 @@ async def test_sweep_shows_the_table_while_it_is_still_filling(
     freezer.move_to("2026-04-29 13:00:00+02:00")
     from dataclasses import replace
 
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
         _SweepStepsMixin,
     )
     from custom_components.be_electricity_prices.providers import EXTRACTORS
@@ -6931,7 +6936,9 @@ async def test_sweep_does_not_start_a_card_that_cannot_fit(hass: HomeAssistant) 
 
     A candidate that cannot fit is skipped, and cheaper ones behind it are
     still taken."""
-    from custom_components.be_electricity_prices.compare_flow import _SweepStepsMixin
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
+        _SweepStepsMixin,
+    )
 
     flow = _SweepStepsMixin()
     flow._sweep = {
@@ -7048,7 +7055,7 @@ def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_inputs import (
         _coordinator_spp_weights,
     )
     from custom_components.be_electricity_prices.providers.base import InjectionRates
@@ -7095,9 +7102,25 @@ def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:
     import ast
     import inspect
 
-    from custom_components.be_electricity_prices import compare_flow
+    from custom_components.be_electricity_prices import (
+        compare_engine,
+        compare_flow,
+        compare_household,
+        compare_sweep_flow,
+    )
 
-    tree = ast.parse(inspect.getsource(compare_flow))
+    tree = ast.parse(
+        "\n".join(
+            inspect.getsource(m)
+            for m in (
+                compare_flow,
+                compare_engine,
+                compare_household,
+                compare_placeholders,
+                compare_sweep_flow,
+            )
+        )
+    )
     calls = [
         node
         for node in ast.walk(tree)
@@ -7327,7 +7350,7 @@ def test_the_quote_proxy_carries_the_targets_meter() -> None:
     beside the regime, the DSO mode and the settlement rather than being
     passed to the two resolvers by hand.
     """
-    from custom_components.be_electricity_prices.compare_flow import _quote_entry
+    from custom_components.be_electricity_prices.compare_inputs import _quote_entry
     from custom_components.be_electricity_prices.const import (
         CONF_METER,
         METER_DYNAMIC,
@@ -7446,7 +7469,12 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     import ast
     import inspect
 
-    from custom_components.be_electricity_prices import compare_flow
+    from custom_components.be_electricity_prices import (
+        compare_engine,
+        compare_flow,
+        compare_household,
+        compare_sweep_flow,
+    )
 
     required = {
         "historical_spots",
@@ -7456,7 +7484,18 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
         "rlp_index_weights",
         "spp_weights",
     }
-    tree = ast.parse(inspect.getsource(compare_flow))
+    tree = ast.parse(
+        "\n".join(
+            inspect.getsource(m)
+            for m in (
+                compare_flow,
+                compare_engine,
+                compare_household,
+                compare_placeholders,
+                compare_sweep_flow,
+            )
+        )
+    )
     calls = [
         node
         for node in ast.walk(tree)
@@ -7779,9 +7818,7 @@ def test_which_month_index_a_feed_in_credit_settles_on() -> None:
     September curve, 63 EUR a year at 3000 kWh exported.
     """
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.compare_flow import (
-        _credit_index_for,
-    )
+    from custom_components.be_electricity_prices.compare_inputs import _credit_index_for
     from custom_components.be_electricity_prices.providers.base import (
         FixedRates,
         InjectionRates,
@@ -7971,7 +8008,7 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
     Korting tier, which exists for its cashback, ranked as JN's loser."""
     from dataclasses import replace
 
-    from custom_components.be_electricity_prices import cohort, compare_flow
+    from custom_components.be_electricity_prices import cohort
 
     freezer.move_to("2026-09-11 12:00:00+02:00")
     own_plain = _stub_snapshot("eneco", "power_fix", 0.18)
@@ -8008,7 +8045,9 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
             # The signing month's card is the current one here, and the
             # archive is not to be fetched from a test.
             patch.object(
-                compare_flow, "signing_month_snapshot", AsyncMock(return_value=own_snap)
+                compare_household,
+                "signing_month_snapshot",
+                AsyncMock(return_value=own_snap),
             ),
             patch.object(cohort, "_cohort_energy_leg", AsyncMock(return_value=None)),
         ):

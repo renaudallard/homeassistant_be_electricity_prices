@@ -90,7 +90,7 @@ from .flow_schemas import (
     _validate_entsoe_key,
     _MANUAL_RATE_KEYS,
 )
-from .compare_flow import _SweepStepsMixin
+from .compare_sweep_flow import _SweepStepsMixin
 from .flow_prefill import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,

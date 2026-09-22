@@ -5862,7 +5862,7 @@ def test_no_user_facing_string_stands_a_dash_on_two_hyphens() -> None:
 def test_the_compare_quote_helpers_read_only_entry_data() -> None:
     """The compare flow hands these helpers a stand-in ConfigEntry.
 
-    ``compare_flow._QuoteEntry`` is a frozen dataclass carrying a single
+    ``compare_inputs._QuoteEntry`` is a frozen dataclass carrying a single
     ``data`` mapping, cast to ConfigEntry. Any helper on that path that grows
     a read of ``entry.entry_id``, ``.options``, ``.runtime_data`` or ``.title``
     breaks the compare page from a distance, and nothing guarded it. The
@@ -6218,9 +6218,24 @@ def test_the_one_to_one_page_prices_the_raw_card_not_the_spliced_one() -> None:
     """
     import inspect
 
-    from custom_components.be_electricity_prices import compare_flow
+    from custom_components.be_electricity_prices import (
+        compare_engine,
+        compare_flow,
+        compare_household,
+        compare_placeholders,
+        compare_sweep_flow,
+    )
 
-    source = inspect.getsource(compare_flow)
+    source = "\n".join(
+        inspect.getsource(m)
+        for m in (
+            compare_flow,
+            compare_engine,
+            compare_household,
+            compare_placeholders,
+            compare_sweep_flow,
+        )
+    )
     site = source.index("The RAW card, which is what the coordinator hands the")
     # The snapshot argument sits between that comment and the entry beside it.
     argument = source[site : source.index("quote_entry,", site)]

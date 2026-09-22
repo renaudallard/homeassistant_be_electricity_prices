@@ -624,7 +624,7 @@ async def test_the_compare_page_weights_a_card_on_its_own_blend(
     row priced most of them on an index their card never names: measured on the
     August 2026 Belgian day-ahead curve the reductions stood 2,2 EUR/MWh apart,
     which is enough to reorder neighbouring rows."""
-    from custom_components.be_electricity_prices.compare_flow import (
+    from custom_components.be_electricity_prices.compare_inputs import (
         _coordinator_rlp_index_weights,
     )
     from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates

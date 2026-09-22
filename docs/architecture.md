@@ -88,7 +88,12 @@ relative to that package directory.
 | `config_flow.py` | The config wizard's step handlers (supplier and region, contract, DSO sub-area, meter, DSO billing mode, ENTSO-E key, capacity, connection power, solar, energy meters) and the options flow. |
 | `flow_schemas.py` | The voluptuous schema builders and validators each step calls, including the ENTSO-E key check against the live endpoint. |
 | `flow_prefill.py` | Suggests meter and capacity defaults from Home Assistant's Energy dashboard and the entity registry. Every failure mode degrades to suggesting nothing. |
-| `compare_flow.py` | The options flow's one-off "compare another supplier" branch, as a mixin. |
+| `compare_flow.py` | The options flow's one-off "compare another supplier" branch, as a mixin: the steps, their pickers and the step-to-step branching. |
+| `compare_sweep_flow.py` | The compare-all branch: the progress step that sweeps the market a slice at a time, the parked ranking, and the daily job that enters the same sweep with nobody watching. |
+| `compare_engine.py` | `_SweepEngine`: prices each candidate against the resolved household and ranks them, for the dialog and the schedule alike. |
+| `compare_household.py` | `_HouseholdMixin`: resolves the one picture of the home every candidate is priced against, which is most of the work and none of the ranking. |
+| `compare_inputs.py` | What the comparison reads off a household and what it calls things: volumes, regime, load-profile weights, the running welcome credit, and the registry's names. |
+| `compare_placeholders.py` | `_PlaceholdersMixin`: everything the result page renders, from the side-by-side table to the charts and the caveats. |
 | `compare_quote.py` | The annual-cost arithmetic that branch displays. Kept out of `pricing.py`, which is a leaf the coordinator imports. |
 | `api.py` | The ENTSO-E day-ahead spot client (`EntsoeClient`). Fetches the Belgian day-ahead curve (hourly or native 15-minute) and parses the XML with defusedxml. Raises `EntsoeError` / `EntsoeAuthError`. |
 | `synergrid.py` | The Synergrid profile fetchers. The solar production profile (SPP) for the SPP-weighted injection credit: streams the annual ex-ante workbook and parses only its small sheet, via `defusedxml` (already a requirement) so a nested-entity payload cannot be expanded. The residential load profile (RLP) for the RLP-indexed energy legs and the compensation allocation: a binary `.xlsb` read with `pyxlsb`, grouped into its distinct DSO curves in local time and reduced to every blend a card names from that one read, so the compare page can price each card on its own index. Both return hourly weights, or `{}` on any failure so the coordinator falls back to the plain mean or the metered slices. |

@@ -72,7 +72,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .coordinator import BePricesCoordinator
-from .compare_flow import evict_sweep_rows
+from .compare_engine import evict_sweep_rows
 from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 
@@ -416,7 +416,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             # Imported here rather than at module scope: compare_flow pulls in
             # the whole options-flow branch, which setup has no other reason
             # to load.
-            from .compare_flow import async_run_daily_compare
+            from .compare_sweep_flow import async_run_daily_compare
 
             await async_run_daily_compare(hass, entry, coordinator)
 
