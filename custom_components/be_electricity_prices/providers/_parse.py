@@ -449,3 +449,4 @@ _VREG_CEILING_RE = re.compile(
 
 
 SIGN_CHARS = r"+\-‐‑‒–—−"
+"""Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""

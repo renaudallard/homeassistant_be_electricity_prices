@@ -713,8 +713,6 @@ async def fetch_text(
 
 NUM_NO_THOUSANDS = r"([\d]+(?:[.,][\d]+)?)"
 
-"""Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
-
 
 # Full month names in calendar order (index 0 == January). The single
 # source of truth for the per-supplier archive-validity checks, which
