@@ -459,6 +459,22 @@ CONF_NIGHT_INJECTION_KWH: Final = "night_injection_kwh"
 CONF_CONSUMPTION_KWH: Final = "consumption_kwh"
 CONF_INJECTION_KWH: Final = "injection_kwh"
 
+# The six kWh entity pickers, in the order the meters step renders them, and
+# every key that changes what _resolve_daily_kwh reads. One tuple because a
+# seventh added to one list and not the other gives either the form or the
+# memo a stale key set. It lives here rather than in either module for the
+# reason the two comments used to give for copying it: flow_schemas is not a
+# leaf and energy_meters must not import it, while this module imports nothing
+# from the package and both already take these six names from it.
+METER_SENSOR_KEYS: Final[tuple[str, ...]] = (
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
+    CONF_CONSUMPTION_KWH,
+    CONF_INJECTION_KWH,
+)
+
 # Solar inverter capacity in kVA. 0 means no panels (no prosumer cost).
 CONF_SOLAR_KVA: Final = "solar_kva"
 CONF_SOLAR_REGIME: Final = "solar_regime"

@@ -63,6 +63,7 @@ from .const import (
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_INJECTION_KWH,
+    METER_SENSOR_KEYS,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
@@ -397,18 +398,11 @@ async def _recorder_hourly_kwh(
 # never a global TTL cache: the coordinator tick and the one-off quote both
 # want a live read, and guessing a TTL for them is how a stale meter reaches
 # a bill.
-# Every entry key that changes what _resolve_daily_kwh reads. Spelled here
-# from the constants this module already imports: the same tuple exists in
-# flow_schemas as _METER_SENSOR_KEYS, but importing that would close a cycle
-# on a leaf module.
-_MEMO_METER_KEYS: tuple[str, ...] = (
-    CONF_DAY_CONSUMPTION_KWH,
-    CONF_NIGHT_CONSUMPTION_KWH,
-    CONF_DAY_INJECTION_KWH,
-    CONF_NIGHT_INJECTION_KWH,
-    CONF_CONSUMPTION_KWH,
-    CONF_INJECTION_KWH,
-)
+# Every entry key that changes what _resolve_daily_kwh reads, which is the
+# same six the meters step renders. Shared from const rather than spelled out
+# twice: importing flow_schemas here would close a cycle, but const is a leaf
+# both modules already take these names from.
+_MEMO_METER_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
 
 _METER_MEMO: ContextVar[dict[Any, Any] | None] = ContextVar("_METER_MEMO", default=None)
 

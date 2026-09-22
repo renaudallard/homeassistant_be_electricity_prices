@@ -119,6 +119,7 @@ from .const import (
     CONF_DAILY_COMPARE,
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
+    METER_SENSOR_KEYS,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -1189,15 +1190,9 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 # The six kWh entity pickers, in the order the meters step renders them.
-# Shared by the schema and the step handler, which pops any the user blanked.
-_METER_SENSOR_KEYS: tuple[str, ...] = (
-    CONF_DAY_CONSUMPTION_KWH,
-    CONF_NIGHT_CONSUMPTION_KWH,
-    CONF_DAY_INJECTION_KWH,
-    CONF_NIGHT_INJECTION_KWH,
-    CONF_CONSUMPTION_KWH,
-    CONF_INJECTION_KWH,
-)
+# Shared by the schema and the step handler, which pops any the user blanked,
+# and with energy_meters, which memoises reads keyed on the same six.
+_METER_SENSOR_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
 
 
 def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
