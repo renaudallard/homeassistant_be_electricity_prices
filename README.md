@@ -678,7 +678,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Twelve repair issues surface
+TimeoutError` rather than trailing off after the colon. Thirteen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -746,9 +746,14 @@ successful refresh:
   compensation install but its card omits the DSO prosumer tariff, so only
   the supplier's own PV forfait is billed and the network half is left out
   rather than borrowed from another supplier's card.
+- **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
+  payer differently and this entry has no stored answer, which an entry
+  created before the question existed does not. The credit is left out
+  rather than guessed, so answer it in the options to have it billed.
 
-  The last five are not failures either: each clears when the supplier
-  prints the missing row again.
+  The first five of those six are not failures either: each clears when the
+  supplier prints the missing row again, and the last one clears as soon as
+  the question is answered.
 
 ### `be_electricity_prices.refresh` service
 

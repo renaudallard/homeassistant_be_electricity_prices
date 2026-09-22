@@ -216,8 +216,18 @@ CONF_QUARTER_HOURLY: Final = "quarter_hourly"
 # prices that differently. Only meaningful on a contract whose card states
 # the reduction (``Contract.direct_debit_discount``); every other card
 # charges the same standing charge however the invoice is settled, and the
-# setting cannot change it. Defaults to False: a household that has not been
-# asked is billed the figure its card leads with.
+# setting cannot change it.
+#
+# Defaults to False, which is the conservative reading and not a neutral one.
+# It holds for the fourteen cards that state a supplement, where the figure
+# the card leads with is the unconditional base. It does NOT hold for the four
+# that grant the whole ristourne to a direct-debit payer alone: there the
+# figure the card leads with IS the conditional one, so the default bills
+# nothing, and an entry created before this question existed has no stored
+# answer to distinguish it from a household that answered no. Guessing either
+# way would bill a figure the card does not support, so the default stands and
+# ``_sync_direct_debit_unanswered_issue`` says so in a Repairs card instead of
+# letting the credit disappear in silence.
 CONF_DIRECT_DEBIT: Final = "direct_debit"
 DEFAULT_DIRECT_DEBIT: Final = False
 

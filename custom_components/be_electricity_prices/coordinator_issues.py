@@ -35,6 +35,7 @@ way for the user to clear it."""
 from __future__ import annotations
 
 from .providers import get as get_extractor
+from .providers import offers_direct_debit
 
 from .providers.base import (
     SupplierExtractor,
@@ -42,6 +43,7 @@ from .providers.base import (
 
 from .const import (
     CONF_CONTRACT,
+    CONF_DIRECT_DEBIT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -321,6 +323,40 @@ class _IssuesMixin:
         if extractor is None or extractor.deprecated_until is None:
             return False
         return dt_util.now().date() > extractor.deprecated_until
+
+    def _sync_direct_debit_unanswered_issue(self) -> None:
+        """Flag an entry on a card that prices direct debit but was never asked.
+
+        Four Mega cards grant the WHOLE ristourne only to a direct-debit
+        payer, and ``resolve_direct_debit`` clears the base, the per-kWh leg
+        and the cap when the answer is no. The answer is read as
+        ``entry.data.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)``, which
+        cannot tell a household that answered no from one that was never
+        asked, and an entry created before the question existed has no stored
+        answer at all. Such an entry bills nothing where 0.27.0 billed the
+        whole credit, 522,58 EUR a year on Cosy Flex at 3500 kWh.
+
+        The conservative reading is the right one for the bill: the card grants
+        the credit to a direct-debit payer and this integration does not know
+        how the household pays, so inventing the answer either way would bill
+        a figure the card does not support. What was wrong is that it happened
+        in silence, which is what this card fixes. One tick of the options
+        flow settles it for good, and the notice clears the moment an answer
+        of either value is stored.
+
+        Raised for all eighteen products the question is offered on, not only
+        the four exclusive ones: on the fourteen that state a supplement the
+        missing answer costs a payer that supplement rather than the whole
+        credit, which is smaller and still wrong.
+        """
+        self._sync_issue(
+            "direct_debit_unanswered",
+            offers_direct_debit(
+                str(self.entry.data.get(CONF_SUPPLIER, "")),
+                str(self.entry.data.get(CONF_CONTRACT, "")),
+            )
+            and CONF_DIRECT_DEBIT not in self.entry.data,
+        )
 
     def _sync_extractor_issue(
         self,

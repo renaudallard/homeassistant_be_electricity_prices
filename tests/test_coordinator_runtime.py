@@ -2539,6 +2539,7 @@ _REPAIR_ISSUE_KINDS = (
     "impact_rates_missing",
     "connection_fee_missing",
     "prosumer_tariff_missing",
+    "direct_debit_unanswered",
 )
 
 
@@ -4060,6 +4061,74 @@ async def test_prosumer_gap_is_silent_outside_the_compensation_regime(
     assert (
         ir.async_get(hass).async_get_issue(
             DOMAIN, f"prosumer_tariff_missing_{entry.entry_id}"
+        )
+        is None
+    )
+
+
+async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
+    hass: HomeAssistant,
+) -> None:
+    """Mega's Cosy Flex grants the whole ristourne to a direct-debit payer, and
+    resolve_direct_debit clears the base, the per-kWh leg and the cap when the
+    answer is no. An entry created before the question existed carries no answer
+    at all and cannot be told apart from one that answered no, so it bills
+    nothing where 0.27.0 billed 522,58 EUR a year. Say so instead of dropping it
+    in silence."""
+    from homeassistant.helpers import issue_registry as ir
+
+    data = {
+        "supplier": "mega",
+        "contract": "mega_cosy_flex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"direct_debit_unanswered_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._sync_direct_debit_unanswered_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # Answering NO is still an answer: the credit is correctly withheld and the
+    # household has said so, so there is nothing left to disclose.
+    hass.config_entries.async_update_entry(entry, data={**data, "direct_debit": False})
+    coord._sync_direct_debit_unanswered_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    hass.config_entries.async_update_entry(entry, data={**data, "direct_debit": True})
+    coord._sync_direct_debit_unanswered_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_direct_debit_question_is_silent_where_no_card_prices_it(
+    hass: HomeAssistant,
+) -> None:
+    """The flow never asks on a product whose card charges the same either way,
+    so a missing answer there is not a gap and raising would be noise on every
+    entry in the fleet."""
+    from homeassistant.helpers import issue_registry as ir
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+        },
+        title="Eneco Power Fix",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._sync_direct_debit_unanswered_issue()
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, f"direct_debit_unanswered_{entry.entry_id}"
         )
         is None
     )

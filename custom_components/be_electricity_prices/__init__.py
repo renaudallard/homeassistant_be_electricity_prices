@@ -531,6 +531,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "impact_rates_missing",
         "connection_fee_missing",
         "prosumer_tariff_missing",
+        "direct_debit_unanswered",
     ):
         issue_registry.async_delete_issue(
             hass, DOMAIN, f"{issue_kind}_{entry.entry_id}"

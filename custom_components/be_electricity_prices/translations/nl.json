@@ -764,6 +764,10 @@
     "prosumer_tariff_missing": {
       "title": "{supplier} ({contract}) publiceert het prosumententarief van {dso} niet",
       "description": "Deze vermelding valt onder het Waalse compensatieregime, waardoor de distributienetbeheerder een prosumententarief per kVA omvormervermogen aanrekent. De kaart van {supplier} voor {contract} vermeldt wel het eigen fotovoltaïsche forfait, maar laat de kolom \"Tarif prosumer\" weg die op de andere kaarten wel staat, zodat het netgedeelte nergens staat waar deze integratie het kan lezen.\n\nDe prijzen voor deze vermelding sluiten het daarom uit. Het tarief loopt van ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus een omvormer van 5 kVA wordt jaarlijks ongeveer €400 tot €500 te weinig aangerekend. Al de rest van de kaart, inclusief het forfait van de leverancier zelf, wordt normaal aangerekend. Deze melding verdwijnt automatisch zodra {supplier} de kolom opnieuw publiceert."
+    },
+    "direct_debit_unanswered": {
+      "title": "{supplier} ({contract}) rekent domiciliëring anders aan en deze ingave is niets gevraagd",
+      "description": "De tariefkaart van {contract} rekent een gezin dat met domiciliëring betaalt anders aan: op Cosy Flex en Smart Fixed van Mega en hun zakelijke edities wordt de volledige welkomstkorting alleen aan een domiciliëringsbetaler toegekend, en op de andere kaarten komt er een supplement bij.\n\nDeze ingave is aangemaakt voordat de vraag werd gesteld, dus er is geen antwoord opgeslagen en de korting wordt weggelaten in plaats van geraden. Als u wel met domiciliëring betaalt, gaat het om tot €522 per jaar bij 3500 kWh. Open de opties van de integratie en antwoord \"Ik betaal met domiciliëring\" om ze aan te rekenen. Deze melding verdwijnt zodra er een antwoord is opgeslagen, welk ook."
     }
   },
   "entity": {
