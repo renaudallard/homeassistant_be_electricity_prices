@@ -7255,6 +7255,59 @@ def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -
     assert credited() == 0.0
 
 
+def test_the_compare_credit_refuses_a_plain_mean_for_a_month_index() -> None:
+    """``_compare_injection_credit`` restates ``_injection_is_spot_formula``
+    and dropped the guard it opens with, so a month or SPP indexed leg with no
+    printed indicative was quoted at the plain window mean: the substitution
+    `strict` refuses everywhere else, and the shape the 0.6.7 mis-credit was
+    silent in.
+
+    Unreachable today, because all 772 month or SPP indexed rows in the archive
+    print a current. That is what makes it worth a test rather than a
+    differential: nothing priced can see it.
+    """
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+        },
+    )
+
+    def credited(inj: InjectionRates) -> float | None:
+        return _compare_injection_credit(
+            make_snapshot(energy=FixedRates(single=0.20), injection=inj),
+            entry,
+            {},
+            0.05,
+        )
+
+    formula = 0.9 * 0.05 + 0.001
+    # A per-hour formula with no printed indicative is priced off the mean.
+    assert credited(InjectionRates(factor=0.9, base=0.001)) == pytest.approx(formula)
+    # The same coefficients on a MONTH index are not: a mean of the window says
+    # nothing about the months it spans.
+    assert credited(
+        InjectionRates(factor=0.9, base=0.001, month_indexed=True)
+    ) != pytest.approx(formula)
+    # Nor on the solar-weighted one, which is a month too.
+    assert credited(
+        InjectionRates(factor=0.9, base=0.001, spp_indexed=True)
+    ) != pytest.approx(formula)
+
+
 def test_the_quote_proxy_carries_the_targets_meter() -> None:
     """``_target_side`` forces METER_DYNAMIC where the candidate's kind is only
     sold on a digital meter, and prices the rate and the volume on it. Two

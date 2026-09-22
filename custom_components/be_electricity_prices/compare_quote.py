@@ -429,6 +429,16 @@ def _compare_injection_credit(
         inj is not None
         and inj.factor is not None
         and inj.base is not None
+        # The guard _injection_is_spot_formula opens with, and this branch
+        # dropped: month and solar-weighted coefficients are never a per-hour
+        # formula, whatever else is true. Without it a month-indexed leg whose
+        # card stopped printing its indicative would be quoted at the plain
+        # window mean, which is the substitution `strict` refuses on every
+        # other path. Unreachable today, because all 772 month or SPP indexed
+        # rows in the archive print a current, and that is exactly the state
+        # the 0.6.7 mis-credit was silent in.
+        and not inj.month_indexed
+        and not inj.spp_indexed
         and (
             isinstance(energy, DynamicRates)
             or inj.current is None
