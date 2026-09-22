@@ -128,7 +128,17 @@ In addition, seventeen scraped supplier modules live under `providers/`, each ex
 `EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
 `eneco.py`, `energiebe.py`, `energyknights.py`, `energyvision.py`, `engie.py`, `frank.py`,
 `luminus.py`, `mega.py`, `octaplus.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
-[providers/](providers/). An eighteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
+[providers/](providers/).
+
+Seven of them carry their card readers in sibling modules, named
+`_<supplier>_cards.py` for the product legs the supplier prices and
+`_<supplier>_overlays.py` for the regulated ones it only reprints. EnergyVision
+also has `_energyvision_wallonia.py`, because its Walloon card is a different
+document in a different language rather than a variant of the Dutch one. The
+supplier module keeps the urls, the archive and `parse_snapshot`, which calls
+into them.
+
+An eighteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
 stub) and the
 coordinator builds its snapshot from the config entry. The framework they implement is
 documented in [provider-framework.md](provider-framework.md).
