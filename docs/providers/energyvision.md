@@ -198,8 +198,8 @@ applying the x10 would 10x the energy leg.
 
 ## Energy formula (GSDYN)
 
-`_extract_dynamic` (`providers/energyvision.py`) does one `findall` with
-`_DYN_FORMULA_RE` (`providers/energyvision.py`), which matches both the `afnametarief`
+`_extract_dynamic` (`providers/_energyvision_cards.py`) does one `findall` with
+`_DYN_FORMULA_RE` (`providers/_energyvision_cards.py`), which matches both the `afnametarief`
 and `injectietarief` rows in the running formula sentence and keys them by group 1:
 
 ```
@@ -223,8 +223,8 @@ vergoeding.
 
 ## Fixed energy (GS3JV)
 
-`_extract_fixed` (`providers/energyvision.py`) parses the "Groene stroom - vast tarief
-13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/energyvision.py`). The fixed
+`_extract_fixed` (`providers/_energyvision_cards.py`) parses the "Groene stroom - vast tarief
+13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/_energyvision_cards.py`). The fixed
 rate is printed VAT-inclusive, so it is used as-is (`single = 13,57 / 100`), with the 75
 EUR/jaar vaste vergoeding as `yearly_fixed_fee`. `test_fixed_energy_is_fixed_rates` and
 `test_fixed_yearly_fixed_fee` pin both.
@@ -261,7 +261,7 @@ formula", `test_missing_dynamic_injection_is_fatal`) rather than silently credit
 
 ## Taxes
 
-`_extract_taxes` (`providers/energyvision.py`) passes this card's anchors to the shared
+`_extract_taxes` (`providers/_energyvision_overlays.py`) passes this card's anchors to the shared
 `regional_tax_overlay` helper (`providers/_parse.py`), naming Flanders as the region whose
 renewables field the levy lands in. The helper owns which rows may be missing; a lost
 GSC/WKC row now reports "GSC/WKK levies" rather than the generic "tax block" this extractor
@@ -302,8 +302,8 @@ page-1 energy rows that name the same product without it.
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energyvision.py`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energyvision.py`). EnergyVision prints the area names in **upper
+`_extract_dsos` (`providers/_energyvision_overlays.py`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/_energyvision_overlays.py`). EnergyVision prints the area names in **upper
 case** ("FLUVIUS ANTWERPEN", "FLUVIUS KEMPEN", ...), so the shared Title-case
 `FLUVIUS_CARD_LABELS` map does not apply and this module carries its own:
 
@@ -328,7 +328,7 @@ while the last good card was gone from the cache. Two tests drop a row from the 
 
 The card prints two meter tables (`Vlaams Gewest Digitale Meter` then
 `Vlaams Gewest Analoge Meter`); the parser slices to the **digital-meter** block between
-`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/energyvision.py`) - a modern SMR3
+`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/_energyvision_overlays.py`) - a modern SMR3
 customer is on a digital meter - and reads the five columns:
 
 ```
@@ -578,7 +578,7 @@ Five things a maintainer needs to know about this card:
   the CMS may append `_0`; resolve it off the listing, do not construct it
   (`providers/energyvision.py`).
 - **Upper-case Fluvius labels.** EnergyVision prints them in caps, so it needs its own
-  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/energyvision.py`).
+  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/_energyvision_overlays.py`).
 - **Two meter tables.** Slice to the digital-meter block before parsing DSO rows, or the
   analog rows leak in (`providers/energyvision.py`).
 - **GSC + WKC are combined; energiefonds is domiciled.** A single combined renewables value,

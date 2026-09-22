@@ -600,7 +600,7 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     made the switch a month after Engie / Mega / Eneco: its August Flemish
     card dropped both the "Verbruik tussen 0 & 3.000 kWh" tier row and the
     Energiebijdrage line, which took every Flemish contract offline."""
-    from custom_components.be_electricity_prices.providers.energyvision import (
+    from custom_components.be_electricity_prices.providers._energyvision_overlays import (
         _extract_taxes,
     )
 
@@ -632,7 +632,7 @@ def test_missing_renewables_row_is_still_fatal() -> None:
     """Tolerating the abolished contribution must not make the whole tax
     block optional: the GSC/WKC quota cost is a per-kWh charge, so
     silently zeroing it under-bills every Flemish user."""
-    from custom_components.be_electricity_prices.providers.energyvision import (
+    from custom_components.be_electricity_prices.providers._energyvision_overlays import (
         _extract_taxes,
     )
 
