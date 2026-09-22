@@ -8900,9 +8900,15 @@ def test_a_percentage_campaign_is_credited_against_the_realised_rate() -> None:
     assert credited == pytest.approx(0.33 * rate * 3500.0)
     assert credited == pytest.approx(254.56, abs=0.01)
 
-    # A volume of free energy is that same rate times the volume, and is NOT
-    # scaled by the year: the card grants 750 kWh once, not 750 a year.
+    # A volume of free energy is NOT scaled by the year either: the card grants
+    # 750 kWh once, not 750 a year. It is valued at the CARD's single rate
+    # rather than the realised one, because its own sentence names one
+    # register where the percentage above names both: "le prix unitaire en
+    # EUR/kWh TTC du cout de l'energie, applicable aux compteurs mono-horaires
+    # ... par 750 kWh". See
+    # test_a_volume_cashback_is_valued_at_the_rate_its_card_names.
     volume = make_snapshot(
+        energy=FixedRates(single=0.2027),  # MaxxFix, September 2026
         welcome_credit_kwh=750.0,
         welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
         welcome_credit_after_months=12,
@@ -8916,7 +8922,8 @@ def test_a_percentage_campaign_is_credited_against_the_realised_rate() -> None:
         3500.0,
         window_energy_rate(rate * 3500.0, 3500.0),
     )
-    assert lump == pytest.approx(750.0 * rate)
+    assert lump == pytest.approx(750.0 * 0.2027)
+    assert lump == pytest.approx(152.03, abs=0.01)
 
     # Without a rate there is no money in it, which is what a window that
     # drew nothing means.
@@ -9487,6 +9494,62 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     # can use the result without checking which it got.
     assert other is snap
     assert own is snap
+
+
+def test_a_volume_cashback_is_valued_at_the_rate_its_card_names() -> None:
+    """The four cards granting one say which rate to value it at, and it is
+    not the household's blended one: "le prix unitaire en EUR/kWh TTC du cout
+    de l'energie, applicable aux compteurs MONO-HORAIRES ... par 750 kWh".
+
+    Valuing it at the realised rate short-changed a bi-hourly household and
+    took 16 to 18 EUR off an exclusive-night one, and on the two variable
+    cards it floated with the year where the clause pins the signing card.
+    """
+    from datetime import date
+
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        FixedRates,
+    )
+
+    def credited(snapshot: Any, realised: float) -> float:
+        return _welcome_credit_eur(
+            snapshot,
+            date(2026, 9, 1),
+            date(2026, 9, 1),
+            date(2027, 9, 2),
+            99_999.0,
+            3500.0,
+            realised,
+        )
+
+    # MaxxFix: 750 kWh at the card's own 0,2027 is the 152,03 its own terms
+    # promise, whatever the household's registers did.
+    card = make_snapshot(
+        energy=FixedRates(single=0.2027),
+        welcome_credit_kwh=750.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=12,
+    )
+    assert credited(card, 0.2027) == pytest.approx(152.03, abs=0.01)
+    # A bi-hourly household whose blend came out 5% under, and an
+    # exclusive-night one far under: same credit, because the card says so.
+    assert credited(card, 0.2027 * 0.95) == pytest.approx(152.03, abs=0.01)
+    assert credited(card, 0.12) == pytest.approx(152.03, abs=0.01)
+
+    # A card publishing no single rate has nothing to read, so the realised
+    # rate stays the fallback rather than the credit collapsing to zero.
+    dynamic = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02),
+        welcome_credit_kwh=750.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=12,
+    )
+    assert credited(dynamic, 0.20) == pytest.approx(750.0 * 0.20, abs=0.01)
 
 
 def test_the_month_bucket_is_not_decided_by_the_current_card() -> None:

@@ -636,13 +636,25 @@ conclusion d'un contrat Luminus Comfy Electricite en septembre 2026"*, or as a v
 *"une remise de 750 kWh"* paid *"12 mois apres la date de debut via un cashback"*.
 `welcome_credit_pct_of_energy` and `welcome_credit_kwh` carry them.
 
-Both need a rate to become money, and the rate is the household's OWN realised one over
-the window (`window_energy_rate`, `fees.py`): the supplier's energy component divided by
-what the window drew. That is what makes them work on every rate shape, blending a
-bi-hourly card by the hours actually drawn rather than needing register weights, and a
-variable or spot-priced card by what it really billed. A percentage then folds into the
-per-kWh leg and a volume into the flat one, so neither opens a path of its own and both
-inherit the cap, the accrual and the VAT basis. The percentage is paid *"au pro rata sur
+Both need a rate to become money, and each takes the rate its own sentence names.
+
+The percentage takes the household's OWN realised rate over the window
+(`window_energy_rate`, `fees.py`): the supplier's energy component divided by what the
+window drew. Its sentence names both registers (*"en heures pleines et creuses"*), and a
+realised rate is what makes that work on every rate shape, blending a bi-hourly card by
+the hours actually drawn rather than needing register weights, and a variable or
+spot-priced card by what it really billed.
+
+The volume takes the card's own single rate (`static_energy_eur_per_kwh`, band `single`),
+because its sentence names one register: *"le prix unitaire en EUR/kWh TTC du cout de
+l'energie, applicable aux compteurs mono-horaires tel qu'indique dans les presentes
+conditions particulieres, par 750 kWh"*. Valuing it at the realised rate instead cost a
+bi-hourly household 0,89 to 4,50 EUR and an exclusive-night one 16,28 to 18,52, and on the
+two variable cards it floated with the year where the clause pins the signing card. A card
+publishing no single rate falls back to the realised rate rather than crediting nothing.
+
+A percentage then folds into the per-kWh leg and a volume into the flat one, so neither
+opens a path of its own and both inherit the cap, the accrual and the VAT basis. The percentage is paid *"au pro rata sur
 vos prochains decomptes"*, which is the pro-rata kind, where a volume is a cashback at the
 wait the card states.
 

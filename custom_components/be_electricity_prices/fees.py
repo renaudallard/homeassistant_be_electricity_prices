@@ -57,6 +57,7 @@ from .const import (
 )
 from .pricing import (
     MeterType,
+    static_energy_eur_per_kwh,
     yearly_fixed_fee_for_meter,
 )
 from .providers.base import (
@@ -566,10 +567,36 @@ def _welcome_credit_eur(
         per_kwh += snapshot.welcome_credit_pct_of_energy * energy_eur_per_kwh
     if per_kwh and first_year_kwh > 0.0:
         amount += per_kwh * first_year_kwh
-    # A volume of free energy, credited at that same rate. Not scaled by the
-    # year: the card grants 750 kWh once, not 750 kWh a year.
-    if snapshot.welcome_credit_kwh and energy_eur_per_kwh > 0.0:
-        amount += snapshot.welcome_credit_kwh * energy_eur_per_kwh
+    # A volume of free energy, at the rate the card says to value it at. Not
+    # scaled by the year: the card grants 750 kWh once, not 750 kWh a year.
+    #
+    # The four cards granting one name their own rate for it, and it is not
+    # the household's blended one: "le prix unitaire en EUR/kWh TTC du cout de
+    # l'energie, applicable aux compteurs MONO-HORAIRES tel qu'indique dans
+    # les presentes conditions particulieres, par 750 kWh". So it is the
+    # card's single rate, and the realised rate is the fallback for a card
+    # that publishes none. Valuing it at the blended rate instead short-changed
+    # a bi-hourly household by 0,89 to 4,50 EUR and an exclusive-night one by
+    # 16,28 to 18,52, and on the two variable cards it also floated with the
+    # year where the clause pins the signing card.
+    #
+    # The percentage leg above keeps the realised rate, because its own
+    # sentence names both registers ("en heures pleines et creuses").
+    if snapshot.welcome_credit_kwh:
+        # getattr for the reason grants_a_welcome_credit uses it: the compare
+        # page hands this the card it read the amount off, typed Any, and a
+        # caller holding one without rates still has to get the realised-rate
+        # fallback rather than an AttributeError out of a fee helper.
+        card_energy = getattr(snapshot, "energy", None)
+        volume_rate = (
+            static_energy_eur_per_kwh(card_energy, "single")
+            if card_energy is not None
+            else None
+        )
+        if volume_rate is None or volume_rate <= 0.0:
+            volume_rate = energy_eur_per_kwh
+        if volume_rate > 0.0:
+            amount += snapshot.welcome_credit_kwh * volume_rate
     ceiling = snapshot.welcome_credit_cap_eur
     if ceiling is not None:
         amount = min(amount, ceiling)
