@@ -4347,7 +4347,7 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     term and is exactly why this went unnoticed.
     """
     from custom_components.be_electricity_prices.compare_quote import _annual_bill
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_prosumer
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_prosumer
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         TaxOverlay,

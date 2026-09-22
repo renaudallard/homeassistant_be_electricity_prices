@@ -125,11 +125,13 @@ from custom_components.be_electricity_prices.spot_stats import (
     _bucket_by_local_month,
     _covered_month_mean,
 )
-from custom_components.be_electricity_prices.ytd_cost import (
-    _compute_current_year_cost,
+from custom_components.be_electricity_prices.ytd_cost import _compute_current_year_cost
+from custom_components.be_electricity_prices.ytd_legs import (
     _days_through,
-    _ytd_spot_injection_credit,
     _ytd_static_fees,
+)
+from custom_components.be_electricity_prices.ytd_energy import (
+    _ytd_spot_injection_credit,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -4671,7 +4673,7 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
         yield snap, None, 365, 365
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         fee_entry = await _ytd_static_fees(
@@ -4784,7 +4786,7 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
 
     end = date(2026, 12, 31)
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost"
+        "custom_components.be_electricity_prices.ytd_legs"
         "._effective_snapshot_for_month",
         new=_snap_for_month,
     ):
@@ -7302,7 +7304,7 @@ def _capacity_snapshot(rate: float | None = 52.37) -> SupplierSnapshot:
 async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> None:
     """The capacity term is a EUR/kW/year rate billed monthly on the
     gemiddelde maandpiek, so a full year at 4 kW accrues peak x rate."""
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -7313,7 +7315,7 @@ async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> N
             yield snap, date(2026, month, 1), days, days
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -7341,7 +7343,7 @@ async def test_ytd_capacity_honours_the_vreg_ceiling(hass: HomeAssistant) -> Non
     by side, and only one of them was the bill.
     """
     from custom_components.be_electricity_prices.fees import _capped_capacity_annual
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_capacity
 
     snap = make_snapshot(
         dsos={
@@ -7373,7 +7375,7 @@ async def test_ytd_capacity_honours_the_vreg_ceiling(hass: HomeAssistant) -> Non
             yield snap, date(2026, month, 1), days, days
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -7399,7 +7401,7 @@ async def test_ytd_capacity_honours_the_vreg_ceiling(hass: HomeAssistant) -> Non
 async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
     """Wallonia and Brussels do not bill a capacity tariff; a leftover rate on
     the overlay must not accrue there."""
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -7407,7 +7409,7 @@ async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
         yield snap, date(2026, 1, 1), 31, 31
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -7428,7 +7430,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
 ) -> None:
     """Cards outside Flanders leave capacity_eur_per_kw_year None; such a month
     contributes nothing rather than raising."""
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_capacity
 
     priced, unpriced = _capacity_snapshot(), _capacity_snapshot(rate=None)
 
@@ -7437,7 +7439,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
         yield priced, date(2026, 2, 1), 28, 28
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -7456,7 +7458,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
 async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> None:
     """A part-elapsed month accrues its own fraction, the same proration
     _ytd_prosumer uses, so the backfill can meet it at the seam."""
-    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -7465,7 +7467,7 @@ async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> N
         yield snap, date(2026, 2, 1), 28, 14  # half of February
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_legs._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -9783,6 +9785,8 @@ async def _tiny_connection_cost(
     the hourly one through ``_sum_hourly_kwh``, so the same helper drives a
     fixed card and a dynamic one.
     """
+    from custom_components.be_electricity_prices import ytd_energy
+
     days = 90
     daily = {
         date(2026, 1, 1) + timedelta(days=n): (kwh_day, 0.0, inj_day, 0.0)
@@ -9822,7 +9826,7 @@ async def _tiny_connection_cost(
     with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
-        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=_noop),
+        patch.object(ytd_energy, "_top_up_today_hourly", side_effect=_noop),
     ):
         return cast(
             float,

@@ -976,6 +976,7 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     and a harness that did exactly that reported the backfill 0,11 EUR high
     on Q1 2026 and sent an audit after a seam bug that was never there.
     """
+    from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
     from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
@@ -1048,7 +1049,7 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
-        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
         patch.object(
             cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
         ),
@@ -1102,6 +1103,7 @@ async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
     cap; the backfill handed the default 0, so on a Flanders card whose
     ceiling binds its capped months sat below the live sensor's and the
     imported series met the sensor at a step."""
+    from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
@@ -1190,7 +1192,7 @@ async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
-        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
         patch.object(
             cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
         ),
@@ -1739,6 +1741,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     imported rows ended a quarter of a 200 EUR credit (49,32 EUR) ABOVE the
     live sensor, and the seed row then handed the live chain a sum the sensor
     stepped down from. Per-day and per-hour kinds alike."""
+    from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
 
     snap = make_snapshot(energy=energy, welcome_credit_eur=200.0)
@@ -1808,7 +1811,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
-        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
         patch.object(
             cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
         ),
@@ -1902,6 +1905,7 @@ async def test_the_credit_cap_reads_each_month_own_green_levy(
     rate it never carried. Latent while no card granting a credit has moved
     its levy, and wrong the moment one does.
     """
+    from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import energy_meters, ytd_cost
 
     freezer.move_to("2026-03-31 23:00:00+02:00")
@@ -1943,7 +1947,7 @@ async def test_the_credit_cap_reads_each_month_own_green_levy(
     with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", AsyncMock(return_value={})),
-        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
         patch.object(
             ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=january)
         ),

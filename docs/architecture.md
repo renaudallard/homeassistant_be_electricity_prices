@@ -83,7 +83,9 @@ relative to that package directory.
 | `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
 | `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
 | `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
-| `ytd_cost.py` | The year-to-date cost walk: per-month fees, the hourly and per-day energy paths, and the spot-injection credit. |
+| `ytd_cost.py` | The year-to-date cost walk itself: which months it covers, what each is billed on, and the total the sensor publishes. |
+| `ytd_energy.py` | The two legs that have to replay the year hour by hour: the energy a spot-priced contract is billed at, and the feed-in credit settled the same way. |
+| `ytd_legs.py` | The legs charged per day rather than per kWh: the standing charges, the Walloon prosumer fee and the Flemish capacity term, each pro-rated over the days the contract covered. |
 | `projected_cost.py` | The full-calendar-year projection behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered yearly volume, plus the basis strings that say what was measured and what was assumed. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
