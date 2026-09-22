@@ -685,8 +685,8 @@ def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
     an error, a repair or any log line the user would look at. The form is the
     one place the mistake is visible, so refuse it there.
 
-    A totals sensor rescues it, though, and the coordinator says so
-    (``coordinator.py:3570``): the odd register half is ignored and the side
+    A totals sensor rescues it, though, and the reader says so
+    (``energy_meters._resolve_daily_kwh``): the odd register half is ignored and the side
     bills off the total. Refusing that combination too would lock an entry
     that has always billed correctly out of its own options flow over a field
     that never affected its bill, so this mirrors the coordinator's rule

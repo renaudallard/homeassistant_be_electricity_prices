@@ -208,8 +208,8 @@ class _PlaceholdersMixin(OptionsFlow):
         # bands are read only in impact mode, so a household on the standard
         # configuration quoting it still bills the target's network leg on the
         # jour/nuit columns, worth about EUR 29/yr on a bi meter and EUR 113 on
-        # a mono one. Not forced, for the reason _IMPACT_DEFAULT_CONTRACTS
-        # gives at flow_schemas.py:514: the TE card states only that a
+        # a mono one. Not forced, for the reason the comment on
+        # _IMPACT_DEFAULT_CONTRACTS in flow_schemas.py gives: the TE card states only that a
         # communicating digital meter is required, so a holder on the standard
         # configuration genuinely exists and forcing would under-bill them by
         # the same amount in the other direction. The install flow pre-selects

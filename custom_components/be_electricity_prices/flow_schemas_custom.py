@@ -138,8 +138,8 @@ def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
     if contract == CUSTOM_CONTRACT_FIXED:
         meter = defaults.get(CONF_METER, METER_MONO)
         _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_SINGLE)
-        # Same rule as the DSO step and as pricing's ``bi_capable``
-        # (`pricing.py:291`): a dynamic (SMR3) meter registers the day/night
+        # Same rule as the DSO step and as the ``bi_capable`` test in
+        # ``pricing.energy_eur_per_kwh``: a dynamic (SMR3) meter registers the day/night
         # split exactly like a bi-hourly one and ``_routed_rate`` bills both
         # through ``peak`` / ``offpeak``. Gating on METER_BI alone left a
         # custom fixed contract on a smart meter unable to enter its own two

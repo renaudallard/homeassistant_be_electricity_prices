@@ -118,3 +118,23 @@ def test_an_anchor_with_an_underscore_is_checked(
     out = capsys.readouterr().out
     assert "MISSING ANCHOR guide.md:5 #fetch_for_months" in out
     assert out.count("MISSING") == 1
+
+
+def test_no_comment_in_the_code_pins_a_line_number() -> None:
+    """The docs dropped their file:line pins because a line number is wrong
+    the moment anything above it moves, and this script checks what is left.
+    Comments in the code kept theirs, out of its reach, and the 0.27.5 split
+    left six of them pointing at the wrong line or past the end of the file.
+    Name the symbol instead."""
+    import re
+
+    root = Path(__file__).resolve().parent.parent
+    pin = re.compile(r"\b[\w/]+\.py:\d+")
+    found = [
+        f"{path.relative_to(root)} line {number}"
+        for folder in ("custom_components", "scripts", "tests")
+        for path in sorted((root / folder).rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
+        if pin.search(line)
+    ]
+    assert not found, found
