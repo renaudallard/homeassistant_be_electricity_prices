@@ -7255,6 +7255,72 @@ def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -
     assert credited() == 0.0
 
 
+def test_the_annual_credit_nets_the_export_only_where_the_meter_nets() -> None:
+    """The rule reached the three windowed callers through first_year_net_kwh
+    and never arrived here, because this one open-coded the subtraction and
+    takes no regime. Only the compensation meter turns back; on the injection
+    regime the household is billed its gross draw and credited separately, and
+    with no solar there is nothing to net.
+
+    The projection sensor and every comparison row read this, while the accrued
+    year-to-date sensor beside them was already right.
+    """
+    from datetime import date, datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _annual_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, yearly_fixed_fee=60.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    card = SimpleNamespace(
+        welcome_credit_eur=None,
+        welcome_credit_eur_per_kwh=0.05,
+        welcome_credit_cap_eur=None,
+        welcome_credit_pct_of_energy=None,
+        welcome_credit_kwh=None,
+        welcome_credit_kind="pro_rata",
+        welcome_credit_after_months=None,
+    )
+    now = datetime(2026, 9, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    def credited(regime: str) -> float:
+        return _annual_welcome_credit(
+            snap,
+            card,
+            date(2026, 9, 15),
+            now,
+            "ores",
+            "wallonia",
+            None,
+            "mono",
+            "bi_horaire",
+            None,
+            3500.0,
+            2500.0,
+            regime=regime,
+        )
+
+    # 3500 kWh drawn, 2500 exported. Gross on the two regimes that bill gross.
+    assert credited("none") == pytest.approx(0.05 * 3500.0, abs=0.01)
+    assert credited("injection") == pytest.approx(0.05 * 3500.0, abs=0.01)
+    # And netted on the one whose meter turns back.
+    assert credited("compensation") == pytest.approx(0.05 * 1000.0, abs=0.01)
+    # The gap this closes, on the card's own figures.
+    assert credited("injection") - credited("compensation") == pytest.approx(
+        0.05 * 2500.0, abs=0.01
+    )
+
+
 def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     """The year-to-date engine takes its pricing inputs as keyword arguments,
     and a call site that omits one degrades silently rather than failing.
