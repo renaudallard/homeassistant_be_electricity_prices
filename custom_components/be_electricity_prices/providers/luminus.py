@@ -367,7 +367,14 @@ def parse_snapshot(
 # the month it SIGNED, which `signing_month_snapshot` already resolves. Across
 # the nine archived months of 2026 exactly one carried a campaign, on six
 # contracts, so the normal answer here is no promo at all.
-_PROMO_GATE = "pour la conclusion d'un contrat"
+# Both apostrophes, because the cards print both. The April Comfy card uses a
+# straight one in this sentence and a curly one elsewhere, and a plain string
+# search then bound the gate to whichever occurrence came first in the file
+# rather than to the campaign's own: the scope ran from the first anchor to a
+# gate 11.000 characters later, which is the whole card, pulling both standing
+# loyalty clauses and their exclusive-night exclusion inside it. A card
+# printing this sentence curly read as no campaign at all.
+_PROMO_GATE_RE = re.compile(r"pour la conclusion d['\u2019]un contrat", re.IGNORECASE)
 _PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
 _PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
 # The volume carries a thousands separator on the cards that print one:
@@ -411,18 +418,36 @@ def _extract_promo(text: str) -> dict[str, object]:
     whether an existing customer gets it too.
     """
     flat = re.sub(r"\s+", " ", text)
-    gate = flat.find(_PROMO_GATE)
-    if gate < 0:
-        return {}
-    anchor = _PROMO_ANCHOR_RE.search(flat, 0, gate)
-    if anchor is None:
-        return {}
-    sentence = flat[anchor.start() : flat.find(".", gate) + 1]
-    payout = flat[len(sentence) + anchor.start() :][:240]
+    # Each anchor with the gate that FOLLOWS it, and the first pair stating an
+    # amount wins. A card can carry more than one of these sentences: April's
+    # Comfy prints a flat "remise de 60,00 EUR TVA incl." at 1.283 and the
+    # percentage campaign at 12.513, each with its own gate. Taking the first
+    # gate on the card and the first anchor before it pairs the two sentences
+    # across each other, and because the first gate is curly and the second
+    # straight, a plain string search for one form skipped the near gate and
+    # scoped the campaign from 1.283 to 12.723: the whole card, which pulls
+    # both standing loyalty clauses and their exclusive-night exclusion inside
+    # it. Only word order kept a 5% loyalty discount from being read as the
+    # campaign.
+    pct = kwh = None
+    sentence = payout = ""
+    for anchor in _PROMO_ANCHOR_RE.finditer(flat):
+        gate_at = _PROMO_GATE_RE.search(flat, anchor.end())
+        if gate_at is None:
+            continue
+        span = flat[anchor.start() : flat.find(".", gate_at.start()) + 1]
+        found_pct = _PROMO_PCT_RE.search(span)
+        found_kwh = _PROMO_KWH_RE.search(span)
+        if found_pct is None and found_kwh is None:
+            # A campaign sentence stating its amount in a shape this does not
+            # read, which April's 60,00 EUR one is. Left alone rather than
+            # guessed at, and the next sentence still gets its turn.
+            continue
+        pct, kwh, sentence = found_pct, found_kwh, span
+        payout = flat[anchor.start() + len(span) :][:240]
+        break
 
     out: dict[str, object] = {}
-    pct = _PROMO_PCT_RE.search(sentence)
-    kwh = _PROMO_KWH_RE.search(sentence)
     if pct is not None:
         out["welcome_credit_pct_of_energy"] = to_float(pct.group(1)) / 100.0
     if kwh is not None:

@@ -737,3 +737,90 @@ def test_the_campaign_is_read_from_its_own_sentence_not_the_card() -> None:
     assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.33)
     # The loyalty clause's own night exclusion is not the campaign's.
     assert "welcome_credit_excludes_night_meter" not in promo
+
+
+def test_the_signing_gate_is_read_whichever_apostrophe_the_card_prints() -> None:
+    """The gate was a plain string with a straight apostrophe, and the cards
+    print both forms. Two ways that goes wrong.
+
+    A card printing the campaign's own gate curly matched nothing, so the whole
+    campaign went unread. And on a card printing both, the search bound the
+    gate to the straight occurrence wherever it fell, while the anchor was
+    taken from the start of the card, so the scope stretched from the first
+    anchor to a gate in a later sentence and swallowed the loyalty clauses the
+    scope rule exists to keep out.
+    """
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    curly = (
+        "(***) En tant que nouveau client, vous beneficiez d\u2019une remise de "
+        "33% sur les couts energetiques pendant 12 mois pour la conclusion "
+        "d\u2019un contrat Luminus Comfy Electricite en septembre 2026. Cette "
+        "remise sera repartie au pro rata sur vos prochains decomptes."
+    )
+    assert _extract_promo(curly)["welcome_credit_pct_of_energy"] == pytest.approx(0.33)
+
+    # The campaign sentence closes with a CURLY gate, and a later sentence
+    # carries the straight one. The scope must end at the campaign's own.
+    both = (
+        "(***) En tant que nouveau client, vous beneficiez d\u2019une remise de "
+        "29% sur les couts energetiques pendant 12 mois pour la conclusion "
+        "d\u2019un contrat Luminus ComfyFlex en septembre 2026. Cette remise "
+        "sera repartie au pro rata sur vos prochains decomptes. "
+        "(*) 12 mois apres la date de debut, une remise de 5 % sur les couts "
+        "energetiques, non-valable sur un compteur exclusif nuit, accordee 24 "
+        "mois apres la signature via un cashback pour la conclusion d'un "
+        "contrat de fourniture existant."
+    )
+    promo = _extract_promo(both)
+    assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.29)
+    # Nothing from the sentence after the campaign's own gate.
+    assert "welcome_credit_excludes_night_meter" not in promo
+    assert promo["welcome_credit_kind"] == "pro_rata"
+    assert "welcome_credit_after_months" not in promo
+
+
+def test_the_campaign_scope_is_one_sentence_on_a_card_carrying_two() -> None:
+    """April's Comfy card prints two of these sentences: a flat "remise de
+    60,00 EUR TVA incl." at 1.283 and the percentage campaign at 12.513, each
+    closed by its own signing gate, and the first gate is curly where the
+    second is straight.
+
+    Pairing the first gate found with the first anchor before it crosses the
+    two over, and the scope then runs the whole 11.512 characters between them.
+    The 11% was read out of that only because it happened to be the first
+    percentage inside it.
+
+    The card as published gives the same answer either way, which is why this
+    puts a loyalty clause between the two sentences: real wording, in the gap
+    the old scope covered and the new one does not. Under the old reader it is
+    the first percentage in scope and is billed as the campaign.
+    """
+    import re
+
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    text = fixture_text("luminus_comfy_w.pdf")
+    assert _extract_promo(text)["welcome_credit_pct_of_energy"] == pytest.approx(0.11)
+
+    flat = re.sub(r"\s+", " ", text)
+    loyalty = (
+        " (*) 12 mois apres la date de debut, une remise de 5 % sur les couts "
+        "energetiques, accordee 24 mois apres la date de debut via un "
+        "cashback. "
+    )
+    # Between the flat sentence and the percentage one: inside the span the
+    # old scope reached, outside the sentence the new one reads.
+    spliced = flat[:6000] + loyalty + flat[6000:]
+
+    promo = _extract_promo(spliced)
+    assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.11), (
+        "the campaign's own sentence states 11%; 5% is the loyalty clause "
+        "that sits between the two campaign sentences"
+    )
+    assert promo["welcome_credit_kind"] == "pro_rata"
+    assert "welcome_credit_after_months" not in promo
