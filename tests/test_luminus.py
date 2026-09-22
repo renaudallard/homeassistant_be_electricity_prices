@@ -824,3 +824,41 @@ def test_the_campaign_scope_is_one_sentence_on_a_card_carrying_two() -> None:
     )
     assert promo["welcome_credit_kind"] == "pro_rata"
     assert "welcome_credit_after_months" not in promo
+
+
+def test_a_campaign_stated_only_in_euro_is_read() -> None:
+    """April's Comfy card prints "une remise de 60,00 EUR TVA incl." under the
+    signing gate, and there was no EUR pattern, so a card whose only campaign
+    is a flat amount granted nothing.
+
+    That card also prints an 11% campaign lower down, and it keeps winning: the
+    snapshot holds one payout kind and one wait, so the percentage and volume
+    shapes are preferred where a card states one. Mixing the amount of one
+    sentence with the conditions of another is what marked the 11% campaign as
+    a cashback at the wait quoted after the flat one.
+    """
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _extract_promo,
+    )
+
+    flat_only = (
+        "En tant que nouveau client, vous beneficiez d'une remise de 60,00 EUR "
+        "TVA incl. pour la conclusion d'un contrat Luminus Comfy Electricite "
+        "en avril 2026."
+    )
+    promo = _extract_promo(flat_only)
+    assert promo["welcome_credit_eur"] == pytest.approx(60.0)
+    assert "welcome_credit_pct_of_energy" not in promo
+    assert "welcome_credit_kwh" not in promo
+
+    # An amount with a thousands separator is left UNREAD rather than guessed
+    # at: no Luminus card prints one, and a reader that took it would have to
+    # decide whether the dot separates thousands or decimals, billing 1,25 EUR
+    # or 125.000 when it decided wrong.
+    assert _extract_promo(flat_only.replace("60,00 EUR", "1.250,00 EUR")) == {}
+
+    # The real April card states both, and the percentage still wins whole.
+    april = _extract_promo(fixture_text("luminus_comfy_w.pdf"))
+    assert april["welcome_credit_pct_of_energy"] == pytest.approx(0.11)
+    assert april["welcome_credit_kind"] == "pro_rata"
+    assert "welcome_credit_eur" not in april

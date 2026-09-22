@@ -377,6 +377,18 @@ def parse_snapshot(
 _PROMO_GATE_RE = re.compile(r"pour la conclusion d['\u2019]un contrat", re.IGNORECASE)
 _PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
 _PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
+# A campaign stated as a flat amount: April's Comfy card prints "une remise de
+# 60,00 EUR TVA incl." in its own sentence, under the same signing gate as the
+# percentage one lower down. TVA incl. on a residential card is the basis the
+# credit is already carried on, so nothing is scaled here.
+#
+# Up to four digits and an optional decimal comma, which is every amount these
+# cards print. A thousands separator is deliberately NOT accepted: "1.250,00"
+# matches nothing and the campaign is left unread, where a reader that took it
+# would have to guess whether the dot separates thousands or decimals and bill
+# 1,25 EUR or 125.000 when it guessed wrong. An unread campaign is a card to
+# look at; an invented figure is a wrong bill.
+_PROMO_EUR_RE = re.compile(r"remise\s+de\s+(\d{1,4}(?:,\d{1,2})?)\s*EUR", re.IGNORECASE)
 # The volume carries a thousands separator on the cards that print one:
 # May 2026 Comfy says "une remise de 1.000 kWh", where a plain decimal
 # read gives 1,0 kWh. tier_bound_kwh is the shared reader for exactly
@@ -429,29 +441,58 @@ def _extract_promo(text: str) -> dict[str, object]:
     # both standing loyalty clauses and their exclusive-night exclusion inside
     # it. Only word order kept a 5% loyalty discount from being read as the
     # campaign.
-    pct = kwh = None
+    #
+    # A card may run more than one campaign at once, and April's Comfy does:
+    # 60,00 EUR flat at 1.283 and 11% of the energy cost at 12.513, both
+    # naming the same product and the same signing month, so they are two
+    # benefits rather than one stated twice. The snapshot holds one field per
+    # shape and the credit engine adds a flat leg to a per-kWh one, so the
+    # union is what the card grants. First of each shape wins, which is the
+    # only reading that cannot double-count a card repeating itself.
+    # ONE sentence supplies everything: the amount, the payout wording, the
+    # wait and the night exclusion. A card can carry two of these sentences,
+    # and April's Comfy does (60,00 EUR flat at 1.283, 11% of the energy cost
+    # at 12.513, both naming the same product and signing month), but the
+    # snapshot holds ONE payout kind and one wait, so taking the amount from
+    # one sentence and the conditions from another is how the 11% campaign
+    # came out marked as a cashback at the wait quoted after the flat one.
+    #
+    # The percentage and volume shapes are preferred where a card states one,
+    # because they are the shapes that ride a year and carry the exclusions.
+    # A card whose only campaign is a flat amount is read on its own terms.
     sentence = payout = ""
-    for anchor in _PROMO_ANCHOR_RE.finditer(flat):
-        gate_at = _PROMO_GATE_RE.search(flat, anchor.end())
-        if gate_at is None:
-            continue
-        span = flat[anchor.start() : flat.find(".", gate_at.start()) + 1]
-        found_pct = _PROMO_PCT_RE.search(span)
-        found_kwh = _PROMO_KWH_RE.search(span)
-        if found_pct is None and found_kwh is None:
-            # A campaign sentence stating its amount in a shape this does not
-            # read, which April's 60,00 EUR one is. Left alone rather than
-            # guessed at, and the next sentence still gets its turn.
-            continue
-        pct, kwh, sentence = found_pct, found_kwh, span
-        payout = flat[anchor.start() + len(span) :][:240]
-        break
+    pct = kwh = eur = None
+    for want_flat in (False, True):
+        for anchor in _PROMO_ANCHOR_RE.finditer(flat):
+            gate_at = _PROMO_GATE_RE.search(flat, anchor.end())
+            if gate_at is None:
+                continue
+            span = flat[anchor.start() : flat.find(".", gate_at.start()) + 1]
+            found_pct = _PROMO_PCT_RE.search(span)
+            found_kwh = _PROMO_KWH_RE.search(span)
+            found_eur = _PROMO_EUR_RE.search(span)
+            if want_flat:
+                if found_eur is None:
+                    continue
+            elif found_pct is None and found_kwh is None:
+                continue
+            pct, kwh, eur = found_pct, found_kwh, found_eur
+            sentence = span
+            payout = flat[anchor.start() + len(span) :][:240]
+            break
+        if sentence:
+            break
 
     out: dict[str, object] = {}
     if pct is not None:
         out["welcome_credit_pct_of_energy"] = to_float(pct.group(1)) / 100.0
     if kwh is not None:
         out["welcome_credit_kwh"] = tier_bound_kwh(kwh.group(1))
+    if eur is not None:
+        # to_float, not tier_bound_kwh: this is money with a decimal comma
+        # ("60,00"), where a volume bound is an integer with a thousands dot
+        # ("1.000 kWh"). Reading one with the other's reader gives 6000,00.
+        out["welcome_credit_eur"] = to_float(eur.group(1))
     if not out:
         return {}
     cashback = _PROMO_CASHBACK_RE.search(payout)
