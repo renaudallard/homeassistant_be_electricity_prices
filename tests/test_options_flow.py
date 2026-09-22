@@ -5532,7 +5532,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
     supplier or a withdrawn product that moves a cell should surface here and
     be re-costed deliberately rather than silently changing what a sweep does.
     """
-    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.flow_contracts import _sweep_candidates
 
     expected = {
         # Trevion adds one fixed card and five dynamic/monthly-indexed cards,
@@ -5593,7 +5593,7 @@ def test_sweep_candidates_apply_every_condition() -> None:
         KIND_GROUP,
         SUPPLIER_CUSTOM,
     )
-    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.flow_contracts import _sweep_candidates
     from custom_components.be_electricity_prices.providers import effective_kind
 
     rows = _sweep_candidates("flanders", "static", False, "power_fix")
@@ -5620,7 +5620,7 @@ def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> Non
     the meter step can still render. That empty string has no group, and the
     ranking page must be told so rather than raising out of a lookup or
     inventing a group the household is not on."""
-    from custom_components.be_electricity_prices.flow_schemas import _contract_group
+    from custom_components.be_electricity_prices.flow_contracts import _contract_group
 
     assert _contract_group("eneco", "power_fix") == "static"
     assert _contract_group("engie", "engie_dynamic") == "spot"
@@ -5657,7 +5657,7 @@ def test_a_row_is_named_for_the_settlement_it_was_priced_on() -> None:
 
     # And every label in a cell stays distinct, which the label -> candidate
     # map the year-to-date pass reads back through depends on.
-    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.flow_contracts import _sweep_candidates
 
     for group in ("static", "spot", "slot"):
         labels = [
@@ -5676,7 +5676,7 @@ def test_the_settlement_decides_which_cell_the_household_is_ranked_in() -> None:
     a real quarter-hourly bill, measured against a table of monthly contracts
     and none of the dynamic ones they could actually move to.
     """
-    from custom_components.be_electricity_prices.flow_schemas import (
+    from custom_components.be_electricity_prices.flow_contracts import (
         _contract_group,
         _sweep_candidates,
     )
@@ -6228,7 +6228,7 @@ def test_every_supplier_declares_what_a_card_costs_to_sweep() -> None:
 def test_sweep_cost_ordering_front_loads_the_cheap_cards() -> None:
     """The property the budget relies on: ordering by declared cost fills far
     more of the table early than the registry's own order does."""
-    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.flow_contracts import _sweep_candidates
     from custom_components.be_electricity_prices.providers import get as get_extractor
 
     rows = _sweep_candidates("flanders", "static", False, "")

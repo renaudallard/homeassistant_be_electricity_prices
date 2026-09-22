@@ -63,9 +63,6 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
-from .providers import all_extractors
-from .providers.base import ExtractorError
-from .providers._rates import Contract
 from .const import (
     CAPACITY_MODE_FIXED,
     CAPACITY_MODE_SENSOR,
@@ -80,38 +77,15 @@ from .const import (
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
     CONF_YTD_FROM_CONTRACT_START,
-    CONF_CUSTOM_DSO_BRUSSELS_OSP,
-    CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
-    CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
     CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
     CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
     CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
-    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
-    CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
-    CONF_CUSTOM_DSO_TRANSPORT,
-    CONF_CUSTOM_ENERGY_BASE,
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
-    CONF_CUSTOM_ENERGY_FACTOR,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_PEAK,
-    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
-    CONF_CUSTOM_ENERGY_SINGLE,
-    CONF_CUSTOM_INJECTION_BASE,
-    CONF_CUSTOM_INJECTION_CURRENT,
-    CONF_CUSTOM_INJECTION_FACTOR,
-    CONF_CUSTOM_INJECTION_FLOOR,
-    CONF_CUSTOM_INJECTION_MODE,
-    CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
-    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
-    CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
-    CONF_CUSTOM_TAX_FEDERAL_EXCISE,
-    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
-    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
-    CONF_CUSTOM_VAT_RATE,
-    CONF_CUSTOM_YEARLY_FIXED_FEE,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
@@ -141,146 +115,35 @@ from .const import (
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
     CONNECTION_KVA_TIERS,
-    CUSTOM_CONTRACT_DYNAMIC,
-    CUSTOM_CONTRACT_FIXED,
-    CUSTOM_CONTRACT_MONTHLY,
-    CUSTOM_INJECTION_MODES,
-    CUSTOM_INJECTION_MODE_CURRENT,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_CONNECTION_KVA_TIER,
-    DEFAULT_CUSTOM_VAT_RATE,
     DEFAULT_CARD_ARCHIVE,
     DEFAULT_DAILY_COMPARE,
     DEFAULT_INCLUDE_VAT,
-    DSO_CHOICES,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     DSO_TARIFF_MODES,
-    KIND_GROUP,
     METER_BI,
     METER_DYNAMIC,
-    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     METER_TYPES,
     REGIONS,
-    REGION_BRUSSELS,
-    REGION_FLANDERS,
     REGION_WALLONIA,
     SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIMES,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SPOT_PRICED_CONTRACT_KINDS,
-    SUPPLIER_CUSTOM,
     VREG_CAPACITY_FLOOR_KW,
 )
-from .providers import get as get_extractor
-from .providers import effective_kind
-from .providers import is_professional
-
-
-def _supplier_options(
-    region: str | None = None, keep: str | None = None
-) -> list[SelectOptionDict]:
-    """Selectable suppliers, dropping any that has announced its exit.
-
-    ``keep`` is the supplier already stored on the entry being edited. It
-    must be passed on every edit path: a SelectSelector rejects a default
-    that is not among its options, so filtering unconditionally would make
-    an existing entry on a withdrawn supplier impossible to edit.
-    """
-    extractors = all_extractors()
-    if region is not None:
-        extractors = tuple(e for e in extractors if region in e.regions())
-    # By label, not by registry order, which is insertion order and put a
-    # supplier added later wherever its import happened to land; the expert
-    # escape hatch stays last.
-    ordered = sorted(
-        extractors, key=lambda e: (e.id == SUPPLIER_CUSTOM, e.label.casefold())
-    )
-    return [
-        SelectOptionDict(value=e.id, label=e.label)
-        for e in ordered
-        if e.deprecated_until is None or e.id == keep
-    ]
-
-
-def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
-    """Report a supplier that sells nothing in the chosen region.
-
-    Supplier and region are picked on the SAME step, so the mismatch can only
-    be judged once both are in. Detecting it a step later and aborting ends
-    the flow, and in the options flow that discards every other change made in
-    the same run: the user re-opens the dialog to find their edits gone. The
-    abort text even says "go back and pick a different combination", which HA
-    gives no way to do from an abort.
-
-    Returning it as a form error re-shows the step with everything still
-    filled in, which is what the text has always described.
-    """
-    supplier = data.get(CONF_SUPPLIER)
-    region = data.get(CONF_REGION)
-    if not supplier or not region:
-        return None
-    try:
-        available = _contracts_for(str(supplier), str(region))
-    except ExtractorError:
-        # Not this check's business: an unknown supplier id is rejected by the
-        # selector itself.
-        return None
-    if available:
-        return None
-    return {CONF_SUPPLIER: "supplier_region_unavailable"}
-
-
-def _contracts_for(supplier_id: str, region: str | None = None) -> tuple[Contract, ...]:
-    contracts = get_extractor(supplier_id).contracts
-    if region is None:
-        return contracts
-    return tuple(c for c in contracts if region in c.regions)
-
-
-def _region_dso_options(region: str) -> list[SelectOptionDict]:
-    return [
-        SelectOptionDict(value=slug, label=label)
-        for slug, label in DSO_CHOICES.get(region, ())
-    ]
-
-
-def _region_dso_slugs(region: str) -> tuple[str, ...]:
-    return tuple(slug for slug, _ in DSO_CHOICES.get(region, ()))
-
-
-def _contract_kind(
-    supplier_id: str, contract_id: str, *, quarter_hourly: bool = False
-) -> str:
-    """Return the TariffKind for a contract, or '' if it can't be resolved.
-
-    OptionsFlow can re-open a stale entry whose stored ``contract`` is
-    no longer in the supplier's catalogue (supplier dropped a product,
-    or the catalogue moved). Returning empty instead of raising lets
-    the meter step still render with a sensible default.
-
-    ``quarter_hourly`` is the household's settlement answer, and it MOVES the
-    kind on a product sold on both (Bolt's variable cards settle either
-    against the RLP-weighted month or per quarter-hour, which are different
-    rate kinds). Defaulted rather than required so every caller that asks
-    about a card in the abstract keeps the registered kind; a caller holding
-    an entry passes its answer, and a caller holding a compare TARGET passes
-    that target's, never the user's. See :func:`effective_kind`.
-    """
-    return effective_kind(supplier_id, contract_id, quarter_hourly=quarter_hourly)
-
-
-def _contract_is_professional(supplier_id: str | None, contract_id: str | None) -> bool:
-    """True when the chosen contract is a professional product, whose card
-    is published excluding VAT and may band the federal excise by annual
-    volume. Resolved from the registry's ``Contract.professional`` flag.
-
-    The flow's name for the registry lookup the pricing side reads as well.
-    """
-    return is_professional(supplier_id, contract_id)
+from .flow_contracts import (
+    _contract_kind,
+    _contracts_for,
+    _region_dso_options,
+    _region_dso_slugs,
+    _supplier_options,
+)
 
 
 def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -308,153 +171,6 @@ def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         }
     )
-
-
-def _contract_has_spot_injection(
-    supplier_id: str | None, contract_id: str | None
-) -> bool:
-    """True when the chosen contract's injection is a per-hour spot
-    formula needing an ENTSO-E key even though the energy isn't dynamic.
-    Resolved from the registry's ``Contract.spot_indexed_injection`` flag.
-
-    This used to name Cociter Variable as the only such card, and went on
-    naming it long after most of the static range across a dozen suppliers
-    had gained the flag. Deliberately no count here: the number moves
-    whenever a card is registered, and the one figure worth stating is in
-    the README, where a test derives it from this same flag.
-
-    Two shapes carry it, and ``_injection_needs_spot`` is what tells them
-    apart: a card with no printed indicative (``current is None``), which
-    loses its whole credit without a key, and one whose indicative the card
-    labels an illustration (``slot_indexed``), which falls back to it.
-    """
-    if not supplier_id or not contract_id:
-        return False
-    try:
-        contracts = get_extractor(supplier_id).contracts
-    except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.spot_indexed_injection for c in contracts)
-
-
-def _contract_is_month_indexed(
-    supplier_id: str | None, contract_id: str | None
-) -> bool:
-    """True when the chosen contract's ENERGY is indexed on the delivery
-    month's mean, so the optional ENTSO-E key is worth offering on every
-    solar regime. Resolved from the registry's ``Contract.month_indexed_energy``
-    flag, the registry twin of the parser's ``month_indexed``."""
-    if not supplier_id or not contract_id:
-        return False
-    try:
-        contracts = get_extractor(supplier_id).contracts
-    except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.month_indexed_energy for c in contracts)
-
-
-def _sweep_candidates(
-    region: str, group: str, professional: bool, own_contract: str
-) -> list[tuple[str, Contract, bool]]:
-    """Every contract the ranking page may quote for this household.
-
-    The five conditions, and where each already existed for the 1:1 page:
-
-    * region, per CONTRACT and never ``SupplierExtractor.regions()``, which is
-      only the union across a supplier's products;
-    * not the expert custom supplier, which has no fetchable card and can only
-      ever be the current side of a quote;
-    * not a supplier on its way out of the market, since quoting a household
-      into a contract about to be transferred away is never useful;
-    * the same professional segment, for the reason
-      ``_compare_contract_schema`` gives at length;
-    * the same kind group, which is the one condition the 1:1 page does NOT
-      apply: see ``KIND_GROUP``.
-
-    ``own_contract`` is dropped because a ranking is a list of alternatives.
-    That is the opposite of the 1:1 page, which keeps it on purpose so a
-    household can ask what its own contract would cost on another meter, and
-    the two are not in tension: the ranking's own row is printed from the
-    baseline the household is already being quoted against, not fetched again
-    as a candidate.
-
-    Returns ``(supplier_id, Contract, quarter_hourly)`` triples, because a
-    contract does not carry its supplier and a product sold on two settlements
-    is two candidates.
-
-    That expansion is what keeps the page whole. A contract the customer may
-    settle either way belongs to a different KIND GROUP on each side (Bolt's
-    variable cards are ``static`` unticked and ``spot`` ticked), and the
-    ranking only ever ranks within one group. Offering just the registered
-    settlement would hide Bolt from every dynamic household and hide its
-    quarter-hourly settlement from every static one, which is a row the page
-    used to have when the two were separate contract ids. Costs nothing to
-    fetch: the pair shares one document and the sweep now reads it once.
-    """
-    out: list[tuple[str, Contract, bool]] = []
-    for ext in all_extractors():
-        if ext.id == SUPPLIER_CUSTOM or ext.deprecated_until is not None:
-            continue
-        for c in ext.contracts:
-            if region not in c.regions:
-                continue
-            if c.professional != professional:
-                continue
-            if c.id == own_contract:
-                continue
-            # Expanded only where the settlement changes the KIND, which is
-            # Bolt: its variable card is a different rate kind read either
-            # way, so the two readings are two bills and belong in different
-            # cells. Frank's tiers are dynamic on both settlements, so the
-            # second candidate would be the same product priced identically
-            # (the ranking's annual figure is hourly whatever the live
-            # sensors show) and cost a duplicate row and a duplicate fetch.
-            settlements = [False]
-            if c.quarter_hourly_option and effective_kind(
-                ext.id, c.id, quarter_hourly=True
-            ) != effective_kind(ext.id, c.id):
-                settlements.append(True)
-            for quarter_hourly in settlements:
-                kind = effective_kind(ext.id, c.id, quarter_hourly=quarter_hourly)
-                # Subscripted, not .get(): KIND_GROUP is total over TariffKind
-                # and a KeyError here is a new kind nobody grouped, which must
-                # fail loudly in CI rather than quietly drop every contract of
-                # it.
-                if KIND_GROUP[kind] != group:
-                    continue
-                out.append((ext.id, c, quarter_hourly))
-    return out
-
-
-def _contract_group(
-    supplier_id: str, contract_id: str, *, quarter_hourly: bool = False
-) -> str:
-    """The household's own kind group, or '' when it cannot be resolved.
-
-    ``_contract_kind`` returns '' for an entry whose stored contract has left
-    the catalogue, deliberately, so the meter step can still render. That
-    empty string has no group, and the ranking page cannot be built for it:
-    answer '' here too and let the caller say so, rather than raising out of a
-    registry lookup or inventing a group the household is not on.
-
-    The stale SUPPLIER is a second case ``_contract_kind`` does not cover: it
-    resolves the extractor first, and that raises for an id this build no
-    longer ships. Caught here rather than there, because widening
-    ``_contract_kind`` would change what every other caller sees for an entry
-    whose supplier is gone, and this is the only caller that needs an answer
-    rather than an exception.
-
-    ``quarter_hourly`` is the household's settlement answer, and it decides
-    the group as much as the contract does: a Bolt variable card is ``static``
-    settled monthly and ``spot`` settled per quarter-hour. The ranking only
-    ranks within one group, so reading the registered kind alone put a
-    quarter-hourly household in a cell of monthly contracts.
-    """
-    try:
-        kind = _contract_kind(supplier_id, contract_id, quarter_hourly=quarter_hourly)
-    except ExtractorError:
-        return ""
-    return KIND_GROUP.get(kind, "")
 
 
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -758,242 +474,6 @@ def _connection_power_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         }
     )
-
-
-def _custom_num(*, negative: bool = False) -> NumberSelector:
-    """Number selector for a hand-entered EUR/kWh rate or coefficient.
-
-    ``negative=True`` for values a Belgian formula can legitimately drive
-    below zero (an injection factor/base, a spot multiplier/offset); the
-    rest are floored at 0.
-    """
-    if negative:
-        return NumberSelector(
-            NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
-        )
-    return NumberSelector(
-        NumberSelectorConfig(min=0.0, step="any", mode=NumberSelectorMode.BOX)
-    )
-
-
-def _add_custom_num(
-    fields: dict[Any, Any],
-    defaults: dict[str, Any],
-    key: str,
-    default: float = 0.0,
-    *,
-    negative: bool = False,
-    fallback: bool = False,
-) -> None:
-    """Append a hand-entered custom-supplier number.
-
-    ``fallback=True`` marks a rate the pricing engine FALLS BACK for when it is
-    absent (the bi-hourly peak / off-peak split and the exclusive-night
-    distribution rate all fall back to the single rate). Those must never carry
-    a ``default``: a default is submitted verbatim when the user leaves the box
-    alone, so 0,00 lands in the entry and the engine bills zero instead of
-    falling back. Use the stored value as a *suggestion* instead, exactly as
-    ``_add_manual_num`` does, so a blank box omits the key.
-    """
-    if fallback:
-        # Literally what _add_manual_num does, and for the same reason, so
-        # call it rather than keep a second copy of the suggestion-not-default
-        # idiom: violating that idiom is what shipped a billed 0,00 in
-        # 0.11.40/0.11.41.
-        _add_manual_num(fields, defaults, key, negative=negative)
-        return
-    fields[vol.Optional(key, default=float(defaults.get(key, default)))] = _custom_num(
-        negative=negative
-    )
-
-
-def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Energy formula fields for the chosen custom mode.
-
-    Coefficients are entered excluding VAT (as printed on a tariff sheet);
-    the ``custom_tax`` step's VAT rate grosses them up.
-    """
-    contract = defaults.get(CONF_CONTRACT)
-    fields: dict[Any, Any] = {}
-    if contract == CUSTOM_CONTRACT_FIXED:
-        meter = defaults.get(CONF_METER, METER_MONO)
-        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_SINGLE)
-        # Same rule as the DSO step and as pricing's ``bi_capable``
-        # (`pricing.py:291`): a dynamic (SMR3) meter registers the day/night
-        # split exactly like a bi-hourly one and ``_routed_rate`` bills both
-        # through ``peak`` / ``offpeak``. Gating on METER_BI alone left a
-        # custom fixed contract on a smart meter unable to enter its own two
-        # rates, so all 24 hours fell back to the single rate.
-        if meter in (METER_BI, METER_DYNAMIC):
-            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_PEAK, fallback=True)
-            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_OFFPEAK, fallback=True)
-        if meter == METER_EXCLUSIVE_NIGHT:
-            # Same fallback class as the peak / off-peak pair above and as its
-            # own DSO counterpart: ``_routed_rate`` bills the single rate when
-            # ``exclusive_night`` is None, so a 0.0 injected into an untouched
-            # box is a DIFFERENT answer, not an absent one. This box was the
-            # one left behind when the other five were fixed, and it is the
-            # worst of them: an exclusive-night meter routes the whole entry
-            # through this single rate, so the energy leg went to zero for
-            # every hour, not just some.
-            _add_custom_num(
-                fields, defaults, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT, fallback=True
-            )
-    else:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_FACTOR, 1.0, negative=True)
-        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_BASE, negative=True)
-        if contract == CUSTOM_CONTRACT_DYNAMIC:
-            fields[
-                vol.Optional(
-                    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
-                    default=bool(
-                        defaults.get(CONF_CUSTOM_ENERGY_QUARTER_HOURLY, False)
-                    ),
-                )
-            ] = BooleanSelector()
-    _add_custom_num(fields, defaults, CONF_CUSTOM_YEARLY_FIXED_FEE)
-    return vol.Schema(fields)
-
-
-def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Injection formula fields (shown only on the injection regime).
-
-    A fixed-rate contract can only quote a flat ``current`` credit; the
-    spot-indexed modes also accept a ``factor``/``base`` formula applied to
-    the live spot (dynamic) or the monthly mean (monthly-average).
-    """
-    contract = defaults.get(CONF_CONTRACT)
-    modes = (
-        [CUSTOM_INJECTION_MODE_CURRENT]
-        if contract == CUSTOM_CONTRACT_FIXED
-        else list(CUSTOM_INJECTION_MODES)
-    )
-    # Clamp the default to the narrowed list: a formula mode stored under a
-    # wider contract kind must not be pre-selected once the contract narrows
-    # to current-only (mirrors the guard in _dso_schema / _meter_schema).
-    mode_default = defaults.get(CONF_CUSTOM_INJECTION_MODE, modes[0])
-    if mode_default not in modes:
-        mode_default = modes[0]
-    fields: dict[Any, Any] = {
-        vol.Required(
-            CONF_CUSTOM_INJECTION_MODE,
-            default=mode_default,
-        ): SelectSelector(
-            SelectSelectorConfig(
-                options=modes,
-                mode=SelectSelectorMode.LIST,
-                translation_key="custom_injection_mode",
-            )
-        ),
-    }
-    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_CURRENT)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
-    fields[
-        vol.Optional(
-            CONF_CUSTOM_INJECTION_FLOOR,
-            default=bool(
-                defaults.get(
-                    CONF_CUSTOM_INJECTION_FLOOR,
-                    contract == CUSTOM_CONTRACT_MONTHLY,
-                )
-            ),
-        )
-    ] = BooleanSelector()
-    # SPP-weighting only applies to the monthly-average mode's formula
-    # injection (weighting the month-mean by the Synergrid solar profile).
-    if contract == CUSTOM_CONTRACT_MONTHLY:
-        fields[
-            vol.Optional(
-                CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
-                default=bool(defaults.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED, False)),
-            )
-        ] = BooleanSelector()
-    return vol.Schema(fields)
-
-
-def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Hand-entered DSO network overlay, only the region/meter-relevant
-    fields. Everything but distribution_single defaults to 0."""
-    region = defaults.get(CONF_REGION)
-    meter = defaults.get(CONF_METER, METER_MONO)
-    dso_mode = defaults.get(CONF_DSO_TARIFF_MODE)
-    fields: dict[Any, Any] = {}
-    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE)
-    # METER_DYNAMIC belongs here as much as METER_BI: an SMR3 meter registers
-    # the bi-horaire split the same way, and pricing.network_eur_per_kwh routes
-    # both through distribution_peak / distribution_offpeak whenever the DSO
-    # mode is not "simple". A dynamic / TOU contract also FORCES this meter
-    # (_meter_schema), so without these boxes a custom entry could never
-    # supply the two rates its own network leg is billed on, and every hour
-    # silently fell back to distribution_single.
-    if meter in (METER_BI, METER_DYNAMIC):
-        _add_custom_num(
-            fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK, fallback=True
-        )
-        _add_custom_num(
-            fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK, fallback=True
-        )
-    if meter == METER_EXCLUSIVE_NIGHT:
-        _add_custom_num(
-            fields,
-            defaults,
-            CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
-            fallback=True,
-        )
-    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_TRANSPORT)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)
-    if region == REGION_FLANDERS:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR)
-    if region == REGION_WALLONIA:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR)
-        if dso_mode == DSO_MODE_IMPACT:
-            # fallback=True: leaving these blank must mean "I am not on the
-            # incitative bands", which falls back to the single rate. A
-            # default would submit 0,00 and bill no distribution at all.
-            _add_custom_num(
-                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PIC, fallback=True
-            )
-            _add_custom_num(
-                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM, fallback=True
-            )
-            _add_custom_num(
-                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_ECO, fallback=True
-            )
-    if region == REGION_BRUSSELS:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_BRUSSELS_OSP)
-    return vol.Schema(fields)
-
-
-def _custom_tax_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Hand-entered taxes/levies overlay. One regional-renewables field is
-    routed to the region's slot at build time; VAT grosses up every
-    component (injection stays exempt).
-
-    The connection-fee box is Walloon only. The only Belgian levy of that
-    shape is the redevance de raccordement, and the pricing engine adds
-    ``region_connection_fee`` for Wallonia alone, so on a Flemish or Brussels
-    entry the box was stored and never priced: a Flanders customer put the
-    WKK levy in it (which belongs in the renewables box, with GSC) and saw 0
-    and 100 behave the same. Same region gate the DSO step already applies
-    to the prosumer and capacity boxes.
-    """
-    fields: dict[Any, Any] = {}
-    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_FEDERAL_EXCISE)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
-    if defaults.get(CONF_REGION) == REGION_WALLONIA:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH)
-    fields[
-        vol.Optional(
-            CONF_CUSTOM_VAT_RATE,
-            default=float(defaults.get(CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE)),
-        )
-    ] = NumberSelector(
-        NumberSelectorConfig(min=0.0, max=1.0, step=0.01, mode=NumberSelectorMode.BOX)
-    )
-    return vol.Schema(fields)
 
 
 def _meter_schema(
@@ -1383,3 +863,19 @@ def _compare_solar_schema(defaults: dict[str, Any], *, ask_volumes: bool) -> vol
                     selector
                 )
     return vol.Schema(fields)
+
+
+def _custom_num(*, negative: bool = False) -> NumberSelector:
+    """Number selector for a hand-entered EUR/kWh rate or coefficient.
+
+    ``negative=True`` for values a Belgian formula can legitimately drive
+    below zero (an injection factor/base, a spot multiplier/offset); the
+    rest are floored at 0.
+    """
+    if negative:
+        return NumberSelector(
+            NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
+        )
+    return NumberSelector(
+        NumberSelectorConfig(min=0.0, step="any", mode=NumberSelectorMode.BOX)
+    )

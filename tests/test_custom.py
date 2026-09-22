@@ -40,7 +40,7 @@ from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.compare_flow import (
     _compare_supplier_options,
 )
-from custom_components.be_electricity_prices.flow_schemas import (
+from custom_components.be_electricity_prices.flow_schemas_custom import (
     _custom_dso_schema,
     _custom_energy_schema,
 )
@@ -229,7 +229,7 @@ def test_impact_boxes_left_blank_do_not_bill_zero_distribution() -> None:
     network_eur_per_kwh takes the Impact branch as soon as all three are
     non-None, so those zeros did not fall back: they billed no distribution
     at all, in every band, every hour."""
-    from custom_components.be_electricity_prices.flow_schemas import (
+    from custom_components.be_electricity_prices.flow_schemas_custom import (
         _custom_dso_schema,
     )
 
@@ -454,7 +454,7 @@ def test_custom_excluded_from_compare_targets() -> None:
 
 
 def test_custom_listed_last_in_supplier_dropdown() -> None:
-    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
+    from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
     values = [o["value"] for o in _supplier_options()]
     assert values[-1] == const.SUPPLIER_CUSTOM
@@ -464,7 +464,7 @@ def test_suppliers_are_listed_alphabetically_before_the_custom_one() -> None:
     """The dropdown followed the registry's insertion order, which put a
     supplier added later wherever its import happened to land: Trevion sat
     between TotalEnergies and Luminus."""
-    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
+    from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
     labels = [o["label"] for o in _supplier_options()][:-1]
     assert labels == sorted(labels, key=str.casefold)
@@ -485,7 +485,7 @@ def test_compare_targets_are_listed_alphabetically() -> None:
 
 
 def test_withdrawn_supplier_not_offered_to_new_setups() -> None:
-    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
+    from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
     assert "dats24" not in {o["value"] for o in _supplier_options()}
     assert "dats24" not in {
@@ -497,7 +497,7 @@ def test_withdrawn_supplier_still_editable_on_an_existing_entry() -> None:
     """The load-bearing half: a SelectSelector rejects a default that is not
     among its options, so an entry already on a withdrawn supplier would
     become impossible to edit if the filter had no ``keep`` escape hatch."""
-    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
+    from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
     assert "dats24" in {o["value"] for o in _supplier_options(keep="dats24")}
     # keep= is an exception for one entry, not a global switch-off.
@@ -915,7 +915,7 @@ def test_custom_tax_step_offers_the_connection_fee_in_wallonia_only() -> None:
     Wallonia alone. Offering the box to a Flemish entry stored a value that was
     never priced: a Flanders customer typed the WKK levy into it, which belongs
     in the renewables box with GSC, and saw 0 and 100 behave the same."""
-    from custom_components.be_electricity_prices.flow_schemas import (
+    from custom_components.be_electricity_prices.flow_schemas_custom import (
         _custom_tax_schema,
     )
 

@@ -1,7 +1,8 @@
 # Config and options flow
 
 This document covers the config-flow package -- `config_flow.py` plus the
-modules split out of it (`flow_schemas.py`, `flow_prefill.py`, `compare_quote.py`,
+modules split out of it (`flow_schemas.py`, `flow_contracts.py`,
+`flow_schemas_custom.py`, `flow_prefill.py`, `compare_quote.py`,
 `compare_weighting.py`, `compare_table.py`, and the compare branch: `compare_flow.py`, `compare_sweep_flow.py`,
 `compare_engine.py`, `compare_household.py`, `compare_inputs.py` and
 `compare_placeholders.py`) -- the multi-step wizard that turns a user's
@@ -172,7 +173,7 @@ leaves the field unset so the user must repick.
 ### `dso`: distribution operator
 
 Schema `_dso_schema` (`flow_schemas.py`). Options come from `DSO_CHOICES[region]`
-(`const.py`) via `_region_dso_options` (`flow_schemas.py`): 8 Fluvius
+(`const.py`) via `_region_dso_options` (`flow_contracts.py`): 8 Fluvius
 sub-areas in Flanders, 5 operators in Wallonia, Sibelga only in Brussels. The DSO
 keys are canonical and stored verbatim in `CONF_DSO`; `const.py` warns they are
 "stable forever" because they key into `SupplierSnapshot.dsos`. As with the contract
@@ -257,7 +258,7 @@ Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route
 distribution through the bi-horaire DSO peak/offpeak split while the supplier still
 billed energy by TOU slot, two billing modes that do not mix (`config_flow.py`
-comment). `_contract_kind` (`flow_schemas.py`) resolves the kind from the
+comment). `_contract_kind` (`flow_contracts.py`) resolves the kind from the
 registry and returns `""` when the stored contract is no longer in the catalogue,
 so a stale OptionsFlow entry still renders the meter step with a sensible default
 rather than raising.
@@ -440,7 +441,7 @@ collected one) and either:
 
 The step keeps its historical id, which is what the translations are keyed on.
 
-`_contract_has_spot_injection` (`flow_schemas.py`) reads the registry's
+`_contract_has_spot_injection` (`flow_contracts.py`) reads the registry's
 `Contract.spot_indexed_injection` flag (`providers/base.py`). That flag marks a
 non-dynamic product whose *feed-in* is index-linked while the energy leg fetches no
 spots, which is most of the static range across a dozen suppliers: the energy is
@@ -676,7 +677,7 @@ table below is the authority on what the picker excludes.
 `_SweepStepsMixin` (`compare_sweep_flow.py`) is a separate branch reached from a
 third menu entry. It subclasses `_CompareStepsMixin` because it reuses
 `_resolve_household` and the live-validated key prompt; only the menu entry and
-the steps are separate. `_sweep_candidates` (`flow_schemas.py`) narrows to
+the steps are separate. `_sweep_candidates` (`flow_contracts.py`) narrows to
 the entry's own `KIND_GROUP`, region and professional segment, and drops the
 entry's own contract - the opposite of the one-to-one picker, which keeps it on
 purpose. An empty cell aborts `compare_all_no_alternatives`, which is an answer

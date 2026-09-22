@@ -64,8 +64,8 @@ from .providers.base import SupplierSnapshot
 from .compare_quote import _annual_volume
 from .compare_quote import _annual_welcome_credit
 from .compare_weighting import _consumption_weighted_spot
-from .flow_schemas import _contract_has_spot_injection
-from .flow_schemas import _contract_kind
+from .flow_contracts import _contract_has_spot_injection
+from .flow_contracts import _contract_kind
 from .compare_quote import _covers_a_year
 from .spot_stats import _energy_is_rlp_indexed
 from .energy_meters import _measured_hour_weights

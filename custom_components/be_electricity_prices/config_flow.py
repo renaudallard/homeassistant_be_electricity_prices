@@ -58,37 +58,41 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 
 from .flow_schemas import (
+    _MANUAL_RATE_KEYS,
     _METER_SENSOR_KEYS,
     _api_key_schema,
-    _injection_api_key_schema,
     _capacity_schema,
     _connection_power_schema,
-    _contract_has_spot_injection,
-    _contract_is_month_indexed,
-    _contract_is_professional,
-    _contract_kind,
     _contract_schema,
-    _contracts_for,
-    _custom_dso_schema,
-    _custom_energy_schema,
-    _custom_injection_schema,
-    _custom_tax_schema,
+    _direct_debit_schema,
     _drop_blanked,
     _dso_schema,
     _dso_tariff_mode_schema,
     _incomplete_register_pairs,
+    _injection_api_key_schema,
     _meter_schema,
     _meters_schema,
-    _direct_debit_schema,
     _professional_schema,
     _settlement_schema,
-    _region_mismatch_error,
     _signed_rate_schema,
     _solar_schema,
     _user_schema,
     _validate_contract_dates,
     _validate_entsoe_key,
-    _MANUAL_RATE_KEYS,
+)
+from .flow_schemas_custom import (
+    _custom_dso_schema,
+    _custom_energy_schema,
+    _custom_injection_schema,
+    _custom_tax_schema,
+)
+from .flow_contracts import (
+    _contract_has_spot_injection,
+    _contract_is_month_indexed,
+    _contract_is_professional,
+    _contract_kind,
+    _contracts_for,
+    _region_mismatch_error,
 )
 from .compare_sweep_flow import _SweepStepsMixin
 from .flow_prefill import (

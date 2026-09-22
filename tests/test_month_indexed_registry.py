@@ -18,7 +18,7 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
     SPOT_PRICED_CONTRACT_KINDS,
 )
-from custom_components.be_electricity_prices.flow_schemas import (
+from custom_components.be_electricity_prices.flow_contracts import (
     _contract_is_month_indexed,
 )
 from custom_components.be_electricity_prices.providers import (

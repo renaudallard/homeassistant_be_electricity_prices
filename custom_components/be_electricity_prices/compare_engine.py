@@ -55,10 +55,10 @@ from .const import DOMAIN
 from .const import METER_MONO
 from .const import SPOT_PRICED_CONTRACT_KINDS
 from .energy_meters import memoise_meter_reads
-from .flow_schemas import _contract_group
-from .flow_schemas import _contract_is_professional
-from .flow_schemas import _contract_kind
-from .flow_schemas import _sweep_candidates
+from .flow_contracts import _contract_group
+from .flow_contracts import _contract_is_professional
+from .flow_contracts import _contract_kind
+from .flow_contracts import _sweep_candidates
 from .providers import get as get_extractor
 from .providers._pdf import memoise_text_fetches
 from dataclasses import replace

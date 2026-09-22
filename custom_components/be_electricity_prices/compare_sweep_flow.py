@@ -46,8 +46,8 @@ from .const import CONF_METER
 from .const import METER_MONO
 from .const import SOLAR_REGIME_INJECTION
 from .const import SPOT_PRICED_CONTRACT_KINDS
-from .flow_schemas import _contract_has_spot_injection
-from .flow_schemas import _contract_kind
+from .flow_contracts import _contract_has_spot_injection
+from .flow_contracts import _contract_kind
 from .providers import get as get_extractor
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.config_entries import ConfigFlowResult

@@ -92,6 +92,8 @@ relative to that package directory.
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
 | `config_flow.py` | The config wizard's step handlers (supplier and region, contract, DSO sub-area, meter, DSO billing mode, ENTSO-E key, capacity, connection power, solar, energy meters) and the options flow. |
 | `flow_schemas.py` | The voluptuous schema builders and validators each step calls, including the ENTSO-E key check against the live endpoint. |
+| `flow_contracts.py` | Which supplier and contract a household can pick, and what each one is: sold in this region, professional, spot-settled, index-tracking. Read-only over the registry. |
+| `flow_schemas_custom.py` | The four forms behind the custom supplier, where a household types its own card in leg by leg. |
 | `flow_prefill.py` | Suggests meter and capacity defaults from Home Assistant's Energy dashboard and the entity registry. Every failure mode degrades to suggesting nothing. |
 | `compare_flow.py` | The options flow's one-off "compare another supplier" branch, as a mixin: the steps, their pickers and the step-to-step branching. |
 | `compare_sweep_flow.py` | The compare-all branch: the progress step that sweeps the market a slice at a time, the parked ranking, and the daily job that enters the same sweep with nobody watching. |

@@ -49,7 +49,7 @@ from .compare_quote import _annual_bill
 from .compare_quote import _annual_welcome_credit
 from .compare_table import _card_caveats
 from .compare_weighting import _compare_injection_credit
-from .flow_schemas import _contract_kind
+from .flow_contracts import _contract_kind
 from .cohort import _parse_iso_date
 from .compare_table import _populate_charts
 from .compare_table import _solar_note
