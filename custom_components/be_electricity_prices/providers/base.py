@@ -35,8 +35,21 @@ Each supplier exposes a module under ``providers/`` that:
 The coordinator picks the configured contract + DSO and feeds the result
 into ``pricing.compute_breakdown``.
 
-No EUR values live in Python source - everything in :class:`SupplierSnapshot`
-comes from a live fetch.
+No SUPPLIER EUR values live in Python source: every price, fee and coefficient
+in :class:`SupplierSnapshot` comes from that supplier's own live card, and a
+figure copied out of one into this package is refused however plausible it
+looks. That rule is why Sibelga's power term is fetched from Brugel's
+published sheet instead of being typed in.
+
+Two REGULATED figures are the exception and they are typed in on purpose,
+because no card is their source: the flat federal excise
+(``FEDERAL_EXCISE_RESIDENTIAL_TVAC``) and the VREG network ceiling
+(``VREG_NETWORK_CEILING_HTVA``), each reaching a snapshot through a resolver
+below. Both are set by a regulator for the whole country or region, both are
+cross-checked against what the fleet prints, and both carry an explicit
+``KNOWN_FROM`` / ``KNOWN_UNTIL`` window so they expire into "read the card"
+rather than going stale. A figure that cannot meet all three tests does not
+belong here.
 """
 
 from __future__ import annotations
