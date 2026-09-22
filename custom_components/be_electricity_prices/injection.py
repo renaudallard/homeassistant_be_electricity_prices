@@ -291,6 +291,11 @@ def _tou_injection_rate(
     hour's spot: the historical walks pass what ``_injection_on_month_mean``
     says the credit settles on, and the live path passes nothing because the
     coordinator has already baked the triplet for the tick.
+
+    Every rate it answers is clamped at the contract's floor here, the one
+    place the live and historical credits both ask: a guaranteed minimum holds
+    per slot and per register as much as on a single rate, and both callers
+    used to pass this answer on unclamped.
     """
     rule = _tou_weekend_rule(energy)
     if inj.peak is None:
@@ -298,22 +303,24 @@ def _tou_injection_rate(
     if rule is None:
         if not inj.bi_hourly or meter not in ("bi", "dynamic"):
             return None
-        return inj.offpeak if is_offpeak(when, region) else inj.peak
+        return _floor_injection(
+            inj.offpeak if is_offpeak(when, region) else inj.peak, inj
+        )
     slot = tou_slot(when, rule)
     if month_mean is not None and inj.month_indexed:
         coefs = _slot_coefficients(inj)
         if coefs is not None:
             (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = coefs
             if slot == "peak":
-                return f_peak * month_mean + b_peak
+                return _floor_injection(f_peak * month_mean + b_peak, inj)
             if slot == "transition":
-                return f_trans * month_mean + b_trans
-            return f_off * month_mean + b_off
+                return _floor_injection(f_trans * month_mean + b_trans, inj)
+            return _floor_injection(f_off * month_mean + b_off, inj)
     if slot == "peak":
-        return inj.peak
+        return _floor_injection(inj.peak, inj)
     if slot == "transition":
-        return inj.transition
-    return inj.offpeak
+        return _floor_injection(inj.transition, inj)
+    return _floor_injection(inj.offpeak, inj)
 
 
 def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:

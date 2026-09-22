@@ -957,6 +957,62 @@ def test_injection_price_for_slot_floors_negative() -> None:
     assert _injection_price_for_slot(inj, energy, 0.10, _slot(12)) == 0.0
 
 
+def test_a_slot_or_register_rate_is_floored_too() -> None:
+    """The floor held on the formula and on ``current`` but not on a slot or
+    register rate: both credit paths returned ``_tou_injection_rate``'s answer
+    as it came, so a card pairing a slot triplet (Engie Empower Flextime) or a
+    day and night pair (Trevion Vast) with ``floor_at_zero`` or a ``minimum``
+    would credit a negative rate. No card combines the two today; the peak
+    figure below is Flextime's September peak resolved on a month mean of
+    -5 EUR/MWh."""
+    energy = TimeOfUseRates(
+        peak=0.20, transition=0.15, offpeak=0.10, weekend_rule="weekend_no_peak"
+    )
+    wed = date(2026, 4, 29)
+    peak_h = datetime.combine(wed, datetime.min.time()).replace(hour=9)
+    off_h = datetime.combine(wed, datetime.min.time()).replace(hour=3)
+    triplet = InjectionRates(
+        current=0.05,
+        peak=-0.004705,
+        transition=-0.001945,
+        offpeak=0.000295,
+        floor_at_zero=True,
+    )
+    assert _injection_price_for_slot(triplet, energy, None, peak_h) == 0.0
+    assert _historical_injection_rate(triplet, energy=energy, when=peak_h) == 0.0
+    assert _injection_price_for_slot(triplet, energy, None, off_h) == pytest.approx(
+        0.000295
+    )
+    # A stated minimum floors the same way.
+    minimum = replace(triplet, floor_at_zero=False, minimum=0.01)
+    assert _injection_price_for_slot(minimum, energy, None, peak_h) == pytest.approx(
+        0.01
+    )
+    # The same slot resolved from the card's own coefficients on a month mean.
+    indexed = replace(
+        triplet,
+        month_indexed=True,
+        factor_peak=1.001,
+        base_peak=0.0003,
+        factor_transition=0.4501,
+        base_transition=0.0003,
+        factor_offpeak=0.001,
+        base_offpeak=0.0003,
+    )
+    assert (
+        _historical_injection_rate(indexed, -0.005, energy=energy, when=peak_h) == 0.0
+    )
+    # And a register pair, on a two-register meter, on both paths.
+    pair = InjectionRates(
+        current=0.05, peak=-0.01, offpeak=-0.02, bi_hourly=True, floor_at_zero=True
+    )
+    fixed = FixedRates(single=0.20, peak=0.22, offpeak=0.18)
+    assert (
+        _historical_injection_rate(pair, energy=fixed, when=peak_h, meter="bi") == 0.0
+    )
+    assert _injection_price_for_slot(pair, fixed, None, off_h, meter="dynamic") == 0.0
+
+
 def test_historical_injection_rate_averages_floored_quarters() -> None:
     """A floored feed-in formula is convex, so the hour is worth the mean of
     its quarters' rates, not the rate of their mean.
