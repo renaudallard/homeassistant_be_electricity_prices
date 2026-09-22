@@ -140,9 +140,8 @@ def ytd_window_start(entry: ConfigEntry, today: date) -> date:
     earlier year is billed from 1 January exactly as it is today, and the
     option only changes the contract's first calendar year.
 
-    Lives here rather than beside ``local_year_start`` in coordinator.py
-    because ytd_cost imports cohort and coordinator imports ytd_cost; the
-    other direction is a cycle.
+    Its datetime form, which the sensor publishes as ``last_reset``, is
+    ``coordinator_data.ytd_window_reset``.
     """
     jan1 = date(today.year, 1, 1)
     if not entry.data.get(CONF_YTD_FROM_CONTRACT_START):

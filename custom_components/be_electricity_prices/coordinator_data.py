@@ -168,39 +168,21 @@ class CoordinatorData:
     projection_diagnostics: dict[str, Any] | None = None
 
 
-def local_year_start(when: datetime | None = None) -> datetime:
-    """Local 1 January 00:00 of ``when``'s year, or of the current year.
-
-    The billing year's anchor. It was spelled out six times as the same
-    ``.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)``,
-    and one of those pairs is a cross-file invariant rather than a
-    convenience: ``_seed_short_term_sum`` has to hand the recorder the SAME
-    instant the ``current_year_cost`` sensor reports as its ``last_reset``,
-    and its docstring said so with nothing enforcing it. A divergence puts the
-    cost compiler on the meter-reset branch and adds a whole year's reading on
-    top of the resumed sum.
-
-    Deliberately a function, never a module-level constant: a Home Assistant
-    process that stays up across midnight on 31 December would otherwise keep
-    reporting last year's anchor.
-    """
-    return (when or dt_util.now()).replace(
-        month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-
-
 def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:
     """Local midnight of the day ``current_year_cost`` accumulates from.
 
-    The datetime form of :func:`cohort.ytd_window_start`, and it inherits the
-    cross-file invariant spelled out above: ``_seed_short_term_sum`` must hand
+    The datetime form of :func:`cohort.ytd_window_start`, and a cross-file
+    invariant rather than a convenience: ``_seed_short_term_sum`` must hand
     the recorder the SAME instant the sensor publishes as ``last_reset``, or
     the cost compiler takes the meter-reset branch and adds the whole window's
     reading on top of the resumed sum. Both sides call this, which is what
     keeps them from drifting apart.
 
-    Equal to ``local_year_start`` for every entry that has not opted into
-    billing from its contract start date, which is all of them by default.
+    Local 1 January 00:00 for every entry that has not opted into billing from
+    its contract start date, which is all of them by default. Deliberately a
+    function, never a module-level constant: a Home Assistant process that
+    stays up across midnight on 31 December would otherwise keep reporting
+    last year's anchor.
     """
     now = when or dt_util.now()
     start = ytd_window_start(entry, now.date())
