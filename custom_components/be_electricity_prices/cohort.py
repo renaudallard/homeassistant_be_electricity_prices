@@ -73,6 +73,7 @@ from .providers.base import (
     SupplierSnapshot,
     TimeOfUseRates,
     VariableRates,
+    without_welcome_credit,
 )
 from .snapshot_store import (
     _include_vat,
@@ -743,7 +744,7 @@ async def signing_month_snapshot(
     if start >= date(now.year, now.month, 1):
         # The current card IS the signing-month card.
         return current_snapshot
-    return await _snapshot_for_month(
+    resolved = await _snapshot_for_month(
         hass,
         session,
         extractor,
@@ -754,6 +755,24 @@ async def signing_month_snapshot(
         entry,
         cached_only=cached_only,
     )
+    if cached_only and resolved is current_snapshot:
+        # The setup path forbids a fetch, so this is today's card standing in
+        # for a month it is not the card of. That is the documented proxy and
+        # it is sound for RATES, which move slowly and whose stand-in is at
+        # worst a near miss. It is not sound for a welcome credit, which is
+        # the property of one month's card: Luminus's campaign exists only on
+        # the live card of the month it ran in, because the supplier archive
+        # strips it, so crediting a May cohort off September's card invents
+        # 100,43 EUR of campaign that cohort was never offered, and the figure
+        # then vanishes on the next tick when the archive answers properly.
+        #
+        # Withhold it until the real card arrives, which makes the cold tick
+        # agree with every tick after it. Only this branch is touched: a
+        # supplier with no archive, a contract with no cohort month and a
+        # signing month inside the running one all return above, so they keep
+        # reading the credit off the card they already had.
+        return without_welcome_credit(resolved)
+    return resolved
 
 
 async def _effective_snapshot_for_month(

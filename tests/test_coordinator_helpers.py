@@ -9489,6 +9489,71 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     assert own is snap
 
 
+async def test_a_cold_tick_does_not_credit_a_campaign_off_the_wrong_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The setup path cannot fetch, so the signing month falls back to today's
+    card. Sound for rates. A campaign belongs to the month it ran in and
+    Luminus's is printed only on that month's live card, so reading one here
+    credits a March cohort a campaign it was never offered, and the figure then
+    disappears on the next tick when the archive answers."""
+    from custom_components.be_electricity_prices.const import WELCOME_CREDIT_PRO_RATA
+    from custom_components.be_electricity_prices.fees import grants_a_welcome_credit
+
+    freezer.move_to("2026-09-10 12:00:00+02:00")
+
+    async def _no_fetch(
+        _hass: Any,
+        _session: Any,
+        _extractor: Any,
+        _contract: str,
+        _region: str,
+        _month: date,
+        current: Any,
+        _entry: Any,
+        **_kw: Any,
+    ) -> Any:
+        # What _snapshot_for_month does under cached_only with nothing cached.
+        return current
+
+    entry = _entry(contract="mine", contract_start_date="2026-03-01")
+    extractor = SimpleNamespace(fetch_for_month=object(), id="luminus")
+    card = make_snapshot(
+        welcome_credit_pct_of_energy=0.33,
+        welcome_credit_kind=WELCOME_CREDIT_PRO_RATA,
+    )
+
+    with patch.object(cohort, "_snapshot_for_month", new=_no_fetch):
+        cold = await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            "mine",
+            "flanders",
+            entry,
+            card,
+            cached_only=True,
+        )
+        warm = await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            "mine",
+            "flanders",
+            entry,
+            card,
+        )
+
+    assert cold.welcome_credit_pct_of_energy is None
+    assert not grants_a_welcome_credit(cold)
+    # Everything else about the stand-in card is untouched: it is still the
+    # right answer for the rates, which is why it is handed back at all.
+    assert cold.energy == card.energy
+    assert cold.dsos == card.dsos
+    # A fetch that really did resolve the month keeps whatever that card says.
+    assert warm is card
+
+
 def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> None:
     """Four answers in order: a full year of meter, then what the entry typed,
     then a shorter measurement scaled up, then the household default.

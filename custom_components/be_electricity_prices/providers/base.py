@@ -1498,6 +1498,37 @@ def resolve_welcome_credit_meter(
     )
 
 
+def without_welcome_credit(snapshot: SupplierSnapshot) -> SupplierSnapshot:
+    """``snapshot`` with every shape of welcome credit taken off it.
+
+    For a caller holding a card that is standing in for a month it is not the
+    card of. Rates survive a stand-in and a credit does not: the credit is a
+    property of the version signed, by its own terms, and Luminus's campaign
+    is only ever printed on the live card of the month it ran in.
+
+    All five amount fields, for the reason :func:`resolve_welcome_credit_meter`
+    clears all five: a card's offer is one offer, and leaving one leg behind
+    credits a household a fragment of something it was never granted.
+    """
+    if not (
+        snapshot.welcome_credit_eur
+        or snapshot.welcome_credit_eur_per_kwh
+        or snapshot.welcome_credit_pct_of_energy
+        or snapshot.welcome_credit_kwh
+        or snapshot.welcome_credit_direct_debit_eur
+    ):
+        return snapshot
+    return replace(
+        snapshot,
+        welcome_credit_eur=None,
+        welcome_credit_eur_per_kwh=None,
+        welcome_credit_cap_eur=None,
+        welcome_credit_pct_of_energy=None,
+        welcome_credit_kwh=None,
+        welcome_credit_direct_debit_eur=None,
+    )
+
+
 def resolve_vreg_network_ceiling(
     snapshot: SupplierSnapshot, delivery_month: date
 ) -> SupplierSnapshot:
