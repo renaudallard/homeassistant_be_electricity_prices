@@ -3352,11 +3352,82 @@ def _validate_snapshot(
         getattr(snap, "energy", None),
         no_standing_charge=no_standing_charge,
     )
+    _expect_welcome_credit(prefix, contract_id, snap)
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
     _validate_dsos(prefix, snap, require_capacity=require_capacity)
+
+
+# Bounds for the welcome credit, sized on the unit slip each one catches and
+# not on what any card happens to grant. A flat credit of 2.000 EUR is ten
+# times Mega's largest; a per-kWh leg of 1 EUR/kWh is ten times an energy
+# rate; a share above 1 is a percentage that was never divided by a hundred,
+# which is the slip that turns 33% into 3.300%; and 10.000 kWh of free energy
+# is ten times the largest cashback printed.
+_MAX_WELCOME_CREDIT_EUR: float = 2000.0
+_MAX_WELCOME_CREDIT_PER_KWH: float = 1.0
+_MAX_WELCOME_CREDIT_KWH: float = 10_000.0
+_MAX_WELCOME_CREDIT_MONTHS: int = 24
+def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
+    """Bounds and self-consistency for whatever welcome credit a card grants.
+
+    Nothing gated any of the twelve credit fields until now: blanking every
+    one of them on a real Mega card and running this validator produced no new
+    failure, while a unit slip on the federal contribution beside it is caught
+    at once. The credit is worth up to 215,18 EUR a year on a Cosy Fixed at
+    3.500 kWh, and the file already argues the case for the OTHER credit it
+    gates: losing it is a silent mis-credit rather than a failure.
+
+    The near risk is named in the commit that added the campaign: Luminus
+    prints a 5% year-2 loyalty discount, a 10% year-3 one and the campaign
+    itself in nearly the same words, and only the scope rule keeps a loyalty
+    discount from being read as a welcome credit. A share above 1, a flat
+    amount ten times the largest printed, or a wait beyond two years all mean
+    the wrong sentence was read.
+    """
+    flat = getattr(snap, "welcome_credit_eur", None)
+    per_kwh = getattr(snap, "welcome_credit_eur_per_kwh", None)
+    cap = getattr(snap, "welcome_credit_cap_eur", None)
+    supplement = getattr(snap, "welcome_credit_direct_debit_eur", None)
+    pct = getattr(snap, "welcome_credit_pct_of_energy", None)
+    kwh = getattr(snap, "welcome_credit_kwh", None)
+    months = getattr(snap, "welcome_credit_after_months", None)
+    for label, value, ceiling in (
+        ("flat", flat, _MAX_WELCOME_CREDIT_EUR),
+        ("supplement", supplement, _MAX_WELCOME_CREDIT_EUR),
+        ("cap", cap, _MAX_WELCOME_CREDIT_EUR),
+        ("per-kWh", per_kwh, _MAX_WELCOME_CREDIT_PER_KWH),
+        ("volume", kwh, _MAX_WELCOME_CREDIT_KWH),
+    ):
+        if value is None:
+            continue
+        _expect(
+            f"{prefix}: welcome credit {label} in [0, {ceiling}]",
+            0.0 <= float(value) <= ceiling,
+            detail=f"{label}={value}",
+        )
+    if pct is not None:
+        # A share, not a percentage. 0,33 and never 33.
+        _expect(
+            f"{prefix}: welcome credit share in (0, 1]",
+            0.0 < float(pct) <= 1.0,
+            detail=f"pct_of_energy={pct}",
+        )
+    if months is not None:
+        _expect(
+            f"{prefix}: welcome credit wait in [0, {_MAX_WELCOME_CREDIT_MONTHS}] months",
+            0 <= int(months) <= _MAX_WELCOME_CREDIT_MONTHS,
+            detail=f"after_months={months}",
+        )
+    if cap is not None and flat is not None:
+        # A ceiling under the amount it caps is two figures read out of order.
+        _expect(
+            f"{prefix}: welcome credit cap is not below the flat amount",
+            float(cap) >= float(flat),
+            detail=f"cap={cap}, flat={flat}",
+        )
 
 
 def _expect_month_indexed_registry(

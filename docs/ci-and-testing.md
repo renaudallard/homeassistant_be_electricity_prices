@@ -510,7 +510,9 @@ that reads the value 100x too large — and that part still holds.
   carries, which must also come whole (`_expect_coefficient_pair`), the Impact bands and price
   ceilings, every per-kWh network rate, the transport rate, the prosumer tariff, the VREG ceiling
   and the Sibelga power term on each DSO overlay (`_validate_dsos`), the per-slot feed-in formula
-  and the printed pair or triplet (`_validate_injection`), and a ceiling on the federal excise and
+  and the printed pair or triplet (`_validate_injection`), the welcome credit's five amounts,
+  its share and its wait (`_expect_welcome_credit`, bounds sized on the unit slip each catches
+  plus a cap that may not sit under the amount it caps), and a ceiling on the federal excise and
   the regional levies (`_expect_region_basics`). The bands are sized on the unit slip they catch,
   measured over the September 2026 archive, never on tariff economics: a figure read in c/kWh
   lands ten times above a ceiling, one read in EUR/MWh a hundred below a floor, while every real

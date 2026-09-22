@@ -2493,6 +2493,57 @@ def test_the_ceiling_consensus_uses_the_allowance(
     assert _rows("bolt/VREG ceiling")[0].expected is False
 
 
+def test_a_welcome_credit_is_gated_at_all() -> None:
+    """Nothing gated any of the twelve credit fields: blanking every one of
+    them on a real Mega card produced no new failure, while a unit slip on the
+    federal contribution beside it is caught at once. The credit is worth up to
+    215,18 EUR a year on a Cosy Fixed at 3.500 kWh.
+
+    Each bound is sized on the slip it catches, never on what a card grants.
+    """
+    lc.CHECKS.clear()
+    sound = SimpleNamespace(
+        welcome_credit_eur=159.0,
+        welcome_credit_eur_per_kwh=0.10388,
+        welcome_credit_cap_eur=848.0,
+        welcome_credit_direct_debit_eur=None,
+        welcome_credit_pct_of_energy=None,
+        welcome_credit_kwh=None,
+        welcome_credit_after_months=12,
+    )
+    lc._expect_welcome_credit("mega/cosy_flex", "mega_cosy_flex", sound)
+    assert [c for c in lc.CHECKS if not c.ok] == []
+
+    def _fails(**fields: object) -> list[str]:
+        lc.CHECKS.clear()
+        card: dict[str, object] = dict(
+            welcome_credit_eur=None,
+            welcome_credit_eur_per_kwh=None,
+            welcome_credit_cap_eur=None,
+            welcome_credit_direct_debit_eur=None,
+            welcome_credit_pct_of_energy=None,
+            welcome_credit_kwh=None,
+            welcome_credit_after_months=None,
+        )
+        card.update(fields)
+        lc._expect_welcome_credit("x/y", "y", SimpleNamespace(**card))
+        return [c.label for c in lc.CHECKS if not c.ok]
+
+    # A percentage that was never divided by a hundred.
+    assert _fails(welcome_credit_pct_of_energy=33.0)
+    assert not _fails(welcome_credit_pct_of_energy=0.33)
+    # A per-kWh leg read in EUR/MWh, and a flat one ten times any card's.
+    assert _fails(welcome_credit_eur_per_kwh=103.88)
+    assert _fails(welcome_credit_eur=21_500.0)
+    # A volume read off the wrong row, and a wait no card states.
+    assert _fails(welcome_credit_kwh=750_000.0)
+    assert _fails(welcome_credit_after_months=120)
+    # A ceiling under the amount it caps is two figures read out of order.
+    assert _fails(welcome_credit_eur=159.0, welcome_credit_cap_eur=84.8)
+    # A card granting nothing is not a failure: most of the fleet grants none.
+    assert not _fails()
+
+
 def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) -> None:
     """The majority branch tells the maintainer the regulator moved and the
     constant needs updating. Only four suppliers print the sentence this reader
