@@ -35,12 +35,14 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
-    InjectionRates,
     SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._resolve import apply_vat
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    InjectionRates,
     VariableRates,
-    apply_vat,
 )
 from custom_components.be_electricity_prices.providers.ecopower import (
     _card_stamp_keys,

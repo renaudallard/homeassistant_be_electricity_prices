@@ -133,16 +133,18 @@ from custom_components.be_electricity_prices.ytd_cost import (
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     EnergyRates,
-    ExtractorError,
     FixedRates,
     ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
     TimeOfUseRates,
     VariableRates,
 )
@@ -359,7 +361,7 @@ def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
         DSO_SIBELGA,
         VREG_NETWORK_CEILING_HTVA,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_vreg_network_ceiling,
     )
 
@@ -5471,7 +5473,7 @@ def test_the_federal_contribution_is_dropped_from_the_months_it_is_not_levied() 
     """
     from dataclasses import replace as _replace
 
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_federal_contribution,
     )
 
@@ -5514,7 +5516,7 @@ def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
     """
     from dataclasses import replace as _replace
 
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_federal_excise,
     )
 
@@ -7489,7 +7491,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.cohort import _manual_energy_leg
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         FixedRates,
     )
@@ -7675,7 +7677,7 @@ async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
     from custom_components.be_electricity_prices.cohort import (
         _cohort_energy_leg,
     )
-    from custom_components.be_electricity_prices.providers.base import apply_vat
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
 
     extractor = providers.get("engie")
     contract = next(c.id for c in extractor.contracts if "fix" in c.id)
@@ -7757,7 +7759,7 @@ def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
     as the professional card printed them, so a typed 121,00 sat next to a
     100,00 card fee on the same entry.
     """
-    from custom_components.be_electricity_prices.providers.base import FixedRates
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
 
     card = FixedRates(single=0.20, yearly_fixed_fee=100.0)
 
@@ -8365,7 +8367,7 @@ def test_the_vreg_ceiling_and_its_network_term_share_a_vat_basis() -> None:
     that stops the cap biting.
     """
     from custom_components.be_electricity_prices.fees import _capped_capacity_annual
-    from custom_components.be_electricity_prices.providers.base import apply_vat
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
 
     overlay = DsoOverlay(
         distribution_single=0.10,
@@ -8529,7 +8531,9 @@ def test_a_published_month_index_is_billed_without_any_spots() -> None:
         _energy_month_spot,
         _hour_spot,
     )
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
 
     leg = SpotMonthlyRates(factor=1.0, base=0.02, index_realised=0.0912)
     local = datetime(2026, 5, 15, 13, 0, tzinfo=ZoneInfo("Europe/Brussels"))
@@ -8667,7 +8671,7 @@ def test_every_half_of_a_welcome_credit_moves_onto_the_entry_basis() -> None:
     168 at 20.000, where the ceiling binds and was still the card's ex-VAT
     figure.
     """
-    from custom_components.be_electricity_prices.providers.base import apply_vat
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
 
     card = make_snapshot(
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0, vat_rate=0.21),
@@ -8971,7 +8975,7 @@ def test_a_campaign_the_card_denies_a_night_meter_is_not_credited() -> None:
     conditions repeat. Which meter the entry has is a per-entry answer, so it
     is settled once in the snapshot rather than at the six places that spend
     the credit."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_welcome_credit_meter,
     )
 
@@ -9101,7 +9105,7 @@ def test_the_direct_debit_part_of_a_credit_is_settled_once() -> None:
     paiement par domiciliation bancaire": how the household pays is a
     per-entry answer, so it is baked into the credit and cleared, the way the
     standing charge's own direct-debit cut already is."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_direct_debit,
     )
 
@@ -9583,7 +9587,7 @@ def test_a_volume_cashback_is_valued_at_the_rate_its_card_names() -> None:
         WELCOME_CREDIT_ANNIVERSARY,
     )
     from custom_components.be_electricity_prices.fees import _welcome_credit_eur
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         FixedRates,
     )
@@ -10161,11 +10165,9 @@ def test_apply_vat_grosses_the_injection_floor_with_the_rates() -> None:
     """A card that taxes injection and guarantees a floor: the floor is a
     rate like the coefficients beside it and was left as printed, ex-VAT
     beside grossed rates."""
-    from custom_components.be_electricity_prices.providers.base import (
-        InjectionRates,
-        TaxOverlay,
-        apply_vat,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
 
     net = make_snapshot(
         injection=InjectionRates(

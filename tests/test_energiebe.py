@@ -34,11 +34,13 @@ from datetime import date
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
+    SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
     FixedRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energiebe import parse_snapshot
 from tests import fixture_text

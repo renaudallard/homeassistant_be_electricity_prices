@@ -374,7 +374,7 @@ def _compare_injection_credit(
         _floor_injection,
         _tou_weekend_rule,
     )
-    from .providers.base import DynamicRates
+    from .providers._rates import DynamicRates
     from .spot_stats import _injection_on_month_mean
 
     raw = snapshot if raw_snapshot is None else raw_snapshot
@@ -601,7 +601,7 @@ def _tou_weighted_per_kwh(
     from .pricing import (
         compute_breakdown,
     )
-    from .providers.base import ImpactRates
+    from .providers._rates import ImpactRates
 
     try:
         bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)

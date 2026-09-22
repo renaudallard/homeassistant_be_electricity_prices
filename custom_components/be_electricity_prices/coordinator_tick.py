@@ -47,7 +47,7 @@ from .coordinator_data import CoordinatorData
 from .const import DOMAIN
 from .const import DSO_MODE_BI_HORAIRE
 from .providers import DynamicRates
-from .providers.base import EnergyRates
+from .providers._rates import EnergyRates
 from .api import EntsoeAuthError
 from .api import EntsoeError
 from collections.abc import Iterable

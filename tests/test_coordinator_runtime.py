@@ -74,10 +74,12 @@ from custom_components.be_electricity_prices.snapshot_codec import (
     _snapshot_to_dict,
 )
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
-    InjectionRates,
     SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    InjectionRates,
 )
 from tests import make_entry, make_snapshot, make_stub_extractor
 
@@ -946,8 +948,8 @@ async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     has to follow the leg the tick prices on."""
     from custom_components.be_electricity_prices.cohort import _CohortLegs
     from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
 
@@ -2334,7 +2336,7 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     """Shape-c (Cociter Variable): a static-energy contract whose injection
     is a per-hour spot formula must trigger the historical-spot fetch from
     the live tick, or the YTD injection credit silently drops to zero."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -3380,7 +3382,7 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
     when the day-ahead price troughs, that systematically over-credited."""
     from unittest.mock import MagicMock
 
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
         VariableRates,
@@ -3455,10 +3457,8 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
     and price off the current card. The cohort re-price used to hand back a
     SpotMonthlyRates leg, which took the spot path and failed setup with
     "missing ENTSO-E API key" on a key the variable flow never asks for."""
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        VariableRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     dsos = {"fluvius_limburg": DsoOverlay(distribution_single=0.10, transport=0.0145)}
     entry = MockConfigEntry(
@@ -4093,9 +4093,7 @@ def test_every_repair_is_invoked_by_the_coordinator() -> None:
     # Every coordinator module, by glob: the tick moved to its own file once
     # already, and a hand-written list of files silently stops covering the
     # one the calls went to.
-    called = "".join(
-        path.read_text() for path in sorted(pkg.glob("coordinator*.py"))
-    )
+    called = "".join(path.read_text() for path in sorted(pkg.glob("coordinator*.py")))
     defined = {
         name
         for name in dir(coordinator_issues._IssuesMixin)
@@ -4242,7 +4240,7 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     """
     from unittest.mock import MagicMock
 
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -4325,7 +4323,7 @@ async def test_a_month_indexed_card_keeps_its_indicative_when_the_mean_is_missin
     degrading by a month's lag. These contracts cannot be handed an ENTSO-E
     key from any flow step, so that was every entry on them.
     """
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -4363,7 +4361,7 @@ async def test_a_formula_only_leg_still_bakes_to_none_without_a_mean(
     standing is the shape _injection_is_spot_formula reads as "price this per
     hour" - turning a flat monthly credit into the current slot's spot.
     """
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -4402,7 +4400,7 @@ async def test_live_tick_never_bakes_an_spp_formula_against_the_energy_mean(
     mean would pay 6,05 c/kWh where the contract owes 3,00 - and silently,
     because nothing downstream can tell which mean produced the number.
     """
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -5727,7 +5725,7 @@ async def test_a_month_indexed_credit_bakes_on_a_dynamic_contract_too(
     year-to-date walk credited the month's own. The question the bake asks is
     whether the CREDIT settles on a month, and nothing else.
     """
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
     )
@@ -5773,7 +5771,7 @@ def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
     from custom_components.be_electricity_prices.injection import (
         _injection_is_spot_formula,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
     )
@@ -5805,7 +5803,7 @@ async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
 
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices.compare_quote import _AnnualVolume
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
 
@@ -5895,7 +5893,9 @@ async def test_a_month_billed_per_quarter_hour_is_fetched_on_that_grid(
     from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_snapshots,
     )
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
 
     freezer.move_to("2026-03-10 12:00:00+01:00")
     entry = MockConfigEntry(
@@ -6312,10 +6312,8 @@ async def test_the_persistent_blob_holds_the_card_as_parsed(
     would fail to undo: the reload would keep a leg already converted for the
     old answer.
     """
-    from custom_components.be_electricity_prices.providers.base import (
-        FixedRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     entry = _entry()

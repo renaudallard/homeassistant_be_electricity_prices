@@ -90,14 +90,16 @@ from ._pdf import (
     parse_vreg_network_ceiling,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    InjectionRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

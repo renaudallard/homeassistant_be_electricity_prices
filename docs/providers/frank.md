@@ -61,7 +61,7 @@ objects by the `EXTRACTOR` comprehension (`providers/frank.py`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
-`base.py`). No parser here sets `quarter_hourly`, because the card always prints the
+`_rates.py`). No parser here sets `quarter_hourly`, because the card always prints the
 hourly formula; the household's own answer flips it, and every tier carries
 `quarter_hourly_option=True` to say the choice exists.
 
@@ -129,7 +129,7 @@ second product: the customer flips it in the app from one month to the next, and
 contract ids would make a billing preference look like a contract change and cost the
 compare sweep a second download of a byte-identical card.
 
-So the tiers carry `quarter_hourly_option` (`base.py`, beside `spot_indexed_injection` and
+So the tiers carry `quarter_hourly_option` (`_rates.py`, beside `spot_indexed_injection` and
 `month_indexed_energy`), the meter step shows a **Bill per quarter-hour** box for a
 contract that has it, and `resolve_settlement_grid` applies the answer where the VAT
 treatment and the excise band are already resolved. Two consequences worth knowing:

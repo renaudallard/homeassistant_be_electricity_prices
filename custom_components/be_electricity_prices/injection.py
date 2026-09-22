@@ -53,12 +53,12 @@ from .pricing import (
     is_offpeak,
     tou_slot,
 )
-from .providers.base import (
+from .providers.base import SupplierSnapshot
+from .providers._rates import (
     DynamicRates,
     EnergyRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
     TimeOfUseRates,
 )
 from .spot_stats import (

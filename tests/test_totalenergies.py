@@ -33,9 +33,9 @@ import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import fixture_text
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     FixedRates,
     VariableRates,
 )

@@ -81,17 +81,19 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    FixedRates,
-    InjectionRates,
-    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

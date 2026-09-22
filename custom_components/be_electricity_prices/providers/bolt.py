@@ -100,19 +100,21 @@ from ._pdf import (
 )
 from .base import (
     CardNotReadableError,
-    Contract,
     DsoOverlay,
-    EnergyRates,
     ExtractorError,
-    FixedRates,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
-    VariableRates,
     brussels_sibelga_overlay,
     walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    TariffKind,
+    VariableRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

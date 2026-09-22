@@ -49,7 +49,7 @@ from .injection import _injection_needs_spot
 from .providers import effective_kind
 from .providers import get as get_extractor
 from .providers import offers_quarter_hourly
-from .providers.base import SpotMonthlyRates
+from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed

@@ -82,17 +82,19 @@ from ._pdf import (
     parse_vreg_network_ceiling,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    FixedRates,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    TariffKind,
     TimeOfUseRates,
     VariableRates,
 )

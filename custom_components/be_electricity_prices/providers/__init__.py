@@ -33,16 +33,18 @@ adding a new module + an entry below.
 from __future__ import annotations
 
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    FixedRates,
-    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    SpotMonthlyRates,
     VariableRates,
 )
 from .bolt import EXTRACTOR as _BOLT

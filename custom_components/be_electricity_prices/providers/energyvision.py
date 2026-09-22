@@ -117,19 +117,21 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    walloon_dso_overlay,
-    Contract,
     DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
     DynamicRates,
     EnergyRates,
-    ExtractorError,
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierExtractor,
-    SupplierSnapshot,
     TariffKind,
-    TaxOverlay,
 )
 
 _SITE_BASE = "https://www.energyvision.be"

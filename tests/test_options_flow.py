@@ -802,7 +802,7 @@ def _stub_snapshot(supplier: str, contract: str, single_rate: float) -> Any:
     on. Walloon DSO with a typical distribution / transport / tax stack
     so the all-in number is in a realistic range without depending on
     fixture PDFs."""
-    from custom_components.be_electricity_prices.providers.base import FixedRates
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     return make_snapshot(
@@ -934,7 +934,7 @@ def _static_to_dynamic_compare(hass: HomeAssistant) -> tuple[Any, Any]:
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
     )
@@ -1038,7 +1038,7 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -1104,7 +1104,7 @@ async def test_compare_does_not_mutate_live_historical_spots(
     from datetime import UTC, datetime
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -1199,7 +1199,7 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -1660,7 +1660,7 @@ async def test_compare_credits_a_short_injection_window(
         title="Eneco - Wallonia",
     )
     entry.add_to_hass(hass)
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -1773,7 +1773,7 @@ async def test_compare_injection_regime_credits_injection_price(
     bill for the alternative must subtract that credit, so a
     higher-credit supplier shows a lower bill even at the same
     consumption rate."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -1857,7 +1857,7 @@ async def test_compare_names_the_side_that_credits_no_injection(
     injection price" either way, so a supplier that genuinely pays nothing
     was indistinguishable from one the quote could not price. The note now
     names the side and the reason."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -1932,9 +1932,11 @@ def _prosumer_entry_and_snapshots(hass: HomeAssistant) -> tuple[Any, Any, Any]:
     rate None, which zeroes the term the regime what-if turns on and off."""
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
+        TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
-        TaxOverlay,
     )
     from tests import make_snapshot
 
@@ -2113,7 +2115,7 @@ async def test_compare_solar_requires_volumes_without_an_injection_meter(
     than quote the override off the netted figure. Silently dropping the
     override instead would look exactly like the picker not working, which
     is the complaint this step exists to answer."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -2443,7 +2445,7 @@ async def test_compare_solar_whatif_resolves_the_custom_rebuild(
     nothing else grosses the fixed fees), and the baseline leg keeps being
     priced on the card the entry is configured on, which is the only one
     that still carries the injection block."""
-    from custom_components.be_electricity_prices.providers.base import FixedRates
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from custom_components.be_electricity_prices.providers.custom import build_snapshot
     from custom_components.be_electricity_prices.snapshot_resolve import (
         _resolve_snapshot,
@@ -2565,10 +2567,8 @@ async def test_compare_meter_override_changes_per_kwh(
     type. Picking 'bi' must route compute_breakdown through the
     peak/offpeak rates, producing a different per-kWh number than
     the user's mono setup would."""
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        FixedRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     # Snapshot with distinct peak / offpeak rates so meter=bi yields a
@@ -2623,10 +2623,8 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
         _tou_weighted_per_kwh,
     )
 
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        ImpactRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import ImpactRates
     from tests import make_snapshot
 
     # A Walloon overlay carrying BOTH structures, as the real cards do: the
@@ -2718,7 +2716,7 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3036,7 +3034,7 @@ def test_compare_injection_credit_weights_slots_by_export_shape() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         TimeOfUseRates,
     )
@@ -3099,7 +3097,7 @@ def test_compare_injection_credit_averages_a_register_pair_over_the_year(
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.pricing import is_offpeak
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -3179,10 +3177,8 @@ def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        TimeOfUseRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3226,10 +3222,8 @@ def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        TimeOfUseRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3272,7 +3266,7 @@ def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3312,7 +3306,7 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import FixedRates
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3377,7 +3371,7 @@ def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -3472,7 +3466,7 @@ def test_compare_floored_injection_averages_the_slot_rates() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
         SpotMonthlyRates,
@@ -3552,7 +3546,7 @@ def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import InjectionRates
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
     from tests import make_entry, make_snapshot
 
     # The Bolt shape tests/test_bolt.py pins: factor < 1, a negative base and
@@ -3616,7 +3610,7 @@ def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> No
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -3645,7 +3639,7 @@ def test_compare_keeps_the_indicative_when_the_spp_profile_is_missing() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -3671,7 +3665,7 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         TimeOfUseRates,
     )
@@ -3711,7 +3705,7 @@ def test_tou_slot_weights_cover_every_weekend_rule() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_slot_weights,
     )
-    from custom_components.be_electricity_prices.providers.base import WeekendRule
+    from custom_components.be_electricity_prices.providers._rates import WeekendRule
 
     weights = {rule: _tou_slot_weights(rule) for rule in get_args(WeekendRule)}
     # No two rules share a shape, which is what having a rule at all means.
@@ -3773,10 +3767,8 @@ def test_annual_fees_include_data_management() -> None:
     # EUR/year DSO charge that must be billed alongside the supplier
     # subscription (re-audit F22).
     from custom_components.be_electricity_prices.compare_quote import _annual_fees
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        FixedRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3800,10 +3792,8 @@ def test_annual_fees_exclude_capacity_for_ytd() -> None:
     # separate sensor by current_year_cost); the full annual estimate keeps
     # it. include_capacity toggles just that term.
     from custom_components.be_electricity_prices.compare_quote import _annual_fees
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        FixedRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -3853,9 +3843,9 @@ def test_the_ytd_what_if_accrues_capacity_like_the_live_sensor() -> None:
     )
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
-        FixedRates,
         TaxOverlay,
     )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     overlay = DsoOverlay(
@@ -4358,9 +4348,9 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     from custom_components.be_electricity_prices.ytd_cost import _ytd_prosumer
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
-        FixedRates,
         TaxOverlay,
     )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     freezer.move_to("2026-07-31 12:00:00+02:00")
@@ -4708,7 +4698,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
 
     from custom_components.be_electricity_prices.pricing import compute_breakdown
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
     from tests import make_entry, make_snapshot
@@ -4801,8 +4791,8 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
         SpotMonthlyRates,
@@ -5007,10 +4997,12 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     )
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
-        InjectionRates,
-        SpotMonthlyRates,
         SupplierSnapshot,
         TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        SpotMonthlyRates,
         VariableRates,
     )
 
@@ -5378,7 +5370,7 @@ def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.compare_quote import _card_caveats
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
 
@@ -5416,7 +5408,7 @@ def test_spp_opt_in_does_not_reach_a_foreign_card() -> None:
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -5475,7 +5467,7 @@ def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -5520,7 +5512,7 @@ def test_kind_group_is_total_over_tariff_kind() -> None:
     from typing import get_args
 
     from custom_components.be_electricity_prices.const import KIND_GROUP
-    from custom_components.be_electricity_prices.providers.base import TariffKind
+    from custom_components.be_electricity_prices.providers._rates import TariffKind
 
     assert set(KIND_GROUP) == set(get_args(TariffKind))
     # Every registered contract resolves, which is the same claim from the
@@ -5933,7 +5925,7 @@ async def test_golden_placeholders_dynamic_target_degrades(
     household's own figures and says so in `error` rather than printing a
     number it cannot stand behind; the charts go empty rather than one-sided."""
     freezer.move_to("2026-04-29 13:00:00+02:00")
-    from custom_components.be_electricity_prices.providers.base import DynamicRates
+    from custom_components.be_electricity_prices.providers._rates import DynamicRates
     from tests import make_snapshot
 
     entry = _make_entry()
@@ -7058,7 +7050,7 @@ def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -
     from custom_components.be_electricity_prices.compare_inputs import (
         _coordinator_spp_weights,
     )
-    from custom_components.be_electricity_prices.providers.base import InjectionRates
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
     from tests import make_snapshot
 
     weights = {(7, 1, 12): 1.0}
@@ -7152,10 +7144,8 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _ytd_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        FixedRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -7226,10 +7216,8 @@ def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -
     from custom_components.be_electricity_prices.compare_quote import (
         _ytd_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        FixedRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -7298,7 +7286,7 @@ def test_the_compare_credit_refuses_a_plain_mean_for_a_month_index() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )
@@ -7400,10 +7388,8 @@ def test_the_annual_credit_nets_the_export_only_where_the_meter_nets() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _annual_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        FixedRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -7529,7 +7515,7 @@ def test_a_month_indexed_credit_is_quoted_at_the_month_it_settles_on() -> None:
         _bake_monthly_injection,
         _compute_injection_price,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -7567,7 +7553,7 @@ def test_a_per_slot_credit_is_quoted_on_the_month_it_settles_on() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         TimeOfUseRates,
     )
@@ -7616,7 +7602,7 @@ def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
         VariableRates,
@@ -7683,8 +7669,10 @@ def test_the_quoted_rate_tracks_the_year_it_stands_in_for() -> None:
     )
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
-        ImpactRates,
         TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        ImpactRates,
         TimeOfUseRates,
     )
     from tests import make_snapshot
@@ -7819,7 +7807,7 @@ def test_which_month_index_a_feed_in_credit_settles_on() -> None:
     """
     from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.compare_inputs import _credit_index_for
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
         SpotMonthlyRates,
@@ -7929,7 +7917,7 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
         _bake_monthly_injection,
         _compute_injection_price,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
         VariableRates,

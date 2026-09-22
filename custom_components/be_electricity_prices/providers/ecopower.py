@@ -90,15 +90,17 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
     VariableRates,
 )
 

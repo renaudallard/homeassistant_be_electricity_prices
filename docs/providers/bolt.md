@@ -20,7 +20,7 @@ Related reading:
 | Property | Value | Source |
 | --- | --- | --- |
 | Extractor id / label | `bolt` / `Bolt` | `bolt.py` |
-| Regions served | Flanders, Wallonia, Brussels (all three) | every `Contract` uses the default `regions`; `EXTRACTOR.regions()` unions them, `base.py` |
+| Regions served | Flanders, Wallonia, Brussels (all three) | every `Contract` uses the default `regions`; `EXTRACTOR.regions()` unions them, `_rates.py` |
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py` |
 | Probe | HEAD the listing page, prefer `ETag` then `Last-Modified` | `bolt.py` |

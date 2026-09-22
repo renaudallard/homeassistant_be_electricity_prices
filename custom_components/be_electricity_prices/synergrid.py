@@ -76,7 +76,7 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 import aiohttp
 
 from .providers._pdf import USER_AGENT
-from .providers.base import RlpBlend
+from .providers._rates import RlpBlend
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -95,20 +95,22 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
+    walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    TariffKind,
     TimeOfUseRates,
     VariableRates,
     fixed_or_variable_rates,
-    walloon_dso_overlay,
 )
 
 _API_URL = (

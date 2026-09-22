@@ -63,17 +63,19 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .providers.base import (
+    SupplierExtractor,
+    SupplierSnapshot,
+)
+from .providers._resolve import without_welcome_credit
+from .providers._rates import (
     DynamicRates,
     EnergyRates,
     FixedRates,
     ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierExtractor,
-    SupplierSnapshot,
     TimeOfUseRates,
     VariableRates,
-    without_welcome_credit,
 )
 from .snapshot_months import _snapshot_for_month
 from .snapshot_resolve import _include_vat

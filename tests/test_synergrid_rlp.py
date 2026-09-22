@@ -27,7 +27,7 @@ from custom_components.be_electricity_prices.spot_stats import (
     _rlp_month_mean,
     _rlp_weighted_month_mean,
 )
-from custom_components.be_electricity_prices.providers.base import RlpBlend
+from custom_components.be_electricity_prices.providers._rates import RlpBlend
 from custom_components.be_electricity_prices.coordinator_spots import (
     _profile_store,
 )
@@ -295,7 +295,7 @@ def _bucket_for(prices: dict[int, float]) -> Any:
 
 
 def test_energy_month_spot_prefers_the_published_index() -> None:
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
     from custom_components.be_electricity_prices.spot_stats import _energy_month_spot
@@ -314,7 +314,7 @@ def test_energy_month_spot_prefers_the_published_index() -> None:
 def test_energy_month_spot_weights_an_rlp_leg_and_falls_back_to_the_plain_mean() -> (
     None
 ):
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
     from custom_components.be_electricity_prices.spot_stats import _energy_month_spot
@@ -627,7 +627,9 @@ async def test_the_compare_page_weights_a_card_on_its_own_blend(
     from custom_components.be_electricity_prices.compare_inputs import (
         _coordinator_rlp_index_weights,
     )
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -671,7 +673,7 @@ async def test_the_tick_prices_energy_on_the_rlp_mean_and_injection_on_the_plain
     hold both."""
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )

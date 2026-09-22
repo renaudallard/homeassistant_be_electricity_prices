@@ -114,17 +114,19 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
-    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    TariffKind,
 )
 
 _SITE_BASE = "https://www.energyknights.be"

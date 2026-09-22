@@ -60,8 +60,8 @@ from .const import (
     METER_MONO,
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
-from .providers.base import (
-    SupplierSnapshot,
+from .providers.base import SupplierSnapshot
+from .providers._resolve import (
     apply_vat,
     resolve_brussels_power_term,
     resolve_direct_debit,

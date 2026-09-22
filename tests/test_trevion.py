@@ -37,9 +37,9 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     FixedRates,
     SpotMonthlyRates,
 )

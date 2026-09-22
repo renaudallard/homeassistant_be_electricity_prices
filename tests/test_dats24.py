@@ -40,8 +40,8 @@ from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
-    VariableRates,
 )
+from custom_components.be_electricity_prices.providers._rates import VariableRates
 from custom_components.be_electricity_prices.providers.dats24 import (
     _card_url,
     discover,

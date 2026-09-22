@@ -40,9 +40,9 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import fixture_text
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     FixedRates,
     TimeOfUseRates,
     VariableRates,
@@ -176,7 +176,7 @@ def test_flextime_energy_is_month_indexed_per_band() -> None:
 
     from custom_components.be_electricity_prices.cohort import _month_indexed_leg
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
 
@@ -436,7 +436,7 @@ def test_empower_energy_carries_the_epexdam_formula() -> None:
     indiques sont bases sur la derniere valeur du EPEXDAM connue (Mars 2026:
     92,57 EUR/MWh)." So the printed 13,775 is March's rate on an April card.
     """
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "engie_empower_variable",
@@ -471,7 +471,7 @@ def test_empty_house_energy_carries_its_bare_epexdam_formula() -> None:
     """Empty House states one formula with no band label at all,
     "3,2150 + (0,2150 x EPEXDAM)", so the parser cannot key on the row
     heading the Empower card uses."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "engie_empty_house",
@@ -490,7 +490,7 @@ def test_endex_indexed_card_keeps_its_printed_rate() -> None:
     """Easy Variable indexes on ENDEX101, which is published in ADVANCE, so
     its printed rate is the contract and must not be swept into the EPEXDAM
     fix. Its card names no EPEXDAM at all, which is what keeps it out."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "engie_easy_variable",

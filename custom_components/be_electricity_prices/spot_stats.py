@@ -59,11 +59,11 @@ from .pricing import (
     is_offpeak,
     slot_start,
 )
-from .providers.base import (
+from .providers.base import SupplierSnapshot
+from .providers._rates import (
     DynamicRates,
     EnergyRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
     VariableRates,
 )
 from .synergrid import (

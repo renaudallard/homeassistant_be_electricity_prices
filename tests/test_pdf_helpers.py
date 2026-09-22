@@ -62,10 +62,10 @@ from custom_components.be_electricity_prices.providers._pdf import (
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     ExtractorError,
-    FixedRates,
     SupplierSnapshot,
     TaxOverlay,
 )
+from custom_components.be_electricity_prices.providers._rates import FixedRates
 
 
 class _PdfResponse:

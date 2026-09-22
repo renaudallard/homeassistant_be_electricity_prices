@@ -48,13 +48,15 @@ from custom_components.be_electricity_prices.pricing import (
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     EnergyRates,
     FixedRates,
     ImpactRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
-    TaxOverlay,
     TimeOfUseRates,
     VariableRates,
 )
@@ -775,7 +777,7 @@ def test_a_half_published_band_pair_is_not_a_split() -> None:
         energy_eur_per_kwh,
         static_energy_eur_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         VariableRates,
     )
@@ -815,7 +817,7 @@ def test_the_variable_ceiling_binds_on_both_costing_walks() -> None:
         energy_eur_per_kwh,
         static_energy_eur_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     capped = VariableRates(
         current=0.20,

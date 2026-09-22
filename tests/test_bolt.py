@@ -42,11 +42,15 @@ from custom_components.be_electricity_prices.pricing import compute_breakdown
 from tests import FIXTURES, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
-    DynamicRates,
     ExtractorError,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
+    resolve_settlement_grid,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
     FixedRates,
     VariableRates,
-    resolve_settlement_grid,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
 

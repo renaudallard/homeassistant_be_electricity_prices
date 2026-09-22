@@ -60,9 +60,9 @@ from custom_components.be_electricity_prices.spot_stats import (
     _mean_of_month,
 )
 from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
@@ -197,7 +197,7 @@ def test_the_zero_floor_can_never_meet_a_tou_injection() -> None:
     Flextime) sets no floor. Pinned here rather than guarded in the pricing
     code, which would be a dead branch in the most shape-sensitive module in
     the package."""
-    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
 
     for contract in const.CUSTOM_CONTRACTS:
         for mode in (

@@ -247,7 +247,7 @@ first-year "free Sundays" promo is not modelled (`luminus.py`).
 Illustrative (`test_smartflex_parses_as_time_of_use`): peak `0.1554`, transition
 `0.1329`, offpeak `0.0672` from `luminus_smartflex_w.pdf`.
 
-Both the `TimeOfUseRates` docstring in `base.py` and this extractor use the
+Both the `TimeOfUseRates` docstring in `_rates.py` and this extractor use the
 `smartflex_seasonal` weekend rule for SmartFlex; the extractor and its test
 (`test_luminus.py`) pin the seasonal behavior.
 

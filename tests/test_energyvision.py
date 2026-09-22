@@ -37,11 +37,13 @@ import pytest
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
+    SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
     FixedRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energyvision import (
     DISCOVER_IDS,
@@ -736,7 +738,7 @@ def test_tiered_card_bills_the_year_the_card_says() -> None:
     ``1.800 x 10,60c + rest x formula`` over the year, which is what the
     Voordeelzekerheid clause settles a tiered year at."""
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_volume_tier,
     )
 

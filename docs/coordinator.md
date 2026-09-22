@@ -425,7 +425,7 @@ Per-regime day math is documented at `ytd_cost.py`. For `compensation` the injec
 
 ## 8. Injection taxonomy and the spot-gating invariant
 
-Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py`). `InjectionRates` (`providers/base.py`) can carry a monthly indicative (`current`), a formula (`factor`/`base`) that resolves either per hour or on a monthly mean depending on the `spp_indexed` / `month_indexed` flags, a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and a guaranteed floor (`floor_at_zero`, or `minimum` for a card that promises more than non-negative). The coordinator distinguishes four shapes:
+Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/_rates.py`). `InjectionRates` (`providers/_rates.py`) can carry a monthly indicative (`current`), a formula (`factor`/`base`) that resolves either per hour or on a monthly mean depending on the `spp_indexed` / `month_indexed` flags, a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and a guaranteed floor (`floor_at_zero`, or `minimum` for a card that promises more than non-negative). The coordinator distinguishes four shapes:
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|

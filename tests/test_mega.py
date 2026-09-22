@@ -41,13 +41,17 @@ from custom_components.be_electricity_prices.providers import mega as mega_mod
 from tests import FIXTURES, fixture_text
 from custom_components.be_electricity_prices.providers.mega import fetch as mega_fetch
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
+    SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
+    resolve_direct_debit,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
     FixedRates,
     ImpactRates,
-    SupplierSnapshot,
     VariableRates,
-    resolve_direct_debit,
 )
 from custom_components.be_electricity_prices.providers.mega import (
     _find_pdf_url,
@@ -1418,7 +1422,7 @@ def test_the_energy_ceiling_is_applied_per_slot_and_per_meter() -> None:
     monthly or annual average instead would let an expensive month shelter
     under a cheap one, which is the opposite of what the guarantee sells."""
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     when = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
     capped = VariableRates(
@@ -1516,7 +1520,7 @@ def test_a_cap_cohort_keeps_its_ceiling() -> None:
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
         VariableRates,
     )
@@ -1565,7 +1569,9 @@ def test_mega_reprices_its_variable_and_impact_cards_on_the_delivery_month() -> 
         dso_impact_band,
         energy_eur_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
     from tests import make_snapshot
 
     variable = parse_snapshot(

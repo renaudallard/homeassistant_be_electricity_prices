@@ -42,9 +42,9 @@ from custom_components.be_electricity_prices.pricing import (
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import make_text_session, fixture_text
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     ImpactRates,
     VariableRates,
 )
@@ -807,7 +807,7 @@ def test_trihoraire_is_billed_on_the_delivery_month() -> None:
     printed bands are the fallback and the delivery month is billed on its own
     mean, per band, the way the variable card's mono pair already is."""
     from custom_components.be_electricity_prices.cohort import _month_indexed_leg
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
 

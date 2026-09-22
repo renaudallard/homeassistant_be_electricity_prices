@@ -92,7 +92,7 @@ Notes:
   returns a `DynamicRates` without setting it, `eneco.py`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
   to hourly (`base.py`).
-- Fix, Flex and Flex One all set `spot_indexed_injection` (`base.py`), so the
+- Fix, Flex and Flex One all set `spot_indexed_injection` (`_rates.py`), so the
   flow offers them the ENTSO-E key their month-indexed credit needs; Power
   Dynamic leaves it `False` because its energy leg collects the key already.
   This bullet claimed the opposite ("it stays `False` on all three") for as long

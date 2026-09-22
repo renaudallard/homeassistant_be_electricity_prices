@@ -58,12 +58,16 @@ from custom_components.be_electricity_prices.ytd_cost import (
     _compute_current_year_cost,
 )
 from custom_components.be_electricity_prices.providers.base import (
-    InjectionRates,
-    SpotMonthlyRates,
     SupplierExtractor,
     TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
     apply_vat,
     resolve_excise_band,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    InjectionRates,
+    SpotMonthlyRates,
 )
 from custom_components.be_electricity_prices.providers.custom import build_snapshot
 from tests import fixture_text, make_snapshot, make_stub_extractor
@@ -299,9 +303,7 @@ def test_spp_weighting_enabled_for_a_card_that_indexes_on_spp() -> None:
     injection regime - nothing else reads the credit, and the profile is a
     52 MB download.
     """
-    from custom_components.be_electricity_prices.providers.base import (
-        InjectionRates,
-    )
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
     from tests import make_snapshot
 
     entry = SimpleNamespace(
@@ -450,7 +452,7 @@ def test_a_formula_only_monthly_injection_is_never_priced_per_hour() -> None:
         _bake_monthly_injection,
         _injection_price_for_slot,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -1007,7 +1009,7 @@ def test_resolve_excise_blends_the_schedule_over_the_volume(
 
 def test_resolve_excise_bills_each_tranche_at_its_own_rate() -> None:
     """The annual total, spelled out in euros rather than in a blended rate."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         blended_excise_rate,
     )
 
@@ -1033,7 +1035,9 @@ _TIER_FACTOR, _TIER_BASE = 1.12 * 1.06, 0.020 * 1.06
 
 
 def _tiered_snapshot() -> Any:
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
 
     return make_snapshot(
         energy=SpotMonthlyRates(
@@ -1063,7 +1067,7 @@ def test_resolve_volume_tier_reproduces_the_annual_bill(
     formula and never learn about tranches.
     """
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_volume_tier,
     )
 
@@ -1084,10 +1088,10 @@ def test_resolve_volume_tier_inside_the_tranche_drops_the_formula() -> None:
     come back as one. Leaving it here with a zeroed factor prices correctly and
     still demands a monthly mean, so a month with no cached spot would fail the
     tick over a coefficient that cannot matter."""
-    from custom_components.be_electricity_prices.providers.base import (
-        FixedRates,
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_volume_tier,
     )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
 
     resolved = resolve_volume_tier(_tiered_snapshot(), 1200.0)
     assert isinstance(resolved.energy, FixedRates)
@@ -1099,10 +1103,12 @@ def test_resolve_volume_tier_inside_the_tranche_drops_the_formula() -> None:
 def test_resolve_volume_tier_is_identity_without_a_tranche() -> None:
     """Every card but EnergyVision's tiered range prices its whole volume one
     way, and a resolver that copied them would churn every snapshot read."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_volume_tier,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         SpotMonthlyRates,
-        resolve_volume_tier,
     )
 
     plain = make_snapshot(energy=SpotMonthlyRates(factor=1.0, base=0.0))
@@ -1185,9 +1191,11 @@ def test_resolve_volume_tier_withholds_the_tranche_from_a_night_circuit() -> Non
     per-register formula, so an exclusive-night entry falls through to the mono
     pair, and folding the tranche into that pair handed a night circuit a
     discount the card never gives it."""
-    from custom_components.be_electricity_prices.providers.base import (
-        SpotMonthlyRates,
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_volume_tier,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
     )
 
     resolved = resolve_volume_tier(_tiered_snapshot(), 3500.0, meter="exclusive_night")

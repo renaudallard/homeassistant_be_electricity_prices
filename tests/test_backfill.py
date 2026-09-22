@@ -46,10 +46,12 @@ from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
-    FixedRates,
     SupplierSnapshot,
     TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    FixedRates,
 )
 from tests import make_entry, make_snapshot, make_stub_extractor
 
@@ -121,7 +123,9 @@ def test_hour_spot_refuses_a_thinly_cached_closed_month() -> None:
     computed it with the ungated mean, and unlike the year-to-date -- which is
     recomputed from scratch every tick and heals itself -- these rows are
     written into the recorder and stay until someone re-runs the service."""
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
     from custom_components.be_electricity_prices.spot_stats import (
         _bucket_by_local_month,
     )
@@ -765,7 +769,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     test_hour_spot_refuses_a_thinly_cached_closed_month pins for the energy
     leg and which the injection leg now shares."""
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -852,7 +856,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     inside an ENTSO-E gap cost the persisted series nothing at all and the
     imported rows disagreed with the compiled ones at the seam."""
     from custom_components.be_electricity_prices import const
-    from custom_components.be_electricity_prices.providers.base import DynamicRates
+    from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
     freezer.move_to("2026-07-15 12:00:00+02:00")
     snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.0))
@@ -973,7 +977,7 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     on Q1 2026 and sent an audit after a seam bug that was never there.
     """
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
-    from custom_components.be_electricity_prices.providers.base import DynamicRates
+    from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
     snap = make_snapshot(
         energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=48.0)
@@ -1101,9 +1105,9 @@ async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
-        FixedRates,
         TaxOverlay,
     )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
 
     snap = make_snapshot(
         energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
@@ -1236,7 +1240,7 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     Variable shape) must still trigger a spot backfill on the injection
     regime, so the feed-in credit lands in the backfilled cost and price
     rows instead of dropping at the backfill->live seam."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
     )
@@ -1290,7 +1294,7 @@ async def test_ensure_dynamic_spots_hands_back_the_quarter_cache() -> None:
     """The backfill prices its hours from what this returns, so returning the
     hourly cache alone would leave a floored feed-in formula replayed off the
     hour mean while the live sensor floors each slot."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
     )
@@ -1361,7 +1365,7 @@ def test_hour_spot_uses_month_mean_for_spot_monthly() -> None:
     is partial by definition and exempt from the closed-month coverage gate.
     A closed month this thinly cached is refused instead, which
     test_hour_spot_refuses_a_thinly_cached_closed_month pins."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         FixedRates,
         SpotMonthlyRates,
@@ -1403,7 +1407,7 @@ async def test_ensure_dynamic_spots_fetches_for_variable_cohort() -> None:
     """A variable contract with a start date re-prices to a SpotMonthly cohort,
     which needs spots for its monthly mean; the backfill must fetch them
     (return the cache) rather than return {} and drop every cohort hour."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
         VariableRates,
     )
@@ -1449,7 +1453,7 @@ async def test_ensure_dynamic_spots_fetches_for_variable_cohort() -> None:
 
 async def test_ensure_dynamic_spots_empty_for_variable_without_start_date() -> None:
     """Same variable contract, no start date: no cohort, static energy, {}."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = make_snapshot(
         supplier="eneco", contract="power_flex", energy=VariableRates(current=0.14)
@@ -1579,7 +1583,7 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
     from custom_components.be_electricity_prices.backfill import (
         _injection_rate_for_hour,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
     )
@@ -1616,7 +1620,7 @@ async def test_backfill_injection_replays_floored_quarters() -> None:
     from custom_components.be_electricity_prices.backfill import (
         _injection_rate_for_hour,
     )
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
     )
@@ -1862,7 +1866,7 @@ def test_backfilled_feed_in_bills_the_printed_indicative_beside_a_formula() -> N
     the hour's spot to the credit only when the card settles per slot. The
     backfill handed it unconditionally, so the same hour was credited off
     the formula there and off the indicative everywhere else."""
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
     )

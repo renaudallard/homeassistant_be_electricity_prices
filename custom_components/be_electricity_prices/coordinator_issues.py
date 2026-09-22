@@ -38,10 +38,8 @@ from .brugel import any_cached_power_term, cached_power_term
 from .providers import get as get_extractor
 from .providers import offers_direct_debit
 
-from .providers.base import (
-    SupplierExtractor,
-    omits_brussels_power_term,
-)
+from .providers.base import SupplierExtractor
+from .providers._resolve import omits_brussels_power_term
 
 from .const import (
     CONF_CONTRACT,

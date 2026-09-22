@@ -160,7 +160,7 @@ Schema `_contract_schema` (`flow_schemas.py`). Contracts come from
 `_contracts_for(supplier_id, region)` (`config_flow.py`), which reads
 `get_extractor(supplier_id).contracts` and keeps only those whose
 `Contract.regions` frozenset contains the region. `Contract` is defined at
-`providers/base.py`; its `kind` is one of the `TariffKind` literals
+`providers/_rates.py`; its `kind` is one of the `TariffKind` literals
 `fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/base.py`).
 
 Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
@@ -226,7 +226,7 @@ is stored rather than the reduced fee, so it cannot silently disagree with the s
 charge beside it. The extractor checks its own reading against the total the same sentence
 states and refuses a footnote that stops adding up.
 
-`resolve_direct_debit` (`providers/base.py`) applies the answer beside the VAT treatment,
+`resolve_direct_debit` (`providers/_resolve.py`) applies the answer beside the VAT treatment,
 the excise band and the volume tranche, which is what puts it on all six paths that price a
 standing charge (the live tick, the year-to-date, the backfill accrual, the config-flow
 estimate and both comparison quotes) instead of teaching each of them about it. It runs

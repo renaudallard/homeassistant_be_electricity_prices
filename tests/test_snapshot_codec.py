@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     EnergyRates,
     FixedRates,

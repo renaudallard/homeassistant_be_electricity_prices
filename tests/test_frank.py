@@ -42,11 +42,15 @@ from custom_components.be_electricity_prices.providers import (
     offers_quarter_hourly,
 )
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
     SupplierSnapshot,
-    VariableRates,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
     resolve_settlement_grid,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    VariableRates,
 )
 from custom_components.be_electricity_prices.providers.frank import (
     _CARD_SELECT,

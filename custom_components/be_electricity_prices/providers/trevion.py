@@ -54,19 +54,21 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from ._resolve import settled_injection
+from ._rates import (
+    Contract,
     DynamicRates,
     EnergyRates,
-    ExtractorError,
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierExtractor,
-    SupplierSnapshot,
     TariffKind,
-    TaxOverlay,
-    settled_injection,
 )
 
 _LISTING_URL = "https://trevion.be/tariefkaarten/"

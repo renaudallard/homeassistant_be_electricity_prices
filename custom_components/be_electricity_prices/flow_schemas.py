@@ -64,7 +64,8 @@ from homeassistant.helpers.selector import (
 
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .providers import all_extractors
-from .providers.base import Contract, ExtractorError
+from .providers.base import ExtractorError
+from .providers._rates import Contract
 from .const import (
     CAPACITY_MODE_FIXED,
     CAPACITY_MODE_SENSOR,

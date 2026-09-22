@@ -44,14 +44,16 @@ from homeassistant.helpers.storage import Store
 from .const import STORAGE_VERSION, WELCOME_CREDIT_PRO_RATA
 from .providers.base import (
     DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from .providers._rates import (
     DynamicRates,
     EnergyRates,
     FixedRates,
     ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
-    TaxOverlay,
     TimeOfUseRates,
     VariableRates,
 )

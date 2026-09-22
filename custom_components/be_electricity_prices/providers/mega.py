@@ -118,14 +118,16 @@ from ._mega_cards import (
 )
 from .base import (
     CardNotReadableError,
-    ALL_REGIONS,
-    Contract,
     ExtractorError,
-    ImpactRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
+)
+from ._rates import (
+    ALL_REGIONS,
+    Contract,
+    ImpactRates,
+    TariffKind,
     VariableRates,
 )
 

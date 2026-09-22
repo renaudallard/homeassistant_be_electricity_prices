@@ -35,9 +35,9 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ebem import (
@@ -541,7 +541,7 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
     both bands correctly off the printed columns, so setting a start date -
     the feature meant to price a cohort more accurately - destroyed the split.
     """
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "ebem_variable",
@@ -567,7 +567,7 @@ def test_basic_plus_keeps_no_band_formulas() -> None:
     too, and searching it for "Exclusief nacht" finds the OTHER product's
     coefficients. Its branch must stay where it is and read none of them.
     """
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "ebem_basic_plus",

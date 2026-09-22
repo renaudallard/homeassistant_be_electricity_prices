@@ -79,21 +79,23 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
-    ALL_REGIONS,
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
-    VariableRates,
     brussels_sibelga_overlay,
-    fixed_or_variable_rates,
     walloon_dso_overlay,
+)
+from ._rates import (
+    ALL_REGIONS,
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    TariffKind,
+    VariableRates,
+    fixed_or_variable_rates,
 )
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"

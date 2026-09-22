@@ -80,20 +80,22 @@ from ._pdf import (
     is_transient_fetch_error,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    ImpactRates,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
+    walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    ImpactRates,
+    InjectionRates,
+    TariffKind,
     VariableRates,
     fixed_or_variable_rates,
-    walloon_dso_overlay,
 )
 
 _BASE_URL = "https://files.octaplus.be/tariffs"

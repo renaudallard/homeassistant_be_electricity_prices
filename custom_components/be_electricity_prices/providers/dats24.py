@@ -87,15 +87,17 @@ from ._pdf import (
     to_float,
 )
 from .base import (
-    walloon_dso_overlay,
-    Contract,
     DsoOverlay,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
+    EnergyRates,
+    InjectionRates,
     VariableRates,
 )
 

@@ -40,9 +40,9 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_aligned,
 )
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
-    ExtractorError,
     FixedRates,
     VariableRates,
 )
@@ -99,7 +99,7 @@ def test_variable_energy_carries_the_monthly_rlp_formula() -> None:
     sont bases sur la valeur actuelle du parametre 'V-test' ... les prix
     moyens attendus pour les 12 mois a venir". A forward estimate of a year
     is not a lagged index, and we were billing it."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "octaplus_smartvariable", _text("octaplus_smartvariable_w.pdf"), "wallonia"
@@ -155,7 +155,7 @@ def test_the_august_variable_card_states_the_same_formula() -> None:
     """The August redesign reworded the meter labels and padded the numbers
     ("mono-horaire (simple) : Epex RLP M * 1,150 + 10,000"). Same contract,
     so the same coefficients have to come out."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     apr = parse_snapshot(
         "octaplus_smartvariable", _text("octaplus_smartvariable_w.pdf"), "wallonia"
@@ -169,7 +169,7 @@ def test_a_card_without_the_formula_keeps_its_printed_rates() -> None:
     were the contract, but it must not lose the entry its energy leg either.
     Dropping to the printed rates is the honest middle, and the live check is
     what says the formula went missing."""
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     text = _text("octaplus_smartvariable_w.pdf").replace("Epex RLP", "Epex XXX")
     energy = parse_snapshot("octaplus_smartvariable", text, "wallonia").energy
@@ -294,7 +294,7 @@ def test_disagreeing_meter_formulas_keep_the_estimate() -> None:
 def test_fixed_impact_extracts_three_cwape_bands() -> None:
     # Impact comptage prices the three CWaPE bands (Eco / Medium / Pic) as
     # the supplier energy, pairing with the DSO's Impact distribution bands.
-    from custom_components.be_electricity_prices.providers.base import ImpactRates
+    from custom_components.be_electricity_prices.providers._rates import ImpactRates
 
     snap = parse_snapshot(
         "octaplus_fixed_impact", _text("octaplus_fixed_w.pdf"), "wallonia"

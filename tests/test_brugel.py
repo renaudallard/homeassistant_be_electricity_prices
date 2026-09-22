@@ -40,6 +40,8 @@ from custom_components.be_electricity_prices.const import DSO_SIBELGA
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
     resolve_brussels_power_term,
 )
 from tests import make_snapshot
@@ -456,7 +458,7 @@ async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> N
 
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._resolve import (
         resolve_brussels_power_term,
     )
 

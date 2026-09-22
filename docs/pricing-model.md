@@ -197,7 +197,7 @@ Three residential card families went on printing it into September 2026
 (Cociter, Ecofix whose card is an OCR reading of a rasterized July one, and
 TotalEnergies), so pricing their cards as printed billed a levy nobody
 charges, roughly 7 EUR/year at 3.500 kWh.
-`resolve_federal_contribution` (`providers/base.py`) zeroes it for a delivery
+`resolve_federal_contribution` (`providers/_resolve.py`) zeroes it for a delivery
 month at or after `FEDERAL_CONTRIBUTION_ZEROED_FROM` (`const.py`), and
 `_resolve_snapshot` (`snapshot_resolve.py`) applies it once on the way from a
 stored card to a priced one, beside `apply_vat` and the two resolvers below.
@@ -223,7 +223,7 @@ TotalEnergies prints it rounded to 4,88, and Ecofix prints July's 5,03288
 because its card is a picture of July's card, which no parser change can read
 differently (about 5,49 EUR/year at 3.500 kWh).
 
-`resolve_federal_excise` (`providers/base.py`) writes the law's figure for a
+`resolve_federal_excise` (`providers/_resolve.py`) writes the law's figure for a
 delivery month inside the window `FEDERAL_EXCISE_KNOWN_FROM` ..
 `FEDERAL_EXCISE_KNOWN_UNTIL` (`const.py`), applied beside the contribution in
 `_resolve_snapshot` (`snapshot_resolve.py`), and it is identity for a card that
@@ -253,7 +253,7 @@ its upload token expires.
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py`), and `resolve_excise_band` (`providers/base.py`)
+(`providers/_resolve.py`), and `resolve_excise_band` (`providers/_resolve.py`)
 resolves it against the entry's yearly volume (`entry_annual_kwh`) and writes
 one rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -279,7 +279,7 @@ Flanders per calendar year, so a card stating another one is wrong rather than
 different, which is the reasoning `resolve_federal_excise` already follows for
 the excise. `VREG_NETWORK_CEILING_HTVA` (`const.py`) holds it EXCLUDING VAT as
 the regulator sets it, with a `KNOWN_FROM` / `KNOWN_UNTIL` window, and
-`resolve_vreg_network_ceiling` (`providers/base.py`) puts it on every Fluvius
+`resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every Fluvius
 overlay inside that window.
 
 Five suppliers read it correctly and are unaffected: Luminus, Frank and
@@ -472,7 +472,7 @@ spot, which is the 0.6.7 mis-credit and is silent.
 Brusol's Groene stroom charges 250 EUR/yr and 230 on domiciliëring, the only card in the
 registry that prices how the invoice is settled. `SupplierSnapshot` carries the REDUCTION
 (`direct_debit_discount_eur`), the config flow asks the household how it pays
-(`CONF_DIRECT_DEBIT`), and `resolve_direct_debit` (`providers/base.py`) takes one off the
+(`CONF_DIRECT_DEBIT`), and `resolve_direct_debit` (`providers/_resolve.py`) takes one off the
 other before the snapshot is priced, clearing the field as it goes.
 
 Resolved there rather than at the six places that read a standing charge (the live tick,
@@ -750,7 +750,7 @@ nothing leave the columns `None` and price exactly as before.
 `energy_eur_per_kwh` dispatches on the runtime type of `snapshot.energy`
 (`pricing.py`). The six `EnergyRates` subtypes are
 `FixedRates | VariableRates | DynamicRates | SpotMonthlyRates | TimeOfUseRates | ImpactRates`
-(`providers/base.py`). The `TariffKind` string on a `Contract` is
+(`providers/_rates.py`). The `TariffKind` string on a `Contract` is
 `"fixed" | "variable" | "dynamic" | "tou" | "tou_impact" | "spot_monthly"`
 (`providers/base.py`).
 
@@ -783,8 +783,8 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
 
 `FixedRates` fields: `single`, optional `peak`/`offpeak`/`exclusive_night`, plus
 `yearly_fixed_fee` and `yearly_fixed_fee_exclusive_night`
-(`providers/base.py`). `VariableRates` mirrors it with `current` in place
-of `single` and an optional `formula` string (`providers/base.py`).
+(`providers/_rates.py`). `VariableRates` mirrors it with `current` in place
+of `single` and an optional `formula` string (`providers/_rates.py`).
 Suppliers that publish only a mono rate (e.g. Eneco Power Flex) leave
 `peak`/`offpeak` `None`, and routing falls through to the single rate for every
 meter type (`providers/base.py`).
@@ -869,7 +869,7 @@ on `VariableRates.formula_factor` so that is not mistaken for an oversight.
 ### Time-of-use: `tou_slot`
 
 `TimeOfUseRates` has three published rates `peak`, `transition`, `offpeak`, and a
-`weekend_rule` (`providers/base.py`). `tou_slot` maps a local datetime to
+`weekend_rule` (`providers/_rates.py`). `tou_slot` maps a local datetime to
 its band (`pricing.py`).
 
 Shared weekday schedule:
@@ -901,7 +901,7 @@ discount and is out of scope (`pricing.py`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py`). Fields: `pic`, `medium`, `eco`
+(`providers/_rates.py`). Fields: `pic`, `medium`, `eco`
 (`providers/base.py`). `dso_impact_band` (`pricing.py`):
 
 | Band | Hours (every day) |
@@ -992,8 +992,8 @@ on an exclusive-night config entry when the card prints one (EBEM Groen Variabel
 otherwise the standard `yearly_fixed_fee` for every meter type
 (`yearly_fixed_fee_for_meter`, `pricing.py`).
 Three rate shapes carry the dedicated field: `FixedRates`
-(`providers/base.py`), `VariableRates` (`providers/base.py`) and
-`SpotMonthlyRates` (`providers/base.py`), the last because a variable card
+(`providers/_rates.py`), `VariableRates` (`providers/_rates.py`) and
+`SpotMonthlyRates` (`providers/_rates.py`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
@@ -1040,7 +1040,7 @@ keys (`pricing.py`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/_rates.py`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption

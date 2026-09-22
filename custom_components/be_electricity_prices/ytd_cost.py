@@ -107,12 +107,14 @@ from .pricing import (
     yearly_fixed_fee_for_meter,
 )
 from .providers.base import (
+    SupplierExtractor,
+    SupplierSnapshot,
+)
+from .providers._rates import (
     DynamicRates,
     ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
-    SupplierExtractor,
-    SupplierSnapshot,
     TimeOfUseRates,
 )
 from .snapshot_resolve import entry_annual_kwh

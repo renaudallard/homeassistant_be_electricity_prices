@@ -25,11 +25,13 @@ from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
-    Contract,
     ExtractorError,
-    FixedRates,
     SupplierExtractor,
     SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    Contract,
+    FixedRates,
 )
 from tests import make_snapshot
 

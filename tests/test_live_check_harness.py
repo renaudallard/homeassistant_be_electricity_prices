@@ -52,7 +52,7 @@ from typing import Any
 import aiohttp
 import pytest
 
-from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+from custom_components.be_electricity_prices.providers._rates import SpotMonthlyRates
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -1198,10 +1198,8 @@ def test_the_vat_check_reads_the_contract_shape_it_is_actually_given() -> None:
     really passes.
     """
     from custom_components.be_electricity_prices.providers import mega
-    from custom_components.be_electricity_prices.providers.base import (
-        InjectionRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
     from custom_components.be_electricity_prices.providers.mega import (
         _injection_vat_applies,
     )
@@ -1470,7 +1468,7 @@ def _bound_rate_types() -> Iterator[None]:
     has no such field. Bind the real classes instead of loading the whole
     provider set: identity is all the dispatch needs.
     """
-    from custom_components.be_electricity_prices.providers import base
+    from custom_components.be_electricity_prices.providers import _rates
 
     saved = (
         lc._RATE_FIXED,
@@ -1480,12 +1478,12 @@ def _bound_rate_types() -> Iterator[None]:
         lc._RATE_TOU,
         lc._RATE_IMPACT,
     )
-    lc._RATE_FIXED = base.FixedRates
-    lc._RATE_VARIABLE = base.VariableRates
-    lc._RATE_DYNAMIC = base.DynamicRates
-    lc._RATE_SPOT_MONTHLY = base.SpotMonthlyRates
-    lc._RATE_TOU = base.TimeOfUseRates
-    lc._RATE_IMPACT = base.ImpactRates
+    lc._RATE_FIXED = _rates.FixedRates
+    lc._RATE_VARIABLE = _rates.VariableRates
+    lc._RATE_DYNAMIC = _rates.DynamicRates
+    lc._RATE_SPOT_MONTHLY = _rates.SpotMonthlyRates
+    lc._RATE_TOU = _rates.TimeOfUseRates
+    lc._RATE_IMPACT = _rates.ImpactRates
     yield
     (
         lc._RATE_FIXED,
@@ -1622,10 +1620,12 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     (the September 2026 figures below) trips none of them."""
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
+        TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         ImpactRates,
         InjectionRates,
-        TaxOverlay,
         TimeOfUseRates,
         VariableRates,
     )
@@ -2398,7 +2398,7 @@ def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> No
     negative constant is a real shape, and a floor at zero sized the bound on
     tariff economics rather than on the unit slip. A base read in c/kWh lands
     a hundred times away and is still caught."""
-    from custom_components.be_electricity_prices.providers.base import DynamicRates
+    from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
     printed = DynamicRates(factor=1.0, base=-0.0102, yearly_fixed_fee=60.0)
     assert _failures(lambda: lc._validate_energy("x", "c", printed)) == []

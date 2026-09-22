@@ -35,10 +35,12 @@ from datetime import date
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
-    DynamicRates,
     ExtractorError,
-    FixedRates,
     SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    FixedRates,
     TimeOfUseRates,
     VariableRates,
 )
@@ -272,7 +274,7 @@ def test_maxxflex_energy_carries_the_monthly_formula() -> None:
     journalieres Day Ahead Belpex Baseload ... pendant le mois de livraison."
     The printed 14,41 is that formula at March's index on an April card.
     """
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
         "luminus_maxxflex", fixture_text("luminus_maxxflex_w.pdf"), "wallonia"
@@ -305,7 +307,7 @@ def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
     fixed card has no energy formula at all, and searching the whole document
     rather than the energy block would hand it the INJECTION one.
     """
-    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
     from custom_components.be_electricity_prices.providers.luminus import (
         _monthly_energy_coefficients,
     )
@@ -431,7 +433,7 @@ def test_smartflex_carries_a_formula_per_slot() -> None:
     sits under the injection block and governs that tariff. ComfyFlex
     attributes its index to a QUARTER, which is what keeps it out.
     """
-    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
 
     snap = parse_snapshot(
         "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
@@ -459,7 +461,7 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
         TimeOfUseRates,
     )

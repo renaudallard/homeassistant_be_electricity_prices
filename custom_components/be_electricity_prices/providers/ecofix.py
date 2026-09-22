@@ -83,18 +83,20 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
-    TariffKind,
     TaxOverlay,
-    VariableRates,
     walloon_dso_overlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    TariffKind,
+    VariableRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

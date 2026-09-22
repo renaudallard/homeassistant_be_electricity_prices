@@ -100,17 +100,19 @@ from ..const import (
     SUPPLIER_CUSTOM,
 )
 from .base import (
-    Contract,
     DsoOverlay,
-    DynamicRates,
-    EnergyRates,
     ExtractorError,
-    FixedRates,
-    InjectionRates,
-    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
 )
 
 _CONTRACTS: tuple[Contract, ...] = (

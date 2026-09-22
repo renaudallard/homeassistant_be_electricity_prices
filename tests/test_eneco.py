@@ -42,7 +42,7 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
 )
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
-from custom_components.be_electricity_prices.providers.base import (
+from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     VariableRates,
@@ -875,7 +875,7 @@ def test_flex_is_month_indexed_on_the_rlp_weighted_mean() -> None:
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.cohort import _month_indexed_leg
-    from custom_components.be_electricity_prices.providers.base import (
+    from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
     from custom_components.be_electricity_prices.spot_stats import (

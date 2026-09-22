@@ -107,7 +107,9 @@ relative to that package directory.
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
 | `button.py` | A refresh button entity that forces an immediate snapshot re-fetch for the entry. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key. |
-| `providers/base.py` | The extractor protocol and every shared dataclass: `SupplierExtractor`, `Contract`, `SupplierSnapshot`, the six `EnergyRates` shapes, `DsoOverlay`, `TaxOverlay`, `InjectionRates`, and the fetch / probe / archive callable types. |
+| `providers/base.py` | The extractor protocol and what a parsed card amounts to: `SupplierExtractor`, `SupplierSnapshot`, `DsoOverlay`, `TaxOverlay`, and the fetch / probe / archive callable types. |
+| `providers/_rates.py` | The shapes a card can print: `Contract`, the six `EnergyRates` shapes and `InjectionRates`. Data only, so an extractor can build one without reaching into the pricing engine. |
+| `providers/_resolve.py` | Turning a published card into the one a given household is billed on: VAT, the excise band, the direct-debit discount, the VREG ceiling, the Brussels power term, the volume tier and the settlement grid. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Shared PDF and HTTP helpers used by the extractors (text extraction, transient-error classification via `is_transient_fetch_error`, and column-alignment utilities). |
 
@@ -162,20 +164,20 @@ onto these canonical keys.
 ### Supplier and contract
 
 A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py`). It declares
-the `Contract`s it sells (`providers/base.py`), each carrying a `TariffKind`
+the `Contract`s it sells (`providers/_rates.py`), each carrying a `TariffKind`
 (`providers/base.py`):
 
 | TariffKind | Energy model | Rates dataclass | Notes |
 | --- | --- | --- | --- |
-| `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py`) | Optional `exclusive_night` rate for a dedicated night circuit. |
-| `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
-| `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
-| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
-| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. Cociter's card prints last month's BELIX per band and flags `month_indexed`, so `_month_indexed_leg` re-prices it through a banded `SpotMonthlyRates`. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py`) | energie.be Variabel, Energy Knights Essentia Online, Trevion Groene Stroom Flex / LifePowr (all Belpex_RLP), and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
+| `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/_rates.py`) | Optional `exclusive_night` rate for a dedicated night circuit. |
+| `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/_rates.py`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
+| `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/_rates.py`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
+| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/_rates.py`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
+| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/_rates.py`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. Cociter's card prints last month's BELIX per band and flags `month_indexed`, so `_month_indexed_leg` re-prices it through a banded `SpotMonthlyRates`. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/_rates.py`) | energie.be Variabel, Energy Knights Essentia Online, Trevion Groene Stroom Flex / LifePowr (all Belpex_RLP), and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
-their home region) and `spot_indexed_injection` (`providers/base.py`), a flag for the
+their home region) and `spot_indexed_injection` (`providers/_rates.py`), a flag for the
 non-dynamic cards (the two Cociter variable ones, every Bolt fixed and variable card, and
 every month-indexed card) where pricing the injection still needs an ENTSO-E spot.
 

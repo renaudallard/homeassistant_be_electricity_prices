@@ -57,13 +57,15 @@ from .const import (
 )
 from .providers.base import (
     DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from .providers._rates import (
     DynamicRates,
     EnergyRates,
     FixedRates,
     ImpactRates,
     SpotMonthlyRates,
-    SupplierSnapshot,
-    TaxOverlay,
     TimeOfUseRates,
     VariableRates,
 )

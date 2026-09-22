@@ -315,10 +315,8 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
     answers, in a column the table sorts.
     """
     from custom_components.be_electricity_prices import compare_engine
-    from custom_components.be_electricity_prices.providers.base import (
-        ImpactRates,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import ImpactRates
     from custom_components.be_electricity_prices.snapshot_resolve import (
         _resolve_snapshot,
     )
@@ -590,7 +588,7 @@ async def test_a_row_needing_spots_that_are_absent_prints_no_figure(
     card whose injection alone is spot-indexed walks straight past it.
     """
     from custom_components.be_electricity_prices import compare_inputs
-    from custom_components.be_electricity_prices.providers.base import InjectionRates
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
 
     entry = MockConfigEntry(
         domain=DOMAIN,

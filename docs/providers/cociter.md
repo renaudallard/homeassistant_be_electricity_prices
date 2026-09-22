@@ -244,7 +244,7 @@ result literally: from `(0.103 x BELPEX + 3) x 1.06`, `factor == 1.0918` and
 `base == 0.0318` (illustrative), and it checks `factor*0.10 + base == 0.14098`
 at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 `quarter_hourly=True` flag (`cociter.py`) keeps the native 15-minute slots
-(see `DynamicRates`, `base.py`).
+(see `DynamicRates`, `_rates.py`).
 
 ### DSO overlay: `_extract_dsos`
 
@@ -422,7 +422,7 @@ card, those four plus the three Tarif Impact bands PIC/MEDIUM/ECO on the
 dynamic SMR3 card, and the three Impact bands plus exclusive-night alone on the
 trihoraire card. The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py`).
+`DsoOverlay` in `base.py` and `ImpactRates` in `_rates.py`).
 
 ## Tax overlay
 
@@ -442,7 +442,7 @@ and compare paths, all gated on the contract's `spot_indexed_injection` flag
 credit.
 
 Injection is VAT-exempt for residential, so `factor`/`base` are never VAT-scaled
-(`InjectionRates` comment, `base.py`). Unit handling mirrors the dynamic
+(`InjectionRates` comment, `_rates.py`). Unit handling mirrors the dynamic
 consumption side: the PDF factor (against BELPEX in EUR/MWh) is multiplied by 10
 to work against a EUR/kWh spot, and the base (c€/kWh) is divided by 100
 (`cociter.py`). From the printed `(0,097 x BELPEX - 2,1)` the tests pin

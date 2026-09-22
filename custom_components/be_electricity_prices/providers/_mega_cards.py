@@ -49,10 +49,10 @@ from ._pdf import (
     to_float,
     vat_multiplier,
 )
-from .base import (
+from .base import ExtractorError
+from ._rates import (
     DynamicRates,
     EnergyRates,
-    ExtractorError,
     FixedRates,
     ImpactRates,
     InjectionRates,

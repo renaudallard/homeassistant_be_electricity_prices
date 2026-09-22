@@ -79,7 +79,11 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
-from .providers.base import DynamicRates, SpotMonthlyRates, SupplierSnapshot
+from .providers.base import SupplierSnapshot
+from .providers._rates import (
+    DynamicRates,
+    SpotMonthlyRates,
+)
 
 _SPOT_BASIS = (
     "not projected: this contract settles on a Belpex index for months that "
