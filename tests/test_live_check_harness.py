@@ -1810,6 +1810,7 @@ def test_a_mono_only_spot_monthly_card_is_unaffected(_bound_rate_types: None) ->
 
 def test_sweep_cost_is_reported_and_never_warned_on(
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The declared sweep cost is fetch PLUS parse on a Raspberry Pi, and
     parse CPU dominates it for the expensive suppliers. A GitHub runner's CPU
@@ -1829,7 +1830,7 @@ def test_sweep_cost_is_reported_and_never_warned_on(
         "failed": 0.0,
         "failed_s": 0.0,
     }
-    lc._DECLARED_SWEEP_COST["bolt"] = 45.3
+    monkeypatch.setitem(lc._DECLARED_SWEEP_COST, "bolt", 45.3)
 
     # Wildly over the declared figure, which is exactly the runner case.
     lc._record_sweep_cost("bolt", 900.0)
@@ -1842,9 +1843,17 @@ def test_sweep_cost_is_reported_and_never_warned_on(
     assert not any("sweep" in w.lower() for w in lc._drift_warnings(lc.METRICS))
 
 
-def test_sweep_cost_reporting_is_silent_without_a_measurement() -> None:
+def test_sweep_cost_reporting_is_silent_without_a_measurement(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """A supplier whose check made no request, or one this build does not
-    ship, must not divide by zero or raise out of a logging helper."""
+    ship, must not divide by zero or raise out of a logging helper.
+
+    And must say nothing, which is the half the name promises and nothing
+    checked: with no capture here the helper could start warning about every
+    supplier that made no request and this would still pass. The sibling above
+    reads stderr for the case that DOES report.
+    """
     import live_check as lc
 
     lc.METRICS.clear()
@@ -1857,6 +1866,7 @@ def test_sweep_cost_reporting_is_silent_without_a_measurement() -> None:
         "failed_s": 0.0,
     }
     lc._record_sweep_cost("bolt", 5.0)
+    assert capsys.readouterr().err == ""
 
 
 def test_a_withdrawn_suppliers_fetch_failure_does_not_gate_ci(
