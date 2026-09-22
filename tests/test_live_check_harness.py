@@ -1495,6 +1495,51 @@ def _bound_rate_types() -> Iterator[None]:
     ) = saved
 
 
+def test_the_loader_binds_what_the_providers_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first call of every nightly run, made for real.
+
+    The fixture above binds the rate classes by hand, which is why nothing
+    here noticed when the 0.27.5 split moved them into providers/_rates.py and
+    the VREG reader into providers/_parse.py: _load_providers still read both
+    off their old modules, raised on the first one, and every run died with
+    rc=8 before it checked a single card.
+    """
+    # Everything the loader rebinds or fills goes back afterwards, so no other
+    # test sees the providers it loaded.
+    for name, value in list(vars(lc).items()):
+        if not name.startswith("__"):
+            monkeypatch.setattr(lc, name, dict(value) if type(value) is dict else value)
+    before = set(sys.modules)
+    try:
+        loaded = lc._load_providers()
+        assert set(loaded) == set(lc._SUPPLIERS)
+        rates = sys.modules["be_pkg.providers._rates"]
+        bound = {
+            "FixedRates": lc._RATE_FIXED,
+            "VariableRates": lc._RATE_VARIABLE,
+            "DynamicRates": lc._RATE_DYNAMIC,
+            "TimeOfUseRates": lc._RATE_TOU,
+            "ImpactRates": lc._RATE_IMPACT,
+            "SpotMonthlyRates": lc._RATE_SPOT_MONTHLY,
+        }
+        for name, cls in bound.items():
+            assert cls is getattr(rates, name), name
+            # isinstance() in _validate_energy only works if every provider
+            # built its cards with the class bound here, not with a second
+            # copy of the module.
+            for mod_name, mod in list(sys.modules.items()):
+                if mod_name.startswith("be_pkg.") and name in vars(mod):
+                    assert vars(mod)[name] is cls, (mod_name, name)
+        parse = sys.modules["be_pkg.providers._parse"]
+        assert lc._parse_vreg_ceiling is parse.parse_vreg_network_ceiling
+    finally:
+        for name in set(sys.modules) - before:
+            if name == "be_pkg" or name.startswith("be_pkg."):
+                del sys.modules[name]
+
+
 def _essentia_leg() -> SpotMonthlyRates:
     """Energy Knights Essentia Online, August 2026, as the extractor parses it."""
     return SpotMonthlyRates(

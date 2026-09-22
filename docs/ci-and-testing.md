@@ -209,10 +209,13 @@ markdown report to stdout and encodes the outcome in its exit code. It is run da
 The script deliberately does not import Home Assistant. `_load_providers()`
 (`scripts/live_check.py`) synthesises a `be_pkg.providers` package and loads each provider
 module by file path, so it can import `providers/*.py` and `providers/base.py` without pulling HA
-into scope. It binds the base rate classes (`FixedRates`, `VariableRates`, `DynamicRates`,
-`TimeOfUseRates`, `ImpactRates`) for the `isinstance`-based energy validation
-(`scripts/live_check.py`); class identity matches because every provider imports from the same
-loaded `base` module.
+into scope. It binds the rate classes (`FixedRates`, `VariableRates`, `DynamicRates`,
+`TimeOfUseRates`, `ImpactRates`, `SpotMonthlyRates`) for the `isinstance`-based energy
+validation (`scripts/live_check.py`), taking them from the one `providers/_rates.py` module that
+`base` and every provider import, so class identity matches. The VREG ceiling reader comes from
+`providers/_parse.py` the same way. `test_the_loader_binds_what_the_providers_use` runs the real
+loader, because a module split that moves one of these names otherwise surfaces only as a
+nightly run dying before its first card.
 
 ### Structure and main functions
 

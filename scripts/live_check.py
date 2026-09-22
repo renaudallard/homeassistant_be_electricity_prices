@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import importlib.util as iu
 import json
 import re
@@ -138,16 +139,18 @@ def _load_providers() -> dict[str, types.ModuleType]:
 
     base = _load("be_pkg.providers.base", PKG / "providers" / "base.py")
     # Bind the rate classes for isinstance-based validation in
-    # _validate_energy. Class identity matches because every provider
-    # imports from this same loaded module via ``from ..base import``.
+    # _validate_energy. They live in _rates, which base and every provider
+    # import through the package, so import_module hands back that one copy;
+    # loading the file a second time would mint classes no card is built with.
+    rates = importlib.import_module("be_pkg.providers._rates")
     global _RATE_FIXED, _RATE_VARIABLE, _RATE_DYNAMIC, _RATE_TOU, _RATE_IMPACT
     global _RATE_SPOT_MONTHLY
-    _RATE_FIXED = base.FixedRates
-    _RATE_VARIABLE = base.VariableRates
-    _RATE_DYNAMIC = base.DynamicRates
-    _RATE_TOU = base.TimeOfUseRates
-    _RATE_IMPACT = base.ImpactRates
-    _RATE_SPOT_MONTHLY = base.SpotMonthlyRates
+    _RATE_FIXED = rates.FixedRates
+    _RATE_VARIABLE = rates.VariableRates
+    _RATE_DYNAMIC = rates.DynamicRates
+    _RATE_TOU = rates.TimeOfUseRates
+    _RATE_IMPACT = rates.ImpactRates
+    _RATE_SPOT_MONTHLY = rates.SpotMonthlyRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR, _render_through
     # The readers' render seam, from the copy of _pdf the providers loaded
@@ -159,7 +162,9 @@ def _load_providers() -> dict[str, types.ModuleType]:
     global _parse_vreg_ceiling
     # The extractors' own reader, so the consensus row below sees exactly what
     # a card gives the parser rather than a second pattern that could drift.
-    _parse_vreg_ceiling = pdf.parse_vreg_network_ceiling
+    _parse_vreg_ceiling = importlib.import_module(
+        "be_pkg.providers._parse"
+    ).parse_vreg_network_ceiling
     _EXTRACTOR_ERROR = base.ExtractorError
     # The integration is loaded under a synthetic ``be_pkg`` package, so a
     # plain ``import custom_components...`` does NOT work here: it raises
@@ -270,7 +275,7 @@ _RENEWABLES_FIELD: dict[str, str] = {
 # Rate-class references bound by _load_providers; ``object`` placeholder
 # until startup so isinstance() in _validate_energy still type-checks
 # pre-load (it runs only after _load_providers, but mypy walks both
-# paths). Bound to the actual base.FixedRates / VariableRates /
+# paths). Bound to the actual _rates.FixedRates / VariableRates /
 # DynamicRates / TimeOfUseRates / ImpactRates / SpotMonthlyRates classes
 # once the providers package is loaded.
 _RATE_FIXED: type = object
