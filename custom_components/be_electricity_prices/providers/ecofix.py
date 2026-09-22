@@ -68,19 +68,21 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
-    parse_prosumer_column,
-    require_contract,
     NL_MONTHS,
-    SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
     head_ok,
-    numeric_row,
-    parse_sign,
-    scan_month_end,
-    to_float,
     vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import scan_month_end
+from ._parse import (
+    numeric_row,
+    parse_prosumer_column,
+    parse_sign,
+    require_contract,
+    to_float,
 )
 from .base import (
     DsoOverlay,

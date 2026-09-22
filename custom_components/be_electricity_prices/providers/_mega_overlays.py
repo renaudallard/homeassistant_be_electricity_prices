@@ -55,7 +55,7 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
 )
-from ._pdf import (
+from ._parse import (
     parse_brussels_osp,
     tier_bound_kwh,
     to_float,

@@ -346,7 +346,7 @@ def test_num_parses_thousands_grouped_and_four_digit_values() -> None:
     # _NUM previously capped the integer part at three digits, truncating
     # any value >= 1000. A non-breaking-space-grouped fee and an
     # ungrouped four-digit value must now parse to their full magnitude.
-    from custom_components.be_electricity_prices.providers._pdf import to_float
+    from custom_components.be_electricity_prices.providers._parse import to_float
 
     pattern = re.compile(eneco_mod._NUM)
     # Grouping uses a non-breaking space (U+00A0); ordinary ASCII

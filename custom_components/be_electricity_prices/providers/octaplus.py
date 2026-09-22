@@ -62,22 +62,26 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
-    _is_pdf_payload,
-    require_contract,
     FR_MONTHS,
-    SIGN_CHARS,
-    archive_validity_check,
+    _is_pdf_payload,
     extract_pdf_text_aligned,
-    render_pdf,
     fetch_pdf_text_aligned,
     fetch_text,
-    fold_accents,
     head_freshness_key,
-    parse_sign,
-    parse_valid_until,
-    to_float,
-    vat_multiplier,
     is_transient_fetch_error,
+    render_pdf,
+    vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
+    fold_accents,
+    parse_sign,
+    require_contract,
+    to_float,
 )
 from .base import (
     DsoOverlay,

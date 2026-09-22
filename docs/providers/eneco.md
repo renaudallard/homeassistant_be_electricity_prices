@@ -160,7 +160,7 @@ candidate:
    under the same rule (`eneco.py`).
 3. `parse_snapshot` parses; an `ExtractorError` skips the volume
    (`eneco.py`).
-4. `archive_validity_check` (`_pdf.py`) confirms the snapshot actually
+4. `archive_validity_check` (`_validity.py`) confirms the snapshot actually
    covers `year_month`, passing `month_names=_NL_MONTHS` (`eneco.py`). This
    guards against the CDN silently substituting the current card at a historical
    URL: when `valid_until` parses, it must fall in the requested month; when it is
@@ -234,14 +234,14 @@ mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
 (`tests/test_eneco.py`) locks both the NBSP-grouped and ungrouped
 four-digit round-trips. `_WS` (`eneco.py`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
-`to_float` (`_pdf.py`), which strips every Unicode space variant before
+`to_float` (`_parse.py`), which strips every Unicode space variant before
 swapping comma for dot.
 
 ### Publication label and validity
 
 `_extract_publication_month` (`eneco.py`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_validity.py`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
@@ -456,7 +456,7 @@ Injection taxonomy (the three-shape rule, `base.py`):
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via
-  `parse_sign` (`_pdf.py`).
+  `parse_sign` (`_parse.py`).
 
 No Eneco contract is the spot-indexed-variable shape (Cociter Variable), but
 that is not what the flag means: Fix, Flex and Flex One all set

@@ -82,13 +82,17 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
-    require_contract,
-    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
-    fold_accents,
     is_transient_fetch_error,
+)
+from ._validity import (
+    archive_validity_check,
     parse_valid_until,
+)
+from ._parse import (
+    fold_accents,
+    require_contract,
     tier_bound_kwh,
     to_float,
 )

@@ -101,20 +101,24 @@ from ..const import (
 )
 from ._pdf import (
     NUM_NO_THOUSANDS,
-    archive_validity_check,
-    regional_tax_overlay,
-    SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_transient_fetch_error,
+    vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
     numeric_row,
     parse_sibelga_row,
     parse_sign,
-    parse_valid_until,
+    regional_tax_overlay,
     tier_bound_kwh,
     to_float,
-    vat_multiplier,
-    is_transient_fetch_error,
 )
 from .base import (
     DsoOverlay,

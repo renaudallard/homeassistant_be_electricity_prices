@@ -45,14 +45,14 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
-    SIGN_CHARS,
-    archive_validity_check,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
-    to_float,
     is_transient_fetch_error,
 )
+from ._parse import SIGN_CHARS
+from ._validity import archive_validity_check
+from ._parse import to_float
 from .base import (
     DsoOverlay,
     ExtractorError,

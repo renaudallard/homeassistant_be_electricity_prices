@@ -124,7 +124,7 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py`).
 
-`archive_validity_check` (`_pdf.py`) is two-tier: if the parsed
+`archive_validity_check` (`_validity.py`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
 the French month names `_FR_MONTHS` (`cociter.py`). This guards against a
@@ -159,11 +159,11 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py` |
 | `injection` | `_extract_injection` | `cociter.py` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py` |
+| `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 
-Shared numeric helpers: `to_float` (`_pdf.py`) parses Belgian decimals
+Shared numeric helpers: `to_float` (`_parse.py`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
-`parse_sign` (`_pdf.py`) turns any hyphen/dash/Unicode-minus into
+`parse_sign` (`_parse.py`) turns any hyphen/dash/Unicode-minus into
 `-1.0`; `SIGN_CHARS` (`_pdf.py`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py`) downloads the PDF and extracts
 text with pypdf off the event loop.

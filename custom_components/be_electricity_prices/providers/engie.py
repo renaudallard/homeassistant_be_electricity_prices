@@ -80,19 +80,23 @@ from ..const import (
 )
 from ._pdf import (
     FR_MONTHS,
-    require_contract,
-    SIGN_CHARS,
-    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    is_transient_fetch_error,
+    vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
     numeric_row,
     parse_sibelga_row,
     parse_sign,
-    parse_valid_until,
+    require_contract,
     tier_bound_kwh,
     to_float,
-    vat_multiplier,
-    is_transient_fetch_error,
 )
 from .base import (
     DsoOverlay,

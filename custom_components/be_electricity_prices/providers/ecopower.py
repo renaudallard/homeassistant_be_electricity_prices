@@ -77,17 +77,21 @@ from ..const import (
 )
 from ._pdf import (
     NL_MONTHS,
-    SIGN_CHARS,
-    archive_validity_check,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_transient_fetch_error,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
     numeric_row,
     parse_sign,
-    parse_valid_until,
     to_float,
-    is_transient_fetch_error,
 )
 from .base import (
     DsoOverlay,

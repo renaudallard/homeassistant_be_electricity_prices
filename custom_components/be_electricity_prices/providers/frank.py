@@ -76,18 +76,22 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
-    NUM_NO_THOUSANDS,
-    regional_tax_overlay,
     NL_MONTHS,
-    SIGN_CHARS,
-    archive_validity_check,
+    NUM_NO_THOUSANDS,
     fetch_pdf_text_layout,
     fetch_text,
-    parse_sign,
-    parse_valid_until,
-    to_float,
     is_transient_fetch_error,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
+    parse_sign,
     parse_vreg_network_ceiling,
+    regional_tax_overlay,
+    to_float,
 )
 from .base import (
     DsoOverlay,

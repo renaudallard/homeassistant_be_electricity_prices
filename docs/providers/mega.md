@@ -261,7 +261,7 @@ for example, uses another day). The rewrite:
    The rewrite cannot anchor on `.pdf` because the suffix can sit mid-token before a
    `-Fixed` / `-Green` / `-Fix` variant.
 4. Download, parse, then cross-check the parsed card against the requested month
-   with `archive_validity_check` (`_pdf.py`), passing `_FR_MONTH_NAMES`
+   with `archive_validity_check` (`_validity.py`), passing `_FR_MONTH_NAMES`
    (`mega.py`). If validity or the month text does not match, return `None` so
    the YTD walk falls back to the proxy snapshot rather than mis-billing.
 
@@ -321,7 +321,7 @@ Fields pulled and their helpers:
 | Energy rates (per kind) | `_extract_energy` | `_mega_cards.py` |
 | Injection | `_extract_injection` | `_mega_cards.py` |
 | Publication label | `_extract_publication_month` | `_mega_cards.py` |
-| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py`, `_mega_cards.py` |
+| Valid until | `parse_valid_until` then `_extract_valid_until` | `_validity.py`, `_mega_cards.py` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py` |
 | Energy contribution | `_extract_energy_contribution` | `_mega_overlays.py` |
 | Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `_mega_overlays.py` |
@@ -475,7 +475,7 @@ terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacit
 (capacity is Flanders-only), so both flat annual euros (the metering fee and the
 Sibelga <=13kVA fixed term) are folded into `data_management_per_year`; the >13kVA
 term (group 8) is not billed here. The Brugel OSP annual fee table is parsed by the
-shared `parse_brussels_osp` (`_pdf.py`) and keyed by connection-power tier. The
+shared `parse_brussels_osp` (`_parse.py`) and keyed by connection-power tier. The
 test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py`) pins the
 folded fee to 14.73 + 50.0744 and the OSP tiers to
 `{le1_44: 0.0, le6: 13.36, le9_6: 21.37, le13: 26.71}` (illustrative).
@@ -580,7 +580,7 @@ The land mines a future maintainer must know, drawn from the module comments:
   first in the Dynamic PDF; anchor on the distinct labels, never on position
   (`mega.py`, `test_mega.py`).
 - **The injection base can be an en-dash, not an ASCII hyphen.** `SIGN_CHARS` /
-  `parse_sign` handle every Unicode dash variant (`_pdf.py`); do not narrow the
+  `parse_sign` handle every Unicode dash variant (`_parse.py`); do not narrow the
   sign class (`test_mega.py`).
 - **VAT convention is TVAC (`vat_rate=0.0`).** Both energy and taxes are already
   VAT-incl; the PV forfait is TVA 6% incl and must not be VAT-scaled

@@ -247,7 +247,7 @@ sub-parsers. All five run against the layout-preserving text from
 | `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py` |
+| `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 
 ### Number format
 
@@ -423,7 +423,7 @@ nacht 4,81 ct/kWh, capacity 52,37 EUR/kW/yr, databeheer 18,92 EUR/yr).
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py`) is the shared best-effort validity parser; Frank cards
+`parse_valid_until` (`_validity.py`) is the shared best-effort validity parser; Frank cards
 resolve to the last day of the pricing month. `test_valid_until_is_end_of_april`
 (`tests/test_frank.py`) pins the April fixture to a date in month 4, year 2026. This
 parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.

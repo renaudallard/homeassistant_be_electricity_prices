@@ -77,13 +77,15 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
-    SIGN_CHARS,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     head_ok,
+)
+from ._parse import SIGN_CHARS
+from ._validity import parse_valid_until
+from ._parse import (
     numeric_row,
     parse_sign,
-    parse_valid_until,
     to_float,
 )
 from .base import (

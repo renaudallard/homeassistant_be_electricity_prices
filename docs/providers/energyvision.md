@@ -262,7 +262,7 @@ formula", `test_missing_dynamic_injection_is_fatal`) rather than silently credit
 ## Taxes
 
 `_extract_taxes` (`providers/energyvision.py`) passes this card's anchors to the shared
-`regional_tax_overlay` helper (`providers/_pdf.py`), naming Flanders as the region whose
+`regional_tax_overlay` helper (`providers/_parse.py`), naming Flanders as the region whose
 renewables field the levy lands in. The helper owns which rows may be missing; a lost
 GSC/WKC row now reports "GSC/WKK levies" rather than the generic "tax block" this extractor
 used for both. All card values are VAT-inclusive (the federal excise and energy fund
@@ -347,7 +347,7 @@ analog-meter block (with its prosumer column) is skipped, so
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py`) is the shared best-effort validity parser. EnergyVision's
+`parse_valid_until` (`_validity.py`) is the shared best-effort validity parser. EnergyVision's
 card says "is geldig voor het product ... van juli 2026", so the month name sits inside a
 "geldig" validity-keyword window and resolves to the last day of the month
 (`date(2026, 7, 31)`, `test_publication_label_and_valid_until`).

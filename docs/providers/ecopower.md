@@ -139,7 +139,7 @@ possible.
 - **gbs** (`ecopower.py`): scrape `_PRICE_PAGE`, find the `_CARD_RE` matches whose month
   equals the requested one and whose URL is not an `inschatting` preview, take the highest stamp
   among them (a month can carry both a bare and a dated card), download and
-  `parse_snapshot`. Then `archive_validity_check` (`_pdf.py`) cross-checks that the parsed card
+  `parse_snapshot`. Then `archive_validity_check` (`_validity.py`) cross-checks that the parsed card
   actually covers the requested month, using Dutch month names (`_NL_MONTHS`, `ecopower.py`)
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
@@ -184,7 +184,7 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py`).
 | `dsos` | `_extract_dsos` (`ecopower.py`) | `_extract_dbs_dsos` (`ecopower.py`) |
 | `taxes` | `_extract_taxes` (`ecopower.py`) | same helper reused |
 | `injection` | `_extract_injection` (`ecopower.py`) | `_extract_dbs_injection` (`ecopower.py`) |
-| `valid_until` | `parse_valid_until` (`_pdf.py`) | same |
+| `valid_until` | `parse_valid_until` (`_validity.py`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
 ### Energy parsing
@@ -215,7 +215,7 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
   engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
 - The multiplication glyph is `×` (U+00D7); the regex accepts `[×xX*]` in case a re-render swaps
   it.
-- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_pdf.py`,
+- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_parse.py`,
   `_pdf.py`) so a punctuation drift (hyphen vs en-dash vs U+2212) never flips the sign
   silently.
 - Values stay HTVA; `vat_rate=0.06` scales them later. They are NOT pre-scaled.

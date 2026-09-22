@@ -196,10 +196,10 @@ the running month, and the permanent state after the transfer to EnergyVision.
 | `taxes` | `_extract_taxes` | `dats24.py` |
 | `injection` | `_extract_injection` | `dats24.py` |
 | `publication_label` | `_extract_publication` | `dats24.py` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py` |
+| `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 | `supplier` / `contract` | literals | `dats24.py` |
 
-Every numeric value is parsed with `to_float` (`_pdf.py`), which strips
+Every numeric value is parsed with `to_float` (`_parse.py`), which strips
 Unicode thousands separators and accepts both the Belgian comma decimal and a dot
 decimal. This dot tolerance is not cosmetic: the May 2026 card switched its
 separator from `,` to `.` (see Quirks).
@@ -399,7 +399,7 @@ Two hard invariants encoded in tests:
   `test_dats24.py`).
 - **Negative-safe sign parsing.** The indicative regex captures an optional leading
   sign, `Teruglevering2?\s*\(c€/kWh\)\s+([SIGN_CHARS]?)\s*(...)` (`dats24.py`),
-  and applies `parse_sign` (`_pdf.py`). When `BE_spotSPP` is low the monthly
+  and applies `parse_sign` (`_parse.py`). When `BE_spotSPP` is low the monthly
   indicative goes negative (the producer pays to inject); an earlier version without
   the sign group silently dropped the credit (`dats24.py`,
   `test_injection_indicative_handles_negative_value` `test_dats24.py`, which
@@ -419,7 +419,7 @@ only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py`), `mei 2026` (`test_dats24.py`). Empty string
 on miss (non-fatal). `valid_until` is parsed separately by the shared
-`parse_valid_until` (`_pdf.py`), which catches the explicit `GELDIG VAN 1 APRIL
+`parse_valid_until` (`_validity.py`), which catches the explicit `GELDIG VAN 1 APRIL
 2026 T.E.M 30 APRIL 2026` header (`test_dats24.py`, expects `date(2026, 4, 30)`).
 
 ## Quirks and historical bugs
@@ -501,6 +501,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py`), `parse_valid_until` (`_pdf.py`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py`), `parse_valid_until` (`_validity.py`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |

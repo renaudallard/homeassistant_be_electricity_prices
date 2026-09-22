@@ -64,19 +64,23 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
-    parse_prosumer_column,
     NL_MONTHS,
-    SIGN_CHARS,
-    archive_validity_check,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
-    numeric_row,
-    parse_sign,
-    scan_month_end,
-    to_float,
-    vat_multiplier,
     is_transient_fetch_error,
+    vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    scan_month_end,
+)
+from ._parse import (
+    numeric_row,
+    parse_prosumer_column,
+    parse_sign,
+    to_float,
 )
 from .base import (
     DsoOverlay,

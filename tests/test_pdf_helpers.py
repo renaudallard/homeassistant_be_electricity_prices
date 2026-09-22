@@ -41,23 +41,27 @@ from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
-    _MIN_TEXT_LAYER_CHARS,
-    extract_pdf_text,
     _MAX_PDF_BYTES,
+    _MIN_TEXT_LAYER_CHARS,
     _fetch_validated_pdf_bytes,
     _read_pdf_bytes,
-    archive_validity_check,
+    extract_pdf_text,
     extract_pdf_text_aligned,
     extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    vat_multiplier,
+)
+from custom_components.be_electricity_prices.providers._validity import (
+    archive_validity_check,
+    parse_valid_until,
+    text_mentions_month,
+)
+from custom_components.be_electricity_prices.providers._parse import (
     numeric_row,
     parse_brussels_osp,
     parse_sign,
-    parse_valid_until,
-    text_mentions_month,
-    vat_multiplier,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -633,7 +637,7 @@ def test_parse_brussels_osp_across_extractor_formats() -> None:
     # is the one that needs care: "Entre 36,01 et 56,00 kVA" and "> 56,01 kVA"
     # both end in a bound near 56, so keying on the number alone made the top
     # row overwrite the one below it.
-    from custom_components.be_electricity_prices.providers._pdf import (
+    from custom_components.be_electricity_prices.providers._parse import (
         parse_brussels_osp,
     )
 
@@ -932,7 +936,7 @@ def test_the_vreg_ceiling_is_read_from_either_language() -> None:
     contracts. It bites where the capacity term dominates, which is a
     low-volume connection on a high peak.
     """
-    from custom_components.be_electricity_prices.providers._pdf import (
+    from custom_components.be_electricity_prices.providers._parse import (
         parse_vreg_network_ceiling,
     )
 

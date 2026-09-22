@@ -69,16 +69,20 @@ from ..const import (
 from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
-    archive_validity_check,
-    regional_tax_overlay,
-    SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
+    is_transient_fetch_error,
+)
+from ._parse import SIGN_CHARS
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from ._parse import (
     numeric_row,
     parse_sign,
-    parse_valid_until,
+    regional_tax_overlay,
     to_float,
-    is_transient_fetch_error,
 )
 from .base import (
     DsoOverlay,

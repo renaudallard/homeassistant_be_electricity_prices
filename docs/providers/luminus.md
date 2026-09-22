@@ -183,7 +183,7 @@ Fields pulled and their helpers:
 | Yearly fixed fee | `_extract_yearly_fee` | `luminus.py` |
 | Exclusive-night fee | `_extract_excl_night_fee` | `luminus.py` |
 | VAT multiplier | `_vat_multiplier` | `luminus.py` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py` |
+| `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 
 ### Numeric token
 

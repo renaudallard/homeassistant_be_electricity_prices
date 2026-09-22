@@ -43,11 +43,13 @@ from datetime import date
 
 from ._pdf import (
     FR_MONTHS,
-    SIGN_CHARS,
-    end_of_month,
+    vat_multiplier,
+)
+from ._parse import SIGN_CHARS
+from ._validity import end_of_month
+from ._parse import (
     parse_sign,
     to_float,
-    vat_multiplier,
 )
 from .base import ExtractorError
 from ._rates import (

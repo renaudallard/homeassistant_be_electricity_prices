@@ -115,7 +115,9 @@ relative to that package directory.
 | `providers/_rates.py` | The shapes a card can print: `Contract`, the six `EnergyRates` shapes and `InjectionRates`. Data only, so an extractor can build one without reaching into the pricing engine. |
 | `providers/_resolve.py` | Turning a published card into the one a given household is billed on: VAT, the excise band, the direct-debit discount, the VREG ceiling, the Brussels power term, the volume tier and the settlement grid. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
-| `providers/_pdf.py` | Shared PDF and HTTP helpers used by the extractors (text extraction, transient-error classification via `is_transient_fetch_error`, and column-alignment utilities). |
+| `providers/_pdf.py` | Fetching a card and getting text out of it: the HTTP layer, transient-error classification via `is_transient_fetch_error`, plain and column-aligned extraction, and the per-tick memo. |
+| `providers/_parse.py` | Reading a figure off a line of that text: the number formats Belgian cards print in, the sign words, the DSO table columns and the regional tax overlay. |
+| `providers/_validity.py` | Which month a card is for and until when it is good: the validity sentences, the month-name headings and the archive's date check. |
 
 In addition, seventeen scraped supplier modules live under `providers/`, each exposing a top-level
 `EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
