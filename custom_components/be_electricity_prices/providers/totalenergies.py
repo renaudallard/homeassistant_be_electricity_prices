@@ -54,13 +54,6 @@ from dataclasses import dataclass, replace
 import aiohttp
 
 from ..const import (
-    DSO_AIEG,
-    DSO_AIESH,
-    DSO_ORES,
-    DSO_RESA,
-    DSO_REW,
-    DSO_SIBELGA,
-    FLUVIUS_CARD_LABELS,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -74,20 +67,15 @@ from ._pdf import (
 from ._parse import SIGN_CHARS
 from ._validity import parse_valid_until
 from ._parse import (
-    numeric_row,
-    parse_brussels_osp,
     parse_sign,
     require_contract,
     to_float,
 )
 from .base import (
-    DsoOverlay,
     ExtractorError,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-    brussels_sibelga_overlay,
-    walloon_dso_overlay,
 )
 from ._rates import (
     ALL_REGIONS,
@@ -98,6 +86,17 @@ from ._rates import (
     TariffKind,
     VariableRates,
     fixed_or_variable_rates,
+)
+from ._totalenergies_overlays import (
+    _energy_contribution_from_table,
+    _extract_brussels_dsos,
+    _extract_energy_contribution,
+    _extract_energy_fund,
+    _extract_federal_excise,
+    _extract_fee_and_renewables,
+    _extract_flanders_dsos,
+    _extract_renewables,
+    _extract_wallonia_dsos,
 )
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
@@ -567,34 +566,6 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     )
 
 
-def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
-    """Pull the (yearly_fee_eur, renewables_eur_per_kwh) pair.
-
-    TotalEnergies prints them on a dedicated 2-number line in the energy
-    block: ``90,00 1,57``. The position varies per contract (after the
-    consumption row for variable/dynamic, between Tarif annuel and
-    Injection for static), but every layout precedes the line with a
-    ``Tarif (mensuel|annuel)`` header. Anchor on that header and require
-    the following 2-number line; this rejects unrelated value pairs that
-    happen to share the shape (e.g. footer rows).
-
-    Both numbers are mandatory on every TE residential card (~90 EUR/yr
-    yearly fee; regional renewables surcharge between 1.6 and 3.2
-    c€/kWh). Raise on miss so a layout drift surfaces as an extractor
-    failure instead of silently dropping ~90 EUR/year and the regional
-    renewables levy from the bill.
-    """
-    match = re.search(
-        r"Tarif\s+(?:mensuel|annuel)[\s\S]{0,400}?"
-        r"^(\d{2,3}[.,]\d{2})\s+(\d[.,]\d{1,3})\s*$",
-        text,
-        re.MULTILINE,
-    )
-    if not match:
-        raise ExtractorError("TotalEnergies: yearly fee + renewables row not found")
-    return to_float(match.group(1)), to_float(match.group(2)) / 100.0
-
-
 def _extract_yearly_fee(text: str) -> float:
     fee, _ = _extract_fee_and_renewables(text)
     return fee
@@ -761,60 +732,6 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 # ---- taxes --------------------------------------------------------------------
 
 
-def _extract_federal_excise(text: str) -> float:
-    """First excise tier (0-3000 kWh).
-
-    Mandatory on every Belgian residential card with no fallback; a miss
-    is a layout drift that would silently undercount the bill by ~5
-    c€/kWh. Raise rather than default to 0.
-    """
-    match = re.search(
-        r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)",
-        text,
-    )
-    if match is None:
-        raise ExtractorError(
-            "TotalEnergies: federal excise (0-3.000 kWh tier) not found"
-        )
-    return to_float(match.group(1)) / 100.0
-
-
-def _extract_energy_contribution(text: str) -> float | None:
-    """The labelled "Cotisation sur l'énergie" line, or None when absent.
-
-    Returns ``None`` (not ``0.0``) on a miss so the caller can tell a card
-    that omits the row from one that prints a genuine zero: the federal
-    levy fell to zero on 2026-08-01, so a zero is now a real value and
-    must not trigger the DSO-table fallback or the drift error.
-    """
-    match = re.search(r"Cotisation sur l[\"'’]\s*énergie\s+([\d.,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else None
-
-
-def _energy_contribution_from_table(text: str, region: str) -> float | None:
-    """Fallback: read the federal energy contribution from the DSO table.
-
-    The Wallonia card prints "Cotisation sur l'énergie <value>" on a
-    labelled line that _extract_energy_contribution catches. The
-    Brussels and Flanders cards wrap that header across two lines, so
-    the only machine-readable copy of the value is the cotisation
-    column of the DSO table: the 7th SIBELGA number on Brussels, the
-    8th of nine on each Flanders Fluvius row. It is a federal levy,
-    identical across rows, so any one row yields it. Returns ``None`` when
-    the layout doesn't expose it. Without this the Brussels / Flanders
-    all-in price silently drops the contribution (~0.20 c€/kWh).
-    """
-    if region == REGION_BRUSSELS:
-        row = numeric_row(text, "SIBELGA", 7)
-        return to_float(row[6]) / 100.0 if row else None
-    if region == REGION_FLANDERS:
-        for label in _FLANDERS_LABELS:
-            row = numeric_row(text, label, 9)
-            if row:
-                return to_float(row[7]) / 100.0
-    return None
-
-
 def _extract_connection_fee(text: str) -> float:
     # Called only for Wallonia, where the raccordement is mandatory; raise
     # on a miss rather than silently zero it.
@@ -824,159 +741,7 @@ def _extract_connection_fee(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-def _extract_energy_fund(text: str) -> float:
-    """Flanders 'Cotisations Fonds Energie' line, principal-with-domicile entry."""
-    match = re.search(
-        r"Résidence principale\s+sans\s+tarif\s+social\s+([\d.,]+)",
-        text,
-    )
-    return to_float(match.group(1)) if match else 0.0
-
-
-def _extract_renewables(text: str) -> float:
-    """The renewables value is the second number on the fee+renewables line.
-
-    Each PDF is region-specific, so we just pick the value next to the
-    yearly fee; the caller's region is not needed to disambiguate.
-    """
-    _, renewables = _extract_fee_and_renewables(text)
-    return renewables
-
-
 # ---- DSO row parsers ----------------------------------------------------------
-
-
-_FLANDERS_LABELS = FLUVIUS_CARD_LABELS
-
-
-def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
-    """Flanders Fluvius rows (9 numbers each).
-
-    Layout:
-      dist_digital_mono | capacity_digital | dist_classic_mono |
-      dist_classic_excl_night | data_mgmt_classic | data_mgmt_digital |
-      tarif_capacity_max | cotisation_energie | prosumer
-
-    Distribution already includes transport (same convention as
-    Engie/Luminus/Mega Flanders).
-    """
-    out: dict[str, DsoOverlay] = {}
-    for label, key in _FLANDERS_LABELS.items():
-        row = numeric_row(text, label, 9)
-        if not row:
-            continue
-        dist_digital = to_float(row[0])
-        capacity = to_float(row[1])
-        data_mgmt = to_float(row[5])  # digital meter column
-        prosumer = to_float(row[8])
-        out[key] = DsoOverlay(
-            distribution_single=dist_digital / 100.0,
-            transport=0.0,
-            data_management_per_year=data_mgmt,
-            capacity_eur_per_kw_year=capacity,
-            prosumer_eur_per_kva_year=prosumer,
-        )
-    return out
-
-
-_WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": DSO_AIEG,
-    "AIESH": DSO_AIESH,
-    "ORES (Namur - Namen)": DSO_ORES,
-    "REGIE DE WAVRE": DSO_REW,
-    "RESA SA": DSO_RESA,
-}
-
-
-def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
-    """Wallonia rows (12 numbers each).
-
-    Layout:
-      mono | jour | nuit | excl_nuit | PIC | MEDIUM | ECO |
-      terme_fixe (€/an) | transport (c€/kWh) | prosumer (€/kVA/an) |
-      cap_base | cap_supplementary
-    """
-    out: dict[str, DsoOverlay] = {}
-    for label, key in _WALLONIA_LABELS.items():
-        # Twelve columns, not the ten this reads: every Walloon row ends in
-        # two more the card prints and nothing here uses, measured 0,00 on
-        # all five DSOs of all three Walloon fixtures. The regex this
-        # replaces took the first ten and never noticed the rest, so it
-        # would have matched just as happily on a row that had lost one.
-        row = numeric_row(text, label, 12)
-        if not row:
-            continue
-        mono = to_float(row[0])
-        peak = to_float(row[1])
-        offpeak = to_float(row[2])
-        excl_night = to_float(row[3])
-        pic = to_float(row[4])
-        medium = to_float(row[5])
-        eco = to_float(row[6])
-        terme_fixe = to_float(row[7])
-        transport = to_float(row[8])
-        prosumer = to_float(row[9])
-        out[key] = walloon_dso_overlay(
-            mono=mono,
-            peak=peak,
-            offpeak=offpeak,
-            excl_night=excl_night,
-            pic=pic,
-            medium=medium,
-            eco=eco,
-            transport=transport,
-            terme_fixe=terme_fixe,
-            prosumer=prosumer,
-        )
-    return out
-
-
-def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
-    """Brussels Sibelga row (7 numbers) plus the separate power term.
-
-    Layout: mono | jour | nuit | excl_nuit | mesure_comptage (€/an) |
-            transport (c€/kWh) | cotisation_energie (c€/kWh)
-    The Sibelga <=13kVA fixed power term is printed on its own
-    "Terme de puissance mise a disposition" line, not in this row.
-    """
-    row = numeric_row(text, "SIBELGA", 7)
-    if not row:
-        return {}
-    mono = to_float(row[0])
-    peak = to_float(row[1])
-    offpeak = to_float(row[2])
-    excl_night = to_float(row[3])
-    mesure = to_float(row[4])
-    transport = to_float(row[5])
-    # A Brussels connection also pays the Sibelga power term, printed on a
-    # separate "Terme de puissance mise a disposition" line with a band at or
-    # below 13 kVA and one above it. Brussels has no separate capacity charge
-    # (capacity is Flanders-only), so fold the flat annual euros into the DSO
-    # fee, one figure per band: a 3x400 V / 25 A house is 17,3 kVA, so the
-    # larger band is residential too. Mandatory on every Brussels card, so
-    # raise on a miss.
-    power = re.search(
-        r"Terme de puissance[\s\S]{0,80}?(?:<=|≤)\s*13\s*kVA\s+([\d.,]+)", text
-    )
-    if power is None:
-        raise ExtractorError("TotalEnergies: Sibelga <=13kVA power term not found")
-    fixed_term = to_float(power.group(1))
-    above = re.search(r">\s*13\s*kVA\s+([\d.,]+)", text)
-    fixed_term_above = to_float(above.group(1)) if above else None
-    return {
-        DSO_SIBELGA: brussels_sibelga_overlay(
-            mono=mono,
-            peak=peak,
-            offpeak=offpeak,
-            excl_night=excl_night,
-            transport=transport,
-            data_management_per_year=mesure + fixed_term,
-            power_term_above_13kva=(
-                None if fixed_term_above is None else mesure + fixed_term_above
-            ),
-            osp_by_tier=parse_brussels_osp(text),
-        )
-    }
 
 
 # The variable products whose energy leg is a BELPEXM_RLP formula the parser
