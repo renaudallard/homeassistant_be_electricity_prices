@@ -2560,6 +2560,37 @@ def test_a_card_pricing_direct_debit_must_be_offered_the_question() -> None:
     assert lc.CHECKS == []
 
 
+def test_every_snapshot_gate_is_called_by_the_validator() -> None:
+    """Every `_expect_*` gate has a test that calls it directly, so deleting
+    the CALL from `_validate_snapshot` leaves the suite green: mutation
+    measured 125 passed with a gate removed.
+
+    `_validate_snapshot` is the funnel every supplier check goes through, so a
+    gate missing from it is a gate that never runs against a real card, which
+    is the only place it can find anything. Held on the source, because the
+    wiring is the claim.
+    """
+    import inspect
+
+    import live_check as lc
+
+    body = inspect.getsource(lc._validate_snapshot)
+    for gate in (
+        "_expect_card_period",
+        "_expect_energy_contribution",
+        "_expect_welcome_credit",
+        "_expect_direct_debit_registry",
+        "_expect_month_indexed_registry",
+        "_expect_quarter_hourly_registry",
+        "_validate_energy",
+        "_validate_injection",
+        "_validate_dsos",
+    ):
+        assert f"{gate}(" in body, (
+            f"{gate} is defined and never called by the validator"
+        )
+
+
 def test_a_welcome_credit_is_gated_at_all() -> None:
     """Nothing gated any of the twelve credit fields: blanking every one of
     them on a real Mega card produced no new failure, while a unit slip on the
