@@ -183,7 +183,7 @@ def test_april_card_taxes_are_htva_with_vat_06() -> None:
     # number, so reading it as a decimal made the levy drift card to card
     # (0,004 / 0,005 / 0,006 across the fixtures) instead of staying 0.
     assert t.energy_fund_eur_per_month == pytest.approx(0.0)
-    # Wallonia / Brussels surcharges stay 0 -- Ecopower is Flanders-only.
+    # Wallonia / Brussels surcharges stay 0: Ecopower is Flanders-only.
     assert t.wallonia_renewables == 0.0
     assert t.brussels_renewables == 0.0
 
@@ -662,7 +662,7 @@ def test_gbs_fetch_for_month_prefers_the_dated_reissue() -> None:
 def test_dbs_resolver_reads_the_dated_yyyymmdd_card() -> None:
     # Ecopower switched the dynamic card to a YYYYMMDD filename with the
     # August 2026 issue. A six-digit pattern cannot match eight digits, so
-    # the resolver silently kept serving the January card -- and it parsed
+    # the resolver silently kept serving the January card, and it parsed
     # fine, so nothing failed. The month label must stay YYYY-MM.
     url, label = asyncio.run(
         _resolve_latest_dbs_pdf(

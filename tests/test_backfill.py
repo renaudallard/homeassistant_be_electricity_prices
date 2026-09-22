@@ -429,7 +429,7 @@ async def test_backfill_range_writes_one_mean_row_per_hour_per_price_sensor(
     assert len(written[ids["current_year_cost"]]) == 3
     # current_price all_in for a fixed supplier with the test snapshot:
     # 0.18 (energy) + 0.10 + 0.0145 (network) + 0.05 + 0.002 (taxes)
-    # = 0.3465 EUR/kWh -- compute_breakdown rounds, but should be close.
+    # = 0.3465 EUR/kWh; compute_breakdown rounds, but should be close.
     cur_rows = written[ids["current_price"]]
     means = [r["mean"] for r in cur_rows]
     assert all(m == pytest.approx(means[0]) for m in means)
@@ -455,7 +455,7 @@ async def test_backfill_if_missing_skips_when_recorder_already_has_data(
         return_value=instance,
     ):
         out = await bf.backfill_if_missing(hass, entry)
-    # Recorder reported a row at the Jan 1 anchor -- backfill must not run.
+    # Recorder reported a row at the Jan 1 anchor, so backfill must not run.
     assert out is None
 
 
@@ -717,7 +717,7 @@ async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
 ) -> None:
     # current_year_cost resets each Jan 1 and the recorder derives change
     # as sum - prev_sum (ignoring last_reset for imported stats), so a
-    # multi-year request must backfill only the end year's cost -- never
+    # multi-year request must backfill only the end year's cost, never
     # crossing a Jan 1 boundary that would drop the sum to ~0 and paint a
     # large spurious negative cost on the Energy dashboard.
     entry = _entry()
@@ -752,7 +752,7 @@ async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
     assert cost_rows  # the end year is backfilled
     # No row predates Jan 1 of the end year (earlier years aren't written).
     assert all(r["start"] >= jan1_end_year for r in cost_rows)
-    # The sum never decreases -- no year-boundary drop -> no negative spike.
+    # The sum never decreases: no year-boundary drop -> no negative spike.
     sums = [r["sum"] for r in cost_rows]
     assert all(sums[i] <= sums[i + 1] for i in range(len(sums) - 1))
 
@@ -921,7 +921,7 @@ async def test_backfill_range_without_runtime_data_raises(
 ) -> None:
     entry = _entry()
     entry.add_to_hass(hass)
-    # No runtime_data assigned -- the helper must refuse rather than
+    # No runtime_data assigned: the helper must refuse rather than
     # crash mid-way through statistic writes.
     with pytest.raises(RuntimeError, match="no live coordinator"):
         await bf.backfill_range(hass, entry)

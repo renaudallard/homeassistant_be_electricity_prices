@@ -279,7 +279,7 @@ def test_dynamic_has_no_prosumer_column() -> None:
     snap = parse_snapshot("ebem_dynamic", _layout(_DYNAMIC), "test://d", "2026-05")
     iveka = snap.dsos["fluvius_iveka"]
     assert iveka.prosumer_eur_per_kva_year is None
-    # Distribution rates still parse — that's the digital-meter row.
+    # Distribution rates still parse: that's the digital-meter row.
     assert iveka.distribution_single == pytest.approx(0.0634)
 
 
@@ -349,7 +349,7 @@ def test_fetch_for_month_handles_underscore_separator() -> None:
         )
     # Validity-stamping: parsed PDF says 'mei 2026'. The cross-check in
     # fetch_for_month rejects a CDN-substituted current card for a past
-    # month, so this returns None — which is the correct safety behaviour
+    # month, so this returns None, which is the correct safety behaviour
     # (the URL was resolved, the underscore separator was handled, but
     # the served PDF was the wrong month).
     assert snap is None

@@ -103,7 +103,7 @@ def test_listing_url_finder_returns_none_for_unknown_product() -> None:
 
 def test_resolver_returns_direct_url_when_block_present() -> None:
     # When the listing carries the requested region's block, the resolver
-    # is a pass-through of _find_pdf_url -- no rewrite, byte-identical.
+    # is a pass-through of _find_pdf_url: no rewrite, byte-identical.
     listing = (FIXTURES / "mega_listing.html").read_text()
     assert _resolve_pdf_url(listing, "Dynamic", "WL") == _find_pdf_url(
         listing, "Dynamic", "WL"
@@ -485,7 +485,7 @@ def test_offpeak_impact_parses_three_tier_rates() -> None:
         "wallonia",
     )
     assert isinstance(snap.energy, ImpactRates)
-    # PIC is the most expensive band, ECO the cheapest -- enforced by
+    # PIC is the most expensive band, ECO the cheapest; enforced by
     # live_check too.
     assert snap.energy.pic > snap.energy.medium > snap.energy.eco
     # The three-tier table on this card is a 12-month forward simulation

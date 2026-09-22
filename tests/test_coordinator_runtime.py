@@ -2774,7 +2774,7 @@ async def test_save_persistent_runs_during_first_refresh(
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    # Do not assign entry.runtime_data — that's the pre-first-refresh
+    # Do not assign entry.runtime_data: that's the pre-first-refresh
     # state. The coordinator's _snapshot is None too, so the file
     # carries only the peak/identity payload, but the call must not
     # raise.
@@ -3271,7 +3271,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
         return snap
 
     extractor = make_stub_extractor(extractor_id="eneco", fetch=_fake_fetch)
-    # entry.runtime_data is intentionally NOT assigned -- this is the
+    # entry.runtime_data is intentionally NOT assigned: this is the
     # state HA core is in before async_setup_entry's coordinator =
     # ... line completes.
     assert getattr(entry, "runtime_data", None) is None
@@ -3285,7 +3285,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
         # under v0.5.14's bare runtime_data read at line 887. Use
         # async_refresh because the first-refresh helper requires
         # config_entry to be wired into DataUpdateCoordinator from
-        # 2024.10+ -- and the bug manifests on the inner tick path
+        # 2024.10+, and the bug manifests on the inner tick path
         # regardless of which entry-point invokes it.
         await coord.async_refresh()
 

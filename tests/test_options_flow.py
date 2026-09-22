@@ -5380,7 +5380,7 @@ def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
     assert "OCTA+" in notes[0] and "last month's index" in notes[0]
 
     # A leg the cohort splice refreshed comes back as SpotMonthlyRates, which
-    # carries no month_indexed field at all -- that is what keeps the label
+    # carries no month_indexed field at all; that is what keeps the label
     # off the side that did get the current month's mean.
     assert "month_indexed" not in SpotMonthlyRates.__dataclass_fields__
     refreshed = SimpleNamespace(
@@ -7909,7 +7909,7 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
 
     # And the shape this must NOT sweep in: a signing cohort splices a
     # month-priced energy leg onto Cociter Tarif Variable, whose card indexes
-    # the two legs on different periods -- consumption monthly, injection per
+    # the two legs on different periods: consumption monthly, injection per
     # hour. Judged on the spliced snapshot it would lose its per-hour credit,
     # so the raw card is what decides.
     cociter_raw = make_snapshot(

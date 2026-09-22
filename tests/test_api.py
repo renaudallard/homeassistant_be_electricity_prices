@@ -277,7 +277,7 @@ def test_energy_charts_skips_an_instant_the_platform_cannot_represent() -> None:
 def test_zoneless_timestamp_is_treated_as_utc() -> None:
     # ENTSO-E timestamps carry a 'Z', but a zoneless one must be read as
     # UTC (the publication document is UTC by spec), not as the HA host's
-    # local time -- otherwise astimezone would shift every slot.
+    # local time; otherwise astimezone would shift every slot.
     assert _parse_iso_utc("2026-04-29T22:00Z") == datetime(
         2026, 4, 29, 22, 0, tzinfo=UTC
     )

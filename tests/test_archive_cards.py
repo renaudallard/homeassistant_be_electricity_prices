@@ -1153,8 +1153,8 @@ async def test_a_card_nobody_could_read_is_tried_again_when_the_reader_changes(
         json.dumps({digest: f"electricity-2026-09/{digest}.pdf"})
     )
 
-    # Day two: the reader learnt to read it. The card is not re-fetched --
-    # the session is empty -- it is read back from the kept copy.
+    # Day two: the reader learnt to read it. The card is not re-fetched
+    # (the session is empty); it is read back from the kept copy.
     read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 40
     with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
         summary = await ac.archive(

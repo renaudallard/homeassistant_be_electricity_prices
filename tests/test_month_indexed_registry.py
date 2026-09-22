@@ -384,7 +384,7 @@ def test_contract_is_month_indexed_reads_the_registry() -> None:
 # How far apart the bands may solve, in EUR/kWh. Sized on the slip it has to
 # catch, not on tariff economics: the cards print four decimals of EUR/kWh and
 # round each band separately, which is worth up to 1,0e-04 across the fixtures,
-# while the SMALLEST real defect -- one band's base read on the ex-VAT basis --
+# while the SMALLEST real defect (one band's base read on the ex-VAT basis)
 # moves a Luminus band by 1,2e-03. This sits between the two, and the test
 # below proves it by re-solving a band on the wrong basis and requiring the
 # bound to fire.
@@ -454,8 +454,8 @@ def test_every_band_solves_to_the_same_month_index(
     if len(implied) < 2:
         return
     # And the bound is only worth its name if it still fires. Re-solve one
-    # band with its base read on the wrong VAT basis -- the smallest of the
-    # slips this exists to catch -- and require the spread to clear it.
+    # band with its base read on the wrong VAT basis (the smallest of the
+    # slips this exists to catch) and require the spread to clear it.
     band, factor_attr, base_attr = next(
         (b, f, x)
         for b, f, x in _BAND_ATTRS[type(energy).__name__]

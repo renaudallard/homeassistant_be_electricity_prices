@@ -124,7 +124,7 @@ def test_april_card_taxes_are_tvac() -> None:
     assert fl.flanders_renewables == pytest.approx(0.01561)
     assert fl.wallonia_renewables == 0.0
     assert fl.region_connection_fee == 0.0
-    # "Hoofdverblijf (domicilie) 0,00 €/maand" -- residential default
+    # "Hoofdverblijf (domicilie) 0,00 €/maand": the residential default
     # is zero. Second-home users should override in OptionsFlow.
     assert fl.energy_fund_eur_per_month == 0.0
 
@@ -223,7 +223,7 @@ def test_april_card_wallonia_dsos_collapse_seven_ores_subareas_to_one() -> None:
     just the first."""
     snap = _snap("wallonia")
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
-    # Spot-check ORES (representative -- all sub-areas share these):
+    # Spot-check ORES (representative, all sub-areas share these):
     # single 11,98 / day 13,27 / night 7,39 / PIC 16,57 / MED 10,83 /
     # ECO 5,09 / transport 2,74 / data 14,10 / prosumer 85,84.
     ores = snap.dsos["ores"]
@@ -328,7 +328,7 @@ def _card_session(by_fragment: dict[str, tuple[bytes, int]]) -> _CardSessionImpl
 _APRIL_PDF = (FIXTURES / "dats24_groen_variabel_apr.pdf").read_bytes()
 
 # A Brussels-local instant inside May 2026, so "this month" is 05/2026 and
-# the fallback month is 04/2026 -- the month the April fixture covers.
+# the fallback month is 04/2026, the month the April fixture covers.
 _IN_MAY = datetime(2026, 5, 12, 9, 0, tzinfo=dt_util.get_time_zone("Europe/Brussels"))
 
 

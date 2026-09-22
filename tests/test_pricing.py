@@ -115,8 +115,8 @@ def test_belgian_holidays_2026() -> None:
     assert not is_belgian_holiday(date(2026, 4, 7))  # Tuesday after Easter Monday
     assert not is_belgian_holiday(
         date(2026, 7, 11)
-    )  # Flemish regional holiday — federal-only set
-    assert not is_belgian_holiday(date(2026, 9, 27))  # French Community holiday — same
+    )  # Flemish regional holiday; the set is federal only
+    assert not is_belgian_holiday(date(2026, 9, 27))  # French Community holiday, same
 
 
 def test_offpeak_weekday_holiday_is_region_specific() -> None:
@@ -161,7 +161,7 @@ def test_tou_slot_weekday_evening_peak() -> None:
 
 
 def test_tou_slot_weekday_late_night_transition() -> None:
-    # 22h-1h is transition (Heures creuses), not offpeak — both
+    # 22h-1h is transition (Heures creuses), not offpeak: both
     # SmartFlex and Empower Flextime documents state this.
     assert tou_slot(datetime(2026, 4, 29, 22, 0)) == "transition"
     assert tou_slot(datetime(2026, 4, 29, 23, 59)) == "transition"
@@ -474,7 +474,7 @@ def test_network_impact_dispatches_by_band() -> None:
     assert medium == pytest.approx(0.085)
     assert eco == pytest.approx(0.045)
     # An exclusive-night meter bills its dedicated circuit rate even when
-    # the main connection opted into the Impact tariff -- the
+    # the main connection opted into the Impact tariff: the
     # exclusive-night branch must take precedence over the Impact bands.
     overlay_excl = DsoOverlay(
         distribution_single=0.05,
@@ -495,7 +495,7 @@ def test_network_impact_dispatches_by_band() -> None:
 
 def test_network_impact_falls_back_when_dso_lacks_impact_rates() -> None:
     # Brussels Sibelga / Flanders Fluvius don't publish Impact rates.
-    # Asking for "impact" mode there must degrade gracefully — fall back
+    # Asking for "impact" mode there must degrade gracefully: fall back
     # to bi-horaire if peak/offpeak exist, else single. No KeyError.
     overlay = DsoOverlay(
         distribution_single=0.05,

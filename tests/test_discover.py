@@ -344,11 +344,11 @@ def test_engie_discover_returns_only_known_families_no_noise() -> None:
     # empower-vast, flow-contract, ...) with marketing slugs that share
     # the suffix pattern (uw-contract, vragen-faq, ...). Discovery
     # should map known URL tokens to family ids and drop the noise via
-    # _NOISE_TOKENS — never surface "uw" or "vragen" as new products.
+    # _NOISE_TOKENS; never surface "uw" or "vragen" as new products.
     session = _FakeSession(_read("engie.html"))
     discovered = _run(engie_mod.discover(session))
     known = {c.family for c in engie_mod._CONTRACTS}
-    # Every discovered token must be a known family — no false positives.
+    # Every discovered token must be a known family: no false positives.
     assert discovered <= known
     # And the fixture must surface the families whose product pages
     # actually appear under the discoverable URL patterns.

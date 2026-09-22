@@ -644,8 +644,8 @@ async def test_an_spp_blob_written_before_the_shared_store_is_adopted(
     [(0.06, 1.06), (0.0, 1.0)],  # custom grosses up; scraped (vat 0) is a no-op
 )
 def test_custom_bakes_fixed_fees_vat_inclusive(vat_rate: float, factor: float) -> None:
-    # apply_vat bakes the fixed fees (so every consumption path -- live, YTD,
-    # backfill, compare -- reads the correct value); per-kWh values stay
+    # apply_vat bakes the fixed fees (so every consumption path, live, YTD,
+    # backfill and compare, reads the correct value); per-kWh values stay
     # excl-VAT and keep vat_rate for compute_breakdown to gross up.
     data = {
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
@@ -810,8 +810,8 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
             const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
             const.CONF_INJECTION_KWH: "sensor.inj_total",
             const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
-            # The opt-in this test is ABOUT. It carries no card flag -- a
-            # hand-entered contract has no card to read one off -- so the
+            # The opt-in this test is ABOUT. It carries no card flag (a
+            # hand-entered contract has no card to read one off), so the
             # answer lives on the entry, and both keys are load-bearing:
             # _spp_weighting_enabled wants the monthly contract on the formula
             # injection mode with the box ticked. Without them the engine is

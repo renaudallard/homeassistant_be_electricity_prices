@@ -223,7 +223,7 @@ def test_resa_is_cheaper_than_rew_after_label_swap() -> None:
     # every other supplier in the registry, RESA's distribution_single
     # is consistently lower than REW's. If a future Bolt PDF or
     # pdfplumber release fixes the upstream layout silently, the swap
-    # would invert correct pricing — this assertion catches that.
+    # would invert correct pricing, and this assertion catches that.
     snap = parse_snapshot(
         "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "wallonia"
     )
@@ -748,8 +748,8 @@ def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
     text = fixture_text("bolt_fix_jan_legacy.pdf", layout=True)
 
     # "Injection (c€/kWh) 5,87 6,69 3,78" under "Tarif d'injection (HTVA)".
-    # Those columns are METER REGISTERS -- their header is "(*) TVA non
-    # applicable. Simple Jour Nuit" and the Belpex row above shares them --
+    # Those columns are METER REGISTERS (their header is "(*) TVA non
+    # applicable. Simple Jour Nuit" and the Belpex row above shares them),
     # not regions. The VL/WAL/BX headers on that page govern the tax rows.
     # Reading them as regions credited Wallonia the Jour rate (6,69) and
     # Brussels the Nuit one (3,78); every region bills the Simple column,

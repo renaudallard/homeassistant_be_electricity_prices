@@ -111,7 +111,7 @@ def test_entity_uses_supplier_label_for_manufacturer() -> None:
     entry = _entry()
     coordinator = _coord(CoordinatorData(), entry)
     sensor = TomorrowPricesAvailable(coordinator)  # type: ignore[arg-type]
-    # Eneco extractor's label is "Eneco" — falls back to the supplier id
+    # Eneco extractor's label is "Eneco". It falls back to the supplier id
     # only when the extractor lookup raises (unknown supplier).
     assert sensor.device_info is not None
     assert sensor.device_info["manufacturer"] == "Eneco"

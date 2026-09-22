@@ -669,7 +669,7 @@ def test_the_three_capacity_paths_share_one_formula() -> None:
     assert _capacity_monthly_eur(overlay(43.5), 0.0) == 0.0
 
     # The live wrapper keeps its own defensive read of a corrupt entry that
-    # lost CONF_DSO -- that guard is the wrapper's, not the helper's.
+    # lost CONF_DSO; that guard is the wrapper's, not the helper's.
     snap = make_snapshot(dsos={"ores": overlay(43.5)})
     assert _compute_capacity(snap, SimpleNamespace(data={}), 6.4) == 0.0  # type: ignore[arg-type]
 
@@ -4040,7 +4040,7 @@ async def test_year_cost_tou_bills_per_hourly_slot(
         },
     )
 
-    # One hour at 09:00 local Tuesday (Jan 6 2026 is a Tuesday) -- TOU peak.
+    # One hour at 09:00 local Tuesday (Jan 6 2026 is a Tuesday): TOU peak.
     peak_hour = dt_util.start_of_local_day(datetime(2026, 1, 6)) + timedelta(hours=9)
 
     async def _fake_hourly(
@@ -4151,7 +4151,7 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
             "meter": "mono",
             "solar_regime": "injection",
             "injection_kwh": "sensor.inj_total",
-            # No consumption sensor wired -- only injection.
+            # No consumption sensor wired, only injection.
             "dso_tariff_mode": "bi_horaire",
         },
     )
