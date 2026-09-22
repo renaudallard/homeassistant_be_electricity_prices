@@ -460,6 +460,14 @@ class BePricesCoordinator(
         self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
         self._snapshot_annual_kwh: float | None = None
+        # The Brugel power term the snapshot was resolved against, stamped for
+        # the same reason the volume is: the cache is a module global and so is
+        # empty after a restart, the persisted card is resolved before the
+        # first refresh can fill it, and the arm of the tick that keeps a card
+        # it already has does not resolve anything. Without this an entry in
+        # Brussels billed 50,07 EUR a year less until the yearly volume next
+        # moved, and never at all on an entry with no meter configured.
+        self._snapshot_power_term: tuple[float, float] | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Which schema the snapshot in hand was parsed under, and what

@@ -28,8 +28,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices import brugel
 from custom_components.be_electricity_prices.const import DSO_SIBELGA
@@ -360,3 +362,67 @@ def test_both_signals_have_to_agree_before_a_card_is_touched() -> None:
     # The same small figure with no band is Bolt's card, and is completed.
     bolt = _brussels_card(fixed_term=14.73, vat_rate=0.0)
     assert resolve_brussels_power_term(bolt, terms=terms) is not bolt
+
+
+async def test_a_restart_does_not_bill_a_brussels_entry_without_the_term(
+    hass: Any,
+) -> None:
+    """The cache is a module global, so it is empty after every restart.
+
+    ``async_load_persistent`` resolves the stored card before the first refresh
+    can fill it, which correctly leaves the term out, and the tick that does
+    fetch it then keeps the card it already has without resolving anything.
+    ``_reresolve_snapshot`` asked only whether the yearly volume had moved, so
+    the term never arrived: 50,07 EUR a year short on a Brussels entry, and on
+    one with no meter configured, never healed at all.
+    """
+    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    from custom_components.be_electricity_prices.const import DOMAIN
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "region": "brussels",
+            "dso": DSO_SIBELGA,
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    # Boot: the card is resolved with the cache empty, as a restart does.
+    brugel._cache.clear()
+    card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    coord._set_snapshot(card)
+    booted = coord._snapshot
+    assert booted is not None
+    assert coord._snapshot_power_term is None
+
+    # Nothing has changed yet, so nothing is redone.
+    coord._reresolve_snapshot()
+    assert coord._snapshot is booted
+
+    # The tick fetches the term. The volume has not moved, and before this the
+    # card was left exactly as it booted.
+    brugel._cache[dt_util.now().year] = (47.24, 94.48)
+    coord._reresolve_snapshot()
+    assert coord._snapshot is not booted
+    assert coord._snapshot_power_term == (47.24, 94.48)
+    # 14,73 metering alone while the cache was empty, then the 64,80 its peers
+    # print once Brugel answers: 14,73 plus the 47,24 power term grossed to the
+    # card's own VAT-inclusive basis. The 50,07 difference is the year's.
+    assert booted.dsos[DSO_SIBELGA].data_management_per_year == pytest.approx(
+        14.73, abs=0.01
+    )
+    assert coord._snapshot.dsos[DSO_SIBELGA].data_management_per_year == pytest.approx(
+        64.80, abs=0.01
+    )
+
+    # And it settles: a second tick with the same term redoes nothing.
+    again = coord._snapshot
+    coord._reresolve_snapshot()
+    assert coord._snapshot is again

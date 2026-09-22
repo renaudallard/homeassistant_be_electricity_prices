@@ -32,6 +32,7 @@ a probe key match where the supplier offers one, a TTL otherwise."""
 from __future__ import annotations
 
 import asyncio
+from .brugel import cached_power_term
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_transient_fetch_error
@@ -102,6 +103,7 @@ class _SnapshotMixin:
     _annual_kwh_full_year: bool
     _annual_kwh_day: date | None
     _snapshot_annual_kwh: float | None
+    _snapshot_power_term: tuple[float, float] | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int
@@ -221,18 +223,34 @@ class _SnapshotMixin:
         after the first refresh at the time, so the card was split against the
         household default under a stamp saying the measurement had been
         applied, and this method saw nothing to redo until the trailing-year
-        figure next moved. Identity while the resolved figure has not moved,
-        which is every tick but the first of a day the measurement changed on.
+        figure next moved. Identity while the resolved figures have not
+        moved, which is every tick but the first of a day one of them changed
+        on.
+
+        TWO inputs, not one. Brugel's Brussels power term is fetched on the
+        tick and cached in a module global, so it is absent after every
+        restart: ``async_load_persistent`` resolves the stored card before the
+        first refresh can fill it, correctly leaving the term out, and no later
+        tick puts it back, because the arm that keeps a card it already has
+        resolves nothing and this method asked only about the volume. A
+        Brussels entry therefore billed 50,07 EUR a year less until the yearly
+        volume next moved, and one with no meter configured never healed at
+        all. Both are stamped now, and either moving re-resolves.
         """
         if self._snapshot_raw is None:
             return
         annual_kwh = entry_annual_kwh(self.entry, self)
-        if self._snapshot_annual_kwh == annual_kwh:
+        power_term = cached_power_term(dt_util.now().year)
+        if (
+            self._snapshot_annual_kwh == annual_kwh
+            and self._snapshot_power_term == power_term
+        ):
             return
         self._snapshot = _resolve_snapshot(
             self.entry, self._snapshot_raw, annual_kwh=annual_kwh
         )
         self._snapshot_annual_kwh = annual_kwh
+        self._snapshot_power_term = power_term
 
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
@@ -257,6 +275,7 @@ class _SnapshotMixin:
             else _resolve_snapshot(self.entry, snap, annual_kwh=annual_kwh)
         )
         self._snapshot_annual_kwh = annual_kwh
+        self._snapshot_power_term = cached_power_term(dt_util.now().year)
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without
