@@ -115,7 +115,7 @@ from .providers.base import (
     SupplierSnapshot,
     TimeOfUseRates,
 )
-from .snapshot_store import entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import (
     _NetAllocation,
     _bucket_by_local_month,

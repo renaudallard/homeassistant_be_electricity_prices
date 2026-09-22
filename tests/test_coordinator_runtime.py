@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import snapshot_resolve
+
 
 import asyncio
 from collections.abc import Iterator
@@ -61,12 +63,12 @@ from custom_components.be_electricity_prices.coordinator_issues import (
 from custom_components.be_electricity_prices.snapshot_store import (
     _monthly_fetched_at,
     _monthly_snapshots,
-    _resolve_snapshot,
     _shared_failed_fetches,
     _shared_lock,
     _shared_snapshots,
     evict_shared_caches,
 )
+from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
 from custom_components.be_electricity_prices.snapshot_codec import (
     _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_to_dict,
@@ -2047,7 +2049,9 @@ async def _refresh_with_unreadable_card(
     hass: HomeAssistant, entry: Any, archived: Any
 ) -> None:
     """One tick whose card is page images, with ``archived`` on the branch."""
-    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices import (
+        snapshot_store,
+    )
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
     )
@@ -5797,7 +5801,7 @@ async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
     ``runtime_data`` at all."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices import compare_quote, snapshot_store
+    from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices.compare_quote import _AnnualVolume
     from custom_components.be_electricity_prices.providers.base import (
         SpotMonthlyRates,
@@ -5836,7 +5840,7 @@ async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
             data=dict(entry.data),
             runtime_data=SimpleNamespace(_annual_kwh=kwh, _annual_kwh_full_year=True),
         )
-        return snapshot_store._resolve_snapshot(proxy, raw).energy  # type: ignore[arg-type]
+        return snapshot_resolve._resolve_snapshot(proxy, raw).energy  # type: ignore[arg-type]
 
     async def _tick(fresh: bool) -> None:
         with patch.object(compare_quote, "_annual_volume", _vol):

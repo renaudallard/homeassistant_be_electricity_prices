@@ -44,7 +44,7 @@ from .const import (
 from .coordinator import (
     BePricesCoordinator,
 )
-from .snapshot_store import entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 from .energy_meters import (
     _kwh_sensor_ids,
     _recorder_daily_kwh,

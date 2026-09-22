@@ -315,7 +315,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
         ImpactRates,
         TaxOverlay,
     )
-    from custom_components.be_electricity_prices.snapshot_store import (
+    from custom_components.be_electricity_prices.snapshot_resolve import (
         _resolve_snapshot,
     )
     from tests import make_snapshot

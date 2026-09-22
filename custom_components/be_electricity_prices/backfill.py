@@ -122,7 +122,7 @@ from .injection import (
     _injection_needs_spot,
     _injection_is_spot_formula,
 )
-from .snapshot_store import entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import (
     _NetAllocation,
     _bucket_by_local_month,

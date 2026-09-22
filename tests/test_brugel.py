@@ -35,7 +35,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.util import dt as dt_util
 
-from custom_components.be_electricity_prices import brugel
+from custom_components.be_electricity_prices import brugel, snapshot_resolve
 from custom_components.be_electricity_prices.const import DSO_SIBELGA
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -303,9 +303,8 @@ def test_the_sheet_is_fetched_before_the_card_is_resolved() -> None:
         "or the tick that fetched the card bills without the term"
     )
     # And the resolver really does read it synchronously, which is why.
-    from custom_components.be_electricity_prices import snapshot_store
 
-    assert "cached_power_term(" in inspect.getsource(snapshot_store._resolve_snapshot)
+    assert "cached_power_term(" in inspect.getsource(snapshot_resolve._resolve_snapshot)
 
 
 async def test_one_request_per_year_and_no_search_for_the_link() -> None:

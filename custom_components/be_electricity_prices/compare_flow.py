@@ -117,7 +117,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .energy_meters import _measured_hour_weights, _measured_kwh
-from .snapshot_store import entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 from .compare_quote import (
     DailyCompare,
     RankedRow,
@@ -813,7 +813,7 @@ class _SweepEngine:
         The card is resolved per entry (VAT, excise band, volume tranche,
         settlement grid) the way every other quote path resolves it.
         """
-        from .snapshot_store import _resolve_snapshot
+        from .snapshot_resolve import _resolve_snapshot
 
         kind = _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
         meter: MeterType = (
@@ -1623,7 +1623,7 @@ class _SweepEngine:
             # does: build_snapshot returns the card ex-VAT with the entered
             # rate on taxes, and nothing else grosses the fixed fees.
             from .providers.custom import build_snapshot
-            from .snapshot_store import _resolve_snapshot
+            from .snapshot_resolve import _resolve_snapshot
 
             try:
                 current_snapshot = _resolve_snapshot(
@@ -2510,7 +2510,8 @@ class _CompareStepsMixin(OptionsFlow):
         # 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, overstating the
         # alternative by about 169 EUR/yr. The user's own side comes off the
         # coordinator and IS resolved, so the comparison was biased.
-        from .snapshot_store import _resolve_snapshot, fetch_shared
+        from .snapshot_store import fetch_shared
+        from .snapshot_resolve import _resolve_snapshot
 
         # Through the shared policy rather than extractor.fetch directly, but
         # asking for a fresh card: this is one quote the user explicitly asked

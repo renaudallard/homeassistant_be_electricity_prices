@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import snapshot_resolve
+
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -769,10 +771,12 @@ def _entry(runtime: object = None, **data: object) -> SimpleNamespace:
 
 
 def _blended_rate(entry: SimpleNamespace, mean: float) -> float:
-    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices import (
+        snapshot_resolve,
+    )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
 
-    resolved = snapshot_store._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
+    resolved = snapshot_resolve._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
     return energy_eur_per_kwh(
         resolved.energy, datetime(2026, 3, 4, 9, tzinfo=UTC), mean
     )
@@ -1275,9 +1279,8 @@ def _grs_entry(**data: object) -> SimpleNamespace:
 
 
 def _grs_fee(**data: object) -> float:
-    from custom_components.be_electricity_prices import snapshot_store
 
-    resolved = snapshot_store._resolve_snapshot(
+    resolved = snapshot_resolve._resolve_snapshot(
         _grs_entry(**data),  # type: ignore[arg-type]
         _grs(),
     )
@@ -1298,10 +1301,9 @@ def test_a_resolved_snapshot_no_longer_carries_the_reduction() -> None:
     """Cleared either way, the way the volume tranche is: it is a fact about
     the card that has been answered for this entry, and a snapshot still
     holding it would look unresolved to the next reader of it."""
-    from custom_components.be_electricity_prices import snapshot_store
 
     for answer in (True, False):
-        resolved = snapshot_store._resolve_snapshot(
+        resolved = snapshot_resolve._resolve_snapshot(
             _grs_entry(direct_debit=answer),  # type: ignore[arg-type]
             _grs(),
         )
@@ -1312,8 +1314,7 @@ def test_a_stored_answer_does_not_reach_a_card_that_grants_no_reduction() -> Non
     """The registry flag is asked about the CARD in hand, so an answer stored
     against Groene stroom cannot discount a 1.800 kWh entry, and cannot
     discount another supplier's row on the comparison page either."""
-    from custom_components.be_electricity_prices import snapshot_store
 
     entry = _entry(direct_debit=True)
-    resolved = snapshot_store._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
+    resolved = snapshot_resolve._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
     assert resolved.energy.yearly_fixed_fee == pytest.approx(50.0)

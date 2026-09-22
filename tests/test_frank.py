@@ -32,7 +32,9 @@ import pytest
 from dataclasses import replace
 from types import SimpleNamespace
 
-from custom_components.be_electricity_prices import snapshot_store
+from custom_components.be_electricity_prices import (
+    snapshot_resolve,
+)
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
@@ -606,8 +608,8 @@ def test_resolve_settlement_grid_leaves_other_legs_alone() -> None:
 
 def test_entry_toggle_flips_the_grid_through_resolve_snapshot() -> None:
     snap = _frank_snapshot()
-    off = snapshot_store._resolve_snapshot(_entry(), snap)  # type: ignore[arg-type]
-    on = snapshot_store._resolve_snapshot(
+    off = snapshot_resolve._resolve_snapshot(_entry(), snap)  # type: ignore[arg-type]
+    on = snapshot_resolve._resolve_snapshot(
         _entry(quarter_hourly=True),  # type: ignore[arg-type]
         snap,
     )
@@ -622,7 +624,7 @@ def test_a_stored_answer_is_inert_on_a_card_that_fixes_its_own_grid() -> None:
     would settle a Mega card per quarter-hour, which Mega does not sell."""
     snap = _frank_snapshot()
     other = replace(snap, supplier="mega", contract="mega_dynamic")
-    resolved = snapshot_store._resolve_snapshot(
+    resolved = snapshot_resolve._resolve_snapshot(
         _entry(quarter_hourly=True),  # type: ignore[arg-type]
         other,
     )
@@ -630,7 +632,7 @@ def test_a_stored_answer_is_inert_on_a_card_that_fixes_its_own_grid() -> None:
 
     # A Frank-to-Frank comparison does carry the household's own answer over.
     sibling = replace(snap, contract="frank_dynamic_hv")
-    carried = snapshot_store._resolve_snapshot(
+    carried = snapshot_resolve._resolve_snapshot(
         _entry(quarter_hourly=True),  # type: ignore[arg-type]
         sibling,
     )

@@ -64,7 +64,7 @@ from .providers.base import (
     DsoOverlay,
     SupplierSnapshot,
 )
-from .snapshot_store import entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 
 
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:

@@ -52,11 +52,13 @@ from .providers.base import (
 )
 from .snapshot_store import (
     _SharedSnapshot,
-    _resolve_snapshot,
     _shared_failed_fetches,
     card_for_unreadable_month,
-    entry_annual_kwh,
     fetch_shared,
+)
+from .snapshot_resolve import (
+    _resolve_snapshot,
+    entry_annual_kwh,
 )
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,

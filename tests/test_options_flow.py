@@ -27,7 +27,10 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import snapshot_store
+from custom_components.be_electricity_prices import (
+    snapshot_resolve,
+    snapshot_store,
+)
 from custom_components.be_electricity_prices.compare_quote import RankedRow
 
 from collections.abc import Iterator
@@ -2441,7 +2444,9 @@ async def test_compare_solar_whatif_resolves_the_custom_rebuild(
     that still carries the injection block."""
     from custom_components.be_electricity_prices.providers.base import FixedRates
     from custom_components.be_electricity_prices.providers.custom import build_snapshot
-    from custom_components.be_electricity_prices.snapshot_store import _resolve_snapshot
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
     from tests import make_snapshot
 
     data = {
@@ -2687,7 +2692,7 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
     # Off the card as the page prices it, not as it was parsed: the page
     # quotes a resolved snapshot, and this card carries a federal energy
     # contribution that the delivery month no longer owes.
-    priced = snapshot_store._resolve_snapshot(on_impact, impact_snap)
+    priced = snapshot_resolve._resolve_snapshot(on_impact, impact_snap)
     on_bands = _tou_weighted_per_kwh(
         priced, "ores", "wallonia", now, None, "dynamic", "impact"
     )
@@ -4601,7 +4606,7 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
     uses: 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, about 169 EUR/yr
     against the alternative. The user's own side comes off the coordinator and
     IS fully resolved, so the comparison was biased. Both transforms live in
-    `snapshot_store._resolve_snapshot`; compare must go through it.
+    `snapshot_resolve._resolve_snapshot`; compare must go through it.
     """
     from dataclasses import replace
 
@@ -4618,7 +4623,7 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
     )
 
     seen: list[Any] = []
-    real = snapshot_store._resolve_snapshot
+    real = snapshot_resolve._resolve_snapshot
 
     def _spy(cfg_entry: Any, snap: Any) -> Any:
         seen.append((cfg_entry, snap))
@@ -4626,7 +4631,7 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
 
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
-        patch.object(snapshot_store, "_resolve_snapshot", _spy),
+        patch.object(snapshot_resolve, "_resolve_snapshot", _spy),
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -4768,7 +4773,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
         ph = result["description_placeholders"]
         assert ph is not None
         # Off the card as the page prices it, resolved rather than as parsed.
-        priced = snapshot_store._resolve_snapshot(entry, own)
+        priced = snapshot_resolve._resolve_snapshot(entry, own)
         at_month_mean = compute_breakdown(
             priced, "ores", "wallonia", now_local, month_mean, "mono"
         ).all_in
@@ -4907,7 +4912,7 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
         # Off the card as the page prices it: the quote resolves the snapshot,
         # and this one carries a federal energy contribution the delivery month
         # no longer owes.
-        priced = snapshot_store._resolve_snapshot(entry, other_snap)
+        priced = snapshot_resolve._resolve_snapshot(entry, other_snap)
         at_month_mean = compute_breakdown(
             priced, "fluvius_antwerpen", "flanders", now_local, month_mean, "mono"
         ).all_in

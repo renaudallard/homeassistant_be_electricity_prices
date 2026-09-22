@@ -27,8 +27,10 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import cohort
-from custom_components.be_electricity_prices import snapshot_store
+from custom_components.be_electricity_prices import cohort, snapshot_resolve
+from custom_components.be_electricity_prices import (
+    snapshot_store,
+)
 from custom_components.be_electricity_prices import ytd_cost
 
 from custom_components.be_electricity_prices import energy_meters
@@ -426,7 +428,6 @@ def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices import snapshot_store
     from custom_components.be_electricity_prices.const import (
         DSO_FLUVIUS_ANTWERPEN,
         VREG_NETWORK_CEILING_HTVA,
@@ -454,7 +455,7 @@ def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
                 "include_vat": include_vat,
             }
         )
-        out = snapshot_store._resolve_snapshot(
+        out = snapshot_resolve._resolve_snapshot(
             entry,  # type: ignore[arg-type]
             card,
             delivery_month=date(2026, 9, 1),
@@ -5558,7 +5559,6 @@ def test_a_priced_card_loses_the_contribution_on_the_month_it_is_billed_for(
     prices the running one."""
     from dataclasses import replace as _replace
 
-    from custom_components.be_electricity_prices import snapshot_store
     from tests import make_entry
 
     entry = make_entry(supplier="cociter", contract="cociter_variable")
@@ -5570,9 +5570,9 @@ def test_a_priced_card_loses_the_contribution_on_the_month_it_is_billed_for(
             card.taxes, federal_excise=0.04876, energy_contribution=0.0020417
         ),
     )
-    running = snapshot_store._resolve_snapshot(entry, card)  # type: ignore[arg-type]
+    running = snapshot_resolve._resolve_snapshot(entry, card)  # type: ignore[arg-type]
     assert running.taxes.energy_contribution == 0.0
-    june = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+    june = snapshot_resolve._resolve_snapshot(  # type: ignore[arg-type]
         entry, card, delivery_month=date(2026, 6, 1)
     )
     assert june.taxes.energy_contribution == pytest.approx(0.0020417)
@@ -8980,9 +8980,7 @@ def test_the_entry_resolver_settles_the_campaign_meter() -> None:
     """The resolver is only worth having if _resolve_snapshot calls it."""
     import inspect
 
-    from custom_components.be_electricity_prices import snapshot_store
-
-    source = inspect.getsource(snapshot_store._resolve_snapshot)
+    source = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "resolve_welcome_credit_meter(" in source, (
         "a campaign the card denies an exclusive-night connection would be "
         "credited to it"
@@ -9716,7 +9714,7 @@ def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> No
     and a seasonally uncorrected extrapolation of a winter quarter can cross a
     band: a 30.000 kWh entry whose 90 days scale to 52.000 would be billed the
     50.000+ rate on a volume it never reaches."""
-    from custom_components.be_electricity_prices.snapshot_store import (
+    from custom_components.be_electricity_prices.snapshot_resolve import (
         entry_annual_kwh,
     )
 
@@ -9969,7 +9967,9 @@ async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> N
     30.000 and its rows priced on 52.000."""
     from custom_components.be_electricity_prices import compare_quote, energy_meters
     from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
-    from custom_components.be_electricity_prices.snapshot_store import entry_annual_kwh
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        entry_annual_kwh,
+    )
 
     async def _resolve(
         typed: float | None, kwh: float, days: int
@@ -10181,7 +10181,6 @@ async def test_a_month_row_is_resolved_on_the_way_out_of_the_cache(
     """
     from dataclasses import replace as _replace
 
-    from custom_components.be_electricity_prices import snapshot_store
     from tests import make_entry
 
     entry = make_entry(supplier="cociter", contract="cociter_variable")
@@ -10219,7 +10218,7 @@ async def test_a_month_row_is_resolved_on_the_way_out_of_the_cache(
         _archive_snapshot("current"),
         entry,  # type: ignore[arg-type]
     )
-    expected = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+    expected = snapshot_resolve._resolve_snapshot(  # type: ignore[arg-type]
         entry, archived, delivery_month=month
     )
     assert row.taxes.energy_contribution == 0.0
@@ -10262,7 +10261,6 @@ async def test_the_signing_card_is_priced_for_the_month_it_was_signed_in(
     would come back on the hourly grid, so the spot layer would fetch the wrong
     product and the tick would price hourly.
     """
-    from custom_components.be_electricity_prices import snapshot_store
     from custom_components.be_electricity_prices.cohort import _cohort_legs
     from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_entry
@@ -10294,7 +10292,7 @@ async def test_the_signing_card_is_priced_for_the_month_it_was_signed_in(
         entry,  # type: ignore[arg-type]
         current,
     )
-    expected = snapshot_store._resolve_snapshot(  # type: ignore[arg-type]
+    expected = snapshot_resolve._resolve_snapshot(  # type: ignore[arg-type]
         entry, archived, delivery_month=start
     )
     assert legs.energy == expected.energy
