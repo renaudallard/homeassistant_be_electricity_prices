@@ -616,7 +616,8 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
 _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
     ("bolt", 0.2035480): (
         date(2027, 1, 1),
-        "prints a figure five other suppliers contradict, on its Wallonia and "
+        "prints a figure three other suppliers contradict in the same month, "
+        "on its Wallonia and "
         "Brussels cards too where no VREG tariff applies; billed from the "
         "regulator either way",
     ),

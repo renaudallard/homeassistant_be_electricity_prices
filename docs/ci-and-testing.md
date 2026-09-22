@@ -1058,7 +1058,9 @@ September. And each entry carries an expiry, all of them 2027-01-01, when the ex
 and every card in the country has to be reprinted anyway.
 
 `_KNOWN_VREG_CEILINGS` is the same mechanism for the same reason, and shipped a day later than
-the check it quiets: Bolt prints 0,2035480 where five other suppliers print 0,3472738, and
+the check it quiets: Bolt prints 0,2035480 where the three other suppliers whose cards the
+shared reader matches in that month print 0,3472738 (five cards state the figure in all, but
+DATS 24 and Ecopower state it as a table column this reader cannot see), and
 `resolve_vreg_network_ceiling` bills the regulator's figure regardless, so the card is worth
 reporting and not worth failing a run over daily. Keyed on the exact (supplier, ceiling) pair
 and expiring with `VREG_NETWORK_CEILING_KNOWN_UNTIL`, which is the month the constant stops
