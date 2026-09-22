@@ -1351,6 +1351,23 @@ def resolve_federal_contribution(
     Engie and Mega have all gone on printing 0,0019261 ex-VAT on theirs
     through the change and every month since, which is the professional scheme
     keeping the levy rather than three suppliers being stale in lockstep.
+
+    Open-ended, unlike the two levy corrections beside it, and deliberately so.
+    Those encode a rate that is IN FORCE and expire into reading the card,
+    because a rate goes out of date. This encodes an ABOLITION, which does
+    not: the line was struck from the law and nothing schedules its return.
+    Giving it an end date would be the harmful choice, because three
+    residential card families still print the abolished line and would be
+    billed it again the month the window closed, about 7 EUR a year each.
+
+    The risk that comes with that is real and is accepted: if the levy were
+    ever reinstated, this would go on striking it out, and nothing would say
+    so. A rate of zero trips no bound, and the consensus check compares cards
+    with each other rather than with the law, so a fleet that all printed the
+    reinstated figure would agree with itself and still be zeroed here. The
+    signal to watch for is the live check's excise window request, which comes
+    up eight weeks before the excise this was folded into next steps; a
+    reinstated contribution would arrive in the same measure.
     """
     taxes = snapshot.taxes
     if professional or not taxes.energy_contribution:
