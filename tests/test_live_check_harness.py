@@ -2656,12 +2656,29 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
     assert not _rows("_federal: the VREG ceiling constant disagrees")
     assert len(_rows("bolt/VREG ceiling")) == 1
 
-    # Two stale against one agreeing is still not a fleet.
+    # Two stale against one agreeing IS a fleet, and a majority of it says the
+    # constant is the odd one out. This asserted the opposite when the gate
+    # counted the agreeing cards; counting the cards seen is what makes the
+    # fleet-wide case below reportable, and this is the same rule applied
+    # consistently rather than a separate concession.
     _run({"bolt": "0,2035480", "mega": "0,1920264", "luminus": "0,3472738"})
-    assert not _rows("_federal: the VREG ceiling constant disagrees")
+    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
 
-    # Three stale against the two that agree is: the constant is now the
-    # minority reading and a human should look at the regulator's sheet.
+    # The case the gate exists for and the one it used to suppress: every card
+    # that prints the sentence has moved to a new figure, so nothing agrees
+    # with the constant. A gate on the AGREEING side can never open here.
+    _run(
+        {
+            "bolt": "0,4100000",
+            "mega": "0,4100000",
+            "luminus": "0,4100000",
+            "frank": "0,4100000",
+        }
+    )
+    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
+
+    # Three stale against the two that agree: the constant is the minority
+    # reading and a human should look at the regulator's sheet.
     _run(
         {
             "bolt": "0,2035480",

@@ -1069,7 +1069,9 @@ disagreeing is never allowed: that says the regulator moved and the constant is 
 stays a hard failure naming the constant rather than the cards.
 
 That verdict needs a fleet to be a majority of, so it is held behind a quorum
-(`_VREG_CONSENSUS_QUORUM`, two agreeing cards). Only four suppliers print the sentence the
+(`_VREG_CONSENSUS_QUORUM`, two cards PRINTING the sentence, not two agreeing
+with the constant: a fleet-wide move leaves nothing in agreement, so a gate on
+the agreeing side cannot open in the one case worth reporting). Only four suppliers print the sentence the
 shared reader matches and two of them are missing from some months, so without it a month that
 captured one stale card and none of the agreeing ones would report that the fleet had moved to
 that card, and point the maintainer at Bolt's figure: about 1,7 times too tight, and worth up to

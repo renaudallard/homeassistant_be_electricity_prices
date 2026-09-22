@@ -240,10 +240,11 @@ _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 _EXCISE_KNOWN_UNTIL: tuple[int, int] = (2026, 8)
 _VREG_CEILING_HTVA: float = 0.3276168
 _VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
-# How many agreeing cards it takes before a disagreeing majority is read as
-# the regulator having moved. Two is the smallest number that is a fleet
-# rather than a card: with one, any month that captured a single agreeing
-# supplier and two stale ones would rewrite the constant.
+# How many cards have to PRINT the sentence before a disagreeing majority
+# among them is read as the regulator having moved. Two is the smallest number
+# that is a fleet rather than a card. Counted on the cards seen and not on the
+# cards that agree: a fleet-wide move leaves nothing in agreement, and a gate
+# on the agreeing side cannot open in exactly the case worth reporting.
 _VREG_CONSENSUS_QUORUM: int = 2
 
 
@@ -2268,19 +2269,25 @@ def _check_vreg_ceiling_consensus(
     if not odd:
         return
     detail = ", ".join(f"{name}={printed[name]:.7f}" for name in odd)
-    # A majority needs a fleet to be a majority OF. Only four suppliers print
-    # the sentence this reader matches, and two of them are absent from some
-    # months, so a month where the agreeing cards happen not to be captured
-    # leaves one stale card as "the fleet" and this tells the maintainer to
-    # adopt its figure. Bolt's is the figure in question, and it prints the
-    # same number on Wallonia and Brussels where no VREG tariff applies, so
-    # adopting it would cap about 1,7 times too tight and under-bill by up to
-    # 59,43 EUR a year. Below the quorum the per-supplier rows still file, and
-    # those say the card is stale, which is the claim the evidence supports.
+    # A majority needs a fleet to be a majority OF, and the fleet is the cards
+    # SEEN, not the cards that agree. Counting the agreeing ones instead
+    # silenced this branch in the one case it exists for: when the regulator
+    # moves the ceiling and the cards follow, every printing card lands in
+    # ``odd``, ``agree`` collapses to zero, and a gate on ``len(agree)`` can
+    # never open however many cards moved. The rows below would then call the
+    # CORRECT cards stale and say no money is lost, while the stale constant is
+    # what is being billed. Only four suppliers print the sentence at all, so
+    # that gate needed five printing cards to ever report a fleet-wide move.
+    #
+    # The floor is still worth having, and it is a floor on the EVIDENCE: one
+    # card is not a fleet, so a month that captured a single stale card and
+    # none of its peers says nothing about the constant. Below it the
+    # per-supplier rows still file, and those say the card is stale, which is
+    # the claim one card can support.
     #
     # The federal twin guards the same way, by refusing to rank a top pair
     # that is only as large as its runner-up.
-    if len(odd) > len(agree) and len(agree) >= _VREG_CONSENSUS_QUORUM:
+    if len(odd) > len(agree) and len(printed) >= _VREG_CONSENSUS_QUORUM:
         _record(
             "_federal: the VREG ceiling constant disagrees with the fleet",
             False,
