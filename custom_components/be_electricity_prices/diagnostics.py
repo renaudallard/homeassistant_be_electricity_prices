@@ -41,6 +41,7 @@ from .const import (
     CONF_REGION,
     CONF_SUPPLIER,
 )
+from .cohort import ytd_window_start
 from .coordinator import (
     BePricesCoordinator,
 )
@@ -122,13 +123,14 @@ async def async_get_config_entry_diagnostics(
 
     # Recorder-backed consumption + injection roll-ups so the bug
     # reporter can see at a glance whether their kWh sensors are wired
-    # up and feeding the recorder; mirrors what current_year_cost reads.
+    # up and feeding the recorder; mirrors what current_year_cost reads,
+    # from the day it reads from.
     today = dt_util.now().date()
-    jan1 = today.replace(month=1, day=1)
+    ytd_days = (today - ytd_window_start(entry, today)).days
     cons_year = await _kwh_window(hass, entry, 365, side="consumption")
-    cons_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="consumption")
+    cons_ytd = await _kwh_window(hass, entry, ytd_days, side="consumption")
     inj_year = await _kwh_window(hass, entry, 365, side="injection")
-    inj_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="injection")
+    inj_ytd = await _kwh_window(hass, entry, ytd_days, side="injection")
 
     # Per-month archived snapshot publication labels: the YTD path
     # caches one snapshot per (supplier, contract, region, YYYY-MM).

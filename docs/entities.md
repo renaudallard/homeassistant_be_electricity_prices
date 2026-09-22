@@ -527,7 +527,7 @@ Top-level dump keys:
 | `entry.title` | entry title |
 | `entry.data` / `entry.options` | config, with `CONF_API_KEY` redacted via `async_redact_data(..., TO_REDACT)` |
 | `coordinator` | live snapshot metadata and the full hourly price table (see below) |
-| `consumption.rolling_year_kwh` / `.ytd_kwh` | recorder-summed consumption over 365 days and year-to-date |
+| `consumption.rolling_year_kwh` / `.ytd_kwh` | recorder-summed consumption over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `shared_failure` | sibling-coordinator negative-fetch marker, or null |

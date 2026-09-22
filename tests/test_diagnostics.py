@@ -276,6 +276,53 @@ async def test_diagnostics_wired_zero_kwh_reports_zero_not_missing(
     assert dump["injection"]["rolling_year_kwh"] is None
 
 
+async def test_diagnostics_counts_the_year_to_date_from_where_the_sensor_does(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The dump says it mirrors what current_year_cost reads, and it summed
+    from 1 January even for an entry billing from its contract start: 181
+    days too many for a July start, so a bug report set the sensor beside a
+    total it never covered."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.const import (
+        CONF_CONTRACT_START_DATE,
+        CONF_YTD_FROM_CONTRACT_START,
+    )
+
+    freezer.move_to("2026-09-22T10:00:00+00:00")
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={}, _historical_spot_quarters={}, data=_coordinator_data()
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "consumption_kwh": "sensor.meter",
+            CONF_CONTRACT_START_DATE: "2026-07-01",
+            CONF_YTD_FROM_CONTRACT_START: True,
+        },
+    )
+    starts: list[object] = []
+
+    async def _recorder(
+        _hass: HomeAssistant, entity_id: str, start: object, end: object
+    ) -> dict[object, float]:
+        starts.append(start)
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+        new=_recorder,
+    ):
+        await async_get_config_entry_diagnostics(hass, entry)
+
+    # The rolling year, then the year to date from the contract start.
+    assert starts == [date(2025, 9, 22), date(2026, 7, 1)]
+
+
 async def test_diagnostics_summarises_the_spot_cache_by_month(
     hass: HomeAssistant,
 ) -> None:
