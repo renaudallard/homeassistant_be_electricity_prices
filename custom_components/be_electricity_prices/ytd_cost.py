@@ -89,6 +89,7 @@ from .fees import (
     _prosumer_monthly_fee,
     _welcome_credit_eur,
     first_year_net_kwh,
+    grants_a_welcome_credit,
     window_energy_rate,
 )
 from .injection import (
@@ -1087,12 +1088,10 @@ async def _compute_current_year_cost(
         card prints today, where the own contract reads the month it signed.
         """
         credit = 0.0
-        # Either half: a card stating a per-kWh reduction and no flat one is
-        # a credit, and the backfill below never tested the flat half at all.
-        if (
-            signing_snapshot.welcome_credit_eur
-            or signing_snapshot.welcome_credit_eur_per_kwh
-        ):
+        # Every shape, through the predicate that lives beside the leaf: this
+        # tested the two EUR halves and dropped 0.27.2's percentage campaign
+        # and its kWh cashback whole.
+        if grants_a_welcome_credit(signing_snapshot):
             credit = _welcome_credit_eur(
                 signing_snapshot,
                 _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),

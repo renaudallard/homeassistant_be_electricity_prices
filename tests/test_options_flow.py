@@ -7183,6 +7183,78 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     assert none == 0.0
 
 
+def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -> None:
+    """0.27.2 added a percentage campaign and a kWh cashback, and the gate above
+    this helper still tested the two EUR halves, so every Luminus campaign card
+    read as no credit here and on the live sensor while the backfill paid it.
+
+    The leaf could price both all along. What was missing was the question.
+    """
+    from datetime import date, datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _ytd_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, yearly_fixed_fee=60.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    now = datetime(2026, 9, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    args = ("ores", "wallonia", None, "mono", "bi_horaire", None, 2500.0)
+
+    def credited(**fields: object) -> float:
+        card: dict[str, object] = {
+            "welcome_credit_eur": None,
+            "welcome_credit_eur_per_kwh": None,
+            "welcome_credit_cap_eur": None,
+            "welcome_credit_pct_of_energy": None,
+            "welcome_credit_kwh": None,
+            "welcome_credit_kind": "pro_rata",
+            "welcome_credit_after_months": None,
+        }
+        card.update(fields)
+        return _ytd_welcome_credit(
+            snap,
+            SimpleNamespace(**card),  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            now,
+            *args,
+            annual_kwh=3500.0,
+            regime="none",
+            window_start=date(2026, 1, 1),
+            fee_proration=0.71,
+        )
+
+    # 33% of the first contract YEAR's energy cost, accrued over the 258 days
+    # elapsed: 0,33 x 3500 kWh x 0,10 = 115,50, times 258/365. The volume the
+    # share rides is the year's, like the per-kWh half beside it, not the
+    # window's 2500 kWh.
+    share = credited(welcome_credit_pct_of_energy=0.33)
+    assert share == pytest.approx(0.33 * 3500.0 * 0.10 * 258 / 365, abs=0.01)
+    assert share == pytest.approx(81.64, abs=0.01)
+
+    # A volume of free energy is a lump at the wait it states, so nothing has
+    # accrued 258 days in and the credit lands whole in the window that
+    # completes the wait.
+    assert (
+        credited(
+            welcome_credit_kwh=750.0,
+            welcome_credit_kind="anniversary",
+            welcome_credit_after_months=12,
+        )
+        == 0.0
+    )
+    assert credited() == 0.0
+
+
 def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     """The year-to-date engine takes its pricing inputs as keyword arguments,
     and a call site that omits one degrades silently rather than failing.

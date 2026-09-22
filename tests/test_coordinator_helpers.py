@@ -9005,16 +9005,28 @@ def test_a_credit_with_no_flat_half_is_still_a_credit() -> None:
     assert _grants_a_welcome_credit(flat_only)
     assert not _grants_a_welcome_credit(neither)
 
-    # And the year-to-date sensor asks the same question, not the flat half.
+    # Every shape the leaf can price, including the two 0.27.2 added, which
+    # set neither EUR half and so read as no credit at all.
+    pct_only = make_snapshot(welcome_credit_pct_of_energy=0.33)
+    kwh_only = make_snapshot(welcome_credit_kwh=750.0)
+    assert _grants_a_welcome_credit(pct_only)
+    assert _grants_a_welcome_credit(kwh_only)
+
+    # And the year-to-date sensor asks the same question. Pinned on the shared
+    # predicate rather than on a field name: both gates spelled the fields out
+    # and both went stale the moment a fifth shape landed.
     source = inspect.getsource(ytd_cost._compute_current_year_cost)
-    assert "signing_snapshot.welcome_credit_eur_per_kwh" in source
-    # Neither compare helper tests the flat field by itself any more.
+    assert "grants_a_welcome_credit(signing_snapshot)" in source
+    # Neither compare helper restates the test for itself any more.
     for func in (
         compare_quote._ytd_welcome_credit,
         compare_quote._annual_welcome_credit,
     ):
         body = inspect.getsource(func)
         assert 'getattr(credited, "welcome_credit_eur", None)' not in body
+    assert "grants_a_welcome_credit" in inspect.getsource(
+        compare_quote._grants_a_welcome_credit
+    )
 
 
 def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:

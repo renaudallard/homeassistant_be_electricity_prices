@@ -1296,18 +1296,17 @@ def _annual_fees(
 
 
 def _grants_a_welcome_credit(snapshot: Any) -> bool:
-    """Whether the card grants a credit at all, either half of it.
+    """Whether the card grants a credit at all, in any of its shapes.
 
-    ``extract_ristourne`` reads a card stating a per-kWh reduction and no
-    flat one, which it says in so many words, so testing the flat half alone
-    turns such a card into no credit. No card in the registry is that shape
-    today, and the backfill beside these two never tested it, so the three
-    paths would have disagreed about the first one that is.
+    Delegates rather than restating the test: this file spelled out the two
+    EUR halves, and 0.27.2's percentage campaign and kWh cashback set neither,
+    so both comparison columns and the projection quoted every campaign card
+    at no credit. :func:`fees.grants_a_welcome_credit` is the one place that
+    question is answered now, beside the leaf that has to agree with it.
     """
-    return bool(
-        getattr(snapshot, "welcome_credit_eur", None)
-        or getattr(snapshot, "welcome_credit_eur_per_kwh", None)
-    )
+    from .fees import grants_a_welcome_credit
+
+    return grants_a_welcome_credit(snapshot)
 
 
 def _ytd_welcome_credit(

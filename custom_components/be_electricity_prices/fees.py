@@ -455,6 +455,36 @@ def window_energy_rate(energy_component_eur: float, consumption_kwh: float) -> f
     return max(energy_component_eur, 0.0) / consumption_kwh
 
 
+def grants_a_welcome_credit(snapshot: SupplierSnapshot) -> bool:
+    """Whether the card grants a welcome credit at all, in ANY of its shapes.
+
+    Lives beside :func:`_welcome_credit_eur` because it has to agree with it:
+    the leaf prices four shapes and the callers that ask this first will skip
+    it entirely on a False, so a shape the leaf can price and this cannot see
+    is a credit the leaf is never asked for.
+
+    That is exactly what happened twice. The flat half was tested alone until
+    a card stating only a per-kWh reduction turned into no credit, and when
+    0.27.2 added Luminus's percentage campaign and its kWh cashback the two
+    gates still tested the two EUR halves, so every campaign card read as no
+    credit on the live sensor, both comparison columns and the projection,
+    while the backfill priced it because it asks nothing. A whole feature
+    inert on every number a user reads, worth 234,12 EUR a year on a 3500 kWh
+    Comfy.
+
+    So this is the one place the question is answered, and a fifth shape field
+    belongs in it on the same commit that teaches the leaf to price it. The
+    backfill deliberately does not ask: the leaf returns 0.0 for a card that
+    grants nothing, which makes the gate a short circuit rather than a rule.
+    """
+    return bool(
+        getattr(snapshot, "welcome_credit_eur", None)
+        or getattr(snapshot, "welcome_credit_eur_per_kwh", None)
+        or getattr(snapshot, "welcome_credit_pct_of_energy", None)
+        or getattr(snapshot, "welcome_credit_kwh", None)
+    )
+
+
 def _welcome_credit_eur(
     snapshot: SupplierSnapshot,
     start: date | None,
