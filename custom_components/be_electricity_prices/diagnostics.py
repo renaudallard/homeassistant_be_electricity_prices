@@ -116,8 +116,14 @@ async def async_get_config_entry_diagnostics(
         # Same answer for a different reason: the entry is loaded but has no
         # price table, because the supplier's card cannot be read and no
         # cached one could stand in. Report it rather than raising, so the bug
-        # report a user is trying to file actually gets filed.
-        return {"status": "no_snapshot", "last_error": coordinator._last_error}
+        # report a user is trying to file actually gets filed. Scrubbed like
+        # the full dump's error fields below: it is the same free text.
+        return {
+            "status": "no_snapshot",
+            "last_error": _scrub_secret(
+                coordinator._last_error, entry.data.get(CONF_API_KEY)
+            ),
+        }
 
     hourly = sorted(data.hourly.items())
 

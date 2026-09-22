@@ -125,6 +125,28 @@ async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -
     assert "**REDACTED**" in dump["coordinator"]["last_error"]
 
 
+async def test_diagnostics_scrubs_api_key_when_there_is_no_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """The early return for an entry with no price table handed back the
+    coordinator's last error as it stood, where the full dump scrubs the key
+    out of the same text: the one path of three the defence-in-depth
+    missed."""
+    secret = "TOKEN-IN-ERROR-TEXT"
+    entry = _entry_with_data(api_key=secret)
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={},
+        _historical_spot_quarters={},
+        data=None,
+        _last_error=f"ENTSO-E error url=...{secret}...",
+    )
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert secret not in str(dump)
+    assert dump["last_error"] == "ENTSO-E error url=...**REDACTED**..."
+
+
 async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> None:
     entry = _entry_with_data()
     entry.add_to_hass(hass)
