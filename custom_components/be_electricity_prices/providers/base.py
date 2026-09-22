@@ -1562,10 +1562,16 @@ def resolve_vreg_network_ceiling(
     :func:`resolve_brussels_power_term`.
 
     Identity outside the window the constants name, and identity on a card
-    already stating the figure, so this is free for the five suppliers that
-    read it correctly and fills it for the two that do not. It moves a bill
-    only where the cap binds, which is a low-volume connection on a high peak:
-    around 515 kWh a year at the 2,5 kW floor on Fluvius Zenne-Dijle.
+    already stating the figure, which four suppliers do (energie.be,
+    EnergyVision, Frank and Luminus); it fills the figure for the ten that
+    print none. Counted over the September 2026 Flanders cards. The two that
+    print a DIFFERENT figure, Mega and Bolt, are a third case and are
+    overwritten rather than filled.
+
+    It moves a bill only where the cap binds, which is a low-volume connection
+    on a high peak, and never at the 2,5 kW floor: see
+    :func:`_capped_capacity_annual` for where that is and why the floor makes
+    it so.
     """
     month = (delivery_month.year, delivery_month.month)
     if not (

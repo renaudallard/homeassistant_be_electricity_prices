@@ -176,12 +176,19 @@ def _capped_capacity_annual(
     wel minstens de minimumbijdrage van 2,5 kW." So the capped figure may not
     fall below 2,5 kW of the capacity rate.
 
-    That floor is not decoration. The ceiling binds only where capacity
-    dominates, which at the 2026 rates is under about 470 kWh a year, and in
-    exactly that region the headroom is small; without the floor the cap
-    reduces the charge below the regulated minimum and UNDER-bills. Applying a
-    ceiling without it is worse than applying neither, which is why it lands
-    before the overlays that populate the ceiling rather than after them.
+    That floor is not decoration, and it decides where the cap can bind at
+    all. AT the floor it cannot: the minimum the sandwich guarantees is the
+    same 2,5 kW of capacity the charge already is, so the ceiling has nothing
+    to take off and the figure comes back unchanged at every volume. Above it
+    the two diverge, and on Fluvius Zenne-Dijle at the 2026 rates the cap
+    reduces the charge below roughly 600, 800, 1.225, 1.850 and 2.450 kWh a
+    year at 3, 4, 6, 9 and 12 kW. Measured by driving this function, not from
+    the inequality: the earlier note here put the region at the floor, where
+    the floor itself rules it out.
+
+    Without the floor the cap would reduce the charge below the regulated
+    minimum and UNDER-bill, which is why it lands before the overlays that
+    populate the ceiling rather than after them.
 
     Returns ``capacity_annual`` unchanged when the card prints no ceiling,
     when the volume is unknown, or when the total is already under it.
