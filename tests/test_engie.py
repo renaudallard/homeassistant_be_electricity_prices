@@ -507,7 +507,7 @@ def test_epexdam_bands_are_not_lifted_from_the_other_leg() -> None:
     PDF interleaves them. Binding by document order paired the energy leg's
     Normal row with the INJECTION block's Heures pleines, which is a factor
     of two out. Each block is grouped from its own Normal row instead."""
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_cards import (
         _epexdam_formulas,
     )
 
@@ -544,7 +544,7 @@ def test_empty_house_is_mono_only() -> None:
 def test_energy_fund_selects_domicile_case() -> None:
     # Default (normal contracts) reads 'avec domicile' (0 on this card);
     # sans_domicile=True (Empty House) reads the 'sans domicile' 10,07.
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_overlays import (
         _extract_energy_fund,
     )
 
@@ -599,7 +599,7 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     consommations" row and deleted the cotisation line. Parsing must follow
     both shapes: the flat rate when present, the 0-3.000 kWh tier otherwise.
     """
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_overlays import (
         _extract_energy_contribution,
         _extract_federal_excise,
     )
@@ -631,7 +631,7 @@ def test_residential_degressive_excise_is_read_as_a_schedule() -> None:
     about 11 EUR a year at 25.000 kWh and 64 at 50.000, which a heat pump
     and a car reach.
     """
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_overlays import (
         _extract_federal_excise,
     )
 
@@ -752,7 +752,7 @@ def test_pro_dynamic_formula_is_not_grossed_at_parse_time() -> None:
     the card is otherwise VAT-inclusive. The professional card is ex-VAT
     throughout, so the formula stays as printed and vat_rate carries the
     21% for apply_vat to resolve."""
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_cards import (
         _FORMULA_RE,
     )
 
@@ -777,7 +777,7 @@ def test_pro_empower_still_yields_the_flextime_triplet() -> None:
 def test_pro_card_without_the_ex_vat_header_is_refused() -> None:
     """A professional card that started printing VAT-inclusive numbers
     would silently under-price by 21%. Fail loudly instead."""
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_cards import (
         _vat_multiplier,
     )
 
@@ -789,7 +789,7 @@ def test_pro_card_without_the_ex_vat_header_is_refused() -> None:
 def test_pro_excise_tier_bounds_are_whole_kwh() -> None:
     """The tier bound's dot is a thousands separator, not a decimal point.
     Reading 20.000 as twenty would band every site into the top tranche."""
-    from custom_components.be_electricity_prices.providers.engie import (
+    from custom_components.be_electricity_prices.providers._engie_overlays import (
         _extract_federal_excise,
     )
 

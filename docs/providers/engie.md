@@ -127,7 +127,7 @@ The dynamic formula is printed *hors TVA* on both. The residential parser
 therefore scales it by the parsed 6% multiplier so it matches the rest of that
 card; the professional parser leaves it as printed and lets `vat_rate` carry
 the 21%, since nothing else on that card is grossed either
-(`_vat_multiplier`, `engie.py`). A professional card that stops printing
+(`_vat_multiplier`, `_engie_cards.py`). A professional card that stops printing
 `Prix tva exclue` raises rather than silently under-pricing by 21%.
 
 Tier bounds are parsed with `_tier_bound_kwh` rather than `to_float`: the dot in
@@ -212,17 +212,17 @@ Fields pulled from the card:
 
 | Field | Helper | Notes |
 | --- | --- | --- |
-| Energy rates | `_extract_energy` (`engie.py`) | Branches on `TariffKind`; returns Fixed/Variable/Dynamic/TOU rates. |
-| Injection | `_extract_injection` (`engie.py`) | See taxonomy below. |
+| Energy rates | `_extract_energy` (`_engie_cards.py`) | Branches on `TariffKind`; returns Fixed/Variable/Dynamic/TOU rates. |
+| Injection | `_extract_injection` (`_engie_cards.py`) | See taxonomy below. |
 | Publication month label | `_extract_publication_month` (`engie.py`) | Anchored on `contrats conclus en <Month> <Year>`. |
-| Federal excise | `_extract_federal_excise` (`engie.py`) | Flat "Toutes consommations" row when present, else the 0-3000 kWh tier row. The federal scheme folded the energy contribution into the special excise and flattened it on 2026-08-01, so the August card dropped the four-tier table. The energy contribution row went with it and now defaults to 0 rather than raising. |
-| Energy contribution | `_extract_energy_contribution` (`engie.py`) | Comma-stripped digits reconstructed. |
-| Regional renewables | `_extract_consumption_renewables` (`engie.py`) | Trailing column of the Consommation row. |
-| Flemish energy fund | `_extract_energy_fund` (`engie.py`) | `avec`/`sans domicile` cases. |
+| Federal excise | `_extract_federal_excise` (`_engie_overlays.py`) | Flat "Toutes consommations" row when present, else the 0-3000 kWh tier row. The federal scheme folded the energy contribution into the special excise and flattened it on 2026-08-01, so the August card dropped the four-tier table. The energy contribution row went with it and now defaults to 0 rather than raising. |
+| Energy contribution | `_extract_energy_contribution` (`_engie_overlays.py`) | Comma-stripped digits reconstructed. |
+| Regional renewables | `_extract_consumption_renewables` (`_engie_overlays.py`) | Trailing column of the Consommation row. |
+| Flemish energy fund | `_extract_energy_fund` (`_engie_overlays.py`) | `avec`/`sans domicile` cases. |
 | Walloon connection fee | `_extract_connection_fee` (`engie.py`) | Wallonia only. |
-| Flanders DSOs | `_extract_flanders_dsos` (`engie.py`) | Digital-meter Fluvius table. |
-| Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py`) | 9/10-number rows, ORES divergence guard. |
-| Brussels DSO | `_extract_brussels_dsos` (`engie.py`) | Sibelga row + Brugel OSP table. |
+| Flanders DSOs | `_extract_flanders_dsos` (`_engie_overlays.py`) | Digital-meter Fluvius table. |
+| Wallonia DSOs | `_extract_wallonia_dsos` (`_engie_overlays.py`) | 9/10-number rows, ORES divergence guard. |
+| Brussels DSO | `_extract_brussels_dsos` (`_engie_overlays.py`) | Sibelga row + Brugel OSP table. |
 | `valid_until` | `parse_valid_until` (`_validity.py`) | Best-effort validity date. |
 
 ### The yearly-fee two-layout problem
@@ -267,7 +267,7 @@ visually-cheapest Flextime super-creuses column (`engie.py`, test
 ### Dynamic formula parsing and unit conversion
 
 Dynamic cards print `Formule de prix hors TVA <base> + (<factor> x eSpot_15)`.
-`_FORMULA_RE` (`engie.py`) accepts the full sign class `[SIGN_CHARS]` on both
+`_FORMULA_RE` (`_engie_cards.py`) accepts the full sign class `[SIGN_CHARS]` on both
 the base and the factor and routes each through `parse_sign` (`_parse.py`) so a
 re-render that swaps a hyphen-minus for a Unicode minus or en-dash does not
 silently miss (`engie.py`). The formula is printed pre-VAT, so factor and
@@ -288,13 +288,13 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 
 ### Tax-block parse hurdles
 
-- `_extract_energy_contribution` (`engie.py`): Engie's PDF strips the comma,
+- `_extract_energy_contribution` (`_engie_overlays.py`): Engie's PDF strips the comma,
   so `0,20417` renders as `020417`. The regex matches an optional separator and
   reconstructs the value as `0.<digits>` with a `\d{4,6}` quantifier
   (illustrative parsed value `0.0020417`, test `tests/test_engie.py`).
-- `_extract_federal_excise` (`engie.py`): anchored on
+- `_extract_federal_excise` (`_engie_overlays.py`): anchored on
   `Consommation entre 0 et 3.000 kWh`; mandatory across regions, raises on miss.
-- `_extract_consumption_renewables` (`engie.py`): takes the last number on
+- `_extract_consumption_renewables` (`_engie_overlays.py`): takes the last number on
   the Consommation row as the regional renewable surcharge (Flanders cogen +
   green, Wallonia green contribution, or Brussels green levy). Mandatory in every
   region (source comment `~1.5-3 c€/kWh`); raises on miss so a levy is never
@@ -307,7 +307,7 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 | fixed | `FixedRates` via `fixed_or_variable_rates` (`engie.py`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
 | variable | `VariableRates` via `fixed_or_variable_rates` (`engie.py`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
 | dynamic | `DynamicRates` (`engie.py`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
-| tou | `TimeOfUseRates` (`engie.py`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`, plus `month_indexed` and one `formula_factor_*` / `formula_base_*` pair per band from the `Flextime Heures ...` EPEXDAM rows, bound by the Normal row and held to reproduce each printed slot figure at the card's index (`_flextime_coefficients`). |
+| tou | `TimeOfUseRates` (`_engie_cards.py`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`, plus `month_indexed` and one `formula_factor_*` / `formula_base_*` pair per band from the `Flextime Heures ...` EPEXDAM rows, bound by the Normal row and held to reproduce each printed slot figure at the card's index (`_flextime_coefficients`). |
 
 Empower Flextime (`kind="tou"`) is the SMR3-only TOU billing mode of the Empower
 Variable product, sharing the same PDF (`engie.py`). It requires the 7-price
@@ -319,7 +319,7 @@ Engie publication (`engie.py`, framework schedule `base.py`).
 
 ## DSO overlay coverage
 
-### Flanders (`_extract_flanders_dsos`, `engie.py`)
+### Flanders (`_extract_flanders_dsos`, `_engie_overlays.py`)
 
 Reads the `Compteur digital` Fluvius table only (the analog table is ignored,
 `engie.py`). Fluvius distribution rates already include Elia transport
@@ -327,7 +327,7 @@ Reads the `Compteur digital` Fluvius table only (the analog table is ignored,
 rolls the full c€/kWh into `distribution_single` (`engie.py`, test
 `test_dynamic_flanders_dso_includes_transport_in_distribution`
 `tests/test_engie.py`). The eight Fluvius sub-areas are mapped through
-`_FLANDERS_LABELS` (`engie.py`); note the card labels do not match the
+`_FLANDERS_LABELS` (`_engie_overlays.py`); note the card labels do not match the
 canonical keys one-to-one:
 
 | Card label | Canonical key |
@@ -345,9 +345,9 @@ Each row yields capacity (`capacity_eur_per_kw_year`), distribution single,
 distribution exclusive-night (a lower dedicated night-meter rate), and the
 quarter-hourly data-management fee (`engie.py`).
 
-### Wallonia (`_extract_wallonia_dsos`, `engie.py`)
+### Wallonia (`_extract_wallonia_dsos`, `_engie_overlays.py`)
 
-Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py`): AIEG, AIESH,
+Five DSOs mapped via `_WALLONIA_LABELS` (`_engie_overlays.py`): AIEG, AIESH,
 `ORES (Brab. Wal.)` -> `ores`, `REGIE DE WAVRE` -> `rew`, `TECTEO - RESA` ->
 `resa`. Rows carry 10 numbers on static contracts (with a prosumer column) and 9
 on dynamic contracts (the prosumer column is replaced by nothing, since dynamic
@@ -370,7 +370,7 @@ Two gotchas guard this parser:
   every ORES customer the Brab. Wal. rate. Test
   `test_wallonia_ores_subarea_divergence_is_fatal` (`tests/test_engie.py`).
 
-### Brussels (`_extract_brussels_dsos`, `engie.py`)
+### Brussels (`_extract_brussels_dsos`, `_engie_overlays.py`)
 
 Reads the single Sibelga row (`engie.py`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
@@ -388,11 +388,11 @@ term (column 6), into `data_management_per_year` (`engie.py`, test
 | --- | --- | --- |
 | `federal_excise` | `_extract_federal_excise` | Any PDF (federal). |
 | `energy_contribution` | `_extract_energy_contribution` | Any PDF (federal). |
-| `flanders_renewables` | `_extract_consumption_renewables` | Flanders text only (`engie.py`). |
-| `wallonia_renewables` | `_extract_consumption_renewables` | Wallonia text only (`engie.py`). |
-| `brussels_renewables` | `_extract_consumption_renewables` | Brussels text only (`engie.py`). |
+| `flanders_renewables` | `_extract_consumption_renewables` | Flanders text only (`_engie_overlays.py`). |
+| `wallonia_renewables` | `_extract_consumption_renewables` | Wallonia text only (`_engie_overlays.py`). |
+| `brussels_renewables` | `_extract_consumption_renewables` | Brussels text only (`_engie_overlays.py`). |
 | `region_connection_fee` | `_extract_connection_fee` | Wallonia only (`engie.py`). |
-| `energy_fund_eur_per_month` | `_extract_energy_fund` | Flanders only (`engie.py`). |
+| `energy_fund_eur_per_month` | `_extract_energy_fund` | Flanders only (`_engie_overlays.py`). |
 | `vat_rate` | hardcoded `0.0` (`engie.py`) | Card is 6% VAT inclusive. |
 
 `vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py`).
@@ -415,7 +415,7 @@ unlike the mandatory levies which raise.
 
 ## Injection
 
-`_extract_injection` (`engie.py`) produces all three shapes of the injection
+`_extract_injection` (`_engie_cards.py`) produces all three shapes of the injection
 taxonomy (see [../pricing-model.md](../pricing-model.md)) depending on the
 contract:
 
@@ -439,10 +439,10 @@ contract:
   per month. The single `factor` / `base` stay empty: the Normal pair would be a
   fourth formula nothing reads (`test_flextime_injection_is_a_month_indexed_triplet`).
 - Hourly `factor * spot + base`: only for `kind == "dynamic"` when the card
-  carries a second BELPEX formula (`engie.py`). The second `_FORMULA_RE`
+  carries a second BELPEX formula (`_engie_cards.py`). The second `_FORMULA_RE`
   match is the injection formula. Residential injection is VAT-exempt
   (`base.py`), so it is not VAT-scaled: `factor = factor_pdf * 10` and
-  `base = base_pdf_cents / 100` (`engie.py`, no `vat` multiplier, contrast the
+  `base = base_pdf_cents / 100` (`_engie_cards.py`, no `vat` multiplier, contrast the
   consumption path). Test `test_dynamic_extracts_injection_formula`
   (`tests/test_engie.py`): illustrative `-1,3135 + (0,1000 x eSpot_15)` gives
   `factor == 1.0`, `base == -0.013135`, and the indicative `current == 0.09136`
@@ -464,7 +464,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - 6% VAT-inclusive convention with a pre-VAT dynamic formula. Everything on the
   card is VAT-incl (`vat_rate=0.0`), except the dynamic formula which is pre-VAT
   and scaled by the parsed multiplier (`engie.py`).
-- Missing-VAT-phrase fail-loud. `_vat_multiplier` (`engie.py`) requires the
+- Missing-VAT-phrase fail-loud. `_vat_multiplier` (`_engie_cards.py`) requires the
   `<N>% de tva comprise` phrase and raises `could not parse Engie dynamic VAT
   multiplier` if absent, rather than falling back to the shared helper's 6%
   default and masking a rate/wording change. Test
@@ -473,7 +473,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
   `Prix mensuels`), `engie.py`.
 - One PDF, three billing modes. Empower Variable and Empower Flextime share the
   same 7-column card; the parser returns bi-horaire rates for `variable` and the
-  Flextime triplet for `tou` from the same row (`engie.py`).
+  Flextime triplet for `tou` from the same row (`_engie_cards.py`).
 - `Prix mensuels` vs `Prix annuels estimés`. The variable card prints two
   Consommation rows; the extractor must take the monthly one (the first match),
   because the annual estimate over-bills by ~7% in a falling-price month (test
@@ -516,17 +516,17 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 If Engie re-renders its cards and the extractor breaks, inspect these functions in
 likely-to-break order:
 
-1. `_extract_energy` (`engie.py`): the yearly-fee anchors, the
+1. `_extract_energy` (`_engie_cards.py`): the yearly-fee anchors, the
    `Consommation(2)` column-count branches (4 / 7 / 1), and the c€/kWh division.
    Most layout drift surfaces here first (`yearly fee row not found`,
    `unexpected price column count`, `could not parse ... consumption block`).
-2. `_FORMULA_RE` and `_vat_multiplier` (`engie.py`): dynamic
+2. `_FORMULA_RE` and `_vat_multiplier` (`_engie_cards.py`): dynamic
    formula punctuation (sign chars, `eSpot_15` token) and the mandatory VAT
    phrase.
-3. `_extract_injection` (`engie.py`): the `Injection(3)` row column order and
+3. `_extract_injection` (`_engie_cards.py`): the `Injection(3)` row column order and
    the second-formula gate for dynamic.
-4. DSO row parsers (`_extract_flanders_dsos` `engie.py`,
-   `_extract_wallonia_dsos` `engie.py`, `_extract_brussels_dsos`
+4. DSO row parsers (`_extract_flanders_dsos` `_engie_overlays.py`,
+   `_extract_wallonia_dsos` `_engie_overlays.py`, `_extract_brussels_dsos`
    `engie.py`): the DSO-label-to-key maps, the digital-meter block boundary,
    the Wallonia 9/10-number split and ORES guard, and the Sibelga column order.
 5. The tax helpers (`_extract_federal_excise`, `_extract_energy_contribution`,
