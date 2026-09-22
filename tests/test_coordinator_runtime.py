@@ -4067,6 +4067,56 @@ async def test_prosumer_gap_is_silent_outside_the_compensation_regime(
     )
 
 
+async def test_a_tick_that_changed_nothing_writes_nothing(
+    hass: HomeAssistant,
+) -> None:
+    """The blob is rebuilt whole on every tick and is mostly slow-changing: the
+    card, the peak history, the spot cache and the compare rows are identical
+    on 23 ticks out of 24. An hourly entry rewrote 342 KB an hour for one
+    unchanged payload and a quarter-hourly one about 1 MB, which is 24 MB a day
+    per entry through HA's JSON encoder and onto the disk.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+        },
+    )
+    from types import SimpleNamespace as _namespace
+
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    saved = AsyncMock()
+    coord._store = _namespace(async_save=saved)  # type: ignore[assignment]
+
+    await coord._save_persistent()
+    assert saved.await_count == 1, "the first tick has to write"
+
+    # Nothing moved: the same payload is not written again.
+    await coord._save_persistent()
+    await coord._save_persistent()
+    assert saved.await_count == 1
+
+    # Something moved: it is.
+    coord._peak_kw = (coord._peak_kw or 0.0) + 1.0
+    await coord._save_persistent()
+    assert saved.await_count == 2
+
+    # And a failed write is not remembered as written, or the state it could
+    # not save would never be retried.
+    saved.side_effect = OSError("disk full")
+    coord._peak_kw += 1.0
+    with pytest.raises(OSError):
+        await coord._save_persistent()
+    saved.side_effect = None
+    await coord._save_persistent()
+    assert saved.await_count == 4
+
+
 async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
     hass: HomeAssistant,
 ) -> None:

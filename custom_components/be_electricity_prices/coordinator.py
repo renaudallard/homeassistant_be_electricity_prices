@@ -460,6 +460,11 @@ class BePricesCoordinator(
         self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
         self._snapshot_annual_kwh: float | None = None
+        # The last blob written to the Store, so a tick that changed nothing
+        # writes nothing. Not loaded from disk on startup: the first tick
+        # should write once, both to prove the file is writable and because a
+        # blob this version wrote differs from the one it read.
+        self._saved_payload: dict[str, Any] | None = None
         # The Brugel power term the snapshot was resolved against, stamped for
         # the same reason the volume is: the cache is a module global and so is
         # empty after a restart, the persisted card is resolved before the
@@ -1857,7 +1862,21 @@ class BePricesCoordinator(
             }
         if self.daily_compare is not None:
             payload["daily_compare"] = _daily_compare_to_dict(self.daily_compare)
+        # Nothing to write when nothing moved. The blob is rebuilt whole on
+        # every tick and is mostly slow-changing: the card, the peak history,
+        # the spot cache and the compare rows are identical on 23 ticks out of
+        # 24, so an hourly entry rewrote 342 KB an hour for one changed
+        # timestamp and a quarter-hourly one 1 MB, which is 24 MB a day per
+        # entry of disk and of HA's JSON encoder.
+        #
+        # Compared as the object, before ``async_save`` serialises it, so the
+        # skip costs a dict comparison and saves the encode as well as the
+        # write. The copy kept here is the payload itself, which nothing
+        # mutates afterwards: it is rebuilt from scratch each time.
+        if payload == self._saved_payload:
+            return
         await self._store.async_save(payload)
+        self._saved_payload = payload
 
 
 # ---- snapshot serialization for the HA Store ----------------------------------
