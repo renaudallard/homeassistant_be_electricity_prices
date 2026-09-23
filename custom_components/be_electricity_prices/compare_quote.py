@@ -40,10 +40,10 @@ local before: they close what would otherwise be an import cycle.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -466,6 +466,10 @@ def _covers_a_year(days_with_data: int) -> bool:
     return days_with_data >= MEASURED_FULL_YEAR_DAYS - MEASURED_YEAR_GAP_DAYS
 
 
+if TYPE_CHECKING:
+    from .energy_meters import MeasuredKwh
+
+
 @dataclass(frozen=True)
 class _AnnualVolume:
     """A yearly kWh figure with the days of history behind it and a label
@@ -482,6 +486,10 @@ class _AnnualVolume:
     # whether it has a volume worth pricing the tranche and the network
     # ceiling against.
     measured: bool = False
+    # The day/night register the figure is short of, when the pair could only
+    # be measured in part (``MeasuredKwh.pair_fault``); what the coordinator
+    # raises a Repairs card over.
+    pair_fault: str = ""
 
 
 async def _annual_volume(
@@ -528,6 +536,11 @@ async def _annual_volume(
     from .energy_meters import _measured_kwh
 
     measured = await _measured_kwh(hass, entry, start, end)
+    return replace(_volume_of(measured, entry), pair_fault=measured.pair_fault)
+
+
+def _volume_of(measured: MeasuredKwh, entry: ConfigEntry) -> _AnnualVolume:
+    """The three bands of :func:`_annual_volume`, from a measurement in hand."""
     days = measured.days_with_data
     if measured.kwh > 0 and _covers_a_year(days):
         # Scaled across whatever few days are missing. At this coverage the

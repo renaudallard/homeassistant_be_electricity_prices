@@ -678,7 +678,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Fourteen repair issues surface
+TimeoutError` rather than trailing off after the colon. Fifteen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -754,11 +754,17 @@ successful refresh:
   metering half of Sibelga's fixed charge and Brugel's sheet, which supplies
   the power half, could not be read. About 50 EUR a year is left out rather
   than guessed; the sheet is retried every six hours.
+- **`register_pair_incomplete_<entry>`** — one register of a day/night pair
+  records nothing, or stopped while its twin carries on (a rename, an
+  integration swap, a meter replacement). The pair is billed only on the
+  days both registers report, so the running cost reads low until it is
+  rewired; the card names the sensor. A register that merely started late
+  is not reported, since it records to date.
 
-  The first five of those seven are not failures either: each clears when the
+  The first five of those eight are not failures either: each clears when the
   supplier prints the missing row again, the direct-debit one clears as soon
-  as the question is answered, and the Brussels one as soon as Brugel's sheet
-  can be read.
+  as the question is answered, the Brussels one as soon as Brugel's sheet
+  can be read, and the register one as soon as both halves report again.
 
 ### `be_electricity_prices.refresh` service
 

@@ -486,6 +486,7 @@ Repairs issues, all keyed by `entry_id`:
 | `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor |
 | `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row |
 | `prosumer_tariff_missing` | `_sync_prosumer_gap_issue` | the entry is a Walloon compensation install (`_compensation_kva` above zero) and its DSO overlay carries no `prosumer_eur_per_kva_year`, i.e. a card that omits the "Tarif prosumer" column |
+| `register_pair_incomplete` | `_sync_register_pair_issue` | the daily volume read (`_ensure_annual_volume`, `coordinator_snapshot.py`) found a day/night register that records nothing or stopped while its twin carries on (`MeasuredKwh.pair_fault`), on the consumption pair or on a wired injection pair; a register that merely started late is not named |
 
 The first four are failure states and clear on a successful refresh, as do
 `connection_fee_missing` and `prosumer_tariff_missing` once the supplier prints

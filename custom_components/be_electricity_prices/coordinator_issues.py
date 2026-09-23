@@ -111,6 +111,7 @@ class _IssuesMixin:
     _snapshot_probe_key: str | None
     _last_error: str | None
     _supplier_tuple: tuple[str, str, str]
+    _register_pair_fault: str
 
     if TYPE_CHECKING:
         # Provided by DataUpdateCoordinator and the sibling mixins, which only
@@ -258,6 +259,23 @@ class _IssuesMixin:
             "connection_fee_missing",
             self._snapshot is not None
             and self._snapshot.taxes.region_connection_fee_unavailable,
+        )
+
+    def _sync_register_pair_issue(self) -> None:
+        """Flag a day/night register that stopped, or never recorded.
+
+        A pair is billed only on the days both halves report, and not at all
+        while one records nothing, so a register that went silent after a
+        rename, an integration swap or a meter replacement leaves the running
+        cost short without any error: the figure is simply lower, and the
+        coverage attributes are the only other trace. The log says which
+        sensor, once a day, where few look; this says it where Home Assistant
+        collects what needs fixing, and clears the moment the pair is whole.
+        """
+        self._sync_issue(
+            "register_pair_incomplete",
+            bool(self._register_pair_fault),
+            extra={"entities": self._register_pair_fault},
         )
 
     def _sync_prosumer_gap_issue(self) -> None:

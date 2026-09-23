@@ -2547,9 +2547,70 @@ _REPAIR_ISSUE_KINDS = (
     "impact_rates_missing",
     "connection_fee_missing",
     "prosumer_tariff_missing",
+    "register_pair_incomplete",
     "direct_debit_unanswered",
     "brussels_power_term_missing",
 )
+
+
+async def test_a_stopped_register_is_named_in_repairs_and_cleared(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A pair is billed only where both halves report, so a register that went
+    silent leaves the running cost short with no error at all. The daily
+    volume read names it, the injection pair included, and the card clears
+    once the pair is whole again."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "day_injection_kwh": "sensor.day_inj",
+            "night_injection_kwh": "sensor.night_inj",
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    volume = compare_quote._AnnualVolume(
+        3500.0, 365, "measured", measured=True, pair_fault="sensor.night_cons"
+    )
+    with (
+        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
+        patch.object(
+            coordinator_snapshot,
+            "_measured_kwh",
+            AsyncMock(return_value=MeasuredKwh(900.0, 300, "sensor.night_inj")),
+        ),
+    ):
+        await coord._ensure_annual_volume()
+    assert coord._register_pair_fault == "sensor.night_cons, sensor.night_inj"
+
+    issue_id = f"register_pair_incomplete_{entry.entry_id}"
+    registry = ir.async_get(hass)
+    coord._sync_register_pair_issue()
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["entities"] == (
+        "sensor.night_cons, sensor.night_inj"
+    )
+
+    coord._register_pair_fault = ""
+    coord._sync_register_pair_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
 def test_repair_issue_kinds_match_the_declared_strings() -> None:

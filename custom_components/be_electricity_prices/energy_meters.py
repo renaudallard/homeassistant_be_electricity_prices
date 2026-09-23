@@ -80,6 +80,12 @@ _LOGGER = logging.getLogger(__name__)
 
 _K = TypeVar("_K")
 
+# How far a register's latest day may trail its twin's before it counts as
+# stopped. Statistics compile an hour behind and today's live reading can be
+# missing for one sensor, so a register a day behind is normal; two means it
+# is no longer recording.
+_REGISTER_STOPPED_AFTER_DAYS = 2
+
 
 async def _recorder_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
@@ -779,6 +785,13 @@ class MeasuredKwh:
 
     kwh: float
     days_with_data: int
+    # The register(s) of a day/night pair that record nothing, or stopped
+    # while the other half carries on, comma-separated; empty when the pair is
+    # whole or none is wired. What the Repairs card names, since the figure
+    # itself only says that less was billed, not which sensor to look at. A
+    # register that merely STARTED late is not named: after a rename the user
+    # fixed, the new entity reports to date and the pair is whole again.
+    pair_fault: str = ""
 
 
 def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] | None:
@@ -849,6 +862,9 @@ async def _measured_kwh(
                 day_id if d else night_id,
                 side,
             )
+            return MeasuredKwh(0.0, 0, pair_fault=night_id if d else day_id)
+        if not d:
+            # Neither half has recorded anything in the window yet.
             return MeasuredKwh(0.0, 0)
         if len(days) < len(d) or len(days) < len(n):
             # Both halves report, but not on the same days: one stopped, or
@@ -868,7 +884,15 @@ async def _measured_kwh(
                 side,
                 len(days),
             )
-        return MeasuredKwh(sum(d[x] + n[x] for x in days), len(days))
+        latest = max(max(d), max(n))
+        stopped = ", ".join(
+            entity_id
+            for entity_id, reported in ((day_id, d), (night_id, n))
+            if max(reported) < latest - timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
+        )
+        return MeasuredKwh(
+            sum(d[x] + n[x] for x in days), len(days), pair_fault=stopped
+        )
     if total_id:
         d = await _recorder_daily_kwh(hass, total_id, start, end)
         return MeasuredKwh(sum(d.values()), len(d))

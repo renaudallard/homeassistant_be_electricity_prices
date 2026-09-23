@@ -1906,7 +1906,7 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
             d0 + timedelta(days=59),
         )
     # Refused outright rather than billed at half, and said out loud.
-    assert got == energy_meters.MeasuredKwh(0.0, 0)
+    assert got == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
     assert "sensor.night" in caplog.text
 
 
@@ -2314,6 +2314,43 @@ async def test_recorder_daily_kwh_swallows_recorder_errors(
 
 
 # ---- _measured_kwh (metered total plus how much of the window it covers) -----
+
+
+async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
+    hass: HomeAssistant,
+) -> None:
+    """The Repairs card names the sensor to look at: one that records nothing,
+    or stopped while its twin carries on. A register that only STARTED late
+    reports to date, which is where a fixed rename leaves the pair, so it is
+    not named: a card raised for a year over a problem already fixed would be
+    one users learn to ignore."""
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+        }
+    )
+    d0 = date(2026, 1, 1)
+    end = d0 + timedelta(days=59)
+    spans: dict[str, range] = {}
+
+    async def _rows(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {d0 + timedelta(days=i): 1.0 for i in spans[entity_id]}
+
+    async def _fault(day: range, night: range) -> str:
+        spans.update({"sensor.day": day, "sensor.night": night})
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_rows):
+            got = await energy_meters._measured_kwh(hass, entry, d0, end)  # type: ignore[arg-type]
+        return got.pair_fault
+
+    assert await _fault(range(60), range(60)) == ""
+    assert await _fault(range(60), range(0)) == "sensor.night"
+    assert await _fault(range(60), range(10)) == "sensor.night"
+    assert await _fault(range(60), range(30, 60)) == ""
+    # A day behind is statistics catching up, not a stopped register.
+    assert await _fault(range(60), range(59)) == ""
 
 
 async def test_measured_kwh_counts_days_across_a_register_pair(

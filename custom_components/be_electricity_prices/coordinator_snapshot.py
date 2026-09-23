@@ -32,6 +32,7 @@ a probe key match where the supplier offers one, a TTL otherwise."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from .brugel import cached_power_term
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
@@ -52,6 +53,7 @@ from .snapshot_store import (
     _shared_failed_fetches,
     fetch_shared,
 )
+from .energy_meters import _kwh_sensor_ids, _measured_kwh
 from .snapshot_months import card_for_unreadable_month
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -101,6 +103,7 @@ class _SnapshotMixin:
     _annual_kwh: float | None
     _annual_kwh_full_year: bool
     _annual_kwh_day: date | None
+    _register_pair_fault: str
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_fetched_at: datetime | None
@@ -204,6 +207,22 @@ class _SnapshotMixin:
         self._annual_kwh_full_year = volume.measured and _covers_a_year(
             volume.days_with_data
         )
+        # The same trailing year read for the injection side, only where an
+        # injection register PAIR is wired: that is the one wiring whose half
+        # can go silent, and every other entry pays nothing for the check.
+        faults = [volume.pair_fault]
+        day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
+        if day_id and night_id:
+            with contextlib.suppress(Exception):
+                injected = await _measured_kwh(
+                    self.hass,
+                    self.entry,
+                    today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
+                    today,
+                    side="injection",
+                )
+                faults.append(injected.pair_fault)
+        self._register_pair_fault = ", ".join(f for f in faults if f)
 
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.

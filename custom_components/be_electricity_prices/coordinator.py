@@ -191,6 +191,10 @@ class BePricesCoordinator(
         # scaled up to one. Only the first outranks a volume a business typed.
         self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
+        # The day/night register(s) the daily measurement found silent or
+        # stopped, which the Repairs card names; empty while every pair is
+        # whole.
+        self._register_pair_fault: str = ""
         self._snapshot_annual_kwh: float | None = None
         # The last blob written to the Store, so a tick that changed nothing
         # writes nothing. Not loaded from disk on startup: the first tick
