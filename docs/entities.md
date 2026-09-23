@@ -107,6 +107,7 @@ pulls (all fields defined at `coordinator.py`).
 | Taxes component | `taxes_component` | - | MEASUREMENT | EUR/kWh | current slot `PriceBreakdown.taxes` |
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
+| EV home charging rate (CREG) | `ev_home_charging_rate` | - | MEASUREMENT | EUR/kWh | `ev_home_charging_rate_eur_per_kwh`, the CREG reimbursement rate for the entry's region this quarter (`creg_ev.py`); unavailable until the regulator's file has been read. Carries `quarter_start`, `region`, `source` and an unrecorded `history` of every published quarter |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
 | Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
@@ -169,8 +170,11 @@ issue.
 
 ### extra_state_attributes
 
-`current_price` always carries extra attributes, and `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py`);
+`current_price` always carries extra attributes, `injection_price` carries
+`today`/`tomorrow` arrays when its injection varies intra-day, and
+`ev_home_charging_rate` carries the quarter its state is the rate of plus the
+regulator's whole series as `history`, so an automation can settle last
+quarter's kWh at last quarter's rate once the state has moved on (`sensor.py`);
 every other sensor returns `{}`.
 
 #### `current_price`

@@ -814,3 +814,38 @@ SPP-weighted value is much closer than the plain mean but not the exact settled
 figure a supplier prints on its card. Scraped SPP-indexed suppliers (DATS 24,
 EBEM, Ecofix Flexy) are unaffected: they print the realized value and the
 integration reads it into `InjectionRates.current` directly.
+
+## Part 4: the CREG home charging reimbursement rate (`creg_ev.py`)
+
+### Why it exists
+
+Circular 2024/C/77 lets an employer repay the electricity an employee puts
+into a company car at home at a flat rate per metered kWh, free of tax and
+social contributions, up to the rate the CREG publishes per region and per
+quarter; most car policies pay exactly that rate. No supplier card prints it
+and it is not part of the all-in price, so it is its own sensor,
+`ev_home_charging_rate`, read off the CSV the CREG publishes beside its page.
+
+### What it fetches and how
+
+`creg.be/sites/default/files/assets/Prices/CREG_Tariff_EV.csv`: one row per
+month, `Year;Month;` then a monthly price and a three-month mean per region,
+Flanders, Brussels, Wallonia in that order, in cents with a decimal comma,
+behind a byte-order mark. The mean is filled on one row in three, the last
+month of the window it averages, and it is the rate of the quarter starting
+three months later: the `2026;7` row averages May to July and is the `Q4/2026`
+rate the page prints. `parse` reads the six figures by position, because the
+headers name the meter each series is computed on and that wording is more
+likely to change than the layout. A row that does not read as year and month,
+a mean landing on no quarter start, or a figure outside 5 to 100 c/kWh is
+skipped on its own.
+
+### Caching and failure
+
+`ensure_rates` runs in the coordinator tick after the snapshot and fetches at
+most once per quarter, under one module lock so the entries that tick together
+cost one download. `rate_for` and `history` read the table synchronously, for
+the tick's record and the sensor's attributes. A failure logs, records a
+six-hour backoff and keeps the previous table, so a quarter already fetched
+keeps answering while the CREG is down; a first fetch that fails leaves the
+sensor unavailable. Nothing here raises, for the reason `brugel.py` gives.

@@ -843,6 +843,9 @@
       "energy_fund_eur_per_month": {
         "name": "Energy fund per month"
       },
+      "ev_home_charging_rate": {
+        "name": "EV home charging rate (CREG)"
+      },
       "current_year_cost": {
         "name": "Current year cost"
       },
