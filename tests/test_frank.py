@@ -365,6 +365,21 @@ def test_the_title_dates_a_card_whose_validity_sentence_is_wrong() -> None:
     assert snap.valid_until == date(2026, 9, 30)
 
 
+def test_a_title_naming_no_month_falls_back_to_the_validity_sentence() -> None:
+    """The title is read first, but the March 2026 cards lay it out cut short
+    ("... maart 202"), so it names no month there. The validity sentence under
+    it is then what dates the card, as it did before the title was read."""
+    from custom_components.be_electricity_prices.providers.frank import _valid_until
+
+    text = fixture_text("frank_dynamic_jn_sep.pdf", layout=True)
+    title, _, rest = text.lstrip().partition("\n")
+    assert title.endswith("september 2026")
+    cut = title.removesuffix("2026") + "202"
+    # The sentence on this card says August, which is how the test tells the
+    # fallback from the title.
+    assert _valid_until(f"{cut}\n{rest}") == date(2026, 8, 31)
+
+
 # ---- registration ---------------------------------------------------------------
 
 
