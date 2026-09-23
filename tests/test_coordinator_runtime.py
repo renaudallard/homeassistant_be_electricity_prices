@@ -3469,6 +3469,28 @@ async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
     assert coord._peak_kw == 2.4
 
 
+async def test_a_reading_from_earlier_in_the_month_still_counts(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The guard above drops a reading written before the MONTH began, not
+    before today. A maximum the meter set on the 5th and has not beaten since
+    is still this month's on the 10th, and an entry starting then (or one
+    whose running peak the reset button just cleared) has nothing else to go
+    on: skipping it billed the month at the regulated floor until the meter
+    set a new maximum."""
+    entity_id = "sensor.dsmr_maximum_demand_current_month"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+
+    freezer.move_to("2026-10-05 19:15:00+02:00")
+    hass.states.async_set(entity_id, "3.1", {"unit_of_measurement": "kW"})
+
+    freezer.move_to("2026-10-10 12:00:00+02:00")
+    coord = BePricesCoordinator(hass, entry)
+    await coord._track_monthly_peak()
+    assert coord._peak_kw == 3.1
+
+
 async def test_the_peak_window_is_pruned_by_date_not_by_count(
     hass: HomeAssistant, freezer: Any
 ) -> None:
