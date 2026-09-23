@@ -690,6 +690,14 @@ split by segment.
 registry, because every product Mega sells to businesses it also sells residentially today --
 the two baselines are identical until the day they are not.
 
+A `discover()` that comes back empty fails its row (`<supplier>/catalog: discover() returned no
+ids`), since a supplier that still trades always has a catalog. A `discover()` whose listing fails
+to load or no longer matches usually returns an empty set rather than raising, so this row is often
+the only sign that a supplier's new products have gone unseen. It used to pass with
+a warning on stderr, and Luminus's sitemap turning into an index kept its products unseen for at
+least the first three weeks of September 2026. A withdrawn supplier's empty discovery is marked
+expected and files nothing (`test_a_discovery_that_sees_nothing_fails`).
+
 ### Exit codes and the two report side-channels
 
 `_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog` and `tax` kinds. The

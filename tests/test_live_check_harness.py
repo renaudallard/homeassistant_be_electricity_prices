@@ -2662,6 +2662,31 @@ def test_a_withdrawn_suppliers_catalog_failure_does_not_set_the_exit_bit() -> No
     assert lc._catalog_gates_ci(rows) is True
 
 
+def test_a_discovery_that_sees_nothing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty discovery passed with a warning on stderr. Luminus's sitemap
+    became an index, its discover() found nothing, and new products at
+    Luminus went unseen for weeks behind a green run. A supplier that is
+    still trading always has a catalog, so an empty one fails; a withdrawn
+    supplier's does not set the bit."""
+
+    async def _nothing(_session: Any) -> set[str]:
+        return set()
+
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 9, 23)))
+    modules = {
+        "luminus": SimpleNamespace(discover=_nothing),
+        "dats24": SimpleNamespace(discover=_nothing),
+    }
+    asyncio.run(lc._check_catalogs(None, modules))  # type: ignore[arg-type]
+    luminus, dats24 = lc.CHECKS
+    assert luminus.label == "luminus/catalog: discover() returned no ids"
+    assert not luminus.ok and not luminus.expected
+    assert not dats24.ok and dats24.expected
+    assert lc._catalog_gates_ci([dats24]) is False
+    assert lc._catalog_gates_ci(lc.CHECKS) is True
+
+
 def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> None:
     """A floor at zero sized the bound on tariff economics rather than on the
     unit slip it exists to catch. The row that lowered it, OCTA+ Dynamic's

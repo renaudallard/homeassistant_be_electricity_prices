@@ -1137,7 +1137,10 @@ changed since the morning's archive walk is rendered again:
   public listing page; any product visible at the supplier but missing
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
-  and a catalogue addition stay in distinct threads.
+  and a catalogue addition stay in distinct threads. A discovery that
+  sees no product at all files in the same thread, as
+  `[live-check] supplier product discovery failed …`, since it means that
+  supplier's new products would go unseen.
 - **Freshness phase** — for the eight supplier-families that pick a card
   from several advertised ones, the card actually resolved is compared
   against the newest one the supplier advertises. A superseded card still

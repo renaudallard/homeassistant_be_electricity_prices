@@ -1809,22 +1809,17 @@ async def _check_catalogs(
             )
             continue
         if not discovered:
-            # discover() returned an empty set: either a transient listing
-            # fetch failure or a discovery surface that changed shape.
-            # Catalog signals aren't retried and we can't open an issue on
-            # a transient blip, but a persistently empty result means all
-            # new-product coverage for this supplier is silently gone. Log
-            # it on stderr AND record a tracked (non-failing) catalog Check
-            # so the emptiness shows up in the structured results and the
-            # run history, not only buried in the CI log.
-            print(
-                f"warning: {name}/catalog: discover() returned no ids "
-                "(listing fetch failed or discovery surface changed)",
-                file=sys.stderr,
-            )
+            # discover() returned an empty set: either a listing fetch that
+            # failed or a discovery surface that changed shape. A supplier
+            # with registered contracts never has an empty catalog, so this
+            # fails. It used to pass with a warning on stderr, and Luminus's
+            # re-sharded sitemap kept its new products unseen for at least
+            # the first three weeks of September 2026 while nothing failed
+            # and nobody looked. A supplier that has left the market is
+            # marked withdrawn by _record and files nothing.
             _record(
                 f"{name}/catalog: discover() returned no ids",
-                True,
+                False,
                 "listing fetch failed or discovery surface changed",
                 kind="catalog",
             )
