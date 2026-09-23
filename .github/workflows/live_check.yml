@@ -407,12 +407,22 @@ jobs:
             cat tax_report.md
           } > tax_issue_body.md
 
+          # Titled after what failed, as the products issue is. Two of the
+          # rows are reminders to move a constant before its window lapses,
+          # and filed as a supplier's block they sent the triager looking for
+          # a card printing a wrong levy.
+          if [ -s tax_failures.txt ] \
+            && ! grep -qv 'window needs extending$' tax_failures.txt; then
+            title='[live-check] a federal constant window needs extending'
+          else
+            title="[live-check] a supplier's federal tax block disagrees"
+          fi
           # On the failing labels, for the same reason as the products
           # issue, and because a row's detail counts the other suppliers,
           # which moves whenever one of them publishes its month.
           bash scripts/file_ci_issue.sh \
             --label 'live-check-tax' \
-            --title "[live-check] a supplier's federal tax block disagrees" \
+            --title "$title" \
             --body tax_issue_body.md \
             --fingerprint tax_failures.txt \
             --workflow .github/workflows/live_check.yml

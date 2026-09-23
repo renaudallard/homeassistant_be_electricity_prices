@@ -1826,8 +1826,13 @@ def test_a_spot_fallback_outage_is_retried_like_a_card_fetch(
     assert "## Failures" not in (tmp_path / "catalog_report.md").read_text()
 
 
-def _file_catalog_issue(tmp_path: Path, failures: str) -> str:
-    """Run the new-products step's shell out of live_check.yml over a report
+def _file_catalog_issue(
+    tmp_path: Path,
+    failures: str,
+    step: str = "Open or update new-products issue",
+    kind: str = "catalog",
+) -> str:
+    """Run an issue step's shell out of live_check.yml over a ``kind`` report
     carrying ``failures``, with file_ci_issue.sh stubbed, and return the
     title it would file under."""
     import yaml  # type: ignore[import-untyped]
@@ -1838,9 +1843,7 @@ def _file_catalog_issue(tmp_path: Path, failures: str) -> str:
         ).read_text()
     )
     script = next(
-        s["run"]
-        for s in workflow["jobs"]["check"]["steps"]
-        if s.get("name") == "Open or update new-products issue"
+        s["run"] for s in workflow["jobs"]["check"]["steps"] if s.get("name") == step
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
@@ -1848,8 +1851,8 @@ def _file_catalog_issue(tmp_path: Path, failures: str) -> str:
         'while [ $# -gt 0 ]; do [ "$1" = --title ] && printf %s "$2" > title; '
         "shift; done\n"
     )
-    (tmp_path / "catalog_report.md").write_text("## Failures\n")
-    (tmp_path / "catalog_failures.txt").write_text(failures)
+    (tmp_path / f"{kind}_report.md").write_text("## Failures\n")
+    (tmp_path / f"{kind}_failures.txt").write_text(failures)
     subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
     return (tmp_path / "title").read_text()
 
@@ -1869,6 +1872,31 @@ def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     assert _file_catalog_issue(blind, "luminus/catalog: discovery raised\n") == (
         "[live-check] supplier product discovery failed"
     )
+
+
+def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
+    """From 6 November 2026 the excise and VREG window reminders fail every
+    night, and they filed as "a supplier's federal tax block disagrees",
+    which sends the triager looking for a card printing a wrong levy."""
+    step = "Open or update tax-block issue"
+    reminders = tmp_path / "reminders"
+    reminders.mkdir()
+    assert _file_catalog_issue(
+        reminders,
+        "_federal: the VREG ceiling window needs extending\n"
+        "_federal: the excise window needs extending\n",
+        step,
+        "tax",
+    ) == ("[live-check] a federal constant window needs extending")
+    supplier = tmp_path / "supplier"
+    supplier.mkdir()
+    assert _file_catalog_issue(
+        supplier,
+        "_federal: the excise window needs extending\n"
+        "mega/VREG ceiling disagrees for 2026-11\n",
+        step,
+        "tax",
+    ) == ("[live-check] a supplier's federal tax block disagrees")
 
 
 def _failures(run: Callable[[], None]) -> list[str]:

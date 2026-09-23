@@ -1132,14 +1132,17 @@ the script through a fake `gh`.
 | bit 0 (rc 1/3/5/7) | Open or update extractor-broken issue | `live-check-extractor` | `[live-check] supplier extractor broken` |
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected`, or `[live-check] supplier product discovery failed` when no new product is among the failures |
-| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees`, or `[live-check] a federal constant window needs extending` when every failure is a window reminder |
 
 The tax report carries four kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
 (`_check_vreg_ceiling_consensus`), and the standing requests to extend each window before it
 lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until eight weeks out).
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
-and fail no pull request.
+and fail no pull request. The issue is titled after what failed, as the products one is: a run
+whose only failures are the window reminders files under the window title, so the triager is
+not sent looking for a card printing a wrong levy. An issue already open keeps its title, since
+the thread is found by its label.
 
 A disagreement that has been looked at and decided goes in `_KNOWN_TAX_BLOCKS`
 (`scripts/live_check.py`) and is then reported in its own section without filing: the
