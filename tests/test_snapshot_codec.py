@@ -125,3 +125,70 @@ def test_a_settled_index_is_written_only_when_the_month_has_one() -> None:
         row = _snapshot_to_dict(settled, NOW)
         assert row["injection"]["index_realised"] == index
         assert _snapshot_from_dict(row).injection == settled.injection
+
+
+def test_the_codec_writes_every_snapshot_field() -> None:
+    """The encoder names the top-level fields by hand, and nothing held the
+    list to the dataclass: a field added to SupplierSnapshot without a line
+    here is written by no path, read back at its default from every stored
+    snapshot, month row and archive row, and the whole suite stayed green.
+    Thirteen of the existing ones could be dropped the same way, eleven of
+    them the welcome-credit and direct-debit terms a signing cohort reads.
+    ``provisional`` is the one left out on purpose: a provisional row is never
+    written."""
+    from dataclasses import fields
+
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierSnapshot,
+    )
+
+    written = set(_snapshot_to_dict(make_snapshot(), NOW)) - {
+        "_cached_at",
+        "_probe_key",
+        "_schema_version",
+        "energy_kind",
+    }
+    assert written == {f.name for f in fields(SupplierSnapshot)} - {"provisional"}
+
+
+def test_every_snapshot_field_survives_the_round_trip() -> None:
+    """Written is half of it; each field also has to be read back. Every one
+    is set off its default here, and the table has to name every field the
+    dataclass defaults, so a new one fails until it is added."""
+    from dataclasses import MISSING, fields, replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierSnapshot,
+    )
+
+    values: dict[str, object] = {
+        "publication_label": "09/2026",
+        "injection": InjectionRates(current=0.05),
+        "supplier_prosumer_eur_per_kva_year": 37.1,
+        "valid_until": date(2026, 9, 30),
+        "welcome_credit_eur": 74.2,
+        "welcome_credit_kind": WELCOME_CREDIT_ANNIVERSARY,
+        "direct_debit_discount_eur": 12.0,
+        "welcome_credit_eur_per_kwh": 0.0424,
+        "welcome_credit_cap_eur": 848.0,
+        "welcome_credit_direct_debit_eur": 42.4,
+        "welcome_credit_requires_direct_debit": True,
+        "welcome_credit_pct_of_energy": 0.33,
+        "welcome_credit_kwh": 750.0,
+        "welcome_credit_excludes_night_meter": True,
+        "welcome_credit_after_months": 14,
+    }
+    defaulted = {
+        f.name
+        for f in fields(SupplierSnapshot)
+        if f.default is not MISSING or f.default_factory is not MISSING
+    }
+    assert set(values) == defaulted - {"provisional"}
+    snap = replace(make_snapshot(), **values)  # type: ignore[arg-type]
+    back = _snapshot_from_dict(_snapshot_to_dict(snap, NOW))
+    for name in values:
+        assert getattr(back, name) == getattr(snap, name), name
