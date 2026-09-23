@@ -120,8 +120,11 @@ async def _no_sleep(_seconds: float) -> None:
 
 # Written out rather than read off _READERS, which is what is being checked:
 # the two text readers the extractors call, and the OCR engine the archiver
-# reads Ecofix's page-image cards with (ocr_price_cards).
-@pytest.mark.parametrize("reader", ["pypdf", "pdfplumber", "ocr-price-cards"])
+# reads Ecofix's page-image cards with (ocr_price_cards), with the page
+# rasterizer and the array library it reads them through.
+@pytest.mark.parametrize(
+    "reader", ["pypdf", "pdfplumber", "ocr-price-cards", "pypdfium2", "numpy"]
+)
 def test_the_parser_digest_moves_with_the_reader_versions(
     monkeypatch: pytest.MonkeyPatch, reader: str
 ) -> None:

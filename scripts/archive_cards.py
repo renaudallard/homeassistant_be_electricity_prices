@@ -182,8 +182,11 @@ _PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_codec.py")
 # The readers whose installed version is part of what a parse depends on:
 # the two PDF text readers, and the OCR engine every Ecofix row since August
 # 2026 is read with. The engine reads only the cards published as page
-# images, so its moving alone re-renders those and nothing else.
-_OCR_READERS = ("ocr-price-cards",)
+# images, so its moving alone re-renders those and nothing else. It takes a
+# page's pixels from pypdfium2 and matches glyphs with numpy, both installed
+# unpinned beside it, so either moving is the engine moving: pypdfium2 does
+# not feed the text readers.
+_OCR_READERS = ("ocr-price-cards", "pypdfium2", "numpy")
 _READERS = ("pypdf", "pdfplumber", *_OCR_READERS)
 
 

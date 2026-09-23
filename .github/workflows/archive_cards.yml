@@ -73,7 +73,8 @@ jobs:
           # The reader for cards published as page images. Installed here and
           # nowhere else: an installation never runs OCR, it reads the rows
           # this walk writes. Unconstrained because its numpy and pypdfium2
-          # are its own business and the test suite pins neither.
+          # are its own business and the test suite pins neither; the parser
+          # stamp records both, so a release of either reads those cards again.
           pip install \
             "ocr-price-cards @ git+https://github.com/renaudallard/ocr_price_cards@main"
 

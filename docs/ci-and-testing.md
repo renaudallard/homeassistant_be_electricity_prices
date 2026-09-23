@@ -877,7 +877,8 @@ older than the retention alongside the rows.
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
 plus the installed `pypdf`, `pdfplumber` and OCR engine versions, the last with the git commit
-it was installed from, since a reader release lays a card out
+it was installed from and beside the `pypdfium2` and `numpy` it reads a page's pixels through,
+since a reader release lays a card out
 differently and a stored text is served to every replay and to the live check for as long as the
 card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
 archive's `parser.txt`; when they differ it replays every stored row (`_replay_row`,
@@ -926,7 +927,8 @@ workflow gives that run the six-hour budget a dispatched re-render gets (`rerend
 `Size the walk's budget`). An OCR engine move alone reads again only the cards read off their
 pixels, the sources marked `ocr`, and serves every other card its stored text within the usual
 budget: the engine is installed from its main branch, so any commit there moves its version, and
-only a page-image card can come out differently. A row is rewritten only
+only a page-image card can come out differently. A `pypdfium2` or `numpy` release counts as the
+engine moving. A row is rewritten only
 when what a source was or what it parsed to changed: the path of the text it was read from is
 not compared, because a listing page with a nonce or a render that is not byte-stable would
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
