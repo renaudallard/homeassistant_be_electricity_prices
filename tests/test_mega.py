@@ -667,6 +667,9 @@ def test_a_fixed_card_fixes_its_feed_in_price_for_the_term(
     snap = parse_snapshot(contract, fixture_text(fixture), region)
     assert snap.injection is not None
     assert snap.injection.fixed_for_term is fixed
+
+
+def test_the_dynamic_anchor_does_not_bind_the_monthly_formula() -> None:
     """Both card generations contain the literal "formule suivante (HTVA)",
     so widening the dynamic anchor to accept "Epex SPP" would let it bind
     this MONTHLY formula and price it at the current slot's spot. The two
