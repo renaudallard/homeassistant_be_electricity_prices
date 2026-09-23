@@ -3456,6 +3456,46 @@ async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
     assert coord._peak_kw == 2.4
 
 
+async def test_the_peak_window_is_pruned_by_date_not_by_count(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month that banked no reading leaves no key, so counting keys kept a
+    peak from outside the twelve-month window alive whenever the window had a
+    gap, and it went on dragging the Fluvius mean: +0,48 kW, about 22 EUR a
+    year, per month lost. Every fixture held eleven months in a row, where
+    counting and dating drop the same key, so putting the count back left
+    every test green. A May 2026 rollover with February missing keeps March
+    2025 out of a window that starts in June 2025."""
+    entity_id = "sensor.dsmr_maximum_demand_current_month"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {
+        month: 5.0
+        for month in (
+            "2025-03-01",
+            "2025-06-01",
+            "2025-07-01",
+            "2025-08-01",
+            "2025-09-01",
+            "2025-10-01",
+            "2025-11-01",
+            "2025-12-01",
+            "2026-01-01",
+            "2026-03-01",
+        )
+    }
+    coord._peak_month = date(2026, 4, 1)
+    coord._peak_kw = 4.0
+
+    freezer.move_to("2026-05-01 00:05:00+02:00")
+    await coord._track_monthly_peak()
+
+    assert "2026-04-01" in coord._peak_history
+    assert "2025-03-01" not in coord._peak_history
+    assert min(coord._peak_history) == "2025-06-01"
+
+
 async def test_capacity_peak_keeps_kilowatts_unscaled(
     hass: HomeAssistant, freezer: Any
 ) -> None:
