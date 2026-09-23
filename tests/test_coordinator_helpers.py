@@ -33,7 +33,7 @@ from custom_components.be_electricity_prices import (
     snapshot_months,
     snapshot_store,
 )
-from custom_components.be_electricity_prices import ytd_cost
+from custom_components.be_electricity_prices import ytd_cost, ytd_energy
 
 from custom_components.be_electricity_prices import energy_meters
 
@@ -1460,6 +1460,152 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     # No consumption wired, so the whole bill is the feed-in credit and it
     # has to be the rate the sensor beside it shows, not the printed 0,0531.
     assert cost == pytest.approx(-30.0 * live)
+
+
+async def test_a_day_one_register_did_not_report_is_billed_on_neither_side(
+    hass: HomeAssistant,
+) -> None:
+    """A stopped register drops the day from its pair, and the round left the
+    feed-in of that day in: 10 days carried a credit with no consumption in a
+    30-day case, and days_seen counted them as billed."""
+    d0 = date(2026, 1, 1)
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "injection_kwh": "sensor.inj",
+        }
+    )
+    rows, live = _pair_through_the_recorder(
+        {
+            "sensor.day": [d0 + timedelta(days=i) for i in range(30)],
+            "sensor.night": [d0 + timedelta(days=i) for i in range(20)],
+            "sensor.inj": [d0 + timedelta(days=i) for i in range(30)],
+        },
+        {},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            d0 + timedelta(days=29),
+            d0,
+        )
+    assert daily is not None
+    assert sorted(daily) == [d0 + timedelta(days=i) for i in range(20)]
+    assert sum(r[2] + r[3] for r in daily.values()) == pytest.approx(20.0)
+
+
+def _slot_indexed_year(
+    night_days: tuple[int, ...], inj_days: tuple[int, ...]
+) -> tuple[Any, Any, dict[datetime, float]]:
+    """Fakes for a three-day year: a consumption pair and a feed-in total
+    whose credit is replayed hour by hour off the spot."""
+    hours = {
+        day: dt_util.start_of_local_day(datetime(2026, 1, day)).astimezone(UTC)
+        + timedelta(hours=11)
+        for day in (1, 2, 3)
+    }
+    days = {"sensor.day": (1, 2, 3), "sensor.night": night_days, "sensor.inj": inj_days}
+
+    async def _daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {date(2026, 1, day): 10.0 for day in days.get(entity_id, ())}
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {hours[day]: 10.0 for day in days.get(entity_id, ())}
+
+    return _daily, _hourly, {hour: 0.08 for hour in hours.values()}
+
+
+async def test_the_spot_credit_skips_a_day_the_walk_did_not_bill(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The per-hour feed-in credit added to the per-day walk credited every
+    day's export, the ones that walk left out for a missing register too."""
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.18),
+        injection=InjectionRates(
+            current=0.0531, factor=0.94, base=-0.01133, slot_indexed=True
+        ),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="mono",
+        day_consumption_kwh="sensor.day",
+        night_consumption_kwh="sensor.night",
+        injection_kwh="sensor.inj",
+    )
+    costs = []
+    for inj_days in ((1, 2, 3), (1, 2)):
+        daily, hourly, spots = _slot_indexed_year((1, 2), inj_days)
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=hourly),
+        ):
+            costs.append(
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                    historical_spots=spots,
+                )
+            )
+    # Day 3 is not billed, so what was exported on it cannot move the year.
+    assert costs[0] == pytest.approx(costs[1])
+
+
+async def test_the_hourly_walk_skips_an_hour_one_register_did_not_report(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The hourly walk billed the paired hours of consumption but the feed-in
+    of every hour, so an hour a register missed was credited with nothing
+    charged against it."""
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=1.0, base=0.01),
+        injection=InjectionRates(factor=0.9, base=-0.01, current=None),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="dynamic",
+        day_consumption_kwh="sensor.day",
+        night_consumption_kwh="sensor.night",
+        injection_kwh="sensor.inj",
+    )
+    costs = []
+    for inj_days in ((1, 2, 3), (1, 2)):
+        daily, hourly, spots = _slot_indexed_year((1, 2), inj_days)
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=hourly),
+            patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
+        ):
+            costs.append(
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                    historical_spots=spots,
+                )
+            )
+    assert costs[0] == pytest.approx(costs[1])
 
 
 async def test_ytd_credits_a_register_pair_per_register(

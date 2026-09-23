@@ -78,7 +78,7 @@ from .spot_stats import (
     _spp_injection_spot,
 )
 from .synergrid import RlpWeights, SppWeights
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -168,7 +168,10 @@ async def _ytd_hourly_energy(
         return None
     if not cons.sensors and not inj.sensors:
         return None
-    cons_per_hour, inj_per_hour = cons.kwh, inj.kwh
+    # An hour one half of a pair did not report leaves both sides.
+    unknown = cons.unknown | inj.unknown
+    cons_per_hour = {h: kwh for h, kwh in cons.kwh.items() if h not in unknown}
+    inj_per_hour = {h: kwh for h, kwh in inj.kwh.items() if h not in unknown}
     # Statistics only carry the last COMPILED hour, so top today up from the
     # live meters the way the per-day branch has since 0.11.9. Without this
     # every hourly-billed contract stepped once an hour at best and froze
@@ -428,6 +431,7 @@ async def _ytd_spot_injection_credit(
     snap_for: Callable[[date], Awaitable[SupplierSnapshot]] | None = None,
     *,
     window_start: date,
+    billed_days: Collection[date] | None = None,
 ) -> float:
     """YTD solar-injection credit (EUR) for a contract whose injection is
     a per-hour spot formula with no monthly indicative.
@@ -495,6 +499,14 @@ async def _ytd_spot_injection_credit(
     await _top_up_today_hourly(hass, metered.sensors, per_hour, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():
+        # Only the days the per-day walk this credit is added to billed: a day
+        # it left out because one half of a register pair did not report it
+        # has no consumption on the bill, and crediting its feed-in anyway
+        # drove the year down on days nothing was charged.
+        if billed_days is not None and dt_util.as_local(utc_hour).date() not in (
+            billed_days
+        ):
+            continue
         spot = historical_spots.get(utc_hour)
         if spot is None:
             continue

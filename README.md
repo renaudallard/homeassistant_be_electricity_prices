@@ -903,10 +903,11 @@ searching for:
   `state_class: measurement`; both look perfectly normal in the UI.
 - **"has diverged"** — both halves of the pair report, but not on the same
   days: one stopped (a rename, an integration swap, a meter replacement) or
-  started late. Only the days both report are billed, and `days_seen` (or
-  `hours_seen`) says how many, rather than the surviving band being billed
-  alone as though the other used nothing. A totals sensor wired on the same
-  side is billed instead, since it covers both bands on every day.
+  started late. Only the days both report are billed, feed-in included, and
+  `days_seen` (or `hours_seen`) says how many, rather than the surviving band
+  being billed alone as though the other used nothing. A totals sensor wired
+  on the same side is billed instead, since it covers both bands on every
+  day.
 - **"accumulated before the window"** — the first hour of the year carried
   energy from before 1 January, which happens when the run-up to New Year
   is missing from the recorder. That one over-bills rather than under-bills.

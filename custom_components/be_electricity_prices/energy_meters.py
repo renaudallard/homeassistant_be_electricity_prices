@@ -500,7 +500,11 @@ async def _metered_hourly_kwh(
         return MeteredHours(total, (total_id,))
     if hours is None:
         return None
-    return MeteredHours({hour: day[hour] + night[hour] for hour in hours}, tuple(ids))
+    return MeteredHours(
+        {hour: day[hour] + night[hour] for hour in hours},
+        tuple(ids),
+        frozenset(set(day) ^ set(night)),
+    )
 
 
 async def _top_up_today_hourly(
@@ -669,6 +673,10 @@ async def _resolve_daily_kwh(
         cached = memo[key]
         return None if cached is None else dict(cached)
     out: dict[date, list[float]] = {}
+    # The days only one half of a register pair reported, on either side.
+    # They leave both sides: a day whose consumption is unknown must not be
+    # credited its feed-in, or counted in days_seen as billed.
+    unknown: set[date] = set()
 
     async def _side(
         day_id: str | None,
@@ -707,6 +715,7 @@ async def _resolve_daily_kwh(
                     row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                     row[slot_day] += d[day]
                     row[slot_night] += n[day]
+                unknown.update(set(d) ^ set(n))
                 if live is not None:
                     row = out.setdefault(today, [0.0, 0.0, 0.0, 0.0])
                     row[slot_day] += live[0]
@@ -744,6 +753,8 @@ async def _resolve_daily_kwh(
         slot_day=2,
         slot_night=3,
     )
+    for day in unknown:
+        out.pop(day, None)
     if not (cons_ok and inj_ok):
         resolved = None
     elif not out:
@@ -822,6 +833,11 @@ class MeteredHours:
 
     kwh: dict[datetime, float]
     sensors: tuple[str, ...]
+    # The hours only one half of a register pair reported. The side's own
+    # figure already leaves them out; a walk that bills both sides must leave
+    # them out of the other side too, or it credits the feed-in of an hour
+    # whose consumption it did not bill.
+    unknown: frozenset[datetime] = frozenset()
 
 
 def _split_today(

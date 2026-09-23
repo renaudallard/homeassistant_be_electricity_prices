@@ -1119,6 +1119,118 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 
+async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
+    hass: HomeAssistant,
+) -> None:
+    """The backfill bills a register pair on the hours both halves report, as
+    the live walks do, and has to leave those hours out of the feed-in side
+    too: an hour whose consumption it does not bill cannot be credited."""
+    from custom_components.be_electricity_prices import ytd_energy
+    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import (
+        DynamicRates,
+        InjectionRates,
+    )
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02),
+        injection=InjectionRates(factor=0.9, base=-0.01, current=None),
+    )
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        meter="dynamic",
+        title="Pair with a gap",
+        solar_regime="injection",
+        day_consumption_kwh="sensor.day",
+        night_consumption_kwh="sensor.night",
+        injection_kwh="sensor.inj",
+    )
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    hours = [start + timedelta(hours=i) for i in range(72)]
+    spots = {h: 0.06 for h in hours}
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots=dict(spots),
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+
+    async def _year(inj_hours: list[datetime]) -> float:
+        series = {
+            "sensor.day": hours,
+            "sensor.night": hours[:48],
+            "sensor.inj": inj_hours,
+        }
+
+        async def fake_hourly(
+            _h: Any, entity_id: str, _s: Any, _e: Any
+        ) -> dict[datetime, float]:
+            return {h: 0.5 for h in series.get(entity_id, [])}
+
+        async def noop(*_a: Any, **_k: Any) -> None:
+            return None
+
+        captured: list[list[dict[str, Any]]] = []
+
+        def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+            captured.append(list(stats))
+
+        instance = MagicMock()
+        instance.async_add_executor_job = AsyncMock(return_value={})
+        with (
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+            patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
+            patch.object(
+                cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+            ),
+            patch.object(
+                ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+            ),
+            patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=fake_import,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance", return_value=instance
+            ),
+            patch(
+                "homeassistant.util.dt.now",
+                lambda: (
+                    dt_util.start_of_local_day(date(2026, 1, 3))
+                    + timedelta(hours=23, minutes=59)
+                ),
+            ),
+        ):
+            await bf._backfill_cost_sensor(
+                hass,
+                entry,
+                coordinator,  # type: ignore[arg-type]
+                hours,
+                dict(spots),
+                {},
+            )
+        rows = [row for batch in captured for row in batch]
+        assert rows, "the backfill imported nothing"
+        return float(rows[-1]["sum"])
+
+    # The night register has no hour of the third day: what was exported then
+    # cannot move the year.
+    assert await _year(hours) == pytest.approx(await _year(hours[:48]))
+
+
 async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
     hass: HomeAssistant,
 ) -> None:
