@@ -600,6 +600,36 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     assert (summary.replayed, summary.reparsed) == (2, 0)
 
 
+async def test_a_schema_bump_restamps_rows_without_calling_them_reparsed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bump rewrites every replayable row to stamp the running schema, and
+    each of those counted as reparsed, so the one figure a parser change is
+    judged by read the whole archive after every bump. A row whose parse is
+    unchanged is now counted as restamped."""
+    session = _Session({CARD_URL: "price=0.2 month=augustus 2026"})
+    extractor = _extractor(_text_fetch(session, {"version": "plain"}, []))
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
+    stored = json.loads(row.read_text())
+    stored["_schema_version"] -= 1
+    row.write_text(json.dumps(stored), encoding="utf-8")
+
+    # September: the live walk files September's card, so August is left to
+    # the replay alone.
+    session.pages[CARD_URL] = "price=0.2 month=september 2026"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW.replace(day=18), sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.reparsed, summary.restamped) == (2, 0, 1)
+    assert (
+        json.loads(row.read_text())["_schema_version"] == stored["_schema_version"] + 1
+    )
+
+
 async def test_a_row_that_cannot_be_reproduced_offline_is_left_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

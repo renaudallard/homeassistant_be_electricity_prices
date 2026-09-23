@@ -217,6 +217,9 @@ class _Summary:
     pdfs_saved: int = 0
     replayed: int = 0
     reparsed: int = 0
+    # Rewritten only to stamp the running schema: every schema bump restamps
+    # every replayable row, which says nothing about what any row parses to.
+    restamped: int = 0
     unreplayable: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     given_up: list[str] = field(default_factory=list)
@@ -733,20 +736,28 @@ def _write_text(out: Path, seen_month: str, text: str) -> str:
     return rel
 
 
-def _same_card(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> bool:
+def _same_card(
+    existing: dict[str, Any] | None,
+    fresh: dict[str, Any],
+    *,
+    ignore_schema: bool = False,
+) -> bool:
     """Whether two rows hold the same card.
 
     The timestamps are not the card, and neither is the path of a text a
     source was read from: a listing page that carries a nonce or a render
     that is not byte-stable gives a new text file every day while the parse,
     the URL, the reader variant and the PDF are all the same. What a source
-    was and what it parsed to is what counts.
+    was and what it parsed to is what counts. ``ignore_schema`` also sets the
+    schema stamp aside, which is how a replay tells a row it re-parsed from
+    one it only restamped.
     """
     if existing is None:
         return False
+    volatile = (*_VOLATILE_KEYS, "_schema_version") if ignore_schema else _VOLATILE_KEYS
 
     def settled(card: dict[str, Any]) -> dict[str, Any]:
-        out = {k: v for k, v in card.items() if k not in _VOLATILE_KEYS}
+        out = {k: v for k, v in card.items() if k not in volatile}
         out["_sources"] = [
             {k: v for k, v in source.items() if k != "text"}
             for source in card.get("_sources", [])
@@ -790,12 +801,7 @@ def _write_card(
     card["_sources"] = sources
     card["_via"] = via
     path = out / _ROWS / supplier / contract / region / f"{month_id}.json"
-    existing: dict[str, Any] | None = None
-    if path.exists():
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError:
-            existing = None
+    existing = _read_row(path)
     if _same_card(existing, card):
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -804,6 +810,17 @@ def _write_card(
         encoding="utf-8",
     )
     return True
+
+
+def _read_row(path: Path) -> dict[str, Any] | None:
+    """A stored row, or None when there is none or it does not parse."""
+    if not path.exists():
+        return None
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    return row if isinstance(row, dict) else None
 
 
 def _prune(out: Path, keep_months: int, today: date) -> int:
@@ -1245,6 +1262,7 @@ async def _replay_row(
     # through the seam) is kept now, under this row's month.
     cards.file(path.stem, (s["pdf"] for s in sources if "pdf" in s))
     summary.replayed += 1
+    before = _read_row(path)
     if _write_card(
         out,
         supplier,
@@ -1257,7 +1275,10 @@ async def _replay_row(
         row.get("_via", "live"),
         seen_on,
     ):
-        summary.reparsed += 1
+        if _same_card(before, _read_row(path) or {}, ignore_schema=True):
+            summary.restamped += 1
+        else:
+            summary.reparsed += 1
 
 
 async def _retry_unparsed(
@@ -1543,7 +1564,8 @@ async def archive(
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "
         f"{summary.pdfs_saved} new PDFs kept; {summary.replayed} replayed, "
-        f"{summary.reparsed} reparsed, {len(summary.unreplayable)} not replayable"
+        f"{summary.reparsed} reparsed, {summary.restamped} restamped, "
+        f"{len(summary.unreplayable)} not replayable"
     )
     for line in summary.failed:
         print(f"  failed {line[:300]}")
