@@ -317,7 +317,7 @@ async def _compute_current_year_cost(
     # A welcome credit belongs to the product version signed, and EnergyVision
     # moved that figure four times between March and September 2026, so the
     # amount comes off the SIGNING month's card rather than today's. Identity
-    # for an entry naming no cohort month and for a supplier with no archive,
+    # for an entry naming no cohort month and for a month no archive holds,
     # and the row is the one _cohort_legs already resolves every tick, so this
     # is a cache hit rather than a second fetch.
     signing_snapshot = await signing_month_snapshot(

@@ -234,8 +234,12 @@ reading the start date, which is about when the household began being supplied.
 
 **Cohort resolution order** (`_cohort_legs`, `cohort.py`): the
 hand-entered signing rate first, then the archived signing-month card, then the
-current card. When neither of the first two yields a rate (a contract signed
-this month, a supplier that keeps no archive, a month older than the archive
+current card. The signing-month card comes from the supplier's own archive or
+from the repository's card archive, which from August 2026 holds the cards of
+suppliers that keep none (`_month_card_retrievable`, `snapshot_months.py`); asking
+the supplier's alone left a TotalEnergies or Ecofix cohort billed on each month's
+card. When neither of the first two yields a rate (a contract signed
+this month, a month neither archive holds, a month older than the archive
 reaches), a month-indexed card still takes `_month_indexed_leg` (`cohort.py`),
 exactly as it does with no cohort month at all: its printed figure is last
 month's index by the card's own words, and a date the archive cannot serve is

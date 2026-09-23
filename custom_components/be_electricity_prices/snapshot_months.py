@@ -392,6 +392,21 @@ def _card_archive_may_hold(
     return extractor.fetch_for_month is not None or month >= CARD_ARCHIVE_FIRST_MONTH
 
 
+def _month_card_retrievable(
+    extractor: "SupplierExtractor",
+    year_month: date,
+    today: date,
+    entry: ConfigEntry | None,
+) -> bool:
+    """Whether ``_snapshot_for_month`` may find the month's own card rather
+    than hand back the current one as its proxy: from the supplier's archive,
+    or from the repository's, which holds every supplier's cards from
+    ``CARD_ARCHIVE_FIRST_MONTH`` whether or not the supplier keeps one."""
+    return extractor.fetch_for_month is not None or _card_archive_may_hold(
+        extractor, year_month, today, entry
+    )
+
+
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,

@@ -3549,6 +3549,41 @@ async def test_snapshot_for_month_reads_the_repository_archive(
     assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-09")] is stored
 
 
+async def test_a_cohort_locks_to_the_repository_card_of_a_supplier_without_an_archive(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """TotalEnergies and Ecofix keep no archive, and the repository holds
+    their cards from August 2026. The year-to-date walk already read them
+    there, but the signing card was asked of the supplier alone, so a
+    contract signed from August was never locked to its own card: billed on
+    each month's instead, and credited today's welcome credit."""
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_legs,
+        signing_month_snapshot,
+    )
+
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    august = make_snapshot(energy=FixedRates(single=0.20), publication_label="08/2026")
+    extractor = SupplierExtractor(
+        id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
+    )
+    entry = _entry(contract="test", contract_start_date="2026-08-20")
+    _monthly_snapshots(hass).clear()
+    github = AsyncMock(return_value=_archive_row(august))
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
+        legs = await _cohort_legs(
+            hass, MagicMock(), extractor, "test", "wallonia", entry, current
+        )
+        signed = await signing_month_snapshot(
+            hass, MagicMock(), extractor, "test", "wallonia", entry, current
+        )
+    assert isinstance(legs.energy, FixedRates)
+    assert legs.energy.single == pytest.approx(0.20)
+    assert signed.publication_label == "08/2026"
+    github.assert_awaited_once_with(ANY, "test", "test", "wallonia", date(2026, 8, 1))
+
+
 async def test_the_branch_is_asked_first_and_the_supplier_for_what_it_lacks(
     hass: HomeAssistant, freezer: Any
 ) -> None:

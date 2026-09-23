@@ -78,7 +78,7 @@ from .providers._rates import (
     VariableRates,
 )
 from .injection import _slot_coefficients
-from .snapshot_months import _snapshot_for_month
+from .snapshot_months import _month_card_retrievable, _snapshot_for_month
 from .snapshot_resolve import _include_vat
 
 
@@ -583,7 +583,10 @@ async def _cohort_legs(
     whether they signed at the card rate or at a promotional, brokered or
     negotiated one, and the form that collected the value promises to price
     the contract with it. The archived signing-month card fills in every field
-    left blank when the supplier keeps an archive; the current card does
+    left blank when an archive holds it: the supplier's own, or the
+    repository's, which from August 2026 also holds the cards of suppliers
+    that keep none (TotalEnergies, Ecofix). Asking the supplier's alone left
+    those cohorts billed on each month's card. The current card fills in
     otherwise.
 
     Both legs are ``None`` for a ``contract`` that isn't the entry's own (the
@@ -638,7 +641,9 @@ async def _cohort_legs(
     # rolled over and the price jumped under the user.
     archived: EnergyRates | None = None
     archived_snap: SupplierSnapshot | None = None
-    if start < this_month and extractor.fetch_for_month is not None:
+    if start < this_month and _month_card_retrievable(
+        extractor, start, now.date(), entry
+    ):
         snap_start = await _snapshot_for_month(
             hass,
             session,
@@ -792,9 +797,9 @@ async def signing_month_snapshot(
 
     The current snapshot comes back unchanged where there is nothing to
     retrieve: a contract that is not the entry's own, no cohort month, a
-    cohort month inside the running month, or a supplier that keeps no
-    archive. Identity in those cases, so a caller can use the result
-    unconditionally.
+    cohort month inside the running month, or a month no archive can hold
+    (a supplier that keeps none, before the repository's first month).
+    Identity in those cases, so a caller can use the result unconditionally.
 
     The own-contract gate is the same one :func:`_cohort_legs` opens with, and
     for a sharper reason here. The compare sweep walks the year-to-date engine
@@ -807,11 +812,13 @@ async def signing_month_snapshot(
     if contract != entry.data.get(CONF_CONTRACT):
         return current_snapshot
     start = _tariff_card_month(entry)
-    if start is None or extractor.fetch_for_month is None:
+    if start is None:
         return current_snapshot
     now = dt_util.now()
     if start >= date(now.year, now.month, 1):
         # The current card IS the signing-month card.
+        return current_snapshot
+    if not _month_card_retrievable(extractor, start, now.date(), entry):
         return current_snapshot
     resolved = await _snapshot_for_month(
         hass,
