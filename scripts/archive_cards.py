@@ -117,6 +117,7 @@ from custom_components.be_electricity_prices.providers.base import (  # noqa: E4
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.snapshot_codec import (  # noqa: E402
+    _snapshot_from_dict,
     _snapshot_to_dict,
 )
 from homeassistant.helpers.json import json_dumps  # noqa: E402
@@ -787,11 +788,15 @@ def _same_card(
     the URL, the reader variant and the PDF are all the same. What a source
     was and what it parsed to is what counts. ``ignore_schema`` also sets the
     schema stamp aside, which is how a replay tells a row it re-parsed from
-    one it only restamped.
+    one it only restamped, and reads both rows back through the codec first:
+    a bump that adds a field writes it at its default into every row, a key
+    the row before it lacks, and each of those counted as re-parsed.
     """
     if existing is None:
         return False
     volatile = (*_VOLATILE_KEYS, "_schema_version") if ignore_schema else _VOLATILE_KEYS
+    if ignore_schema:
+        existing, fresh = _read_back(existing), _read_back(fresh)
 
     def settled(card: dict[str, Any]) -> dict[str, Any]:
         out = {k: v for k, v in card.items() if k not in volatile}
@@ -802,6 +807,20 @@ def _same_card(
         return out
 
     return settled(existing) == settled(fresh)
+
+
+def _read_back(card: dict[str, Any]) -> dict[str, Any]:
+    """A row as the codec reads it back and writes it today, a missing field
+    filled with its default, beside the archive's own keys. A row the codec
+    no longer reads is left as it stands."""
+    try:
+        snap = _snapshot_from_dict(card, min_schema_version=0)
+    except (KeyError, TypeError, ValueError):
+        return card
+    out: dict[str, Any] = json.loads(
+        json_dumps(_snapshot_to_dict(snap, datetime(1970, 1, 1, tzinfo=UTC)))
+    )
+    return {**card, **out}
 
 
 def _write_card(

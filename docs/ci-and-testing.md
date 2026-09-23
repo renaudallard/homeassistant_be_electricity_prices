@@ -904,7 +904,11 @@ before delivery is asked first; anything else is refused as a network error, and
 reported as not replayable and left as it was, as is a row whose text file is gone or whose
 archive path no longer settles it. The run reports rows `reparsed`, whose parse came out
 differently, apart from rows `restamped`, rewritten only to stamp the running schema, which every
-schema bump does to every replayable row. A kept card download is retried the way a live fetch
+schema bump does to every replayable row. Both rows are read back through the codec before they
+are compared (`_read_back`), so a bump that adds a field, written at its default into every row
+that lacked the key, restamps them too: the v71 bump, which added `fixed_for_term`, counted 1427
+rows reparsed, and read back through the codec 1418 of the 1689 rows its run rewrote had changed
+by the stamp and that key alone. A kept card download is retried the way a live fetch
 is (`_fetch_with_retry`, `scripts/live_check.py`), since a re-render downloads every kept card and
 one blip among them repeated the whole re-render the next day. One that still does not download
 for a reason unrelated to the card (a network error, a 5xx, a 429, a 408 or a 403) leaves

@@ -605,13 +605,23 @@ async def test_stored_rows_are_replayed_only_when_the_parser_changed(
     assert (summary.replayed, summary.reparsed) == (2, 0)
 
 
+@pytest.mark.parametrize(
+    "added",
+    [
+        pytest.param(None, id="stamp-only"),
+        # v71 wrote fixed_for_term: false into every row with a feed-in leg,
+        # and the run counted 1427 rows reparsed and 0 restamped.
+        pytest.param("welcome_credit_kind", id="a-field-added-at-its-default"),
+    ],
+)
 async def test_a_schema_bump_restamps_rows_without_calling_them_reparsed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, added: str | None
 ) -> None:
     """A bump rewrites every replayable row to stamp the running schema, and
     each of those counted as reparsed, so the one figure a parser change is
     judged by read the whole archive after every bump. A row whose parse is
-    unchanged is now counted as restamped."""
+    unchanged is now counted as restamped, including under a bump that adds
+    a field, written at its default into a row that lacked the key."""
     session = _Session({CARD_URL: "price=0.2 month=augustus 2026"})
     extractor = _extractor(_text_fetch(session, {"version": "plain"}, []))
     monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
@@ -620,6 +630,8 @@ async def test_a_schema_bump_restamps_rows_without_calling_them_reparsed(
     row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
     stored = json.loads(row.read_text())
     stored["_schema_version"] -= 1
+    if added is not None:
+        del stored[added]
     row.write_text(json.dumps(stored), encoding="utf-8")
 
     # September: the live walk files September's card, so August is left to
