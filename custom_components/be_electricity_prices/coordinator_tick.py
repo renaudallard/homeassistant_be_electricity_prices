@@ -245,7 +245,9 @@ class _TickMixin:
         # below defers: the price table this tick publishes is built from the
         # signing card, so deferring it would serve a cohort entry the current
         # card's rate until the fill came back. _persisted_months keeps that
-        # one row on disk, so only an entry's first setup fetches it.
+        # one row on disk, so a setup fetches it only the first time, after a
+        # schema bump drops the stored rows, and while the card archive still
+        # holds it under an older schema (a provisional row is never written).
         cohort = await _cohort_legs(
             self.hass,
             self._session,
