@@ -973,6 +973,39 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
         asyncio.run(run())
 
 
+def test_replay_answers_404_for_a_read_card_asked_under_another_folder(
+    tmp_path: Path,
+) -> None:
+    """Brusol files each card under the month it uploaded it, so the
+    extractor asks the folder of the month before delivery first. The site
+    answered 404 there and the walk moved on to the card the row records;
+    refused as a network error in a replay, the month could never be
+    replayed. The same file under another folder gets the 404 the site gave,
+    and any other URL the row never read is still refused."""
+    (tmp_path / "electricity-2026-02-1").mkdir()
+    (tmp_path / "electricity-2026-02-1/abc.pdf").write_bytes(b"%PDF kept")
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    card = "EV-0226-GRS-BXL-nl.pdf"
+    replay.pdfs = {f"https://www.brusol.be/sites/default/files/2026-02/{card}": "abc"}
+
+    async def status(url: str) -> int:
+        async with replay.get(url) as resp:
+            return int(resp.status)
+
+    assert (
+        asyncio.run(status(f"https://www.brusol.be/sites/default/files/2026-01/{card}"))
+        == 404
+    )
+    assert (
+        asyncio.run(status(f"https://www.brusol.be/sites/default/files/2026-02/{card}"))
+        == 200
+    )
+    with pytest.raises(aiohttp.ClientConnectionError):
+        asyncio.run(
+            status("https://www.brusol.be/sites/default/files/2026-01/other.pdf")
+        )
+
+
 @pytest.mark.parametrize(
     ("status", "error", "failed"),
     [

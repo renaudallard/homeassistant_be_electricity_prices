@@ -898,7 +898,9 @@ with another PDF reader asks for, served from the `--pdfs` directory or download
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
 the same card; a HEAD answers 200 for a kept card and 404 for anything else, so an extractor
 that probes candidate URLs before choosing one (Eneco's archive walks issue numbers) lands on the
-card the row was parsed from; anything else is refused as a network error, and the row is
+card the row was parsed from; a GET for that card's file under another folder answers the 404 the
+site did, since EnergyVision's Brusol files each card under the month it uploaded it and the month
+before delivery is asked first; anything else is refused as a network error, and the row is
 reported as not replayable and left as it was, as is a row whose text file is gone or whose
 archive path no longer settles it. The run reports rows `reparsed`, whose parse came out
 differently, apart from rows `restamped`, rewritten only to stamp the running schema, which every

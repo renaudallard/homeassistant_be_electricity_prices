@@ -88,6 +88,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, TypeVar
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -443,9 +444,11 @@ class _ReplaySession:
     the sibling rows that read the same card. A HEAD answers 200 for a
     kept card and 404 for anything else, so an extractor that probes
     candidate URLs before choosing one (Eneco's archive walks issue
-    numbers) lands on the card the row was parsed from. Anything else is
-    refused as a network error, which the readers wrap the way they wrap
-    a real one, and the row is left as it was and reported.
+    numbers) lands on the card the row was parsed from, and a GET for the
+    kept card's file under another folder answers 404 the same way (the
+    Brusol walk below). Anything else is refused as a network error, which
+    the readers wrap the way they wrap a real one, and the row is left as
+    it was and reported.
     """
 
     def __init__(
@@ -530,7 +533,21 @@ class _ReplaySession:
         return await self._fetch(f"card:{digest}")
 
     def _get(self, url: str) -> _Pending:
+        if url not in self.pdfs and _file_name(url) in {
+            _file_name(read) for read in self.pdfs
+        }:
+            # The card the row was parsed from, asked for under another
+            # folder first: Brusol files each card under the month it
+            # uploaded it and the extractor tries the month before delivery
+            # first. The site answered that one 404 and the walk moved on;
+            # refusing it as a network error made the month unreplayable.
+            return self._Pending(self._probe(url))
         return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
+
+
+def _file_name(url: str) -> str:
+    """The last path segment of ``url``, what a card is named by."""
+    return urlsplit(url).path.rsplit("/", 1)[-1]
 
 
 def _parser_digest() -> str:
