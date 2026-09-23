@@ -566,20 +566,13 @@ async def _cohort_legs(
     """Resolve the legs a contract actually bills at.
 
     A fixed / dynamic contract signed months ago is billed at the rate it
-    locked in at signing, not today's card. This returns the signing-month
-    card's energy leg so the caller can splice it onto the current
-    delivery-month DSO / tax overlays; ``None`` means "no cohort override,
-    keep the current energy" (no cohort month, or nothing to re-price with:
-    no signing rate typed and no archived card, or a variable cohort with no
-    ENTSO-E key to resolve its monthly mean).
-
-    A fixed / dynamic contract signed months ago is billed at the rate it
-    locked in at signing, not today's card. This returns the signing-month
-    card's energy leg so the caller can splice it onto the current
-    delivery-month DSO / tax overlays; ``None`` means "no cohort override,
-    keep the current energy" (no cohort month, or nothing to re-price with:
-    no signing rate typed and no archived card, or a variable cohort with no
-    ENTSO-E key to resolve its monthly mean).
+    locked in at signing, not today's card, and its feed-in formula locks with
+    it (issue #85). This returns both legs off the signing-month card, for the
+    caller to splice onto the delivery month's DSO / tax overlays
+    (:meth:`_CohortLegs.splice`), and names the card they came off. A leg left
+    ``None`` means "no cohort override, keep the card's own": no cohort month,
+    or nothing to re-price with (no signing rate typed and no archived card,
+    or a variable cohort with no ENTSO-E key to resolve its monthly mean).
 
     Resolution order is a hand-entered signing rate, then the archive, then
     the current card. What the user typed wins per field: only they know
@@ -589,9 +582,9 @@ async def _cohort_legs(
     left blank when the supplier keeps an archive; the current card does
     otherwise.
 
-    ``None`` is also returned for a ``contract`` that isn't the entry's own
-    (the OptionsFlow compare path walks an alternative contract with no
-    signing history, so it must always price at the current card).
+    Both legs are ``None`` for a ``contract`` that isn't the entry's own (the
+    OptionsFlow compare path walks an alternative contract with no signing
+    history, so it must always price at the current card).
     """
     if contract != entry.data.get(CONF_CONTRACT):
         return _CohortLegs(None, None)
