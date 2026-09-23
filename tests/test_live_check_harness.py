@@ -3078,20 +3078,23 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     # Read off the syntax tree, not the text: a call that is commented out,
     # left behind a return or put under a condition is still in the source,
     # and a substring test passed the regional-levy gate commented out. Only
-    # a statement of the function's own body, reached before any return, runs
-    # on every card.
+    # a statement of the function's own body runs on every card, and only
+    # while the body returns nowhere: a return under a condition skips every
+    # gate after it for the cards it catches, which is how a card that parsed
+    # no feed-in leg would pass with nothing checked (issue #31).
     [func] = ast.parse(textwrap.dedent(inspect.getsource(lc._validate_snapshot))).body
     assert isinstance(func, ast.FunctionDef)
-    called: set[str] = set()
-    for statement in func.body:
-        if isinstance(statement, ast.Return):
-            break
-        if (
-            isinstance(statement, ast.Expr)
-            and isinstance(statement.value, ast.Call)
-            and isinstance(statement.value.func, ast.Name)
-        ):
-            called.add(statement.value.func.id)
+    returns = [node.lineno for node in ast.walk(func) if isinstance(node, ast.Return)]
+    assert not returns, (
+        f"_validate_snapshot returns early, line {returns[0]} of its source"
+    )
+    called = {
+        statement.value.func.id
+        for statement in func.body
+        if isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Call)
+        and isinstance(statement.value.func, ast.Name)
+    }
     for gate in (
         "_expect_card_period",
         "_expect_energy_contribution",
