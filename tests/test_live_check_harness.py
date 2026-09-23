@@ -2821,11 +2821,29 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     is the only place it can find anything. Held on the source, because the
     wiring is the claim.
     """
+    import ast
     import inspect
+    import textwrap
 
     import live_check as lc
 
-    body = inspect.getsource(lc._validate_snapshot)
+    # Read off the syntax tree, not the text: a call that is commented out,
+    # left behind a return or put under a condition is still in the source,
+    # and a substring test passed the regional-levy gate commented out. Only
+    # a statement of the function's own body, reached before any return, runs
+    # on every card.
+    [func] = ast.parse(textwrap.dedent(inspect.getsource(lc._validate_snapshot))).body
+    assert isinstance(func, ast.FunctionDef)
+    called: set[str] = set()
+    for statement in func.body:
+        if isinstance(statement, ast.Return):
+            break
+        if (
+            isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Call)
+            and isinstance(statement.value.func, ast.Name)
+        ):
+            called.add(statement.value.func.id)
     for gate in (
         "_expect_card_period",
         "_expect_energy_contribution",
@@ -2839,9 +2857,7 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
         "_validate_injection",
         "_validate_dsos",
     ):
-        assert f"{gate}(" in body, (
-            f"{gate} is defined and never called by the validator"
-        )
+        assert gate in called, f"{gate} is defined and never called by the validator"
 
 
 def test_the_wait_bound_is_where_the_quote_stops() -> None:
