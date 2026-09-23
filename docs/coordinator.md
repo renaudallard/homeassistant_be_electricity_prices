@@ -408,7 +408,7 @@ Three energy paths, chosen by contract shape:
 
 `_resolve_daily_kwh` resolves the consumption and injection sides independently from one of three wirings, keyed by `CONF_CONSUMPTION_KWH` / `CONF_INJECTION_KWH` and the day/night register pair (`const.py`):
 
-- **Day + night register pair** (`CONF_DAY_*_KWH` + `CONF_NIGHT_*_KWH`): one recorder delta per day per register, fanned into band slots.
+- **Day + night register pair** (`CONF_DAY_*_KWH` + `CONF_NIGHT_*_KWH`): one recorder delta per day per register, fanned into band slots, on the days BOTH registers report (`_paired_keys`, `energy_meters.py`). A live register writes a row for every day whether or not it moved, so a day only one half holds is missing data rather than a zero: a register that stopped mid-year is billed on the days both cover and `days_seen` says so, and one that records nothing at all is refused like a partial pair below. The hourly walk and the backfill read the pair through `_metered_hourly_kwh` on the same rule, hour by hour.
 - **Single totals sensor** (`CONF_CONSUMPTION_KWH` / `CONF_INJECTION_KWH`): for mono meters the total goes to the day slot and the math sums it; for bi/dynamic meters `_recorder_daily_band_ratio` (`energy_meters.py`) recovers the day/night split from hourly recorder statistics binned on `is_offpeak`, defaulting to a time-weighted `_default_band_ratio_for` (`energy_meters.py`) for days with no accumulation so a flat Sunday isn't billed all-peak.
 - **Partial pair** (one register half missing): returns `None`, so the caller falls back to the fees-only floor rather than silently undercounting a band (`energy_meters.py`).
 

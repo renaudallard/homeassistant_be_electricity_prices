@@ -3703,7 +3703,8 @@ async def test_year_cost_recorder_driven_mono_no_solar(
     with _patch_recorder_per_entity(
         {
             "sensor.day_cons": per_day,
-            "sensor.night_cons": {},
+            # A live night register writes a row a day even with nothing on it.
+            "sensor.night_cons": dict.fromkeys(per_day, 0.0),
             "sensor.day_inj": {},
             "sensor.night_inj": {},
         }
@@ -3804,7 +3805,12 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     cons_per_day = {d: 5.0 for d in days}
     inj_per_day = {d: 25.0 for d in days}  # over-produces every day
     with _patch_recorder_per_entity(
-        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
+        {
+            "sensor.day_cons": cons_per_day,
+            "sensor.night_cons": dict.fromkeys(cons_per_day, 0.0),
+            "sensor.day_inj": inj_per_day,
+            "sensor.night_inj": dict.fromkeys(inj_per_day, 0.0),
+        }
     ):
         cost = await _compute_current_year_cost(
             hass,
@@ -3849,7 +3855,12 @@ async def test_year_cost_breakdown_exposes_clamped_energy(
     inj_per_day = {d: 25.0 for d in days}  # over-produces every day
     breakdown: dict[str, float] = {}
     with _patch_recorder_per_entity(
-        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
+        {
+            "sensor.day_cons": cons_per_day,
+            "sensor.night_cons": dict.fromkeys(cons_per_day, 0.0),
+            "sensor.day_inj": inj_per_day,
+            "sensor.night_inj": dict.fromkeys(inj_per_day, 0.0),
+        }
     ):
         cost = await _compute_current_year_cost(
             hass,
@@ -3907,7 +3918,12 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
     entry = _yearly_entry(meter="mono", solar_regime="none")
     days = _days_through(jan_first, today)
     cons_per_day = {d: 5.0 for d in days}
-    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_day}):
+    with _patch_recorder_per_entity(
+        {
+            "sensor.day_cons": cons_per_day,
+            "sensor.night_cons": dict.fromkeys(cons_per_day, 0.0),
+        }
+    ):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -3996,7 +4012,12 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
     entry = _yearly_entry(meter="mono", solar_regime="none")
     days = _days_through(jan_first, today)
     cons_per_day = {d: 5.0 for d in days}
-    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_day}):
+    with _patch_recorder_per_entity(
+        {
+            "sensor.day_cons": cons_per_day,
+            "sensor.night_cons": dict.fromkeys(cons_per_day, 0.0),
+        }
+    ):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -7907,6 +7928,111 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
     assert energy_meters._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
 
 
+async def test_both_year_to_date_walks_refuse_a_silent_register_half() -> None:
+    """A night register with no state_class is wired and valid and compiles no
+    statistics at all. The yearly volume refused it, but the running bill
+    added whatever each register returned: current_year_cost read 32% low by
+    late September, with every day counted as seen, while the projection
+    beside it refused the same data."""
+    entry = SimpleNamespace(
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+        }
+    )
+    today = date(2026, 8, 1)
+    days = {date(2026, 7, 1) + timedelta(days=i): 4.0 for i in range(31)}
+    hours = {
+        datetime(2026, 7, 1, tzinfo=UTC) + timedelta(hours=i): 0.2 for i in range(744)
+    }
+
+    async def _daily(
+        _h: object, entity_id: str, _s: date, _e: date
+    ) -> dict[date, float]:
+        return days if entity_id == "sensor.day_cons" else {}
+
+    async def _hourly(
+        _h: object, entity_id: str, _s: date, _e: date
+    ) -> dict[datetime, float]:
+        return hours if entity_id == "sensor.day_cons" else {}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+    ):
+        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        hourly = await ytd_cost._ytd_hourly_energy(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            make_snapshot(),
+            entry,  # type: ignore[arg-type]
+            today,
+            meter="dynamic",
+            window_start=date(2026, 7, 1),
+        )
+    assert daily is None, "the per-day walk must refuse a silent half"
+    assert hourly is None, "the hourly walk must refuse it the same way"
+
+
+async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -> None:
+    """A night register that stopped after a rename left the day band billing
+    alone for the rest of the year: 289 EUR under by late September on a
+    register stopped at the end of February, reported as full coverage. The
+    walks now bill the days (and hours) both halves report, which is what the
+    coverage attributes then say."""
+    entry = SimpleNamespace(
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "solar_regime": "none",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+        }
+    )
+    today = date(2026, 8, 1)
+    d0 = date(2026, 7, 1)
+    h0 = datetime(2026, 7, 1, tzinfo=UTC)
+
+    async def _daily(
+        _h: object, entity_id: str, _s: date, _e: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.day_cons":
+            return {d0 + timedelta(days=i): 4.0 for i in range(10)}
+        return {d0 + timedelta(days=i): 1.0 for i in range(3)}
+
+    async def _hourly(
+        _h: object, entity_id: str, _s: date, _e: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.day_cons":
+            return {h0 + timedelta(hours=i): 0.4 for i in range(10)}
+        return {h0 + timedelta(hours=i): 0.1 for i in range(3)}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+    ):
+        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        hourly = await energy_meters._metered_hourly_kwh(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            "consumption",
+            d0,
+            today,
+        )
+    assert daily == {d0 + timedelta(days=i): (4.0, 1.0, 0.0, 0.0) for i in range(3)}
+    assert hourly == {h0 + timedelta(hours=i): pytest.approx(0.5) for i in range(3)}
+
+
 async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
     """A half-wired pair cannot be billed FROM THE REGISTERS, but a totals
     sensor on the same side covers both bands completely and the split is
@@ -8350,7 +8476,12 @@ async def test_compensation_year_is_allocated_by_the_profile_when_loaded(
     inj_per_day = {d: (10.0 if d.month == 1 else 0.0) for d in days}
     uniform = {(d.month, d.day, h): 1.0 for d in days for h in range(24)}
     with _patch_recorder_per_entity(
-        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
+        {
+            "sensor.day_cons": cons_per_day,
+            "sensor.night_cons": dict.fromkeys(cons_per_day, 0.0),
+            "sensor.day_inj": inj_per_day,
+            "sensor.night_inj": dict.fromkeys(inj_per_day, 0.0),
+        }
     ):
         as_metered = await _compute_current_year_cost(
             hass,

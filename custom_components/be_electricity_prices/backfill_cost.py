@@ -50,12 +50,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .energy_meters import (
-    _hourly_consumption_sensors,
-    _hourly_injection_sensors,
-    _partial_register_pair,
-    _sum_hourly_kwh,
-)
+from .energy_meters import _metered_hourly_kwh
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -242,21 +237,21 @@ async def _backfill_cost_sensor(
     # midnight and either drop or double-include the end-of-range hour.
     cons_per_hour: dict[datetime, float] = {}
     inj_per_hour: dict[datetime, float] = {}
-    # Mirror the live paths: a half-wired day/night pair cannot be billed, so
-    # accrue fees only rather than bill the wired half and credit injection
-    # against a consumption side that silently resolved to nothing.
-    half_wired = _partial_register_pair(entry, "consumption") or (
-        _partial_register_pair(entry, "injection")
-    )
-    if hours and not half_wired:
+    if hours:
         start_d = dt_util.as_local(hours[0]).date()
         end_d = dt_util.as_local(hours[-1]).date()
-        cons_per_hour = await _sum_hourly_kwh(
-            hass, _hourly_consumption_sensors(entry), start_d, end_d
+        metered_cons = await _metered_hourly_kwh(
+            hass, entry, "consumption", start_d, end_d
         )
-        inj_per_hour = await _sum_hourly_kwh(
-            hass, _hourly_injection_sensors(entry), start_d, end_d
+        metered_inj = await _metered_hourly_kwh(
+            hass, entry, "injection", start_d, end_d
         )
+        # Mirror the live paths: a pair that cannot be billed (half-wired, or
+        # one half recording nothing) accrues fees only rather than bill the
+        # wired half and credit injection against a consumption side that
+        # silently resolved to nothing.
+        if metered_cons is not None and metered_inj is not None:
+            cons_per_hour, inj_per_hour = metered_cons, metered_inj
 
     _snap_for = ctx.snap_for
     spp_weights = ctx.spp_weights

@@ -467,6 +467,31 @@ async def _sum_hourly_kwh(
     return out
 
 
+async def _metered_hourly_kwh(
+    hass: HomeAssistant, entry: ConfigEntry, side: str, start: date, end: date
+) -> dict[datetime, float] | None:
+    """Per-UTC-hour kWh for one side of the entry's metering, or ``None`` when
+    the wiring cannot be billed.
+
+    ``None`` for a half-wired day/night pair with no totals sensor, and for a
+    wired pair one half of which produced nothing at all. A pair otherwise
+    counts the hours both halves report (:func:`_paired_keys`), which is the
+    rule the per-day walk and the yearly volume follow too. An empty dict when
+    nothing is wired on this side.
+    """
+    if _partial_register_pair(entry, side):
+        return None
+    ids = _hourly_kwh_sensors(entry, side)
+    if len(ids) != 2:
+        return await _sum_hourly_kwh(hass, ids, start, end)
+    day = await _sum_hourly_kwh(hass, ids[:1], start, end)
+    night = await _sum_hourly_kwh(hass, ids[1:], start, end)
+    hours = _paired_keys(day, night)
+    if hours is None:
+        return None
+    return {hour: day[hour] + night[hour] for hour in hours}
+
+
 async def _top_up_today_hourly(
     hass: HomeAssistant,
     entity_ids: Iterable[str],
@@ -650,16 +675,19 @@ async def _resolve_daily_kwh(
         if bool(day_id) ^ bool(night_id) and not total_id:
             return False
         if day_id and night_id:
-            for day, kwh in (
-                await _recorder_daily_kwh(hass, day_id, window_start, today)
-            ).items():
+            d = await _recorder_daily_kwh(hass, day_id, window_start, today)
+            n = await _recorder_daily_kwh(hass, night_id, window_start, today)
+            days = _paired_keys(d, n)
+            if days is None:
+                # A dead half is refused like a missing one: billing the
+                # surviving band alone read a silent night register as a
+                # year that used no night energy, 32% under the real bill
+                # with every day counted as seen.
+                return False
+            for day in days:
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[slot_day] += kwh
-            for day, kwh in (
-                await _recorder_daily_kwh(hass, night_id, window_start, today)
-            ).items():
-                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[slot_night] += kwh
+                row[slot_day] += d[day]
+                row[slot_night] += n[day]
             return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
@@ -870,21 +898,17 @@ async def _measured_hour_weights(
     third of the clock weight, so a per-slot feed-in credit averaged by slot
     duration always under-credits.
 
-    Returns ``None`` when nothing is wired, the pair is half-wired, or the
-    window recorded nothing. The caller then stays on the clock-hour weighting
-    rather than inventing a profile.
+    Returns ``None`` when nothing is wired, the pair is half-wired or has a
+    dead half, or the window recorded nothing. The caller then stays on the
+    clock-hour weighting rather than inventing a profile from one band.
     """
-    if _partial_register_pair(entry, side):
-        return None
-    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
-    ids = [i for i in ((day_id, night_id) if day_id and night_id else (total_id,)) if i]
-    if not ids:
+    metered = await _metered_hourly_kwh(hass, entry, side, start, end)
+    if not metered:
         return None
     per_hour: dict[int, float] = {}
-    for entity_id in ids:
-        for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
-            hour = dt_util.as_local(when).hour
-            per_hour[hour] = per_hour.get(hour, 0.0) + delta
+    for when, kwh in metered.items():
+        hour = dt_util.as_local(when).hour
+        per_hour[hour] = per_hour.get(hour, 0.0) + kwh
     total = sum(per_hour.values())
     if total <= 0:
         return None

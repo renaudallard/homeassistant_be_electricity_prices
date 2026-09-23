@@ -50,8 +50,7 @@ from .const import (
 from .energy_meters import (
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
-    _partial_register_pair,
-    _sum_hourly_kwh,
+    _metered_hourly_kwh,
     _top_up_today_hourly,
 )
 from .injection import (
@@ -159,21 +158,23 @@ async def _ytd_hourly_energy(
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
-    if _partial_register_pair(entry, "consumption") or _partial_register_pair(
-        entry, "injection"
-    ):
-        # Same rule the static per-day path applies: a half-wired pair means
-        # the missing band's kWh are unavailable, so bill nothing rather than
-        # bill the wired half. Without this the empty side vanished silently
-        # and any wired injection was credited against zero consumption.
-        return None
     cons_ids = _hourly_consumption_sensors(entry)
     inj_ids = _hourly_injection_sensors(entry)
+    cons_per_hour = await _metered_hourly_kwh(
+        hass, entry, "consumption", window_start, today
+    )
+    inj_per_hour = await _metered_hourly_kwh(
+        hass, entry, "injection", window_start, today
+    )
+    if cons_per_hour is None or inj_per_hour is None:
+        # Same rule the static per-day path applies: a half-wired pair, or one
+        # whose other half records nothing, means the missing band's kWh are
+        # unavailable, so bill nothing rather than bill the wired half.
+        # Without this the empty side vanished silently and any wired
+        # injection was credited against zero consumption.
+        return None
     if not cons_ids and not inj_ids:
         return None
-
-    cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, window_start, today)
-    inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Statistics only carry the last COMPILED hour, so top today up from the
     # live meters the way the per-day branch has since 0.11.9. Without this
     # every hourly-billed contract stepped once an hour at best and froze
@@ -484,7 +485,9 @@ async def _ytd_spot_injection_credit(
         # a card printing an indicative every month otherwise paid on every
         # tick for a credit that is always zero.
         return 0.0
-    per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
+    per_hour = await _metered_hourly_kwh(hass, entry, "injection", window_start, today)
+    if per_hour is None:
+        return 0.0
     # Topped up from the live meter, exactly as both sibling paths do: the
     # daily branch through _recorder_daily_kwh and the hourly branch through
     # its own two _top_up_today_hourly calls. Without it the consumption leg
