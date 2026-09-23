@@ -20,4 +20,6 @@ drift_fingerprint.txt
 drift_report.md
 extractor_failures.txt
 catalog_report.md
+catalog_failures.txt
 tax_report.md
+tax_failures.txt

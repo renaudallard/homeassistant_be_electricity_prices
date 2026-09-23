@@ -63,6 +63,7 @@ HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 # modules. A doc naming these is correct; resolving them is not the point.
 NOT_OURS = frozenset(
     {
+        "catalog_failures.txt",
         "catalog_report.md",
         "coverage.md",
         "drift_fingerprint.txt",
@@ -75,6 +76,7 @@ NOT_OURS = frozenset(
         "providers/foo.py",
         "report.md",
         "sensor/recorder.py",
+        "tax_failures.txt",
         "tax_report.md",
         "unparsed.json",
     }

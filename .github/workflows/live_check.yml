@@ -360,11 +360,14 @@ jobs:
             cat catalog_report.md
           } > catalog_issue_body.md
 
+          # Fingerprinted on the failing labels, not the report: the report
+          # carries every passing row, so any unrelated change to one of them
+          # posted the same open failure again.
           bash scripts/file_ci_issue.sh \
             --label "$label" \
             --title "$title_prefix" \
             --body catalog_issue_body.md \
-            --fingerprint catalog_report.md \
+            --fingerprint catalog_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update tax-block issue
@@ -396,11 +399,14 @@ jobs:
             cat tax_report.md
           } > tax_issue_body.md
 
+          # On the failing labels, for the same reason as the products
+          # issue, and because a row's detail counts the other suppliers,
+          # which moves whenever one of them publishes its month.
           bash scripts/file_ci_issue.sh \
             --label 'live-check-tax' \
             --title "[live-check] a supplier's federal tax block disagrees" \
             --body tax_issue_body.md \
-            --fingerprint tax_report.md \
+            --fingerprint tax_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Fail PR job on extractor or drift signal

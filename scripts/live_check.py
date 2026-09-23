@@ -4428,6 +4428,14 @@ async def _run(texts: Path | None = None) -> int:
     # month's other cards do not, which is neither a new product nor
     # something a release here fixes.
     (ROOT / "tax_report.md").write_text(_render_report(tax_checks))
+    # What the workflow fingerprints those two issues on: the failing labels.
+    # Each report also carries its pass count and every passing row, so a
+    # fingerprint over it changed with any unrelated row and the same open
+    # failure got a comment a day instead of a week.
+    _write_failure_labels(
+        ROOT / "catalog_failures.txt", _extractor_regressions(catalog_checks)
+    )
+    _write_failure_labels(ROOT / "tax_failures.txt", _extractor_regressions(tax_checks))
     failed_suppliers = _failed_suppliers(extractor_checks)
     drift_warnings = _drift_warnings(METRICS, failed_suppliers)
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
@@ -4591,7 +4599,8 @@ def _catalog_gates_ci(checks: Iterable[Check]) -> bool:
 
 
 def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
-    """Write one check label per line, sorted, for the workflow's retry loop.
+    """Write one check label per line, sorted, for the workflow's retry loop
+    and for the catalog and tax issues' fingerprints.
 
     The loop intersects this file across its attempts and only files an
     issue for what failed in EVERY attempt. On a slow runner each attempt

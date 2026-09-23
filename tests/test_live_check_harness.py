@@ -1651,6 +1651,111 @@ def test_the_drift_issue_is_fingerprinted_on_the_budget_not_the_measurement() ->
     assert "--fingerprint drift_fingerprint.txt" in drift
 
 
+def _sync_no_op(*_args: Any) -> None:
+    return None
+
+
+async def _async_no_op(*_args: Any) -> None:
+    return None
+
+
+def _drive_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **stubs: Callable[..., Any]
+) -> int:
+    """The real _run with no supplier and its network phases stubbed, so
+    what it records, and the side files it writes under ``tmp_path``, come
+    from the stubs passed in."""
+    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(lc, "METRICS", {})
+    monkeypatch.setattr(lc, "_load_providers", dict)
+    monkeypatch.setattr(lc, "_SUPPLIERS", ())
+    phases: dict[str, Callable[..., Any]] = {
+        "_check_catalogs": _async_no_op,
+        "_check_excise_window": _sync_no_op,
+        "_check_vreg_ceiling_window": _sync_no_op,
+        "_check_vreg_ceiling_consensus": _sync_no_op,
+        "_check_federal_tax_consensus": _sync_no_op,
+        "_check_card_freshness": _async_no_op,
+        "_check_spot_fallback": _async_no_op,
+    }
+    for name, stub in {**phases, **stubs}.items():
+        monkeypatch.setattr(lc, name, stub)
+    lc.CHECKS.clear()
+    return asyncio.run(lc._run())
+
+
+def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Both issues were fingerprinted on their whole report, which lists
+    every passing row under its pass count, so the same open failure got a
+    fresh comment on any day an unrelated row changed: Luminus's discovery
+    coming back empty for a day was enough, and so was one more supplier
+    publishing its month, which moves the count in a tax row's detail."""
+    import yaml  # type: ignore[import-untyped]
+
+    def _day(luminus: str, others: int, tax: str = "ecofix") -> tuple[str, str]:
+        async def _catalogs(*_args: Any) -> None:
+            lc._record(
+                "bolt/catalog: no new products at supplier",
+                False,
+                "bolt_brand_new",
+                kind="catalog",
+            )
+            lc._record(f"luminus/catalog: {luminus}", True, kind="catalog")
+
+        def _consensus(*_args: Any) -> None:
+            lc._record(
+                f"{tax}/federal tax block disagrees for 2026-09",
+                False,
+                f"flanders: excise 0.0503288 against 0.04876 on {others} other "
+                "suppliers",
+                kind="tax",
+            )
+
+        _drive_run(
+            monkeypatch,
+            tmp_path,
+            _check_catalogs=_catalogs,
+            _check_federal_tax_consensus=_consensus,
+        )
+        return (
+            (tmp_path / "catalog_report.md").read_text()
+            + (tmp_path / "tax_report.md").read_text(),
+            (tmp_path / "catalog_failures.txt").read_text()
+            + (tmp_path / "tax_failures.txt").read_text(),
+        )
+
+    report1, failed1 = _day("no new products at supplier", 12)
+    report2, failed2 = _day("discover() returned no ids", 13)
+    assert report1 != report2
+    assert (
+        failed1
+        == failed2
+        == (
+            "bolt/catalog: no new products at supplier\n"
+            "ecofix/federal tax block disagrees for 2026-09\n"
+        )
+    )
+    # A failure that changes is still news.
+    _report, failed3 = _day("no new products at supplier", 12, tax="cociter")
+    assert failed3 != failed1
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    runs = {
+        s.get("name", ""): s.get("run", "") for s in workflow["jobs"]["check"]["steps"]
+    }
+    assert (
+        "--fingerprint catalog_failures.txt"
+        in runs["Open or update new-products issue"]
+    )
+    assert "--fingerprint tax_failures.txt" in runs["Open or update tax-block issue"]
+
+
 def _failures(run: Callable[[], None]) -> list[str]:
     lc.CHECKS.clear()
     run()

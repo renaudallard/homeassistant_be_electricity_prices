@@ -686,13 +686,15 @@ the two baselines are identical until the day they are not.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog` and `tax` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
-catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py`), each a side-channel the workflow reads to file a separate
-issue so the failure modes never conflate in one thread; beside the drift report goes
-`drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes` line per blown budget
-with no measurement in it, which is what the drift issue is fingerprinted on.
+catalog diff is written to `catalog_report.md`, the tax rows to `tax_report.md` and the drift
+warnings to `drift_report.md` at the repo root (`scripts/live_check.py`), each a side-channel the
+workflow reads to file a separate issue so the failure modes never conflate in one thread. Beside
+the drift report goes `drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes`
+line per blown budget with no measurement in it, and beside the other two go
+`catalog_failures.txt` and `tax_failures.txt`, their failing labels; those three files are what
+the issues are fingerprinted on.
 
 The exit code is bit-encoded (`scripts/live_check.py`):
 
@@ -1059,15 +1061,17 @@ until it becomes consistent.
 The extractor issue body leads with those persistent failures, because the report under them is the
 last attempt's and on a slow runner also lists checks that failed only that once.
 
-The job then branches on the captured `rc` to open or update three distinct issues through
+The job then branches on the captured `rc` to open or update four distinct issues through
 `scripts/file_ci_issue.sh`, which finds the one open issue by its label (never by a title substring,
 so a manually opened issue cannot catch these comments) and posts a comment only when the failure
 changed or the last post is older than a week. Each body ends in a hidden fingerprint marker: for
-the extractor issue it is a hash of `persistent_failures.txt`, for the catalog issue a hash of its
-report, for the drift issue a hash of `drift_fingerprint.txt` (the report itself carries the
-measured seconds and bytes, so hashing it never matched the previous day and a supplier over its
-budget for weeks got a comment a day), and the script compares the marker on the issue's latest
-post with the one it is about to write. A supplier that stays broken therefore gets one issue and one comment a week
+the extractor issue it is a hash of `persistent_failures.txt`, for the catalog and tax issues a
+hash of `catalog_failures.txt` and `tax_failures.txt` (each report also lists every passing row
+under its pass count, and a tax row's detail counts the other suppliers, so hashing the report
+posted the same open failure again whenever an unrelated row changed), for the drift issue a hash
+of `drift_fingerprint.txt` (the report itself carries the measured seconds and bytes, so hashing it
+never matched the previous day and a supplier over its budget for weeks got a comment a day), and
+the script compares the marker on the issue's latest post with the one it is about to write. A supplier that stays broken therefore gets one issue and one comment a week
 rather than one a day, which was the last open piece of the live check's noise problem, while a
 failure that changes shape is still posted the same morning. `tests/test_file_ci_issue.py` drives
 the script through a fake `gh`.
@@ -1303,8 +1307,9 @@ Notes:
 - To iterate on a single provider, target its module WITHOUT the split, for example
   `pytest tests/test_bolt.py -q`.
 - The full live check is network-bound and can be run locally with
-  `python scripts/live_check.py`; it writes `catalog_report.md` and `drift_report.md` to the repo
-  root and prints the extractor report to stdout. It is not part of the pre-commit gate.
+  `python scripts/live_check.py`; it writes `catalog_report.md`, `tax_report.md`,
+  `drift_report.md` and their fingerprint and failure-label files to the repo root and prints the
+  extractor report to stdout. It is not part of the pre-commit gate.
 - `python scripts/archive_cards.py --out tmp/archive` stores today's cards under `tmp/archive`
   the way the daily workflow stores them in `be_price_cards`. A full walk asks about 250
   cards and takes 21 minutes on a Raspberry Pi, most of it Bolt's and Mega's PDF parses, and
