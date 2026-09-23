@@ -1077,6 +1077,16 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
+        # The Walloon connection fee rides on the same card for the same
+        # reason. The regional-levy gate judges it only on a Walloon card, and
+        # this card is fetched as Flemish, so a fee read as zero passed while
+        # every Walloon household on the card went 2,63 EUR a year short.
+        _expect(
+            f"{prefix}: Walloon connection fee read",
+            snap.taxes.region_connection_fee > 0
+            or snap.taxes.region_connection_fee_unavailable,
+            detail=str(snap.taxes),
+        )
         _validate_snapshot(
             prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
         )

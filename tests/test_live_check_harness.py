@@ -2711,6 +2711,41 @@ def test_a_feed_in_price_fixed_for_the_term_is_gated_both_ways() -> None:
         lc.CHECKS.clear()
 
 
+def test_eneco_s_walloon_fee_is_judged_on_its_flemish_fetch() -> None:
+    """Eneco's card covers every region and is fetched once, as Flemish, so
+    the regional-levy gate never judged its Walloon connection fee as
+    Walloon: a fee read as zero passed."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from tests import make_snapshot
+
+    def _labels(fee: float) -> dict[str, bool]:
+        snap = make_snapshot(
+            taxes=TaxOverlay(
+                federal_excise=0.05,
+                energy_contribution=0.0,
+                flanders_renewables=0.02,
+                wallonia_renewables=0.03,
+                region_connection_fee=fee,
+            )
+        )
+        eneco = SimpleNamespace(
+            EXTRACTOR=SimpleNamespace(contracts=(SimpleNamespace(id="power_fix"),)),
+            fetch=AsyncMock(return_value=snap),
+        )
+        lc.CHECKS.clear()
+        asyncio.run(lc._check_eneco(None, eneco))  # type: ignore[arg-type]
+        return {c.label: c.ok for c in lc.CHECKS}
+
+    try:
+        label = "eneco/power_fix: Walloon connection fee read"
+        assert _labels(0.00075)[label] is True
+        assert _labels(0.0)[label] is False
+    finally:
+        lc.CHECKS.clear()
+
+
 def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     """Every `_expect_*` gate has a test that calls it directly, so deleting
     the CALL from `_validate_snapshot` leaves the suite green: mutation
