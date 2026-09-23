@@ -2608,7 +2608,20 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
         "sensor.night_cons, sensor.night_inj"
     )
 
-    coord._register_pair_fault = ""
+    # The sensor is fixed: the next day's read finds both pairs whole, and
+    # the card goes through the same recompute that raised it.
+    freezer.move_to("2026-09-21 12:00:00+02:00")
+    healthy = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+    with (
+        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=healthy)),
+        patch.object(
+            coordinator_snapshot,
+            "_measured_kwh",
+            AsyncMock(return_value=MeasuredKwh(900.0, 300)),
+        ),
+    ):
+        await coord._ensure_annual_volume()
+    assert coord._register_pair_fault == ""
     coord._sync_register_pair_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
