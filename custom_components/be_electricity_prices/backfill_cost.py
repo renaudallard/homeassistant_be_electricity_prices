@@ -84,10 +84,17 @@ from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import calendar
 import logging
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+
+if TYPE_CHECKING:
+    # Annotations only, as _recorder_models says: the package has to load
+    # without the recorder, and the calls take the lazy copies it returns.
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 

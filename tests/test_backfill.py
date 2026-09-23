@@ -27,9 +27,13 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from custom_components.be_electricity_prices import energy_meters
 
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -63,6 +67,26 @@ BRUSSELS = ZoneInfo("Europe/Brussels")
 
 
 # ---- pure helpers -------------------------------------------------------------
+
+
+def test_the_package_loads_without_the_recorder() -> None:
+    """_recorder_models keeps the recorder out of module scope, so the
+    integration loads on an installation that runs without it. The 0.27.5
+    split moved two of its models into backfill_cost at module scope, and
+    loading the package pulled in 42 recorder modules for nothing."""
+    code = (
+        "import sys, custom_components.be_electricity_prices\n"
+        "print(sorted(m for m in sys.modules "
+        "if m.startswith('homeassistant.components.recorder')))"
+    )
+    loaded = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert loaded.strip() == "[]"
 
 
 def test_hour_iter_inclusive_start_exclusive_end() -> None:

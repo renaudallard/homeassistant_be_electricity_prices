@@ -627,14 +627,17 @@ matter to this module:
 
 - `recorder` provides every statistics primitive backfill uses:
   `async_import_statistics` and `StatisticData` / `StatisticMetaData` /
-  `StatisticMeanType` (`backfill.py`),
-  `statistics_during_period` for the missing-probe (`backfill.py`),
-  `clear_statistics` for the destructive path (`backfill.py`), and the
-  hourly-kWh reconstruction that reads past consumption. Loading after the
-  recorder ensures its statistics tables are ready when the one-shot backfill
-  task fires at setup. The recorder imports are still wrapped in
-  `try/except ImportError` (`backfill.py`) so a bare HA
-  without the recorder degrades gracefully instead of crashing.
+  `StatisticMeanType` (`_recorder_models`, `backfill_window.py`),
+  `statistics_during_period` for the missing-probe (`backfill_window.py`),
+  `clear_statistics` for the destructive path (`_clear_all`, `backfill_window.py`),
+  and the hourly-kWh reconstruction that reads past consumption. Loading after
+  the recorder ensures its statistics tables are ready when the one-shot
+  backfill task fires at setup. None of them is imported at module scope, so
+  the integration loads on an installation without the recorder; the probe and
+  the wipe are wrapped in `try/except ImportError` (`backfill_window.py`) so a
+  bare HA degrades gracefully instead of crashing, and
+  `test_the_package_loads_without_the_recorder` (`tests/test_backfill.py`)
+  holds the package to that.
 - `energy` is the consumer: the Energy dashboard reads the `current_year_cost`
   sum series and the price means this module writes. Ordering after it keeps the
   dashboard's expectations satisfied on first load.
