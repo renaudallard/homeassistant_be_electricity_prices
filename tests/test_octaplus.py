@@ -755,6 +755,48 @@ async def test_archive_resolves_the_months_card_by_its_listed_name(
     assert len(snap.dsos) > 0
 
 
+@pytest.mark.parametrize(
+    ("contract", "listed"),
+    [
+        ("octaplus_fixed", "2026-03 E OCTA+FIXEDD RE VL FR.pdf"),
+        ("octaplus_ecofixed", "2026-03 E OCTA+ECOFIXEDD RE VL FR.pdf"),
+    ],
+)
+async def test_archive_finds_a_card_the_listing_misspells_by_a_letter(
+    monkeypatch: pytest.MonkeyPatch, contract: str, listed: str
+) -> None:
+    """OCTA+'s March 2026 listing names its fixed cards FIXEDD and ECOFIXEDD,
+    in both regions, and nowhere else. An exact match found nothing, so a
+    March signer of Fixed, Eco Fixed or Fixed Impact was billed today's card:
+    0,1838 EUR/kWh on Fixed in Flanders where the March card prints 0,145,
+    136 EUR a year on 3500 kWh. A name that differs only by a doubled letter
+    is taken when it is the only one."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    asked: list[str] = []
+    listing = [
+        {"NomPdf": "2026-03 E OCTA+FIXEDD RE VL FR.pdf"},
+        {"NomPdf": "2026-03 E OCTA+ECOFIXEDD RE VL FR.pdf"},
+        {"NomPdf": "2026-03 E OCTA+DYNAMIC RE VL FR.pdf"},
+    ]
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        # The real March card, which the listing names FIXEDD.
+        _archive_router(
+            listing, (FIXTURES / "octaplus_fixed_v_mar.pdf").read_bytes(), asked
+        ),
+    )
+    snap = await octaplus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        contract,
+        "flanders",
+        date(2026, 3, 10),
+    )
+    assert snap is not None
+    assert parse_qs(urlsplit(asked[1]).query)["RequestedPDF"] == [listed]
+
+
 async def test_archive_renders_the_base64_card_through_the_render_seam(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

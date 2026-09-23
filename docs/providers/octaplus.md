@@ -130,7 +130,12 @@ which `fetch_for_month` reads:
   the live URL does, spacing and plus sign aside (`2026-06 E OCTA+DYNAMIC RE VL
   FR.pdf` against `E_OCTA_DYNAMIC_RE_VL_FR.pdf`), so `_archive_name_key` folds
   both and `_resolve_archive_name` picks the row. A month whose list lacks the
-  product answers `None` without a second request.
+  product answers `None` without a second request. The March 2026 lists misspell
+  the fixed cards `2026-03 E OCTA+FIXEDD RE VL FR.pdf` and `...ECOFIXEDD...`, in
+  both regions, so a name that differs from the wanted one only by a doubled
+  letter is taken when it is the only such name (`_archive_name_loose`). Across
+  all sixteen archived lists that reaches exactly those five cells, Fixed, Eco
+  Fixed and Fixed Impact, which were otherwise billed on today's card.
 - `getTariffSheet?Canal=website&RequestedPDF=<NomPdf>` answers
   `{"Response": {"Ok": "True", "TariffSheet": "data:application/pdf;base64,..."}}`,
   which `_fetch_archive_pdf` unwraps and magic-checks. The text is extracted with
@@ -471,6 +476,7 @@ cards):
 | `octaplus_fixed_w_aug.pdf` | OCTA+ Fixed, Wallonia, **August 2026 redesign**. `Epex SPP M * 0,8560 - 16,20` in place of April's three `Epex SPP x` rows. Kept as served, not re-rendered: ghostscript reorders the DSO and tax column headers. |
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
+| `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`

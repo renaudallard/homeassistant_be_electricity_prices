@@ -260,13 +260,29 @@ async def _resolve_archive_name(
         f"{month_first.year:04d}-{month_first.month:02d} E OCTA+{contract.slug}"
         f" RE {_REGION_TO_CODE[region]} FR.pdf"
     )
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        name = row.get("NomPdf")
-        if isinstance(name, str) and _archive_name_key(name) == wanted:
+    names: list[str] = [
+        row["NomPdf"]
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("NomPdf"), str)
+    ]
+    for name in names:
+        if _archive_name_key(name) == wanted:
             return name
-    return None
+    # The March 2026 listing names its fixed cards FIXEDD and ECOFIXEDD. A name
+    # that differs only by a doubled letter is taken when it is the only one:
+    # no two products in the range fold onto each other that way, and a month
+    # that lists two such names is left unread rather than guessed.
+    loose = _archive_name_loose(wanted)
+    near = [
+        name for name in names if _archive_name_loose(_archive_name_key(name)) == loose
+    ]
+    return near[0] if len(near) == 1 else None
+
+
+def _archive_name_loose(key: str) -> str:
+    """A folded archive name with runs of one character collapsed, which is
+    the only typo the listing has been seen to make."""
+    return re.sub(r"(.)\1+", r"\1", key)
 
 
 async def _fetch_archive_pdf(session: aiohttp.ClientSession, name: str) -> bytes:
