@@ -2746,6 +2746,61 @@ def test_eneco_s_walloon_fee_is_judged_on_its_flemish_fetch() -> None:
         lc.CHECKS.clear()
 
 
+def test_each_card_is_validated_as_the_region_it_was_fetched_for() -> None:
+    """The regional levies are judged by the ``region`` each check hands
+    ``_validate_snapshot``, and nothing held that argument to the fetch it
+    describes: a Walloon card validated as Flemish skips the connection-fee
+    rule, and both a check passing the wrong literal and the validator
+    dropping the argument passed every test. Read off the source, every region
+    the validator is given has to be one the same function fetched with."""
+    import ast
+
+    tree = ast.parse(Path(lc.__file__).read_text(encoding="utf-8"))
+
+    def _callee(call: ast.Call) -> str:
+        func = call.func
+        if isinstance(func, ast.Name) and func.id == "partial" and call.args:
+            func = call.args[0]
+        if isinstance(func, ast.Attribute):
+            return func.attr
+        return func.id if isinstance(func, ast.Name) else ""
+
+    checked = 0
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.AsyncFunctionDef | ast.FunctionDef):
+            continue
+        calls = [node for node in ast.walk(fn) if isinstance(node, ast.Call)]
+        fetched = {
+            ast.unparse(arg)
+            for call in calls
+            # One PDF for every region (Bolt) is parsed per region instead.
+            if _callee(call) in ("fetch", "fetch_for_month", "parse_snapshot")
+            for arg in call.args
+        }
+        for call in calls:
+            if _callee(call) != "_validate_snapshot":
+                continue
+            [region] = [kw.value for kw in call.keywords if kw.arg == "region"]
+            assert ast.unparse(region) in fetched, (fn.name, ast.unparse(region))
+            checked += 1
+    assert checked >= 13
+
+
+def test_the_validator_judges_the_levies_by_the_region_it_is_given() -> None:
+    """The other half of the wiring: ``_validate_snapshot`` has to hand its
+    own ``region`` to the levy gate, not a region of its choosing."""
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from tests import make_snapshot
+
+    card = make_snapshot(taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0))
+    label = "x/y: Walloon connection fee read, or flagged unavailable"
+    for region, fails in (("wallonia", True), ("flanders", False)):
+        lc.CHECKS.clear()
+        lc._validate_snapshot("x/y", "y", card, region=region)
+        assert any(c.label == label and not c.ok for c in lc.CHECKS) is fails, region
+    lc.CHECKS.clear()
+
+
 def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     """Every `_expect_*` gate has a test that calls it directly, so deleting
     the CALL from `_validate_snapshot` leaves the suite green: mutation
