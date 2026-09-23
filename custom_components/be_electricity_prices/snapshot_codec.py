@@ -381,7 +381,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # for its energy. v71 also carries InjectionRates.fixed_for_term, which Mega's
 # fixed cards, Trevion Groene Energie Vast and EnergyVision's fixed-injection
 # card set: a signing cohort keeps its own card's feed-in price on them, and
-# a v70 row cannot say so.
+# a v70 row cannot say so. It also brings Frank's cards dated by the month
+# their title names: the JN card for September 2026 names August in its
+# validity sentence, so a cached v70 snapshot of it ended on 31 August and
+# kept tomorrow_prices_available off until the October card.
 _SNAPSHOT_SCHEMA_VERSION = 71
 
 # The oldest stored schema a rejected blob may still be replayed from when no
