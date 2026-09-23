@@ -185,11 +185,15 @@ By kind:
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
   (`_EPEX_FORMULA`), which also accepts `Belpex 15'`, the name the January and
   February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`).
-  The consumption formula is picked by
-  `_dynamic_consumption_formula`, which first locates the injection
-  formula (the one after the `Le prix de votre injection` lead-in) and skips it,
-  so reordering the two paragraphs cannot bind the injection formula as the
-  consumption rate (`test_dynamic_consumption_formula_skips_injection_on_reorder`).
+  The consumption formula is read by `_dynamic_consumption_formula` within a
+  short distance of its own lead-in (`_CONSUMPTION_LEAD`: *"La formule tarifaire
+  HTVA (en €/MWh) est la suivante:"* before the August redesign, *"La formule de
+  prix est la suivante, en EUR/MWh HTVA :"* after), as the feed-in one is read
+  after its own. Reordering the two paragraphs cannot bind the feed-in formula
+  as the consumption rate (`test_dynamic_consumption_formula_skips_injection_on_reorder`),
+  and a consumption formula in an unknown spelling fails the parse instead of
+  being billed off the AMR clause further down
+  (`test_an_unread_consumption_formula_is_not_taken_from_the_amr_clause`).
   The card formula is HTVA and in EUR/MWh, so it is converted to the model's
   TVAC EUR/kWh: `factor = factor_pdf * vat`, `base = base_eur_mwh / 1000 * vat`
 . VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`

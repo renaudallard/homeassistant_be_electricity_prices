@@ -557,6 +557,27 @@ def test_dynamic_formulas_read_the_belpex_spelling() -> None:
     assert snap.injection.base == pytest.approx(-0.01389)
 
 
+def test_an_unread_consumption_formula_is_not_taken_from_the_amr_clause() -> None:
+    """The consumption formula is anchored on its lead-in like the feed-in one.
+
+    Every dynamic card that carries the AMR clause quotes two more formulas in
+    it, and the picker took the first one it found that was not the feed-in
+    formula. A consumption formula in a spelling the pattern does not know,
+    which OCTA+ has printed before, was then billed off the clause: 1,02 x Epex
+    + 11,60 EUR/MWh where the card says 1,083 x Belpex + 4,17. Refusing the
+    card is what the live check reports; the clause's rate is a bill nobody
+    notices is wrong.
+    """
+    text = _text("octaplus_dynamic_v_jan.pdf")
+    assert "Belpex 15' * 1,083 + 4,17" in text
+    with pytest.raises(ExtractorError):
+        parse_snapshot(
+            "octaplus_dynamic",
+            text.replace("Belpex 15' * 1,083 + 4,17", "Belpex 15 min x 1,083 + 4,17"),
+            "flanders",
+        )
+
+
 def test_the_monthly_feed_in_formula_reads_the_belpex_spelling() -> None:
     """The non-dynamic cards of January and February 2026 name the monthly
     index Belpex too: "Belpex SPP x 0,852 - 13,39", on every Fixed, Eco Fixed,

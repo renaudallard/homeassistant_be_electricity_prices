@@ -476,21 +476,28 @@ def _injection_formula(text: str) -> re.Match[str] | None:
     return re.search(rf"{_INJECTION_LEAD}.{{0,500}}?{_EPEX_FORMULA}", text, re.S)
 
 
-def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
-    """First 'Epex 15' formula that is not the injection one.
+# The sentence that introduces the consumption formula, once on every dynamic
+# card: "La formule tarifaire HTVA (en €/MWh) est la suivante:" until the
+# August 2026 redesign, "La formule de prix est la suivante, en EUR/MWh HTVA :"
+# after it.
+_CONSUMPTION_LEAD = (
+    r"La\s+formule\s+(?:tarifaire\s+HTVA(?:\s*\(en\s*€\s*/\s*MWh\))?|de\s+prix)"
+    r"\s+est\s+la\s+suivante\s*(?:,\s*en\s+EUR\s*/\s*MWh\s+HTVA)?\s*:"
+)
 
-    The consumption and injection formulas share the same shape; the
-    injection one sits in the "Le prix de votre injection" section. Find
-    that formula's offset and skip it, so a card that reorders the two
-    paragraphs can't silently bind the injection formula as the
-    consumption rate.
+
+def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
+    """The consumption formula a dynamic card prints after its lead-in, or None.
+
+    The consumption and injection formulas share the same shape, and the AMR
+    clause further down quotes two more. The formula directly follows its
+    lead-in on every archived card, so the search is bounded the way the
+    feed-in one is: an open search took the first formula that was not the
+    feed-in one, which on a card printing its own in an unknown spelling was
+    the AMR clause's. Anchoring also keeps a card that prints the feed-in
+    paragraph first from binding that formula as the consumption rate.
     """
-    inj = _injection_formula(text)
-    for m in re.finditer(_EPEX_FORMULA, text):
-        if inj is not None and m.start(1) == inj.start(1):
-            continue
-        return m
-    return None
+    return re.search(rf"{_CONSUMPTION_LEAD}.{{0,100}}?{_EPEX_FORMULA}", text, re.S)
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
