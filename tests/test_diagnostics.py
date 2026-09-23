@@ -323,16 +323,17 @@ async def test_diagnostics_counts_the_year_to_date_from_where_the_sensor_does(
         data={
             **entry.data,
             "consumption_kwh": "sensor.meter",
+            "injection_kwh": "sensor.export",
             CONF_CONTRACT_START_DATE: "2026-07-01",
             CONF_YTD_FROM_CONTRACT_START: True,
         },
     )
-    starts: list[object] = []
+    starts: list[tuple[str, date]] = []
 
     async def _recorder(
-        _hass: HomeAssistant, entity_id: str, start: object, end: object
+        _hass: HomeAssistant, entity_id: str, start: date, end: date
     ) -> dict[object, float]:
-        starts.append(start)
+        starts.append((entity_id, start))
         return {}
 
     with patch(
@@ -341,8 +342,14 @@ async def test_diagnostics_counts_the_year_to_date_from_where_the_sensor_does(
     ):
         await async_get_config_entry_diagnostics(hass, entry)
 
-    # The rolling year, then the year to date from the contract start.
-    assert starts == [date(2025, 9, 22), date(2026, 7, 1)]
+    # The rolling year, then the year to date from the contract start, on
+    # both sides: the two are read through separate calls, and a test wiring
+    # only the consumption side let the injection one go back to 1 January.
+    for sensor in ("sensor.meter", "sensor.export"):
+        assert sorted(start for eid, start in starts if eid == sensor) == [
+            date(2025, 9, 22),
+            date(2026, 7, 1),
+        ], sensor
 
 
 async def test_diagnostics_summarises_the_spot_cache_by_month(
