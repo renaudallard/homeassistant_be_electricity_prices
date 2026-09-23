@@ -2615,10 +2615,10 @@ def test_the_regional_levies_are_gated() -> None:
     are the ones the archive holds."""
     from custom_components.be_electricity_prices.providers.base import TaxOverlay
 
-    def _fails(region: str, **fields: Any) -> list[str]:
+    def _fails(region: str, contract: str = "harness", **fields: Any) -> list[str]:
         lc.CHECKS.clear()
         taxes = TaxOverlay(federal_excise=0.05, energy_contribution=0.0, **fields)
-        lc._expect_regional_levies("x/y", region, taxes)
+        lc._expect_regional_levies("x/y", contract, region, taxes)
         return [c.label for c in lc.CHECKS if not c.ok]
 
     # Cards read right, and a card with nothing to print.
@@ -2647,6 +2647,33 @@ def test_the_regional_levies_are_gated() -> None:
     )
     # The published rate is stamped by the resolver, never read off a card.
     assert _fails("flanders", published_vat_rate=0.21)
+
+    # A contract the registry knows: the fund is owed by a professional card
+    # and a non-domiciled one, so a reader that drops it to zero fails there,
+    # and a residential card that picks it up fails the other way.
+    keys = ("harness_pro", "harness_home", "engie_empty_house")
+    saved = {key: lc._CONTRACTS_BY_ID.get(key) for key in keys}
+    lc._CONTRACTS_BY_ID["harness_pro"] = SimpleNamespace(professional=True)
+    lc._CONTRACTS_BY_ID["harness_home"] = SimpleNamespace(professional=False)
+    lc._CONTRACTS_BY_ID["engie_empty_house"] = SimpleNamespace(professional=False)
+    try:
+        assert not _fails("flanders", "harness_pro", energy_fund_eur_per_month=10.07)
+        assert _fails("flanders", "harness_pro")
+        assert not _fails("flanders", "harness_home")
+        assert _fails("flanders", "harness_home", energy_fund_eur_per_month=10.07)
+        assert not _fails(
+            "flanders", "engie_empty_house", energy_fund_eur_per_month=10.07
+        )
+        assert _fails("flanders", "engie_empty_house")
+        # Outside Flanders nobody owes it, professional or not.
+        assert not _fails("brussels", "harness_pro")
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                lc._CONTRACTS_BY_ID.pop(key, None)
+            else:
+                lc._CONTRACTS_BY_ID[key] = value
+        lc.CHECKS.clear()
 
 
 def test_a_feed_in_price_fixed_for_the_term_is_gated_both_ways() -> None:

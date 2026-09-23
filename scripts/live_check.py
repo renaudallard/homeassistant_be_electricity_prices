@@ -920,19 +920,33 @@ _MIN_ENERGY_FUND_EUR_PER_MONTH = 2.014
 _MAX_ENERGY_FUND_EUR_PER_MONTH = 50.35
 _MIN_CONNECTION_FEE = 0.00014
 _MAX_CONNECTION_FEE = 0.00375
+# The residential products sold to a home that is not the customer's
+# domicile, which pay the fund like a business does. Engie's parser reads the
+# non-domiciled row for the same one (``sans_domicile``, providers/engie.py).
+_NON_DOMICILED_CONTRACTS = frozenset({"engie_empty_house"})
 
 
-def _expect_regional_levies(prefix: str, region: str, taxes: object) -> None:
+def _expect_regional_levies(
+    prefix: str, contract_id: str, region: str, taxes: object
+) -> None:
     """The levies nothing else read, the energy fund alone worth 120,84 EUR a
     year on a Flemish card that carries it.
 
-    Zero is always allowed: most cards print no energy fund, and a card for
-    another region no Walloon fee. What is not allowed is a fund outside
-    Flanders; a Walloon card with neither the fee nor the flag saying it could
-    not read one, which under-bills without a word to the user; the flag
-    anywhere but on a Walloon card with no fee; and a published VAT rate,
-    which only the resolver stamps when it grosses a card, and which an
-    extractor must leave at zero for ``published_vat_rate or vat_rate`` to
+    The fund is owed by a professional contract and by a non-domiciled one,
+    and by no residential one, so a Flemish card of a contract the registry
+    knows must carry it exactly then. That is what catches the failure the
+    readers actually have: each returns 0 when its pattern misses, and Bolt's
+    once billed 0,00 where the card said 10,07. A zero allowed everywhere let
+    that through, and the other way round a residential reader switching to
+    the non-domiciled row would bill a household 120,84 EUR a year it does
+    not owe.
+
+    The fee is zero on a card for another region. What is not allowed is a
+    fund outside Flanders; a Walloon card with neither the fee nor the flag
+    saying it could not read one, which under-bills without a word to the
+    user; the flag anywhere but on a Walloon card with no fee; and a published
+    VAT rate, which only the resolver stamps when it grosses a card, and which
+    an extractor must leave at zero for ``published_vat_rate or vat_rate`` to
     answer.
     """
     fund = float(getattr(taxes, "energy_fund_eur_per_month", 0.0))
@@ -950,6 +964,16 @@ def _expect_regional_levies(prefix: str, region: str, taxes: object) -> None:
         fund == 0.0 or region == "flanders",
         detail=f"region={region} energy_fund_eur_per_month={fund}",
     )
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if region == "flanders" and contract is not None:
+        owed = bool(getattr(contract, "professional", False)) or (
+            contract_id in _NON_DOMICILED_CONTRACTS
+        )
+        _expect(
+            f"{prefix}: energy fund printed exactly where the contract owes it",
+            (fund > 0.0) is owed,
+            detail=f"energy_fund_eur_per_month={fund}, owed={owed}",
+        )
     _expect(
         f"{prefix}: connection fee 0 or in [{_MIN_CONNECTION_FEE}, "
         f"{_MAX_CONNECTION_FEE}] EUR/kWh",
@@ -3438,7 +3462,7 @@ def _validate_snapshot(
     # For every supplier, not the three that used to ask for it at their own
     # call sites: the levy is federal and the unit slip it catches is not.
     _expect_energy_contribution(prefix, getattr(snap, "taxes", None))
-    _expect_regional_levies(prefix, region, getattr(snap, "taxes", None))
+    _expect_regional_levies(prefix, contract_id, region, getattr(snap, "taxes", None))
     _validate_energy(
         prefix,
         contract_id,

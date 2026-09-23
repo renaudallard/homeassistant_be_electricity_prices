@@ -536,7 +536,10 @@ that reads the value 100x too large — and that part still holds.
 - `_expect_regional_levies` (`scripts/live_check.py`) judges the levies nothing else read, by the
   region the card was fetched for, which `_validate_snapshot` takes as a required keyword so a new
   check cannot skip it. The Flemish energy fund must be zero or within five times of the 10,07 EUR a
-  month every card that prints it states, and only on a Flemish card; the Walloon connection fee
+  month every card that prints it states, and only on a Flemish card; on a Flemish card of a
+  contract the registry knows it must be printed exactly where the contract owes it, a
+  professional one or the non-domiciled Engie Empty House, since every reader returns 0 when its
+  pattern misses and a zero allowed everywhere let a dropped fund through; the Walloon connection fee
   zero or within five times of 0,00075 EUR/kWh, and a Walloon card must carry it or set
   `region_connection_fee_unavailable`, which is allowed nowhere else and only with no fee;
   `published_vat_rate` is stamped by the resolver alone, so an extractor must leave it at zero.
