@@ -660,9 +660,8 @@ def test_ebem_still_fails_on_a_stale_electricity_card() -> None:
 # These have no advertised set at all: Mega never links the B2B cards from a
 # page, so the CDN's own answer is the signal (application/pdf = published,
 # text/html stub = not). What makes it worth checking is that fetch() rolls
-# back a month when the card is missing, and four of the nine professional
-# contracts are variable or dynamic, so last month's card carries last
-# month's index.
+# back a month when the card is missing, and on the professional contracts
+# that are variable or dynamic, last month's card carries last month's index.
 
 
 class _FakeHead:

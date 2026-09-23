@@ -3,7 +3,7 @@
 This document is the maintenance reference for the Energy Knights extractor
 (`providers/energyknights.py`). It explains how the extractor addresses Energy
 Knights' monthly tariff cards, how the energy / injection / tax / DSO fields are
-parsed for the three supported products, and the land mines a future maintainer
+parsed for each supported product, and the land mines a future maintainer
 must know when Energy Knights changes its cards. The test module
 `tests/test_energyknights.py` is treated as ground truth throughout: it pins the
 expected parse output against twelve real fixtures.

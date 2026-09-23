@@ -413,16 +413,16 @@ parser is unicode-aware on purpose - a character class that forgets the `u` in `
 fails to read 104 of the 236 live labels, and since an unreadable label is skipped, the check would
 have covered almost nothing while looking green.
 
-Mega's nine *professional* contracts get a **different** check, `_check_mega_professional`, because
+Mega's *professional* contracts get a **different** check, `_check_mega_professional`, because
 they have no advertised set at all: Mega never links the B2B cards from any page, so there is no
 "newest advertised" to compare against. The CDN answers for itself instead - a published month
 returns `application/pdf`, an unpublished one a `text/html` stub under the same 200 - so the check
-is one HEAD per (contract, region), 27 in all, downloading nothing.
+is one HEAD per (contract, region), downloading nothing.
 
 What makes it worth checking is that `fetch` silently rolls back one month when the current card is
-missing. Four of the nine professional contracts are variable or dynamic, so last month's card
-carries last month's index: the prices are *wrong*, not merely old, and nothing else in the run
-would say so.
+missing. On the professional contracts that are variable or dynamic, last month's card carries
+last month's index: the prices are *wrong*, not merely old, and nothing else in the run would say
+so.
 
 Early in a month that rollback is correct behaviour rather than a defect, so the check only fails
 past `_PRO_PUBLICATION_GRACE_DAYS`. Mega does not publish ahead - next month's URL is a stub today,

@@ -3,10 +3,10 @@
 This document is the maintenance reference for the EnergyVision extractor
 (`providers/energyvision.py`). It explains how the extractor resolves EnergyVision's
 monthly "Goedkope stroom" tariff cards off the site listing, how the energy / injection /
-tax / DSO fields are parsed for the two supported products, and the land mines a future
+tax / DSO fields are parsed for each supported product, and the land mines a future
 maintainer must know when EnergyVision changes its cards. The test module
 `tests/test_energyvision.py` is treated as ground truth throughout: it pins the expected
-parse output against two real fixtures.
+parse output against real fixtures.
 
 Related reading:
 
@@ -23,7 +23,7 @@ Related reading:
 ## Overview
 
 EnergyVision sells a "Goedkope stroom" family of residential electricity cards; the
-integration tracks six of them:
+integration tracks these:
 
 - **GSDYN** ("Goedkope Stroom Dynamisch", Flanders) - a quarter-hourly spot-indexed dynamic product.
 - **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.

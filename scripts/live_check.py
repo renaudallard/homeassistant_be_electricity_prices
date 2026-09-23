@@ -2122,10 +2122,10 @@ async def _check_mega_professional(
     the same 200, so HEAD is the whole check, and no card is downloaded.
 
     What makes this worth a check at all is that ``fetch`` silently rolls
-    back one month when the current card is missing. Four of the nine
-    professional contracts are variable or dynamic, so last month's card
-    carries last month's index: the prices are WRONG, not merely old, and
-    nothing else in this run would say so.
+    back one month when the current card is missing. On the professional
+    contracts that are variable or dynamic, last month's card carries last
+    month's index: the prices are WRONG, not merely old, and nothing else in
+    this run would say so.
 
     Early in a month the rollback is correct behaviour, not a defect, so
     this only fails past :data:`_PRO_PUBLICATION_GRACE_DAYS`. Mega does not
