@@ -513,9 +513,10 @@ test in the source.
   and breaks the row-anchored regexes; only `fetch_pdf_text_layout` (pdfplumber row
   reconstruction) parses correctly (`ecofix.py`).
 - **Overwrite-in-place, no archive.** Filenames are stable and reused each month,
-  so there is no `fetch_for_month` and past months fall back to the current snapshot
-  as a proxy (`ecofix.py`); the repository's card archive has nothing for them
-  either while the cards are page images.
+  so there is no `fetch_for_month` (`ecofix.py`). A closed month from August 2026
+  on (`CARD_ARCHIVE_FIRST_MONTH`) is read from the repository's card archive, which
+  files the page-image cards by OCR and marks their sources `ocr`; an earlier month
+  falls back to the current snapshot as a proxy.
 - **Magnitude disambiguation of fee vs renewable.** The two Vlaanderen numbers flip
   order across cards; the parser keys off magnitude (`< 5` = renewable, `>= 10` =
   fee) not position (`ecofix.py`).

@@ -159,8 +159,9 @@ month at the current rate. Return-value semantics:
   provider re-raises such a failure around its network calls, the way
   `dats24.py` always did.
 - `None` when the supplier has no accessible archive for that month. This
-  applies to overwrite-in-place suppliers (Ecofix, OCTA+, TotalEnergies),
-  suppliers with no archive at all (TotalEnergies, Ecofix), the
+  applies to the suppliers that overwrite their cards in place and keep no
+  archive (Ecofix, TotalEnergies; OCTA+ overwrites its live cards too, but its
+  site's archive answers for past months), the
   running month on a supplier that publishes in arrears (energie.be), and any
   month before the supplier's archive horizon (Engie's 2023 cards predate the
   layout its parser reads, energie.be's mid-2025 cards are page images). The
@@ -253,13 +254,14 @@ price slot, against the ENTSO-E BE day-ahead spot.
 | `quarter_hourly` | `bool` | `False` | Selects the spot billing grid. `True` keeps ENTSO-E's native 15-minute slots; `False` aggregates to clock hours. |
 
 `quarter_hourly` reflects a real billing-grid difference between suppliers.
-Eneco, Frank Energie (by default), Luminus, Mega and TotalEnergies price per
-clock hour, so the integration aggregates the 15-minute day-ahead curve to
-hourly and these leave the flag `False`. Bolt (Dynamisch), Cociter, EBEM,
-Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights (Agilior
-Online), EnergyVision, Engie, OCTA+ and Trevion bill per quarter-hour (their cards
-multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it
-`True`;
+Eneco, Energy Knights (Agilis Online), Frank Energie (by default), Luminus, Mega
+and TotalEnergies price per clock hour, so the integration aggregates the
+15-minute day-ahead curve to hourly and these leave the flag `False`. Cociter,
+EBEM, Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights
+(Agilior Online), EnergyVision, Engie, OCTA+ and Trevion bill per quarter-hour
+(their cards multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot)
+and set it `True`; Bolt and Frank sell one card on both settlements, and
+`resolve_settlement_grid` sets the flag from the entry's answer;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
 because HA only retains hourly long-term statistics (`providers/base.py`).

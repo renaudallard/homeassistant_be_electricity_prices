@@ -102,12 +102,12 @@ Each of these has a section of its own further down; this is the scan.
 | **energie.be** | Dynamisch *(quarter-hourly EPEX)* · Variabel *(monthly Belpex_RLP)* · Vast | Flanders only; on the dynamic card only · [`energiebe.py`](./custom_components/be_electricity_prices/providers/energiebe.py) · [notes](./docs/providers/energiebe.md)
 | **Energy Knights** | Agilior Online *(quarter-hourly Belpex_15)* · Agilis Online *(hourly Belpex_h)* · Essentia Online *(monthly Belpex_RLP)* · all three as **Green** | Flanders only · [`energyknights.py`](./custom_components/be_electricity_prices/providers/energyknights.py) · [notes](./docs/providers/energyknights.md)
 | **EnergyVision** | Dynamisch *(quarter-hourly Belpex)* · 3 jaar vast · 1 an fixe *(Wallonia)* · 1.800 kWh vast *(all three regions)* · vaste injectieprijs 3 jaar · Laadpunt · Groene stroom *(Brussels, monthly Belpex-RLP-M)* | The 1.800 kWh card is sold in all three regions and prices the same energy leg in each, but Wallonia pays no standing charge where the other two pay 50 EUR/yr. In Brussels EnergyVision trades as **Brusol** and publishes on its own site, and there the card is sold only to households with EnergyVision/Brusol panels on the roof; Groene stroom is Brusol's own product, any Brussels household can take it, and it is the one card in the registry that prices a direct-debit payer differently (250 EUR/yr, 230 on domiciliëring), which the setup flow asks about · [`energyvision.py`](./custom_components/be_electricity_prices/providers/energyvision.py) · [notes](./docs/providers/energyvision.md)
-| **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House · the same eight as **pro** contracts, minus Direct Online and Basic Online | [`engie.py`](./custom_components/be_electricity_prices/providers/engie.py) · [notes](./docs/providers/engie.md)
+| **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House · the same eight as **pro** contracts, minus Direct Online and Basic Online | All three regions, Basic Online is Flanders + Wallonia only · [`engie.py`](./custom_components/be_electricity_prices/providers/engie.py) · [notes](./docs/providers/engie.md)
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch Korting · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
-| **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic · most months run a new-customer campaign tied to the month you sign, either a share of the energy cost (33% on the September 2026 Comfy card) or a volume of free energy (750 kWh as a cashback after 12 months, valued at the card's own mono-hourly rate because that is the rate its terms name), and it is billed from the card of your contract start month, which the archive can only supply from September 2026 on: Luminus's own tariff archive serves a past month without its campaign, so a contract signed before then is priced with no campaign at all | [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
+| **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic · most months run a new-customer campaign tied to the month you sign, either a share of the energy cost (33% on the September 2026 Comfy card) or a volume of free energy (750 kWh as a cashback after 12 months, valued at the card's own mono-hourly rate because that is the rate its terms name), and it is billed from the card of your contract start month, which the archive can only supply from September 2026 on: Luminus's own tariff archive serves a past month without its campaign, so a contract signed before then is priced with no campaign at all | Flanders + Wallonia only · [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin), and seventeen cards price it on whether the household pays by direct debit · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
 | **OCTA+** | Fixed · Fixed Impact *(Wallonia, CWaPE 3-band)* · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
-| **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
+| **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before)* · Energreen | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
 
@@ -1058,7 +1058,8 @@ series:
 The bars can dip below zero at low spot, where you pay to inject. The
 sensor only publishes those arrays on contracts whose injection actually
 varies during the day (every dynamic contract, both Cociter variable cards,
-every Bolt fixed and variable card, and Engie Empower Flextime); a flat or
+every Bolt fixed and variable card, Engie Empower Flextime, and Trevion Groene
+Energie Vast on a bi-hourly or dynamic meter); a flat or
 monthly-indexed injection has no curve to draw, so the chart comes up
 empty.
 
@@ -1080,7 +1081,7 @@ Energy is billed at the supplier's `exclusive_night` rate; distribution
 uses the DSO's published exclusive-night rate when the supplier's card
 prints it (Bolt, Cociter, DATS 24, EBEM, Ecofix, Ecopower, Eneco,
 energie.be, Energy Knights, EnergyVision, Engie, Frank, Luminus, Mega,
-OCTA+, and TotalEnergies in Wallonia and Brussels), falling back to the
+OCTA+, Trevion, and TotalEnergies in Wallonia and Brussels), falling back to the
 DSO's off-peak rate where it does not, and finally to the single day rate
 on a card that publishes neither. TotalEnergies' Flemish cards are that
 last case: such an entry raises an `exclusive_night_rate_missing` repair
@@ -1153,7 +1154,8 @@ changed since the morning's archive walk is rendered again:
 
 Most suppliers keep their past cards somewhere the integration can fetch
 them from, which is what the year-to-date cost and the signing-cohort
-pricing walk (the *archive suppliers* listed under Highlights). Some do not
+pricing walk (the suppliers listed under `current_year_cost` in
+[Sensors](#sensors)). Some do not
 (TotalEnergies, Ecofix), and some archive only part of their range (Bolt's
 variable cards are named by version rather than by month, Frank skips a
 month now and then), so a past month on those was billed on today's card.

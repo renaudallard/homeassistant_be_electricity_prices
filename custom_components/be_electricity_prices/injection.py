@@ -550,7 +550,8 @@ def _injection_varies_intraday(
     """True when this contract's injection changes across the day: a TOU
     schedule (Engie Empower Flextime), a day/night register pair on a meter
     with two registers (Trevion Vast) or a spot-indexed formula (every dynamic
-    contract plus Cociter Tarif Variable). Flat monthly-indicative, fixed and
+    contract, both Cociter variable cards and every Bolt fixed and variable
+    card). Flat monthly-indicative, fixed and
     (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
     array is worth emitting for it. Mirrors the branch conditions of
     ``_injection_price_for_slot``."""
