@@ -3437,6 +3437,49 @@ async def test_capacity_peak_scales_watts_to_kilowatts(
     assert coord._peak_kw == 4.481
 
 
+async def test_the_tick_bakes_each_cost_sensor_its_own_reset(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """current_year_cost and current_month_cost each publish the reset the
+    tick baked beside the figure, and the cost compiler reads a wrong one as
+    a meter reset: the yearly sensor would restart its sum every month. On an
+    entry billing from its start date, mid-month, the two windows open on
+    different days, which is where swapping them or building one through the
+    other's helper shows."""
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+    from custom_components.be_electricity_prices.coordinator_data import (
+        month_window_reset,
+        ytd_window_reset,
+    )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    entry = make_entry(contract_start_date="2026-06-30", ytd_from_contract_start=True)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
+            AsyncMock(return_value=_CohortLegs(None, None)),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    now = dt_util.now()
+    assert data.current_year_cost_reset == ytd_window_reset(entry, now)
+    assert data.current_month_cost_reset == month_window_reset(entry, now)
+    assert data.current_year_cost_reset != data.current_month_cost_reset
+
+
 async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
     hass: HomeAssistant, freezer: Any
 ) -> None:

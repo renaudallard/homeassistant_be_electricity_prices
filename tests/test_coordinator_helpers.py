@@ -5594,8 +5594,8 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     )
     desc = next(d for d in every if d.key == "current_year_cost")
     # The sensor publishes the reset the tick baked beside the figure, and the
-    # tick bakes it through the window helper, as the backfill seed does.
-    from custom_components.be_electricity_prices import coordinator_tick
+    # tick bakes it through the window helper, as the backfill seed does
+    # (test_the_tick_bakes_each_cost_sensor_its_own_reset runs the tick).
     from custom_components.be_electricity_prices.coordinator_data import (
         CoordinatorData,
     )
@@ -5603,10 +5603,6 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     baked = datetime(2026, 1, 1, tzinfo=ZoneInfo("Europe/Brussels"))
     assert desc.last_reset_fn is not None
     assert desc.last_reset_fn(CoordinatorData(current_year_cost_reset=baked)) == baked
-    tick = inspect.getsource(coordinator_tick._TickMixin._update_body)
-    assert "ytd_window_reset(self.entry, window_now)" in tick, (
-        "the tick must resolve the published reset through the window helper"
-    )
     seed_call = inspect.getsource(backfill._backfill_cost_sensor)
     assert "ytd_window_reset(entry)" in seed_call, (
         "the backfill seed must resolve the reset through the same helper"
