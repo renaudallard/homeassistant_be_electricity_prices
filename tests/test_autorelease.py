@@ -28,6 +28,7 @@ scratch origin and a fake gh."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -37,33 +38,51 @@ from typing import Any
 WORKFLOW = Path(__file__).resolve().parent.parent / ".github/workflows/autorelease.yml"
 TAG = "v9.9.9"
 
-# gh as the release job calls it. A release is a file under releases/, and
-# create fails first as many times as the failures file says.
-FAKE_GH = r"""#!/bin/sh
+# gh as the release job calls it. A release is the JSON gh would answer
+# with, under releases/, and view runs the job's --jq filter over it with the
+# real jq. create fails first as many times as the failures file says, and
+# as many times again as the drafts file says, leaving a draft each time: the
+# publish call and the cleanup of the draft both failing.
+_RELEASE = '{"isDraft": %s, "assets": [{"name": "be_electricity_prices.zip"}]}'
+FAKE_GH = rf"""#!/bin/sh
 state=$(dirname "$0")/..
 echo "$*" >> "$state/gh.log"
 case "$1 $2" in
-  "release view") [ -e "$state/releases/$3" ] ;;
+  "release view")
+    tag=$3
+    [ -e "$state/releases/$tag" ] || exit 1
+    shift 3
+    while [ $# -gt 0 ] && [ "$1" != "--jq" ]; do shift; done
+    [ $# -gt 1 ] || exit 0
+    jq -r "$2" "$state/releases/$tag" ;;
   "release create")
     n=$(cat "$state/failures")
     if [ "$n" -gt 0 ]; then
       echo $((n - 1)) > "$state/failures"
       exit 1
     fi
-    touch "$state/releases/$3" ;;
+    d=$(cat "$state/drafts")
+    if [ "$d" -gt 0 ]; then
+      echo $((d - 1)) > "$state/drafts"
+      echo '{_RELEASE % "true"}' > "$state/releases/$3"
+      exit 1
+    fi
+    echo '{_RELEASE % "false"}' > "$state/releases/$3" ;;
+  "release delete") rm "$state/releases/$3" ;;
   *) exit 2 ;;
 esac
 """
 
 
-def _steps() -> dict[str, dict[str, Any]]:
+def _job() -> dict[str, Any]:
     import yaml  # type: ignore[import-untyped]
 
-    workflow = yaml.safe_load(WORKFLOW.read_text())
-    return {
-        s.get("id") or s.get("name", ""): s
-        for s in workflow["jobs"]["release"]["steps"]
-    }
+    job: dict[str, Any] = yaml.safe_load(WORKFLOW.read_text())["jobs"]["release"]
+    return job
+
+
+def _steps() -> dict[str, dict[str, Any]]:
+    return {s.get("id") or s.get("name", ""): s for s in _job()["steps"]}
 
 
 def _scratch(root: Path) -> dict[str, str]:
@@ -77,8 +96,10 @@ def _scratch(root: Path) -> dict[str, str]:
         stub.chmod(0o755)
     (root / "releases").mkdir()
     (root / "failures").write_text("0")
+    (root / "drafts").write_text("0")
     env = {
         **os.environ,
+        **_job().get("env", {}),
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
@@ -164,3 +185,26 @@ def test_a_published_release_is_left_alone(tmp_path: Path) -> None:
     creates = (tmp_path / "gh.log").read_text().count("release create")
     assert _run_job(tmp_path, env) is None
     assert (tmp_path / "gh.log").read_text().count("release create") == creates
+
+
+def test_a_draft_left_by_a_failed_publish_is_not_the_release(tmp_path: Path) -> None:
+    """gh release create makes a draft, uploads, then publishes. When the
+    publish call and the cleanup of the draft both fail, the draft stays, and
+    the lookup by tag finds it: the retry took it for the release and ended
+    green with nothing HACS can install. It is dropped and the create run
+    again."""
+    env = _scratch(tmp_path)
+    (tmp_path / "drafts").write_text("1")
+    assert _run_job(tmp_path, env) == 0
+    assert json.loads((tmp_path / "releases" / TAG).read_text())["isDraft"] is False
+    assert (tmp_path / "gh.log").read_text().count("release create") == 2
+
+
+def test_a_rerun_publishes_over_a_draft_an_earlier_run_left(tmp_path: Path) -> None:
+    """A draft an earlier run could not clean up is found by the check's
+    lookup too, and a re-run must not take it for the release and skip the
+    job, green, with nothing published."""
+    env = _scratch(tmp_path)
+    (tmp_path / "releases" / TAG).write_text(_RELEASE % "true")
+    assert _run_job(tmp_path, env) == 0
+    assert json.loads((tmp_path / "releases" / TAG).read_text())["isDraft"] is False

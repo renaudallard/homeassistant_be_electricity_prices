@@ -1279,19 +1279,22 @@ release's own gate. The `release` job needs all three
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
    (`.github/workflows/autorelease.yml`).
-2. Skips if the release already exists (`gh release view`, `.github/workflows/autorelease.yml`),
-   making the workflow idempotent against re-pushes. It asks for the release rather than the tag
-   because the tag is pushed first: when every `gh release create` attempt below fails, the tag
-   is already on origin, and a re-run that tested it skipped the release and ended green with
-   nothing published. Re-running the failed job now finishes the release
-   (`tests/test_autorelease.py` runs the check and release steps out of the workflow against a
-   scratch origin and a fake `gh`).
+2. Skips if the release is already published with its zip (`gh release view` with the job's
+   `PUBLISHED` filter, `.github/workflows/autorelease.yml`), making the workflow idempotent against
+   re-pushes. It asks for the release rather than the tag because the tag is pushed first: when
+   every `gh release create` attempt below fails, the tag is already on origin, and a re-run that
+   tested it skipped the release and ended green with nothing published. And for a published one,
+   because `gh release create` makes a draft, uploads and then publishes, and the lookup by tag
+   finds a draft too: one left by a create that died at the publish call passed for the release.
+   Re-running the failed job now finishes the release (`tests/test_autorelease.py` runs the check
+   and release steps out of the workflow against a scratch origin and a fake `gh` that answers
+   through the real `jq`).
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
    `__pycache__` (`.github/workflows/autorelease.yml`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
-   from GitHub's REST API) and treating an already-created release as success
-   (`.github/workflows/autorelease.yml`).
+   from GitHub's REST API), treating a release an attempt published before it died as success and
+   deleting a draft one left behind, the tag kept, before the next (`.github/workflows/autorelease.yml`).
 
 The practical consequence: tagging and publishing a GitHub release is fully automatic once a
 manifest version bump lands on `main`. Do not tag or create releases by hand.

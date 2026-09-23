@@ -48,6 +48,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [verify, hacs, hassfest]
+    env:
+      # A release counts once it is published with the zip HACS installs.
+      # gh release create makes a draft, uploads, then publishes, and the
+      # lookup by tag finds a draft too, so one left by a create that died
+      # at the publish call passed for the release.
+      PUBLISHED: '(.isDraft | not) and any(.assets[]; .name == "be_electricity_prices.zip")'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -74,7 +80,9 @@ jobs:
           # created, so when every attempt below fails it is already on
           # origin, and a re-run that tested the tag skipped the release and
           # ended green with nothing published.
-          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+          published=$(gh release view "${{ steps.version.outputs.tag }}" \
+            --json isDraft,assets --jq "$PUBLISHED" 2>/dev/null)
+          if [ "$published" = "true" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -104,6 +112,16 @@ jobs:
           # exists" case the same way 'git push origin <tag>' does locally.
           git tag "$tag"
           git push origin "$tag"
+          # A draft an earlier attempt left behind is dropped before the
+          # next one, keeping the tag. Only when the lookup resolves to a
+          # draft: it finds a published release first, and that is never
+          # deleted.
+          drop_draft() {
+            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" = "true" ]; then
+              gh release delete "$tag" --yes
+            fi
+          }
+          drop_draft
           # gh release create is the operation that lost v0.5.28 to a
           # 504 from GitHub's REST API. Retry up to 5 times with
           # exponential backoff so a transient API blip doesn't strand
@@ -122,13 +140,14 @@ jobs:
             if [ $rc -eq 0 ]; then
               break
             fi
-            # If the release was created on a prior attempt that died
-            # mid-call, treat it as success on the retry.
-            if gh release view "$tag" >/dev/null 2>&1; then
-              echo "release $tag already exists, treating as success"
+            # If the release was published by an attempt that died
+            # mid-call, treat it as success on the retry. A draft is not.
+            if [ "$(gh release view "$tag" --json isDraft,assets --jq "$PUBLISHED" 2>/dev/null)" = "true" ]; then
+              echo "release $tag already published, treating as success"
               rc=0
               break
             fi
+            drop_draft
             if [ "$i" -lt "$attempts" ]; then
               sleep_for=$1
               shift
