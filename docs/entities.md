@@ -530,6 +530,8 @@ Top-level dump keys:
 | `consumption.rolling_year_kwh` / `.ytd_kwh` | recorder-summed consumption over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
+| `spot_cache_by_month` | `{ "YYYY-MM": {hours, mean, min, max} }` over the day-ahead prices `current_year_cost` is replayed from, in EUR/kWh: a month whose mean sits far off the Belgian day-ahead average is the cache, not the card |
+| `spot_quarter_hours_by_month` | `{ "YYYY-MM": hours }` whose 15-minute prices are held; empty unless the entry's feed-in formula is floored, where an hour missing here is replayed off its mean and under-credits |
 | `shared_failure` | sibling-coordinator negative-fetch marker, or null |
 
 The `coordinator` block (`diagnostics.py`) mirrors the current-price
@@ -595,7 +597,7 @@ Top-level keys in `strings.json`:
 | `selector` | option labels for `region`, `capacity_mode`, `meter`, `dso_tariff_mode`, `connection_kva_tier`, `solar_regime` |
 | `services` | names and field descriptions for the four services |
 | `exceptions` | `ServiceValidationError` messages |
-| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `card_read_by_ocr`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `supplier_deprecated_ended`, `supplier_deprecated_ended_no_successor`, `exclusive_night_rate_missing`, `impact_rates_missing`, `prosumer_tariff_missing`, `connection_fee_missing`, `register_pair_incomplete` |
+| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `card_read_by_ocr`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `supplier_deprecated_ended`, `supplier_deprecated_ended_no_successor`, `exclusive_night_rate_missing`, `impact_rates_missing`, `prosumer_tariff_missing`, `connection_fee_missing`, `brussels_power_term_missing`, `direct_debit_unanswered`, `register_pair_incomplete` |
 | `entity` | entity names under `sensor.*`, `binary_sensor.*`, `button.*` |
 
 Entity names are resolved by `translation_key`, which each description sets equal
