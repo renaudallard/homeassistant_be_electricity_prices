@@ -855,6 +855,37 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     return removed
 
 
+def _drop_unnamed_texts(out: Path) -> int:
+    """Remove every stored text that no row names; count them.
+
+    Everything that reads a text reaches it through a row's sources, so one
+    no row names is dead weight. Two things leave them behind: a listing page
+    that carries a nonce is stored under a new digest every day while the
+    unchanged row keeps naming the first one, and a row rewritten on a new
+    text leaves its old one. On 22 September 2026 they were 84 of the 1732
+    texts, 10,2 MB of 29,3, and every shallow clone of the store carried them.
+
+    A row that cannot be read could be naming anything, so then nothing goes.
+    """
+    named: set[str] = set()
+    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
+        row = _read_row(path)
+        if row is None:
+            return 0
+        for source in row.get("_sources", []):
+            if isinstance(source, dict) and isinstance(source.get("text"), str):
+                named.add(source["text"])
+    removed = 0
+    for text in out.glob("texts/????-??/*.txt"):
+        if f"texts/{text.parent.name}/{text.name}" not in named:
+            text.unlink()
+            removed += 1
+    for folder in out.glob("texts/????-??"):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    return removed
+
+
 @dataclass
 class _Held:
     """One stored month, as the coverage table needs it."""
@@ -1555,7 +1586,7 @@ async def archive(
     summary.rendered = cards.rendered
     summary.unrendered = cards.unrendered
     summary.pdfs_saved = len(cards.saved)
-    removed = _prune(out, keep_months, today)
+    removed = _prune(out, keep_months, today) + _drop_unnamed_texts(out)
     _write_listings(out, pdf_base_url, archive_base_url)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "

@@ -912,6 +912,41 @@ def test_a_text_that_changed_bytes_but_not_its_parse_is_not_a_new_card() -> None
     assert not ac._same_card(card, other_parse)
 
 
+async def test_a_nonce_leaves_no_text_that_no_row_names(tmp_path: Path) -> None:
+    """A row is kept when only a nonce moved, but the day's copy of the page
+    was stored all the same and named by nothing: 84 of the 1732 texts in the
+    store were such copies. A run now removes every text no row names."""
+    session = _Session({CARD_URL: "card text nonce=1"})
+    extractor = _extractor(_card_fetch("september 2026", session=session))
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
+    named = [s["text"] for s in json.loads(row.read_text())["_sources"]]
+
+    session.pages[CARD_URL] = "card text nonce=2"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW.replace(day=12), sleep=_no_sleep
+    )
+    assert summary.unchanged == 1
+    assert [
+        str(p.relative_to(tmp_path)) for p in tmp_path.glob("texts/*/*.txt")
+    ] == named
+
+
+def test_no_text_goes_while_a_row_cannot_be_read(tmp_path: Path) -> None:
+    """A row that does not parse could be naming any text, so none goes."""
+    text = tmp_path / "texts/2026-09/a.txt"
+    text.parent.mkdir(parents=True)
+    text.write_text("x")
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
+    row.parent.mkdir(parents=True)
+    row.write_text("{not json")
+    assert ac._drop_unnamed_texts(tmp_path) == 0
+    assert text.exists()
+    row.write_text(json.dumps({"_sources": []}))
+    assert ac._drop_unnamed_texts(tmp_path) == 1
+    assert not (tmp_path / "texts/2026-09").exists()
+
+
 def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
     replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
 

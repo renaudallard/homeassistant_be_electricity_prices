@@ -828,7 +828,10 @@ Three design points:
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the archive gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
+  row names (`_drop_unnamed_texts`): the day's copy of a listing page that carries a nonce, or
+  the text a rewritten row no longer reads. Nothing reaches a text except through a row, and on
+  22 September 2026 such copies were 84 of the store's 1732 texts, 10,2 MB of 29,3.
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py`): inside that
