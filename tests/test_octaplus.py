@@ -440,6 +440,36 @@ def test_dynamic_consumption_formula_skips_injection_on_reorder() -> None:
     assert match.group(3) == "4,17"
 
 
+@pytest.mark.parametrize(
+    ("energy_unit", "feed_unit"),
+    [
+        pytest.param("EUR", "EUR", id="both-spelt-EUR"),
+        pytest.param("€", "€", id="both-spelt-euro-sign"),
+    ],
+)
+def test_the_june_leads_are_told_apart_by_more_than_the_unit(
+    energy_unit: str, feed_unit: str
+) -> None:
+    """Since the June 2026 card both paragraphs open with "La formule de prix
+    est la suivante", energy in EUR/MWh and feed-in in €/MWh. The anchor accepted the
+    EUR spelling only: an energy lead written with € raised, and a feed-in
+    paragraph printed first with an EUR lead was billed as the energy price."""
+    from custom_components.be_electricity_prices.providers.octaplus import (
+        _dynamic_consumption_formula,
+    )
+
+    text = (
+        "Le prix de votre injection est indexé tous les quarts d'heure. "
+        f"La formule de prix est la suivante, en {feed_unit}/MWh HTVA : "
+        "Belpex 15' * 1 - 13,89\n"
+        f"La formule de prix est la suivante, en {energy_unit}/MWh HTVA : "
+        "Belpex 15' * 1,097 + 4,17\n"
+    )
+    match = _dynamic_consumption_formula(text)
+    assert match is not None
+    assert (match.group(1), match.group(3)) == ("1,097", "4,17")
+
+
 def test_supplier_pv_forfait_extracted_and_absent_on_dynamic() -> None:
     # Fixed/variable cards print "+ 4,77 EUR/kVA par mois" (the Forfait
     # panneaux solaires for the compensation regime); 4,77 * 12 = 57,24

@@ -498,7 +498,7 @@ def _injection_formula(text: str) -> re.Match[str] | None:
 # after it.
 _CONSUMPTION_LEAD = (
     r"La\s+formule\s+(?:tarifaire\s+HTVA(?:\s*\(en\s*€\s*/\s*MWh\))?|de\s+prix)"
-    r"\s+est\s+la\s+suivante\s*(?:,\s*en\s+EUR\s*/\s*MWh\s+HTVA)?\s*:"
+    r"\s+est\s+la\s+suivante\s*(?:,\s*en\s+(?:EUR|€)\s*/\s*MWh\s+HTVA)?\s*:"
 )
 
 
@@ -510,10 +510,22 @@ def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
     lead-in on every archived card, so the search is bounded the way the
     feed-in one is: an open search took the first formula that was not the
     feed-in one, which on a card printing its own in an unknown spelling was
-    the AMR clause's. Anchoring also keeps a card that prints the feed-in
-    paragraph first from binding that formula as the consumption rate.
+    the AMR clause's.
+
+    Since the June 2026 card the feed-in paragraph opens with the same
+    sentence as the consumption one, told apart only by writing the unit
+    EUR/MWh against €/MWh. The lead accepts either spelling, and the match
+    that is the feed-in formula is skipped, so a card that prints the feed-in
+    paragraph first, or spells both units alike, still binds the consumption
+    formula rather than raising or billing the feed-in one as energy.
     """
-    return re.search(rf"{_CONSUMPTION_LEAD}.{{0,100}}?{_EPEX_FORMULA}", text, re.S)
+    feed_in = _injection_formula(text)
+    for match in re.finditer(
+        rf"{_CONSUMPTION_LEAD}.{{0,100}}?{_EPEX_FORMULA}", text, re.S
+    ):
+        if feed_in is None or match.start(1) != feed_in.start(1):
+            return match
+    return None
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:

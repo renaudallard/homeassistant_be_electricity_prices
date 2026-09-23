@@ -192,10 +192,14 @@ By kind:
   February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`).
   The consumption formula is read by `_dynamic_consumption_formula` within a
   short distance of its own lead-in (`_CONSUMPTION_LEAD`: *"La formule tarifaire
-  HTVA (en €/MWh) est la suivante:"* before the August redesign, *"La formule de
-  prix est la suivante, en EUR/MWh HTVA :"* after), as the feed-in one is read
-  after its own. Reordering the two paragraphs cannot bind the feed-in formula
-  as the consumption rate (`test_dynamic_consumption_formula_skips_injection_on_reorder`),
+  HTVA (en €/MWh) est la suivante:"* up to the May 2026 card, *"La formule de
+  prix est la suivante, en EUR/MWh HTVA :"* from June), as the feed-in one is read
+  after its own. From June the feed-in paragraph opens with the same sentence,
+  spelt *"en €/MWh HTVA"*; the lead accepts either spelling and the match that
+  is the feed-in formula is skipped. Reordering the two paragraphs or spelling
+  both units alike cannot bind the feed-in formula as the consumption rate
+  (`test_dynamic_consumption_formula_skips_injection_on_reorder`,
+  `test_the_june_leads_are_told_apart_by_more_than_the_unit`),
   and a consumption formula in an unknown spelling fails the parse instead of
   being billed off the AMR clause further down
   (`test_an_unread_consumption_formula_is_not_taken_from_the_amr_clause`).
