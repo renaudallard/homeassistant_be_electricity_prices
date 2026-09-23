@@ -343,7 +343,9 @@ class _TickMixin:
         # entry that opted in. Soft-fail. What a failure degrades TO differs -
         # the opt-in falls back to the plain mean, an SPP-indexed card must
         # not and keeps its printed indicative instead (see the bake below).
-        spp_weighted = _spp_weighting_enabled(self.entry, self._snapshot)
+        # Asked of the priced leg, like every gate below: a signing cohort's
+        # feed-in reads the index its own card names.
+        spp_weighted = _spp_weighting_enabled(self.entry, priced)
         # Only worth the download when there are prices to weight. energie.be
         # Vast offers its ENTSO-E key as optional, so an entry that skipped it
         # reaches here with no spots at all and would otherwise pull 52 MB to

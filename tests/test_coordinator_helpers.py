@@ -6169,19 +6169,31 @@ async def test_the_cohort_credit_keeps_the_delivery_month_index(
     today = make_snapshot(
         energy=DynamicRates(factor=1.06, base=0.01272),
         injection=InjectionRates(
-            factor=0.50, base=-0.05, current=0.07, index_realised=0.222
+            factor=0.50,
+            base=-0.05,
+            current=0.07,
+            index_realised=0.222,
+            spp_indexed=True,
         ),
     )
     signing = make_snapshot(
         energy=DynamicRates(factor=1.1342, base=0.00742),
         injection=InjectionRates(
-            factor=0.10, base=-0.013, current=0.05, index_realised=0.111
+            factor=0.10,
+            base=-0.013,
+            current=0.05,
+            index_realised=0.111,
+            spp_indexed=True,
         ),
     )
     june = make_snapshot(
         energy=DynamicRates(factor=1.06, base=0.01272),
         injection=InjectionRates(
-            factor=0.99, base=-0.99, current=0.06, index_realised=0.0545
+            factor=0.99,
+            base=-0.99,
+            current=0.06,
+            index_realised=0.0545,
+            spp_indexed=True,
         ),
     )
 
@@ -6347,6 +6359,57 @@ async def test_cohort_freezes_a_feed_in_slot_triplet(
     assert legs.injection.factor_offpeak == pytest.approx(0.164)
     # The printed triplet is today's illustration, the keyless fallback.
     assert legs.injection.peak == pytest.approx(0.12975)
+
+
+async def test_cohort_keeps_the_index_its_feed_in_formula_was_signed_on(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Trevion LifePowr moved its feed-in from the quarter-hour Belpex to the
+    month's solar-weighted Belpex_SPP in June 2026. An April signer's card
+    reads "0,1 x Belpex 15 MTU - 1,3", September's "0,090 * Belpex_SPP_BE -
+    1,5".
+
+    The freeze copied April's coefficients onto September's leg and kept its
+    flags, so the April contract was credited 1,0 x SPP month mean - 13
+    EUR/MWh: a formula neither card prints, flat all month where the contract
+    moves every quarter-hour. The signed formula brings the index it reads.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.spot_stats import (
+        _injection_on_month_mean,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=FixedRates(single=0.30),
+        injection=InjectionRates(
+            factor=0.90,
+            base=-0.015,
+            current=0.056199,
+            spp_indexed=True,
+            index_realised=0.0791,
+        ),
+    )
+    april = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(factor=1.0, base=-0.013),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return april
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-04-10")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+    )
+    assert legs.injection is not None
+    assert (legs.injection.factor, legs.injection.base) == (1.0, -0.013)
+    assert not legs.injection.spp_indexed
+    # A month's settled index belongs to a month formula only.
+    assert legs.injection.index_realised is None
+    priced = replace(today, injection=legs.injection)
+    assert not _injection_on_month_mean(priced)
 
 
 async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(

@@ -409,6 +409,13 @@ def _cohort_injection_from_archived(
     them, and freezing the pair alone billed an August signer on August's
     energy and September's feed-in.
 
+    The formula also brings what it is a formula OF: the index it reads and
+    any floor it promises. Trevion LifePowr moved its feed-in from the
+    quarter-hour Belpex to the month's Belpex_SPP in June 2026, and copying an
+    April signer's coefficients onto September's leg credited them on an index
+    neither card names. A month's settled index is then kept only for a
+    formula that reads a month.
+
     ``None`` when the archived leg carries no coefficients: a card that
     publishes only a printed monthly figure re-prices every month by its own
     terms, and freezing it would invent a lock the contract does not have.
@@ -418,23 +425,33 @@ def _cohort_injection_from_archived(
     if old is None or leg is None:
         return None
     slots = _slot_coefficients(old)
-    if slots is None:
-        if old.factor is None and old.base is None:
-            return None
-        frozen = replace(leg, factor=old.factor, base=old.base)
-    else:
-        (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = slots
-        frozen = replace(
-            leg,
-            factor=old.factor,
-            base=old.base,
-            factor_peak=f_peak,
-            base_peak=b_peak,
-            factor_transition=f_trans,
-            base_transition=b_trans,
-            factor_offpeak=f_off,
-            base_offpeak=b_off,
-        )
+    if slots is None and old.factor is None and old.base is None:
+        return None
+    (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = slots or (
+        (None, None),
+        (None, None),
+        (None, None),
+    )
+    frozen = replace(
+        leg,
+        factor=old.factor,
+        base=old.base,
+        factor_peak=f_peak,
+        base_peak=b_peak,
+        factor_transition=f_trans,
+        base_transition=b_trans,
+        factor_offpeak=f_off,
+        base_offpeak=b_off,
+        formula=old.formula,
+        spp_indexed=old.spp_indexed,
+        month_indexed=old.month_indexed,
+        slot_indexed=old.slot_indexed,
+        floor_at_zero=old.floor_at_zero,
+        minimum=old.minimum,
+        index_realised=(
+            leg.index_realised if old.spp_indexed or old.month_indexed else None
+        ),
+    )
     return None if frozen == leg else frozen
 
 
