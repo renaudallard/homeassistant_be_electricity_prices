@@ -284,9 +284,11 @@ async def _compute_current_year_cost(
     # Dispatch on the EFFECTIVE energy leg. A variable contract with a start
     # date re-prices its signing cohort to a SpotMonthlyRates leg, which bills
     # on the monthly-mean hourly path rather than the variable static daily
-    # path. _cohort_energy_leg returns None for the compare flow and for
-    # contracts without a start date, leaving the current card's kind. The
-    # per-month walk resolves the same cohort leg through
+    # path. _cohort_energy_leg returns None for the compare flow, leaving the
+    # current card's kind, and for a contract without a start date unless its
+    # card is month indexed and the entry has a key: that card is re-priced
+    # on the monthly mean too (_month_indexed_leg). The per-month walk
+    # resolves the same cohort leg through
     # _effective_snapshot_for_month, so dispatch and per-month pricing agree.
     # The entry's own opt-in belongs to the side it was made on; a contract
     # that is not this entry's is judged only by what its card prints. Same

@@ -570,9 +570,13 @@ async def _cohort_legs(
     it (issue #85). This returns both legs off the signing-month card, for the
     caller to splice onto the delivery month's DSO / tax overlays
     (:meth:`_CohortLegs.splice`), and names the card they came off. A leg left
-    ``None`` means "no cohort override, keep the card's own": no cohort month,
-    or nothing to re-price with (no signing rate typed and no archived card,
-    or a variable cohort with no ENTSO-E key to resolve its monthly mean).
+    ``None`` means "no cohort override, keep the card's own": nothing to
+    re-price with (no signing rate typed and no archived card, or a variable
+    cohort with no ENTSO-E key to resolve its monthly mean). With no cohort
+    month there is no lock, so the feed-in leg is ``None`` and the energy leg
+    is the delivery month's card re-priced on its monthly mean when that card
+    is month indexed and the entry has a key (:func:`_month_indexed_leg`),
+    ``None`` otherwise.
 
     Resolution order is a hand-entered signing rate, then the archive, then
     the current card. What the user typed wins per field: only they know
