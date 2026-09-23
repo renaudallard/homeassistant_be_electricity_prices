@@ -221,10 +221,11 @@ class _SpotsMixin(_ProfilesMixin):
     _supplier_tuple: tuple[str, str, str]
 
     if TYPE_CHECKING:
-        # Provided by DataUpdateCoordinator and the sibling mixins, which only
-        # the concrete class composes. Declared for the type checker rather
-        # than inherited, so each mixin is checked on its own while the
-        # composition stays in one place, BePricesCoordinator's bases.
+        # Provided by DataUpdateCoordinator and the sibling mixins. Declared
+        # for the type checker rather than inherited, so each mixin is checked
+        # on its own and BePricesCoordinator's bases say how they compose. The
+        # one mixin composed anywhere else is the profiles mixin, which this
+        # one extends.
         hass: HomeAssistant
 
     def _cached_spot_hours(self, day_start_utc: datetime, want_quarters: bool) -> int:

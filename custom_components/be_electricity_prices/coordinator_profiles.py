@@ -67,9 +67,8 @@ class _ProfilesMixin:
     hass: HomeAssistant
 
     if TYPE_CHECKING:
-        # Provided by the spots mixin, which only the concrete class composes;
-        # declared for the type checker rather than inherited, like every
-        # mixin's view of its siblings.
+        # Provided by the spots mixin, which extends this one, so it is
+        # declared for the type checker: inheriting it back would be a cycle.
         def _billable_spots(
             self, extra_spots: dict[datetime, float]
         ) -> dict[datetime, float]: ...

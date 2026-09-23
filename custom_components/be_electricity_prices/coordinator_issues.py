@@ -114,10 +114,11 @@ class _IssuesMixin:
     _register_pair_fault: str
 
     if TYPE_CHECKING:
-        # Provided by DataUpdateCoordinator and the sibling mixins, which only
-        # the concrete class composes. Declared for the type checker rather
-        # than inherited, so each mixin is checked on its own while the
-        # composition stays in one place, BePricesCoordinator's bases.
+        # Provided by DataUpdateCoordinator and the sibling mixins. Declared
+        # for the type checker rather than inherited, so each mixin is checked
+        # on its own and BePricesCoordinator's bases say how they compose. The
+        # one mixin composed anywhere else is the profiles mixin, which the
+        # spots mixin extends.
         hass: HomeAssistant
 
     def _sync_issue(
