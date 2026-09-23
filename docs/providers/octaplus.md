@@ -189,7 +189,12 @@ By kind:
 
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
   (`_EPEX_FORMULA`), which also accepts `Belpex 15'`, the name the January and
-  February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`).
+  February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`),
+  and `Belpex Hourly`, the index the cards from 2023 to 2025 name: without it a
+  contract signed before 2026 could not read its own card and was priced on
+  today's formula. Such a card settles by the clock hour, so its leg carries
+  `quarter_hourly=False` where every 2026 card carries `True`
+  (`test_a_card_from_before_2026_is_read_on_the_hourly_index`).
   The consumption formula is read by `_dynamic_consumption_formula` within a
   short distance of its own lead-in (`_CONSUMPTION_LEAD`: *"La formule tarifaire
   HTVA (en €/MWh) est la suivante:"* up to the May 2026 card, *"La formule de
@@ -470,7 +475,7 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 ## Test fixtures
 
 Under `tests/fixtures/`, exercised by `tests/test_octaplus.py` (April 2026
-cards):
+cards unless the row names another month):
 
 | fixture | card variant |
 | --- | --- |
@@ -480,6 +485,7 @@ cards):
 | `octaplus_fixed_w_aug.pdf` | OCTA+ Fixed, Wallonia, **August 2026 redesign**. `Epex SPP M * 0,8560 - 16,20` in place of April's three `Epex SPP x` rows. Kept as served, not re-rendered: ghostscript reorders the DSO and tax column headers. |
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
+| `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 

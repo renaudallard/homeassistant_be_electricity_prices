@@ -440,6 +440,31 @@ def test_dynamic_consumption_formula_skips_injection_on_reorder() -> None:
     assert match.group(3) == "4,17"
 
 
+def test_a_card_from_before_2026_is_read_on_the_hourly_index() -> None:
+    """OCTA+'s dynamic cards from 2023 to 2025 print "Belpex Hourly * 1,038 +
+    3,93" for the energy and "Belpex Hourly * 0,988 - 16,83" for the feed-in.
+    Neither was read, so a contract signed before 2026 could not read its
+    own card and was priced on today's formula. The card names the clock
+    hour, so the leg settles by the hour rather than the quarter."""
+    snap = parse_snapshot(
+        "octaplus_dynamic", _text("octaplus_dynamic_v_dec2025.pdf"), "flanders"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.038 * 1.06)
+    assert snap.energy.base == pytest.approx(3.93 / 1000 * 1.06)
+    assert snap.energy.quarter_hourly is False
+    assert snap.injection is not None
+    assert (snap.injection.factor, snap.injection.base) == pytest.approx(
+        (0.988, -0.01683)
+    )
+    # And a card of this year keeps its quarter-hour grid.
+    jan = parse_snapshot(
+        "octaplus_dynamic", _text("octaplus_dynamic_v_jan.pdf"), "flanders"
+    )
+    assert isinstance(jan.energy, DynamicRates)
+    assert jan.energy.quarter_hourly is True
+
+
 @pytest.mark.parametrize(
     ("energy_unit", "feed_unit"),
     [

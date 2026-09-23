@@ -429,9 +429,11 @@ def _vat_multiplier(text: str) -> float:
 
 # The January and February 2026 cards name both indices Belpex: "Belpex 15' * 1
 # - 13,89" on the dynamic card, "Belpex SPP x 0,852 - 13,39" on the monthly
-# ones. From March every card says Epex.
+# ones. From March every card says Epex. The dynamic cards before 2026 index
+# on the clock hour, "Belpex Hourly * 1,038 + 3,93", and without that spelling
+# a contract signed on one could not read its own card.
 _EPEX_FORMULA = (
-    rf"(?:Bel|E)pex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*"
+    rf"(?:Bel|E)pex\s*(?:15\s*'?|Hourly)\s*\*\s*(\d+(?:[.,]\d+)?)\s*"
     rf"([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
 )
 # The 2026 template reworded the injection lead-in from "Le prix de votre
@@ -555,8 +557,10 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             # the contract bills per quarter-hour like Engie / Cociter /
             # EBEM / Ecofix. Without this the live price table aggregates
             # to hourly and the current / next-slot sensors and the
-            # cheapest-window service lose the native 15-minute grid.
-            quarter_hourly=True,
+            # cheapest-window service lose the native 15-minute grid. A card
+            # from before 2026 names "Belpex Hourly", which a contract signed
+            # on it settles on by the clock hour.
+            quarter_hourly="Hourly" not in formula.group(0),
         )
 
     if kind == "tou_impact":
