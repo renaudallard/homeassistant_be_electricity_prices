@@ -73,20 +73,34 @@ def test_the_package_loads_without_the_recorder() -> None:
     """_recorder_models keeps the recorder out of module scope, so the
     integration loads on an installation that runs without it. The 0.27.5
     split moved two of its models into backfill_cost at module scope, and
-    loading the package pulled in 42 recorder modules for nothing."""
+    loading the package pulled in 42 recorder modules for nothing.
+
+    Every module is imported, not the package root alone: Home Assistant
+    loads the platforms, the config flow and the diagnostics handler on its
+    own, and eleven modules the root never reaches were unguarded."""
     code = (
-        "import sys, custom_components.be_electricity_prices\n"
+        "import importlib, pkgutil, sys\n"
+        "import custom_components.be_electricity_prices as pkg\n"
+        "names = [m.name for m in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + '.')]\n"
+        "for name in names:\n"
+        "    importlib.import_module(name)\n"
+        "print(len(names))\n"
         "print(sorted(m for m in sys.modules "
         "if m.startswith('homeassistant.components.recorder')))"
     )
-    loaded = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=Path(__file__).resolve().parent.parent,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    assert loaded.strip() == "[]"
+    count, loaded = (
+        subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        .stdout.strip()
+        .split("\n")
+    )
+    assert int(count) > 80
+    assert loaded == "[]"
 
 
 def test_hour_iter_inclusive_start_exclusive_end() -> None:

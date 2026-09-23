@@ -637,7 +637,7 @@ matter to this module:
   the wipe are wrapped in `try/except ImportError` (`backfill_window.py`) so a
   bare HA degrades gracefully instead of crashing, and
   `test_the_package_loads_without_the_recorder` (`tests/test_backfill.py`)
-  holds the package to that.
+  holds every module to that, the ones Home Assistant loads on its own included.
 - `energy` is the consumer: the Energy dashboard reads the `current_year_cost`
   sum series and the price means this module writes. Ordering after it keeps the
   dashboard's expectations satisfied on first load.
