@@ -65,10 +65,16 @@ jobs:
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "tag=v$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Check if tag exists
+      - name: Check if the release exists
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if git tag -l "${{ steps.version.outputs.tag }}" | grep -q .; then
+          # The release, not the tag. The tag is pushed before the release is
+          # created, so when every attempt below fails it is already on
+          # origin, and a re-run that tested the tag skipped the release and
+          # ended green with nothing published.
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -92,10 +98,10 @@ jobs:
           set +e
           tag="${{ steps.version.outputs.tag }}"
           # Tag + push are idempotent enough to leave outside the retry
-          # loop: if the tag is already on origin we still want to
-          # proceed to release creation. The push command tolerates the
-          # "already exists" case the same way 'git push origin <tag>'
-          # does locally.
+          # loop: if the tag is already on origin, as it is on a re-run
+          # after every attempt below failed, we still want to proceed to
+          # release creation. The push command tolerates the "already
+          # exists" case the same way 'git push origin <tag>' does locally.
           git tag "$tag"
           git push origin "$tag"
           # gh release create is the operation that lost v0.5.28 to a

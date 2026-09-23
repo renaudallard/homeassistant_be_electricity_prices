@@ -1257,8 +1257,13 @@ release's own gate. The `release` job needs all three
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
    (`.github/workflows/autorelease.yml`).
-2. Skips if the tag already exists (`.github/workflows/autorelease.yml`), making the workflow
-   idempotent against re-pushes.
+2. Skips if the release already exists (`gh release view`, `.github/workflows/autorelease.yml`),
+   making the workflow idempotent against re-pushes. It asks for the release rather than the tag
+   because the tag is pushed first: when every `gh release create` attempt below fails, the tag
+   is already on origin, and a re-run that tested it skipped the release and ended green with
+   nothing published. Re-running the failed job now finishes the release
+   (`tests/test_autorelease.py` runs the check and release steps out of the workflow against a
+   scratch origin and a fake `gh`).
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
    `__pycache__` (`.github/workflows/autorelease.yml`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
