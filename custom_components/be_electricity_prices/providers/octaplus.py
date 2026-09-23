@@ -411,9 +411,9 @@ def _vat_multiplier(text: str) -> float:
     return vat_multiplier(text, r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
 
 
-# The January and February 2026 cards name the quarter-hourly index Belpex in
-# the injection formula ("Belpex 15' * 1 - 13,89"); every other formula on
-# every card says Epex.
+# The January and February 2026 cards name both indices Belpex: "Belpex 15' * 1
+# - 13,89" on the dynamic card, "Belpex SPP x 0,852 - 13,39" on the monthly
+# ones. From March every card says Epex.
 _EPEX_FORMULA = (
     rf"(?:Bel|E)pex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*"
     rf"([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
@@ -422,8 +422,10 @@ _EPEX_FORMULA = (
 # injection est indexé ..." to "les prix de l'électricité injectée sont
 # indexés ..."; accept either (with the curly apostrophe the card uses).
 # The monthly index the non-dynamic cards settle their feed-in credit on. The
-# August 2026 redesign renamed the parameter and changed the operator, so both
-# spellings have to be accepted:
+# August 2026 redesign renamed the parameter and changed the operator, and the
+# first two cards of the year named the index Belpex, so all three spellings
+# have to be accepted:
+#   January "monohoraire : Belpex SPP x 0,852 - 13,39"  (one row per meter)
 #   April  "monohoraire : Epex SPP x 0,852 - 13,39"     (one row per meter)
 #   August "en EUR/MWh HTVA : Epex SPP M * 0,8560 - 16,20"  (one row)
 # Stated in EUR/MWh either way. The value part is anchored rather than left as
@@ -431,7 +433,7 @@ _EPEX_FORMULA = (
 # The optional M must be followed by the operator, so the prose mention of the
 # parameter name on its own ("le parametre << Epex SPP M >>") cannot match.
 _SPP_FORMULA_RE = re.compile(
-    rf"Epex\s*SPP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
+    rf"(?:Bel|E)pex\s*SPP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
     rf"(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )

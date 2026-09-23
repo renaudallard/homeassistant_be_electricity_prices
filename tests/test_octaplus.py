@@ -557,6 +557,23 @@ def test_dynamic_formulas_read_the_belpex_spelling() -> None:
     assert snap.injection.base == pytest.approx(-0.01389)
 
 
+def test_the_monthly_feed_in_formula_reads_the_belpex_spelling() -> None:
+    """The non-dynamic cards of January and February 2026 name the monthly
+    index Belpex too: "Belpex SPP x 0,852 - 13,39", on every Fixed, Eco Fixed,
+    Fixed Impact, Flux, Eco Flux and Smart Variable card of both months and
+    regions. Only Epex was read, so those 22 rows kept the printed estimate
+    alone, which is last month's figure, and a January or February cohort had
+    no formula to lock. The real January 2026 Fixed card for Flanders."""
+    snap = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_v_jan.pdf"), "flanders"
+    )
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.852)
+    assert snap.injection.base == pytest.approx(-0.01339)
+    assert snap.injection.spp_indexed is True
+    assert snap.injection.current == pytest.approx(0.0296)
+
+
 def test_an_unread_injection_formula_is_not_taken_from_the_amr_clause() -> None:
     """A spelling the pattern does not know must leave the credit unread.
 

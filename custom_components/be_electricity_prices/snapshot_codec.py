@@ -367,19 +367,21 @@ class _MigratingStore(Store[dict[str, Any]]):
 # contrat ... en septembre 2026", or 750 kWh paid as a cashback), and a v69
 # row carries none of it, so a household that signed in that month is
 # credited nothing where its card grants up to 254,56 EUR at 3500 kWh.
-# v71: OCTA+'s January and February 2026 dynamic cards name the quarter-hourly
-# index Belpex where every other card says Epex. Three of them read no feed-in
-# formula at all, and on both January cards in Flanders the search ran on to
-# the AMR clause further down and credited its consumption formula (1,02 x
-# Epex + 11,60 EUR/MWh) against the card's own (1 x Belpex - 13,89). On the
-# Dynamic one the energy price was that clause's injection formula as well. A
-# v70 month row keeps all of it, and a January 2026 cohort freezes both legs
-# from that card: at a 100 EUR/MWh spot either one was credited 2,75 c/kWh too
-# much for its feed-in, and the Dynamic one paid 2,34 c/kWh too little for its
-# energy. v71 also carries InjectionRates.fixed_for_term, which Mega's fixed
-# cards, Trevion Groene Energie Vast and EnergyVision's fixed-injection card
-# set: a signing cohort keeps its own card's feed-in price on them, and a v70
-# row cannot say so.
+# v71: OCTA+'s January and February 2026 cards name both indices Belpex where
+# every later card says Epex. On the dynamic ones three read no feed-in formula
+# at all, and on both January cards in Flanders the search ran on to the AMR
+# clause further down and credited its consumption formula (1,02 x Epex +
+# 11,60 EUR/MWh) against the card's own (1 x Belpex - 13,89); on the Dynamic
+# one the energy price was that clause's injection formula as well. The
+# non-dynamic cards spell their monthly feed-in formula "Belpex SPP x 0,852 -
+# 13,39" and 22 rows were read with none, keeping last month's printed
+# estimate. A v70 month row keeps all of it, and a January 2026 cohort
+# freezes both legs from that card: at a 100 EUR/MWh spot a Dynamic one was
+# credited 2,75 c/kWh too much for its feed-in and paid 2,34 c/kWh too little
+# for its energy. v71 also carries InjectionRates.fixed_for_term, which Mega's
+# fixed cards, Trevion Groene Energie Vast and EnergyVision's fixed-injection
+# card set: a signing cohort keeps its own card's feed-in price on them, and
+# a v70 row cannot say so.
 _SNAPSHOT_SCHEMA_VERSION = 71
 
 # The oldest stored schema a rejected blob may still be replayed from when no

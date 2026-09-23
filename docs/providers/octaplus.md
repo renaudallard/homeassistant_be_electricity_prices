@@ -414,10 +414,13 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   the sentence, so a `[\d.,]+` value class swallows the period and turns
   `13,39.` into a different number. The value is anchored as
   `\d+(?:[.,]\d+)?`.
-- **Two card generations, two spellings of the same formula.** OCTA+ reissued
+- **Two card generations, three spellings of the same formula.** OCTA+ reissued
   every card in August 2026: `Epex SPP x 0,852 - 13,39` became
   `Epex SPP M * 0,8560 - 16,20`, and the three per-meter rows collapsed to one.
-  `_SPP_FORMULA_RE` accepts both. The optional `M` must be followed by the
+  The January and February 2026 cards print the first one as
+  `Belpex SPP x 0,852 - 13,39`, as their dynamic sibling names its index
+  `Belpex 15'`. `_SPP_FORMULA_RE` accepts all three; reading only `Epex` left
+  those 22 rows on the printed estimate, which is last month's figure. The optional `M` must be followed by the
   operator, because the same prose names the parameter on its own first
   (*"sur base du paramètre « Epex SPP M » dont les dernières valeurs connues"*)
   and that sentence would otherwise bind as a formula. This is also why the
@@ -464,6 +467,7 @@ cards):
 | `octaplus_fixed_w_aug.pdf` | OCTA+ Fixed, Wallonia, **August 2026 redesign**. `Epex SPP M * 0,8560 - 16,20` in place of April's three `Epex SPP x` rows. Kept as served, not re-rendered: ghostscript reorders the DSO and tax column headers. |
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
+| `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
 in the test helper `_text` (`test_octaplus.py`), matching the production
