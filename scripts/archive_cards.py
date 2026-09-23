@@ -76,6 +76,7 @@ import argparse
 import asyncio
 import base64
 import binascii
+import functools
 import hashlib
 import importlib.metadata
 import json
@@ -124,7 +125,7 @@ from homeassistant.helpers.json import json_dumps  # noqa: E402
 # month is read by the same function the live check's freshness gate uses,
 # and the render cache is the one the live check reads too.
 from card_texts import StoredTexts, digest_of, read_text  # type: ignore[import-not-found]  # noqa: E402
-from live_check import label_month  # type: ignore[import-not-found]  # noqa: E402
+from live_check import _fetch_with_retry, label_month  # type: ignore[import-not-found]  # noqa: E402
 
 _T = TypeVar("_T")
 _BRUSSELS = ZoneInfo("Europe/Brussels")
@@ -466,10 +467,11 @@ class _ReplaySession:
         # url -> digest for the row being replayed.
         self.pdfs: dict[str, str] = {}
         self._cache = Path(tempfile.mkdtemp(prefix="cards-replay-"))
-        # Set when a kept card could not be downloaded for a reason that says
-        # nothing about the card: a network error, a 5xx, a 429. The row it
-        # was for is left as it was, and archive() keeps the old parser stamp
-        # so the next run replays it again rather than never.
+        # Set when a kept card could not be downloaded, retries included, for
+        # a reason that says nothing about the card: a network error, a 5xx,
+        # a 429, a 408 or a 403. The row it was for is left as it was, and
+        # archive() keeps the old parser stamp so the next run replays it
+        # again rather than never.
         self.download_failed = False
 
     def get(self, url: str, **_kw: Any) -> Any:
@@ -495,23 +497,41 @@ class _ReplaySession:
         path = self._kept.get(digest)
         if self._pdf_base_url is None or path is None:
             raise aiohttp.ClientConnectionError(f"no kept copy of {url} to replay from")
+        # Retried like a live fetch: a re-render downloads every kept card,
+        # and one blip among them used to hold the stamp and repeat the whole
+        # re-render the next day.
+        try:
+            payload = await _fetch_with_retry(
+                functools.partial(self._download, f"{self._pdf_base_url}/{path}", url),
+                transient=is_transient_fetch_error,
+            )
+        except aiohttp.ClientConnectionError as err:
+            # Still failing for a reason that says nothing about the card: the
+            # stamp waits for the next run. A 404 says the card is not kept,
+            # and waiting finds no more.
+            if is_transient_fetch_error(str(err)):
+                self.download_failed = True
+            raise
+        cached.write_bytes(payload)
+        return payload
+
+    async def _download(self, source: str, url: str) -> bytes:
+        """One attempt at a kept copy, failing in the words the shared
+        transient test reads."""
         try:
             async with self._session.get(
-                f"{self._pdf_base_url}/{path}", timeout=aiohttp.ClientTimeout(total=60)
+                source, timeout=aiohttp.ClientTimeout(total=60)
             ) as resp:
                 status = resp.status
                 payload = await resp.read() if status < 400 else b""
-        except (aiohttp.ClientError, TimeoutError):
-            self.download_failed = True
-            raise
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise aiohttp.ClientConnectionError(
+                f"network error fetching the kept copy of {url}: {err!r}"
+            ) from err
         if status >= 400:
-            self.download_failed = (
-                self.download_failed or status >= 500 or status == 429
-            )
             raise aiohttp.ClientConnectionError(
                 f"HTTP {status} fetching the kept copy of {url}"
             )
-        cached.write_bytes(payload)
         return payload
 
     class _Pending:

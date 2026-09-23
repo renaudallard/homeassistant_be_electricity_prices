@@ -1016,13 +1016,18 @@ def test_replay_answers_404_for_a_read_card_asked_under_another_folder(
     ],
 )
 def test_a_kept_card_that_did_not_download_marks_the_replay(
-    status: int | None, error: BaseException | None, failed: bool
+    monkeypatch: pytest.MonkeyPatch,
+    status: int | None,
+    error: BaseException | None,
+    failed: bool,
 ) -> None:
     """A kept card that does not come back for a reason unrelated to the card
     marks the replay, so the parser stamp is not moved over the rows it
     missed. A 404 says the card is not kept: retrying tomorrow finds nothing
     more, so it does not hold the stamp."""
+    import live_check  # type: ignore[import-not-found]
 
+    monkeypatch.setattr(live_check, "_RETRY_BACKOFF_S", (0.0,))
     answered = status
 
     class _Response:
@@ -1061,6 +1066,52 @@ def test_a_kept_card_that_did_not_download_marks_the_replay(
     with pytest.raises((aiohttp.ClientConnectionError, TimeoutError)):
         asyncio.run(run())
     assert replay.download_failed is failed
+
+
+def test_a_kept_card_download_is_retried_before_it_holds_the_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A re-render downloads every kept card, about 1500, and one blip among
+    them held the stamp and repeated the whole re-render the next day. The
+    download is retried like a live fetch, so a 503 that clears on the
+    second try costs nothing."""
+    import live_check  # type: ignore[import-not-found]
+
+    monkeypatch.setattr(live_check, "_RETRY_BACKOFF_S", (0.0,))
+    answers = [503, 200]
+
+    class _Response:
+        def __init__(self) -> None:
+            self.status = answers.pop(0)
+
+        async def __aenter__(self) -> "_Response":
+            return self
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+        async def read(self) -> bytes:
+            return b"%PDF kept"
+
+    class _Session:
+        def get(self, _url: str, **_kw: object) -> _Response:
+            return _Response()
+
+    replay = ac._ReplaySession(
+        _Session(),  # type: ignore[arg-type]
+        None,
+        "https://cards.test/download",
+        {"abc": "electricity-2026-09/abc.pdf"},
+    )
+    replay.pdfs = {"https://acme.test/card.pdf": "abc"}
+
+    async def run() -> bytes:
+        async with replay.get("https://acme.test/card.pdf") as resp:
+            return await resp.read()
+
+    assert asyncio.run(run()) == b"%PDF kept"
+    assert not answers
+    assert replay.download_failed is False
 
 
 async def test_the_parser_stamp_waits_for_a_replay_that_could_not_download(

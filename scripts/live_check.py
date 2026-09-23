@@ -1010,6 +1010,7 @@ async def _fetch_with_retry(
     factory: Callable[[], Awaitable[_RetryT]],
     *,
     attempts: int = 3,
+    transient: Callable[[str], bool] | None = None,
 ) -> _RetryT:
     """Call ``factory()`` up to ``attempts`` times, retrying transient
     network failures with a short backoff between attempts.
@@ -1023,7 +1024,12 @@ async def _fetch_with_retry(
 
     A fresh awaitable is created via ``factory()`` for every attempt
     because awaitables can only be awaited once.
+
+    ``transient`` is the classifier for a caller that loads the package
+    itself rather than through ``_load_providers``, where the default is
+    still the placeholder that retries nothing.
     """
+    is_transient = transient or _is_transient_fetch_error
     last_err: BaseException | None = None
     for i in range(attempts):
         try:
@@ -1034,10 +1040,10 @@ async def _fetch_with_retry(
             # 429 / 403 status. A 404 / 410 (card renamed or withdrawn) is
             # not transient and fails fast. The string predicate is shared
             # from providers/_pdf.py so the two paths can't drift apart.
-            transient = isinstance(err, TimeoutError) or _is_transient_fetch_error(
-                str(err)
-            )
-            if not transient or i == attempts - 1:
+            if (
+                not (isinstance(err, TimeoutError) or is_transient(str(err)))
+                or i == attempts - 1
+            ):
                 raise
             last_err = err
             await asyncio.sleep(_RETRY_BACKOFF_S[min(i, len(_RETRY_BACKOFF_S) - 1)])

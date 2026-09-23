@@ -904,9 +904,12 @@ before delivery is asked first; anything else is refused as a network error, and
 reported as not replayable and left as it was, as is a row whose text file is gone or whose
 archive path no longer settles it. The run reports rows `reparsed`, whose parse came out
 differently, apart from rows `restamped`, rewritten only to stamp the running schema, which every
-schema bump does to every replayable row. A kept card that does not download for a reason unrelated to
-the card (a network error, a 5xx, a 429) leaves `parser.txt` as it was, so the next run replays
-the rows again: stamping over them had them never looked at again until an unrelated parser
+schema bump does to every replayable row. A kept card download is retried the way a live fetch
+is (`_fetch_with_retry`, `scripts/live_check.py`), since a re-render downloads every kept card and
+one blip among them repeated the whole re-render the next day. One that still does not download
+for a reason unrelated to the card (a network error, a 5xx, a 429, a 408 or a 403) leaves
+`parser.txt` as it was, so the next run replays the rows again: stamping over them had them
+never looked at again until an unrelated parser
 edit, while the integration reads a closed month from here first. A row whose parse came out differently is rewritten,
 keeping its capture day; `_cached_at` moves. The replay is a regex pass per row, no download
 and no render, so it is minutes for the whole branch, and a day without a code change replays
