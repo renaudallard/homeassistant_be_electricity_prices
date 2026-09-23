@@ -3541,6 +3541,15 @@ _MAX_WELCOME_CREDIT_MONTHS: int = 14
 _MIN_WELCOME_CREDIT_EUR: float = 3.0
 _MIN_WELCOME_CREDIT_PER_KWH: float = 0.0006
 _MIN_WELCOME_CREDIT_KWH: float = 150.0
+# The supplement, the cap and the share are fenced on their own figures, not
+# on the flat credit's: the cap borrowed a floor fifty times under the
+# smallest cap any card prints, so a cap read ten times low passed, and the
+# share had no floor at all. Mega's supplements run from 5,00 to 42,40 and its
+# caps from 800 to 848; Luminus's share from 29% to 33%.
+_MIN_WELCOME_SUPPLEMENT_EUR: float = 1.0
+_MIN_WELCOME_CAP_EUR: float = 160.0
+_MAX_WELCOME_CAP_EUR: float = 4240.0
+_MIN_WELCOME_CREDIT_SHARE: float = 0.058
 # The supplement is the one field that cannot share the flat ceiling: its
 # largest real value is 42,40, a thirty-fifth of the flat fence, so a x10 slip
 # would pass there. Five times its own largest.
@@ -3577,10 +3586,10 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
         (
             "supplement",
             supplement,
-            _MIN_WELCOME_CREDIT_EUR,
+            _MIN_WELCOME_SUPPLEMENT_EUR,
             _MAX_WELCOME_SUPPLEMENT_EUR,
         ),
-        ("cap", cap, _MIN_WELCOME_CREDIT_EUR, _MAX_WELCOME_CREDIT_EUR),
+        ("cap", cap, _MIN_WELCOME_CAP_EUR, _MAX_WELCOME_CAP_EUR),
         (
             "per-kWh",
             per_kwh,
@@ -3598,10 +3607,10 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
             detail=f"{label}={value}",
         )
     if pct is not None:
-        # A share, not a percentage. 0,33 and never 33.
+        # A share, not a percentage. 0,33 and never 33, nor 0,033.
         _expect(
-            f"{prefix}: welcome credit share in (0, 1]",
-            0.0 < float(pct) <= 1.0,
+            f"{prefix}: welcome credit share in [{_MIN_WELCOME_CREDIT_SHARE}, 1]",
+            _MIN_WELCOME_CREDIT_SHARE <= float(pct) <= 1.0,
             detail=f"pct_of_energy={pct}",
         )
     if months is not None:

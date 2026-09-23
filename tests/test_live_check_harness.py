@@ -2823,10 +2823,15 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
     # let 0,003 / 10 through on float rounding, and the supplement's own
     # ceiling of 500 let its slip, 42,40 read as 424, through outright. Each
     # extreme the archive holds must pass, and ten times off it must not.
+    # The cap and the share had no floor of their own: a cap read ten times
+    # low, 84,80 for 848, sat far above the flat credit's 3,00 and dropped
+    # 135,95 EUR a year from a Mega Online Fixed quote, and a share had no
+    # floor at all.
     extremes = {
         "welcome_credit_eur": (15.0, 300.0),
         "welcome_credit_eur_per_kwh": (0.003, 0.10388),
         "welcome_credit_direct_debit_eur": (5.0, 42.4),
+        "welcome_credit_cap_eur": (800.0, 848.0),
         "welcome_credit_kwh": (750.0, 750.0),
     }
     for field, (smallest, largest) in extremes.items():
@@ -2834,7 +2839,10 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
         assert not _fails(**{field: largest}), field
         assert _fails(**{field: smallest / 10}), field
         assert _fails(**{field: largest * 10}), field
-    assert _fails(welcome_credit_cap_eur=848.0 * 10)
+    assert not _fails(welcome_credit_pct_of_energy=0.29)
+    assert _fails(welcome_credit_pct_of_energy=0.029)
+    # A supplier halving its supplement is an offer moving, not a slip.
+    assert not _fails(welcome_credit_direct_debit_eur=2.5)
 
     # Zero is exempt, because zero is no credit rather than a small one, and a
     # card granting none does not always say so with None: EnergyVision's
