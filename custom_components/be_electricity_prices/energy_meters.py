@@ -37,7 +37,7 @@ import logging
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from homeassistant.components.sensor import (
@@ -474,27 +474,33 @@ async def _sum_hourly_kwh(
 
 async def _metered_hourly_kwh(
     hass: HomeAssistant, entry: ConfigEntry, side: str, start: date, end: date
-) -> dict[datetime, float] | None:
+) -> MeteredHours | None:
     """Per-UTC-hour kWh for one side of the entry's metering, or ``None`` when
     the wiring cannot be billed.
 
     ``None`` for a half-wired day/night pair with no totals sensor, and for a
     wired pair one half of which produced nothing at all. A pair otherwise
     counts the hours both halves report (:func:`_paired_keys`), which is the
-    rule the per-day walk and the yearly volume follow too. An empty dict when
-    nothing is wired on this side.
+    rule the per-day walk and the yearly volume follow too. A pair that does
+    not report the same hours is billed off the side's totals sensor instead
+    when one is wired, since the total covers both bands on every hour. An
+    empty map when nothing is wired on this side.
     """
     if _partial_register_pair(entry, side):
         return None
     ids = _hourly_kwh_sensors(entry, side)
     if len(ids) != 2:
-        return await _sum_hourly_kwh(hass, ids, start, end)
+        return MeteredHours(await _sum_hourly_kwh(hass, ids, start, end), tuple(ids))
     day = await _sum_hourly_kwh(hass, ids[:1], start, end)
     night = await _sum_hourly_kwh(hass, ids[1:], start, end)
     hours = _paired_keys(day, night)
+    total_id = _kwh_sensor_ids(entry, side)[2]
+    if total_id and (hours is None or set(day) != set(night)):
+        total = await _sum_hourly_kwh(hass, [total_id], start, end)
+        return MeteredHours(total, (total_id,))
     if hours is None:
         return None
-    return {hour: day[hour] + night[hour] for hour in hours}
+    return MeteredHours({hour: day[hour] + night[hour] for hour in hours}, tuple(ids))
 
 
 async def _top_up_today_hourly(
@@ -686,21 +692,26 @@ async def _resolve_daily_kwh(
                 today,
             )
             days = _paired_keys(d, n)
-            if days is None:
-                # A dead half is refused like a missing one: billing the
-                # surviving band alone read a silent night register as a
-                # year that used no night energy, 32% under the real bill
-                # with every day counted as seen.
-                return False
-            for day in days:
-                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[slot_day] += d[day]
-                row[slot_night] += n[day]
-            if live is not None:
-                row = out.setdefault(today, [0.0, 0.0, 0.0, 0.0])
-                row[slot_day] += live[0]
-                row[slot_night] += live[1]
-            return True
+            # A pair that does not report the same days is billed off the
+            # totals sensor when one is wired: the total covers both bands on
+            # every day, where the pair can only bill the days both halves
+            # report, or none at all.
+            if not (total_id and (days is None or set(d) != set(n))):
+                if days is None:
+                    # A dead half is refused like a missing one: billing the
+                    # surviving band alone read a silent night register as a
+                    # year that used no night energy, 32% under the real bill
+                    # with every day counted as seen.
+                    return False
+                for day in days:
+                    row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                    row[slot_day] += d[day]
+                    row[slot_night] += n[day]
+                if live is not None:
+                    row = out.setdefault(today, [0.0, 0.0, 0.0, 0.0])
+                    row[slot_day] += live[0]
+                    row[slot_night] += live[1]
+                return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
         per_day = await _recorder_daily_kwh(hass, total_id, window_start, today)
@@ -800,6 +811,19 @@ class MeasuredKwh:
     pair_fault: str = ""
 
 
+@dataclass(frozen=True)
+class MeteredHours:
+    """One side's per-UTC-hour kWh and the sensors it was read from.
+
+    The sensors are what today's live top-up has to read. A pair that a wired
+    total stands in for is billed off the total, and topping it up off the
+    registers would add one meter's live reading to another's statistics.
+    """
+
+    kwh: dict[datetime, float]
+    sensors: tuple[str, ...]
+
+
 def _split_today(
     day: Mapping[date, float], night: Mapping[date, float], end: date
 ) -> tuple[dict[date, float], dict[date, float], tuple[float, float] | None]:
@@ -881,22 +905,30 @@ async def _measured_kwh(
         )
         today_kwh, today_days = (live[0] + live[1], 1) if live else (0.0, 0)
         days = _paired_keys(d, n)
+        # A wired totals sensor measures what the pair cannot, and the pair
+        # is still named, so the Repairs card gets the register fixed.
+        instead = "; its totals sensor is read instead" if total_id else ""
         if days is None:
             # One half of the pair is wired but produced nothing whatsoever.
             # That is a broken pair rather than a band that used no energy, and
             # billing the surviving half alone is a wrong bill, not a partial
             # one, so refuse it the way a half-wired pair is already refused.
+            dead, alive = (night_id, day_id) if d else (day_id, night_id)
             _LOGGER.warning(
                 "%s returned no statistics between %s and %s while %s did, so "
-                "the %s pair cannot be billed. Check that sensor has a "
+                "the %s pair cannot be billed%s. Check that sensor has a "
                 "state_class of total_increasing and still exists",
-                night_id if d else day_id,
+                dead,
                 start,
                 end,
-                day_id if d else night_id,
+                alive,
                 side,
+                instead,
             )
-            return MeasuredKwh(0.0, 0, pair_fault=night_id if d else day_id)
+            if total_id:
+                measured = await _measured_total(hass, total_id, start, end)
+                return replace(measured, pair_fault=dead)
+            return MeasuredKwh(0.0, 0, pair_fault=dead)
         if not d:
             # Neither half has recorded anything in the window yet, today
             # aside.
@@ -909,7 +941,7 @@ async def _measured_kwh(
             _LOGGER.warning(
                 "%s covers %d days between %s and %s while %s covers %d, so "
                 "the %s pair has diverged; only the %d days both report are "
-                "billed",
+                "billed%s",
                 day_id,
                 len(d),
                 start,
@@ -918,6 +950,7 @@ async def _measured_kwh(
                 len(n),
                 side,
                 len(days),
+                instead,
             )
         latest = max(max(d), max(n))
         stopped = ", ".join(
@@ -925,15 +958,25 @@ async def _measured_kwh(
             for entity_id, reported in ((day_id, d), (night_id, n))
             if max(reported) < latest - timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
         )
+        if total_id and set(d) != set(n):
+            measured = await _measured_total(hass, total_id, start, end)
+            return replace(measured, pair_fault=stopped)
         return MeasuredKwh(
             sum(d[x] + n[x] for x in days) + today_kwh,
             len(days) + today_days,
             pair_fault=stopped,
         )
     if total_id:
-        d = await _recorder_daily_kwh(hass, total_id, start, end)
-        return MeasuredKwh(sum(d.values()), len(d))
+        return await _measured_total(hass, total_id, start, end)
     return MeasuredKwh(0.0, 0)
+
+
+async def _measured_total(
+    hass: HomeAssistant, total_id: str, start: date, end: date
+) -> MeasuredKwh:
+    """A totals sensor's kWh over ``[start, end]`` and the days it covers."""
+    d = await _recorder_daily_kwh(hass, total_id, start, end)
+    return MeasuredKwh(sum(d.values()), len(d))
 
 
 async def _measured_hour_weights(
@@ -964,10 +1007,10 @@ async def _measured_hour_weights(
     clock-hour weighting rather than inventing a profile from one band.
     """
     metered = await _metered_hourly_kwh(hass, entry, side, start, end)
-    if not metered:
+    if metered is None or not metered.kwh:
         return None
     per_hour: dict[int, float] = {}
-    for when, kwh in metered.items():
+    for when, kwh in metered.kwh.items():
         hour = dt_util.as_local(when).hour
         per_hour[hour] = per_hour.get(hour, 0.0) + kwh
     total = sum(per_hour.values())

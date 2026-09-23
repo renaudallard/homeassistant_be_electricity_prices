@@ -2499,6 +2499,66 @@ async def test_a_healthy_pair_still_bills_today_off_the_live_meter(
     assert measured == energy_meters.MeasuredKwh(265 * 2.0 + 7.0, 266)
 
 
+_PAIR_AND_TOTAL = SimpleNamespace(
+    data={
+        "day_consumption_kwh": "sensor.day",
+        "night_consumption_kwh": "sensor.night",
+        "consumption_kwh": "sensor.total",
+    }
+)
+
+
+@pytest.mark.parametrize(
+    ("night", "fault"),
+    [
+        pytest.param(0, "sensor.night", id="dead-half"),
+        pytest.param(250, "sensor.night", id="stopped-half"),
+    ],
+)
+async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
+    hass: HomeAssistant, freezer: Any, night: int, fault: str
+) -> None:
+    """The meters form takes a pair and a total side by side (P1 dongles
+    expose tariff 1, tariff 2 and the total), and the pair wins. When one
+    half went silent the round refused the whole side, so the year to date
+    fell to the fees while the total held every kWh. The total now bills the
+    side, and the pair is still named so the register gets fixed."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": year[:night], "sensor.total": year},
+        {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.total": 7.0},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        hourly = await energy_meters._metered_hourly_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            "consumption",
+            date(2026, 1, 1),
+            today,
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert daily is not None
+    assert len(daily) == 266
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(265.0 + 7.0)
+    assert hourly is not None
+    assert hourly.sensors == ("sensor.total",)
+    assert len(hourly.kwh) == 265
+    assert measured == energy_meters.MeasuredKwh(265.0 + 7.0, 266, pair_fault=fault)
+
+
 async def test_measured_kwh_counts_days_across_a_register_pair(
     hass: HomeAssistant,
 ) -> None:
@@ -8452,7 +8512,8 @@ async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -
             today,
         )
     assert daily == {d0 + timedelta(days=i): (4.0, 1.0, 0.0, 0.0) for i in range(3)}
-    assert hourly == {h0 + timedelta(hours=i): pytest.approx(0.5) for i in range(3)}
+    assert hourly is not None
+    assert hourly.kwh == {h0 + timedelta(hours=i): pytest.approx(0.5) for i in range(3)}
 
 
 async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:

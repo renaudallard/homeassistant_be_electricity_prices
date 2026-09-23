@@ -897,14 +897,16 @@ searching for:
   each time.
 - **"returned no statistics"** — one half of a day/night register pair is
   wired but produces nothing, so the pair cannot be billed and the running
-  cost falls to the fixed fees. A sensor with `device_class: energy` but no
-  `state_class` compiles no long-term statistics at all, and neither does
+  cost falls to the fixed fees, unless a totals sensor is wired on the same
+  side, which is then billed instead. A sensor with `device_class: energy` but
+  no `state_class` compiles no long-term statistics at all, and neither does
   `state_class: measurement`; both look perfectly normal in the UI.
 - **"has diverged"** — both halves of the pair report, but not on the same
   days: one stopped (a rename, an integration swap, a meter replacement) or
   started late. Only the days both report are billed, and `days_seen` (or
   `hours_seen`) says how many, rather than the surviving band being billed
-  alone as though the other used nothing.
+  alone as though the other used nothing. A totals sensor wired on the same
+  side is billed instead, since it covers both bands on every day.
 - **"accumulated before the window"** — the first hour of the year carried
   energy from before 1 January, which happens when the run-up to New Year
   is missing from the recorder. That one over-bills rather than under-bills.

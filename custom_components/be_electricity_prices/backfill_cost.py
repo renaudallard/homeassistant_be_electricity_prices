@@ -258,7 +258,7 @@ async def _backfill_cost_sensor(
         # wired half and credit injection against a consumption side that
         # silently resolved to nothing.
         if metered_cons is not None and metered_inj is not None:
-            cons_per_hour, inj_per_hour = metered_cons, metered_inj
+            cons_per_hour, inj_per_hour = metered_cons.kwh, metered_inj.kwh
 
     _snap_for = ctx.snap_for
     spp_weights = ctx.spp_weights
