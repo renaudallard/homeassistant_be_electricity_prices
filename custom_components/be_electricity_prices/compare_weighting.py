@@ -353,7 +353,7 @@ def _compare_injection_credit(
         _floor_injection,
         _tou_weekend_rule,
     )
-    from .providers._rates import DynamicRates
+    from .providers._rates import DynamicRates, InjectionRates
     from .spot_stats import _injection_on_month_mean
 
     raw = snapshot if raw_snapshot is None else raw_snapshot
@@ -368,7 +368,7 @@ def _compare_injection_credit(
         # coefficient pair collapsed into ``current``, which the branches below
         # then read as printed rates.
         snapshot = _bake_monthly_injection(snapshot, month_spot)
-    inj = getattr(snapshot, "injection", None)
+    inj: InjectionRates | None = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
     weekend_rule = _tou_weekend_rule(energy)
     if (
@@ -379,9 +379,12 @@ def _compare_injection_credit(
         and inj.offpeak is not None
     ):
         wp, wt, wo = _tou_slot_weights(weekend_rule, inj_hour_weights)
-        return float(
-            (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
-        )
+        # Each slot floored before it is weighted, as the live and historical
+        # credits floor it: the mean of floored rates, not the floor of theirs.
+        rates = [
+            _floor_injection(r, inj) for r in (inj.peak, inj.transition, inj.offpeak)
+        ]
+        return float((rates[0] * wp + rates[1] * wt + rates[2] * wo) / (wp + wt + wo))
     if (
         inj is not None
         and weekend_rule is None
@@ -403,7 +406,8 @@ def _compare_injection_credit(
             meter=METER_BI,
             dso_mode=DSO_MODE_BI_HORAIRE,
         )
-        return float((inj.peak * wd + inj.offpeak * wn) / (wd + wn))
+        day, night = (_floor_injection(r, inj) for r in (inj.peak, inj.offpeak))
+        return float((day * wd + night * wn) / (wd + wn))
     if (
         inj is not None
         and inj.factor is not None

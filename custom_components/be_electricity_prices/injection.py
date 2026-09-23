@@ -39,6 +39,7 @@ from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
 from statistics import fmean
+from typing import overload
 
 from .const import (
     CONF_METER,
@@ -323,6 +324,10 @@ def _tou_injection_rate(
     return _floor_injection(inj.offpeak, inj)
 
 
+@overload
+def _floor_injection(rate: float, inj: InjectionRates) -> float: ...
+@overload
+def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None: ...
 def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
     """Clamp an injection rate at the contract's guaranteed minimum.
 
@@ -338,6 +343,22 @@ def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
     if inj.floor_at_zero:
         return max(rate, 0.0)
     return rate
+
+
+def _static_injection_bands(
+    inj: InjectionRates | None,
+) -> tuple[float | None, float | None]:
+    """The day and night register rates the two band sensors publish.
+
+    Both or neither: a card that printed one of the pair would otherwise
+    publish a day rate and leave the night one unavailable, which reads as a
+    broken sensor rather than as a card that does not carry the split. Floored
+    like every other credit the entry is paid, or the pair would stand negative
+    beside a floored injection_price.
+    """
+    if inj is None or not inj.bi_hourly or inj.peak is None or inj.offpeak is None:
+        return None, None
+    return _floor_injection(inj.peak, inj), _floor_injection(inj.offpeak, inj)
 
 
 def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool:

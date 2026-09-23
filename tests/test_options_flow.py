@@ -3514,6 +3514,61 @@ def test_compare_prices_a_dynamic_energy_leg_on_the_consumption_shape() -> None:
     assert _consumption_weighted_spot({}, shape) is None
 
 
+def test_compare_floors_a_slot_or_register_rate_too() -> None:
+    """The live and historical credits floor a slot triplet or a register pair
+    like any other rate, and the page's triplet and register branches averaged
+    the raw rates: a card pairing either with a floor was quoted below what
+    the entry bills, 2,03 EUR/MWh of export on Flextime's coefficients at a
+    -5 EUR/MWh month. The band sensors published the raw pair beside a
+    floored injection_price."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _compare_injection_credit,
+        _tou_slot_weights,
+    )
+    from custom_components.be_electricity_prices.injection import (
+        _static_injection_bands,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        FixedRates,
+        InjectionRates,
+        TimeOfUseRates,
+    )
+    from tests import make_snapshot
+
+    entry = SimpleNamespace(
+        data={"solar_regime": "injection", "region": "flanders", "meter": "bi"}
+    )
+    energy = TimeOfUseRates(
+        peak=0.20, transition=0.15, offpeak=0.10, weekend_rule="weekend_no_peak"
+    )
+    triplet = InjectionRates(
+        current=0.05,
+        peak=-0.004705,
+        transition=-0.001945,
+        offpeak=0.000295,
+        floor_at_zero=True,
+    )
+    wp, wt, wo = _tou_slot_weights("weekend_no_peak", None)
+    credit = _compare_injection_credit(
+        make_snapshot(energy=energy, injection=triplet), entry, {}, None
+    )
+    assert credit == pytest.approx(0.000295 * wo / (wp + wt + wo))
+
+    pair = InjectionRates(
+        current=0.05, peak=-0.01, offpeak=-0.02, bi_hourly=True, floor_at_zero=True
+    )
+    fixed = FixedRates(single=0.20, peak=0.22, offpeak=0.18)
+    assert _compare_injection_credit(
+        make_snapshot(energy=fixed, injection=pair), entry, {}, None
+    ) == pytest.approx(0.0)
+    assert _static_injection_bands(pair) == (0.0, 0.0)
+    unfloored = InjectionRates(current=0.05, peak=0.06, offpeak=0.04, bi_hourly=True)
+    assert _static_injection_bands(unfloored) == (0.06, 0.04)
+    assert _static_injection_bands(InjectionRates(current=0.05)) == (None, None)
+
+
 def test_compare_floored_injection_averages_the_slot_rates() -> None:
     """A never-negative feed-in formula is convex, so the window mean does not
     price it.

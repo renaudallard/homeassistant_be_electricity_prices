@@ -81,6 +81,7 @@ from .injection import (
     _injection_needs_spot,
     _injection_price_for_slot,
     _injection_varies_intraday,
+    _static_injection_bands,
 )
 from .cohort import (
     _cohort_legs,
@@ -703,21 +704,7 @@ class _TickMixin:
         # Static injection (feed-in) rates for bi-hourly meters. None when the
         # contract has a single injection rate, is spot-indexed, or has TOU slots.
         # Trevion Vast and similar cards print separate day/night injection rates.
-        inj = priced.injection
-        static_inj_peak: float | None = None
-        static_inj_offpeak: float | None = None
-        # Both or neither. A card that printed one of the pair would
-        # otherwise publish a day rate and leave the night one unavailable,
-        # which reads as a broken sensor rather than as a card that does not
-        # carry the split.
-        if (
-            inj is not None
-            and inj.bi_hourly
-            and inj.peak is not None
-            and inj.offpeak is not None
-        ):
-            static_inj_peak = inj.peak
-            static_inj_offpeak = inj.offpeak
+        static_inj_peak, static_inj_offpeak = _static_injection_bands(priced.injection)
 
         return CoordinatorData(
             hourly=hourly,
