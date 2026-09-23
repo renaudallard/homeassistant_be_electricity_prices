@@ -1757,10 +1757,52 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
         local=dt_util.as_local(utc_hour),
         spp_weights=None,  # no Synergrid profile
         month_spp_cache={},
-        hourly_injection=False,
+        hourly_injection=lambda _leg: False,
         today=date(2026, 6, 20),
     )
     assert rate == pytest.approx(0.03)
+
+
+def test_the_backfill_asks_the_per_hour_gate_of_the_hours_own_leg() -> None:
+    """The per-hour gate is asked of the feed-in leg an hour credits, which
+    on a signing cohort is the signed formula laid on that month's leg. It
+    was one answer for the whole backfill, worked out from today's leg, while
+    the compare page asked with the signed one."""
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices.backfill_cost import (
+        _injection_rate_for_hour,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from tests import make_snapshot
+
+    asked: list[InjectionRates | None] = []
+
+    def gate(leg: InjectionRates | None) -> bool:
+        asked.append(leg)
+        return False
+
+    snap = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(factor=0.9, base=-0.01, month_indexed=True),
+    )
+    utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    _injection_rate_for_hour(
+        snap,
+        spot=0.20,
+        spots={utc_hour: 0.20},
+        quarters={},
+        utc_hour=utc_hour,
+        local=dt_util.as_local(utc_hour),
+        spp_weights=None,
+        month_spp_cache={},
+        hourly_injection=gate,
+        today=date(2026, 6, 20),
+    )
+    assert asked == [snap.injection]
 
 
 async def test_backfill_injection_replays_floored_quarters() -> None:
@@ -1799,7 +1841,7 @@ async def test_backfill_injection_replays_floored_quarters() -> None:
             local=dt_util.as_local(utc_hour),
             spp_weights=None,
             month_spp_cache={},
-            hourly_injection=False,
+            hourly_injection=lambda _leg: False,
             today=date(2026, 6, 20),
         )
 
@@ -2043,7 +2085,7 @@ def test_backfilled_feed_in_bills_the_printed_indicative_beside_a_formula() -> N
         local=dt_util.as_local(utc_hour),
         spp_weights=None,
         month_spp_cache={},
-        hourly_injection=False,
+        hourly_injection=lambda _leg: False,
         today=date(2026, 1, 31),
     )
     assert rate == pytest.approx(0.05)

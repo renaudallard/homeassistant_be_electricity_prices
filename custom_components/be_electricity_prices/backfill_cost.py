@@ -61,6 +61,7 @@ from .fees import (
     window_energy_rate,
 )
 from .injection import _historical_injection_rate, _injection_is_spot_formula
+from .providers._rates import InjectionRates
 from .pricing import (
     MeterType,
     compute_breakdown,
@@ -80,6 +81,7 @@ from .spot_stats import (
     _spp_injection_spot,
 )
 from .synergrid import SppWeights
+from collections.abc import Callable
 from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -109,7 +111,7 @@ def _injection_rate_for_hour(
     local: datetime,
     spp_weights: SppWeights | None,
     month_spp_cache: dict[tuple[int, int, bool], float | None],
-    hourly_injection: bool,
+    hourly_injection: Callable[[InjectionRates | None], bool],
     today: date,
     meter: MeterType = METER_MONO,
     region: str = REGION_FLANDERS,
@@ -128,6 +130,7 @@ def _injection_rate_for_hour(
     on an entry whose feed-in formula is floored.
     """
     monthly_mean = _injection_on_month_mean(snap_h)
+    hourly = hourly_injection(snap_h.injection)
     inj_spot = _spp_injection_spot(
         # The hour's spot goes in only when the CREDIT is the one that replays
         # it, judged by the same predicate the live scalar and the year-to-date
@@ -154,15 +157,13 @@ def _injection_rate_for_hour(
         month=local.month,
         today=today,
         cache=month_spp_cache,
-        hourly=hourly_injection,
+        hourly=hourly,
         hourly_spot=spots.get(utc_hour),
     )
     return _historical_injection_rate(
         snap_h.injection,
         inj_spot,
-        quarters=(
-            quarters.get(utc_hour) if hourly_injection or not monthly_mean else None
-        ),
+        quarters=(quarters.get(utc_hour) if hourly or not monthly_mean else None),
         energy=snap_h.energy,
         when=local,
         meter=meter,

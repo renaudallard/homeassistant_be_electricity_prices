@@ -1608,6 +1608,101 @@ async def test_the_hourly_walk_skips_an_hour_one_register_did_not_report(
     assert costs[0] == pytest.approx(costs[1])
 
 
+def test_the_tick_and_the_page_ask_the_per_hour_gate_of_the_priced_leg() -> None:
+    """The live tick passed today's unspliced card, whose feed-in leg is
+    today's, and the compare page today's card carrying the signed leg; the
+    shared rule now asks with the priced leg whichever the caller hands it.
+    A cohort that signed a month-indexed formula bakes to the month mean even
+    when today's card indexes its feed-in per hour."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_bakes_to_month_mean,
+    )
+
+    entry = _entry(solar_regime="injection", api_key="k")
+    signed = InjectionRates(factor=0.9, base=-0.01, month_indexed=True)
+    priced = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02), injection=signed
+    )
+    per_hour = InjectionRates(factor=0.97, base=-0.021)
+    today = make_snapshot(energy=VariableRates(current=0.19), injection=per_hour)
+    assert _injection_bakes_to_month_mean(priced, today, entry)
+    assert _injection_bakes_to_month_mean(
+        priced, replace(today, injection=signed), entry
+    )
+    # And a cohort that signed the per-hour formula keeps it per hour.
+    hourly_priced = replace(priced, injection=per_hour)
+    assert not _injection_bakes_to_month_mean(hourly_priced, today, entry)
+
+
+async def test_the_walk_asks_the_per_hour_gate_of_the_leg_it_credits(
+    freezer: Any,
+) -> None:
+    """Whether a cohort's feed-in keeps a per-hour index under its monthly
+    energy re-price was asked of TODAY's feed-in leg by the live tick and the
+    walks, and of the signed leg by the compare page, so a product that
+    changed its feed-in shape after a cohort signed was credited two ways.
+    Here the cohort signed a month-indexed formula and today's card indexes
+    its feed-in per hour: the walk credits the signed formula on the month
+    mean, exactly as it does when today's leg has that shape too."""
+    freezer.move_to("2026-08-05 12:00:00+02:00")
+    july = [datetime(2026, 7, 1, tzinfo=UTC) + timedelta(hours=i) for i in range(744)]
+    noon = datetime(2026, 7, 10, 10, tzinfo=UTC)
+    spots = {hour: 0.10 for hour in july} | {noon: 0.04}
+    entry = SimpleNamespace(
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+        }
+    )
+    signed_leg = InjectionRates(factor=0.9, base=-0.01, month_indexed=True)
+    signed = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02), injection=signed_leg
+    )
+
+    async def _hours(
+        _h: object, entity_id: str, _s: date, _e: date
+    ) -> dict[datetime, float]:
+        return {noon: 2.0 if entity_id == "sensor.inj" else 0.5}
+
+    def _cache(*_a: object, **_k: object) -> Any:
+        async def _for(_month: date) -> SupplierSnapshot:
+            return signed
+
+        return _for
+
+    costs = []
+    for today_leg in (InjectionRates(factor=0.97, base=-0.021), signed_leg):
+        with (
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=_hours),
+            patch.object(ytd_energy, "_month_snapshot_cache", new=_cache),
+            patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
+        ):
+            costs.append(
+                await ytd_energy._ytd_hourly_energy(
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    make_snapshot(
+                        energy=VariableRates(current=0.19), injection=today_leg
+                    ),
+                    entry,  # type: ignore[arg-type]
+                    date(2026, 8, 5),
+                    window_start=date(2026, 7, 1),
+                    meter="mono",
+                    historical_spots=spots,
+                    monthly_mean=True,
+                )
+            )
+    assert costs[0] is not None
+    assert costs[0] == pytest.approx(costs[1])
+
+
 async def test_today_is_not_billed_on_a_pair_one_half_of_which_stopped(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -9176,7 +9271,8 @@ def test_an_spp_indexed_credit_is_never_read_as_a_per_hour_one() -> None:
     indicative forever, which is the bug this shape exists to fix.
     """
     entry = _entry(solar_regime="injection")
-    assert not _injection_hourly_on_cohort(_spp_snap(), entry)
+    snap = _spp_snap()
+    assert not _injection_hourly_on_cohort(snap, snap.injection, entry)
 
 
 def test_compare_quote_weights_a_monthly_leg_that_splits_by_meter() -> None:
@@ -9679,7 +9775,7 @@ def test_a_month_index_is_never_read_as_an_hourly_one() -> None:
     for flag, leg in (("month_indexed", month_only), ("spp_indexed", spp_only)):
         snap = make_snapshot(energy=VariableRates(current=0.19), injection=leg)
         assert _injection_needs_spot(snap, entry) is False, flag
-        assert _injection_hourly_on_cohort(snap, entry) is False, flag
+        assert _injection_hourly_on_cohort(snap, leg, entry) is False, flag
         assert _injection_needs_month_spot(snap, entry) is True, flag
         # And the per-hour replay does not claim it either, or the credit
         # would be applied twice: once at the month mean and once per hour.

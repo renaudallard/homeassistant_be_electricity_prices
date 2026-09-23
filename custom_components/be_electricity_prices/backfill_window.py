@@ -54,11 +54,13 @@ from .coordinator import BePricesCoordinator
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
+from .providers._rates import InjectionRates
 from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 from datetime import UTC, date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -230,7 +232,9 @@ class _BackfillContext:
     rlp_weights: RlpWeights | None
     month_spp_cache: dict[tuple[int, int, bool], float | None]
     month_mean_cache: dict[tuple[int, int], float | None]
-    hourly_injection: bool
+    # Whether the feed-in leg an hour credits keeps its per-hour index under a
+    # cohort's monthly energy re-price, judged on today's card.
+    hourly_injection: Callable[[InjectionRates | None], bool]
     # The card the welcome credit is read off: the signing month's where the
     # supplier keeps an archive and the entry has a start date, else the
     # current one. Same resolution the live year-to-date walk makes, so the
@@ -330,8 +334,9 @@ async def _build_context(
         # A card whose injection is a per-hour spot formula with no printed
         # indicative (Cociter Tarif Variable) keeps that hourly index even when
         # a signing cohort re-prices its ENERGY leg to a monthly mean. Same
-        # gate the live tick and the YTD walk apply.
-        hourly_injection=_injection_hourly_on_cohort(snap, entry),
+        # gate the live tick and the YTD walk apply, asked of each hour's
+        # credited leg.
+        hourly_injection=partial(_injection_hourly_on_cohort, snap, entry=entry),
         signing=signing,
         annual_kwh=entry_annual_kwh(entry, coordinator),
     )

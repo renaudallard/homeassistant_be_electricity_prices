@@ -239,7 +239,9 @@ def _injection_needs_month_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) 
     )
 
 
-def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
+def _injection_hourly_on_cohort(
+    snapshot: SupplierSnapshot, credited: InjectionRates | None, entry: ConfigEntry
+) -> bool:
     """True when this entry's injection keeps a PER-HOUR spot index even though
     its energy is being priced on a monthly mean.
 
@@ -254,10 +256,17 @@ def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) 
     the month mean - and the SPP weighting when the card or the entry calls for
     it. That is why the snapshot's own energy kind, not the effective one,
     decides.
+
+    The feed-in leg is ``credited``, the one actually credited: a signing
+    cohort's frozen formula live, and on a past month that month's leg with
+    the cohort's formula laid on it. The live tick and the walks asked with
+    today's leg while the compare page asked with the signed one, and the two
+    part ways on a product that changes its feed-in shape after a cohort
+    signed. On every archived card they agree.
     """
-    return _injection_needs_spot(snapshot, entry) and not isinstance(
-        snapshot.energy, SpotMonthlyRates
-    )
+    return _injection_needs_spot(
+        replace(snapshot, injection=credited), entry
+    ) and not isinstance(snapshot.energy, SpotMonthlyRates)
 
 
 def _injection_bakes_to_month_mean(
@@ -268,9 +277,9 @@ def _injection_bakes_to_month_mean(
     The live tick's rule, written once so the compare page and the daily
     ranking credit a cohort the way the sensor beside them does. The PRICED
     leg decides, since a signing cohort carries its own card's formula and
-    index, and the month mean is waived when ``today``'s card keeps its
-    feed-in per hour under a cohort's monthly energy re-price
-    (:func:`_injection_hourly_on_cohort`). The page asked today's card alone,
+    index, and the month mean is waived when that leg keeps a per-hour index
+    under a cohort's monthly energy re-price, judged on ``today``'s own energy
+    kind (:func:`_injection_hourly_on_cohort`). The page asked today's card alone,
     so a Trevion LifePowr cohort signed from March to May 2026, a quarter-hour
     contract the tick credits per slot, was flattened to the plain month mean:
     about 200 EUR a year of credit too much at 3000 kWh exported.
@@ -278,7 +287,7 @@ def _injection_bakes_to_month_mean(
     if priced is None or today is None:
         return False
     return _injection_on_month_mean(priced) and not _injection_hourly_on_cohort(
-        today, entry
+        today, priced.injection, entry
     )
 
 

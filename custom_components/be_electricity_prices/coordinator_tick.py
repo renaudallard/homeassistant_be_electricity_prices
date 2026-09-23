@@ -347,8 +347,9 @@ class _TickMixin:
         # not and keeps its printed indicative instead (see the bake below).
         # Asked of the priced leg: a signing cohort's feed-in reads the index
         # its own card names. Not every gate here does: the spot fetches and
-        # the bake's per-hour, SPP-only and indicative tests read today's card,
-        # and the per-hour one must (see _injection_hourly_on_cohort).
+        # the bake's SPP-only and indicative tests read today's card, and the
+        # per-hour test reads today's energy kind with the priced leg, which it
+        # must (see _injection_hourly_on_cohort).
         spp_weighted = _spp_weighting_enabled(self.entry, priced)
         # Only worth the download when there are prices to weight. energie.be
         # Vast offers its ENTSO-E key as optional, so an entry that skipped it

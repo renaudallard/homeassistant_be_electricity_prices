@@ -228,17 +228,16 @@ async def _ytd_hourly_energy(
     # A static card whose injection is a per-hour spot formula with no printed
     # indicative (Cociter Tarif Variable) keeps that hourly index even on the
     # monthly-mean path, which it reaches only via a signing-cohort re-price of
-    # the ENERGY leg. Same gate the live tick applies before baking.
-    hourly_injection = monthly_mean and _injection_hourly_on_cohort(snapshot, entry)
+    # the ENERGY leg. Same gate the live tick applies before baking, asked of
+    # the leg the hour's month credits, once per month.
+    hourly_by_month: dict[tuple[int, int], bool] = {}
     # The hour's own 15-minute spots, for the one feed-in formula that is not
     # linear in the spot and so is not priced by their mean (see
     # _injection_needs_spot_quarters). Empty for every other entry, which is
     # what makes reading them a no-op there. A credit that settles on a month
     # mean is deliberately excluded: a mean of means says nothing about what
     # one hour's quarters did.
-    quarters: dict[datetime, list[float]] = (
-        spot_quarters or {} if hourly_injection or not monthly_mean else {}
-    )
+    quarters: dict[datetime, list[float]] = spot_quarters or {}
 
     energy_cost = 0.0
     # The supplier's ENERGY component of what the window's consumption was
@@ -325,6 +324,13 @@ async def _ytd_hourly_energy(
             d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
+            month_key = (local.year, local.month)
+            hourly_injection = hourly_by_month.get(month_key)
+            if hourly_injection is None:
+                hourly_injection = monthly_mean and _injection_hourly_on_cohort(
+                    snapshot, snap_h.injection, entry
+                )
+                hourly_by_month[month_key] = hourly_injection
             # Energy bills at the flat month-mean (spot); the injection credit
             # uses the SPP-weighted month-mean when the entry opted in, falling
             # back to the flat mean when the profile is missing for the month
@@ -371,7 +377,11 @@ async def _ytd_hourly_energy(
             inj_rate = _historical_injection_rate(
                 snap_h.injection,
                 inj_spot,
-                quarters=quarters.get(utc_hour),
+                quarters=(
+                    quarters.get(utc_hour)
+                    if hourly_injection or not monthly_mean
+                    else None
+                ),
                 energy=snap_h.energy,
                 when=local,
                 meter=meter,
