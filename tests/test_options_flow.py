@@ -2251,8 +2251,12 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
     spliced the energy leg only, so "your contract" was quoted on the signed
     energy formula beside today's feed-in one: 34,98 EUR a year off on an Engie
     Direct Online household signed in August, and every gap the page and the
-    daily ranking print was measured from that figure."""
-    from custom_components.be_electricity_prices import cohort
+    daily ranking print was measured from that figure.
+
+    The raw card the credit is handed carries the signed leg too: whether the
+    credit settles on a month mean, and whether the year-to-date column needs
+    spots, are read off it, and both belong to the formula credited."""
+    from custom_components.be_electricity_prices import cohort, compare_placeholders
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
     )
@@ -2265,6 +2269,12 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
     )
     entry.runtime_data = _real_coordinator(hass, entry, current_snap)
     signed = InjectionRates(current=0.02, fixed_for_term=True)
+    raw_cards: list[Any] = []
+    credit = compare_placeholders._compare_injection_credit
+
+    def _spy(*args: Any, **kwargs: Any) -> Any:
+        raw_cards.append(kwargs.get("raw_snapshot"))
+        return credit(*args, **kwargs)
 
     async def _no_rows(
         _hass: HomeAssistant, _entity_id: str, _start: Any, _end: Any
@@ -2276,6 +2286,7 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
             "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
             new=_no_rows,
         ),
+        patch.object(compare_placeholders, "_compare_injection_credit", _spy),
         patch.object(
             compare_household,
             "signing_month_snapshot",
@@ -2300,6 +2311,9 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
     # Credited at the signed 0,02, not today's card's 0,05.
     expected = 6160.0 * per_kwh - 2660.0 * 0.02
     assert float(ph["current_annual"]) == pytest.approx(expected, abs=0.5)
+    assert raw_cards
+    assert all(raw.injection == signed for raw in raw_cards if raw is not None)
+    assert any(raw is not None for raw in raw_cards)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

@@ -7113,6 +7113,59 @@ async def test_cohort_keeps_the_index_its_feed_in_formula_was_signed_on(
     assert not _injection_on_month_mean(priced)
 
 
+@pytest.mark.parametrize(
+    ("signed", "today_leg", "floor_at_zero", "minimum"),
+    [
+        pytest.param(
+            InjectionRates(factor=0.6, base=-0.015, spp_indexed=True, minimum=0.0),
+            InjectionRates(
+                factor=0.6, base=-0.015, current=0.0278, spp_indexed=True, minimum=0.01
+            ),
+            False,
+            0.0,
+            id="energyvision-guarantee-raised",
+        ),
+        pytest.param(
+            InjectionRates(factor=1.0, base=-0.013, floor_at_zero=True),
+            InjectionRates(factor=1.0, base=-0.013, current=0.05),
+            True,
+            None,
+            id="floor-dropped",
+        ),
+    ],
+)
+async def test_cohort_keeps_the_floor_its_feed_in_formula_was_signed_with(
+    hass: HomeAssistant,
+    freezer: Any,
+    signed: InjectionRates,
+    today_leg: InjectionRates,
+    floor_at_zero: bool,
+    minimum: float | None,
+) -> None:
+    """EnergyVision's 3 jaar vast card credits 0,6 x Belpex_SPP - 1,5 all year
+    and guarantees the result "in elk geval 0 EURcent/kWh" up to April 2026, 1
+    from May. A floor belongs to the formula it guards, as the index it reads
+    does, so a January signer keeps the 0 their own card promised and a card
+    that drops a floor does not take it from a cohort that signed with it."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(energy=FixedRates(single=0.30), injection=today_leg)
+    january = make_snapshot(energy=FixedRates(single=0.20), injection=signed)
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return january
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-01-15")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+    )
+    assert legs.injection is not None
+    assert legs.injection.floor_at_zero is floor_at_zero
+    assert legs.injection.minimum == minimum
+
+
 async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -7241,15 +7294,27 @@ async def test_cohort_leaves_a_printed_only_feed_in_alone(
     assert legs.injection is None
 
 
+@pytest.mark.parametrize(
+    ("signing_fixed", "delivery_fixed"),
+    [
+        pytest.param(True, True, id="every-card-fixes-it"),
+        pytest.param(True, False, id="later-cards-drop-the-sentence"),
+        pytest.param(False, True, id="later-cards-add-the-sentence"),
+    ],
+)
 async def test_cohort_keeps_a_feed_in_price_fixed_for_the_term(
-    hass: HomeAssistant, freezer: Any
+    hass: HomeAssistant, freezer: Any, signing_fixed: bool, delivery_fixed: bool
 ) -> None:
     """Mega's fixed cards fix the feed-in price with the consumption price:
     "le prix de rachat de votre energie injectee sur le reseau sera fixe
     egalement pour une duree d'un an". The printed figure IS the contract
     there, so a January Online Fixed signer is credited January's 0,98 c/kWh
     for the term, live and on every past month, where today's card prints
-    3,56: 77,40 EUR a year at 3000 kWh exported."""
+    3,56: 77,40 EUR a year at 3000 kWh exported.
+
+    The sentence binds the contract it was printed on, so the SIGNING card
+    decides: a later card dropping it does not release the cohort, and one
+    adding it does not lock a cohort whose own card never said so."""
     from custom_components.be_electricity_prices.cohort import (
         _cohort_legs,
         _effective_snapshot_for_month,
@@ -7258,15 +7323,15 @@ async def test_cohort_keeps_a_feed_in_price_fixed_for_the_term(
     freezer.move_to("2026-09-15 12:00:00+02:00")
     today = make_snapshot(
         energy=FixedRates(single=0.30),
-        injection=InjectionRates(current=0.0356, fixed_for_term=True),
+        injection=InjectionRates(current=0.0356, fixed_for_term=delivery_fixed),
     )
     january = make_snapshot(
         energy=FixedRates(single=0.20),
-        injection=InjectionRates(current=0.0098, fixed_for_term=True),
+        injection=InjectionRates(current=0.0098, fixed_for_term=signing_fixed),
     )
     may = make_snapshot(
         energy=FixedRates(single=0.25),
-        injection=InjectionRates(current=0.0145, fixed_for_term=True),
+        injection=InjectionRates(current=0.0145, fixed_for_term=delivery_fixed),
     )
 
     async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
@@ -7280,8 +7345,9 @@ async def test_cohort_keeps_a_feed_in_price_fixed_for_the_term(
     legs = await _cohort_legs(
         hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
     )
-    assert legs.injection is not None
-    assert legs.injection.current == pytest.approx(0.0098)
+    live = legs.splice(today).injection
+    assert live is not None
+    assert live.current == pytest.approx(0.0098 if signing_fixed else 0.0356)
     with patch(
         "custom_components.be_electricity_prices.cohort._snapshot_for_month",
         _for_month,
@@ -7297,7 +7363,7 @@ async def test_cohort_keeps_a_feed_in_price_fixed_for_the_term(
             entry,
         )
     assert eff.injection is not None
-    assert eff.injection.current == pytest.approx(0.0098)
+    assert eff.injection.current == pytest.approx(0.0098 if signing_fixed else 0.0145)
 
 
 async def test_cohort_card_names_the_card_the_legs_came_off(
