@@ -293,7 +293,7 @@ Iterates `_WALLONIA_DSOS` (`dats24.py`), an ordered tuple:
 The ORES collapse is the key gotcha: DATS 24 lists seven ORES sub-areas (Brabant
 Wallon, Est, Hainaut, Luxembourg, Mouscron, Namur, Verviers) with identical rates,
 but the integration has one `ores` key, so the extractor matches only the Brabant
-Wallon row (`dats24.py`, `359-365`). The label is matched by similarity
+Wallon row (`dats24.py`). The label is matched by similarity
 against the text a row starts with, and the other six sub-areas score well below
 the threshold, so `ORES (Brabant Wallon)` only picks up that one row.
 
@@ -361,7 +361,7 @@ tagged `Niet aan btw onderworpen` (the Walloon connection fee and the Flemish
 Energiefonds) happen to use the same per-kWh / per-month conventions, so they slot
 in without conversion (`dats24.py`). Illustrative April values: Flanders
 renewables 0.01561, Wallonia renewables 0.03032, connection fee 0.00075 EUR/kWh
-(`test_dats24.py`, `138-139`).
+(`test_dats24.py`).
 
 ### Injection (`_extract_injection`, `dats24.py`)
 
@@ -437,7 +437,7 @@ comment or test:
    see `_card_absent` (`dats24.py`).
 2. **All values are TVAC; `vat_rate=0.0`.** The card is 6% VAT-inclusive except two
    `Niet aan btw onderworpen` lines that still use per-kWh/per-month conventions
-   (`dats24.py`, `456`). Do not add VAT scaling in the pricing engine.
+   (`dats24.py`). Do not add VAT scaling in the pricing engine.
 3. **Decimal separator flipped between months.** The May 2026 card switched from
    comma to dot (`Afname1 10.64 11.77 ...` instead of `12,18 13,48 ...`). All
    regexes use the `[\d,.]+` class and delegate to `to_float`, which handles both;
@@ -445,10 +445,10 @@ comment or test:
    (`test_may_card_uses_dot_decimal_separator`, `test_dats24.py`). June
    reverted to commas.
 4. **Seven ORES sub-areas collapse to one key.** Only the `ORES (Brabant Wallon)`
-   row is kept (`dats24.py`, `359-365`,
+   row is kept (`dats24.py`,
    `test_april_card_wallonia_dsos_collapse_seven_ores_subareas_to_one`).
 5. **Label renames KEMPEN->iveka, MIDDEN-VLAANDEREN->intergem** in the Flanders map
-   (`dats24.py`, `121`).
+   (`dats24.py`).
 6. **Digital-meter-only modeling.** Both DSO parsers read only the digital-meter
    columns; the analog/classical columns are intentionally ignored
    (`dats24.py`).
@@ -495,12 +495,12 @@ pure parsers are the unit under test.
 |---|---|---|
 | `could not parse DATS 24 indicative afname row` | `_extract_energy` (`dats24.py`) | the `Afname1 (c€/kWh)` label, column count, or separator changed |
 | `could not parse DATS 24 yearly fixed fee` | `_extract_energy` (`dats24.py`) | `VASTE VERGOEDING (€/jaar)` label moved |
-| A Flanders DSO silently missing from `snapshot.dsos` | `_extract_flanders_dsos` / `_FLANDERS_DSOS` (`dats24.py`, `115-124`) | a Fluvius label was renamed (row skipped on no-match) or the 10-column layout changed |
-| A Walloon DSO missing, or all sharing one row | `_extract_wallonia_dsos` / `_WALLONIA_DSOS` (`dats24.py`, `130-136`) | `ORES (Brabant Wallon)` / `RÉGIE DE WAVRE` label drift, or column reorder |
+| A Flanders DSO silently missing from `snapshot.dsos` | `_extract_flanders_dsos` / `_FLANDERS_DSOS` (`dats24.py`) | a Fluvius label was renamed (row skipped on no-match) or the 10-column layout changed |
+| A Walloon DSO missing, or all sharing one row | `_extract_wallonia_dsos` / `_WALLONIA_DSOS` (`dats24.py`) | `ORES (Brabant Wallon)` / `RÉGIE DE WAVRE` label drift, or column reorder |
 | `DATS 24: Flanders GSC/WKC renewables not found` | `_extract_taxes` (`dats24.py`) | the fragile `Vlaams Gewest: GSC` / `WKC` prefixes changed |
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
 | Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py`), `parse_valid_until` (`_validity.py`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
-| `PDF layout parse error` / html-not-pdf | `_pdf.py`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |
+| `PDF layout parse error` / html-not-pdf | `_pdf.py` | the CDN returned HTML (file moved) or an undecodable PDF |

@@ -69,7 +69,7 @@ class PriceBreakdown:      # pricing.py
 | `static_energy_eur_per_kwh(energy, band)` | `pricing.py` | `float | None` | Stable (no time-of-day) rate for a band. |
 | `static_breakdown(snapshot, dso_key, region, band, dso_tariff_mode)` | `pricing.py` | `PriceBreakdown | None` | All-in for a static band, used by the YTD/current-year path. |
 | `yearly_fixed_fee_for_meter(energy, meter)` | `pricing.py` | `float` | Supplier yearly fixed fee for the meter type. |
-| `slots_per_hour(resolution)` / `slot_delta(resolution)` / `slot_start(when, resolution)` | `pricing.py`,`89`,`96` | `int`/`timedelta`/`datetime` | Quarter-hour vs hourly grid helpers. |
+| `slots_per_hour(resolution)` / `slot_delta(resolution)` / `slot_start(when, resolution)` | `pricing.py` | `int`/`timedelta`/`datetime` | Quarter-hour vs hourly grid helpers. |
 
 The injection, capacity, prosumer and Brussels-OSP arithmetic is not in
 `pricing.py`; it lives in `coordinator.py` and is documented in the later sections.

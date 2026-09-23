@@ -120,9 +120,12 @@ def test_an_anchor_with_an_underscore_is_checked(
     assert out.count("MISSING") == 1
 
 
-# A line pin in any of its spellings after a file name: a colon and the
-# number, a GitHub #L anchor, or the word line or lines and the number.
-_PIN = r"\b[\w/.-]+\.{}(?::\d+|#L\d+|`?,? lines? \d+)"
+# A line pin after a file name, in the spellings the docs have used: a colon
+# and the number (after the closing backtick too), a GitHub #L anchor, the
+# word line or lines and the number, or the number in backticks of its own
+# after a comma. Whitespace may be a line break. A colon then a space is left
+# alone: "`const.py`: 3 constants" is prose.
+_PIN = r"\b[\w/.-]+\.{}(?:`?:\d+|#L\d+|`?,?\s+lines?\s+\d+|`,\s*`\d+)"
 _ANY_FILE = "(?:py|ya?ml|md|json|sh|toml)"
 
 
@@ -169,13 +172,48 @@ def test_no_doc_pins_a_line_number() -> None:
 
     root = Path(__file__).resolve().parent.parent
     pin = re.compile(_PIN.format(_ANY_FILE))
-    found = [
-        f"{path.relative_to(root)} line {number}"
-        for path in sorted([*(root / "docs").rglob("*.md"), root / "README.md"])
-        for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
-        if pin.search(line)
-    ]
+    found = []
+    for path in sorted([*(root / "docs").rglob("*.md"), root / "README.md"]):
+        text = path.read_text(encoding="utf-8")
+        found += [
+            f"{path.relative_to(root)} line {text.count(chr(10), 0, m.start()) + 1}"
+            for m in pin.finditer(text)
+        ]
     assert not found, found
+
+
+# Written with upper-case extensions, lowered in the test: the code guard
+# above reads this file too, and would take the samples for pins.
+@pytest.mark.parametrize(
+    ("text", "is_pin"),
+    [
+        ("`coordinator.PY:412`", True),
+        ("coordinator.PY line 412", True),
+        ("`coordinator.PY`, line 412", True),
+        ("coordinator.PY#L412", True),
+        ("live_check.YML:120", True),
+        ("`coordinator.PY`:412", True),
+        ("(`ecopower.PY`, `534-537`)", True),
+        ("`pricing.PY`,`89`,`96`", True),
+        ("(`luminus.PY`,\n  `330-338`)", True),
+        ("`coordinator.PY`, lines\n  12-20", True),
+        ("`const.PY`: 3 constants", False),
+        ("(`ecopower.PY`, `test_ecopower.PY`)", False),
+        ("(`dats24.PY`, `_parse.PY`)", False),
+    ],
+)
+def test_the_pin_pattern_knows_every_spelling_the_docs_used(
+    text: str, is_pin: bool
+) -> None:
+    """The pattern once read a colon only when the digits followed it, missed
+    a number in backticks of its own after a comma, and read one line at a
+    time: 34 pins in five docs, some wrapped onto the next line, stayed in
+    after the rest were taken out. Each spelling found in the tree is held
+    here, with the prose the pattern must leave alone."""
+    import re
+
+    text = text.replace(".PY", ".py").replace(".YML", ".yml")
+    assert bool(re.search(_PIN.format(_ANY_FILE), text)) is is_pin
 
 
 def test_a_module_named_beside_a_symbol_still_binds_it() -> None:

@@ -181,10 +181,13 @@ a reader greps for, and neither moves when a function grows.
 Two tests keep them out, since this script never sees a pin at all: it reads a file name only
 when a backtick closes right after it. `test_no_doc_pins_a_line_number` reads every doc and the
 README, and `test_no_comment_in_the_code_pins_a_line_number` the code, the scripts and the
-tests, for a pin in any spelling after a file name: a colon and the number, a GitHub `#L`
-anchor, or the word line or lines and the number (`tests/test_doc_ref_check.py`). In the code a
-pin to a workflow or a doc is refused in comments only, because the checker's own tests quote
-its report, which names a doc's line the same way.
+tests, for a pin after a file name in each spelling the docs have used: a colon and the number,
+after the closing backtick too, a GitHub `#L` anchor, the word line or lines and the number, or
+the number in backticks of its own after a comma (`tests/test_doc_ref_check.py`). The docs are
+read whole, so a pin wrapped onto the next line is caught; a colon and a space is not, since
+that is how prose introduces a list. In the code a pin to a workflow or a doc is refused in
+comments only, because the checker's own tests quote its report, which names a doc's line the
+same way.
 
 What is left is what a RENAME breaks, which is the only way these can still rot:
 

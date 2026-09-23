@@ -387,10 +387,10 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 | --- | --- | --- |
 | `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py` |
 | `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py` |
-| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py`, `606` |
-| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py`, `607-611` |
-| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py`, `612` |
-| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py`, `613` |
+| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py` |
+| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py` |
+| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py` |
+| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py` |
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
@@ -541,13 +541,12 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   newline, so the pattern no longer demands one (`eneco.py`), guarded by
   `test_energy_fund_is_read_on_every_card_layout` (`tests/test_eneco.py`).
 - **Fail-loud excise and connection fee**: unlike the gated renewables, these two
-  raise on a regex miss to avoid silent under-billing (`eneco.py`,
-  `576-583`).
+  raise on a regex miss to avoid silent under-billing (`eneco.py`).
 - **Eneco Impact column order is `MEDIUM | PIC | ECO`**, not `PIC | MEDIUM | ECO`
   like OCTA+ / Bolt; mapping the wrong order swaps the CWaPE bands
   (`eneco.py`).
 - **Fluvius transport is 0**: the Flemish Afnametarief bundles Elia transmission;
-  do not add a transport term (`eneco.py`, `514-516`).
+  do not add a transport term (`eneco.py`).
 - **Flemish digital meters have no peak / offpeak split and no prosumer rate**
   (`eneco.py`, `tests/test_eneco.py`).
 - **`fetch_for_month` HEAD-before-GET budget**: HEAD-probing each volume keeps the
@@ -559,8 +558,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   (`_pdf.py`, `tests/test_eneco.py`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
-  not silently drop the formula or the base (`eneco.py`, `428-431`,
-  `656-659`).
+  not silently drop the formula or the base (`eneco.py`).
 - **Power Dynamic is Flanders-only**: its Walloon DSO rows are vestigial reference;
   do not offer the product in Wallonia (`eneco.py`,
   `tests/test_eneco.py`).
@@ -587,7 +585,7 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py` |
 | variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py` |
 | dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py` |
-| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py`, `469-539` |
+| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py` |
 | Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py` |
 | tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py` |
 | injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py` |
