@@ -625,7 +625,7 @@ downstream regex would miss silently.
 | --- | --- | --- |
 | `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_parse.py`). |
 | `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_parse.py`). |
-| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py`). Supplier PDFs flip silently between these on re-renders. |
+| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_parse.py`). Supplier PDFs flip silently between these on re-renders. |
 | `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_parse.py`). |
 | `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_parse.py`). |
 
@@ -644,7 +644,7 @@ maps Dutch, French (with and without accents) and English month names to their
 1-12 index, and `_validity_windows` (`_validity.py`) returns the ~200-char
 context after each validity keyword so a retrospective month mention elsewhere
 in the PDF does not masquerade as a validity statement. `_OSP_BOUND_TO_TIER`
-(`_pdf.py`) maps kVA upper bounds to the shared tier keys and is kept as
+(`_parse.py`) maps kVA upper bounds to the shared tier keys and is kept as
 literals so this low-level helper stays decoupled from `const.py` (the keys must
 match `const.CONNECTION_KVA_TIER_*`).
 

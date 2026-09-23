@@ -229,7 +229,7 @@ After parsing, the result is passed through `archive_validity_check(snap, text,
 year_month, month_names=_NL_MONTHS)` (`providers/frank.py`). Because Frank cards carry
 a parseable `valid_until` (see below), that check authoritatively rejects any snapshot
 whose validity does not fall in the requested month, guarding against a CDN substituting
-the wrong card (`_pdf.py`). Because `month_names` is supplied, a snapshot with no
+the wrong card (`_validity.py`). Because `month_names` is supplied, a snapshot with no
 `valid_until` still gets the textual month cross-check. Any `ExtractorError` during
 resolution or parsing is swallowed and `fetch_for_month` returns `None`
 (`providers/frank.py`), letting the coordinator fall back to the current snapshot as a
@@ -463,7 +463,7 @@ This parsed date is what makes `archive_validity_check` authoritative in `fetch_
 - JN tier's injection base differs (-0,02 vs -0,0115 elsewhere,
   `tests/test_frank.py`).
 - Hourly billing: no tier sets `quarter_hourly`, so the integration aggregates ENTSO-E's
-  15-minute curve to hourly (`base.py`).
+  15-minute curve to hourly (`_rates.py`).
 
 ## Test fixtures
 

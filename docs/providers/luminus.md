@@ -93,9 +93,9 @@ the Brussels exclusion above.
 
 `luminus_dynamic` bills per clock hour, not per quarter-hour. The `DynamicRates`
 returned by `_extract_energy` leaves `quarter_hourly` at its default `False`
-(`luminus.py`), which is what routes the coordinator to aggregate
+(`_luminus_cards.py`), which is what routes the coordinator to aggregate
 ENTSO-E's 15-minute day-ahead curve to hourly. See the `DynamicRates` docstring
-(`base.py`): Luminus is listed among the hourly-billing dynamic
+(`_rates.py`): Luminus is listed among the hourly-billing dynamic
 suppliers (Frank default, Mega, TotalEnergies, Eneco).
 
 ## Fetch strategy
@@ -187,11 +187,11 @@ Fields pulled and their helpers:
 
 ### Numeric token
 
-`_NUM = r"\d+(?:[,.]\d+)?"` (`luminus.py`) is anchored on a starting and
+`_NUM = r"\d+(?:[,.]\d+)?"` (`_luminus_overlays.py`) is anchored on a starting and
 ending digit precisely so a trailing sentence period is not captured. The comment
 flags the concrete hazard: `0,1019 x Belpex H + 2,4591.\n` from
 `luminus_dynamic_w` would grab the final `.` under a lazier `[\d,.]+`
-(`luminus.py`). Values are parsed with the shared `to_float` (handles
+(`_luminus_overlays.py`). Values are parsed with the shared `to_float` (handles
 Belgian comma decimals and every Unicode space variant, `_pdf.py`).
 
 ### Units
@@ -213,16 +213,16 @@ so the regex tolerates optional whitespace inside the parens
 
 ## Energy formula per kind
 
-`_extract_energy(text, kind)` (`luminus.py`) always parses the yearly
+`_extract_energy(text, kind)` (`_luminus_cards.py`) always parses the yearly
 fixed fee first (`_extract_yearly_fee`), then branches on `kind`.
 
 ### fixed / variable
 
 Both parse the same four-column `Énergie fournie (c€/kWh)` row (mono / pleines /
-creuses / exclusif-nuit), each divided by 100 (`luminus.py`). `fixed`
+creuses / exclusif-nuit), each divided by 100 (`_luminus_cards.py`). `fixed`
 returns `FixedRates(single, peak, offpeak, exclusive_night, ...)`
-(`luminus.py`); `variable` returns `VariableRates(current=mono, peak,
-offpeak, exclusive_night, ...)` (`luminus.py`). Illustrative
+(`_luminus_cards.py`); `variable` returns `VariableRates(current=mono, peak,
+offpeak, exclusive_night, ...)` (`_luminus_cards.py`). Illustrative
 (`test_comfy_wallonia_fixed_rates_and_dso`): mono `0.2038`, pleines `0.2374`,
 creuses `0.1771`, exclusive-night `0.1771` from `luminus_comfy_w.pdf`.
 
@@ -234,16 +234,16 @@ and `yearly_fixed_fee_exclusive_night` from `_extract_excl_night_fee`.
 Parses the three-rate `Énergie fournie (c€/kWh)` row (peak / transition /
 offpeak) by asking `numeric_row` for a row exactly three figures wide, which is
 what tells it from the four-figure row the other products print
-(`luminus.py`). The second occurrence later in the PDF is the bi-horaire
-fallback for non-SMR3 customers (`luminus.py`); it is also three wide,
+(`_luminus_cards.py`). The second occurrence later in the PDF is the bi-horaire
+fallback for non-SMR3 customers (`_luminus_cards.py`); it is also three wide,
 and the first match wins. Returns `TimeOfUseRates(peak, transition, offpeak,
-yearly_fixed_fee, weekend_rule="smartflex_seasonal")` (`luminus.py`).
+yearly_fixed_fee, weekend_rule="smartflex_seasonal")` (`_luminus_cards.py`).
 
 SmartFlex uses seasonal windows, not the generic CWaPE schedule: peak (pleines)
 07-11 + 17-22 all year, the cheapest super-creuses band 11-17 only in spring/
 summer (21/03-20/09), 22-07 always creuses. The `weekend_rule`
 `"smartflex_seasonal"` tells `pricing.tou_slot` to bill those windows; the
-first-year "free Sundays" promo is not modelled (`luminus.py`).
+first-year "free Sundays" promo is not modelled (`_luminus_cards.py`).
 Illustrative (`test_smartflex_parses_as_time_of_use`): peak `0.1554`, transition
 `0.1329`, offpeak `0.0672` from `luminus_smartflex_w.pdf`.
 
@@ -255,14 +255,14 @@ Both the `TimeOfUseRates` docstring in `_rates.py` and this extractor use the
 
 Parses the ex-VAT formula
 `Prélèvement (...) = <factor> x Belpex H <sign> <base>` via `_DYNAMIC_FORMULA_RE`
-(`luminus.py`, matched at `luminus.py`). The sign character is
+(`_luminus_cards.py`). The sign character is
 matched from the shared `SIGN_CHARS` class and resolved with `parse_sign`
-(`_pdf.py`), so a card that flips to a Unicode minus does not silently
+(`_parse.py`), so a card that flips to a Unicode minus does not silently
 break polarity.
 
 The PDF formula is `c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents`.
 The extractor converts to EUR/kWh against a EUR/kWh spot and applies the parsed
-6% VAT multiplier (`luminus.py`):
+6% VAT multiplier (`_luminus_cards.py`):
 
 ```
 factor_eur_kwh = factor_pdf * vat * 10.0        # (*1000 mWh->kWh, /100 c->EUR)
@@ -305,15 +305,15 @@ Eight Fluvius sub-areas mapped by printed label to canonical key
 | Fluvius Zenne-Dijle | `fluvius_zenne_dijle` |
 
 Two column layouts are read by asking for each width in turn
-(`luminus.py`):
+(`_luminus_overlays.py`):
 
 - **Static (fixed/variable/tou) cards print 8 numbers**: data_mgmt €/an,
   capacity_digital €/kW/yr, dist_normal, dist_excl_night, capacity_classic,
   dist_classic_normal, dist_classic_excl, prosumer €/kW/yr. The parser reads the
-  digital-meter columns (`nums[0..3]`) plus `nums[7]` prosumer (`luminus.py`).
+  digital-meter columns (`nums[0..3]`) plus `nums[7]` prosumer (`_luminus_overlays.py`).
 - **Dynamic (SMR3) cards print 4 numbers**: data_mgmt, capacity_digital,
   dist_normal, dist_excl_night, no analog or prosumer columns. `prosumer` stays
-  `None` (`luminus.py`), because post-2024 SMR3 connections carry no
+  `None` (`_luminus_overlays.py`), because post-2024 SMR3 connections carry no
   compensation regime (see `DsoOverlay.prosumer_eur_per_kva_year`,
   `base.py`).
 
@@ -331,7 +331,7 @@ static is `54.63` (illustrative).
 ### Wallonia (`_extract_wallonia_dsos`, `_luminus_overlays.py`)
 
 Five DSO sub-areas mapped by printed label (`_WALLONIA_LABELS`,
-`luminus.py`):
+`_luminus_overlays.py`):
 
 | Printed label | Canonical key |
 | --- | --- |
@@ -341,7 +341,7 @@ Five DSO sub-areas mapped by printed label (`_WALLONIA_LABELS`,
 | TECTEO RESA | `resa` |
 | WAVRE | `rew` |
 
-Two column layouts (`luminus.py`):
+Two column layouts (`_luminus_overlays.py`):
 
 - **Static rows have 7 numbers**: mono, pleines, creuses, excl_nuit, transport,
   data_mgmt, prosumer. `prosumer` is populated (`nums[6]`), the Impact bands stay
@@ -353,8 +353,8 @@ Two column layouts (`luminus.py`):
 
 Band-ordering gotcha: Luminus prints the Impact triplet **ECO | MEDIUM | PIC in
 ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
-(`luminus.py`). They are mapped to `distribution_eco` / `_medium` /
-`_pic` accordingly (`luminus.py`). Illustrative
+(`_luminus_overlays.py`). They are mapped to `distribution_eco` / `_medium` /
+`_pic` accordingly (`_luminus_overlays.py`). Illustrative
 (`test_comfy_wallonia_fixed_rates_and_dso`): AIEG mono `0.1087`, pleines
 `0.1205`, creuses `0.0666`, transport `0.0274`, prosumer `81.03`.
 
@@ -362,9 +362,9 @@ ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
 
 `_extract_per_kwh_taxes` (`_luminus_overlays.py`) reads the
 `3 Taxes et redevances : WAL|FL|BRU` block via `_tax_block_values`
-(`luminus.py`). That helper anchors on the colon after the label because
+(`_luminus_overlays.py`). That helper anchors on the colon after the label because
 `Taxes et redevances` also appears in the `Composition du prix` legend without a
-colon or region (`luminus.py`); the block runs until
+colon or region (`_luminus_overlays.py`); the block runs until
 `INFORMATION SUR VOTRE TARIF` or `Conditions`. Inside the block, values sit alone
 on their own lines, and the parser collects that contiguous run of `-` /
 `_NUM` tokens (`_luminus_overlays.py`). The label order and matching value order are
@@ -383,7 +383,7 @@ BTR, excise, contribution, and (Wallonia only) connection.
 
 `_extract_per_kwh_taxes` raises on a short block (`< 4` values) or a missing
 Walloon connection row, rather than silently zeroing a regulated tax and
-underbilling (`luminus.py`). Illustrative
+underbilling (`_luminus_overlays.py`). Illustrative
 (`test_taxes_split_correctly_per_region`): excise `0.050329`, contribution
 `0.002042` (both regions); Wallonia green `0.0303` and connection `0.00075`;
 Flanders green `0.0117` + cogen `0.0039` = `0.0156`.
@@ -402,7 +402,7 @@ card).
 
 ## Injection
 
-`_extract_injection(text, kind)` (`luminus.py`) covers two of the three
+`_extract_injection(text, kind)` (`_luminus_cards.py`) covers two of the three
 injection shapes in the project taxonomy, selected by contract kind:
 
 - **fixed / variable / tou -> monthly-indicative-only.** The extractor reads the
@@ -410,9 +410,9 @@ injection shapes in the project taxonomy, selected by contract kind:
   `InjectionRates.current` (`_luminus_cards.py`). `factor` / `base` stay `None`,
   so the pricing engine credits the indicative and never needs a spot.
 - **dynamic -> hourly `factor*spot + base`.** `_INJECTION_FORMULA_RE`
-  (`luminus.py`) parses `Injection (...) = <factor> x Belpex H <sign>
+  (`_luminus_cards.py`) parses `Injection (...) = <factor> x Belpex H <sign>
   <base>`. Residential injection is VAT-exempt, so **no VAT multiplier is
-  applied** (`luminus.py`): `factor = factor_pdf * 10.0`, `base =
+  applied** (`_luminus_cards.py`): `factor = factor_pdf * 10.0`, `base =
   base_pdf_cents / 100.0`. Contrast the consumption dynamic formula, which does
   scale by VAT. The formula text is stored in `InjectionRates.formula`.
 
@@ -423,14 +423,14 @@ Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 (`test_injection_uses_applicable_rate_not_annual_estimate`): comfy Wallonia
 `0.0381`, comfyflex Flanders `0.0396`.
 
-Two anchoring subtleties in the indicative regex (`luminus.py`):
+Two anchoring subtleties in the indicative regex (`_luminus_cards.py`):
 
 1. **Applicable vs annual estimate.** The card prints both the applicable
    `Tarif de l'énergie injectée` and an `Estimation annuelle du tarif de
    l'énergie injectée` 12-month forecast just below. They share the
    `de l'énergie injectée` tail, but only the applicable row capitalises
    `Tarif`, so the case-sensitive `Tarif` binds to the applicable rate
-   (`luminus.py`). `test_injection_uses_applicable_rate_not_annual_estimate`
+   (`_luminus_cards.py`). `test_injection_uses_applicable_rate_not_annual_estimate`
    (`test_luminus.py`) verifies this in both directions, including the
    May card where the estimate (`3.68`) is below the applicable rate (`3.81`),
    so picking the wrong row would under-credit.
@@ -438,11 +438,11 @@ Two anchoring subtleties in the indicative regex (`luminus.py`):
    after the unit (`(c€/kWh)2 3,81`), so the regex skips an optional
    digit-then-whitespace; and the label can wrap mid-phrase
    (`Tarif de l'énergie \ninjectée`), so `\s+` is used between every word with
-   `re.S` (`luminus.py`).
+   `re.S` (`_luminus_cards.py`).
 
 Fail-loud invariant: both Luminus card families always publish injection, so if
 neither `current` nor `factor` parses, `_extract_injection` raises rather than
-silently crediting nothing (`luminus.py`). `test_missing_injection_row_fails_loud`
+silently crediting nothing (`_luminus_cards.py`). `test_missing_injection_row_fails_loud`
 (`test_luminus.py`) corrupts the `injectée` label and asserts the raise.
 
 There is no supplier-side prosumer / PV forfait on Luminus cards

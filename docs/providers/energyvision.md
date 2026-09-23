@@ -583,10 +583,10 @@ Five things a maintainer needs to know about this card:
 - **Upper-case Fluvius labels.** EnergyVision prints them in caps, so it needs its own
   `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/_energyvision_overlays.py`).
 - **Two meter tables.** Slice to the digital-meter block before parsing DSO rows, or the
-  analog rows leak in (`providers/energyvision.py`).
+  analog rows leak in (`providers/_energyvision_overlays.py`).
 - **GSC + WKC are combined; energiefonds is domiciled.** A single combined renewables value,
   and the domiciled (0 EUR/month) fund row is billed, not the non-domiciled one
-  (`providers/energyvision.py`).
+  (`providers/_energyvision_overlays.py`).
 - **Kempen and Midden-Vlaanderen map to non-obvious keys** (`fluvius_iveka`,
   `fluvius_intergem`).
 

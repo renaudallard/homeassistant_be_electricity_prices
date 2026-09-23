@@ -468,7 +468,7 @@ regexes use `\s+` (which matches newlines) between values to handle both layouts
 `test_wallonia_dso_handles_vertical_layout` (`tests/test_bolt.py`) exercises this.
 
 **Flanders (`_extract_flanders_dsos`, `_bolt_overlays.py`).** Eight Fluvius sub-areas via `_FLANDERS_LABELS`
-(`bolt.py`). Note the label-to-key mapping is not one-to-one by name: `Fluvius Kempen` maps to
+(`_bolt_overlays.py`). Note the label-to-key mapping is not one-to-one by name: `Fluvius Kempen` maps to
 `DSO_FLUVIUS_IVEKA` and `Fluvius Midden-Vl` to `DSO_FLUVIUS_INTERGEM`. Each row has 8 numbers; the
 extractor bills the digital (SMR3) block (columns 1-4 plus the prosumer column 8) and ignores the
 trailing classic columns. Group 4 is the dedicated exclusive-night meter rate, lower than normal
@@ -480,7 +480,7 @@ the general case, but Bolt still exposes a prosumer column, which is read into
 0.0481 (< distribution), capacity 52.37 (all illustrative).
 
 **Wallonia (`_extract_wallonia_dsos`, `_bolt_overlays.py`).** Five DSOs via `_WALLONIA_LABELS`
-(`bolt.py`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
+(`_bolt_overlays.py`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
 terme_fixe (EUR/an), prosumer (EUR/kVA/an). PIC/MEDIUM/ECO populate the CWaPE Tarif Impact band
 columns (`distribution_pic` / `_medium` / `_eco`); `terme_fixe` becomes `data_management_per_year`.
 
@@ -506,10 +506,10 @@ the invariant in CI.
 **Brussels (`_extract_brussels_dsos`, `_bolt_overlays.py`).** One row, `Sibelga`, with six captured
 numbers: mono, jour, nuit, excl_nuit, transport, terme_fixe (the prosumer trailing token is `-`).
 The exclusive-night column (group 4) is wired into `distribution_exclusive_night` via the shared
-`brussels_sibelga_overlay` builder (`bolt.py`); earlier it was dropped, which made a Brussels
+`brussels_sibelga_overlay` builder (`_bolt_overlays.py`); earlier it was dropped, which made a Brussels
 night meter fall back to off-peak, correct only while the two columns happened to be equal. The
 Sibelga overlay also carries the Brussels Brugel OSP annual-fee table via `parse_brussels_osp`
-(`bolt.py`,
+(`_parse.py`,
 `_pdf.py`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
 case-insensitive helper handles. A missing Sibelga row returns an empty dict (permitted).
 `test_brussels_extracts_sibelga` (`tests/test_bolt.py`) checks distribution 0.0996, off-peak

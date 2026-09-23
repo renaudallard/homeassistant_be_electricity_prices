@@ -81,8 +81,8 @@ Notes on the enumeration:
 - Off-peak Impact is Wallonia-only (`regions=frozenset({REGION_WALLONIA})`,
   `mega.py`) because it needs the CWaPE Tarif réseau IMPACT plus an SMR3 smart
   meter, both Wallonia-specific. The test `test_offpeak_impact_contract_is_wallonia_only`
-  (`test_mega.py`) enforces this. Every other product declares the default
-  `_MEGA_ALL_REGIONS` (`mega.py`).
+  (`test_mega.py`) enforces this. Every other product keeps the default,
+  `ALL_REGIONS` (`mega.py`).
 - Mega Cap ("prix variable plafonne") was discontinued with the September 2026
   cards. The listing dropped the product block in all three regions at once and
   the CDN answers the September filename of both the residential and the B2B
@@ -435,7 +435,7 @@ Mega prints two distinct formulas in every Dynamic PDF (`mega.py`):
 
 Each is matched by its own label-anchored regex (`_CONSUMPTION_FORMULA_RE`
 `mega.py`, `_INJECTION_FORMULA_RE` `_mega_cards.py`) sharing `_FORMULA_TAIL`
-(`mega.py`). This is critical because Mega prints the injection formula BEFORE
+(`_mega_cards.py`). This is critical because Mega prints the injection formula BEFORE
 the consumption formula, so a naive "first / second formula" policy swaps them; the
 test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py`)
 guards against exactly that. `_parse_formula` (`_mega_cards.py`) converts factor and
@@ -656,7 +656,7 @@ Ranked by how likely each is to break when Mega restyles or rotates its card, an
    filename convention, every `fetch` / `probe` / `fetch_for_month` / `discover`
    fails at once. Start here on a total outage.
 2. `_extract_meter_value` / `_extract_impact_tier` / `_extract_yearly_fee`
-   (`mega.py`, `mega.py`). Label wording or the label / value
+   (`_mega_cards.py`, `mega.py`). Label wording or the label / value
    newline split is the most common drift; these anchor on French labels
    (`Compteur mono-horaire`, `Tarif jour`, `Redevance fixe`).
 3. `_CONSUMPTION_FORMULA_RE` / `_INJECTION_FORMULA_RE` (`_mega_cards.py`). A reworded

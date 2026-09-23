@@ -144,7 +144,7 @@ per config entry (`providers/base.py`).
   (`providers/base.py`).
 - `quarter_hourly` affects the live/next-slot/cheapest-window paths only; YTD
   billing is always hourly because HA retains only hourly long-term statistics
-  (`providers/base.py`).
+  (`providers/_rates.py`).
 - Compensation-regime prosumer costs come from two independent sources that add
   together: the DSO rate (`DsoOverlay.prosumer_eur_per_kva_year`) and the
   optional supplier forfait (`SupplierSnapshot.supplier_prosumer_eur_per_kva_year`,

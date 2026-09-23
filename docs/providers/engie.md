@@ -137,7 +137,7 @@ every site into the top tranche.
 ### Dynamic billing grid
 
 `engie_dynamic` sets `quarter_hourly=True` on its `DynamicRates`
-(`engie.py`). Engie bills the dynamic consumer formula against `eSpot_15`,
+(`_engie_cards.py`). Engie bills the dynamic consumer formula against `eSpot_15`,
 the Belgian day-ahead EPEX price for that specific quarter-hour, so the
 integration keeps the native 15-minute slots rather than aggregating to hourly
 (`engie.py`, framework note `base.py`). Billing of long-term YTD
@@ -428,7 +428,7 @@ contract:
 - Per-slot TOU triplet (`peak`/`transition`/`offpeak`): only for `kind == "tou"`
   when the row has >=6 numbers (`engie.py`), reading columns 4/5/6. Engie
   Empower Flextime's feed-in tariff varies by slot, so the pricing engine selects
-  the slot with the same `tou_slot()` rule as consumption (`base.py`). Issue
+  the slot with the same `tou_slot()` rule as consumption (`pricing.py`). Issue
   #34; test `test_empower_flextime_injection_varies_by_slot`
   (`tests/test_engie.py`). Each slot is also its own EPEXDAM formula
   ("Flextime Heures pleines = 0,0300 + (0,1001 x EPEXDAM)" and siblings), so the

@@ -186,7 +186,7 @@ onto these canonical keys.
 
 A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py`). It declares
 the `Contract`s it sells (`providers/_rates.py`), each carrying a `TariffKind`
-(`providers/base.py`):
+(`providers/_rates.py`):
 
 | TariffKind | Energy model | Rates dataclass | Notes |
 | --- | --- | --- | --- |

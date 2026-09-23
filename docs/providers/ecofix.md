@@ -339,7 +339,7 @@ Notable parsing hurdles:
   needs no code edit (`ecofix.py`, helper at `_pdf.py`).
 - **Sign handling.** The `<sign>` between factor and base is matched against
   `SIGN_CHARS` and resolved with `parse_sign`, which treats every hyphen/dash/minus
-  variant as negative (`_pdf.py`). Supplier PDFs flip between these silently on
+  variant as negative (`_parse.py`). Supplier PDFs flip between these silently on
   re-renders.
 - **DSO-name to canonical-key mapping.** Flanders labels map through
   `_FLANDERS_LABELS` (`ecofix.py`); note "Fluvius Kempen" maps to the

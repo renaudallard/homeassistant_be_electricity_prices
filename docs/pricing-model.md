@@ -162,7 +162,7 @@ pricing engine:
   `_resolve.apply_vat` (`providers/_resolve.py`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
-(`coordinator.py`), never before the shared snapshot cache: that cache is
+(`snapshot_resolve.py`), never before the shared snapshot cache: that cache is
 keyed on `(supplier, contract, region)` and shared between entries that may
 answer the VAT question differently. It is identity on a `vat_rate == 0.0`
 snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
@@ -260,7 +260,7 @@ one rate to `federal_excise`. The pricing engine never sees a band.
 The schedule is billed PER TRANCHE, which the cards state outright: *"un tarif
 degressif par tranche de consommation, calcule sur une base annuelle"*. So the
 resolved figure is the BLEND over the year's volume (`blended_excise_rate`,
-`providers/base.py`), not the rate of the band the total lands in. At the
+`providers/_resolve.py`), not the rate of the band the total lands in. At the
 2026 professional schedule a 30.000 kWh site pays the first 20.000 at 1,421 and
 the rest at 1,209, which is 405,10 EUR/year and a 1,3503 c/kWh blend; billing
 all 30.000 at 1,209 gives 362,70. The engine prices per hour and cannot know
@@ -802,7 +802,7 @@ default, Luminus, Mega, TotalEnergies).
 Bolt and Frank sell one card on both settlements, so their entries answer for
 themselves and `resolve_settlement_grid` sets the flag; YTD billing stays hourly
 regardless
-(`providers/base.py`). See [data-sources.md](data-sources.md) for how the
+(`providers/_rates.py`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /
 `slot_start` (`pricing.py`).
 
@@ -1062,7 +1062,7 @@ convex and the two orders give different money:
 - a PER-SLOT formula floors each slot, because that is what the contract bills.
   The live array and the year-to-date replay (off the hour's own quarters) credit
   each slot at its own rate; the compare estimate (`_compare_injection_credit`,
-  `compare_quote.py`) has to collapse the window to one number, so it takes
+  `compare_weighting.py`) has to collapse the window to one number, so it takes
   the mean of the floored rates weighted by the household's own export shape
   (`_export_weighted_credit`, `compare_weighting.py`), which is the basis the
   year-to-date walk bills on.
@@ -1145,7 +1145,7 @@ tells, or the flagged cards silently fall back on a rate they do not bill.
 Shape (d) needs
 one too, at monthly rather than hourly resolution. `Contract` advertises both
 with `spot_indexed_injection` so the config flow offers the API-key
-step on the injection regime (`providers/base.py`). At runtime,
+step on the injection regime (`providers/_rates.py`). At runtime,
 `_injection_needs_spot` detects it (`injection.py`):
 
 ```python

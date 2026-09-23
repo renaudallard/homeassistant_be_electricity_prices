@@ -191,10 +191,10 @@ Notable parsing hurdles:
   handles both (`totalenergies.py`).
 - **Sign character variance.** Formula signs are parsed with `parse_sign` over the
   shared `SIGN_CHARS` class, which covers ASCII `+`/`-` plus several Unicode dashes
-  that TotalEnergies flips between on re-renders (`_pdf.py`).
+  that TotalEnergies flips between on re-renders (`_parse.py`).
 - **DSO name to canonical key mapping.** Card labels are mapped to `DSO_*`
   constants via `_FLANDERS_LABELS` (`_totalenergies_overlays.py`) and `_WALLONIA_LABELS`
-  (`totalenergies.py`). Note the non-obvious ones: `Fluvius Kempen` maps to
+  (`_totalenergies_overlays.py`). Note the non-obvious ones: `Fluvius Kempen` maps to
   `DSO_FLUVIUS_IVEKA`, `Fluvius Midden-Vlaanderen` to `DSO_FLUVIUS_INTERGEM`, and
   Wallonia uses the exact card strings `ORES (Namur - Namen)`, `REGIE DE WAVRE`
   (-> `DSO_REW`), `RESA SA`.

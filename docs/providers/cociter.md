@@ -73,7 +73,7 @@ pins that they resolve to different contract ids.
 The `spot_indexed_injection=True` flag on both variable contracts is load-bearing
 for the config flow: it makes the wizard offer the ENTSO-E API-key step on the
 injection regime even though the energy side is "just" variable
-(`base.py`). Do not drop it; without a spot curve the variable card's
+(`_rates.py`). Do not drop it; without a spot curve the variable card's
 injection cannot be priced and would silently zero the solar credit (see the
 [spot-indexed injection invariant](#injection)).
 
@@ -553,7 +553,7 @@ Ordered by likelihood of breaking when Cociter re-renders its cards:
 7. **PV forfait footnote rewording** -> `_extract_supplier_prosumer`
    (`cociter.py`): the `EUR/kVA/an TVAC` anchor.
 8. **Validity-header format change** -> shared `parse_valid_until`
-   (`_pdf.py`) and the `_FR_MONTHS` fallback used by
+   (`_validity.py`) and the `_FR_MONTHS` fallback used by
    `archive_validity_check`.
 
 When a card changes, capture the new PDF into `tests/fixtures/` and update the

@@ -80,7 +80,7 @@ leg never fetches; only the dynamic product leaves it `False`.
 - **Groen Dyn@mic**: 15-minute Belpex spot dynamic, SMR3 (smart meter) only,
   with its own `dynamic` card. `quarter_hourly=True` (`ebem.py`) keeps the
   native 15-minute slots like Engie / Cociter rather than aggregating to hourly;
-  see the `DynamicRates.quarter_hourly` docstring (`providers/base.py`).
+  see the `DynamicRates.quarter_hourly` docstring (`providers/_rates.py`).
 
 Retired products: the variable card explicitly notes EBEM stopped selling fixed
 contracts for now (`ebem.py`). No fixed contract is declared.
@@ -427,7 +427,7 @@ feed-in credit (`ebem.py`, `tests/test_ebem.py`).
   with capital `MWH` (`ebem.py`).
 - **Sign flexibility everywhere**: every formula regex accepts `SIGN_CHARS`
   (plus, hyphen, figure/en/em dash, U+2212) because supplier PDFs flip silently
-  between them on re-render (`_pdf.py`). `_indicative_from_row` does not
+  between them on re-render (`_parse.py`). `_indicative_from_row` does not
   read the sign at all any more: it counts the row's figures, after a literal
   `+` there failed valid cards that printed a negative offset (`ebem.py`).
 - **Exclusive-night yearly fee**: both variable products surface a dedicated
@@ -465,7 +465,7 @@ HTML is read at `tests/test_ebem.py`. Fixture text is loaded with
 | Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py`) / `_extract_injection` dynamic (`ebem.py`) | `alle uren` / `Belpex15'` label or spacing drift |
 | Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py`) | column order / count or sign changed |
 | Variable formula row not found | row regexes (`ebem.py`) | meter-type label wording changed |
-| Yearly fees wrong | `_extract_yearly_fee_variable` / `_excl_night` / `_abonnement` (`ebem.py`) | `Vaste vergoeding` / `Abonnement` label changed |
+| Yearly fees wrong | `_extract_yearly_fee_variable` / `_extract_excl_night_fee_variable` / `_extract_yearly_fee_abonnement` (`ebem.py`) | `Vaste vergoeding` / `Abonnement` label changed |
 | A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py`) / `_FLANDERS_LABELS` (`ebem.py`) | Fluvius label rename, table heading, or column order |
 | Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py`) / `_extract_flanders_renewables` (`ebem.py`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
 | Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py`) | card stopped printing the realized indicative column |

@@ -463,7 +463,7 @@ injected each past hour. `_backfill_cost_sensor` (`backfill_cost.py`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
-UTC-hour totals (`backfill.py`). The recorder helpers treat their date
+UTC-hour totals (`energy_meters.py`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
 `_hour_iter` grid (`backfill_window.py`).
