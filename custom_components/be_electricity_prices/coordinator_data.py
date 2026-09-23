@@ -146,6 +146,14 @@ class CoordinatorData:
     # month's registers rather than taking a slice of the year's netting, and
     # twelve of them do not add up to current_year_cost_eur on such an entry.
     current_month_cost_eur: float | None = None
+    # The window start each running cost above was computed over, which its
+    # sensor publishes as ``last_reset``. Baked beside the value rather than
+    # read off the clock when the state is written: the hourly push at
+    # 00:00:00 on the 1st rewrites the last tick's figure, and a last_reset
+    # read then named the new period for the old period's total, which is the
+    # one reading the Energy dashboard keeps if the refresh after it fails.
+    current_year_cost_reset: datetime | None = None
+    current_month_cost_reset: datetime | None = None
     # Optional diagnostic breakdown behind current_year_cost: YTD and today
     # consumption / injection kWh, the pre-clamp raw energy term and the fees
     # floor. Populated only on the static per-day (fixed / variable) path;

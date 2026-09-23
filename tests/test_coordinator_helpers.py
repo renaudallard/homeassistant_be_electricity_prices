@@ -5070,6 +5070,47 @@ async def test_the_ytd_attributes_describe_the_window_they_bill(
     assert rates[0] > 0
 
 
+def test_a_running_cost_keeps_its_period_across_the_boundary() -> None:
+    """At 00:00:00 on the 1st the hourly push rewrites the last tick's
+    figure, and the refresh that recomputes it comes up to a minute later.
+    last_reset was read off the clock when the state was written, so for that
+    minute last month's total was published under this month's reset, and if
+    the refresh then failed that was the new period's only reading. It is now
+    the reset the figure was computed with."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.coordinator_data import (
+        CoordinatorData,
+    )
+    from custom_components.be_electricity_prices import sensor
+    from custom_components.be_electricity_prices.sensor import BePriceSensor
+
+    brussels = ZoneInfo("Europe/Brussels")
+    september = datetime(2026, 9, 1, tzinfo=brussels)
+    coordinator = MagicMock()
+    coordinator.entry = MockConfigEntry(domain=DOMAIN, data={})
+    coordinator.data = CoordinatorData(
+        current_month_cost_eur=118.73, current_month_cost_reset=september
+    )
+    coordinator.last_update_success = True
+    every = (
+        *sensor.SENSORS,
+        *sensor.PROSUMER_SENSORS,
+        *sensor.INJECTION_SENSORS,
+        *sensor.FEE_SENSORS,
+        *sensor.CAPACITY_SENSORS,
+    )
+    entity = BePriceSensor(
+        coordinator, next(d for d in every if d.key == "current_month_cost")
+    )
+    with patch(
+        "homeassistant.util.dt.now",
+        return_value=datetime(2026, 10, 1, 0, 0, tzinfo=brussels),
+    ):
+        assert entity.native_value == pytest.approx(118.73)
+        assert entity.last_reset == september
+
+
 def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     """The load-bearing invariant of the whole option.
 
@@ -5095,8 +5136,19 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
         *sensor.CAPACITY_SENSORS,
     )
     desc = next(d for d in every if d.key == "current_year_cost")
-    assert desc.last_reset_fn is ytd_window_reset, (
-        "the sensor must publish the window helper's answer, not its own"
+    # The sensor publishes the reset the tick baked beside the figure, and the
+    # tick bakes it through the window helper, as the backfill seed does.
+    from custom_components.be_electricity_prices import coordinator_tick
+    from custom_components.be_electricity_prices.coordinator_data import (
+        CoordinatorData,
+    )
+
+    baked = datetime(2026, 1, 1, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert desc.last_reset_fn is not None
+    assert desc.last_reset_fn(CoordinatorData(current_year_cost_reset=baked)) == baked
+    tick = inspect.getsource(coordinator_tick._TickMixin._update_body)
+    assert "ytd_window_reset(self.entry, window_now)" in tick, (
+        "the tick must resolve the published reset through the window helper"
     )
     seed_call = inspect.getsource(backfill._backfill_cost_sensor)
     assert "ytd_window_reset(entry)" in seed_call, (

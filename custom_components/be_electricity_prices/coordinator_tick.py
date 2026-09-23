@@ -54,7 +54,12 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
-from .coordinator_data import CoordinatorData, month_window_start
+from .coordinator_data import (
+    CoordinatorData,
+    month_window_reset,
+    month_window_start,
+    ytd_window_reset,
+)
 from .providers import (
     DynamicRates,
     SpotMonthlyRates,
@@ -595,6 +600,9 @@ class _TickMixin:
         # bills all year anyway, and the refresh the fill requests puts the
         # right ones back.
         cached_months_only = self._month_cards_deferred
+        # One reading of the clock for both windows and the resets published
+        # beside them, so a figure and its last_reset always name one period.
+        window_now = dt_util.now()
         current_year_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
@@ -632,7 +640,7 @@ class _TickMixin:
             ),
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
-            window_start_override=month_window_start(self.entry),
+            window_start_override=month_window_start(self.entry, window_now.date()),
         )
         if cached_months_only:
             self._month_cards_deferred = False
@@ -738,6 +746,8 @@ class _TickMixin:
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
             current_month_cost_eur=month_cost,
+            current_year_cost_reset=ytd_window_reset(self.entry, window_now),
+            current_month_cost_reset=month_window_reset(self.entry, window_now),
             ytd_diagnostics=ytd_breakdown or None,
             projected_year_cost_eur=projected_year_cost,
             projection_diagnostics=projection_breakdown or None,

@@ -68,11 +68,7 @@ from .coordinator import (
     BePricesCoordinator,
     supplier_device_info,
 )
-from .coordinator_data import (
-    CoordinatorData,
-    month_window_reset,
-    ytd_window_reset,
-)
+from .coordinator_data import CoordinatorData
 from .pricing import PriceBreakdown, breakdown_row, slot_start
 
 # What one slot of a per-slot table holds: a PriceBreakdown for the price
@@ -88,7 +84,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     # Takes the entry: current_year_cost's reset instant is per-entry now,
     # since an entry can bill from its contract start date instead of 1
     # January.
-    last_reset_fn: Callable[[ConfigEntry], datetime] | None = None
+    last_reset_fn: Callable[[CoordinatorData], datetime | None] | None = None
     # A None from value_fn reads as unavailable rather than unknown. For the
     # band sensors, which exist for a constant the card may not print: a
     # bi-hourly meter on a monthly-indexed card has no constant day rate,
@@ -511,7 +507,7 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
         value_fn=lambda d: d.current_year_cost_eur,
-        last_reset_fn=ytd_window_reset,
+        last_reset_fn=lambda d: d.current_year_cost_reset,
     ),
     BePriceSensorDescription(
         key="current_month_cost",
@@ -529,7 +525,7 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
         value_fn=lambda d: d.current_month_cost_eur,
-        last_reset_fn=month_window_reset,
+        last_reset_fn=lambda d: d.current_month_cost_reset,
     ),
     BePriceSensorDescription(
         key="projected_year_cost",
@@ -704,8 +700,11 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
 
     @property
     def last_reset(self) -> datetime | None:
+        # The window the published figure was computed over, baked with it at
+        # the tick, so the two can never name different periods.
         fn = self.entity_description.last_reset_fn
-        return fn(self.coordinator.entry) if fn is not None else None
+        data = self.coordinator.data
+        return fn(data) if fn is not None and data is not None else None
 
     @property
     def available(self) -> bool:
