@@ -81,7 +81,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
     _bake_monthly_injection,
     _compute_injection_price,
-    _injection_hourly_on_cohort,
+    _injection_bakes_to_month_mean,
     _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_price_for_slot,
@@ -533,9 +533,7 @@ class _TickMixin:
         # systematically over-credits. _injection_needs_spot identifies that
         # shape (factor/base with no printed indicative), so leave it alone.
         injection_snapshot = priced
-        if _injection_on_month_mean(priced) and not _injection_hourly_on_cohort(
-            self._snapshot, self.entry
-        ):
+        if _injection_bakes_to_month_mean(priced, self._snapshot, self.entry):
             inj_mean = plain_mean
             spp_only = _injection_is_spp_indexed(self._snapshot)
             # A card that prints an indicative has something to fall back to

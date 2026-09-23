@@ -1068,7 +1068,11 @@ convex and the two orders give different money:
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
-  number. `_bake_monthly_injection` (`injection.py`) produces it and the floor
+  number. Which of the two a credit is, the live tick and the compare page decide
+  with one rule (`_injection_bakes_to_month_mean`, `injection.py`) asked of the
+  PRICED leg, so a signing cohort on a quarter-hour card (Trevion LifePowr signed
+  from March to May 2026) is credited per slot even though today's card is
+  monthly. `_bake_monthly_injection` (`injection.py`) produces it and the floor
   lands on the flat `current` path. Every quote path calls that one helper: the
   compare estimate used to resolve only the Belpex_SPP cards and leave the rest
   to the live helper, which answers the card's printed figure on a snapshot

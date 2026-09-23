@@ -351,13 +351,15 @@ def _compare_injection_credit(
         _bake_monthly_injection,
         _compute_injection_price,
         _floor_injection,
+        _injection_bakes_to_month_mean,
         _tou_weekend_rule,
     )
     from .providers._rates import DynamicRates, InjectionRates
-    from .spot_stats import _injection_on_month_mean
 
     raw = snapshot if raw_snapshot is None else raw_snapshot
-    if month_spot is not None and _injection_on_month_mean(raw):
+    # The tick's rule, on the priced leg with the raw card as today's.
+    bakes = _injection_bakes_to_month_mean(snapshot, raw, entry)
+    if month_spot is not None and bakes:
         # Resolve the month index the way the coordinator resolves it for the
         # live sensor, by calling the same helper, so the two agree band by
         # band rather than by a rule written out twice. Asked of the RAW card
@@ -447,9 +449,7 @@ def _compare_injection_credit(
         # quoted 0,07959 EUR/kWh where the live tick, the year-to-date walk
         # and the backfill all say 0,05023: it understated the user's own bill
         # and so biased the comparison toward staying put.
-        if spot_dict and not _injection_on_month_mean(
-            snapshot if raw_snapshot is None else raw_snapshot
-        ):
+        if spot_dict and not bakes:
             # Priced per slot and averaged by when the panels export, because
             # that is what the year's exported kWh is billed at. Evaluating
             # the formula once at the window mean instead answers a different

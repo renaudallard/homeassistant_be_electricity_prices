@@ -7740,6 +7740,48 @@ def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
     assert quoted == pytest.approx(0.97 * 0.05 - 0.021)
 
 
+def test_a_cohort_signed_on_a_quarter_hour_card_is_credited_per_slot() -> None:
+    """Trevion LifePowr was a quarter-hour contract from March to May 2026 and
+    has been monthly since June. A cohort signed then is priced on its signing
+    card's formula, which the live tick credits per slot; the page asked
+    today's monthly card instead and flattened it to the month mean, about 200
+    EUR a year of credit too much at 3000 kWh exported."""
+    from custom_components.be_electricity_prices.compare_inputs import (
+        _credit_index_for,
+    )
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        DynamicRates,
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"solar_regime": "injection", "region": "flanders", "api_key": "k"},
+    )
+    signed = InjectionRates(factor=1.0, base=-0.013)
+    priced = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02, quarter_hourly=True),
+        injection=signed,
+    )
+    today = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02), injection=signed
+    )
+    spots = {
+        dt_util.utcnow().replace(minute=0, second=0, microsecond=0): 0.05,
+    }
+    quoted = _compare_injection_credit(
+        priced, entry, dict(spots), 0.05, 0.15, None, raw_snapshot=today
+    )
+    # Off the day-ahead slots, as the tick prices it, not the 0.15 month mean.
+    assert quoted == pytest.approx(1.0 * 0.05 - 0.013)
+    assert _credit_index_for(entry, priced, own=True, raw=today) is None
+
+
 def test_the_projection_credits_the_month_baked_leg_when_given_one() -> None:
     """The coordinator resolves a month-indexed credit once per tick; the
     projection reads that result rather than re-deriving it off the card,

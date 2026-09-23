@@ -64,6 +64,7 @@ from .providers._rates import (
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
+    _injection_on_month_mean,
     _now_slot_spot,
 )
 
@@ -256,6 +257,28 @@ def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) 
     """
     return _injection_needs_spot(snapshot, entry) and not isinstance(
         snapshot.energy, SpotMonthlyRates
+    )
+
+
+def _injection_bakes_to_month_mean(
+    priced: SupplierSnapshot | None, today: SupplierSnapshot | None, entry: ConfigEntry
+) -> bool:
+    """Whether the feed-in credit resolves on the delivery month's mean.
+
+    The live tick's rule, written once so the compare page and the daily
+    ranking credit a cohort the way the sensor beside them does. The PRICED
+    leg decides, since a signing cohort carries its own card's formula and
+    index, and the month mean is waived when ``today``'s card keeps its
+    feed-in per hour under a cohort's monthly energy re-price
+    (:func:`_injection_hourly_on_cohort`). The page asked today's card alone,
+    so a Trevion LifePowr cohort signed from March to May 2026, a quarter-hour
+    contract the tick credits per slot, was flattened to the plain month mean:
+    about 200 EUR a year of credit too much at 3000 kWh exported.
+    """
+    if priced is None or today is None:
+        return False
+    return _injection_on_month_mean(priced) and not _injection_hourly_on_cohort(
+        today, entry
     )
 
 

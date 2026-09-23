@@ -46,7 +46,7 @@ from .const import (
     METER_MONO,
     SOLAR_REGIME_NONE,
 )
-from .injection import _injection_needs_spot
+from .injection import _injection_bakes_to_month_mean, _injection_needs_spot
 from .providers import effective_kind, get as get_extractor
 from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
@@ -54,7 +54,6 @@ from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
-    _injection_on_month_mean,
     _rlp_blend_for,
     _spp_weighting_enabled,
 )
@@ -252,7 +251,9 @@ def _credit_index_for(
     )
     if spp:
         return "spp"
-    if _injection_on_month_mean(raw if raw is not None else snapshot):
+    if _injection_bakes_to_month_mean(
+        snapshot, raw if raw is not None else snapshot, entry
+    ):
         return "plain"
     return None
 
