@@ -1511,6 +1511,9 @@ def test_the_loader_binds_what_the_providers_use(
         if not name.startswith("__"):
             monkeypatch.setattr(lc, name, dict(value) if type(value) is dict else value)
     before = set(sys.modules)
+    # The wait bound's default is the value the loader binds, so asserting
+    # the two equal proved nothing; a sentinel the loader has to overwrite does.
+    monkeypatch.setattr(lc, "_MAX_WELCOME_CREDIT_MONTHS", -1)
     try:
         loaded = lc._load_providers()
         assert set(loaded) == set(lc._SUPPLIERS)
