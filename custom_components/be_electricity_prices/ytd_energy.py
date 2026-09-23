@@ -178,8 +178,12 @@ async def _ytd_hourly_energy(
     # outright whenever compilation lagged or stalled. Off the sensors each
     # side was actually read from, which is the total when it stood in for a
     # broken pair.
-    await _top_up_today_hourly(hass, cons.sensors, cons_per_hour, today)
-    await _top_up_today_hourly(hass, inj.sensors, inj_per_hour, today)
+    # Neither side is topped up while a pair on either cannot bill today: its
+    # hours drop out at midnight, and the other side's live reading would be
+    # billed against nothing in the meantime.
+    if cons.today_ok and inj.today_ok:
+        await _top_up_today_hourly(hass, cons.sensors, cons_per_hour, today)
+        await _top_up_today_hourly(hass, inj.sensors, inj_per_hour, today)
 
     _snap_for = _month_snapshot_cache(
         hass,
@@ -496,7 +500,8 @@ async def _ytd_spot_injection_credit(
     # trailed the last COMPILED hour, so current_year_cost over-stated the
     # bill by whatever of today's injection statistics had not booked yet, and
     # did not heal at all while compilation was stalled.
-    await _top_up_today_hourly(hass, metered.sensors, per_hour, today)
+    if metered.today_ok:
+        await _top_up_today_hourly(hass, metered.sensors, per_hour, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():
         # Only the days the per-day walk this credit is added to billed: a day

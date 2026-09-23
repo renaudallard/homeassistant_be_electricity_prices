@@ -1608,6 +1608,132 @@ async def test_the_hourly_walk_skips_an_hour_one_register_did_not_report(
     assert costs[0] == pytest.approx(costs[1])
 
 
+async def test_today_is_not_billed_on_a_pair_one_half_of_which_stopped(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A register whose statistics stopped still reads live. Billed off the
+    two live readings, today counted during the day and dropped at midnight
+    with the days the stopped half never reports: a sawtooth in the running
+    cost. Today now goes the way of those days, on both sides."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "injection_kwh": "sensor.inj",
+        }
+    )
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": year[:250], "sensor.inj": year},
+        {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.inj": 3.0},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert daily is not None
+    assert today not in daily
+    assert len(daily) == 250
+    assert measured.days_with_data == 250
+    assert measured.pair_fault == "sensor.night"
+
+
+async def test_a_pair_is_not_topped_up_off_one_half(hass: HomeAssistant) -> None:
+    """The top-up summed whichever sensors read live, so a pair with one half
+    unreadable added the other band's whole day to the current hour."""
+    from custom_components.be_electricity_prices.energy_meters import (
+        _top_up_today_hourly,
+    )
+
+    readings = {"sensor.day": 5.0, "sensor.night": None}
+
+    async def _live(_hass: object, entity_id: str, _today: date) -> float | None:
+        return readings[entity_id]
+
+    per_hour: dict[datetime, float] = {}
+    with patch.object(energy_meters, "_live_today_kwh", new=_live):
+        await _top_up_today_hourly(
+            hass, ["sensor.day", "sensor.night"], per_hour, date(2026, 7, 16)
+        )
+    assert per_hour == {}
+
+
+async def test_a_stopped_pair_leaves_today_out_of_the_hourly_walk(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With the night register stopped, the hourly walk's top-up billed today
+    off the live meters and the next midnight took it back. Whatever they read
+    today, the year cost must not move."""
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=1.0, base=0.01),
+        injection=InjectionRates(factor=0.9, base=-0.01, current=None),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="dynamic",
+        day_consumption_kwh="sensor.day",
+        night_consumption_kwh="sensor.night",
+        injection_kwh="sensor.inj",
+    )
+    hours = [
+        dt_util.start_of_local_day(datetime(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=i)
+        for i in range(24 * 4 + 11)
+    ]
+    series = {"sensor.day": hours, "sensor.night": hours[:24], "sensor.inj": hours}
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {h: 0.5 for h in series.get(entity_id, [])}
+
+    async def _daily(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {}
+
+    costs = []
+    for reading in (None, 9.0):
+
+        async def _live(
+            _hass: object, _entity_id: str, _today: date, value: Any = reading
+        ) -> float | None:
+            return value
+
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+            patch.object(energy_meters, "_live_today_kwh", new=_live),
+        ):
+            costs.append(
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                    historical_spots={h: 0.08 for h in hours},
+                )
+            )
+    assert costs[0] == pytest.approx(costs[1])
+
+
 async def test_ytd_credits_a_register_pair_per_register(
     hass: HomeAssistant, freezer: Any
 ) -> None:

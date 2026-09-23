@@ -79,6 +79,7 @@ from .pricing import (
 _LOGGER = logging.getLogger(__name__)
 
 _K = TypeVar("_K")
+_P = TypeVar("_P", date, datetime)
 
 # How far a register's latest day may trail its twin's before it counts as
 # stopped. Statistics compile an hour behind, so a register a day behind is
@@ -504,6 +505,7 @@ async def _metered_hourly_kwh(
         {hour: day[hour] + night[hour] for hour in hours},
         tuple(ids),
         frozenset(set(day) ^ set(night)),
+        today_ok=not _stopped(((ids[0], day), (ids[1], night))),
     )
 
 
@@ -530,16 +532,20 @@ async def _top_up_today_hourly(
     the hour the user is living through, which is the point of a live read on
     a dynamic contract.
 
-    A meter with no reliable live reading contributes nothing and leaves the
-    statistics figure standing, exactly as the per-day path degrades.
+    All or nothing: when any of the sensors has no reliable live reading the
+    statistics figure is left standing, exactly as the per-day path degrades.
+    A side is read off one totals sensor or off a register pair, and a pair
+    topped up off the one half that reads added that band's whole day to the
+    current hour, which the next midnight took back.
     """
     live_total = 0.0
     have_live = False
     for entity_id in entity_ids:
         live = await _live_today_kwh(hass, entity_id, today)
-        if live is not None:
-            live_total += live
-            have_live = True
+        if live is None:
+            return
+        live_total += live
+        have_live = True
     if not have_live:
         return
     midnight = dt_util.start_of_local_day(today).astimezone(UTC)
@@ -694,7 +700,7 @@ async def _resolve_daily_kwh(
         if bool(day_id) ^ bool(night_id) and not total_id:
             return False
         if day_id and night_id:
-            d, n, live = _split_today(
+            d, n, (day_today, night_today) = _split_today(
                 await _recorder_daily_kwh(hass, day_id, window_start, today),
                 await _recorder_daily_kwh(hass, night_id, window_start, today),
                 today,
@@ -716,10 +722,19 @@ async def _resolve_daily_kwh(
                     row[slot_day] += d[day]
                     row[slot_night] += n[day]
                 unknown.update(set(d) ^ set(n))
-                if live is not None:
+                if (
+                    day_today is not None
+                    and night_today is not None
+                    and not _stopped(((day_id, d), (night_id, n)))
+                ):
                     row = out.setdefault(today, [0.0, 0.0, 0.0, 0.0])
-                    row[slot_day] += live[0]
-                    row[slot_night] += live[1]
+                    row[slot_day] += day_today
+                    row[slot_night] += night_today
+                elif day_today is not None or night_today is not None:
+                    # Read, but not billable as a pair: today goes the way of
+                    # any day one half did not report, or it would be billed
+                    # now and taken back at midnight.
+                    unknown.add(today)
                 return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
@@ -838,13 +853,18 @@ class MeteredHours:
     # them out of the other side too, or it credits the feed-in of an hour
     # whose consumption it did not bill.
     unknown: frozenset[datetime] = frozenset()
+    # False when one half of the pair stopped: today cannot be billed then,
+    # since the day drops out at midnight with the hours the stopped half
+    # never reports, so a live top-up billed today would be taken back
+    # tomorrow.
+    today_ok: bool = True
 
 
 def _split_today(
     day: Mapping[date, float], night: Mapping[date, float], end: date
-) -> tuple[dict[date, float], dict[date, float], tuple[float, float] | None]:
+) -> tuple[dict[date, float], dict[date, float], tuple[float | None, float | None]]:
     """A register pair's daily readings with today taken out, and today's
-    two readings when BOTH halves have one.
+    reading of each half, ``None`` where a half has none.
 
     Today's value is a live meter reading (:func:`_recorder_daily_kwh`), and
     the live reading comes off the state history, which a register compiling
@@ -852,16 +872,30 @@ def _split_today(
     the pair was billed on today alone, and no register was named for the
     Repairs card, because each had reported today. Whether a half records is
     therefore decided on the days before today, and the caller bills today
-    on top only when both halves read it.
+    on top only when both halves read it and neither stopped.
     """
     if end != dt_util.now().date():
-        return dict(day), dict(night), None
-    today = (day[end], night[end]) if end in day and end in night else None
+        return dict(day), dict(night), (None, None)
     return (
         {when: kwh for when, kwh in day.items() if when != end},
         {when: kwh for when, kwh in night.items() if when != end},
-        today,
+        (day.get(end), night.get(end)),
     )
+
+
+def _stopped(halves: Iterable[tuple[str, Mapping[_P, float]]]) -> list[str]:
+    """The halves of a reporting pair whose latest day (or hour) trails the
+    other's by more than ``_REGISTER_STOPPED_AFTER_DAYS``.
+
+    Relative to the pair rather than to the clock, so a statistics stall that
+    holds both halves back names neither.
+    """
+    last = [(entity_id, max(readings)) for entity_id, readings in halves if readings]
+    if len(last) < 2:
+        return []
+    latest = max(when for _entity_id, when in last)
+    limit = latest - timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
+    return [entity_id for entity_id, when in last if when < limit]
 
 
 def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] | None:
@@ -914,12 +948,17 @@ async def _measured_kwh(
         return MeasuredKwh(0.0, 0)
     day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     if day_id and night_id:
-        d, n, live = _split_today(
+        d, n, (day_today, night_today) = _split_today(
             await _recorder_daily_kwh(hass, day_id, start, end),
             await _recorder_daily_kwh(hass, night_id, start, end),
             end,
         )
-        today_kwh, today_days = (live[0] + live[1], 1) if live else (0.0, 0)
+        stopped = ", ".join(_stopped(((day_id, d), (night_id, n))))
+        today_kwh, today_days = (
+            (day_today + night_today, 1)
+            if day_today is not None and night_today is not None and not stopped
+            else (0.0, 0)
+        )
         days = _paired_keys(d, n)
         # A wired totals sensor measures what the pair cannot, and the pair
         # is still named, so the Repairs card gets the register fixed.
@@ -968,12 +1007,6 @@ async def _measured_kwh(
                 len(days),
                 instead,
             )
-        latest = max(max(d), max(n))
-        stopped = ", ".join(
-            entity_id
-            for entity_id, reported in ((day_id, d), (night_id, n))
-            if max(reported) < latest - timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
-        )
         if total_id and set(d) != set(n):
             measured = await _measured_total(hass, total_id, start, end)
             return replace(measured, pair_fault=stopped)
