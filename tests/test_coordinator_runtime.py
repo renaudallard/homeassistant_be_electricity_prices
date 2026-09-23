@@ -3389,6 +3389,38 @@ async def test_capacity_peak_scales_watts_to_kilowatts(
     assert coord._peak_kw == 4.481
 
 
+async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """HA's dsmr integration writes its entities at most every 30 s, so for up
+    to 30 s after the meter resets its monthly maximum at midnight the entity
+    still shows last month's. A rollover tick inside that window started
+    October at September's 5,2 kW, and a running maximum never comes down:
+    the month billed 5,2 where it peaked at 2,4, about 12 EUR a year at
+    Fluvius Antwerpen's rate per affected rollover."""
+    entity_id = "sensor.dsmr_maximum_demand_current_month"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    freezer.move_to("2026-09-30 23:40:00+02:00")
+    hass.states.async_set(entity_id, "5.2", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+    assert coord._peak_kw == 5.2
+
+    # The rollover tick, before the entity has published the reset.
+    freezer.move_to("2026-10-01 00:00:12+02:00")
+    await coord._track_monthly_peak()
+    assert coord._peak_history == {"2026-09-01": 5.2}
+    assert coord._peak_kw == 0.0
+
+    # The reset lands, and October is October's.
+    freezer.move_to("2026-10-01 00:00:42+02:00")
+    hass.states.async_set(entity_id, "2.4", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+    assert coord._peak_kw == 2.4
+
+
 async def test_capacity_peak_keeps_kilowatts_unscaled(
     hass: HomeAssistant, freezer: Any
 ) -> None:

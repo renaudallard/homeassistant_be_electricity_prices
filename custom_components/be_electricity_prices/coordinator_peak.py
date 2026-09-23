@@ -161,7 +161,16 @@ class _PeakMixin:
         elif mode == CAPACITY_MODE_SENSOR:
             entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
             state: State | None = self.hass.states.get(entity_id) if entity_id else None
-            if state is not None and state.state not in ("unknown", "unavailable"):
+            # A reading written before this month began cannot be this
+            # month's. HA's dsmr integration writes at most every 30 s, so a
+            # rollover tick right after midnight still sees last month's
+            # maximum, and a running maximum seeded with it never comes back
+            # down: the new month billed the old month's peak.
+            if (
+                state is not None
+                and state.state not in ("unknown", "unavailable")
+                and state.last_updated >= dt_util.start_of_local_day(current_month)
+            ):
                 try:
                     value = float(state.state)
                 except (TypeError, ValueError):
