@@ -2383,7 +2383,18 @@ def _check_vreg_ceiling_consensus(
     odd = sorted(set(printed) - agree)
     if not odd:
         return
-    detail = ", ".join(f"{name}={printed[name]:.7f}" for name in odd)
+    # A figure with an allowance is a card error somebody has looked at, not
+    # evidence that the regulator moved the ceiling, so it neither votes nor
+    # counts toward the quorum. Bolt prints one, and is one of only four
+    # suppliers whose sentence the reader matches: with one card unread and
+    # another moved, its vote made the stale side a majority and the run
+    # asked for the constant to be moved.
+    allowances = {
+        name: _vreg_ceiling_allowance(name, printed[name], today) for name in odd
+    }
+    moved = [name for name in odd if allowances[name] is None]
+    seen = len(printed) - (len(odd) - len(moved))
+    detail = ", ".join(f"{name}={printed[name]:.7f}" for name in moved)
     # A majority needs a fleet to be a majority OF, and the fleet is the cards
     # SEEN, not the cards that agree. Counting the agreeing ones instead
     # silenced this branch in the one case it exists for: when the regulator
@@ -2402,11 +2413,11 @@ def _check_vreg_ceiling_consensus(
     #
     # The federal twin guards the same way, by refusing to rank a top pair
     # that is only as large as its runner-up.
-    if len(odd) > len(agree) and len(printed) >= _VREG_CONSENSUS_QUORUM:
+    if len(moved) > len(agree) and seen >= _VREG_CONSENSUS_QUORUM:
         _record(
             "_federal: the VREG ceiling constant disagrees with the fleet",
             False,
-            f"{len(odd)} of {len(printed)} Flemish cards printing a "
+            f"{len(moved)} of {seen} Flemish cards printing a "
             f"maximumtarief for {month} disagree with VREG_NETWORK_CEILING_HTVA "
             f"({_VREG_CEILING_HTVA} ex-VAT, {tvac:.7f} incl.): {detail}. A "
             "majority means the regulator moved it and the constant needs "
@@ -2425,7 +2436,7 @@ def _check_vreg_ceiling_consensus(
             "already bills the regulator's figure, so it is a card to report "
             "rather than money lost"
         )
-        allowed = _vreg_ceiling_allowance(name, printed[name], today)
+        allowed = allowances[name]
         if allowed is not None:
             line = f"{_ALLOWED_TAX_MARKER}: {line}; {allowed}"
         _record(

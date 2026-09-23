@@ -3265,9 +3265,32 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
     # constant is the odd one out. This asserted the opposite when the gate
     # counted the agreeing cards; counting the cards seen is what makes the
     # fleet-wide case below reportable, and this is the same rule applied
-    # consistently rather than a separate concession.
-    _run({"bolt": "0,2035480", "mega": "0,1920264", "luminus": "0,3472738"})
+    # consistently rather than a separate concession. Bolt prints a figure
+    # with no allowance here: its allowed one is not a vote (below).
+    _run({"bolt": "0,1920264", "mega": "0,1920264", "luminus": "0,3472738"})
     assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
+
+    # Bolt's allowed figure is a card error somebody looked at, not a sign the
+    # regulator moved. With Frank unread and energie.be printing a new figure,
+    # its vote made one moved card against one agreeing a majority, and the
+    # run asked for the constant to be moved instead of naming energie.be.
+    _run({"bolt": "0,2035480", "energiebe": "0,3600000", "luminus": "0,3472738"})
+    assert not _rows("_federal: the VREG ceiling constant disagrees")
+    (energiebe,) = _rows("energiebe/VREG ceiling")
+    assert not energiebe.expected
+    assert _rows("bolt/VREG ceiling")[0].expected
+
+    # Without Bolt's vote a fleet-wide move still reports, three of three.
+    _run(
+        {
+            "bolt": "0,2035480",
+            "energiebe": "0,4100000",
+            "luminus": "0,4100000",
+            "frank": "0,4100000",
+        }
+    )
+    (fleet,) = _rows("_federal: the VREG ceiling constant disagrees")
+    assert fleet.detail.startswith("3 of 3 ")
 
     # The case the gate exists for and the one it used to suppress: every card
     # that prints the sentence has moved to a new figure, so nothing agrees
@@ -3286,7 +3309,7 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
     # reading and a human should look at the regulator's sheet.
     _run(
         {
-            "bolt": "0,2035480",
+            "bolt": "0,1920264",
             "mega": "0,1920264",
             "energiebe": "0,1920264",
             "luminus": "0,3472738",

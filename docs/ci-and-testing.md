@@ -1137,6 +1137,12 @@ that card, and point the maintainer at Bolt's figure: about 1,7 times too tight,
 still file, which is the claim the evidence supports. `_check_federal_tax_consensus` guards the
 same way, by refusing to rank a top pair only as large as its runner-up.
 
+A figure `_KNOWN_VREG_CEILINGS` allows is left out of that vote and of the quorum's count: it is a
+card error somebody has looked at, not a sign that the regulator moved. Counted, Bolt's figure made
+one moved card a majority against one agreeing card whenever a third was unread that month, and the
+run asked for the constant to be moved instead of naming the card that had changed. A fleet-wide
+move still reports without it, three of three.
+
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
 which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A
