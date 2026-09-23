@@ -421,10 +421,10 @@ def _cohort_injection_from_archived(
     publishes only a printed monthly figure re-prices every month by its own
     terms, and freezing it would invent a lock the contract does not have.
     Unless the card says the figure IS the contract for the term
-    (``fixed_for_term``: Mega's fixed range, Trevion Groene Energie Vast):
-    then the signing card's leg stands whole, printed figure included. A
-    January Mega Online Fixed signer was otherwise credited September's 3,56
-    c/kWh where the contract pays 0,98.
+    (``fixed_for_term``: Mega's fixed range, Trevion Groene Energie Vast,
+    EnergyVision's fixed-injection card): then the signing card's leg stands
+    whole, printed figure included. A January Mega Online Fixed signer was
+    otherwise credited September's 3,56 c/kWh where the contract pays 0,98.
     """
     old = archived.injection
     leg = delivery.injection
