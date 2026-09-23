@@ -404,10 +404,6 @@ _NUMERIC_SEPARATORS = (
 # all encountered in the wild; supplier PDFs flip silently between
 # them on re-renders.
 _NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
-# One capture group around a plain decimal, with NO thousands separator.
-# Named for that constraint on purpose: a card whose values run into four
-# digits needs eneco's wider pattern instead, and reusing this one there
-# truncates the value to its first digits (recorded beside eneco's _NUM).
 # A Belgian figure carries a thousands separator AND a decimal comma, so a
 # pattern allowing only one of them reads 1.234,56 as two columns and makes
 # a row look wider than it is. The cards print 20.000 and 1.000.000 (see

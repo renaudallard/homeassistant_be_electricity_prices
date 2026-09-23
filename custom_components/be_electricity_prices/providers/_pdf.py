@@ -711,6 +711,10 @@ async def fetch_text(
         ) from err
 
 
+# One capture group around a plain decimal, with NO thousands separator.
+# Named for that constraint on purpose: a card whose values run into four
+# digits needs eneco's wider pattern instead, and reusing this one there
+# truncates the value to its first digits (recorded beside eneco's _NUM).
 NUM_NO_THOUSANDS = r"([\d]+(?:[.,][\d]+)?)"
 
 
