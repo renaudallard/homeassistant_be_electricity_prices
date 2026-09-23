@@ -50,12 +50,13 @@ from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
     _snapshot_to_dict,
 )
 from .snapshot_resolve import _resolve_snapshot
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -313,15 +314,20 @@ async def _archived_card_from_github(
         return None
     try:
         row = json.loads(body)
-        return ArchivedCard(
-            snapshot=_snapshot_from_dict(
-                row, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
-            ),
-            read_by_ocr=_row_read_by_ocr(row),
+        snapshot = _snapshot_from_dict(
+            row, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
         )
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
         return None
+    if row.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION:
+        # Parsed before the running parser, and re-parsed on the archive's next
+        # run. Good enough to bill until then, not to keep: cached as settled
+        # it was persisted under the running schema and served from disk for
+        # good, so a fix that reached the archive never reached the entry. A
+        # provisional row is re-asked daily and never written.
+        snapshot = replace(snapshot, provisional=True)
+    return ArchivedCard(snapshot=snapshot, read_by_ocr=_row_read_by_ocr(row))
 
 
 async def card_for_unreadable_month(

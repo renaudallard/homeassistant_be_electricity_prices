@@ -2837,6 +2837,49 @@ async def test_an_archive_row_says_whether_its_card_was_read_by_ocr(
     assert card.snapshot.publication_label == "2026-09"
 
 
+async def test_an_archive_row_from_an_older_parser_is_not_kept() -> None:
+    """The card archive re-parses its rows on the first daily run after a
+    parser change, and until then serves each row as the old parser read it.
+    Read at the degraded floor that is still the best card for a past month,
+    but it was cached as settled and persisted under the RUNNING schema, so
+    an entry that upgraded before the archive's run kept the misread for good:
+    a January 2026 OCTA+ Dynamic cohort billed on the AMR clause's formulas,
+    about 157 EUR a year too favourable, until the next schema bump. A row
+    older than the running schema is billed, re-asked, and never written."""
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _SNAPSHOT_SCHEMA_VERSION,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _month_row_is_provisional,
+    )
+
+    snap = _archive_snapshot("2026-01")
+    for schema, kept in (
+        (_SNAPSHOT_SCHEMA_VERSION - 1, False),
+        (_SNAPSHOT_SCHEMA_VERSION, True),
+    ):
+        row = _snapshot_to_dict(snap, dt_util.utcnow(), schema_version=schema)
+
+        async def _body(*_args: object, _row: object = row, **_kw: object) -> str:
+            return json.dumps(_row)
+
+        with patch.object(snapshot_months, "fetch_text", _body):
+            card = await _archived_card_from_github(
+                MagicMock(),
+                "octaplus",
+                "octaplus_dynamic",
+                "flanders",
+                date(2026, 1, 1),
+            )
+        assert card is not None
+        assert card.snapshot.provisional is not kept
+        # Provisional is what keeps it out of the store and re-asks it daily.
+        assert (
+            _month_row_is_provisional(card.snapshot, date(2026, 1, 1), date(2026, 9, 1))
+            is not kept
+        )
+
+
 async def test_snapshot_for_month_uses_archive_when_available(
     hass: HomeAssistant,
 ) -> None:
