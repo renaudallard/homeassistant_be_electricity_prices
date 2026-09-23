@@ -427,10 +427,13 @@ nacht 4,81 ct/kWh, capacity 52,37 EUR/kW/yr, databeheer 18,92 EUR/yr).
 names ("Frank Energie Dynamisch — JN — september 2026"), and falls back to the shared
 `parse_valid_until` (`_validity.py`) only when the title names no month. The validity
 sentence under the title ("geldig voor contracten getekend in <maand> <jaar>") agrees with
-it on every card but one: the JN card for September 2026 says August, while its title, its
-file name and its expected-price lines say September. Read as August, that card kept
+it on every card but four: the HV, JN and Slim cards for February 2026 say January and the
+JN card for September 2026 says August, while their titles, file names and expected-price
+lines name the card's own month. Read as August, the September card kept
 `tomorrow_prices_available` off for the whole month, and `fetch_for_month` refused it for
-September. `test_valid_until_is_end_of_april` pins the April fixture to a date in month 4,
+September; read as January, the three February cards were refused for February, so the
+card archive held no February row for those tiers until the title was read first.
+`test_valid_until_is_end_of_april` pins the April fixture to a date in month 4,
 year 2026, and `test_the_title_dates_a_card_whose_validity_sentence_is_wrong` pins the real
 JN September card (`frank_dynamic_jn_sep.pdf`) to 30 September (`tests/test_frank.py`).
 This parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.

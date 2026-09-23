@@ -368,10 +368,11 @@ def _valid_until(text: str) -> date | None:
 
     Every card opens on a title ending "<maand> <jaar>", and its file name in
     the CMS and its expected-price lines name the same month. So does the
-    validity sentence under the title, on every card but one: the JN card for
-    September 2026 says its formula is for contracts signed in August, which
-    dated it a month early. The title is read first, and the sentence only
-    when the title names no month.
+    validity sentence under the title, on every card but four: the HV, JN and
+    Slim cards for February 2026 say their formula is for contracts signed in
+    January, and the JN card for September 2026 says August, each dating the
+    card a month early. The title is read first, and the sentence only when
+    the title names no month.
     """
     title = text.lstrip().partition("\n")[0]
     in_title = scan_month_end(title, _MONTH_NAMES, limit=len(title))
