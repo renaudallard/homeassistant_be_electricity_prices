@@ -727,6 +727,9 @@ def test_the_fixed_injection_card_prices_its_feed_in_flat() -> None:
     assert inj.factor is None
     assert inj.base is None
     assert inj.spp_indexed is False
+    # "Het injectietarief van 4,00 EURcent/kWh ligt vast voor een bepaalde
+    # duur van 3 jaar": a signing cohort keeps its own card's figure.
+    assert inj.fixed_for_term is True
     energy = snap.energy
     assert isinstance(energy, SpotMonthlyRates)
     assert energy.tier_kwh == pytest.approx(1000.0)

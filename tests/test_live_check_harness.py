@@ -2649,6 +2649,41 @@ def test_the_regional_levies_are_gated() -> None:
     assert _fails("flanders", published_vat_rate=0.21)
 
 
+def test_a_feed_in_price_fixed_for_the_term_is_gated_both_ways() -> None:
+    """The flag that makes a signing cohort keep its own card's feed-in price
+    is read off a sentence, so a redesign that drops it unlocks every such
+    cohort without a word. The flag on any other card would lock a credit the
+    contract lets move."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    def _fails(contract_id: str, fixed: bool) -> bool:
+        lc.CHECKS.clear()
+        snap = SimpleNamespace(
+            injection=InjectionRates(current=0.02, fixed_for_term=fixed)
+        )
+        lc._expect_feed_in_fixed_for_term("x", contract_id, snap)
+        return any(not c.ok for c in lc.CHECKS)
+
+    lc._CONTRACTS_BY_ID["mega_harness_fixed"] = SimpleNamespace(kind="fixed")
+    lc._CONTRACTS_BY_ID["mega_harness_flex"] = SimpleNamespace(kind="variable")
+    try:
+        assert not _fails("mega_harness_fixed", True)
+        assert _fails("mega_harness_fixed", False)
+        assert not _fails("mega_harness_flex", False)
+        assert _fails("mega_harness_flex", True)
+        assert not _fails("groene_energie_vast", True)
+        assert _fails("groene_energie_vast", False)
+        assert not _fails("energyvision_fixed_injection_3y", True)
+        assert not _fails("power_fix", False)
+        assert _fails("power_fix", True)
+    finally:
+        lc._CONTRACTS_BY_ID.pop("mega_harness_fixed", None)
+        lc._CONTRACTS_BY_ID.pop("mega_harness_flex", None)
+        lc.CHECKS.clear()
+
+
 def test_every_snapshot_gate_is_called_by_the_validator() -> None:
     """Every `_expect_*` gate has a test that calls it directly, so deleting
     the CALL from `_validate_snapshot` leaves the suite green: mutation
@@ -2672,6 +2707,7 @@ def test_every_snapshot_gate_is_called_by_the_validator() -> None:
         "_expect_direct_debit_registry",
         "_expect_month_indexed_registry",
         "_expect_quarter_hourly_registry",
+        "_expect_feed_in_fixed_for_term",
         "_validate_energy",
         "_validate_injection",
         "_validate_dsos",

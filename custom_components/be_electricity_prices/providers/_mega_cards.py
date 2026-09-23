@@ -686,7 +686,23 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         base=base,
         formula=formula,
         spp_indexed=spp_indexed,
+        # Read off the card, so a redesign that drops the sentence falls back
+        # to a figure that tracks each month's card, as every Mega fixed row
+        # did before.
+        fixed_for_term=kind == "fixed"
+        and bool(_INJECTION_FIXED_FOR_TERM.search(re.sub(r"\s+", " ", text))),
     )
+
+
+# "Tarif d'injection : dans le cas ou vous avez souscrit au tarif fixe pour
+# votre consommation, le prix de rachat de votre energie injectee sur le
+# reseau sera fixe egalement pour une duree d'un an" (deux ans, trois ans),
+# on every fixed card and no other.
+_INJECTION_FIXED_FOR_TERM = re.compile(
+    r"prix de rachat de votre [ée]nergie inject[ée]e sur le r[ée]seau "
+    r"sera fix[ée] [ée]galement",
+    re.IGNORECASE,
+)
 
 
 def _injection_vat_applies(text: str, professional: bool) -> bool:

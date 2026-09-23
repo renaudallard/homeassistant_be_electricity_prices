@@ -103,6 +103,12 @@ schedule and a single-register meter at the `Enkelvoudig` rate. The flag is
 what makes the pair readable; the engine ignores an unflagged pair on a
 fixed or variable card, so no other supplier is affected.
 
+The table holding both columns is headed `1 jaar vast`, so the feed-in pair is
+fixed with the consumption price and the leg sets `fixed_for_term`. A signing
+cohort keeps its own card's pair (`_cohort_injection_from_archived`,
+`cohort.py`): a March 2026 signer is paid 2,81 c/kWh on a single-register meter
+for the year, not the 5,76 September's card prints.
+
 Every path that credits the feed-in asks per register. The live sensor and the
 today/tomorrow array resolve the hour's own, and the year-to-date walk asks once
 for each: it is a per-day walk holding the day and night kWh apart already, so it

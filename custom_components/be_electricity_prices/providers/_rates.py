@@ -640,6 +640,15 @@ class InjectionRates:
     # maandbasis"*. ``floor_at_zero`` is the same clamp at 0, so a card sets
     # one or the other and the pricing engine applies whichever is present.
     minimum: float | None = None
+    # True when the card fixes its printed feed-in price for the contract's
+    # term, beside the fixed consumption price. Mega's fixed cards say it
+    # outright: *"le prix de rachat de votre energie injectee sur le reseau
+    # sera fixe egalement pour une duree d'un an"* (two years on Cosy and
+    # Smart, three on Zen). Trevion Groene Energie Vast prints its Injectie
+    # column under "1 jaar vast". A signing cohort then keeps the figure its
+    # own card printed, where a printed figure with no such statement tracks
+    # each month's card.
+    fixed_for_term: bool = False
     # True when the card taxes injection (professional cards do, at 21%).
     # None of these rates passes through the pricing engine's per-component
     # VAT gross-up, so ``apply_vat`` bakes them, like the fixed fees. Left

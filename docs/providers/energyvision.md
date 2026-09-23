@@ -437,6 +437,9 @@ Two per-card differences are worth knowing, because both broke the first parse:
   Belpex-SPP-M formula, where its two siblings print "Injectie - variabel" and index the
   credit monthly. `_TIER_INJECTION_RE` accepts either word and `_spp_injection` then finds
   a formula or does not, so the flat card is not left indexed on one it does not carry.
+  The card also says "Het injectietarief van 4,00 €cent/kWh ligt vast voor een bepaalde
+  duur van 3 jaar", which sets `fixed_for_term`: a signing cohort keeps its own card's
+  figure for the term.
 - **GSLP words its GSC/WKC levy differently**: "Kosten GSC en WKC *bedragen* 1,554
   €cent/kWh" where every other card says "geldig voor". Same levy and same figure, and
   pinning one verb cost the laadpunt card its entire tax overlay.

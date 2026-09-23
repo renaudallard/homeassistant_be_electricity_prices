@@ -386,6 +386,15 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > injection at 3,84 where it pays 2,32. `fixed` and `dynamic` cards carry no such
 > disclaimer and are left alone.
 >
+> A fixed card says the opposite about its feed-in: *"le prix de rachat de votre
+> énergie injectée sur le réseau sera fixé également pour une durée d'un an"* (two
+> years on Cosy and Smart, three on Zen), on every fixed card and no other.
+> `_extract_injection` sets `InjectionRates.fixed_for_term` from that sentence, and a
+> signing cohort then keeps its own card's printed feed-in price
+> (`_cohort_injection_from_archived`, `cohort.py`) where it would otherwise track each
+> month's card: a January 2026 Online Fixed signer is paid 0,98 c/kWh for the term,
+> not the 3,56 September's card prints.
+>
 > **The sentence names the month BEFORE the card's own**, so on the ARCHIVE path
 > it has to be read off the *next* month's card. The June card's sentence says
 > "pour le mois de mai"; the figures that bill June are on the July card. On the

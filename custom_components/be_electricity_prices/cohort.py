@@ -419,11 +419,18 @@ def _cohort_injection_from_archived(
     ``None`` when the archived leg carries no coefficients: a card that
     publishes only a printed monthly figure re-prices every month by its own
     terms, and freezing it would invent a lock the contract does not have.
+    Unless the card says the figure IS the contract for the term
+    (``fixed_for_term``: Mega's fixed range, Trevion Groene Energie Vast):
+    then the signing card's leg stands whole, printed figure included. A
+    January Mega Online Fixed signer was otherwise credited September's 3,56
+    c/kWh where the contract pays 0,98.
     """
     old = archived.injection
     leg = delivery.injection
     if old is None or leg is None:
         return None
+    if old.fixed_for_term:
+        return None if old == leg else old
     slots = _slot_coefficients(old)
     if slots is None and old.factor is None and old.base is None:
         return None

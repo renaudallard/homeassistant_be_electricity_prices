@@ -6540,6 +6540,65 @@ async def test_cohort_leaves_a_printed_only_feed_in_alone(
     assert legs.injection is None
 
 
+async def test_cohort_keeps_a_feed_in_price_fixed_for_the_term(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Mega's fixed cards fix the feed-in price with the consumption price:
+    "le prix de rachat de votre energie injectee sur le reseau sera fixe
+    egalement pour une duree d'un an". The printed figure IS the contract
+    there, so a January Online Fixed signer is credited January's 0,98 c/kWh
+    for the term, live and on every past month, where today's card prints
+    3,56: 77,40 EUR a year at 3000 kWh exported."""
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_legs,
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=FixedRates(single=0.30),
+        injection=InjectionRates(current=0.0356, fixed_for_term=True),
+    )
+    january = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(current=0.0098, fixed_for_term=True),
+    )
+    may = make_snapshot(
+        energy=FixedRates(single=0.25),
+        injection=InjectionRates(current=0.0145, fixed_for_term=True),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return january
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return january if _a[5] == date(2026, 1, 1) else may
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-01-15")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+    )
+    assert legs.injection is not None
+    assert legs.injection.current == pytest.approx(0.0098)
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+        _for_month,
+    ):
+        eff = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            _fixed_extractor(_ffm),
+            "test",
+            "wallonia",
+            date(2026, 5, 1),
+            today,
+            entry,
+        )
+    assert eff.injection is not None
+    assert eff.injection.current == pytest.approx(0.0098)
+
+
 async def test_cohort_card_names_the_card_the_legs_came_off(
     hass: HomeAssistant, freezer: Any
 ) -> None:

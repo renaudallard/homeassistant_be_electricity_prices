@@ -75,7 +75,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Ranked comparison of every alternative** — prices every contract sold in your region against your own settings and sorts them cheapest first, with your own row badged and every gap signed. Optionally once a day in the background, publishing the best saving as a sensor.
 - **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract, which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Both live under [Reconfiguring later](#reconfiguring-later).
-- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors). See [Configuration](#configuration).
+- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors). The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
 - **Renewal reminder** — an optional notice before a fixed contract's end date.
 
 **Running it**

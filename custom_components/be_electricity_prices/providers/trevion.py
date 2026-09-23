@@ -392,8 +392,19 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
             peak=_number(peak.group(2)) / 100.0,
             offpeak=_number(offpeak.group(2)) / 100.0,
             bi_hourly=True,
+            # The table holding both columns is headed "1 jaar vast", so the
+            # feed-in price is fixed with the consumption price.
+            fixed_for_term=bool(_FIXED_FOR_TERM.search(table)),
         ),
     )
+
+
+# The row label between the column headings and the first price row, on
+# every Vast card: "Afname (c€/kWh) Injectie (c€/kWh) ... 1 jaar vast
+# Enkelvoudig ...".
+_FIXED_FOR_TERM = re.compile(
+    r"Injectie\s*\(c€/kWh\).{0,200}?\b\d+\s+jaar\s+vast\b", re.IGNORECASE
+)
 
 
 def _extract_formula(text: str, marker: str) -> tuple[float, float]:

@@ -94,6 +94,8 @@ def test_fixed_card_parses_both_pdf_text_orders(layout: bool) -> None:
     assert snap.injection.peak == pytest.approx(0.063329)
     assert snap.injection.offpeak == pytest.approx(0.043330)
     assert snap.injection.bi_hourly is True
+    # The table holding both columns is headed "1 jaar vast".
+    assert snap.injection.fixed_for_term is True
     assert snap.valid_until == date(2026, 9, 30)
 
 
@@ -111,6 +113,8 @@ def test_april_fixed_card_reads_the_residential_excise_tier(layout: bool) -> Non
     assert snap.taxes.federal_excise == pytest.approx(0.0503288)
     assert snap.taxes.energy_contribution == pytest.approx(0.0020417)
     assert snap.valid_until == date(2026, 4, 30)
+    assert snap.injection is not None
+    assert snap.injection.fixed_for_term is True
 
 
 @pytest.mark.parametrize(

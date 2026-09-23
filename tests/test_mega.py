@@ -643,7 +643,30 @@ def test_the_fixed_cards_index_no_injection_formula() -> None:
     assert inj.spp_indexed is False
 
 
-def test_the_dynamic_anchor_does_not_bind_the_monthly_formula() -> None:
+@pytest.mark.parametrize(
+    ("contract", "fixture", "region", "fixed"),
+    [
+        ("mega_smart_fixed", "mega_smart_fixed_w.pdf", "wallonia", True),
+        ("mega_smart_fixed", "mega_smart_fixed_v.pdf", "flanders", True),
+        ("mega_smart_fixed", "mega_smart_fixed_b.pdf", "brussels", True),
+        ("mega_offpeak_fixed", "mega_offpeak_fixed_w.pdf", "wallonia", True),
+        ("mega_pro_smart_fixed", "mega_pro_smart_fixed_w.pdf", "wallonia", True),
+        ("mega_pro_offpeak_fixed", "mega_pro_offpeak_fixed_v.pdf", "flanders", True),
+        ("mega_smart_flex", "mega_smart_flex_w.pdf", "wallonia", False),
+        ("mega_dynamic", "mega_dynamic_w.pdf", "wallonia", False),
+        ("mega_offpeak_impact_var", "mega_offpeak_impact_w.pdf", "wallonia", False),
+    ],
+)
+def test_a_fixed_card_fixes_its_feed_in_price_for_the_term(
+    contract: str, fixture: str, region: str, fixed: bool
+) -> None:
+    """Every fixed card, and no other, says the feed-in price is fixed with the
+    consumption price: "le prix de rachat de votre energie injectee sur le
+    reseau sera fixe egalement pour une duree d'un an". A signing cohort keeps
+    the figure its own card printed on the strength of that sentence."""
+    snap = parse_snapshot(contract, fixture_text(fixture), region)
+    assert snap.injection is not None
+    assert snap.injection.fixed_for_term is fixed
     """Both card generations contain the literal "formule suivante (HTVA)",
     so widening the dynamic anchor to accept "Epex SPP" would let it bind
     this MONTHLY formula and price it at the current slot's spot. The two

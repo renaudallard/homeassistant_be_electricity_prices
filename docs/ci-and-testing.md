@@ -572,6 +572,13 @@ that reads the value 100x too large — and that part still holds.
   ENERGY leg does not make the feed-in credit per-slot, and asserting a `factor`/`base` they never
   carry would have been noise rather than a gate.
 
+- `_expect_feed_in_fixed_for_term` (`scripts/live_check.py`) holds `InjectionRates.fixed_for_term`
+  to the cards that fix their printed feed-in price for the term: every Mega fixed card (by the
+  registry kind), Trevion Groene Energie Vast and EnergyVision's fixed-injection card. The flag is
+  read off a sentence and is what makes a signing cohort keep its own card's feed-in price, so a
+  redesign that drops the sentence unlocks every such cohort silently, and the flag on any other
+  card would lock a credit the contract lets move.
+
 ### Per-supplier byte and wallclock budgets, and drift issues
 
 An aiohttp `TraceConfig` (`scripts/live_check.py`) tags every request with the supplier

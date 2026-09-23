@@ -136,7 +136,17 @@ def _spp_injection(text: str, indicative: float) -> InjectionRates:
         formula=formula.group(0) if formula else None,
         spp_indexed=factor is not None,
         minimum=to_float(guarantee.group(1)) / 100.0 if guarantee else None,
+        fixed_for_term=bool(_FIXED_TERM_INJECTION_RE.search(re.sub(r"\s+", " ", text))),
     )
+
+
+# GSVI3: "Het injectietarief van 4,00 €cent/kWh ligt vast voor een bepaalde
+# duur van 3 jaar". The figure printed beside it is then the contract, not a
+# placeholder for a formula.
+_FIXED_TERM_INJECTION_RE = re.compile(
+    rf"injectietarief\s+van\s+{_NUM}\s*€?\s*cent\s*/\s*kWh\s+ligt\s+vast",
+    re.IGNORECASE,
+)
 
 
 def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:

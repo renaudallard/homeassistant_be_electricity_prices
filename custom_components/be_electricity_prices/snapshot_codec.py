@@ -376,7 +376,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v70 month row keeps all of it, and a January 2026 cohort freezes both legs
 # from that card: at a 100 EUR/MWh spot either one was credited 2,75 c/kWh too
 # much for its feed-in, and the Dynamic one paid 2,34 c/kWh too little for its
-# energy.
+# energy. v71 also carries InjectionRates.fixed_for_term, which Mega's fixed
+# cards, Trevion Groene Energie Vast and EnergyVision's fixed-injection card
+# set: a signing cohort keeps its own card's feed-in price on them, and a v70
+# row cannot say so.
 _SNAPSHOT_SCHEMA_VERSION = 71
 
 # The oldest stored schema a rejected blob may still be replayed from when no

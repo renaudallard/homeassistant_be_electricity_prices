@@ -3451,7 +3451,39 @@ def _validate_snapshot(
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
+    _expect_feed_in_fixed_for_term(prefix, contract_id, snap)
     _validate_dsos(prefix, snap, require_capacity=require_capacity)
+
+
+def _feed_in_fixed_for_term(contract_id: str) -> bool:
+    """Whether this contract's card fixes its printed feed-in price for the
+    term. Every Mega fixed card says so, so those follow the registry kind;
+    the other two are one product each."""
+    if contract_id.startswith("mega_"):
+        contract = _CONTRACTS_BY_ID.get(contract_id)
+        return getattr(contract, "kind", "") == "fixed"
+    return contract_id in ("groene_energie_vast", "energyvision_fixed_injection_3y")
+
+
+def _expect_feed_in_fixed_for_term(prefix: str, contract_id: str, snap: object) -> None:
+    """The flag that makes a signing cohort keep its own card's feed-in price.
+
+    Read off a sentence, so a redesign that drops it unlocks every such
+    cohort without a word: a January Mega Online Fixed signer would be
+    credited today's 3,56 c/kWh where the contract pays 0,98. Both ways: the
+    flag on any other card would mean the parser had picked up a sibling's
+    wording and locked a credit the contract lets move.
+    """
+    injection = getattr(snap, "injection", None)
+    if injection is None:
+        return
+    flagged = bool(getattr(injection, "fixed_for_term", False))
+    expected = _feed_in_fixed_for_term(contract_id)
+    _expect(
+        f"{prefix}: feed-in price fixed for the term only where the card says so",
+        flagged is expected,
+        detail=f"fixed_for_term={flagged}, expected {expected}",
+    )
 
 
 # Bounds for the welcome credit, sized on the unit slip each one catches and
