@@ -28,7 +28,9 @@ Related docs:
 Tests live under `tests/` and run with `pytest`. Configuration is in `pyproject.toml`: pytest is
 in `asyncio_mode = "auto"` with `asyncio_default_fixture_loop_scope = "function"`
 (`pyproject.toml`), so `async def test_*` functions run without an explicit `@pytest.mark.asyncio`
-decorator and each test gets a fresh event loop.
+decorator and each test gets a fresh event loop. `testpaths = ["tests"]` keeps a run given no path
+inside `tests/`: `tmp/` holds scratch worktrees and one-off scripts, and pytest imports every
+`*_test.py` it finds, which once ran an old experiment that rewrote a live provider file.
 
 The integration is a Home Assistant custom component, so the suite depends on
 `pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)

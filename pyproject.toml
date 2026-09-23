@@ -1,6 +1,10 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# Collect from tests/ alone when no path is given. tmp/ holds scratch worktrees
+# and one-off scripts, and pytest imports every *_test.py it finds there: a
+# bare run once executed an old experiment that rewrote a live provider file.
+testpaths = ["tests"]
 
 [tool.mypy]
 # custom_components/be_electricity_prices and tests/ would otherwise be
