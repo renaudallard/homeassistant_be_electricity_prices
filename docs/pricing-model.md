@@ -159,7 +159,7 @@ pricing engine:
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
   and supplier prosumer forfaits, the Brussels OSP table - never reach that path:
   the live, YTD, backfill and compare paths each sum them raw.
-  `base.apply_vat` (`providers/base.py`) bakes them once instead.
+  `_resolve.apply_vat` (`providers/_resolve.py`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`coordinator.py`), never before the shared snapshot cache: that cache is

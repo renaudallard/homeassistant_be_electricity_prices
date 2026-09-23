@@ -164,7 +164,7 @@ field to helper:
 Shared numeric helpers: `to_float` (`_parse.py`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
 `parse_sign` (`_parse.py`) turns any hyphen/dash/Unicode-minus into
-`-1.0`; `SIGN_CHARS` (`_pdf.py`) is the character class of accepted sign
+`-1.0`; `SIGN_CHARS` (`_parse.py`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py`) downloads the PDF and extracts
 text with pypdf off the event loop.
 
@@ -501,7 +501,7 @@ comment:
   `base.py`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py`, `SIGN_CHARS`, `_pdf.py`).
+  (`cociter.py`, `SIGN_CHARS`, `_parse.py`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py`).
   Losing the gate zeros or drifts the solar credit.

@@ -269,18 +269,18 @@ Region specifics:
 
 - **Flanders** distribution already includes transport, so `transport=0.0` and the
   c€/kWh lands in `distribution_single` (same convention as Engie/Luminus/Mega
-  Flanders, `totalenergies.py`, `tests/test_totalenergies.py`).
+  Flanders, `_totalenergies_overlays.py`, `tests/test_totalenergies.py`).
   The Flanders row's 9th column is surfaced into `prosumer_eur_per_kva_year`
-  (`totalenergies.py`); capacity is a Flanders only field.
+  (`_totalenergies_overlays.py`); capacity is a Flanders only field.
 - **Wallonia** rows carry 12 numbers; the extractor surfaces mono/jour/nuit/excl,
   the Impact PIC/MEDIUM/ECO triplet, terme fixe (as `data_management_per_year`),
   transport and prosumer. The two capacity columns (cols 10-11) are not surfaced
-  (`totalenergies.py`, `tests/test_totalenergies.py`).
+  (`_totalenergies_overlays.py`, `tests/test_totalenergies.py`).
 - **Brussels** Sibelga has no separate capacity charge, so the metering fee and the
   `<=13kVA` "Terme de puissance mise a disposition" power term are folded together
-  into `data_management_per_year` (`totalenergies.py`). The OSP annual fee
+  into `data_management_per_year` (`_totalenergies_overlays.py`). The OSP annual fee
   table is parsed by the shared `parse_brussels_osp` into `brussels_osp_by_tier`
-  (`_pdf.py`). The test pins `data_management_per_year == 14.73 + 50.07`
+  (`_parse.py`). The test pins `data_management_per_year == 14.73 + 50.07`
   (illustrative, `tests/test_totalenergies.py`).
 
 ### Tax overlay

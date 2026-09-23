@@ -270,7 +270,7 @@ def build_snapshot(data: Mapping[str, Any], region: str, dso: str) -> SupplierSn
 
     VAT convention: the user enters everything excluding VAT, so the snapshot
     is returned on that basis with the entered rate on ``vat_rate``, exactly
-    like a professional card. ``base.apply_vat`` resolves it for the entry -
+    like a professional card. ``_resolve.apply_vat`` resolves it for the entry -
     grossing the per-kWh side through ``compute_breakdown`` and baking the
     fixed/annual fees, which no pricing path grosses on its own.
     """

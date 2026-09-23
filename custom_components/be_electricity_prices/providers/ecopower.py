@@ -466,7 +466,7 @@ def _extract_dbs_abonnement(text: str) -> float:
 
     Printed HTVA as ``Abonnementskost 5,00 euro/maand``, so multiply out the
     12 months and leave it HTVA: this card declares ``vat_rate=0.06`` and
-    ``base.apply_vat`` grosses every flat annual fee once, per entry. Baking
+    ``_resolve.apply_vat`` grosses every flat annual fee once, per entry. Baking
     the 6% here as well billed it twice.
     """
     match = _ABONNEMENT_RE.search(text)
@@ -509,7 +509,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         if not row:
             continue
         # Ecopower's card is HTVA and declares vat_rate=0.06, so store both
-        # flat fees exactly as printed: base.apply_vat grosses them once per
+        # flat fees exactly as printed: _resolve.apply_vat grosses them once per
         # entry, alongside every other flat annual fee. The same Fluvius
         # databeheer prints 17,85 HTVA here vs 18,92 TVAC on the other
         # suppliers' cards, and apply_vat is what turns one into the other.
@@ -591,7 +591,7 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row[2]),
             distribution_exclusive_night=to_float(row[3]),
             transport=0.0,  # rolled into distribution on Ecopower's card
-            # HTVA card, stored as printed: base.apply_vat grosses both flat
+            # HTVA card, stored as printed: _resolve.apply_vat grosses both flat
             # fees once per entry (same as the gbs parser).
             capacity_eur_per_kw_year=to_float(row[1]),
             data_management_per_year=to_float(row[0]),

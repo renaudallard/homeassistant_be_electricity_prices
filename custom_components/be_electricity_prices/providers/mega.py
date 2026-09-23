@@ -867,7 +867,7 @@ def parse_snapshot(
             energy_fund_eur_per_month=_extract_energy_fund(
                 text, region, professional=professional
             ),
-            # The professional card prints HTVA throughout; base.apply_vat
+            # The professional card prints HTVA throughout; _resolve.apply_vat
             # resolves it for the entry.
             vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),

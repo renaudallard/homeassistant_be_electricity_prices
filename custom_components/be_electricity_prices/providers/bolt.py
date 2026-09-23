@@ -548,7 +548,7 @@ def parse_snapshot(
             # The professional card prices excluding VAT throughout - its
             # distribution block is still headed TTC, but the numbers match
             # the other suppliers' ex-VAT tables to the cent, so the label
-            # is stale, not the values. base.apply_vat resolves it.
+            # is stale, not the values. _resolve.apply_vat resolves it.
             vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),
         source_url=source_url,

@@ -556,7 +556,7 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
 
     The card prints e.g. "Mei 2026" right under the product name. It has
     no validity-keyword anchor (``geldig`` / ``valable``) so the shared
-    helper in ``_pdf.parse_valid_until`` would return ``None``; parse
+    helper in ``_validity.parse_valid_until`` would return ``None``; parse
     the Dutch month name + year directly. ``valid_until`` is the last
     day of that month so the binary sensor reflects monthly rotation.
     """

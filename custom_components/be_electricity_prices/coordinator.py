@@ -230,7 +230,7 @@ class BePricesCoordinator(
         # Set by async_force_refresh; cleared on the next successful
         # extractor fetch. Acts as an out-of-band signal to bypass both
         # the probe-based and TTL-based freshness paths in
-        # _self_is_fresh without having to lie about fetched_at: the
+        # fetch_shared without having to lie about fetched_at: the
         # latter would block _save_persistent from writing the cached
         # snapshot until the next successful fetch lands.
         self._force_refresh = False
@@ -394,7 +394,7 @@ class BePricesCoordinator(
         Invoked by the be_electricity_prices.refresh service when the user
         wants the integration to pick up a new tariff card or correct an
         error without waiting for the 24h refresh tick. Sets a one-shot
-        ``_force_refresh`` flag that ``_self_is_fresh`` honours, clears
+        ``_force_refresh`` flag that ``fetch_shared`` honours, clears
         the spot cache, the shared snapshot row, and the negative-fetch
         marker so a sibling coordinator on the same (supplier, contract,
         region) tuple also re-fetches on its next refresh. The current

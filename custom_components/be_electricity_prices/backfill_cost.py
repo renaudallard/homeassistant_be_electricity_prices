@@ -420,7 +420,7 @@ async def _backfill_cost_sensor(
                     monthly / days_in_full_month / hours_per_local_date[local.date()]
                 )
 
-        # Compensation is Walloon-only (see coordinator._compute_prosumer):
+        # Compensation is Walloon-only (see fees._compute_prosumer):
         # gate the prosumer accrual to Wallonia so a Flanders entry never
         # backfills prosumer on top of the capacity tariff.
         if kva:

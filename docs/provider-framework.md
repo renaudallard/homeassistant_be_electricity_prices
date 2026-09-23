@@ -165,7 +165,7 @@ month at the current rate. Return-value semantics:
   month before the supplier's archive horizon (Engie's 2023 cards predate the
   layout its parser reads, energie.be's mid-2025 cards are page images). The
   month cache asks the repository's own card archive first for a closed month
-  (`snapshot_store._archived_card_from_github`, fed daily by
+  (`snapshot_months._archived_card_from_github`, fed daily by
   `scripts/archive_cards.py` and mirroring these archives, see
   [ci-and-testing.md](ci-and-testing.md)); `fetch_for_month` answers for a
   month the archive does not hold, and on `None` from both the current

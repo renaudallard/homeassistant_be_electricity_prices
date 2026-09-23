@@ -131,7 +131,7 @@ Related reading:
 > itself gets noticed. TotalEnergies and Cociter drift the same way.
 >
 > The comparison pages take the same reading rather than reporting the card as
-> unreadable: `_SweepEngine._ocr_fallback` (`compare_flow.py`) asks
+> unreadable: `_HouseholdMixin._ocr_fallback` (`compare_household.py`) asks
 > `card_for_unreadable_month` exactly as the live tick does, on the exception
 > type rather than its message, so only a card with no text layer takes it and
 > a supplier that is merely down still reports as down. The ranking row carries

@@ -403,7 +403,7 @@ def _extract_injection(
 # Engie's formula prints either "Formule de prix hors TVA -1,3135 + (0,1095 x
 # eSpot_15)" (consumption: positive base usually, negative for injection),
 # but a future re-render could flip either side to a Unicode minus or any
-# of the dashes from _pdf.SIGN_CHARS. Accept the full sign-class on both
+# of the dashes from _parse.SIGN_CHARS. Accept the full sign-class on both
 # the base and the factor so the regex doesn't silently miss after a
 # punctuation drift, and route through parse_sign for the magnitude.
 _FORMULA_RE = re.compile(
@@ -468,7 +468,7 @@ def _vat_multiplier(text: str, *, professional: bool = False) -> float:
     if professional:
         # The professional card prices everything excluding VAT, so the
         # formula needs no scaling here; the snapshot carries vat_rate and
-        # base.apply_vat resolves it for the entry. Assert the header all
+        # _resolve.apply_vat resolves it for the entry. Assert the header all
         # the same, so a card that starts printing VAT-inclusive numbers
         # fails loudly instead of silently under-pricing by 21%.
         if _VAT_EXCLUDED_RE.search(text) is None:

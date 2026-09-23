@@ -245,7 +245,7 @@ async def _compute_current_year_cost(
     process already holds, fetching none. Only the coordinator's FIRST tick
     passes it, because that tick runs inside config-entry setup and one PDF
     per elapsed month does not fit in Home Assistant's bootstrap budget (see
-    :func:`snapshot_store._snapshot_for_month`). What it costs is the months
+    :func:`snapshot_months._snapshot_for_month`). What it costs is the months
     the cache is missing: they bill against the current card instead of their
     own, exactly as a supplier with no archive does all year, until the
     warm-up refresh lands.

@@ -187,8 +187,16 @@ What is left is what a RENAME breaks, which is the only way these can still rot:
 | a markdown link names a `.md` file, or an anchor in one, that is not there | yes | the docs cross-link without backticks, so a renamed doc used to break every link into it while the check stayed green; resolved relative to the linking doc first, as a browser reads it |
 | a symbol named beside a file that this tree does not define | no | printed for a human; most are prose words, Home Assistant's own names and service ids, and no rule separates those from a rename |
 
-The third is deliberately not gated. Gating a count of it would put the docs back to needing an
+The fourth is deliberately not gated. Gating a count of it would put the docs back to needing an
 edit whenever they grow, which is the thing this replaced.
+
+A symbol written with its module, `module.symbol`, is checked where the fourth row cannot be:
+`test_a_module_named_beside_a_symbol_still_binds_it` (`tests/test_doc_ref_check.py`) reads the
+comments and strings of every Python file and every doc, and fails when the module named does not
+bind the symbol and another module does. The 0.27.5 and August splits moved symbols out of their
+modules and left 27 of these behind, fifteen of them sending the reader to `base` for the VAT
+resolver. A method of the coordinator is exempt, since `coordinator.<method>` names the object and
+its coordinator_* mixins define the method.
 
 It runs in the `test` job (`.github/workflows/test.yml`), before the suite, needs no network or
 fixtures, and reports in under a second. `NOT_OURS` lists the names that are not files of this
@@ -807,7 +815,7 @@ dict is `_snapshot_to_dict`, the same codec the integration's own Store uses for
 round-tripped through Home Assistant's JSON encoder so the file holds exactly the types
 `_snapshot_from_dict` reads back, plus `_seen_on` and `_sources`. The run happens daily against
 the `be_price_cards` repository (see `archive_cards.yml` below) and the month cache reads the result first for
-any closed month, before the supplier's own archive (`snapshot_store._archived_card_from_github`,
+any closed month, before the supplier's own archive (`snapshot_months._archived_card_from_github`,
 see [coordinator.md](coordinator.md)).
 
 Three design points:

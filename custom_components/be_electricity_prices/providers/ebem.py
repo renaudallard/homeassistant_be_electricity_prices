@@ -482,7 +482,7 @@ def _extract_validity(text: str) -> date | None:
     """Return the last day of the printed Dutch month + year, e.g. ``mei 2026``.
 
     EBEM's tariff cards have no validity-keyword anchor (``geldig`` /
-    ``valable``) that ``_pdf.parse_valid_until`` would key on, so the
+    ``valable``) that ``_validity.parse_valid_until`` would key on, so the
     shared helper would return ``None``. The card title ends with
     ``<maand> <jaar>``; parse that directly.
     """

@@ -532,7 +532,7 @@ falls back to the single total), not in the flow. The flow's job is only to coll
 entity ids; it does not couple the day and night fields.
 
 All three billing paths share one predicate for that rule,
-`_partial_register_pair` (`coordinator.py`). Only the static per-day path used to
+`_partial_register_pair` (`energy_meters.py`). Only the static per-day path used to
 enforce it: the hourly path (TOU / Impact / dynamic / exclusive-night) and the
 backfill resolved each side independently and bailed only when BOTH were empty, so
 a half-wired consumption pair collapsed to "no consumption sensors" while a wired
@@ -758,7 +758,7 @@ rows.
 | `compare_result` | `compare_flow.py` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_placeholders.py`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 
 The quoted supplier's freshly fetched card is resolved through
-`snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets
+`snapshot_resolve._resolve_snapshot`, the same helper the live path uses, so it gets
 **both** per-entry transforms: `apply_vat` and `resolve_excise_band`. It previously
 called `apply_vat` alone, which priced a banded professional card at its first
 excise tier however much the household uses (1,421 c€/kWh instead of 1,139 at

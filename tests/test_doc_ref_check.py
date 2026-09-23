@@ -138,3 +138,80 @@ def test_no_comment_in_the_code_pins_a_line_number() -> None:
         if pin.search(line)
     ]
     assert not found, found
+
+
+def test_a_module_named_beside_a_symbol_still_binds_it() -> None:
+    """A comment or a doc naming ``module.symbol`` sends the reader to that
+    module. The 0.27.5 and August splits moved symbols out of theirs and
+    left 27 of these behind, fifteen of them sending the reader to ``base``
+    for ``apply_vat``, while every other guard stayed green. The module named has to bind the symbol, unless
+    the name is a method of the coordinator, which its coordinator_* mixins
+    define."""
+    import ast
+    import io
+    import re
+    import tokenize
+    from collections.abc import Iterator
+
+    root = Path(__file__).resolve().parent.parent
+    package = root / "custom_components" / "be_electricity_prices"
+    bound: dict[str, set[str]] = {}
+    methods: set[str] = set()
+    for path in package.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        module = path.parent.name if path.name == "__init__.py" else path.stem
+        names = bound.setdefault(module, set())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                names.add(node.name)
+            if isinstance(node, ast.ClassDef) and module.startswith("coordinator"):
+                methods.update(
+                    n.name
+                    for n in ast.walk(node)
+                    if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+                )
+        for node in tree.body:
+            if isinstance(node, ast.Assign | ast.AnnAssign):
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                names.update(
+                    n.id
+                    for t in targets
+                    for n in ast.walk(t)
+                    if isinstance(n, ast.Name)
+                )
+            elif isinstance(node, ast.Import | ast.ImportFrom):
+                names.update(a.asname or a.name.split(".")[0] for a in node.names)
+    anywhere = set().union(*bound.values())
+    modules = sorted(bound, key=len, reverse=True)
+    reference = re.compile(rf"(?<![\w.])({'|'.join(map(re.escape, modules))})\.(\w+)")
+
+    def texts(path: Path) -> Iterator[tuple[int, str]]:
+        source = path.read_text(encoding="utf-8")
+        if path.suffix == ".md":
+            yield from enumerate(source.split("\n"), 1)
+            return
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type in (tokenize.COMMENT, tokenize.STRING):
+                yield token.start[0], token.string
+
+    files = [
+        *(
+            p
+            for f in ("custom_components", "scripts", "tests")
+            for p in (root / f).rglob("*.py")
+        ),
+        *(root / "docs").rglob("*.md"),
+        root / "README.md",
+    ]
+    stale = [
+        f"{path.relative_to(root)} line {number}: {found[0]}"
+        for path in sorted(files)
+        for number, text in texts(path)
+        for found in reference.finditer(text)
+        if found[2] not in bound[found[1]]
+        and found[2] in anywhere
+        and not (found[1] == "coordinator" and found[2] in methods)
+    ]
+    assert not stale, stale

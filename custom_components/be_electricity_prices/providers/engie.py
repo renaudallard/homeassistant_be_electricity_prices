@@ -46,7 +46,7 @@ multiplier. Engie also publishes a professional edition of most families
 VAT at 21%, keeping the degressive excise schedule the residential cards
 lost in August 2026 and printing the professional energy-fund row. Those
 snapshots carry ``vat_rate`` and their per-kWh values as printed;
-``base.apply_vat`` resolves them per config entry.
+``_resolve.apply_vat`` resolves them per config entry.
 """
 
 from __future__ import annotations
@@ -557,7 +557,7 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
             region_connection_fee=region_connection_fee,
             energy_fund_eur_per_month=energy_fund,
             # The professional card prints everything excluding VAT at
-            # 21%; base.apply_vat resolves it for the entry.
+            # 21%; _resolve.apply_vat resolves it for the entry.
             vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),
         source_url=_API_URL,

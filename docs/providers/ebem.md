@@ -172,7 +172,7 @@ regulator-driven rate change propagates without a code change (`ebem.py`).
 ### Validity: `_extract_validity` (`ebem.py`)
 
 EBEM cards have no `geldig` / `valable` validity keyword that the shared
-`_pdf.parse_valid_until` would anchor on, so that helper returns `None`. The
+`_validity.parse_valid_until` would anchor on, so that helper returns `None`. The
 card title ends with `<maand> <jaar>` (Dutch month name plus year), parsed
 directly via `_DUTCH_MONTHS` (`ebem.py`) and returned as the last day of
 that month (`calendar.monthrange`). Two hurdles:

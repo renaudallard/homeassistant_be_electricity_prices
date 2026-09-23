@@ -112,7 +112,7 @@ def test_april_card_extracts_distribution_and_capacity_for_antwerpen() -> None:
     """Spot-check Fluvius Antwerpen against the printed values:
     databeheer 17.85, capacity 49.40 EUR/kW/yr, distribution 0.0505027.
     The card is HTVA and declares vat_rate=0.06, so the snapshot stores
-    the flat fees exactly as printed and base.apply_vat grosses them
+    the flat fees exactly as printed and _resolve.apply_vat grosses them
     once per entry (17.85 -> 18.92, the same Fluvius fee the other
     suppliers print TVAC)."""
     snap = _april_snap()
@@ -427,7 +427,7 @@ def test_dbs_card_energy_is_dynamic_formula_htva() -> None:
 
 def test_dbs_card_subscription_fee_is_vat_inclusive_annual() -> None:
     """Abonnementskost 5,00 euro/maand HTVA -> the 12-month total, still
-    HTVA: base.apply_vat grosses every flat annual fee once per entry."""
+    HTVA: _resolve.apply_vat grosses every flat annual fee once per entry."""
     snap = _dbs_snap()
     assert isinstance(snap.energy, DynamicRates)
     assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)

@@ -568,7 +568,7 @@ when both `current` and `factor` are absent (`_mega_cards.py`).
 `_extract_supplier_prosumer` (`_mega_overlays.py`) parses the compensation-regime
 `Forfait panneaux solaires (EUR/kVA par mois)` line and annualises it (times 12) into
 `supplier_prosumer_eur_per_kva_year`. This forfait is TVA 6% incl, so it must NOT be
-VAT-scaled: `pricing._compute_prosumer` sums it raw on top of the DSO
+VAT-scaled: `fees._compute_prosumer` sums it raw on top of the DSO
 `Tarif prosumer` column, exactly like the Cociter Variable forfait (`mega.py`).
 Because pypdf splits the label and value three ways across the card family (value
 after, before, or with the label line-wrapped), the parser anchors on the

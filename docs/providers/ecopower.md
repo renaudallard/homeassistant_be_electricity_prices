@@ -37,7 +37,7 @@ overlay so `compute_breakdown` scales the per-kWh energy and levies up to TVAC (
 `ecopower.py`; `_extract_taxes` `ecopower.py`). Residential injection is VAT-exempt,
 so injection formulas are stored unscaled.
 
-That `vat_rate=0.06` also makes Ecopower the one residential card where `base.apply_vat` is **not**
+That `vat_rate=0.06` also makes Ecopower the one residential card where `_resolve.apply_vat` is **not**
 a no-op: it grosses every flat annual fee (the yearly fee, data management, capacity, the prosumer
 forfaits) once per entry, because those never reach `compute_breakdown`'s per-kWh factor. So the
 extractor must store flat fees exactly as the card prints them. It used to bake the 6% itself as
@@ -380,7 +380,7 @@ Because Ecopower publishes HTVA, **every** value is stored exactly as the card p
 | value | grossed by | where |
 | --- | --- | --- |
 | per-kWh energy, distribution, levies | `compute_breakdown` via `vat_rate=0.06` | `pricing._finalize_breakdown` |
-| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py` |
+| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `_resolve.apply_vat`, once per entry | `providers/_resolve.py` |
 
 The worked example: the same Fluvius databeheer prints `17,85` HTVA on Ecopower's card versus
 `18,92` TVAC on other suppliers' cards, and `apply_vat` is what turns one into the other

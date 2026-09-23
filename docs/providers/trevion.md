@@ -134,7 +134,7 @@ latest known SPP index printed beside the formula.
 
 `_extract_dynamic` reads the same VAT conversion around `Belpex 15 MTU` and
 marks the energy rate quarter-hourly. Trevion PDFs use an en dash or Unicode
-minus in feed-in formulas, so every sign regex uses `_pdf.SIGN_CHARS` rather
+minus in feed-in formulas, so every sign regex uses `_parse.SIGN_CHARS` rather
 than a literal ASCII hyphen.
 
 ### Shared meter columns

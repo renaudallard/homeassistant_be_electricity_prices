@@ -187,7 +187,7 @@ def brussels_sibelga_overlay(
     The distribution and transport rates print in c€/kWh and scale to
     EUR/kWh (``/ 100``). ``data_management_per_year`` (databeheer / terme
     fixe) and ``osp_by_tier`` (the Brugel OSP table from
-    :func:`_pdf.parse_brussels_osp`) are supplier-specific: some cards
+    :func:`_parse.parse_brussels_osp`) are supplier-specific: some cards
     print a single databeheer line, others sum a measurement and a
     fixed-term charge, so the caller computes them and passes them in.
     """

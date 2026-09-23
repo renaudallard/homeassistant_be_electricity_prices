@@ -355,8 +355,8 @@ The extractor maps the card's own DSO labels onto the canonical DSO keys (`const
 per-contract `regions` set for products that are not sold everywhere, and, if the card ships
 ex-VAT numbers, sets `TaxOverlay.vat_rate` explicitly (the default `0.0` means "already
 VAT-inclusive", `providers/base.py`). An ex-VAT snapshot is left exactly as the card prints
-it; `base.apply_vat` resolves it per config entry at the point the coordinator adopts it
-(`coordinator.py`), because the snapshot caches above that point are shared between entries.
+it; `_resolve.apply_vat` resolves it per config entry at the point the coordinator adopts it
+(`_resolve_snapshot`, `snapshot_resolve.py`, called from `coordinator_snapshot.py`), because the snapshot caches above that point are shared between entries.
 
 ## Where to go next
 

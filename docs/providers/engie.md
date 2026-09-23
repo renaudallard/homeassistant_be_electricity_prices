@@ -304,9 +304,9 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 
 | kind | Returned dataclass | How the rates map |
 | --- | --- | --- |
-| fixed | `FixedRates` via `fixed_or_variable_rates` (`engie.py`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
-| variable | `VariableRates` via `fixed_or_variable_rates` (`engie.py`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
-| dynamic | `DynamicRates` (`engie.py`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
+| fixed | `FixedRates` via `fixed_or_variable_rates` (`_engie_cards.py`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
+| variable | `VariableRates` via `fixed_or_variable_rates` (`_engie_cards.py`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
+| dynamic | `DynamicRates` (`_engie_cards.py`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
 | tou | `TimeOfUseRates` (`_engie_cards.py`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`, plus `month_indexed` and one `formula_factor_*` / `formula_base_*` pair per band from the `Flextime Heures ...` EPEXDAM rows, bound by the Normal row and held to reproduce each printed slot figure at the card's index (`_flextime_coefficients`). |
 
 Empower Flextime (`kind="tou"`) is the SMR3-only TOU billing mode of the Empower
@@ -322,9 +322,9 @@ Engie publication (`engie.py`, framework schedule `base.py`).
 ### Flanders (`_extract_flanders_dsos`, `_engie_overlays.py`)
 
 Reads the `Compteur digital` Fluvius table only (the analog table is ignored,
-`engie.py`). Fluvius distribution rates already include Elia transport
+`_engie_overlays.py`). Fluvius distribution rates already include Elia transport
 (`incluant déjà les coûts de transport`), so the parser sets `transport=0` and
-rolls the full c€/kWh into `distribution_single` (`engie.py`, test
+rolls the full c€/kWh into `distribution_single` (`_engie_overlays.py`, test
 `test_dynamic_flanders_dso_includes_transport_in_distribution`
 `tests/test_engie.py`). The eight Fluvius sub-areas are mapped through
 `_FLANDERS_LABELS` (`_engie_overlays.py`); note the card labels do not match the
@@ -372,10 +372,10 @@ Two gotchas guard this parser:
 
 ### Brussels (`_extract_brussels_dsos`, `_engie_overlays.py`)
 
-Reads the single Sibelga row (`engie.py`). Brussels has no separate capacity
+Reads the single Sibelga row (`_engie_overlays.py`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
 the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
-term (column 6), into `data_management_per_year` (`engie.py`, test
+term (column 6), into `data_management_per_year` (`_engie_overlays.py`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
 `parse_brussels_osp` (`_parse.py`) into `brussels_osp_by_tier`.
