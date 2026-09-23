@@ -827,6 +827,38 @@ async def test_archive_finds_a_card_the_listing_misspells_by_a_letter(
     assert parse_qs(urlsplit(asked[1]).query)["RequestedPDF"] == [listed]
 
 
+async def test_archive_refuses_to_guess_between_two_near_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The near match is taken only when it is the only one. A month listing
+    two names that both fold onto the product's own would have the fallback
+    pick one of them, and a past month would bill on whichever product's card
+    came first, so the month is left unread instead."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    asked: list[str] = []
+    listing = [
+        {"NomPdf": "2026-03 E OCTA+FIXEDD RE VL FR.pdf"},
+        {"NomPdf": "2026-03 E OCTA+FFIXED RE VL FR.pdf"},
+        {"NomPdf": "2026-03 E OCTA+DYNAMIC RE VL FR.pdf"},
+    ]
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router(
+            listing, (FIXTURES / "octaplus_fixed_v_mar.pdf").read_bytes(), asked
+        ),
+    )
+    snap = await octaplus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "octaplus_fixed",
+        "flanders",
+        date(2026, 3, 10),
+    )
+    assert snap is None
+    assert not any("getTariffSheet" in url for url in asked)
+
+
 async def test_archive_renders_the_base64_card_through_the_render_seam(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
