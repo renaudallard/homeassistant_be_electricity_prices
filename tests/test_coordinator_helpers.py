@@ -6218,6 +6218,72 @@ async def test_the_cohort_credit_keeps_the_delivery_month_index(
     assert eff.injection.index_realised == pytest.approx(0.0545)
 
 
+async def test_a_keyless_cohort_credits_each_past_month_its_own_printed_figure(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With no ENTSO-E key a past month is credited at its printed figure, so
+    that figure has to be the month's own.
+
+    The frozen leg was built on TODAY's card, so every month of the year to
+    date carried today's printed figure. On Eneco Power Fix signed in January
+    the cards print 4,12 to 6,38 c/kWh from January to August, and all eight
+    months were credited September's 7,86: the running bill came out 63,53 EUR
+    too low by late September on 3000 kWh a year exported.
+    """
+    from custom_components.be_electricity_prices.cohort import (
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=FixedRates(single=0.30),
+        injection=InjectionRates(
+            factor=0.84, base=-0.03, current=0.0786, month_indexed=True
+        ),
+    )
+    signing = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(
+            factor=0.80, base=-0.0271, current=0.0412, month_indexed=True
+        ),
+    )
+    may = make_snapshot(
+        energy=FixedRates(single=0.25),
+        injection=InjectionRates(
+            factor=0.84, base=-0.0265, current=0.0398, month_indexed=True
+        ),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signing
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signing if _a[5] == date(2026, 1, 1) else may
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-01-15")
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+        _for_month,
+    ):
+        eff = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            _fixed_extractor(_ffm),
+            "test",
+            "wallonia",
+            date(2026, 5, 1),
+            today,
+            entry,
+        )
+    assert eff.injection is not None
+    assert eff.injection.factor == pytest.approx(0.80)
+    assert eff.injection.base == pytest.approx(-0.0271)
+    # May's own printed figure, which is what a keyless walk credits.
+    assert eff.injection.current == pytest.approx(0.0398)
+    assert _historical_injection_rate(eff.injection, None) == pytest.approx(0.0398)
+
+
 async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -382,9 +382,9 @@ def _cohort_energy_from_archived(
 
 
 def _cohort_injection_from_archived(
-    archived: "SupplierSnapshot", current: "SupplierSnapshot"
+    archived: "SupplierSnapshot", delivery: "SupplierSnapshot"
 ) -> InjectionRates | None:
-    """The feed-in coefficients a signing cohort bills at, or ``None``.
+    """The feed-in leg a signing cohort bills at, or ``None``.
 
     A contract that locks its offtake formula for the term locks the feed-in
     formula with it: the customer on issue #85 confirmed both from his own
@@ -396,23 +396,25 @@ def _cohort_injection_from_archived(
     Only the COEFFICIENTS move, on the same principle as
     ``_cohort_energy_from_archived``: ``factor`` and ``base`` are the
     contract, while ``current`` is the illustration the supplier printed for
-    that month's new customers and is stale the moment the month turns. The
-    current card's ``current`` is therefore kept, so a keyless entry with
-    nothing to resolve a formula against sees exactly what it saw before.
+    that month's new customers and is stale the moment the month turns. They
+    are laid onto ``delivery``, the card of the month being billed: today's
+    on the live tick, the month's own on a year-to-date walk. So a keyless
+    entry, which can only credit the printed figure, credits each month the
+    figure that month's card printed, and a month keeps its own settled index.
 
     ``None`` when the archived leg carries no coefficients: a card that
     publishes only a printed monthly figure re-prices every month by its own
     terms, and freezing it would invent a lock the contract does not have.
     """
     old = archived.injection
-    live = current.injection
-    if old is None or live is None:
+    leg = delivery.injection
+    if old is None or leg is None:
         return None
     if old.factor is None and old.base is None:
         return None
-    if (old.factor, old.base) == (live.factor, live.base):
+    if (old.factor, old.base) == (leg.factor, leg.base):
         return None
-    return replace(live, factor=old.factor, base=old.base)
+    return replace(leg, factor=old.factor, base=old.base)
 
 
 def _month_indexed_leg(
@@ -670,11 +672,14 @@ async def _cohort_legs(
         source,
     )
     # The feed-in leg locks with the offtake leg, so it is resolved from the
-    # same archived card rather than left on the current one (issue #85).
+    # same archived card rather than left on the current one (issue #85), and
+    # laid onto the card of the month being billed.
     injection = (
         None
         if archived_snap is None
-        else _cohort_injection_from_archived(archived_snap, current_snapshot)
+        else _cohort_injection_from_archived(
+            archived_snap, month_snapshot or current_snapshot
+        )
     )
     return _CohortLegs(
         energy=energy,
@@ -838,18 +843,16 @@ async def _effective_snapshot_for_month(
         # The feed-in coefficients lock with the offtake ones, so the credit
         # for a past month is billed off the signing card too (issue #85).
         #
-        # The INDEX still belongs to the delivery month, exactly as on the
-        # energy leg above: the signing card holds what the contract pays per
-        # unit of index, the month holds what the index settled at. Carrying
-        # the signing month's index across made a cohort's credit swing on
-        # whether the Synergrid profile happened to be loaded, 62 EUR on a
-        # Trevion LifePowr entry signed in the spring, where the contract's
-        # own formula answers the same either way.
-        injection = replace(
-            legs.injection,
-            index_realised=getattr(snap_m.injection, "index_realised", None),
-        )
-        changes["injection"] = injection
+        # The INDEX and the printed figure still belong to the delivery month,
+        # exactly as on the energy leg above: the signing card holds what the
+        # contract pays per unit of index, the month holds what the index
+        # settled at. _cohort_legs lays the coefficients onto this month's own
+        # leg for that reason. Carrying the signing month's index across made a
+        # cohort's credit swing on whether the Synergrid profile happened to be
+        # loaded, 62 EUR on a Trevion LifePowr entry signed in the spring, and
+        # carrying today's printed figure back credited every keyless month at
+        # September's rate.
+        changes["injection"] = legs.injection
     return replace(snap_m, **changes)  # type: ignore[arg-type]
 
 
