@@ -118,21 +118,26 @@ async def _no_sleep(_seconds: float) -> None:
     return None
 
 
+# Written out rather than read off _READERS, which is what is being checked:
+# the two text readers the extractors call, and the OCR engine the archiver
+# reads Ecofix's page-image cards with (ocr_price_cards).
+@pytest.mark.parametrize("reader", ["pypdf", "pdfplumber", "ocr-price-cards"])
 def test_the_parser_digest_moves_with_the_reader_versions(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, reader: str
 ) -> None:
     """A stored text is served to every later replay and to the live check
     for as long as the card's bytes stand, so a pypdf or pdfplumber release
     that lays a card out differently reached neither until someone dispatched
     a re-render by hand: the digest hashed the parser sources only. A reader
-    bump has to move it."""
+    bump has to move it, the OCR engine's included, or an OCR release leaves
+    every Ecofix reading as it was."""
     import importlib.metadata
 
     real = importlib.metadata.version
     before = ac._parser_digest()
 
     def _bumped(name: str) -> str:
-        return "99.0.0" if name == "pdfplumber" else real(name)
+        return "99.0.0" if name == reader else real(name)
 
     monkeypatch.setattr(importlib.metadata, "version", _bumped)
     assert ac._parser_digest() != before
