@@ -2374,6 +2374,131 @@ async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
     assert await _fault(range(60), range(59)) == ""
 
 
+def _pair_through_the_recorder(
+    stats: dict[str, list[date]], live: dict[str, float]
+) -> Any:
+    """Patch the two readers under _recorder_daily_kwh rather than the helper
+    itself: daily statistics rows per register, and today's live reading.
+
+    A register with no state_class compiles no statistics but still has a
+    state history, and the live reading comes off that history, so the real
+    reader returns a live value for it (checked against a real recorder
+    database). Patching _recorder_daily_kwh to return {} for such a register
+    is what hid the defect from every earlier test.
+    """
+
+    async def _rows(
+        _hass: object,
+        entity_id: str,
+        _start: date,
+        _end: date,
+        _period: str,
+        _fields: object = None,
+    ) -> list[dict[str, float]]:
+        return [_stat_row(d.year, d.month, d.day, 1.0) for d in stats[entity_id]]
+
+    async def _live(_hass: object, entity_id: str, _today: date) -> float | None:
+        return live.get(entity_id)
+
+    return (
+        patch.object(energy_meters, "_recorder_rows", new=_rows),
+        patch.object(energy_meters, "_live_today_kwh", new=_live),
+    )
+
+
+_PAIR_ENTRY = SimpleNamespace(
+    data={
+        "day_consumption_kwh": "sensor.day",
+        "night_consumption_kwh": "sensor.night",
+    }
+)
+
+
+async def test_a_register_with_only_a_live_reading_is_a_dead_half(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A night register with no statistics reads live for today, and paired
+    with today in it looked alive: the year to date was billed on today alone
+    (7 kWh for the whole year here) and no register was named, so the Repairs
+    card that exists for this wiring never appeared."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": []},
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            today - timedelta(days=364),
+            today,
+        )
+    assert daily is None
+    assert measured == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
+
+
+async def test_a_register_that_stopped_is_named_though_it_reads_live_today(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Statistics stop while the entity lives on after a unit change or a
+    removed state_class. Its live reading for today kept it from being named
+    as stopped."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": year[:250]},
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert measured.pair_fault == "sensor.night"
+
+
+async def test_a_healthy_pair_still_bills_today_off_the_live_meter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The control: with both registers recording, today joins the billed
+    days on the live readings, as the running year cost always did."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": year},
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert daily is not None
+    assert len(daily) == 266
+    assert daily[today] == (5.0, 2.0, 0.0, 0.0)
+    assert measured == energy_meters.MeasuredKwh(265 * 2.0 + 7.0, 266)
+
+
 async def test_measured_kwh_counts_days_across_a_register_pair(
     hass: HomeAssistant,
 ) -> None:
