@@ -103,7 +103,6 @@ from .snapshot_months import archived_months_present
 import asyncio
 from homeassistant.util import dt as dt_util
 from .brugel import ensure_power_term
-from dataclasses import replace
 from .synergrid import RlpWeights, SppWeights
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -255,18 +254,9 @@ class _TickMixin:
             self.entry,
             self._snapshot,
         )
-        cohort_changes: dict[str, object] = {}
-        if cohort.energy is not None:
-            cohort_changes["energy"] = cohort.energy
-        if cohort.injection is not None:
-            # A contract that locks its offtake formula locks the feed-in one
-            # with it, so the credit follows the signing card too (issue #85).
-            cohort_changes["injection"] = cohort.injection
-        priced = (
-            self._snapshot
-            if not cohort_changes
-            else replace(self._snapshot, **cohort_changes)  # type: ignore[arg-type]
-        )
+        # A contract that locks its offtake formula locks the feed-in one with
+        # it, so the credit follows the signing card too (issue #85).
+        priced = cohort.splice(self._snapshot)
         # The spot fetch and the historical walk decide their grid off the
         # leg that is priced, so it has to be on the coordinator before either
         # runs; the resolution below is read off the same leg.

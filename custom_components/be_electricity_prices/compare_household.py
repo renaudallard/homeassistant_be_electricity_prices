@@ -550,18 +550,20 @@ class _HouseholdMixin:
             "error": "",
         }
 
-        # Price the user's CURRENT side off the leg the live sensors bill, not
-        # the raw card. A fixed / dynamic contract with a signing start date is
-        # billed at the rate it locked in, which _cohort_energy_leg resolves
-        # and the coordinator splices on every tick. Reading coord._snapshot
-        # here compared the alternative against today's published card instead,
-        # so the quoted delta was wrong for exactly the users the start-date
-        # feature exists for. _cohort_energy_leg returns None for a contract
-        # that is not the entry's own, so it can never touch the other side.
+        # Price the user's CURRENT side off the legs the live sensors bill, not
+        # the raw card. A contract with a signing start date is billed at the
+        # rates it locked in, energy and feed-in both, which _cohort_legs
+        # resolves and the coordinator splices on every tick. Reading
+        # coord._snapshot here compared the alternative against today's
+        # published card instead, so the quoted delta was wrong for exactly the
+        # users the start-date feature exists for. _cohort_legs overrides
+        # nothing for a contract that is not the entry's own, so it can never
+        # touch the other side.
         current_snapshot = coord._snapshot
-        # Kept before any cohort splice: _compare_injection_credit has to ask
-        # the RAW snapshot whether the CREDIT rides a month mean, because the
-        # splice replaces the ENERGY leg only.
+        # Kept before the ENERGY splice: _compare_injection_credit has to ask
+        # the raw card whether the CREDIT rides a month mean, and the energy
+        # splice can put a month-priced leg on a card whose feed-in varies per
+        # hour. The feed-in leg the entry bills goes onto it below.
         raw_snapshot = coord._snapshot
         # The card the entry is actually configured on, which the baseline
         # leg prices. Only the expert custom supplier builds its snapshot
@@ -585,9 +587,9 @@ class _HouseholdMixin:
             except Exception:  # noqa: BLE001 - keep the configured snapshot
                 pass
         if current_snapshot is not None:
-            from .cohort import _cohort_energy_leg
+            from .cohort import _cohort_legs
 
-            cohort = await _cohort_energy_leg(
+            legs = await _cohort_legs(
                 self.hass,
                 async_get_clientsession(self.hass),
                 get_extractor(current[CONF_SUPPLIER]),
@@ -596,14 +598,17 @@ class _HouseholdMixin:
                 quote_entry,
                 current_snapshot,
             )
-            if cohort is not None:
-                spliced = replace(current_snapshot, energy=cohort)
-                # The splice carries the signed yearly fee, which the fee
-                # legs read, so the baseline has to follow it whenever the
-                # two are the same card.
-                if baseline_snapshot is current_snapshot:
-                    baseline_snapshot = spliced
-                current_snapshot = spliced
+            spliced = legs.splice(current_snapshot)
+            # The splice carries the signed yearly fee, which the fee legs
+            # read, so the baseline has to follow it whenever the two are the
+            # same card.
+            if baseline_snapshot is current_snapshot:
+                baseline_snapshot = spliced
+            current_snapshot = spliced
+            if legs.injection is not None and raw_snapshot is not None:
+                # Idempotent through the month walk the YTD column hands the
+                # raw card to: a leg already frozen re-freezes to itself.
+                raw_snapshot = replace(raw_snapshot, injection=legs.injection)
 
         # The household's own hour-of-day consumption shape, so a time-of-use
         # card is quoted on the kWh it actually bills rather than on clock

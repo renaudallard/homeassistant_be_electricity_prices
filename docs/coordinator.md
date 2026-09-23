@@ -220,8 +220,8 @@ falls through to branch 2's soft path. Only the dynamic and spot-monthly
 *contract kinds* are asked for a mandatory API key; a month-indexed variable
 contract is offered one as an optional step and may have skipped it, and would
 otherwise hard-fail over a key it never held once its leg re-prices to
-`SpotMonthlyRates`. `_cohort_energy_leg` therefore drops the cohort leg when no
-key is configured (`coordinator.py`), keeping the current card instead.
+`SpotMonthlyRates`. `_cohort_legs` therefore drops the cohort leg when no
+key is configured (`cohort.py`), keeping the current card instead.
 
 **Which month the cohort asks for** (`_tariff_card_month`, `cohort.py`): the
 entry's own tariff card month when it sets one, else its contract start date.
@@ -232,7 +232,7 @@ switcher one card late (issue #96). Only this lookup reads the card month; the
 year-to-date window, the fee proration and the welcome-credit window keep
 reading the start date, which is about when the household began being supplied.
 
-**Cohort resolution order** (`_cohort_energy_leg`, `cohort.py`): the
+**Cohort resolution order** (`_cohort_legs`, `cohort.py`): the
 hand-entered signing rate first, then the archived signing-month card, then the
 current card. When neither of the first two yields a rate (a contract signed
 this month, a supplier that keeps no archive, a month older than the archive
@@ -252,10 +252,12 @@ ex-VAT it has to be un-grossed for an entry that deducts VAT. The rate to
 un-gross by is `TaxOverlay.published_vat_rate` (`providers/base.py`), read
 as `published_vat_rate or vat_rate`. It has to ride on the snapshot rather than
 be passed in, because `apply_vat` zeroes `vat_rate` on an ex-VAT resolve, and
-every `_cohort_energy_leg` call site hands in an already-resolved snapshot: the
-live tick (`coordinator.py`), the monthly walk (`cohort.py`), the
-year-to-date walk (`ytd_cost.py`), the backfill accrual
-(`backfill.py`), and the compare quote (`compare_flow.py`).
+every `_cohort_legs` call site hands in an already-resolved snapshot: the
+live tick (`coordinator_tick.py`), the monthly walk (`cohort.py`), the
+year-to-date walk and the backfill accrual through `_cohort_energy_leg`
+(`ytd_cost.py`, `backfill.py`), and the compare quote, which splices the
+feed-in leg beside the energy one as the live tick does
+(`compare_household.py`).
 `_set_snapshot` (`coordinator_snapshot.py`) is the only writer of
 `self._snapshot` and always routes through `_resolve_snapshot`, so by the time
 the cohort leg reads the taxes there is no other surviving record of the basis

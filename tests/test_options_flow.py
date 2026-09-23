@@ -2243,6 +2243,66 @@ async def test_compare_solar_typed_volumes_blank_the_year_to_date(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_own_row_credits_the_signed_feed_in_leg(
+    hass: HomeAssistant,
+) -> None:
+    """A signing cohort's feed-in leg locks with its energy leg (issue #85),
+    and the live tick and the year-to-date walks bill it. The page's own row
+    spliced the energy leg only, so "your contract" was quoted on the signed
+    energy formula beside today's feed-in one: 34,98 EUR a year off on an Engie
+    Direct Online household signed in August, and every gap the page and the
+    daily ranking print was measured from that figure."""
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    # The netted-register wiring, which is what offers the typed volumes.
+    data = {k: v for k, v in entry.data.items() if k != "injection_kwh"}
+    hass.config_entries.async_update_entry(
+        entry, data={**data, "contract_start_date": "2026-01-15"}
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+    signed = InjectionRates(current=0.02, fixed_for_term=True)
+
+    async def _no_rows(
+        _hass: HomeAssistant, _entity_id: str, _start: Any, _end: Any
+    ) -> dict[Any, float]:
+        return {}
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_no_rows,
+        ),
+        patch.object(
+            compare_household,
+            "signing_month_snapshot",
+            AsyncMock(return_value=current_snap),
+        ),
+        patch.object(
+            cohort,
+            "_cohort_legs",
+            AsyncMock(return_value=cohort._CohortLegs(None, signed)),
+        ),
+    ):
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="injection",
+            whatif_kwh=(6160.0, 2660.0),
+        )
+    per_kwh = float(ph["current_per_kwh"])
+    # Credited at the signed 0,02, not today's card's 0,05.
+    expected = 6160.0 * per_kwh - 2660.0 * 0.02
+    assert float(ph["current_annual"]) == pytest.approx(expected, abs=0.5)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_solar_whatif_to_none_keeps_the_baseline_netted(
     hass: HomeAssistant,
 ) -> None:
@@ -7985,7 +8045,11 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
                 "signing_month_snapshot",
                 AsyncMock(return_value=own_snap),
             ),
-            patch.object(cohort, "_cohort_energy_leg", AsyncMock(return_value=None)),
+            patch.object(
+                cohort,
+                "_cohort_legs",
+                AsyncMock(return_value=cohort._CohortLegs(None, None)),
+            ),
         ):
             ph = await _drive_compare(hass, entry, other_snap=other_snap)
         assert ph["error"] == "", ph["error"]

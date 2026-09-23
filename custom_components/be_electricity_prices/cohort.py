@@ -539,6 +539,18 @@ class _CohortLegs(NamedTuple):
     injection: InjectionRates | None
     card: str = ""
 
+    def splice(self, snapshot: "SupplierSnapshot") -> "SupplierSnapshot":
+        """``snapshot`` billed on this cohort: each leg it overrides replaced,
+        the rest of the card kept. The same object back when there is nothing
+        to override, so a caller can tell the no-op by identity."""
+        if self.energy is None and self.injection is None:
+            return snapshot
+        return replace(
+            snapshot,
+            energy=snapshot.energy if self.energy is None else self.energy,
+            injection=snapshot.injection if self.injection is None else self.injection,
+        )
+
 
 async def _cohort_legs(
     hass: HomeAssistant,
