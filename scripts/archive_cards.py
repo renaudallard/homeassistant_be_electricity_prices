@@ -174,10 +174,12 @@ _LEGEND = (
 )
 # What a parse depends on: the extractors, the shared readers and rate
 # dataclasses beside them, the constants they key on, and the codec the
-# rows are written with.
-_PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_store.py")
-# The PDF readers whose installed version is part of what a parse depends on.
-_READERS = ("pypdf", "pdfplumber")
+# rows are written with, which the module split moved to snapshot_codec.py.
+_PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_codec.py")
+# The readers whose installed version is part of what a parse depends on:
+# the two PDF text readers, and the OCR engine every Ecofix row since August
+# 2026 is read with.
+_READERS = ("pypdf", "pdfplumber", "ocr-price-cards")
 
 
 class _RecordingMemo(dict[str, str]):
@@ -544,16 +546,38 @@ def _parser_digest() -> str:
         for path in sorted(root.glob(pattern)):
             digest.update(path.relative_to(root).as_posix().encode("utf-8"))
             digest.update(path.read_bytes())
-    for reader in _READERS:
-        digest.update(f"{reader}=={importlib.metadata.version(reader)}".encode("utf-8"))
+    digest.update(_readers_line().encode("utf-8"))
     return digest.hexdigest()
 
 
 def _readers_line() -> str:
     """The reader versions a parse runs on, one line for the stamp."""
-    return " ".join(
-        f"{reader}=={importlib.metadata.version(reader)}" for reader in _READERS
-    )
+    return " ".join(f"{reader}=={_reader_version(reader)}" for reader in _READERS)
+
+
+def _reader_version(name: str) -> str:
+    """One reader's version, with the commit when it was installed from git.
+
+    The OCR engine is installed from its main branch, where a fix does not
+    have to move the version number, so the commit pip recorded is what says
+    it changed. ``absent`` when the reader is not installed, which is only
+    ever a local run: the workflow installs all three.
+    """
+    try:
+        version = importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "absent"
+    try:
+        direct = importlib.metadata.distribution(name).read_text("direct_url.json")
+        commit = json.loads(direct or "{}").get("vcs_info", {}).get("commit_id")
+    except (importlib.metadata.PackageNotFoundError, ValueError, AttributeError):
+        commit = None
+    return f"{version}+{commit[:12]}" if isinstance(commit, str) else version
+
+
+def _readers_of(line: str) -> dict[str, str]:
+    """A readers line back into ``{reader: version}``."""
+    return dict(item.split("==", 1) for item in line.split() if "==" in item)
 
 
 def _read_stamp(stamp: Path, default: str) -> tuple[str, str]:
@@ -570,9 +594,17 @@ def _read_stamp(stamp: Path, default: str) -> tuple[str, str]:
 def rerender_due(out: Path) -> bool:
     """Whether the readers moved since the archive was last replayed, which
     makes the next run render every kept card afresh; the workflow sizes
-    that run's budget on the same answer."""
+    that run's budget on the same answer.
+
+    Reader by reader: one the stamp never named is recorded rather than
+    counted as moved, so adding a reader to the list does not render every
+    kept card again when none of them changed.
+    """
     _, readers = _read_stamp(out / _PARSER_STAMP, "")
-    return bool(readers) and readers != _readers_line()
+    now = _readers_of(_readers_line())
+    return any(
+        now.get(name) != version for name, version in _readers_of(readers).items()
+    )
 
 
 def _month_id(year: int, month: int) -> str:

@@ -140,6 +140,50 @@ def test_the_parser_digest_moves_with_the_reader_versions(
     assert ac._parser_digest() == before
 
 
+def test_the_parser_digest_covers_the_codec_the_rows_are_written_with() -> None:
+    """The digest named snapshot_store.py, which held the codec until the
+    module split moved it to snapshot_codec.py: a change to how rows are
+    written, or a schema bump on its own, stopped starting the replay that
+    rewrites them, and an edit to the runtime cache replayed every row for
+    nothing. Held to the definitions rather than to a file name, so the next
+    move is caught too."""
+    from custom_components.be_electricity_prices import snapshot_codec
+
+    package = Path(snapshot_codec.__file__).parent
+    hashed = "".join(
+        path.read_text(encoding="utf-8")
+        for pattern in ac._PARSER_SOURCES
+        for path in package.glob(pattern)
+    )
+    assert "_SNAPSHOT_SCHEMA_VERSION = " in hashed
+    assert "def _snapshot_to_dict(" in hashed
+
+
+def test_a_newly_listed_reader_is_recorded_rather_than_rendered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The OCR engine joined the stamped readers. Comparing the whole line
+    would have called that a reader moving and rendered every kept card again
+    with nothing changed, so readers are compared one by one and one the
+    stamp never named only starts being recorded."""
+    (tmp_path / "parser.txt").write_text(
+        "digest\npypdf==6.18.0 pdfplumber==0.11.9\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        ac,
+        "_readers_line",
+        lambda: "pypdf==6.18.0 pdfplumber==0.11.9 ocr-price-cards==0.4.0+abc",
+    )
+    assert not ac.rerender_due(tmp_path)
+    monkeypatch.setattr(
+        ac,
+        "_readers_line",
+        lambda: "pypdf==6.18.0 pdfplumber==0.12.0 ocr-price-cards==0.4.0+abc",
+    )
+    assert ac.rerender_due(tmp_path)
+    assert ac._reader_version("no-such-reader-installed") == "absent"
+
+
 async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
     """Cociter's listing carries carriage returns; a text read back with
     newline translation would be two bytes shorter than what the parser
