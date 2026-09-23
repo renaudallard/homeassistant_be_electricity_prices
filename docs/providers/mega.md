@@ -388,7 +388,8 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 >
 > A fixed card says the opposite about its feed-in: *"le prix de rachat de votre
 > énergie injectée sur le réseau sera fixé également pour une durée d'un an"* (two
-> years on Cosy and Smart, three on Zen), on every fixed card and no other.
+> years on Smart, three on Zen, and on Cosy one year up to the July 2026 card and
+> two from August), on every fixed card and no other.
 > `_extract_injection` sets `InjectionRates.fixed_for_term` from that sentence, and a
 > signing cohort then keeps its own card's printed feed-in price
 > (`_cohort_injection_from_archived`, `cohort.py`) where it would otherwise track each
