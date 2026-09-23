@@ -192,7 +192,7 @@ ending digit precisely so a trailing sentence period is not captured. The commen
 flags the concrete hazard: `0,1019 x Belpex H + 2,4591.\n` from
 `luminus_dynamic_w` would grab the final `.` under a lazier `[\d,.]+`
 (`_luminus_overlays.py`). Values are parsed with the shared `to_float` (handles
-Belgian comma decimals and every Unicode space variant, `_pdf.py`).
+Belgian comma decimals and every Unicode space variant, `_parse.py`).
 
 ### Units
 
@@ -285,8 +285,7 @@ shared `vat_multiplier` helper with two Luminus-specific patterns
 The DSO table is parsed per region. Distribution values are stored in EUR/kWh
 (divide by 100); capacity, data-management and prosumer fees stay in their EUR/yr
 units. Distribution already includes transport on the Flanders side (same
-convention as Engie), so `transport` is set to `0.0` there (`_luminus_overlays.py`,
-`luminus.py`).
+convention as Engie), so `transport` is set to `0.0` there (`_luminus_overlays.py`).
 
 ### Flanders (`_extract_flanders_dsos`, `_luminus_overlays.py`)
 
@@ -322,7 +321,7 @@ its data-management fee is the reduced value from the
 `(**) ... quart d'heure ... gestion des données` footnote, not the table's
 monthly-regime column. `_extract_flanders_dsos` reads that footnote when
 `kind == "dynamic"` and falls back to the table value if it is absent
-(`luminus.py`, applied at `luminus.py`).
+(`_luminus_overlays.py`, handed the kind by `parse_snapshot` in `luminus.py`).
 `test_flanders_dynamic_dso_table_is_smaller_than_static`
 (`test_luminus.py`) pins it: Antwerpen dynamic data-management `18.56`
 (footnote) vs static `18.92` (table), and the dynamic prosumer is `None` while

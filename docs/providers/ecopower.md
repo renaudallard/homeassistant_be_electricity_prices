@@ -79,7 +79,7 @@ Notes:
   multiplies the 15-minute EPEX DA spot, so the live price table, current / next-slot sensors and
   the cheapest-window service keep the native 15-minute slots. YTD billing stays hourly regardless
   (Home Assistant only retains hourly long-term statistics). See `DynamicRates` docstring,
-  `base.py`.
+  `_rates.py`.
 - Groene Burgerstroom sets `spot_indexed_injection`; the dynamic contract does not, its
   energy formula collecting the ENTSO-E key already. The variable card's printed indicative is
   a fallback rather than a reason to skip the key: the credit resolves against a monthly mean
@@ -215,8 +215,8 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
   engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
 - The multiplication glyph is `×` (U+00D7); the regex accepts `[×xX*]` in case a re-render swaps
   it.
-- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_parse.py`,
-  `_pdf.py`) so a punctuation drift (hyphen vs en-dash vs U+2212) never flips the sign
+- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_parse.py`)
+  so a punctuation drift (hyphen vs en-dash vs U+2212) never flips the sign
   silently.
 - Values stay HTVA; `vat_rate=0.06` scales them later. They are NOT pre-scaled.
 

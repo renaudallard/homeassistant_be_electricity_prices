@@ -115,7 +115,7 @@ EnergyVision sells in Brussels under the **Brusol** brand, on `brusol.be`, and n
   variant would have needed a French parser set for nothing. Only the network row and the
   tax block are the region's own.
 
-`quarter_hourly=True` on the dynamic card (`providers/energyvision.py`): it bills "op
+`quarter_hourly=True` on the dynamic card (`providers/_energyvision_cards.py`): it bills "op
 kwartierbasis" on the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table,
 next-slot sensor and cheapest-window service keep the native 15-minute slots. YTD billing
 stays hourly. Both fixed contracts set `spot_indexed_injection` and the dynamic one does not:
@@ -209,7 +209,7 @@ and `injectietarief` rows in the running formula sentence and keys them by group
 The card quotes the formula ex-VAT while every printed price is VAT-inclusive, so the
 energy leg is scaled to the VAT-inclusive basis (`vat_rate` then stays 0.0, matching Bolt /
 Frank). `vat_multiplier(text, _VAT_RE)` reads the "6% BTW" header
-(`providers/energyvision.py`). Converting EUR/MWh HTVA to the EUR/kWh basis applied
+(`providers/_energyvision_cards.py`). Converting EUR/MWh HTVA to the EUR/kWh basis applied
 against the EUR/kWh spot:
 
 ```
@@ -570,10 +570,10 @@ Five things a maintainer needs to know about this card:
 - **Dynamic card is EUR/MWh HTVA (Bolt axis).** The `1,05` coefficient is a dimensionless
   Belpex multiplier scaled only by VAT - NOT by 10 like Frank. The base goes EUR/MWh ->
   EUR/kWh (`/1000`). Getting the axis wrong 10x's the energy leg
-  (`providers/energyvision.py`).
+  (`providers/_energyvision_cards.py`).
 - **Injection coefficient is exactly 1,0.** Bolt's `factor < 1.0` injection-row heuristic
   would miss it, so the dynamic row is parsed explicitly by label
-  (`providers/energyvision.py`).
+  (`providers/_energyvision_cards.py`).
 - **GS3JV injection is monthly, not spot.** It is `Belpex-SPP-M` (month-end). Emit the
   coefficients with `spp_indexed` so they resolve against the delivery MONTH's mean, and
   never let them reach the hourly spot (`_spp_injection`).

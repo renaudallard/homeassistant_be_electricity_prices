@@ -111,7 +111,7 @@ the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table, next-s
 and cheapest-window service keep the native 15-minute slots (`_rates.py`). YTD billing
 stays hourly. `spot_indexed_injection` is left at its default `False` on both: a `dynamic`
 or `spot_monthly` contract already collects the ENTSO-E key via its energy kind, so the
-injection regime does not need to gate it (`base.py`).
+injection regime does not need to gate it (`_rates.py`).
 
 ### Why the variable product is `spot_monthly`, not `variable`
 
@@ -124,7 +124,7 @@ realised Belpex_RLP of 11,42 - a true rate of 14,41 c€/kWh, nearly 10% higher.
 would ship a knowingly wrong rate that no later tick corrects, the 0.6.7 mispricing class.
 
 `spot_monthly` instead stores the coefficients and lets the coordinator resolve
-`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py`),
+`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator_tick.py`),
 which firms up as the month fills in. That mean is RLP-weighted, on the `columns` blend:
 the card defines Belpex_RLP as the mean "van de verschillende distributienetbeheerders",
 and energie.be publishes the literal column reading of it, every DSO sub-area counting
@@ -355,7 +355,7 @@ The regex skips with `.*?` (DOTALL) to the first `(factor x Belpex +/- base)` af
 anchor, because the card interleaves the unit label "(c€/kWh)" between "de formule:" and
 the parenthesised formula. The anchor sits below the energy formula, which guarantees the
 injection formula is matched and not the energy one. Injection is VAT-exempt
-(`base.py`) and Belpex is in c€/kWh, so
+(`_rates.py`) and Belpex is in c€/kWh, so
 (`providers/energiebe.py`):
 
 ```

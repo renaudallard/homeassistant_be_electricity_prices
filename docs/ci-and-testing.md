@@ -805,7 +805,7 @@ is built via `factory()` per attempt (awaitables are single-use), which is why c
 from `providers/_pdf.py` (`scripts/live_check.py`) so the harness and the coordinator classify
 errors identically and cannot drift apart.
 
-This retry helper is CI-only. Do not port it into `coordinator.py`: the coordinator has its own
+This retry helper is CI-only. Do not port it into the coordinator (`coordinator_snapshot.py`): it has its own
 retry/backoff behaviour, and duplicating this logic there would create two divergent policies.
 
 ### Coverage-gap caveat

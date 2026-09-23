@@ -72,8 +72,9 @@ Notes:
   Impact comptage is a Walloon CWaPE concept and the Flanders `FIXED` card
   carries no Impact block. `test_octaplus_is_registered` pins this: eight
   contract ids, and `impact.regions == frozenset({"wallonia"})`.
-- Both dynamic products set `quarter_hourly=True` (`octaplus.py`),
-  because OCTA+ indexes on the 15-minute EPEX spot (`Epex 15'`). Billing thus
+- Both dynamic products set `quarter_hourly=True` on every card from 2026
+  (`octaplus.py`), because OCTA+ indexes on the 15-minute EPEX spot (`Epex 15'`);
+  a card from before 2026 names `Belpex Hourly` and sets `False`. Billing thus
   uses the native 15-minute grid, like Engie / Cociter / EBEM / Ecofix; without
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
@@ -300,7 +301,7 @@ third one's formula (`test_disagreeing_meter_formulas_keep_the_estimate`).
 For `dynamic`, the injection
 formula is found within 500 characters after the `_INJECTION_LEAD` prose
 (`_injection_formula`; 174 to 252 on every archived card) and yields `factor` and `base`
-that are NOT VAT-adjusted (injection is VAT-exempt, `base.py`);
+that are NOT VAT-adjusted (injection is VAT-exempt, `_rates.py`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.

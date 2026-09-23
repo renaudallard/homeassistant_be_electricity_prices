@@ -498,7 +498,7 @@ comment:
   a VAT change tracks automatically.
 - **quarter_hourly=True.** Cociter Dynamique bills on the 15-minute Belpex grid;
   keep native quarter-hour slots, not the hourly mean (`cociter.py`,
-  `base.py`). YTD statistics still aggregate to hourly.
+  `_rates.py`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
   (`cociter.py`, `SIGN_CHARS`, `_parse.py`).
@@ -508,7 +508,7 @@ comment:
 - **Archive validity cross-check.** `fetch_for_month` runs
   `archive_validity_check` with the French month names so a CDN-substituted
   current card served under an archived URL is rejected rather than mis-billed
-  (`cociter.py`, `_pdf.py`).
+  (`cociter.py`, `_validity.py`).
 - **DSO map / const lockstep assertion.** `_DSO_KEY` must equal
   `WALLONIA_DSO_KEYS` or import fails (`cociter.py`).
 

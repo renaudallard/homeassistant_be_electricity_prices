@@ -162,7 +162,7 @@ Schema `_contract_schema` (`flow_schemas.py`). Contracts come from
 `get_extractor(supplier_id).contracts` and keeps only those whose
 `Contract.regions` frozenset contains the region. `Contract` is defined at
 `providers/_rates.py`; its `kind` is one of the `TariffKind` literals
-`fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/base.py`).
+`fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/_rates.py`).
 
 Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
 filtered list is empty (`config_flow.py`), for example a Flanders-only supplier
@@ -442,7 +442,7 @@ collected one) and either:
 The step keeps its historical id, which is what the translations are keyed on.
 
 `_contract_has_spot_injection` (`flow_contracts.py`) reads the registry's
-`Contract.spot_indexed_injection` flag (`providers/base.py`). That flag marks a
+`Contract.spot_indexed_injection` flag (`providers/_rates.py`). That flag marks a
 non-dynamic product whose *feed-in* is index-linked while the energy leg fetches no
 spots, which is most of the static range across a dozen suppliers: the energy is
 priced without a spot but the feed-in credit needs the day-ahead curve, per hour or

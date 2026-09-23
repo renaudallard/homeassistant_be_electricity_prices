@@ -3,7 +3,7 @@
 This document covers the pricing engine: the pure functions in `pricing.py` that
 turn a supplier snapshot, a DSO overlay and a region into an all-in EUR/kWh
 breakdown for a given hour, plus the injection (feed-in), capacity and prosumer
-math that surrounds it in `coordinator.py`. It is the reference for how each
+math that surrounds it in `injection.py` and `fees.py`. It is the reference for how each
 Belgian contract kind resolves to an energy rate, how the network and tax layers
 add up, how VAT is (or is not) applied, and how meter type routes the rate on
 both the supplier and the DSO side. Read it before changing any rate arithmetic
@@ -72,7 +72,8 @@ class PriceBreakdown:      # pricing.py
 | `slots_per_hour(resolution)` / `slot_delta(resolution)` / `slot_start(when, resolution)` | `pricing.py` | `int`/`timedelta`/`datetime` | Quarter-hour vs hourly grid helpers. |
 
 The injection, capacity, prosumer and Brussels-OSP arithmetic is not in
-`pricing.py`; it lives in `coordinator.py` and is documented in the later sections.
+`pricing.py`; it lives in `injection.py` (the feed-in) and `fees.py` (capacity, prosumer,
+Brussels OSP) and is documented in the later sections.
 
 ## The all-in formula
 
@@ -752,7 +753,7 @@ nothing leave the columns `None` and price exactly as before.
 `FixedRates | VariableRates | DynamicRates | SpotMonthlyRates | TimeOfUseRates | ImpactRates`
 (`providers/_rates.py`). The `TariffKind` string on a `Contract` is
 `"fixed" | "variable" | "dynamic" | "tou" | "tou_impact" | "spot_monthly"`
-(`providers/base.py`).
+(`providers/_rates.py`).
 
 ```
 energy_eur_per_kwh(energy, when, spot, meter, region, dso_tariff_mode)
@@ -787,7 +788,7 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
 of `single` and an optional `formula` string (`providers/_rates.py`).
 Suppliers that publish only a mono rate (e.g. Eneco Power Flex) leave
 `peak`/`offpeak` `None`, and routing falls through to the single rate for every
-meter type (`providers/base.py`).
+meter type (`providers/_rates.py`).
 
 ### Dynamic: `factor * spot + base`
 
@@ -819,7 +820,7 @@ formula with no month arithmetic of its own.
 The rate is therefore a single flat value for the whole month, so the contract
 always bills on the hourly grid and carries no `quarter_hourly` flag. The
 current month's mean is a running estimate until the month closes
-(`providers/base.py`).
+(`providers/_rates.py`).
 
 Used by group-purchase style products that index the commodity to the realized
 monthly average (the Mega iChoosr / Samen Overstappen groepsaankoop shape), and
@@ -903,7 +904,7 @@ discount and is out of scope (`pricing.py`).
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
 (`providers/_rates.py`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py`). `dso_impact_band` (`pricing.py`):
+(`providers/_rates.py`). `dso_impact_band` (`pricing.py`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -914,7 +915,7 @@ matching the DSO Impact distribution tariff that gates eligibility
 Source cited in the docstring: TotalEnergies Impact card footnote 7 / ORES
 "Comprendre ma facture / Impact" (`pricing.py`). Requires an SMR3
 quarter-hourly meter and an opt-in to the DSO Impact tariff
-(`providers/base.py`).
+(`providers/_rates.py`).
 
 The bands are 5 / 7 / 12 hours a day, the 35 / 49 / 84 per week the cards
 quote, and `dso_impact_band` is the only place that says so. The OptionsFlow
@@ -1038,7 +1039,7 @@ keys (`pricing.py`, same guard in `compute_breakdown` at
 
 ## Injection (feed-in) math
 
-Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
+Injection is computed in `injection.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
 `peak`/`transition`/`offpeak`, and a `formula` string (`providers/_rates.py`).
@@ -1164,7 +1165,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator.py`). This is the
+unavailable (`coordinator_tick.py`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 

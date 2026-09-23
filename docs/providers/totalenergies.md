@@ -73,9 +73,9 @@ Notes on the kind mapping:
   `test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands`
   (`tests/test_totalenergies.py`).
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
-  defaults `False` (`providers/base.py`) and TotalEnergies never overrides it,
+  defaults `False` (`providers/_rates.py`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
-  contract (same grid choice as Frank/Luminus/Mega/Eneco, `providers/base.py`).
+  contract (same grid choice as Frank/Luminus/Mega/Eneco, `providers/_rates.py`).
 - 8 of the 9 contracts set `spot_indexed_injection`, derived in
   `totalenergies.py` as "every kind except dynamic": their credit indexes on a
   monthly mean the energy leg never fetches, so the flow has to offer the key.
@@ -225,8 +225,8 @@ via `_vat_multiplier` (`totalenergies.py`), defaulting to 1.06 when absent
 `base == 0.04081` from the split layout (`tests/test_totalenergies.py`).
 
 The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
-`_extract_fee_and_renewables` and is shared across all kinds
-(`totalenergies.py`).
+`_extract_fee_and_renewables` (`_totalenergies_overlays.py`) and is shared across all
+kinds (`totalenergies.py`).
 
 ### Month-indexed energy on the variable cards
 
@@ -288,7 +288,7 @@ Region specifics:
 `TaxOverlay` is built in `parse_snapshot` (`totalenergies.py`):
 
 - `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
-  (`totalenergies.py`). Illustrative pinned value 0.0503 EUR/kWh across all
+  (`_totalenergies_overlays.py`). Illustrative pinned value 0.0503 EUR/kWh across all
   three regions (`tests/test_totalenergies.py`).
 - `energy_contribution`: federal levy. Read from the labelled "Cotisation sur
   l'énergie" line, or, when the header is wrapped, from the DSO table fallback
@@ -303,7 +303,7 @@ Region specifics:
 - Regional renewables land in exactly one of `flanders_renewables`,
   `wallonia_renewables`, `brussels_renewables` per region (all others 0), taken
   from the second number on the fee+renewables line (`_extract_renewables`,
-  `totalenergies.py`). Illustrative: Flanders 0.0157 (green + cogen merged),
+  `_totalenergies_overlays.py`). Illustrative: Flanders 0.0157 (green + cogen merged),
   Wallonia 0.032, Brussels 0.0285 (`tests/test_totalenergies.py`).
 - `region_connection_fee`: Wallonia only ("Redevance de raccordement"), mandatory
   there, raises on a miss (`totalenergies.py`). Illustrative 0.0007 EUR/kWh.
@@ -323,7 +323,7 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py`):
   after the `Injection` header so the consumption formula above is never captured
   (`totalenergies.py`). `factor = f_pdf * 10.0`, `base = b_cents / 100.0`,
   with **no VAT scaling** because residential injection is VAT-exempt
-  (`providers/base.py`). Illustrative Wallonia: `0.1 * BELPEXH - 1.3` ->
+  (`providers/_rates.py`). Illustrative Wallonia: `0.1 * BELPEXH - 1.3` ->
   `factor == 1.0`, `base == -0.013` (`tests/test_totalenergies.py`). A
   dynamic card whose injection block is missing the BELPEXH formula raises rather
   than silently pricing feed-in at the flat monthly rate every hour
@@ -386,11 +386,11 @@ The land mines a future maintainer must know, each traceable to a source comment
   to avoid grabbing the next column's formula (`totalenergies.py`).
 - **Sibelga power term is a separate line.** The `<=13kVA` "Terme de puissance mise
   a disposition" is not in the DSO row; it is folded into `data_management_per_year`
-  and is mandatory (raises on a miss, `totalenergies.py`).
+  and is mandatory (raises on a miss, `_totalenergies_overlays.py`).
 - **Mandatory levies fail loud.** Federal excise, Wallonia connection fee and the
   Sibelga power term all raise rather than defaulting to 0, so a layout drift
   surfaces as an extractor failure instead of an undercounted bill
-  (`totalenergies.py`). The energy contribution raises only on
+  (`totalenergies.py`, `_totalenergies_overlays.py`). The energy contribution raises only on
   a genuinely absent row — a printed zero is a valid rate since
   2026-08-01, not drift.
 - **200-OK HTML 404s.** Some products only publish a Wallonia PDF; the others return

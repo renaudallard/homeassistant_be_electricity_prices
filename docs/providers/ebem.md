@@ -133,7 +133,7 @@ be billed at their own rates instead of the current-snapshot proxy.
 the requested month (a defence against a CDN-substituted current card
 mis-billing past consumption). When `valid_until` is `None` and `month_names` is
 `None` (the EBEM case), the textual fallback is skipped and the snapshot is
-accepted on the strength of the URL resolver alone (`_pdf.py`). This is why
+accepted on the strength of the URL resolver alone (`_validity.py`). This is why
 `_extract_validity` failing silently degrades the safety check, not the fetch.
 
 `test_fetch_for_month_handles_underscore_separator` (`tests/test_ebem.py`)
@@ -200,7 +200,7 @@ EBEM cards print both ex-VAT and incl-VAT columns:
 - Variable indicative rates, yearly fees, and the Flanders renewables total are
   read from the *incl-VAT* column directly so VAT is not double-applied.
 - Injection is VAT-exempt (Belgian residential injection is never VAT-incl,
-  `providers/base.py`), so injection factor / base skip the VAT multiplier.
+  `providers/_rates.py`), so injection factor / base skip the VAT multiplier.
 
 ## Energy formula per TariffKind
 
@@ -422,7 +422,7 @@ feed-in credit (`ebem.py`, `tests/test_ebem.py`).
   (`ebem.py`).
 - **VAT columns**: cards print both ex-VAT and incl-VAT; the extractor stores
   incl-VAT for consumption, ex-VAT-based factors are VAT-scaled, injection is
-  never VAT-scaled (`providers/base.py`).
+  never VAT-scaled (`providers/_rates.py`).
 - **`MWH` vs `MWh` casing**: the residential federal-excise band is the only row
   with capital `MWH` (`ebem.py`).
 - **Sign flexibility everywhere**: every formula regex accepts `SIGN_CHARS`

@@ -91,7 +91,7 @@ Notes:
 - `DynamicRates.quarter_hourly` is left at its default `False` (`_extract_dynamic`
   returns a `DynamicRates` without setting it, `eneco.py`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
-  to hourly (`base.py`).
+  to hourly (`_rates.py`).
 - Fix, Flex and Flex One all set `spot_indexed_injection` (`_rates.py`), so the
   flow offers them the ENTSO-E key their month-indexed credit needs; Power
   Dynamic leaves it `False` because its energy leg collects the key already.
@@ -437,7 +437,7 @@ Steps (`eneco.py`):
    coefficients (`eneco.py`): `factor = factor_pdf * 10`,
    `base = base_cents / 100` (VAT-exempt for residential, so no VAT scaling).
 
-Injection taxonomy (the three-shape rule, `base.py`):
+Injection taxonomy (the three-shape rule, `_rates.py`):
 
 - **Power Fix and Power Flex are MONTH-indexed**: the extractor surfaces the
   `Maandprijs` as `current` AND the card's Belpex-injectie coefficients, with
@@ -555,7 +555,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 - **Archive substitution guard**: `archive_validity_check` rejects a snapshot whose
   `valid_until` does not fall in the requested month, so a CDN that overwrites a
   historical URL with the current card cannot mis-bill past consumption
-  (`_pdf.py`, `tests/test_eneco.py`).
+  (`_validity.py`, `tests/test_eneco.py`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
   not silently drop the formula or the base (`eneco.py`).

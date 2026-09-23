@@ -27,7 +27,7 @@ not one number from one party: it fuses three independently sourced inputs.
 
 1. The supplier energy formula, fetched live from that supplier's own published tariff card (a
    PDF, an HTML listing, or a small API), never hardcoded. See `const.py`
-   ("No prices live here") and `providers/base.py` ("No EUR values live in Python source").
+   ("No prices live here") and `providers/base.py` ("No SUPPLIER EUR values live in Python source").
 2. The DSO (distribution grid operator) network and capacity overlay, parsed from the same card
    for the sub-area the user selected.
 3. Federal and regional taxes and levies, and, for solar, the injection tariff.
@@ -228,7 +228,7 @@ The solar regime (`CONF_SOLAR_REGIME`, `const.py`) is independent again: `none` 
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
-(`providers/base.py`).
+(`providers/_rates.py`).
 
 ## End-to-end data flow
 
@@ -292,7 +292,7 @@ Numbered walkthrough:
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
 8. The result is packed into `CoordinatorData` (`coordinator_data.py`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator_tick.py`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. The three platforms are forwarded and a slot-boundary push is registered (`__init__.py`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
@@ -312,20 +312,20 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   bandwidth (`providers/base.py`).
 - TTL fallback: suppliers with no usable probe (DATS 24, energie.be, Engie, Luminus, where the
   only cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
-  `coordinator.py`).
+  `snapshot_store.py`).
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py`). That file is rewritten whole on every tick, so what goes in it has to be
+  `snapshot_codec.py`). That file is rewritten whole on every tick, so what goes in it has to be
   worth writing hourly: the two Synergrid profiles are national and change monthly, and live in
   one installation-wide store instead (`_profile_store`, `coordinator_profiles.py`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`
-(`coordinator.py`), so two entries on the same product never poll the same card twice; the
+(`snapshot_store.py`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
-(`coordinator.py`) and the user-facing "extractor failed" repair issue is raised only after
+(`snapshot_store.py`) and the user-facing "extractor failed" repair issue is raised only after
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py`), so
 a single transient CDN timeout does not false-alarm.
 

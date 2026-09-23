@@ -389,11 +389,11 @@ constructs a fresh `EntsoeClient` per call (`api.py`,
   the year-to-date missing an energy term long after the outage cleared.
 
 `_historical_spots` is persisted to HA storage (`STORAGE_VERSION = 2`,
-`const.py`) and reloaded on restart (`coordinator.py`). The reload is
+`const.py`) and reloaded on restart (`coordinator_persist.py`). The reload is
 gated on a "tuple" match (supplier / contract / region): spots collected while
 the entry was dynamic are dropped after an options-flow swap to a static supplier
-rather than being re-saved indefinitely (`coordinator.py`). Persisted keys
-are ISO strings; a naive one is treated as UTC on load (`coordinator.py`).
+rather than being re-saved indefinitely (`coordinator_persist.py`). Persisted keys
+are ISO strings; a naive one is treated as UTC on load (`coordinator_persist.py`).
 
 ## Part 2: recorder backfill (`backfill.py`)
 

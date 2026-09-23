@@ -104,7 +104,7 @@ Notes on the enumeration:
   Luminus: it is a regulated CREG tariff, auto-assigned, with no DSO breakdown
   (`mega.py`).
 - `mega_dynamic` is hourly-billed. `DynamicRates.quarter_hourly` defaults to `False`
-  (`base.py`) and Mega leaves it unset, so the coordinator aggregates the
+  (`_rates.py`) and Mega leaves it unset, so the coordinator aggregates the
   ENTSO-E 15-minute curve to clock hours for this contract, unlike Engie / Cociter /
   EBEM / Ecofix / OCTA+ / Ecopower which bill per quarter-hour.
 - 8 of the 21 contracts set `spot_indexed_injection`, derived rather than listed:
@@ -197,7 +197,7 @@ The region header check accepts either wording but still pins the region, since
 a wrong-region card mis-prices silently.
 
 `vat_applies` is read off the card's own sentence rather than off the edition
-(`_injection_vat_applies`, `providers/mega.py`), because the two sentences
+(`_injection_vat_applies`, `providers/_mega_cards.py`), because the two sentences
 do not split the way the editions do: the professional dynamic card is exempt.
 Keying on the edition grossed that one card's feed-in credit by 21%. A card
 printing neither sentence falls back to the edition, which is what every card
@@ -339,7 +339,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 
 - `dynamic`: parse the consumption formula (see next section) into `DynamicRates`.
 - `tou_impact`: parse three CWaPE bands (`_extract_impact_tier` for `PIC`,
-  `MEDIUM`, `ECO`, `mega.py`) plus the footnote formula text into `ImpactRates`.
+  `MEDIUM`, `ECO`, `_mega_cards.py`) plus the footnote formula text into `ImpactRates`.
   The regex is permissive on the `Tarif` prefix because circulating cards print a
   bare `PIC` on the last row and lowercase `tarif` in the footnote.
   `_impact_band_coefficients` (`_mega_cards.py`) also parses the footnote's three
@@ -425,7 +425,7 @@ The Wallonia Smart Fixed fixture pins mono / peak / offpeak / exclusive-night to
 
 ### Dynamic formula
 
-Mega prints two distinct formulas in every Dynamic PDF (`mega.py`):
+Mega prints two distinct formulas in every Dynamic PDF (`_mega_cards.py`):
 
 - Consumption: `formule tarifaire suivante : Day Ahead Epex Spot * 1.05 + 1.35 c€/kWh`
   (TVAC, spot already in c€/kWh, result in c€/kWh).
@@ -434,7 +434,7 @@ Mega prints two distinct formulas in every Dynamic PDF (`mega.py`):
   the user receives).
 
 Each is matched by its own label-anchored regex (`_CONSUMPTION_FORMULA_RE`
-`mega.py`, `_INJECTION_FORMULA_RE` `_mega_cards.py`) sharing `_FORMULA_TAIL`
+`_mega_cards.py`, `_INJECTION_FORMULA_RE` `_mega_cards.py`) sharing `_FORMULA_TAIL`
 (`_mega_cards.py`). This is critical because Mega prints the injection formula BEFORE
 the consumption formula, so a naive "first / second formula" policy swaps them; the
 test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py`)
@@ -447,7 +447,7 @@ hyphen (`test_dynamic_injection_uses_separate_htva_formula_with_endash`,
 
 Because the consumption formula is already TVAC with the spot in c€/kWh, the parsed
 `factor` maps EUR/kWh-spot to EUR/kWh-energy directly (no VAT multiplier); only the
-base cents are converted to EUR (`mega.py`). Illustrative: factor 1.05, base
+base cents are converted to EUR (`_mega_cards.py`). Illustrative: factor 1.05, base
 0.0135 EUR, fee 42.4 EUR/yr (`test_mega.py`); injection factor 1.0, base -0.04
 EUR (`test_mega.py`).
 
@@ -513,7 +513,7 @@ month (Mega cards are valid for the printed month).
   the flat value with a DOT decimal (`4.876`) where the tiered rows used commas.
   Still mandatory: a miss on BOTH shapes raises, because dropping it would silently
   undercount the bill by roughly 5 c€/kWh (about 50 EUR/year at 1000 kWh,
-  `mega.py`, illustrative).
+  `_mega_overlays.py`, illustrative).
 - Energy contribution: the next number on the same `0 et 3000 kWh` row
   (`_extract_energy_contribution`, `_mega_overlays.py`). No longer mandatory: the levy
   was abolished on 2026-08-01 and the row went with the tier table, so an absent
@@ -526,7 +526,7 @@ month (Mega cards are valid for the printed month).
   (`Redevance de raccordement`, `_mega_overlays.py`), 0.0 outside Wallonia. Mandatory in
   Wallonia, raises on a miss.
 - `energy_fund_eur_per_month`: the Flemish `Fonds Energie` block
-  (`_extract_energy_fund`, `mega.py`), 0.0 outside Flanders, where the cards
+  (`_extract_energy_fund`, `_mega_overlays.py`), 0.0 outside Flanders, where the cards
   carry no such row. Inside it a **professional** contract bills `Montant de base`
   (10.07 EUR/month on the August 2026 card) and a residential one bills `Montant
   réduit (résidentiel avec domicile)` (0.00); the professional card omits the
@@ -570,7 +570,7 @@ when both `current` and `factor` are absent (`_mega_cards.py`).
 `Forfait panneaux solaires (EUR/kVA par mois)` line and annualises it (times 12) into
 `supplier_prosumer_eur_per_kva_year`. This forfait is TVA 6% incl, so it must NOT be
 VAT-scaled: `fees._compute_prosumer` sums it raw on top of the DSO
-`Tarif prosumer` column, exactly like the Cociter Variable forfait (`mega.py`).
+`Tarif prosumer` column, exactly like the Cociter Variable forfait (`_mega_overlays.py`).
 Because pypdf splits the label and value three ways across the card family (value
 after, before, or with the label line-wrapped), the parser anchors on the
 `Forfait panneaux` lead-in and takes the first decimal in the following 200-char
@@ -579,7 +579,7 @@ window rather than a fixed layout. Illustrative: 7.63 EUR/kVA/month annualises t
 
 Absence is legitimate only on Brussels cards and the Flanders Dynamic card (neither
 carries a compensation regime); everywhere else a miss is a layout drift and raises
-(`mega.py`). `test_supplier_pv_forfait_absent_on_brussels_and_flanders_dynamic`
+(`_mega_overlays.py`). `test_supplier_pv_forfait_absent_on_brussels_and_flanders_dynamic`
 (`test_mega.py`) pins the two legitimate-`None` cases.
 
 ## Quirks and historical bugs
@@ -588,7 +588,7 @@ The land mines a future maintainer must know, drawn from the module comments:
 
 - **Consumption / injection formulas are printed in reverse order.** Injection comes
   first in the Dynamic PDF; anchor on the distinct labels, never on position
-  (`mega.py`, `test_mega.py`).
+  (`_mega_cards.py`, `test_mega.py`).
 - **The injection base can be an en-dash, not an ASCII hyphen.** `SIGN_CHARS` /
   `parse_sign` handle every Unicode dash variant (`_parse.py`); do not narrow the
   sign class (`test_mega.py`).
@@ -596,24 +596,24 @@ The land mines a future maintainer must know, drawn from the module comments:
   VAT-incl; the PV forfait is TVA 6% incl and must not be VAT-scaled
   (`mega.py`).
 - **`Compteur bi-horaire` is split across a newline by pypdf**, so a literal `find`
-  never matched; the anchor uses `Compteur\s+bi-horaire` (`mega.py`). The same
+  never matched; the anchor uses `Compteur\s+bi-horaire` (`_mega_cards.py`). The same
   split affects `Fluvius` label matching (matched via `re.IGNORECASE` and `\s`).
 - **`Redevance fixe` heading splits differently on dynamic vs fixed cards**; accept
-  both the joined and the split layout (`mega.py`).
+  both the joined and the split layout (`_mega_cards.py`).
 - **Off-peak Impact cards lack the `Compteur mono-horaire` anchor** and use a bare
   `PIC` (not `Tarif PIC`) on the last row; the tier regex is permissive on the
-  prefix (`mega.py`).
+  prefix (`_mega_cards.py`).
 - **DSO label-to-key is not one-to-one:** `Fluvius Kempen` maps to IVEKA,
   `Fluvius Midden-Vlaanderen` to INTERGEM (`_mega_cards.py`).
 - **Prosumer rates live in a separate table** from the main DSO row in both Flanders
   and Wallonia; scope the match to the `Tarif Prosumer` block to avoid grabbing a
-  distribution rate (`_mega_cards.py`).
+  distribution rate (`_mega_overlays.py`).
 - **Dynamic cards carry no compensation regime:** no supplier forfait, no
   DSO prosumer table, only 2 Fluvius columns (digital), and the data-management fee
-  is broken out into a separate paragraph (`mega.py`, `_mega_cards.py`).
+  is broken out into a separate paragraph (`_mega_overlays.py`).
 - **Brussels folds two flat annual euros** (metering fee + Sibelga <=13kVA term) into
   `data_management_per_year`; the >13kVA term is intentionally dropped
-  (`_mega_cards.py`).
+  (`_mega_overlays.py`).
 - **Off-peak Fixed retired (July 2026), revived (August 2026)** with a B2B
   edition it previously lacked. `discover()` surfaced the return the same day;
   a product Mega pulls is dropped from the registry rather than left to 404, and
@@ -621,8 +621,7 @@ The land mines a future maintainer must know, drawn from the module comments:
 - **Mandatory-line policy:** the yearly fee, federal excise, Wallonia raccordement,
   regional renewables, and the (non-Brussels, non-dynamic) PV forfait all raise on a
   miss rather than silently defaulting to 0, so a layout drift fails loudly instead
-  of mis-billing (`mega.py`, `mega.py`, `_mega_overlays.py`,
-  `_mega_overlays.py`). The energy contribution left that set on 2026-08-01: the levy is
+  of mis-billing (`_mega_cards.py`, `_mega_overlays.py`). The energy contribution left that set on 2026-08-01: the levy is
   abolished, so an absent row is a real zero rather than drift.
 - **`fetch_for_month` must rotate two month placeholders and preserve the effective
   day**, and reject the CDN HTML stub via the PDF magic-byte check plus
@@ -656,7 +655,7 @@ Ranked by how likely each is to break when Mega restyles or rotates its card, an
    filename convention, every `fetch` / `probe` / `fetch_for_month` / `discover`
    fails at once. Start here on a total outage.
 2. `_extract_meter_value` / `_extract_impact_tier` / `_extract_yearly_fee`
-   (`_mega_cards.py`, `mega.py`). Label wording or the label / value
+   (`_mega_cards.py`). Label wording or the label / value
    newline split is the most common drift; these anchor on French labels
    (`Compteur mono-horaire`, `Tarif jour`, `Redevance fixe`).
 3. `_CONSUMPTION_FORMULA_RE` / `_INJECTION_FORMULA_RE` (`_mega_cards.py`). A reworded

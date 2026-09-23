@@ -190,7 +190,7 @@ filled in rather than a scraped card.
 
 ### Contract
 
-`providers/base.py`. One product sold by a supplier.
+`providers/_rates.py`. One product sold by a supplier.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -211,7 +211,7 @@ so do not read it as a one-supplier edge case.
 
 ### FixedRates
 
-`providers/base.py`. Fixed energy contract: constant EUR/kWh, optionally
+`providers/_rates.py`. Fixed energy contract: constant EUR/kWh, optionally
 bi-hourly.
 
 | Field | Type | Default | Meaning |
@@ -225,7 +225,7 @@ bi-hourly.
 
 ### VariableRates
 
-`providers/base.py`. Variable energy contract: the current month's effective
+`providers/_rates.py`. Variable energy contract: the current month's effective
 EUR/kWh, re-published monthly.
 
 | Field | Type | Default | Meaning |
@@ -243,7 +243,7 @@ EUR/kWh, re-published monthly.
 
 ### DynamicRates
 
-`providers/base.py`. Dynamic energy contract: `factor * spot + base` per
+`providers/_rates.py`. Dynamic energy contract: `factor * spot + base` per
 price slot, against the ENTSO-E BE day-ahead spot.
 
 | Field | Type | Default | Meaning |
@@ -264,11 +264,11 @@ and set it `True`; Bolt and Frank sell one card on both settlements, and
 `resolve_settlement_grid` sets the flag from the entry's answer;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
-because HA only retains hourly long-term statistics (`providers/base.py`).
+because HA only retains hourly long-term statistics (`providers/_rates.py`).
 
 ### TimeOfUseRates and WeekendRule
 
-`providers/base.py`. Time-of-use energy contract: three slots by hour-of-day
+`providers/_rates.py`. Time-of-use energy contract: three slots by hour-of-day
 (`kind = "tou"`). Requires an SMR3 smart meter.
 
 The weekday schedule is shared across products:
@@ -300,7 +300,7 @@ schedule:
 
 ### ImpactRates
 
-`providers/base.py`. Wallonia Tarif Impact energy contract: three slots on
+`providers/_rates.py`. Wallonia Tarif Impact energy contract: three slots on
 CWaPE bands (`kind = "tou_impact"`). Distinct from `TimeOfUseRates` because the
 schedule is the CWaPE-defined Impact one (every day, no weekend exception),
 matching the DSO Impact tariff that gates eligibility. Requires an SMR3
@@ -342,7 +342,7 @@ not index monthly would pin the signing-month index, the exact bug it exists to 
 
 ### SpotMonthlyRates
 
-`providers/base.py`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
+`providers/_rates.py`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
 a single flat rate for the whole delivery month, `factor * monthly_mean(spot) +
 base`, where the mean is the arithmetic average of that month's hourly ENTSO-E
 day-ahead spots. Used by the expert **custom** monthly-average mode for
@@ -362,7 +362,7 @@ closes.
 
 ### InjectionRates
 
-`providers/base.py`. Solar feed-in compensation, in EUR/kWh. Belgian
+`providers/_rates.py`. Solar feed-in compensation, in EUR/kWh. Belgian
 residential injection is exempt from VAT, so these values are NEVER VAT-incl
 regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 `factor`+`base`) must be populated.

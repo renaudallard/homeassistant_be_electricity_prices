@@ -104,7 +104,7 @@ Related reading:
 > supplier-specific (EnergyVision prints 3,00 c€/kWh where DATS 24 prints 2,860
 > for the same month), so the tax block still cannot be reconstructed — and it
 > would break the invariant stated at the top of `providers/base.py`, that no
-> EUR values live in Python source.
+> supplier EUR values live in Python source.
 >
 > **What the image does get wrong is the federal tax block.** The DSO tables it
 > carries are right, because those tariffs are set for the calendar year and a
@@ -192,7 +192,7 @@ Notes:
 - Both dynamic products set `quarter_hourly=True` (`ecofix.py`): the cards bill
   on the 15-minute Belpex spot ("Belpex 15M"), so the integration keeps the native
   quarter-hour slots rather than the hourly mean, like Engie and OCTA+ (see the
-  `DynamicRates.quarter_hourly` docstring at `providers/base.py`). YTD billing
+  `DynamicRates.quarter_hourly` docstring at `providers/_rates.py`). YTD billing
   is still hourly because HA only retains hourly long-term statistics.
 - Motion vs Motion Online differ only in the energy formula and the yearly fixed
   fee; the yearly fee is the sole reason two dynamic products exist. Motion Online
