@@ -859,6 +859,96 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
         asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("status", "error", "failed"),
+    [
+        (404, None, False),
+        (503, None, True),
+        (429, None, True),
+        (None, TimeoutError(), True),
+    ],
+)
+def test_a_kept_card_that_did_not_download_marks_the_replay(
+    status: int | None, error: BaseException | None, failed: bool
+) -> None:
+    """A kept card that does not come back for a reason unrelated to the card
+    marks the replay, so the parser stamp is not moved over the rows it
+    missed. A 404 says the card is not kept: retrying tomorrow finds nothing
+    more, so it does not hold the stamp."""
+
+    answered = status
+
+    class _Response:
+        async def __aenter__(self) -> "_Response":
+            if error is not None:
+                raise error
+            return self
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+        @property
+        def status(self) -> int:
+            assert answered is not None
+            return answered
+
+        async def read(self) -> bytes:
+            return b"%PDF kept"
+
+    class _Session:
+        def get(self, _url: str, **_kw: object) -> _Response:
+            return _Response()
+
+    replay = ac._ReplaySession(
+        _Session(),  # type: ignore[arg-type]
+        None,
+        "https://cards.test/download",
+        {"abc": "electricity-2026-09/abc.pdf"},
+    )
+    replay.pdfs = {"https://acme.test/card.pdf": "abc"}
+
+    async def run() -> bytes:
+        async with replay.get("https://acme.test/card.pdf") as resp:
+            return await resp.read()
+
+    with pytest.raises((aiohttp.ClientConnectionError, TimeoutError)):
+        asyncio.run(run())
+    assert replay.download_failed is failed
+
+
+async def test_the_parser_stamp_waits_for_a_replay_that_could_not_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every OCTA+ row stores its card folded to a reference, so replaying it
+    downloads the kept copy. When that download failed the row was reported
+    and left as it was, the new digest was stamped anyway, and the next run
+    replayed nothing: the rows a parser fix existed to heal stayed wrong
+    behind a green run, and the integration reads a closed month from here
+    first. The stamp now moves only once a replay has had its cards."""
+    session = _Session({CARD_URL: "price=0.2 month=augustus 2026"})
+    extractor = _extractor(_text_fetch(session, {"version": "plain"}, []))
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-a"
+
+    replay_all = ac._replay_all
+
+    async def _failing(*args: Any, **kwargs: Any) -> None:
+        await replay_all(*args, **kwargs)
+        args[3].download_failed = True
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    monkeypatch.setattr(ac, "_replay_all", _failing)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-a"
+
+    # The next run gets its cards, and only then is the parser recorded.
+    monkeypatch.setattr(ac, "_replay_all", replay_all)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    assert (tmp_path / "parser.txt").read_text().splitlines()[0] == "digest-b"
+
+
 async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
     tmp_path: Path,
 ) -> None:

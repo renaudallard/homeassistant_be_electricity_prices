@@ -847,7 +847,10 @@ the same card; a HEAD answers 200 for a kept card and 404 for anything else, so 
 that probes candidate URLs before choosing one (Eneco's archive walks issue numbers) lands on the
 card the row was parsed from; anything else is refused as a network error, and the row is
 reported as not replayable and left as it was, as is a row whose text file is gone or whose
-archive path no longer settles it. A row whose parse came out differently is rewritten,
+archive path no longer settles it. A kept card that does not download for a reason unrelated to
+the card (a network error, a 5xx, a 429) leaves `parser.txt` as it was, so the next run replays
+the rows again: stamping over them had them never looked at again until an unrelated parser
+edit, while the integration reads a closed month from here first. A row whose parse came out differently is rewritten,
 keeping its capture day; `_cached_at` moves. The replay is a regex pass per row, no download
 and no render, so it is minutes for the whole branch, and a day without a code change replays
 nothing. `--reparse` forces it; `--rerender` also leaves the PDF texts out of the seed, so every

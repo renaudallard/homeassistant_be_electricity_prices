@@ -458,6 +458,11 @@ class _ReplaySession:
         # url -> digest for the row being replayed.
         self.pdfs: dict[str, str] = {}
         self._cache = Path(tempfile.mkdtemp(prefix="cards-replay-"))
+        # Set when a kept card could not be downloaded for a reason that says
+        # nothing about the card: a network error, a 5xx, a 429. The row it
+        # was for is left as it was, and archive() keeps the old parser stamp
+        # so the next run replays it again rather than never.
+        self.download_failed = False
 
     def get(self, url: str, **_kw: Any) -> Any:
         return self._get(url)
@@ -482,14 +487,22 @@ class _ReplaySession:
         path = self._kept.get(digest)
         if self._pdf_base_url is None or path is None:
             raise aiohttp.ClientConnectionError(f"no kept copy of {url} to replay from")
-        async with self._session.get(
-            f"{self._pdf_base_url}/{path}", timeout=aiohttp.ClientTimeout(total=60)
-        ) as resp:
-            if resp.status >= 400:
-                raise aiohttp.ClientConnectionError(
-                    f"HTTP {resp.status} fetching the kept copy of {url}"
-                )
-            payload = await resp.read()
+        try:
+            async with self._session.get(
+                f"{self._pdf_base_url}/{path}", timeout=aiohttp.ClientTimeout(total=60)
+            ) as resp:
+                status = resp.status
+                payload = await resp.read() if status < 400 else b""
+        except (aiohttp.ClientError, TimeoutError):
+            self.download_failed = True
+            raise
+        if status >= 400:
+            self.download_failed = (
+                self.download_failed or status >= 500 or status == 429
+            )
+            raise aiohttp.ClientConnectionError(
+                f"HTTP {status} fetching the kept copy of {url}"
+            )
         cached.write_bytes(payload)
         return payload
 
@@ -1455,6 +1468,7 @@ async def archive(
         # A fresh archive holds nothing older than this parser, so the first
         # run only stamps it; from then on a changed digest replays the rows
         # and a changed reader renders them again.
+        download_failed = False
         if reparse or rerender or stamped != parser:
             replay = _ReplaySession(session, pdf_dir, pdf_base_url, cards.kept)
             await _replay_all(
@@ -1471,7 +1485,18 @@ async def archive(
             await _retry_unparsed(
                 out, {ex.id: ex for ex in registry}, cards, replay, now, summary
             )
-        stamp.write_text(f"{parser}\n{_readers_line()}\n", encoding="utf-8")
+            download_failed = replay.download_failed
+        if download_failed:
+            # Stamping now would call the rows it missed replayed, and no later
+            # run would look at them until an unrelated parser edit: the
+            # integration reads a closed month from here first, so a parser
+            # fix those rows needed would never reach anyone.
+            print(
+                "a kept card could not be downloaded; the parser stamp is left as "
+                "it was so the next run replays the rows again"
+            )
+        else:
+            stamp.write_text(f"{parser}\n{_readers_line()}\n", encoding="utf-8")
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
