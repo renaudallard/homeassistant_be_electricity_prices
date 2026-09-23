@@ -1947,7 +1947,10 @@ async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
         )
     # The union would have said 60 days and called a partial total measured.
     assert got.days_with_data == 10
-    assert got.kwh == pytest.approx(60 * 4.0 + 10 * 1.0)
+    # And only the overlap's kWh: 60 days of the surviving register over a
+    # 10-day count scaled a year up 1,6 to 2,8 times once the overlap reached
+    # the 90 days the projection accepts.
+    assert got.kwh == pytest.approx(10 * (4.0 + 1.0))
     assert "diverged" in caplog.text
 
 
@@ -2316,11 +2319,13 @@ async def test_recorder_daily_kwh_swallows_recorder_errors(
 async def test_measured_kwh_counts_days_across_a_register_pair(
     hass: HomeAssistant,
 ) -> None:
-    """A day/night pair contributes a day when EITHER band reports it.
+    """A day/night pair contributes a day when BOTH bands report it.
 
     The pair is two independent recorder series. Counting them separately and
-    adding would double-count a day both bands cover, and taking one band's
-    count alone would undercount a day only the other saw."""
+    adding would double-count a day both bands cover. A day only one band saw
+    is not a covered day either: a live register writes a row for every day,
+    moved or not, so the other band's energy for that day is missing rather
+    than zero, and counting the day billed that band at nothing."""
     from types import SimpleNamespace
 
     entry = SimpleNamespace(
@@ -2341,8 +2346,8 @@ async def test_measured_kwh_counts_days_across_a_register_pair(
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
         got = await energy_meters._measured_kwh(hass, entry, d0, d0 + timedelta(days=2))  # type: ignore[arg-type]
-    assert got.kwh == pytest.approx(10.0)
-    assert got.days_with_data == 3
+    assert got.kwh == pytest.approx(5.0)
+    assert got.days_with_data == 1
 
 
 async def test_measured_kwh_counts_days_for_a_totals_sensor(

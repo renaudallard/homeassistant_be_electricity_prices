@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -56,7 +56,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter
-from typing import Any
+from typing import Any, TypeVar
 
 from .const import (
     CONF_CONSUMPTION_KWH,
@@ -77,6 +77,8 @@ from .pricing import (
 
 
 _LOGGER = logging.getLogger(__name__)
+
+_K = TypeVar("_K")
 
 
 async def _recorder_deltas(
@@ -751,6 +753,22 @@ class MeasuredKwh:
     days_with_data: int
 
 
+def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] | None:
+    """The days (or hours) a day/night register pair can be billed on.
+
+    ``None`` when one half produced nothing at all: a wired register that
+    compiles no statistics is a broken pair, not a band that used no energy.
+    Otherwise the keys BOTH halves report. A live register writes a row for
+    every period whether or not it moved, so a key only one half holds is a
+    period the other did not record, and billing it would bill that band at
+    zero: a night register stopped at the end of February left the rest of the
+    year on the day band alone, labelled as a whole year.
+    """
+    if bool(day) != bool(night):
+        return None
+    return set(day) & set(night)
+
+
 async def _measured_kwh(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -768,16 +786,14 @@ async def _measured_kwh(
     wired band alone; the old totals-first ordering here was incidental (the
     chain simply fell off its end) and this makes the refusal deliberate.
 
-    Coverage counts local days EITHER band of a wired pair reported, because a
-    band that genuinely used nothing that day still leaves the day covered.
-    That union is only safe while both halves are alive. A register producing
-    no statistics contributes 0.0 kWh while the surviving half holds coverage
-    at a full year, so a half-total came back labelled "measured (365 days)"
-    and every caller believed it, at 30 to 37% of the real bill. The same shape
-    at lower amplitude when one register merely stops mid-year, which needs no
+    Coverage counts the local days BOTH bands of a wired pair reported
+    (:func:`_paired_keys`), and the kWh are those days' only. Counting the days
+    either band reported let a register producing no statistics hold coverage
+    at a full year on the surviving half, so a half-total came back labelled
+    "measured (365 days)" at 30 to 37% of the real bill. The same shape at lower
+    amplitude when one register merely stops mid-year, which needs no
     misconfiguration at all: a rename, an integration swap or a meter
-    replacement is enough. So the two halves are compared before they are
-    trusted.
+    replacement is enough.
 
     A register can be wired, valid, and silent: device_class=energy with no
     state_class compiles no long-term statistics at all, and neither does
@@ -789,7 +805,8 @@ async def _measured_kwh(
     if day_id and night_id:
         d = await _recorder_daily_kwh(hass, day_id, start, end)
         n = await _recorder_daily_kwh(hass, night_id, start, end)
-        if bool(d) != bool(n):
+        days = _paired_keys(d, n)
+        if days is None:
             # One half of the pair is wired but produced nothing whatsoever.
             # That is a broken pair rather than a band that used no energy, and
             # billing the surviving half alone is a wrong bill, not a partial
@@ -805,18 +822,15 @@ async def _measured_kwh(
                 side,
             )
             return MeasuredKwh(0.0, 0)
-        days = set(d) | set(n)
-        if min(len(d), len(n)) * 2 < max(len(d), len(n)):
-            # Both halves report, but one covers less than half the span of the
-            # other, so they have diverged: one stopped, or started late. The
-            # union would carry the survivor's coverage and present a partial
-            # total as a whole one. Fall back to the days both halves actually
-            # cover, which is the only part that can be billed honestly. The
-            # figure is then short enough to be labelled scaled rather than
-            # measured, which is disclosed to the user instead of silent.
+        if len(days) < len(d) or len(days) < len(n):
+            # Both halves report, but not on the same days: one stopped, or
+            # started late. The figure over the days both cover is then short
+            # enough to be labelled scaled rather than measured, which is
+            # disclosed to the user instead of silent.
             _LOGGER.warning(
                 "%s covers %d days between %s and %s while %s covers %d, so "
-                "the %s pair has diverged; only the overlap is billed",
+                "the %s pair has diverged; only the %d days both report are "
+                "billed",
                 day_id,
                 len(d),
                 start,
@@ -824,9 +838,9 @@ async def _measured_kwh(
                 night_id,
                 len(n),
                 side,
+                len(days),
             )
-            days = set(d) & set(n)
-        return MeasuredKwh(sum(d.values()) + sum(n.values()), len(days))
+        return MeasuredKwh(sum(d[x] + n[x] for x in days), len(days))
     if total_id:
         d = await _recorder_daily_kwh(hass, total_id, start, end)
         return MeasuredKwh(sum(d.values()), len(d))
