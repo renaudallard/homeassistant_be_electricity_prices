@@ -324,9 +324,10 @@ jobs:
 
       - name: Open or update new-products issue
         # rc bit 1 set: a new product was detected at a supplier we
-        # know how to discover, OR a supplier's tax block disagrees. The
-        # two share the bit and are told apart here by which report
-        # carries failures, so neither files under the other's title.
+        # know how to discover, or its discovery failed, OR a supplier's
+        # tax block disagrees. The two reports share the bit and are told
+        # apart here by which one carries failures, so neither files
+        # under the other's title.
         # Independent issue from the extractor one so the failure modes
         # don't conflate in one thread.
         # Skipped on pull_request -- failing job is the signal.
@@ -347,7 +348,14 @@ jobs:
             echo "no new product; nothing to file" >&2
             exit 0
           fi
-          title_prefix='[live-check] new supplier products detected'
+          # The report also carries a discovery that failed. Titled after a
+          # new product whatever failed, it sent the triager looking for a
+          # product that did not exist.
+          if grep -q '/catalog: no new products at supplier$' catalog_failures.txt; then
+            title_prefix='[live-check] new supplier products detected'
+          else
+            title_prefix='[live-check] supplier product discovery failed'
+          fi
           label='live-check-catalog'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {

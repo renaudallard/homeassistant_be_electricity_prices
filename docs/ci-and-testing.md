@@ -306,6 +306,12 @@ naming a check that had in fact completed -- so it now has its own `try` and rep
 label. Loading `api.py` is why the workflow installs `defusedxml`, which that module imports at
 import time.
 
+Its rows are extractor rows, as a card fetch's are, so an outage is retried and only one that lasts
+the whole retry loop is filed, under the extractor issue. They were catalog rows at first: never
+retried, and filed on the first failure as "new supplier products detected". A phase of the run
+that crashes, this one or the catalog, federal or freshness phase, is an extractor row for the same
+reason, and because a crash is a bug here that a pull request should fail on.
+
 The window is anchored on `ZoneInfo("Europe/Brussels")` explicitly rather than through
 `dt_util.start_of_local_day()`. Run standalone, this script has no Home Assistant instance and
 `dt_util`'s default time zone is **UTC**, so asking it for local midnight slices 22 hours out of the
@@ -700,8 +706,8 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
-| 0 | 1 | extractor **regression** (fetch or parse), excluding unreadable cards | yes |
-| 1 | 2 | catalog signal: a new product appeared at a supplier, or a supplier's federal tax block disagrees with the month's consensus. One bit for two kinds of news, because neither is this repository's bug and neither should fail a pull request; `catalog_report.md` and `tax_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
+| 0 | 1 | extractor **regression** (fetch or parse, the spot fallback included) or a phase of the run that crashed, excluding unreadable cards | yes |
+| 1 | 2 | catalog signal: a new product appeared at a supplier or its discovery failed, or a supplier's federal tax block disagrees with the month's consensus. One bit for two kinds of news, because neither is a regression in what this repository bills and neither should fail a pull request; `catalog_report.md` and `tax_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash: a top-level Python exception in the script, or, set by the workflow's loop itself, any exit above 7 and any odd exit with no `extractor_failures.txt` written (a module-level ImportError exits 1, an OOM kill 137, a runner SIGTERM 143) | no |
 
@@ -1080,7 +1086,7 @@ the script through a fake `gh`.
 | --- | --- | --- | --- |
 | bit 0 (rc 1/3/5/7) | Open or update extractor-broken issue | `live-check-extractor` | `[live-check] supplier extractor broken` |
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
-| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
+| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected`, or `[live-check] supplier product discovery failed` when no new product is among the failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 
 The tax report carries four kinds of row: a supplier whose federal block disagrees with the

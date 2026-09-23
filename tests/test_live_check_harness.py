@@ -1756,6 +1756,121 @@ def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(
     assert "--fingerprint tax_failures.txt" in runs["Open or update tax-block issue"]
 
 
+def _crash(*_args: Any) -> None:
+    raise AttributeError("renamed by a refactor")
+
+
+async def _async_crash(*_args: Any) -> None:
+    _crash()
+
+
+@pytest.mark.parametrize(
+    ("phase", "stub", "label"),
+    [
+        ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
+        ("_check_excise_window", _crash, "_federal: excise window check crashed"),
+        (
+            "_check_vreg_ceiling_window",
+            _crash,
+            "_federal: VREG ceiling window check crashed",
+        ),
+        (
+            "_check_vreg_ceiling_consensus",
+            _crash,
+            "_federal: VREG ceiling consensus check crashed",
+        ),
+        ("_check_federal_tax_consensus", _crash, "_federal: consensus check crashed"),
+        ("_check_card_freshness", _async_crash, "_freshness: probe crashed"),
+        ("_check_spot_fallback", _async_crash, "spot/fallback: check crashed"),
+    ],
+)
+def test_a_crashed_phase_is_filed_as_a_bug_here(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    phase: str,
+    stub: Callable[..., Any],
+    label: str,
+) -> None:
+    """Every crash was a catalog row, so a crashed tax consensus, or the spot
+    check's import error on its first night (#79), was filed on the first
+    run as "new supplier products detected". A crash is a bug in this
+    repository: it sets the extractor bit, which the retry loop confirms
+    and a pull request fails on, and stays out of both news reports."""
+    rc = _drive_run(monkeypatch, tmp_path, **{phase: stub})
+    assert rc & 1 and not rc & 2
+    assert (tmp_path / "extractor_failures.txt").read_text() == f"{label}\n"
+    assert (tmp_path / "catalog_failures.txt").read_text() == ""
+    assert (tmp_path / "tax_failures.txt").read_text() == ""
+
+
+def test_a_spot_fallback_outage_is_retried_like_a_card_fetch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The keyless day-ahead source failing was a catalog row: never retried,
+    so one blip on the attempt the loop ended on filed an issue, and filed
+    under "new supplier products detected"."""
+
+    class _Down:
+        def __init__(self, _session: Any) -> None:
+            pass
+
+        async def fetch_day_ahead(self, *_args: Any) -> dict[datetime, float]:
+            raise TimeoutError
+
+    monkeypatch.setattr(lc, "_ENERGY_CHARTS_CLIENT", _Down)
+    rc = _drive_run(monkeypatch, tmp_path, _check_spot_fallback=lc._check_spot_fallback)
+    assert rc == 1
+    assert (tmp_path / "extractor_failures.txt").read_text() == (
+        "spot/fallback: energy-charts serves the Belgian day-ahead\n"
+    )
+    assert "## Failures" not in (tmp_path / "catalog_report.md").read_text()
+
+
+def _file_catalog_issue(tmp_path: Path, failures: str) -> str:
+    """Run the new-products step's shell out of live_check.yml over a report
+    carrying ``failures``, with file_ci_issue.sh stubbed, and return the
+    title it would file under."""
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    script = next(
+        s["run"]
+        for s in workflow["jobs"]["check"]["steps"]
+        if s.get("name") == "Open or update new-products issue"
+    )
+    script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "file_ci_issue.sh").write_text(
+        'while [ $# -gt 0 ]; do [ "$1" = --title ] && printf %s "$2" > title; '
+        "shift; done\n"
+    )
+    (tmp_path / "catalog_report.md").write_text("## Failures\n")
+    (tmp_path / "catalog_failures.txt").write_text(failures)
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
+    return (tmp_path / "title").read_text()
+
+
+def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
+    """A discovery that failed was filed as "new supplier products detected",
+    which sends the triager looking for a product that does not exist."""
+    new_product = tmp_path / "new"
+    new_product.mkdir()
+    assert _file_catalog_issue(
+        new_product,
+        "bolt/catalog: no new products at supplier\n"
+        "luminus/catalog: discovery raised\n",
+    ) == ("[live-check] new supplier products detected")
+    blind = tmp_path / "blind"
+    blind.mkdir()
+    assert _file_catalog_issue(blind, "luminus/catalog: discovery raised\n") == (
+        "[live-check] supplier product discovery failed"
+    )
+
+
 def _failures(run: Callable[[], None]) -> list[str]:
     lc.CHECKS.clear()
     run()

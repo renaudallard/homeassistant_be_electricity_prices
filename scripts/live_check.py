@@ -210,8 +210,11 @@ class Check:
     label: str
     ok: bool
     detail: str = ""
-    # "extractor" -> a fetch / parse regression; opens the existing issue
-    # "catalog"   -> a new product detected at the supplier; opens a
+    # "extractor" -> a fetch / parse regression, the spot fallback and the
+    #                card freshness check included, or a check phase that
+    #                crashed; opens the existing issue
+    # "catalog"   -> a new product detected at the supplier, or a
+    #                discovery that failed; opens a
     #                separate issue so the two failure modes don't get
     #                conflated in one thread.
     # "tax"       -> a supplier's federal tax block disagrees with the
@@ -2192,6 +2195,11 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     leaving it unexercised until then is how it rots unnoticed. Checked on
     its shape rather than its values: a full local day of slots, all inside
     the publishable band, on whichever grid the auction cleared on.
+
+    Recorded as extractor rows: this runs our client against a live source,
+    as a card fetch does, so an outage is retried like one and only one that
+    lasts the whole retry loop is filed. As catalog rows they were filed on
+    the first failure under "new supplier products detected".
     """
     # Brussels explicitly, as elsewhere in this script: run standalone, HA's
     # dt_util default time zone is UTC, and asking it for "local midnight"
@@ -2211,13 +2219,11 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     try:
         prices = await _ENERGY_CHARTS_CLIENT(session).fetch_day_ahead(start, end)
     except Exception as err:  # noqa: BLE001 - any failure is the finding
-        _record(label, False, f"{type(err).__name__}: {err}", kind="catalog")
+        _record(label, False, f"{type(err).__name__}: {err}")
         return
     # 23/24/25 hours: a DST boundary day is a real local day, not a fault.
     if not 23 <= len(prices) <= 25:
-        _record(
-            label, False, f"got {len(prices)} hourly slots for today", kind="catalog"
-        )
+        _record(label, False, f"got {len(prices)} hourly slots for today")
         return
     bad = [v for v in prices.values() if not -1.0 <= v <= 5.0]
     _record(
@@ -2226,7 +2232,6 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
         f"{len(bad)} slot(s) outside the publishable band, e.g. {bad[:3]}"
         if bad
         else "",
-        kind="catalog",
     )
 
 
@@ -4328,14 +4333,17 @@ async def _run(texts: Path | None = None) -> int:
                 await _check_catalogs(session, modules)
             except Exception as err:  # noqa: BLE001
                 # The catalog phase dereferences provider-internal attributes
-                # (renamed by a refactor -> AttributeError). Record it as a
-                # catalog failure instead of letting it escape and discard the
-                # extractor report that was already computed above.
+                # (renamed by a refactor -> AttributeError). Record it instead
+                # of letting it escape and discard the extractor report that
+                # was already computed above. Like every crash below, it is an
+                # extractor row: a crash is a bug here, so it fails the pull
+                # request that brings it and files when it persists. As a
+                # catalog row it did neither, and was filed on the first run
+                # as "new supplier products detected".
                 _record(
                     "_catalog: probe crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             # Its own try: a catalog crash must not swallow the freshness
             # gate, which is the one check that sees a supplier superseding
@@ -4347,7 +4355,6 @@ async def _run(texts: Path | None = None) -> int:
                     "_federal: excise window check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             try:
                 _check_vreg_ceiling_window()
@@ -4356,7 +4363,6 @@ async def _run(texts: Path | None = None) -> int:
                     "_federal: VREG ceiling window check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             try:
                 _check_vreg_ceiling_consensus(texts)
@@ -4365,7 +4371,6 @@ async def _run(texts: Path | None = None) -> int:
                     "_federal: VREG ceiling consensus check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             try:
                 _check_federal_tax_consensus(texts)
@@ -4374,7 +4379,6 @@ async def _run(texts: Path | None = None) -> int:
                     "_federal: consensus check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             try:
                 await _check_card_freshness(session, modules)
@@ -4383,7 +4387,6 @@ async def _run(texts: Path | None = None) -> int:
                     "_freshness: probe crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
             # Its own try, so a failure here is reported as ITS failure. Folded
             # into the block above, the first version of this check crashed and
@@ -4396,7 +4399,6 @@ async def _run(texts: Path | None = None) -> int:
                     "spot/fallback: check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
-                    kind="catalog",
                 )
 
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
@@ -4456,8 +4458,8 @@ async def _run(texts: Path | None = None) -> int:
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
     #   bit 0 (1) = extractor failure
-    #   bit 1 (2) = catalog signal (a new product, or a tax block that
-    #               disagrees; the two reports say which)
+    #   bit 1 (2) = catalog signal (a new product or a failed discovery,
+    #               or a tax block that disagrees; the two reports say which)
     #   bit 2 (4) = drift alert
     return (
         (1 if extractor_failed else 0)
