@@ -10749,7 +10749,7 @@ async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> N
     and a scaled measurement the same way. They did not: a 30.000 kWh business
     with 90 days of meter scaling to 52.000 had its excise band resolved on
     30.000 and its rows priced on 52.000."""
-    from custom_components.be_electricity_prices import compare_quote, energy_meters
+    from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
     from custom_components.be_electricity_prices.snapshot_resolve import (
         entry_annual_kwh,
@@ -10761,7 +10761,7 @@ async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> N
         data = {} if typed is None else {"annual_consumption_kwh": typed}
         entry = SimpleNamespace(data=data)
         with patch.object(
-            energy_meters,
+            compare_quote,
             "_measured_kwh",
             AsyncMock(return_value=MeasuredKwh(kwh, days)),
         ):

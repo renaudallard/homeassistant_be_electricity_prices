@@ -407,9 +407,8 @@ async def _recorder_hourly_kwh(
 # want a live read, and guessing a TTL for them is how a stale meter reaches
 # a bill.
 # Every entry key that changes what _resolve_daily_kwh reads, which is the
-# same six the meters step renders. Shared from const rather than spelled out
-# twice: importing flow_schemas here would close a cycle, but const is a leaf
-# both modules already take these names from.
+# same six the meters step renders. Shared from const, where flow_schemas takes
+# them from too, rather than spelled out twice.
 _MEMO_METER_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
 
 _METER_MEMO: ContextVar[dict[Any, Any] | None] = ContextVar("_METER_MEMO", default=None)

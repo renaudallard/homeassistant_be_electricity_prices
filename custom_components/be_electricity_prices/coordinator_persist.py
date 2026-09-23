@@ -491,12 +491,10 @@ class _PersistMixin:
 def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
     """Flatten one scheduled ranking for the Store.
 
-    Read off the object rather than imported and isinstance-checked, because
-    ``compare_quote`` reaches back into this module and importing it at module
-    scope would close an import cycle. Every ``RankedRow`` field is written,
-    the ones the sensor never shows included: the options page re-serves these
-    rows to skip a two-minute sweep, and a row restored short of a field it
-    reads is the shape that crashed that page once already.
+    Every ``RankedRow`` field is written, the ones the sensor never shows
+    included: the options page re-serves these rows to skip a two-minute
+    sweep, and a row restored short of a field it reads is the shape that
+    crashed that page once already.
     """
     return {
         "ran_at": result.ran_at.isoformat(),

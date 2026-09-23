@@ -26,16 +26,14 @@
 """Annual-cost arithmetic behind the options flow's compare screen.
 
 Split out of ``config_flow.py`` together with ``compare_flow.py``: the two are
-one concern cut by size, not two layers. Everything here is reachable only
-from the compare branch.
+one concern cut by size, not two layers. The projection and the coordinator's
+yearly volume (``_ensure_annual_volume``) reuse the annual bill and the
+measured volume from here.
 
-Deliberately NOT folded into ``pricing.py``. That module is a leaf the
-coordinator imports at load time; several functions here reach back into
-``coordinator`` and one does recorder I/O, so folding them in would invert the
-dependency direction.
-
-The function-local imports are kept verbatim for the same reason they were
-local before: they close what would otherwise be an import cycle.
+Deliberately NOT folded into ``pricing.py``. That module is a leaf that
+``fees`` and ``energy_meters`` import; the functions here call into both, and
+two read the recorder through ``_measured_kwh``, so folding them in would
+invert the dependency direction.
 """
 
 from __future__ import annotations
@@ -43,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -64,6 +62,18 @@ from .const import (
 from .compare_weighting import (
     _tou_weighted_per_kwh,
 )
+from .energy_meters import MeasuredKwh, _measured_kwh
+from .fees import (
+    _annual_static_fees,
+    _compute_capacity,
+    _compute_prosumer,
+    _welcome_credit_eur,
+    _year_ahead_welcome_credit,
+    first_year_net_kwh,
+    grants_a_welcome_credit,
+    window_energy_rate,
+)
+from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
 
 def _annual_bill(
@@ -142,8 +152,6 @@ def _annual_bill(
         # already-annual fee by a month count and quoted the prosumer term 12x
         # over on every date. No test caught it because the options-flow stub
         # DSO publishes no prosumer rate, which zeroes the whole term.
-        from .fees import _compute_prosumer
-
         prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
         fees += prosumer_annual * (prosumer_proration / 12.0 - fee_proration)
     if capacity_proration is not None and include_capacity:
@@ -159,8 +167,6 @@ def _annual_bill(
         # it uncapped left the correction and the term it corrects on two
         # different numbers, so they no longer cancelled and a capped entry
         # was quoted about half its capacity leg.
-        from .fees import _compute_capacity
-
         if entry.data.get(CONF_REGION) == REGION_FLANDERS:
             capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
             fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
@@ -246,12 +252,6 @@ def _annual_fees(
     year's capacity charge against a quarter of a year's consumption, so the
     cap bit where it does not belong and the page quoted 11 to 18 EUR under
     the sensor it is meant to match, on an ordinary 3 500 kWh household."""
-    from .fees import (
-        _annual_static_fees,
-        _compute_capacity,
-        _compute_prosumer,
-    )
-
     static = _annual_static_fees(snapshot, meter, entry)
     capacity = 0.0
     if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
@@ -269,8 +269,6 @@ def _grants_a_welcome_credit(snapshot: Any) -> bool:
     at no credit. :func:`fees.grants_a_welcome_credit` is the one place that
     question is answered now, beside the leaf that has to agree with it.
     """
-    from .fees import grants_a_welcome_credit
-
     return grants_a_welcome_credit(snapshot)
 
 
@@ -310,9 +308,6 @@ def _ytd_welcome_credit(
     shown. Passing the window's own volume here made this column disagree
     with the annual one beside it by most of the credit.
     """
-    from .fees import _welcome_credit_eur, first_year_net_kwh, window_energy_rate
-    from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
-
     if not _grants_a_welcome_credit(credited):
         return 0.0
     energy_per_kwh = _tou_weighted_per_kwh(
@@ -382,13 +377,6 @@ def _annual_welcome_credit(
     so the energy leg is re-walked on its ``energy`` component with the same
     weights the all-in rate carries.
     """
-    from .fees import (
-        _year_ahead_welcome_credit,
-        first_year_net_kwh,
-        window_energy_rate,
-    )
-    from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
-
     if not _grants_a_welcome_credit(credited):
         return 0.0
     energy_per_kwh = _tou_weighted_per_kwh(
@@ -449,8 +437,6 @@ async def _read_total_kwh(
     sites treat as "nothing to bill". That conflates "no sensor wired" with
     "wired and reads zero"; callers that need to tell those apart go through
     :func:`_annual_volume` instead, which carries the coverage."""
-    from .energy_meters import _measured_kwh
-
     measured = await _measured_kwh(hass, entry, start, end, side=side)
     return measured.kwh if measured.kwh > 0 else None
 
@@ -464,10 +450,6 @@ def _covers_a_year(days_with_data: int) -> bool:
     turns a missing bucket into a cliff rather than a rounding error.
     """
     return days_with_data >= MEASURED_FULL_YEAR_DAYS - MEASURED_YEAR_GAP_DAYS
-
-
-if TYPE_CHECKING:
-    from .energy_meters import MeasuredKwh
 
 
 @dataclass(frozen=True)
@@ -533,8 +515,6 @@ async def _annual_volume(
     Reads only ``entry.data``, so it stays usable with the compare flow's
     ``_QuoteEntry`` proxy.
     """
-    from .energy_meters import _measured_kwh
-
     measured = await _measured_kwh(hass, entry, start, end)
     return replace(_volume_of(measured, entry), pair_fault=measured.pair_fault)
 

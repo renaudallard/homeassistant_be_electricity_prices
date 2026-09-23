@@ -85,8 +85,8 @@ class _PlaceholdersMixin(OptionsFlow):
     _compare: dict[str, Any]
 
     if TYPE_CHECKING:
-        # Provided by the concrete class; stubs rather than inheritance,
-        # which would be a cycle.
+        # Provided by _CompareStepsMixin (compare_flow.py), which mixes this
+        # one in; a stub, since a subclass cannot also be a base.
         @property
         def _engine(self) -> _SweepEngine: ...
 
