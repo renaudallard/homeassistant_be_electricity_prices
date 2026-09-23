@@ -487,7 +487,10 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py`) runs five gates:
+`_validate_snapshot` (`scripts/live_check.py`) is the funnel every supplier check goes through.
+Besides `_expect_card_period` and `_expect_energy_contribution`, described above, and
+`_expect_welcome_credit` and `_validate_dsos`, whose bounds are listed under `_validate_energy`, it
+runs these gates:
 
 - `_expect_month_indexed_registry` holds the parsed energy's `month_indexed` against the
   registry's `Contract.month_indexed_energy`. The flow offers the optional ENTSO-E key from
@@ -503,10 +506,18 @@ that reads the value 100x too large — and that part still holds.
   `formula_factor` (Bolt): losing those coefficients silently disables the box, and the entry
   keeps billing the printed monthly rate.
 
+- `_expect_direct_debit_registry` holds a card that prices a direct-debit payer (a welcome credit
+  conditional on it, a direct-debit supplement or a standing-charge discount) to a contract whose
+  registry entry carries `direct_debit_discount`. The flow asks the question from that flag before
+  any card is fetched, so an unflagged card that prices it is the direction that costs money: the
+  stored answer can only be no, and the household has no box to tick to be credited. The reverse
+  is common and not asserted, since a product that printed the supplement in some months prints
+  nothing in others.
+
 - `_validate_energy` (`scripts/live_check.py`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
-  check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
+  check `factor` in `[0.5, 3.0]` and `base` in `[-0.10, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). Every
   populated figure is bounded, not one per shape: the bi-hourly and exclusive-night registers
   (`_expect_registers`), every month-indexed coefficient pair a variable, TOU or Impact card
