@@ -32,6 +32,10 @@ adding a new module + an entry below.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
+from ..const import CONF_CONTRACT, CONF_QUARTER_HOURLY, CONF_SUPPLIER
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -205,6 +209,37 @@ def effective_kind(
     return ""
 
 
+def settlement_answer(data: Mapping[str, Any]) -> bool:
+    """The settlement answer held in one side's config data.
+
+    Gated on that side's OWN contract, so a value left behind by an earlier
+    pick, or carried in from the household when the target is a different
+    product, can never move a kind it does not belong to.
+    """
+    if not offers_quarter_hourly(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
+        return False
+    return bool(data.get(CONF_QUARTER_HOURLY, False))
+
+
+def takes_signing_rate(data: Mapping[str, Any]) -> bool:
+    """Whether a typed signing rate applies to the contract ``data`` names.
+
+    A fixed card's price and a dynamic or spot-monthly card's coefficient pair
+    are what the signing-rate step asks for, so those are the only kinds it
+    is offered on and the only ones it may bill. One rule for both, because
+    they drifted: the step was gated on the registry kind while the rate was
+    laid onto whatever shape the card took, and a month-indexed variable card
+    re-priced to a spot-monthly leg picked up a rate typed on the entry's
+    previous contract.
+    """
+    kind = effective_kind(
+        data.get(CONF_SUPPLIER),
+        data.get(CONF_CONTRACT),
+        quarter_hourly=settlement_answer(data),
+    )
+    return kind in ("fixed", "dynamic", "spot_monthly")
+
+
 __all__ = [
     "Contract",
     "DsoOverlay",
@@ -222,5 +257,7 @@ __all__ = [
     "effective_kind",
     "offers_direct_debit",
     "offers_quarter_hourly",
+    "settlement_answer",
+    "takes_signing_rate",
     "get",
 ]

@@ -60,7 +60,7 @@ from .flow_contracts import _contract_kind
 from .cohort import _parse_iso_date
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
-from .providers import get as get_extractor
+from .providers import get as get_extractor, settlement_answer
 from .compare_engine import _SweepEngine
 from .compare_inputs import (
     _borrowed_spot_cache,
@@ -71,7 +71,6 @@ from .compare_inputs import (
     _label_for_contract,
     _label_for_supplier,
     _quote_entry,
-    _settlement_of,
     _target_dso_mode,
 )
 from collections.abc import Mapping
@@ -146,7 +145,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 (
                     self._compare[CONF_SUPPLIER],
                     self._compare[CONF_CONTRACT],
-                    _settlement_of(self._compare),
+                    settlement_answer(self._compare),
                 )
             ],
             meter=meter,
@@ -192,7 +191,7 @@ class _PlaceholdersMixin(OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER],
             self._compare[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self._compare),
+            quarter_hourly=settlement_answer(self._compare),
         )
         other_dso_mode = _target_dso_mode(other_kind, dso_mode)
         target_entry = _quote_entry(
@@ -270,7 +269,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 _quote_entry(
                     self.config_entry,
                     regime,
-                    quarter_hourly=_settlement_of(self._compare),
+                    quarter_hourly=settlement_answer(self._compare),
                     meter=meter,
                 ),
                 fetched_snapshot,

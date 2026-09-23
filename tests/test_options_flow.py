@@ -4070,6 +4070,55 @@ async def test_options_flow_contract_dates_round_trip(hass: HomeAssistant) -> No
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_signing_rate_is_dropped_when_the_new_contract_skips_the_step(
+    hass: HomeAssistant,
+) -> None:
+    """A rate typed for a fixed or dynamic contract belongs to that contract.
+
+    Moving the entry to a variable card skips the signing-rate step, and
+    nothing popped the keys: only the step itself does. The variable card's
+    signing cohort is re-priced to a spot-monthly leg, which the old rate then
+    overlaid, billing a Mega Smart Flex household on its old Mega Dynamic
+    coefficients."""
+    entry = make_entry(
+        manual_energy_factor=1.05,
+        manual_energy_base=0.0135,
+        manual_yearly_fee=42.4,
+        contract_start_date="2025-06-01",
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "cociter_variable", "contract_start_date": "2026-03-01"},
+    )
+    # A variable card: no signing-rate step.
+    assert result["step_id"] == "dso"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "bi"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    for key in ("manual_energy_factor", "manual_energy_base", "manual_yearly_fee"):
+        assert key not in entry.data, key
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_tariff_card_date_round_trip(hass: HomeAssistant) -> None:
     """The card month persists beside the start date, and clears on its own.
 

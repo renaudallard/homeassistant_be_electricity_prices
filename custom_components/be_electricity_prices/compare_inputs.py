@@ -36,20 +36,18 @@ from __future__ import annotations
 from .compare_table import _row_label
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
-    CONF_CONTRACT,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
-    CONF_SUPPLIER,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     METER_MONO,
     SOLAR_REGIME_NONE,
 )
 from .injection import _injection_needs_spot
-from .providers import effective_kind, get as get_extractor, offers_quarter_hourly
+from .providers import effective_kind, get as get_extractor
 from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
@@ -84,18 +82,6 @@ def _label_for_contract(supplier_id: str, contract_id: str) -> str:
     except Exception:  # noqa: BLE001 - stale id
         pass
     return contract_id
-
-
-def _settlement_of(data: Mapping[str, Any]) -> bool:
-    """The settlement answer held in one side's config data.
-
-    Gated on that side's OWN contract, so a value left behind by an earlier
-    pick, or carried in from the household when the target is a different
-    product, can never move a kind it does not belong to.
-    """
-    if not offers_quarter_hourly(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
-        return False
-    return bool(data.get(CONF_QUARTER_HOURLY, False))
 
 
 def _candidate_label(supplier_id: str, contract_id: str, quarter_hourly: bool) -> str:

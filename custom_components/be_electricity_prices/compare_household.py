@@ -81,7 +81,7 @@ from .compare_table import _solar_note
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from datetime import date, datetime, timedelta
 from homeassistant.util import dt as dt_util
-from .providers import get as get_extractor
+from .providers import get as get_extractor, settlement_answer
 from dataclasses import replace
 from .compare_inputs import (
     _HouseholdQuote,
@@ -93,7 +93,6 @@ from .compare_inputs import (
     _months_billed,
     _needs_month_mean,
     _quote_entry,
-    _settlement_of,
     _target_dso_mode,
 )
 from homeassistant.core import HomeAssistant
@@ -257,7 +256,7 @@ class _HouseholdMixin:
         current_kind = _contract_kind(
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self.config_entry.data),
+            quarter_hourly=settlement_answer(self.config_entry.data),
         )
         # A spot-indexed-injection side (Cociter Variable) prices its feed-in
         # credit off the hourly day-ahead even though its energy kind is

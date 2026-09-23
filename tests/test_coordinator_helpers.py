@@ -6955,12 +6955,21 @@ async def test_cohort_energy_leg_manual_applies_from_a_start_date_this_month(
 
     _monthly_snapshots(hass).clear()
     entry = _entry(
-        contract="test",
+        # A registered fixed contract: the step, and so the rate, is
+        # offered only on the kinds it can price.
+        supplier="eneco",
+        contract="power_fix",
         contract_start_date="2026-07-01",
         **{CONF_MANUAL_ENERGY_SINGLE: 0.21},
     )
     leg = await _cohort_energy_leg(
-        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "power_fix",
+        "wallonia",
+        entry,
+        current,
     )
     assert leg == FixedRates(single=0.21)
 
@@ -7411,14 +7420,75 @@ async def test_cohort_energy_leg_manual_when_no_archive(
     current = make_snapshot(energy=FixedRates(single=0.30))
     _monthly_snapshots(hass).clear()
     entry = _entry(
-        contract="test",
+        # A registered fixed contract: the step, and so the rate, is
+        # offered only on the kinds it can price.
+        supplier="eneco",
+        contract="power_fix",
         contract_start_date="2025-11-10",
         **{CONF_MANUAL_ENERGY_SINGLE: 0.20},
     )
     leg = await _cohort_energy_leg(
-        hass, MagicMock(), _fixed_extractor(None), "test", "wallonia", entry, current
+        hass,
+        MagicMock(),
+        _fixed_extractor(None),
+        "power_fix",
+        "wallonia",
+        entry,
+        current,
     )
     assert leg == FixedRates(single=0.20)
+
+
+async def test_cohort_ignores_a_signing_rate_the_contract_never_asked_for(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An entry moved onto a variable card before the flow popped the typed
+    rate still holds it. A month-indexed variable cohort is re-priced to a
+    spot-monthly leg, and the old contract's coefficients and fee landed on
+    it: 113 to 130 EUR a year of energy on a Mega Smart Flex household that
+    had typed its Mega Dynamic rate. The runtime has to refuse it too, or
+    those entries never heal."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=VariableRates(
+            current=0.20, month_indexed=True, formula_factor=1.177, formula_base=0.0184
+        )
+    )
+    signing = make_snapshot(
+        energy=VariableRates(
+            current=0.15, month_indexed=True, formula_factor=1.20, formula_base=0.024
+        )
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signing
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(
+        supplier="cociter",
+        contract="cociter_variable",
+        api_key="k",
+        contract_start_date="2026-03-10",
+        **{
+            CONF_MANUAL_ENERGY_FACTOR: 1.05,
+            CONF_MANUAL_ENERGY_BASE: 0.0135,
+            CONF_MANUAL_YEARLY_FEE: 42.4,
+        },
+    )
+    legs = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "cociter_variable",
+        "wallonia",
+        entry,
+        current,
+    )
+    assert isinstance(legs.energy, SpotMonthlyRates)
+    assert legs.energy.factor == pytest.approx(1.20)
+    assert legs.energy.base == pytest.approx(0.024)
 
 
 async def test_cohort_energy_leg_manual_wins_over_archive(
@@ -7441,12 +7511,21 @@ async def test_cohort_energy_leg_manual_wins_over_archive(
 
     _monthly_snapshots(hass).clear()
     entry = _entry(
-        contract="test",
+        # A registered fixed contract: the step, and so the rate, is
+        # offered only on the kinds it can price.
+        supplier="eneco",
+        contract="power_fix",
         contract_start_date="2025-11-10",
         **{CONF_MANUAL_ENERGY_SINGLE: 0.25},
     )
     leg = await _cohort_energy_leg(
-        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "power_fix",
+        "wallonia",
+        entry,
+        current,
     )
     # The typed rate replaces the archived single; the boxes left blank keep
     # the ARCHIVED signing-month values, not today's card.

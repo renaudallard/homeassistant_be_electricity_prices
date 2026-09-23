@@ -127,7 +127,13 @@ from .const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from .providers import get as get_extractor, offers_direct_debit, offers_quarter_hourly
+from .providers import (
+    get as get_extractor,
+    offers_direct_debit,
+    offers_quarter_hourly,
+    settlement_answer,
+    takes_signing_rate,
+)
 
 
 # ---- shared schema builders ---------------------------------------------------
@@ -259,6 +265,12 @@ class _WizardStepsMixin:
     async def _after_settlement(self) -> ConfigFlowResult:
         if self._needs_manual_rate():
             return await self.async_step_signed_rate()
+        # The step was not asked, so a rate typed for the entry's previous
+        # contract has to go, the way _after_contract drops a settlement
+        # answer: left behind, it billed a variable card re-priced on its
+        # signing month at the old contract's coefficients.
+        for key in _MANUAL_RATE_KEYS:
+            self._data.pop(key, None)
         return await self.async_step_dso()
 
     def _quarter_hourly(self) -> bool:
@@ -268,11 +280,7 @@ class _WizardStepsMixin:
         ``_resolve_snapshot`` uses, so a stored answer left over from another
         contract never moves the kind.
         """
-        if not offers_quarter_hourly(
-            self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
-        ):
-            return False
-        return bool(self._data.get(CONF_QUARTER_HOURLY, False))
+        return settlement_answer(self._data)
 
     def _needs_manual_rate(self) -> bool:
         """Offer the signing-rate override for a start date on a fixed /
@@ -294,18 +302,11 @@ class _WizardStepsMixin:
             CONF_TARIFF_CARD_DATE
         ):
             return False
-        return _contract_kind(
-            self._data[CONF_SUPPLIER],
-            self._data[CONF_CONTRACT],
-            quarter_hourly=self._quarter_hourly(),
-        ) in (
-            "fixed",
-            "dynamic",
-            # A spot-monthly card is a coefficient pair like a dynamic one, so
-            # a negotiated factor / base is just as typeable - and just as
-            # invisible to the integration otherwise.
-            "spot_monthly",
-        )
+        # A spot-monthly card is a coefficient pair like a dynamic one, so a
+        # negotiated factor / base is just as typeable, and just as invisible
+        # to the integration otherwise. The rule is shared with the runtime,
+        # which must not bill a rate the step would not have asked for.
+        return takes_signing_rate(self._data)
 
     async def _after_contract(self) -> ConfigFlowResult:
         if offers_quarter_hourly(

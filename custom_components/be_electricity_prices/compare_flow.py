@@ -59,7 +59,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .providers import all_extractors, offers_quarter_hourly
+from .providers import all_extractors, offers_quarter_hourly, settlement_answer
 
 from .const import (
     CONF_API_KEY,
@@ -97,7 +97,6 @@ from .compare_inputs import (
     _kva,
     _label_for_contract,
     _label_for_supplier,
-    _settlement_of,
 )
 from .compare_engine import (
     _SweepEngine,
@@ -211,7 +210,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         current_kind = _contract_kind(
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self.config_entry.data),
+            quarter_hourly=settlement_answer(self.config_entry.data),
         )
         own_professional = _contract_is_professional(
             current[CONF_SUPPLIER], current[CONF_CONTRACT]
@@ -247,7 +246,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         current_kind = _contract_kind(
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self.config_entry.data),
+            quarter_hourly=settlement_answer(self.config_entry.data),
         )
         own_professional = _contract_is_professional(
             current[CONF_SUPPLIER], current[CONF_CONTRACT]
@@ -349,7 +348,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER],
             self._compare[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self._compare),
+            quarter_hourly=settlement_answer(self._compare),
         )
         # Dynamic, TOU and TOU-Impact contracts all require a smart
         # meter, so don't offer mono/bi for them: matching the install
@@ -449,7 +448,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER],
             self._compare[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(self._compare),
+            quarter_hourly=settlement_answer(self._compare),
         )
         needs_spot = other_kind in SPOT_PRICED_CONTRACT_KINDS or (
             _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION

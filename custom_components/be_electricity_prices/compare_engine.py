@@ -41,7 +41,6 @@ from .compare_inputs import (
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
     _needs_missing_spots,
-    _settlement_of,
 )
 from .compare_table import DailyCompare, RankedRow
 from .compare_quote import _annual_bill, _annual_welcome_credit
@@ -62,7 +61,7 @@ from .flow_contracts import (
     _contract_kind,
     _sweep_candidates,
 )
-from .providers import get as get_extractor
+from .providers import get as get_extractor, settlement_answer
 from .providers._pdf import memoise_text_fetches
 from dataclasses import replace
 from datetime import date
@@ -417,7 +416,7 @@ class _SweepEngine(_HouseholdMixin):
         group = _contract_group(
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
-            quarter_hourly=_settlement_of(current),
+            quarter_hourly=settlement_answer(current),
         )
         if not group:
             # The entry's contract has left the catalogue, so there is no
@@ -490,7 +489,7 @@ class _SweepEngine(_HouseholdMixin):
         label = _candidate_label(
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
-            _settlement_of(current),
+            settlement_answer(current),
         )
         try:
             annual = _annual_bill(

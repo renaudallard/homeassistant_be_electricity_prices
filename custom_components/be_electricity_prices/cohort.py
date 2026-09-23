@@ -61,6 +61,7 @@ from .const import (
     CONF_TARIFF_CARD_DATE,
     SUPPLIER_CUSTOM,
 )
+from .providers import takes_signing_rate
 from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
@@ -685,11 +686,22 @@ async def _cohort_legs(
     # signatures, which is how the conversion previously reached the live
     # tick only, leaving the year-to-date and monthly paths 21 EUR/yr adrift
     # on the same entry. Fall back to vat_rate for a raw (unresolved) card.
+    #
+    # Only on a contract the signing-rate step is asked for. Popping the keys
+    # in the flow keeps a new one from being left behind, and this is what
+    # heals the entries already holding one: a Mega Dynamic signer who moved
+    # to Smart Flex kept the Dynamic coefficients, and a Smart Flex cohort
+    # re-priced to a spot-monthly leg billed them, 113 to 130 EUR a year of
+    # energy plus the old contract's standing charge.
     taxes = current_snapshot.taxes
-    manual = _manual_energy_leg(
-        entry,
-        current_snapshot.energy if archived is None else archived,
-        taxes.published_vat_rate or taxes.vat_rate,
+    manual = (
+        _manual_energy_leg(
+            entry,
+            current_snapshot.energy if archived is None else archived,
+            taxes.published_vat_rate or taxes.vat_rate,
+        )
+        if takes_signing_rate(entry.data)
+        else None
     )
     energy = manual if manual is not None else archived
     if energy is None:
