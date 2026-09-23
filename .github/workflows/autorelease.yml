@@ -80,8 +80,11 @@ jobs:
           # created, so when every attempt below fails it is already on
           # origin, and a re-run that tested the tag skipped the release and
           # ended green with nothing published.
+          # The step runs under bash -e, and the lookup fails whenever there
+          # is no release yet, which is the usual case: without the || true
+          # that failure ended the step.
           published=$(gh release view "${{ steps.version.outputs.tag }}" \
-            --json isDraft,assets --jq "$PUBLISHED" 2>/dev/null)
+            --json isDraft,assets --jq "$PUBLISHED" 2>/dev/null || true)
           if [ "$published" = "true" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else

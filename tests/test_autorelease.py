@@ -137,8 +137,12 @@ def _run_job(root: Path, env: dict[str, str]) -> int | None:
     def _script(step: dict[str, Any]) -> str:
         return str(step["run"]).replace("${{ steps.version.outputs.tag }}", TAG)
 
+    # Under bash -e, as the runner runs a step ("shell: /usr/bin/bash -e
+    # {0}"): a plain bash let a failing lookup in an assignment through, and
+    # that ended the 0.27.8 release before it started.
+
     subprocess.run(
-        ["bash", "-c", _script(steps["check"])],
+        ["bash", "-e", "-c", _script(steps["check"])],
         cwd=work,
         env={**env, "GITHUB_OUTPUT": str(output)},
         check=True,
@@ -146,7 +150,7 @@ def _run_job(root: Path, env: dict[str, str]) -> int | None:
     if "exists=false" not in output.read_text():
         return None
     return subprocess.run(
-        ["bash", "-c", _script(steps["Tag and release"])],
+        ["bash", "-e", "-c", _script(steps["Tag and release"])],
         cwd=work,
         env=env,
         capture_output=True,
