@@ -6284,6 +6284,71 @@ async def test_a_keyless_cohort_credits_each_past_month_its_own_printed_figure(
     assert _historical_injection_rate(eff.injection, None) == pytest.approx(0.0398)
 
 
+async def test_cohort_freezes_a_feed_in_slot_triplet(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Engie Empower Flextime prints one EPEXDAM formula per band on the
+    feed-in side, and the card fixes them per signing month like the energy
+    formulas beside them ("Les formules de prix sont valables pour tous les
+    contrats conclus en ...").
+
+    The freeze only looked at the single ``factor`` / ``base`` pair, which
+    these cards leave unset, so an August signer was billed August's energy
+    formulas beside September's feed-in triplet: 30,26 EUR a year at 3000 kWh
+    exported. Real coefficients, August against September 2026.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=FixedRates(single=0.30),
+        injection=InjectionRates(
+            current=0.05836,
+            peak=0.12975,
+            transition=0.05836,
+            offpeak=0.00043,
+            factor_peak=1.001,
+            base_peak=0.0003,
+            factor_transition=0.449,
+            base_transition=0.0003,
+            factor_offpeak=0.001,
+            base_offpeak=0.0003,
+            month_indexed=True,
+        ),
+    )
+    august = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(
+            current=0.06017,
+            peak=0.09994,
+            transition=0.06148,
+            offpeak=0.01822,
+            factor_peak=0.912,
+            base_peak=0.0003,
+            factor_transition=0.56,
+            base_transition=0.0003,
+            factor_offpeak=0.164,
+            base_offpeak=0.0003,
+            month_indexed=True,
+        ),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return august
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-08-10")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+    )
+    assert legs.injection is not None
+    assert (legs.injection.factor_peak, legs.injection.base_peak) == (0.912, 0.0003)
+    assert legs.injection.factor_transition == pytest.approx(0.56)
+    assert legs.injection.factor_offpeak == pytest.approx(0.164)
+    # The printed triplet is today's illustration, the keyless fallback.
+    assert legs.injection.peak == pytest.approx(0.12975)
+
+
 async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     hass: HomeAssistant, freezer: Any
 ) -> None:

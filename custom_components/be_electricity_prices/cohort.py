@@ -76,6 +76,7 @@ from .providers._rates import (
     TimeOfUseRates,
     VariableRates,
 )
+from .injection import _slot_coefficients
 from .snapshot_months import _snapshot_for_month
 from .snapshot_resolve import _include_vat
 
@@ -402,6 +403,12 @@ def _cohort_injection_from_archived(
     entry, which can only credit the printed figure, credits each month the
     figure that month's card printed, and a month keeps its own settled index.
 
+    The coefficients are the single pair and, on a card that prints one
+    formula per band (Engie Empower Flextime), the six slot coefficients: the
+    card fixes those per signing month just like the energy formulas beside
+    them, and freezing the pair alone billed an August signer on August's
+    energy and September's feed-in.
+
     ``None`` when the archived leg carries no coefficients: a card that
     publishes only a printed monthly figure re-prices every month by its own
     terms, and freezing it would invent a lock the contract does not have.
@@ -410,11 +417,25 @@ def _cohort_injection_from_archived(
     leg = delivery.injection
     if old is None or leg is None:
         return None
-    if old.factor is None and old.base is None:
-        return None
-    if (old.factor, old.base) == (leg.factor, leg.base):
-        return None
-    return replace(leg, factor=old.factor, base=old.base)
+    slots = _slot_coefficients(old)
+    if slots is None:
+        if old.factor is None and old.base is None:
+            return None
+        frozen = replace(leg, factor=old.factor, base=old.base)
+    else:
+        (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = slots
+        frozen = replace(
+            leg,
+            factor=old.factor,
+            base=old.base,
+            factor_peak=f_peak,
+            base_peak=b_peak,
+            factor_transition=f_trans,
+            base_transition=b_trans,
+            factor_offpeak=f_off,
+            base_offpeak=b_off,
+        )
+    return None if frozen == leg else frozen
 
 
 def _month_indexed_leg(
