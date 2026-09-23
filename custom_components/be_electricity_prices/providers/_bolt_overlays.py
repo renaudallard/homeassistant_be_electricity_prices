@@ -458,6 +458,20 @@ _FLANDERS_LABELS: dict[str, str] = {
     "Fluvius West": DSO_FLUVIUS_WEST,
     "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
+# Bolt's PDFs have a pdfplumber row-alignment quirk: the rows labeled
+# "TECTEO RESA" and "WAVRE" in the extracted text actually carry each
+# other's values. Verified against the regulator's published rates and
+# every other supplier's PDF. We swap the labels here so DSO lookups
+# return the correct numbers. ``_extract_wallonia_dsos`` runs an
+# additional runtime sanity check after parsing (RESA must remain
+# cheaper than REW under the current Walloon tariff structure); if
+# Bolt's PDF ever stops triggering the misalignment the check logs at
+# ERROR level so the swap can be removed.
+#
+# Last manual re-validation against the live PDFs: 2026-05.
+# Re-verify at least every 6 months (next: 2026-11) by parsing a
+# current Bolt Wallonia card and confirming TECTEO RESA's printed
+# distribution_single is HIGHER than WAVRE's (the swap target).
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,

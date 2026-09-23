@@ -400,20 +400,6 @@ _IMPACT_ROW_RE = re.compile(
     rf"Belpex\s*\*\s*([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)",
     re.IGNORECASE,
 )
-# Bolt's PDFs have a pdfplumber row-alignment quirk: the rows labeled
-# "TECTEO RESA" and "WAVRE" in the extracted text actually carry each
-# other's values. Verified against the regulator's published rates and
-# every other supplier's PDF. We swap the labels here so DSO lookups
-# return the correct numbers. ``_extract_wallonia_dsos`` runs an
-# additional runtime sanity check after parsing (RESA must remain
-# cheaper than REW under the current Walloon tariff structure); if
-# Bolt's PDF ever stops triggering the misalignment the check logs at
-# ERROR level so the swap can be removed.
-#
-# Last manual re-validation against the live PDFs: 2026-05.
-# Re-verify at least every 6 months (next: 2026-11) by parsing a
-# current Bolt Wallonia card and confirming TECTEO RESA's printed
-# distribution_single is HIGHER than WAVRE's (the swap target).
 # The residential VAT the settlement formula and the Impact bands are grossed
 # by. Named rather than left to the helper's default: the residential cards
 # print no "N% TVA" phrase for the multiplier to read, so this is the value
