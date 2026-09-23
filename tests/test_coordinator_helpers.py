@@ -1002,6 +1002,27 @@ def test_a_slot_or_register_rate_is_floored_too() -> None:
     assert (
         _historical_injection_rate(indexed, -0.005, energy=energy, when=peak_h) == 0.0
     )
+    # Every slot, not the peak alone: the clamp sits on each of the method's
+    # returns, and a test holding one of them let the others go unfloored.
+    from custom_components.be_electricity_prices.pricing import tou_slot
+
+    hour_of = {
+        tou_slot(
+            datetime.combine(wed, datetime.min.time()).replace(hour=h),
+            energy.weekend_rule,
+        ): h
+        for h in range(24)
+    }
+    below = replace(triplet, offpeak=-0.000295)
+    coefs_below = replace(indexed, base_offpeak=-0.001)
+    for slot in ("peak", "transition", "offpeak"):
+        when = datetime.combine(wed, datetime.min.time()).replace(hour=hour_of[slot])
+        assert _injection_price_for_slot(below, energy, None, when) == 0.0, slot
+        assert _historical_injection_rate(below, energy=energy, when=when) == 0.0, slot
+        assert (
+            _historical_injection_rate(coefs_below, -0.005, energy=energy, when=when)
+            == 0.0
+        ), slot
     # And a register pair, on a two-register meter, on both paths.
     pair = InjectionRates(
         current=0.05, peak=-0.01, offpeak=-0.02, bi_hourly=True, floor_at_zero=True
