@@ -115,6 +115,9 @@ async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -
     secret = "TOKEN-IN-ERROR-TEXT"
     entry = _entry_with_data(api_key=secret)
     entry.add_to_hass(hass)
+    # Where the flow keeps the key: in data, and not in options, so a scrub
+    # reading the wrong one is caught here rather than found by nobody.
+    hass.config_entries.async_update_entry(entry, options={})
     data = replace(_coordinator_data(), last_error=f"ENTSO-E error url=...{secret}...")
     entry.runtime_data = SimpleNamespace(
         _historical_spots={}, _historical_spot_quarters={}, data=data
@@ -135,6 +138,7 @@ async def test_diagnostics_scrubs_api_key_when_there_is_no_snapshot(
     secret = "TOKEN-IN-ERROR-TEXT"
     entry = _entry_with_data(api_key=secret)
     entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, options={})
     entry.runtime_data = SimpleNamespace(
         _historical_spots={},
         _historical_spot_quarters={},
