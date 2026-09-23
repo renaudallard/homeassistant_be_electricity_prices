@@ -3952,9 +3952,12 @@ def _validate_energy(
             factor is not None and 0.5 <= factor <= 3.0,
             detail=f"factor={factor}",
         )
-        # The constant can be negative: OCTA+ Dynamic's January 2026 card
-        # printed factor x spot - 0,0102. Sized on the slip, as the bands
-        # above are: a base read in c/kWh lands a hundred times away.
+        # Sized on the slip, as the bands above are, not on what a base can
+        # sensibly be: a base read in c/kWh lands a hundred times away. The
+        # floor was once zero and was lowered for OCTA+ Dynamic's January 2026
+        # row at factor x spot - 0,0102, which was the parser reading the AMR
+        # clause rather than the card (1,083 x Belpex + 4,17); no archived card
+        # prints a negative base.
         _expect(
             f"{prefix}: dynamic base in [-0.10, 0.10] EUR/kWh",
             base is not None and -0.10 <= base <= 0.10,
