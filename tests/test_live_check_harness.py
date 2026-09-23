@@ -2629,10 +2629,20 @@ def test_the_regional_levies_are_gated() -> None:
     assert not _fails("brussels")
     # A card covering every region carries the Walloon fee on a Flemish fetch.
     assert not _fails("flanders", region_connection_fee=0.00075)
-    # The fund ten times off either way, and on a card outside Flanders.
+    # The fund ten times off either way, and on a card outside Flanders. That
+    # one is asked of a card with nothing else wrong with it, so the fund rule
+    # is the only thing that can fail it: a Walloon card missing its fee as
+    # well failed the fee rule too, and the fund rule could be deleted green.
     assert _fails("flanders", energy_fund_eur_per_month=100.7)
     assert _fails("flanders", energy_fund_eur_per_month=1.007)
-    assert _fails("wallonia", energy_fund_eur_per_month=10.07)
+    only_fund = ["x/y: energy fund only on a Flemish card"]
+    assert (
+        _fails(
+            "wallonia", energy_fund_eur_per_month=10.07, region_connection_fee=0.00075
+        )
+        == only_fund
+    )
+    assert _fails("brussels", energy_fund_eur_per_month=10.07) == only_fund
     # The fee ten times off either way, and dropped by a Walloon card that
     # does not say so, which under-bills without a word to the user.
     assert _fails("wallonia", region_connection_fee=0.0075)
