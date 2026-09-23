@@ -264,7 +264,8 @@ moves only when a peak does. Add new attribute names here as they are added to
 a sensor: the set is the only thing preventing them being recorded, and
 `test_the_diagnostic_breakdowns_are_not_recorded` reads the breakdown keys off
 the source, so one added to the year-to-date walk or the projection without an
-entry here fails the suite.
+entry here fails the suite, and so does a key written where the scan cannot
+read it, through a variable, `dict()` or a computed name.
 
 ### `projected_year_cost`: why no device class
 

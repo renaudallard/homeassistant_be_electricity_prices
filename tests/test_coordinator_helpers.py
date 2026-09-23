@@ -6155,12 +6155,28 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
         "custom_components/be_electricity_prices"
     )
     keys: set[str] = set()
+    unresolved: list[str] = []
+
+    def _dict_keys(value: ast.expr, where: str) -> None:
+        # A dict literal names its keys; anything else (a variable, dict(),
+        # a comprehension) hides them from the scan, which then fails rather
+        # than pass a key it never saw.
+        if not isinstance(value, ast.Dict):
+            unresolved.append(where)
+            return
+        for k in value.keys:
+            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                keys.add(k.value)
+            else:
+                unresolved.append(where)
+
     for path in pkg.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         # Every way of writing a key: a subscript, update() with a dict or
-        # keywords, setdefault(), and any plain alias of the two dicts. The
-        # scan read the subscript alone, so a key written any other way was
-        # recorded with the test green.
+        # keywords, |=, setdefault(), and any plain alias of the two dicts.
+        # The scan read the subscript alone, so a key written any other way
+        # was recorded with the test green, and a write it cannot read the
+        # key off fails it.
         stores = {"breakdown", "stats"}
         grew = True
         while grew:
@@ -6176,7 +6192,14 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
                             stores.add(target.id)
                             grew = True
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assign | ast.AugAssign):
+            where = f"{path.name} line {getattr(node, 'lineno', 0)}"
+            if (
+                isinstance(node, ast.AugAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id in stores
+            ):
+                _dict_keys(node.value, where)
+            elif isinstance(node, ast.Assign | ast.AugAssign):
                 targets = (
                     node.targets if isinstance(node, ast.Assign) else [node.target]
                 )
@@ -6185,10 +6208,13 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
                         isinstance(target, ast.Subscript)
                         and isinstance(target.value, ast.Name)
                         and target.value.id in stores
-                        and isinstance(target.slice, ast.Constant)
-                        and isinstance(target.slice.value, str)
                     ):
-                        keys.add(target.slice.value)
+                        if isinstance(target.slice, ast.Constant) and isinstance(
+                            target.slice.value, str
+                        ):
+                            keys.add(target.slice.value)
+                        else:
+                            unresolved.append(where)
             elif (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
@@ -6196,22 +6222,23 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
                 and node.func.value.id in stores
             ):
                 if node.func.attr == "update":
-                    keys.update(kw.arg for kw in node.keywords if kw.arg)
+                    for kw in node.keywords:
+                        if kw.arg:
+                            keys.add(kw.arg)
+                        else:
+                            unresolved.append(where)
                     for arg in node.args:
-                        if isinstance(arg, ast.Dict):
-                            keys.update(
-                                k.value
-                                for k in arg.keys
-                                if isinstance(k, ast.Constant)
-                                and isinstance(k.value, str)
-                            )
-                elif (
-                    node.func.attr == "setdefault"
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and isinstance(node.args[0].value, str)
-                ):
-                    keys.add(node.args[0].value)
+                        _dict_keys(arg, where)
+                elif node.func.attr == "setdefault":
+                    if (
+                        node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        keys.add(node.args[0].value)
+                    else:
+                        unresolved.append(where)
+    assert not unresolved, unresolved
     # The scan reads both families, or it proves nothing.
     assert {"hours_elapsed", "days_seen", "energy_basis"} <= keys
     recorded = keys - BePriceSensor._unrecorded_attributes - {"billed_peak_kw"}
@@ -6468,15 +6495,19 @@ def test_every_selector_translation_key_names_a_selector_block() -> None:
             ):
                 continue
             values = [kw.value for kw in node.keywords if kw.arg == "translation_key"]
-            # And one passed through a ** dict.
-            for kw in node.keywords:
-                if kw.arg is None and isinstance(kw.value, ast.Dict):
-                    values += [
-                        value
-                        for key, value in zip(kw.value.keys, kw.value.values)
-                        if isinstance(key, ast.Constant)
-                        and key.value == "translation_key"
-                    ]
+            # And one passed in a dict, through ** or as the config itself. A
+            # dict held in a variable, or a key that is not a literal, hides
+            # whether a translation key is set at all, so it fails the scan.
+            dicts = [kw.value for kw in node.keywords if kw.arg is None]
+            for config in [*node.args, *dicts]:
+                if not isinstance(config, ast.Dict):
+                    unread.append(f"{path.name}: {ast.unparse(config)}")
+                    continue
+                for key, value in zip(config.keys, config.values):
+                    if not isinstance(key, ast.Constant):
+                        unread.append(f"{path.name}: {ast.unparse(config)}")
+                    elif key.value == "translation_key":
+                        values.append(value)
             for value in values:
                 if isinstance(value, ast.Constant) and isinstance(value.value, str):
                     named.add(value.value)

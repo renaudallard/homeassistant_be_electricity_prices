@@ -85,13 +85,16 @@ def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
     that names it are not taken for calls, while a call inside an f-string is.
     A call through a name the module imported it under, or wrapped in
     ``partial``, is a call too: matching the bare name alone let either one
-    through a guard written to see every call.
+    through a guard written to see every call. Any other use of the function,
+    held in a variable or handed to another as an argument, is a call this
+    cannot see, so it fails every guard built on it rather than pass one.
     """
 
     def _named(node: ast.expr) -> str | None:
         return getattr(node, "id", getattr(node, "attr", None))
 
     calls: list[tuple[str, ast.Call]] = []
+    unfollowed: list[str] = []
     for name, source in compare_page_sources().items():
         tree = ast.parse(source)
         names = {function} | {
@@ -101,15 +104,29 @@ def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
             for alias in node.names
             if alias.name == function and alias.asname
         }
+        followed: set[int] = set()
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            if _named(node.func) in names or (
+            if _named(node.func) in names:
+                calls.append((name, node))
+                followed.add(id(node.func))
+            elif (
                 _named(node.func) == "partial"
                 and node.args
                 and _named(node.args[0]) in names
             ):
                 calls.append((name, node))
+                followed.add(id(node.args[0]))
+        unfollowed += [
+            f"{name} line {node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name | ast.Attribute)
+            and isinstance(node.ctx, ast.Load)
+            and _named(node) in names
+            and id(node) not in followed
+        ]
+    assert not unfollowed, f"{function} used other than by a call: {unfollowed}"
     return calls
 
 
