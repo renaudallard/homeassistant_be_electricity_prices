@@ -2791,6 +2791,41 @@ async def test_save_persistent_skipped_once_the_entry_is_unloaded(
     assert len(saved) == 1
 
 
+async def test_a_failed_unload_leaves_the_coordinator_live(
+    hass: HomeAssistant,
+) -> None:
+    """The mute is set only once the platforms have unloaded. A failed unload
+    leaves the entry loaded, and muting its coordinator anyway would stop its
+    persistence and Repairs sync until Home Assistant restarts; setting the
+    flag before the outcome was known passed every test."""
+    from custom_components.be_electricity_prices import async_unload_entry
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+    coord = entry.runtime_data
+    assert isinstance(coord, BePricesCoordinator)
+
+    with patch.object(
+        hass.config_entries, "async_unload_platforms", AsyncMock(return_value=False)
+    ):
+        assert await async_unload_entry(hass, entry) is False
+    assert coord._unloaded is False
+
+    assert await hass.config_entries.async_unload(entry.entry_id) is True
+    await hass.async_block_till_done()
+
+
 async def test_unloading_an_entry_mutes_its_coordinator(
     hass: HomeAssistant,
 ) -> None:
