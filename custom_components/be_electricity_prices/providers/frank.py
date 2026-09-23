@@ -76,6 +76,7 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
+    _MONTH_NAMES,
     NL_MONTHS,
     NUM_NO_THOUSANDS,
     fetch_pdf_text_layout,
@@ -92,6 +93,7 @@ from ._parse import (
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
+    scan_month_end,
 )
 from .base import (
     DsoOverlay,
@@ -354,11 +356,26 @@ def parse_snapshot(
         taxes=_extract_taxes(text),
         source_url=source_url,
         publication_label=publication_label,
-        valid_until=parse_valid_until(text),
+        valid_until=_valid_until(text),
         injection=_extract_injection(text),
         welcome_credit_eur=_welcome_credit(text),
         welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
+
+
+def _valid_until(text: str) -> date | None:
+    """The last day of the month the card's title names.
+
+    Every card opens on a title ending "<maand> <jaar>", and its file name in
+    the CMS and its expected-price lines name the same month. So does the
+    validity sentence under the title, on every card but one: the JN card for
+    September 2026 says its formula is for contracts signed in August, which
+    dated it a month early. The title is read first, and the sentence only
+    when the title names no month.
+    """
+    title = text.lstrip().partition("\n")[0]
+    in_title = scan_month_end(title, _MONTH_NAMES, limit=len(title))
+    return in_title or parse_valid_until(text)
 
 
 # ---- energy ------------------------------------------------------------------

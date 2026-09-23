@@ -247,7 +247,7 @@ sub-parsers. All five run against the layout-preserving text from
 | `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py` |
-| `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
+| `valid_until` | `_valid_until`, then `parse_valid_until` (shared) | `providers/frank.py`, `_validity.py` |
 
 ### Number format
 
@@ -423,10 +423,17 @@ nacht 4,81 ct/kWh, capacity 52,37 EUR/kW/yr, databeheer 18,92 EUR/yr).
 
 ## valid_until
 
-`parse_valid_until` (`_validity.py`) is the shared best-effort validity parser; Frank cards
-resolve to the last day of the pricing month. `test_valid_until_is_end_of_april`
-(`tests/test_frank.py`) pins the April fixture to a date in month 4, year 2026. This
-parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.
+`_valid_until` (`providers/frank.py`) returns the last day of the month the card's title
+names ("Frank Energie Dynamisch — JN — september 2026"), and falls back to the shared
+`parse_valid_until` (`_validity.py`) only when the title names no month. The validity
+sentence under the title ("geldig voor contracten getekend in <maand> <jaar>") agrees with
+it on every card but one: the JN card for September 2026 says August, while its title, its
+file name and its expected-price lines say September. Read as August, that card kept
+`tomorrow_prices_available` off for the whole month, and `fetch_for_month` refused it for
+September. `test_valid_until_is_end_of_april` pins the April fixture to a date in month 4,
+year 2026, and `test_the_title_dates_a_card_whose_validity_sentence_is_wrong` pins the real
+JN September card (`frank_dynamic_jn_sep.pdf`) to 30 September (`tests/test_frank.py`).
+This parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.
 
 ## Quirks and historical bugs (land mines)
 
@@ -467,6 +474,7 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 | `frank_dynamic_jn_jun.pdf` | `frank_dynamic_jn` | JN tier, June; different formula and injection base |
 | `frank_dynamic_slim_may.pdf` | `frank_dynamic_slim` | Slim tier (`SL`), May |
 | `frank_dynamic_aug.pdf` | `frank_dynamic` | standard tier, August 2026; the first card with the energy-contribution row deleted |
+| `frank_dynamic_jn_sep.pdf` | `frank_dynamic_jn` | JN tier, September 2026; its validity sentence says August |
 
 The five tiers share one PDF layout, but only the default tier had a fixture originally;
 `test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py`) was added

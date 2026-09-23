@@ -30,6 +30,7 @@ from __future__ import annotations
 import pytest
 
 from dataclasses import replace
+from datetime import date
 from types import SimpleNamespace
 
 from custom_components.be_electricity_prices import (
@@ -350,6 +351,18 @@ def test_valid_until_is_end_of_april() -> None:
     assert snap.valid_until is not None
     assert snap.valid_until.month == 4
     assert snap.valid_until.year == 2026
+
+
+def test_the_title_dates_a_card_whose_validity_sentence_is_wrong() -> None:
+    """The JN card for September 2026 says its formula is for contracts
+    signed in August. Its title, its file name and its expected-price lines
+    say September, as every other tier's card does. Read as August, the card
+    kept tomorrow_prices_available off all month and was refused by a
+    September month fetch."""
+    text = fixture_text("frank_dynamic_jn_sep.pdf", layout=True)
+    assert "getekend in augustus 2026" in " ".join(text.split())
+    snap = parse_snapshot(text, "test://frank", "frank_dynamic_jn", "september 2026")
+    assert snap.valid_until == date(2026, 9, 30)
 
 
 # ---- registration ---------------------------------------------------------------
