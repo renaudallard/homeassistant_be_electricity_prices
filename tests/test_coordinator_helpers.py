@@ -5647,22 +5647,62 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
     )
     keys: set[str] = set()
     for path in pkg.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Assign):
-                targets = node.targets
-            elif isinstance(node, ast.AugAssign):
-                targets = [node.target]
-            else:
-                continue
-            for target in targets:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        # Every way of writing a key: a subscript, update() with a dict or
+        # keywords, setdefault(), and any plain alias of the two dicts. The
+        # scan read the subscript alone, so a key written any other way was
+        # recorded with the test green.
+        stores = {"breakdown", "stats"}
+        grew = True
+        while grew:
+            grew = False
+            for node in ast.walk(tree):
                 if (
-                    isinstance(target, ast.Subscript)
-                    and isinstance(target.value, ast.Name)
-                    and target.value.id in ("breakdown", "stats")
-                    and isinstance(target.slice, ast.Constant)
-                    and isinstance(target.slice.value, str)
+                    isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in stores
                 ):
-                    keys.add(target.slice.value)
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and target.id not in stores:
+                            stores.add(target.id)
+                            grew = True
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign | ast.AugAssign):
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                for target in targets:
+                    if (
+                        isinstance(target, ast.Subscript)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id in stores
+                        and isinstance(target.slice, ast.Constant)
+                        and isinstance(target.slice.value, str)
+                    ):
+                        keys.add(target.slice.value)
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in stores
+            ):
+                if node.func.attr == "update":
+                    keys.update(kw.arg for kw in node.keywords if kw.arg)
+                    for arg in node.args:
+                        if isinstance(arg, ast.Dict):
+                            keys.update(
+                                k.value
+                                for k in arg.keys
+                                if isinstance(k, ast.Constant)
+                                and isinstance(k.value, str)
+                            )
+                elif (
+                    node.func.attr == "setdefault"
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    keys.add(node.args[0].value)
     # The scan reads both families, or it proves nothing.
     assert {"hours_elapsed", "days_seen", "energy_basis"} <= keys
     recorded = keys - BePriceSensor._unrecorded_attributes - {"billed_peak_kw"}
@@ -5898,20 +5938,45 @@ def test_every_selector_translation_key_names_a_selector_block() -> None:
         "selector"
     ]
     named: set[str] = set()
+    unread: list[str] = []
     for path in PACKAGE.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if (
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        # A key held in a module constant resolves like a literal one.
+        constants = {
+            target.id: node.value.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not (
                 isinstance(node, ast.Call)
                 and getattr(node.func, "id", getattr(node.func, "attr", None))
                 == "SelectSelectorConfig"
             ):
-                named |= {
-                    kw.value.value
-                    for kw in node.keywords
-                    if kw.arg == "translation_key"
-                    and isinstance(kw.value, ast.Constant)
-                    and isinstance(kw.value.value, str)
-                }
+                continue
+            values = [kw.value for kw in node.keywords if kw.arg == "translation_key"]
+            # And one passed through a ** dict.
+            for kw in node.keywords:
+                if kw.arg is None and isinstance(kw.value, ast.Dict):
+                    values += [
+                        value
+                        for key, value in zip(kw.value.keys, kw.value.values)
+                        if isinstance(key, ast.Constant)
+                        and key.value == "translation_key"
+                    ]
+            for value in values:
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    named.add(value.value)
+                elif isinstance(value, ast.Name) and value.id in constants:
+                    named.add(constants[value.id])
+                else:
+                    # A key this cannot read is a key it cannot check.
+                    unread.append(f"{path.name}: {ast.unparse(value)}")
+    assert not unread, unread
     assert named, "no select selector names a translation key any more"
     assert named <= set(blocks), sorted(named - set(blocks))
 

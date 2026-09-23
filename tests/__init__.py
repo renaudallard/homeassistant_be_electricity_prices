@@ -83,14 +83,34 @@ def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
 
     Read off the syntax tree, so the function's own definition and a docstring
     that names it are not taken for calls, while a call inside an f-string is.
+    A call through a name the module imported it under, or wrapped in
+    ``partial``, is a call too: matching the bare name alone let either one
+    through a guard written to see every call.
     """
-    return [
-        (name, node)
-        for name, source in compare_page_sources().items()
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Call)
-        and getattr(node.func, "id", getattr(node.func, "attr", None)) == function
-    ]
+
+    def _named(node: ast.expr) -> str | None:
+        return getattr(node, "id", getattr(node, "attr", None))
+
+    calls: list[tuple[str, ast.Call]] = []
+    for name, source in compare_page_sources().items():
+        tree = ast.parse(source)
+        names = {function} | {
+            alias.asname
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name == function and alias.asname
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if _named(node.func) in names or (
+                _named(node.func) == "partial"
+                and node.args
+                and _named(node.args[0]) in names
+            ):
+                calls.append((name, node))
+    return calls
 
 
 @lru_cache(maxsize=None)
