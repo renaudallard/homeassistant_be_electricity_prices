@@ -120,20 +120,58 @@ def test_an_anchor_with_an_underscore_is_checked(
     assert out.count("MISSING") == 1
 
 
+# A line pin in any of its spellings after a file name: a colon and the
+# number, a GitHub #L anchor, or the word line or lines and the number.
+_PIN = r"\b[\w/.-]+\.{}(?::\d+|#L\d+|`?,? lines? \d+)"
+_ANY_FILE = "(?:py|ya?ml|md|json|sh|toml)"
+
+
 def test_no_comment_in_the_code_pins_a_line_number() -> None:
     """The docs dropped their file:line pins because a line number is wrong
     the moment anything above it moves, and this script checks what is left.
     Comments in the code kept theirs, out of its reach, and the 0.27.5 split
     left six of them pointing at the wrong line or past the end of the file.
-    Name the symbol instead."""
+    Name the symbol instead.
+
+    A pin to a Python file is refused on any line. One to a workflow or a
+    doc only in a comment, because this file's own tests quote the checker's
+    report, which names a doc's line the same way."""
+    import io
+    import re
+    import tokenize
+
+    root = Path(__file__).resolve().parent.parent
+    python_pin = re.compile(_PIN.format("py"))
+    any_pin = re.compile(_PIN.format(_ANY_FILE))
+    found = []
+    for folder in ("custom_components", "scripts", "tests"):
+        for path in sorted((root / folder).rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            found += [
+                f"{path.relative_to(root)} line {number}"
+                for number, line in enumerate(source.split("\n"), 1)
+                if python_pin.search(line)
+            ]
+            found += [
+                f"{path.relative_to(root)} line {token.start[0]}"
+                for token in tokenize.generate_tokens(io.StringIO(source).readline)
+                if token.type == tokenize.COMMENT and any_pin.search(token.string)
+            ]
+    assert not found, sorted(set(found))
+
+
+def test_no_doc_pins_a_line_number() -> None:
+    """The docs carried 2182 pins in August and 2258 in September before they
+    were taken out, and doc_ref_check does not see one: it reads a file name
+    only when a backtick closes right after it. Nothing stopped them coming
+    back with the next edit written in the old habit."""
     import re
 
     root = Path(__file__).resolve().parent.parent
-    pin = re.compile(r"\b[\w/]+\.py:\d+")
+    pin = re.compile(_PIN.format(_ANY_FILE))
     found = [
         f"{path.relative_to(root)} line {number}"
-        for folder in ("custom_components", "scripts", "tests")
-        for path in sorted((root / folder).rglob("*.py"))
+        for path in sorted([*(root / "docs").rglob("*.md"), root / "README.md"])
         for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
         if pin.search(line)
     ]
