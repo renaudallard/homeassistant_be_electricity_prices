@@ -1374,6 +1374,79 @@ async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
     assert not any(source.get("ocr") for source in row["_sources"])
 
 
+async def test_an_ocr_engine_move_reads_only_the_page_image_cards_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine is installed from its main branch, so any commit there moves
+    its version, and a moved reader rendered every kept card afresh: about
+    1500 downloads and half an hour, where only the cards read off their
+    pixels can come out differently. Those are read again; a card with a text
+    layer keeps its stored text, and the workflow keeps its ordinary budget."""
+    read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 40
+    engine: list[bytes] = []
+
+    def read_pdf(payload: bytes, strict: bool) -> SimpleNamespace:
+        engine.append(payload)
+        return SimpleNamespace(trusted_text=read)
+
+    def readers(ocr: str) -> None:
+        monkeypatch.setattr(
+            ac,
+            "_readers_line",
+            lambda: f"pypdf==6.18.0 pdfplumber==0.11.9 ocr-price-cards==0.4.0+{ocr}",
+        )
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    readers("aaa")
+    text_out, image_out = tmp_path / "text", tmp_path / "image"
+    renders: list[bytes] = []
+    text_session = _PdfSession({PDF_URL: b"%PDF v1"})
+    image_session = _PdfSession({PDF_URL: b"%PDF page images"})
+    with _ocr_engine(read_pdf):
+        await ac.archive(
+            text_out,
+            extractors=[_extractor(_pdf_fetch(text_session, renders))],
+            pdf_dir=tmp_path / "text-pdfs",
+            now=NOW.replace(day=5),
+            sleep=_no_sleep,
+        )
+        await ac.archive(
+            image_out,
+            extractors=[_extractor(_page_image_fetch(image_session))],
+            pdf_dir=tmp_path / "image-pdfs",
+            now=NOW.replace(day=5),
+            sleep=_no_sleep,
+        )
+        assert (len(renders), len(engine)) == (1, 1)
+
+        readers("bbb")
+        monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+        assert not ac.rerender_due(text_out)
+        await ac.archive(
+            text_out,
+            extractors=[_extractor(_pdf_fetch(text_session, renders))],
+            pdf_dir=tmp_path / "text-pdfs",
+            now=NOW.replace(day=6),
+            sleep=_no_sleep,
+        )
+        # Only the kept copy is left, so the second reading is the replay's.
+        image_session.pdfs.clear()
+        summary = await ac.archive(
+            image_out,
+            extractors=[_extractor(_page_image_fetch(image_session))],
+            pdf_dir=tmp_path / "image-pdfs",
+            now=NOW.replace(day=6),
+            sleep=_no_sleep,
+        )
+    assert summary.replayed == 1
+    assert len(renders) == 1
+    assert len(engine) == 2
+    row = json.loads(
+        (image_out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text()
+    )
+    assert any(source.get("ocr") for source in row["_sources"])
+
+
 async def test_without_the_engine_a_page_image_card_is_refused_as_before(
     tmp_path: Path,
 ) -> None:

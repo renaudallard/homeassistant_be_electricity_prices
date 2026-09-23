@@ -181,8 +181,10 @@ _LEGEND = (
 _PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_codec.py")
 # The readers whose installed version is part of what a parse depends on:
 # the two PDF text readers, and the OCR engine every Ecofix row since August
-# 2026 is read with.
-_READERS = ("pypdf", "pdfplumber", "ocr-price-cards")
+# 2026 is read with. The engine reads only the cards published as page
+# images, so its moving alone re-renders those and nothing else.
+_OCR_READERS = ("ocr-price-cards",)
+_READERS = ("pypdf", "pdfplumber", *_OCR_READERS)
 
 
 class _RecordingMemo(dict[str, str]):
@@ -320,8 +322,9 @@ class _Cards(StoredTexts):
         seen_month: str,
         *,
         serve_texts: bool = True,
+        rerender_ocr: bool = False,
     ) -> None:
-        super().__init__(out, serve=serve_texts)
+        super().__init__(out, serve=serve_texts, rerender_ocr=rerender_ocr)
         self.out = out
         self.pdf_dir = pdf_dir
         self.seen_month = seen_month
@@ -632,10 +635,8 @@ def _read_stamp(stamp: Path, default: str) -> tuple[str, str]:
     return lines[0].strip(), (lines[1].strip() if len(lines) > 1 else "")
 
 
-def rerender_due(out: Path) -> bool:
-    """Whether the readers moved since the archive was last replayed, which
-    makes the next run render every kept card afresh; the workflow sizes
-    that run's budget on the same answer.
+def _moved_readers(out: Path) -> set[str]:
+    """The readers whose version moved since the archive was last replayed.
 
     Reader by reader: one the stamp never named is recorded rather than
     counted as moved, so adding a reader to the list does not render every
@@ -643,9 +644,22 @@ def rerender_due(out: Path) -> bool:
     """
     _, readers = _read_stamp(out / _PARSER_STAMP, "")
     now = _readers_of(_readers_line())
-    return any(
-        now.get(name) != version for name, version in _readers_of(readers).items()
-    )
+    return {
+        name
+        for name, version in _readers_of(readers).items()
+        if now.get(name) != version
+    }
+
+
+def rerender_due(out: Path) -> bool:
+    """Whether a text reader moved since the archive was last replayed, which
+    makes the next run render every kept card afresh; the workflow sizes
+    that run's budget on the same answer. The OCR engine moving alone
+    re-renders only the cards read off their pixels, a dozen, which the
+    ordinary budget covers: it is installed from its main branch, so any
+    commit there moves it.
+    """
+    return bool(_moved_readers(out) - set(_OCR_READERS))
 
 
 def _month_id(year: int, month: int) -> str:
@@ -1252,12 +1266,14 @@ async def _replay_row(
     summary: _Summary,
     *,
     rerender: bool = False,
+    rerender_ocr: bool = False,
 ) -> None:
     """Re-run one stored row through the current parser, offline.
 
     Under ``rerender`` the PDF texts are not seeded, so every card is
     fetched back from the kept copy and rendered afresh; the listing pages
     still come from the archive, since there is nothing to re-render there.
+    ``rerender_ocr`` does the same for the cards read off their pixels only.
     """
     out = cards.out
     supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
@@ -1291,7 +1307,7 @@ async def _replay_row(
         if not text_path.exists():
             summary.unreplayable.append(f"{label}: {source['text']} is missing")
             return
-        if rerender and source["variant"] != "text":
+        if _rendered_afresh(source, rerender, rerender_ocr):
             continue
         key = _memo_key(source)
         # Seeded, not touched: only what the parse actually reads counts.
@@ -1309,7 +1325,7 @@ async def _replay_row(
         key = _memo_key(source)
         if key in memo or not text_path.exists():
             continue
-        if rerender and source["variant"] != "text":
+        if _rendered_afresh(source, rerender, rerender_ocr):
             continue
         stored = read_text(text_path)
         if _CARD_REF.search(stored):
@@ -1437,6 +1453,16 @@ async def _retry_unparsed(
             summary.reparsed += 1
 
 
+def _rendered_afresh(
+    source: dict[str, str], rerender: bool, rerender_ocr: bool
+) -> bool:
+    """Whether a replay leaves this source's stored text out, so its card is
+    fetched back from the kept copy and read again."""
+    if source["variant"] == "text":
+        return False
+    return rerender or (rerender_ocr and bool(source.get("ocr")))
+
+
 async def _replay_all(
     out: Path,
     extractors: dict[str, SupplierExtractor],
@@ -1446,6 +1472,7 @@ async def _replay_all(
     summary: _Summary,
     *,
     rerender: bool = False,
+    rerender_ocr: bool = False,
 ) -> None:
     """Every stored row, grouped by capture day so the clock is pinned
     once per day rather than once per row."""
@@ -1460,7 +1487,14 @@ async def _replay_all(
         if not day:
             for path in paths:
                 await _replay_row(
-                    path, extractors, cards, replay, now, summary, rerender=rerender
+                    path,
+                    extractors,
+                    cards,
+                    replay,
+                    now,
+                    summary,
+                    rerender=rerender,
+                    rerender_ocr=rerender_ocr,
                 )
             continue
         # Ticking, so the loop's own timers and the render threads keep
@@ -1468,7 +1502,14 @@ async def _replay_all(
         with freeze_time(f"{day}T12:00:00+02:00", tick=True):
             for path in paths:
                 await _replay_row(
-                    path, extractors, cards, replay, now, summary, rerender=rerender
+                    path,
+                    extractors,
+                    cards,
+                    replay,
+                    now,
+                    summary,
+                    rerender=rerender,
+                    rerender_ocr=rerender_ocr,
                 )
 
 
@@ -1508,8 +1549,12 @@ async def archive(
     stamp = out / _PARSER_STAMP
     parser = _parser_digest()
     stamped, _ = _read_stamp(stamp, parser)
-    rerender = rerender or rerender_due(out)
-    cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
+    moved = _moved_readers(out)
+    rerender = rerender or bool(moved - set(_OCR_READERS))
+    rerender_ocr = not rerender and bool(moved)
+    cards = _Cards(
+        out, pdf_dir, seen_month, serve_texts=not rerender, rerender_ocr=rerender_ocr
+    )
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
     async with aiohttp.ClientSession() as session:
@@ -1619,6 +1664,7 @@ async def archive(
                 now,
                 summary,
                 rerender=rerender,
+                rerender_ocr=rerender_ocr,
             )
             # Same trigger, same reason: a reader that changed is the only
             # thing that can turn a card nobody could read into a row.

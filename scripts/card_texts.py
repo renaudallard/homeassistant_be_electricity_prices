@@ -41,11 +41,16 @@ def digest_of(pdf: str) -> str:
 class StoredTexts:
     """What the archive already knows about card bytes."""
 
-    def __init__(self, archive: Path, *, serve: bool = True) -> None:
+    def __init__(
+        self, archive: Path, *, serve: bool = True, rerender_ocr: bool = False
+    ) -> None:
         self.archive = archive
         # False when every card must be rendered afresh, which is how a
         # reader upgrade reaches the stored months.
         self.serve = serve
+        # True when only the cards read off their pixels are rendered afresh:
+        # the OCR engine moved and no text reader did.
+        self.rerender_ocr = rerender_ocr
         # (variant, digest) -> text path in the archive, from every stored row.
         self.texts: dict[tuple[str, str], str] = {}
         # Digests of cards a PREVIOUS run had to read off their pixels. Carried
@@ -97,7 +102,11 @@ class StoredTexts:
         self.keep(digest, payload)
         key = (variant, digest)
         text = self.fresh.get(key)
-        if text is None and self.serve:
+        if (
+            text is None
+            and self.serve
+            and not (self.rerender_ocr and digest in self.ocr)
+        ):
             stored = self.texts.get(key)
             if stored is not None and (self.archive / stored).exists():
                 text = read_text(self.archive / stored)

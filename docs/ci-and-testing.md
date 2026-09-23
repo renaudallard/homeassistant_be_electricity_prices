@@ -919,10 +919,14 @@ keeping its capture day; `_cached_at` moves. The replay is a regex pass per row,
 and no render, so it is minutes for the whole branch, and a day without a code change replays
 nothing. `--reparse` forces it; `--rerender` also leaves the PDF texts out of the seed, so every
 card is fetched back from its kept copy and rendered afresh, at the cost of downloading every
-kept card. A pdfplumber, pypdf or OCR engine upgrade takes that path by itself: the reader
-versions are stamped beside the digest in `parser.txt`, a run that finds one of them moved renders
-rather than re-reads (a reader the stamp never named is recorded, not counted as moved), and the workflow gives that run the six-hour budget a dispatched re-render gets
-(`Size the walk's budget`). A row is rewritten only
+kept card. A pdfplumber or pypdf upgrade takes that path by itself: the reader versions are
+stamped beside the digest in `parser.txt`, a run that finds one of them moved renders rather
+than re-reads (a reader the stamp never named is recorded, not counted as moved), and the
+workflow gives that run the six-hour budget a dispatched re-render gets (`rerender_due`,
+`Size the walk's budget`). An OCR engine move alone reads again only the cards read off their
+pixels, the sources marked `ocr`, and serves every other card its stored text within the usual
+budget: the engine is installed from its main branch, so any commit there moves its version, and
+only a page-image card can come out differently. A row is rewritten only
 when what a source was or what it parsed to changed: the path of the text it was read from is
 not compared, because a listing page with a nonce or a render that is not byte-stable would
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
