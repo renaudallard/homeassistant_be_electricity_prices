@@ -82,8 +82,10 @@ _MAX_CENTS: Final = 100.0
 # Months between the last month a mean covers and the first month it prices.
 _LEAD_MONTHS: Final = 3
 
-# The file gains a row once a quarter, so a success is kept for the quarter;
-# a failure is retried after a few hours rather than every tick.
+# The file gains a row once a quarter, so a file that prices the running
+# quarter is kept for the rest of it. A failure, or a file the CREG has not
+# added the quarter to yet, is retried after a few hours rather than every
+# tick.
 _FAILURE_RETRY_S: Final = 6 * 3600
 # Rate per region per quarter start, EUR/kWh.
 _table: dict[str, dict[date, float]] = {}
@@ -128,21 +130,23 @@ def history(region: str) -> list[tuple[date, float]]:
 async def ensure_rates(session: aiohttp.ClientSession, today: date) -> bool:
     """Fetch the CSV once per quarter; return whether ``today`` has a rate.
 
-    A failed download leaves the previous table, which may still answer.
+    A quarter counts as fetched only once the file prices it. A failed
+    download, or a file that does not price the quarter yet, leaves the
+    previous table, which may still answer, and is retried after the backoff.
     """
     current = quarter_start(today)
     if _fetched_quarter == current:
-        return _has(current)
+        return _has(_table, current)
     async with _get_lock():
         # Re-read under the lock: entries tick together.
         if _fetched_quarter == current:
-            return _has(current)
+            return _has(_table, current)
         await _fetch(session, current)
-    return _has(current)
+    return _has(_table, current)
 
 
-def _has(quarter: date) -> bool:
-    return any(quarter in rows for rows in _table.values())
+def _has(table: dict[str, dict[date, float]], quarter: date) -> bool:
+    return any(quarter in rows for rows in table.values())
 
 
 async def _fetch(session: aiohttp.ClientSession, quarter: date) -> None:
@@ -159,6 +163,13 @@ async def _fetch(session: aiohttp.ClientSession, quarter: date) -> None:
         _LOGGER.warning("CREG home charging rates could not be read: %s", err)
         table = None
     if not table:
+        _failed_at = dt_util.utcnow()
+        return
+    if not _has(table, quarter):
+        # Read before the CREG added this quarter. Settling on it would leave
+        # the sensor unavailable until the next quarter, so it is retried
+        # after the backoff, and the previous table answers meanwhile.
+        _LOGGER.debug("CREG home charging rates: nothing yet for %s", quarter)
         _failed_at = dt_util.utcnow()
         return
     _table.clear()

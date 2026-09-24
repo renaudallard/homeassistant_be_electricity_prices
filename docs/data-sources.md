@@ -851,10 +851,13 @@ priced.
 
 ### Caching and failure
 
-`ensure_rates` runs in the coordinator tick after the snapshot and fetches at
-most once per quarter, under one module lock so the entries that tick together
+`ensure_rates` runs in the coordinator tick after the snapshot and fetches the
+file once per quarter, under one module lock so the entries that tick together
 cost one download. `rate_for` and `history` read the table synchronously, for
 the tick's record and the sensor's attributes. A failure logs, records a
 six-hour backoff and keeps the previous table, so a quarter already fetched
 keeps answering while the CREG is down; a first fetch that fails leaves the
-sensor unavailable. Nothing here raises, for the reason `brugel.py` gives.
+sensor unavailable. A file that answers but does not price the running quarter
+yet counts as a failure too: kept for the quarter, it would leave the sensor
+unavailable for three months after the CREG added the row. Nothing here
+raises, for the reason `brugel.py` gives.

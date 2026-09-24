@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -245,6 +245,36 @@ async def test_a_failed_refetch_keeps_last_quarters_table() -> None:
     # And the table is asked for again once the backoff has passed, not before.
     assert creg_ev._failed_at is not None
     assert (dt_util.utcnow() - creg_ev._failed_at).total_seconds() < 5
+
+
+async def test_a_file_without_the_running_quarter_is_asked_again() -> None:
+    """A file read before the CREG added the running quarter is not kept for
+    the rest of it, or the sensor would stay unavailable for three months
+    after the row appeared."""
+    session = _Session(_FIXTURE.read_bytes())
+    assert await creg_ev.ensure_rates(session, date(2026, 12, 31)) is True  # type: ignore[arg-type]
+    # The first day of Q1/2027, before the CREG has added it: the table read
+    # last quarter keeps answering for the quarters it holds.
+    assert await creg_ev.ensure_rates(session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
+    assert session.calls == 2
+    assert creg_ev.history(REGION_WALLONIA)[-1] == (date(2026, 10, 1), 0.3779)
+    # Within the backoff, nothing more is asked.
+    assert await creg_ev.ensure_rates(session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
+    assert session.calls == 2
+    # The CREG adds August to October 2026, and the backoff runs out.
+    session._body += (
+        b"2026;10;31,00;;36,00;;37,00;\r\n"
+        b"2026;9;32,00;;37,00;;38,00;\r\n"
+        b"2026;8;33,00;;38,00;;39,00;\r\n"
+    )
+    assert creg_ev._failed_at is not None
+    creg_ev._failed_at -= timedelta(seconds=creg_ev._FAILURE_RETRY_S)
+    assert await creg_ev.ensure_rates(session, date(2027, 1, 2)) is True  # type: ignore[arg-type]
+    assert session.calls == 3
+    assert creg_ev.rate_for(REGION_WALLONIA, date(2027, 1, 2)) == pytest.approx(0.38)
+    # And that file is kept for the rest of the quarter.
+    assert await creg_ev.ensure_rates(session, date(2027, 3, 31)) is True  # type: ignore[arg-type]
+    assert session.calls == 3
 
 
 def test_the_sensor_reads_the_rate_and_is_unavailable_without_one() -> None:
