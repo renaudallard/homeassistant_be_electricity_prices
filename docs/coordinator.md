@@ -490,7 +490,11 @@ with the old contract rather than its kind alone: most cards indexed on the
 delivery month's mean are registered variable, and the walk re-prices them on
 that mean whenever the old settings hold an ENTSO-E key
 (`month_indexed_energy`, or a variable signing cohort), which the reload after
-a switch leaves with no spots at all.
+a switch leaves with no spots at all. The profile gate asks the same of those
+cards, since whether one weights its mean on the load profile is printed on the
+card rather than kept in the registry, and `_price_previous` loads the profile
+in the entry's own blend before pricing, as it fills the spots, because the
+first tick after a switch fetches it in the background.
 
 The comparison pages price the household's own year the same way
 (`with_previous_contracts`): the day's pricing while they quote the household

@@ -336,11 +336,17 @@ def periods_need_spots(periods: list[ContractPeriod]) -> bool:
 
 
 def periods_need_rlp(periods: list[ContractPeriod]) -> bool:
-    """Whether an earlier contract wants the residential load profile: a monthly
-    spot card may settle on its weighted mean, and a compensation net is spread
-    over the profile."""
+    """Whether an earlier contract wants the residential load profile: a card
+    re-priced on the month's mean may settle on its weighted mean, and a
+    compensation net is spread over the profile.
+
+    Whether a variable card weights its mean is on the card, not in the
+    registry (Mega's flex cards, TotalEnergies' variables and Eneco Flex One
+    do, Engie's EPEXDAM cards do not), so every card the walk re-prices asks.
+    The profile is one download shared by every entry."""
     return any(
         _kind(p) == "spot_monthly"
+        or _reprices_on_spots(p)
         or p.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
         for p in periods
     )

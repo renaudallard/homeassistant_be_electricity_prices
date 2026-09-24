@@ -974,6 +974,8 @@ class _TickMixin:
         background, and pricing an old dynamic contract before it lands would
         settle that contract without its energy for the whole day. The fill is
         behind the spot lock, so this waits for it rather than fetching twice.
+        The load profile likewise, for an old contract settled on its weighted
+        mean or netted over it.
         """
         if periods_need_spots(periods):
             # The entry's own key first. A household that left a dynamic
@@ -994,6 +996,12 @@ class _TickMixin:
                 # it does for the entry's own contract, so price on what the
                 # cache holds rather than not at all.
                 _LOGGER.debug("Day-ahead history for earlier contracts: %s", err)
+        if periods_need_rlp(periods):
+            # The profile too, which the first tick after a switch fills in the
+            # background and could still be fetching. In the entry's own blend:
+            # an old card's index is reduced from the same workbook read, and
+            # asking for its blend here would move the live coordinator's.
+            await self._ensure_rlp_weights(self._rlp_blend)
         try:
             month_start = month_window_start(self.entry, today)
             rows = await price_previous_periods(

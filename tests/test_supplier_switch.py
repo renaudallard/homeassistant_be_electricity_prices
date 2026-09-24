@@ -618,6 +618,7 @@ async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spot
     coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
     fill = AsyncMock()
     coord._ensure_historical_spots = fill  # type: ignore[method-assign]
+    coord._ensure_rlp_weights = AsyncMock()  # type: ignore[method-assign]
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
     with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
@@ -625,6 +626,44 @@ async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spot
         fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
     else:
         fill.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("held", "loaded"),
+    [
+        # Mega's flex cards settle on the RLP-weighted month mean, and so do
+        # TotalEnergies' variables and Eneco Flex One: all registered variable.
+        (_held("mega", "mega_online_flex", api_key="OLDKEY"), True),
+        (_held("eneco", "power_flex_one", api_key="OLDKEY"), True),
+        # Keyless, the walk keeps the printed figure and weights nothing.
+        (_held("mega", "mega_online_flex"), False),
+        (_held("engie", "engie_easy_fixed", api_key="OLDKEY"), False),
+    ],
+)
+async def test_an_old_contract_settled_on_a_weighted_mean_loads_the_profile(
+    hass: HomeAssistant, freezer: Any, held: dict[str, Any], loaded: bool
+) -> None:
+    """Without the profile the walk falls back to the plain month mean, about
+    1 to 1,5 EUR a month off on an RLP-indexed card. Loaded before pricing,
+    in the entry's own blend: the old card's index is reduced from the same
+    workbook read, and moving the live coordinator's blend is not ours to do."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(previous_contracts=[{"until": "2026-06-15", "data": held}])
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    rlp = AsyncMock()
+    coord._ensure_rlp_weights = rlp  # type: ignore[method-assign]
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    assert contract_periods.periods_need_rlp(periods) is loaded
+    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
+        await coord._price_previous(periods, date(2026, 9, 24))
+    if loaded:
+        rlp.assert_awaited_once_with(coord._rlp_blend)
+    else:
+        rlp.assert_not_awaited()
 
 
 async def test_pricing_closes_each_window_on_the_day_before_the_switch(
