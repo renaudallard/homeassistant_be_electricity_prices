@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.flow_schemas import (
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
+    InjectionRates,
 )
 from tests import make_entry, make_snapshot, make_stub_extractor
 
@@ -664,6 +665,70 @@ async def test_an_old_contract_settled_on_a_weighted_mean_loads_the_profile(
         rlp.assert_awaited_once_with(coord._rlp_blend)
     else:
         rlp.assert_not_awaited()
+
+
+async def test_an_old_feed_in_settled_on_the_solar_profile_loads_it_before_pricing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """energie.be's feed-in settles on the month's Belpex_SPP. Without the
+    profile the walk credits the printed forecast (10,38 EUR for 300 kWh in
+    April where the realised month gives 5,71), while the backfill of the
+    same days loads it, so the sensor and the statistics disagreed. Loaded by
+    the daily pricing only: the compare dialog never downloads 52 MB."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = _held("energiebe", "energiebe_fixed", solar_regime="injection")
+    entry = make_entry(
+        solar_regime="injection",
+        previous_contracts=[{"until": "2026-05-01", "data": held}],
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord._historical_spots = {datetime(2026, 4, 1, 10, tzinfo=UTC): 0.02}
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    profile = {(4, 1, 12): 1.0}
+
+    async def _load() -> None:
+        coord._spp_weights = profile  # type: ignore[assignment]
+
+    spp = AsyncMock(side_effect=_load)
+    coord._ensure_spp_weights = spp  # type: ignore[method-assign]
+    card = make_snapshot(
+        energy=FixedRates(single=0.15),
+        injection=InjectionRates(
+            current=0.0346, factor=0.6, base=-0.008, spp_indexed=True
+        ),
+    )
+    seen: list[Any] = []
+
+    async def _cost(*args: Any, **kwargs: Any) -> float:
+        seen.append(kwargs["spp_weights"])
+        return 10.0
+
+    async def _card(
+        hass_: Any, session: Any, coordinator: Any, period: Any, overrides: Any = None
+    ) -> Any:
+        proxy = _QuoteEntry(data=dict(period.data), runtime_data=coordinator)
+        return proxy, make_stub_extractor(), card, False
+
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    with (
+        patch.object(contract_periods, "period_card", new=_card),
+        patch.object(contract_periods, "_compute_current_year_cost", new=_cost),
+    ):
+        await contract_periods.price_previous_periods(
+            hass,
+            None,  # type: ignore[arg-type]
+            coord,
+            periods,
+            month_start=date(2026, 9, 1),  # type: ignore[arg-type]
+        )
+        spp.assert_not_awaited()
+        assert seen == [None]
+        await coord._price_previous(periods, date(2026, 9, 24))
+    spp.assert_awaited_once()
+    assert seen[1:] == [profile]
 
 
 async def test_pricing_closes_each_window_on_the_day_before_the_switch(

@@ -494,7 +494,11 @@ a switch leaves with no spots at all. The profile gate asks the same of those
 cards, since whether one weights its mean on the load profile is printed on the
 card rather than kept in the registry, and `_price_previous` loads the profile
 in the entry's own blend before pricing, as it fills the spots, because the
-first tick after a switch fetches it in the background.
+first tick after a switch fetches it in the background. The solar profile is
+decided on the fetched card instead, since no registry flag says a feed-in
+settles on Belpex_SPP: the daily pricing (`load_profiles=True`) loads it for
+such a card on the injection regime, as the backfill does for the same days,
+and the compare dialog only reads what that run left behind.
 
 The comparison pages price the household's own year the same way
 (`with_previous_contracts`): the day's pricing while they quote the household

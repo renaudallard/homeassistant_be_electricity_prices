@@ -975,7 +975,8 @@ class _TickMixin:
         settle that contract without its energy for the whole day. The fill is
         behind the spot lock, so this waits for it rather than fetching twice.
         The load profile likewise, for an old contract settled on its weighted
-        mean or netted over it.
+        mean or netted over it, and the solar profile for one whose feed-in
+        settles on it (decided on the card, in ``price_previous_periods``).
         """
         if periods_need_spots(periods):
             # The entry's own key first. A household that left a dynamic
@@ -1005,7 +1006,12 @@ class _TickMixin:
         try:
             month_start = month_window_start(self.entry, today)
             rows = await price_previous_periods(
-                self.hass, self._session, self, periods, month_start=month_start
+                self.hass,
+                self._session,
+                self,
+                periods,
+                month_start=month_start,
+                load_profiles=True,
             )
         except Exception as err:  # noqa: BLE001 - the next tick asks again
             _LOGGER.warning(

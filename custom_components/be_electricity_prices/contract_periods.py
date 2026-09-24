@@ -75,7 +75,7 @@ from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import _snapshot_for_month
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
 from .snapshot_store import fetch_shared
-from .spot_stats import _energy_is_rlp_indexed
+from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled
 from .ytd_cost import _compute_current_year_cost
 
 _LOGGER = logging.getLogger(__name__)
@@ -463,6 +463,7 @@ async def price_previous_periods(
     *,
     month_start: date,
     overrides: Mapping[str, Any] | None = None,
+    load_profiles: bool = False,
 ) -> list[PricedPeriod]:
     """Price every earlier contract over its own days, on its own cards.
 
@@ -478,6 +479,12 @@ async def price_previous_periods(
     both sides on, a solar regime or a DSO tariff mode. Network access is
     expected, so neither the tick nor setup calls this: the coordinator runs it
     in the background once a day and keeps the result.
+
+    ``load_profiles`` is that daily run. A card whose feed-in settles on the
+    month's Belpex_SPP is only known once fetched, so the solar profile is
+    loaded here for it, as the backfill does for the same days; otherwise the
+    walk credits the card's printed forecast. The compare dialog leaves it
+    off, and reads the profile the daily run left behind.
     """
     out: list[PricedPeriod] = []
     for period in periods:
@@ -493,6 +500,13 @@ async def price_previous_periods(
             if card is not None:
                 regime = proxy.data.get(CONF_SOLAR_REGIME, "none")
                 allocating = regime == SOLAR_REGIME_COMPENSATION
+                # Only with spots to weight, as the tick asks for its own.
+                if (
+                    load_profiles
+                    and getattr(coordinator, "_historical_spots", None)
+                    and _spp_weighting_enabled(proxy, card)
+                ):
+                    await coordinator._ensure_spp_weights()
                 rlp = getattr(coordinator, "_rlp_weights", None) or None
                 inputs: dict[str, Any] = {
                     "historical_spots": getattr(coordinator, "_historical_spots", None),
