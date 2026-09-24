@@ -906,7 +906,9 @@ Re-runs without `clear` are idempotent (rows are upserted by
 `(statistic_id, hour)`). For dynamic suppliers the service reuses
 the coordinator's ENTSO-E historical-spot cache, so a year-wide
 backfill on a fresh install can take tens of seconds while the spots
-land. Response is a `{rows_written, sensors, range}` object you can
+land. The backfill lets Home Assistant carry on between each day of
+hours, so the rest of the system stays responsive while it runs.
+Response is a `{rows_written, sensors, range}` object you can
 inspect from Developer Tools → Services.
 
 States history (the per-entity timeline shown in the **History**

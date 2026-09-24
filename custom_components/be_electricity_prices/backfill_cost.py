@@ -38,6 +38,7 @@ from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
     _contract_segments,
+    _in_turns,
     _recorder_models,
     _stat_id,
 )
@@ -389,7 +390,7 @@ async def _accrue_cost(
     credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
     netting = _NetAllocation()
     allocated = ctx.rlp_weights is not None
-    for utc_hour in hours:
+    async for utc_hour in _in_turns(hours):
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)

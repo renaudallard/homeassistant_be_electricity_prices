@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -2288,3 +2289,43 @@ async def test_the_backfill_groups_the_day_ahead_once_per_pass(
     assert set(written.values()) == {len(hours)}
     assert len(written) == 6
     assert grouped == 2
+
+
+async def test_the_backfill_gives_the_event_loop_a_turn_every_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Both passes hand the loop a turn after each day of hours.
+
+    Nothing either pass awaits waits once the month cards are cached, so each
+    walked the whole window without letting anything else run: the rest of
+    Home Assistant stood still for as long as the backfill took, and an unload
+    could not cancel the setup-time backfill until it was over.
+    """
+    freezer.move_to("2026-06-20 12:00:00+02:00")
+    entry = make_entry(
+        title="Eneco Fix",
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    turns = 0
+    running = True
+
+    async def _other_work() -> None:
+        nonlocal turns
+        while running:
+            await asyncio.sleep(0)
+            turns += 1
+
+    with _month_indexed_backfill(hass, entry) as (coord, hours, spots):
+        other = asyncio.create_task(_other_work())
+        await asyncio.sleep(0)
+        before = turns
+        await bf._backfill_price_sensors(hass, entry, coord, hours, spots, {})
+        await bf._backfill_cost_sensor(hass, entry, coord, hours, spots, {})
+        during = turns - before
+        running = False
+        await other
+
+    # Ten days of hours in each pass, a turn between each two of them.
+    assert during >= 2 * 9

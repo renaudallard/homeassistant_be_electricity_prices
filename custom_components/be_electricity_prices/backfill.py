@@ -92,6 +92,7 @@ from .backfill_window import (
     _existing_stat_window,
     _floor_to_hour_utc,
     _hour_iter,
+    _in_turns,
     _normalize_window,
     _recorder_models,
     _stat_id,
@@ -267,7 +268,7 @@ async def _backfill_price_sensors(
         month_spp_cache = ctx.month_spp_cache
         month_mean_cache = ctx.month_mean_cache
         hourly_injection = ctx.hourly_injection
-        for utc_hour in seg_hours:
+        async for utc_hour in _in_turns(seg_hours):
             local = dt_util.as_local(utc_hour)
             snap_h = await _snap_for(date(local.year, local.month, 1))
             spot = _hour_spot(

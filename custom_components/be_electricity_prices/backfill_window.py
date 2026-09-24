@@ -61,7 +61,7 @@ from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from datetime import UTC, date, datetime, timedelta
@@ -70,6 +70,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from typing import Any
+import asyncio
 
 
 def _stat_id(hass: HomeAssistant, entry: ConfigEntry, key: str) -> str | None:
@@ -95,6 +96,26 @@ def _hour_iter(start: datetime, end: datetime) -> list[datetime]:
         out.append(cur)
         cur += timedelta(hours=1)
     return out
+
+
+# Hours priced between two turns of the event loop. A backfill walks up to a
+# year of them in one coroutine on Home Assistant's own loop, and a day at a
+# time keeps each turn to a few milliseconds.
+_HOURS_PER_TURN = 24
+
+
+async def _in_turns(hours: list[datetime]) -> AsyncIterator[datetime]:
+    """``hours`` one by one, handing the event loop a turn every day of them.
+
+    Neither pass awaits anything that actually waits once the month cards are
+    cached, so each held the loop from its first hour to its last: the whole
+    of Home Assistant stood still for as long as a backfill ran, and a task
+    cancelled on unload could not stop until the pass was over.
+    """
+    for index, hour in enumerate(hours):
+        if index and not index % _HOURS_PER_TURN:
+            await asyncio.sleep(0)
+        yield hour
 
 
 def _floor_to_hour_utc(when: datetime) -> datetime:

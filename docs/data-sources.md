@@ -486,6 +486,10 @@ hour is skipped, because `factor * spot + base` needs both terms
 (`backfill.py`). `KeyError` / `ValueError` (a missing DSO row for an archived
 month, or a non-static rate kind reaching the static path) skips just that hour
 rather than tearing the whole backfill down (`backfill.py`).
+Both passes walk their hours through `_in_turns` (`backfill_window.py`),
+which hands the event loop a turn after every 24 of them. Once the month cards
+are cached neither pass awaits anything that actually waits, and a year of
+hours would otherwise hold Home Assistant's loop for the whole run.
 
 The injection credit reuses `_historical_injection_rate` (`injection.py`,
 called at `backfill.py`), the same coordinator helper the live YTD path uses, so a
