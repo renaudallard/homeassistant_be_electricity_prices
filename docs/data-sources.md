@@ -821,24 +821,33 @@ integration reads it into `InjectionRates.current` directly.
 
 Circular 2024/C/77 lets an employer repay the electricity an employee puts
 into a company car at home at a flat rate per metered kWh, free of tax and
-social contributions, up to the rate the CREG publishes per region and per
-quarter; most car policies pay exactly that rate. No supplier card prints it
-and it is not part of the all-in price, so it is its own sensor,
-`ev_home_charging_rate`, read off the CSV the CREG publishes beside its page.
+social contributions, as long as the rate stays under a maximum the SPF
+Finances sets per region and per quarter from the CREG's monthly prices. It
+is a ceiling and an option, not the rate everyone is paid: the legal basis
+stays the employee's actual cost, an employer may pay less, and one that
+ignores where its staff live is held to the lowest of the three regions for
+the whole year. No supplier card prints it and it is not part of the all-in
+price, so it is its own sensor, `ev_home_charging_rate`, computed from the
+CSV the CREG publishes beside its page.
 
 ### What it fetches and how
 
 `creg.be/sites/default/files/assets/Prices/CREG_Tariff_EV.csv`: one row per
 month, `Year;Month;` then a monthly price and a three-month mean per region,
 Flanders, Brussels, Wallonia in that order, in cents with a decimal comma,
-behind a byte-order mark. The mean is filled on one row in three, the last
-month of the window it averages, and it is the rate of the quarter starting
-three months later: the `2026;7` row averages May to July and is the `Q4/2026`
-rate the page prints. `parse` reads the six figures by position, because the
-headers name the meter each series is computed on and that wording is more
-likely to change than the layout. A row that does not read as year and month,
-a mean landing on no quarter start, or a figure outside 5 to 100 c/kWh is
-skipped on its own.
+behind a byte-order mark. A quarter's rate is the mean of the monthly prices
+of the three months ending three months before it: May to July for
+`Q4/2026`. `parse` computes it from the monthly prices and rounds it to the
+hundredth of a cent, which is what each addendum to the circular shows the
+SPF doing, rather than reading the mean column: the CREG rounds that column
+from unrounded prices, and it once disagreed with the circular, 36,18
+against 36,17 for Wallonia in Q2/2025. Computed this way it matches all 21
+figures the circular and its addenda published from Q1/2025 to Q3/2026. The
+prices are read by position, because the headers name the meter each series
+is computed on and that wording is more likely to change than the layout. A
+row that does not read as year and month, or a price outside 5 to 100 c/kWh,
+is skipped on its own, and a quarter missing one of its three months is not
+priced.
 
 ### Caching and failure
 

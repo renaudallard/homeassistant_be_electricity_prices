@@ -53,16 +53,43 @@ def test_the_published_file_reads_as_the_page_prints_it() -> None:
     assert table[REGION_BRUSSELS][q4] == pytest.approx(0.3688)
     assert table[REGION_WALLONIA][q4] == pytest.approx(0.3779)
     assert table[REGION_WALLONIA][q3] == pytest.approx(0.3783)
-    # Q1/2025, the first quarter the tolerance covered, off the 2024;10 row.
+    # Q1/2025, the first quarter the tolerance covered: August to October 2024.
     assert table[REGION_WALLONIA][date(2025, 1, 1)] == pytest.approx(0.3256)
 
 
-def test_a_quarter_is_priced_off_the_row_three_months_before_it() -> None:
-    """The mean on the ``2026;7`` row is the mean of May, June and July.
+def test_every_quarter_is_the_figure_the_circular_prints() -> None:
+    """The SPF's own figures, from circular 2024/C/77 and its addenda.
+
+    They are what an employer is held to, and the SPF computes them from the
+    monthly prices. The CREG's mean column rounds differently and says 36,18
+    for Wallonia in Q2/2025, where the circular says 36,17.
+    """
+    circular = {
+        date(2025, 1, 1): (28.22, 32.94, 32.56),
+        date(2025, 4, 1): (31.94, 35.85, 36.17),
+        date(2025, 7, 1): (34.56, 37.87, 38.43),
+        date(2025, 10, 1): (30.70, 33.56, 34.57),
+        date(2026, 1, 1): (31.32, 34.26, 35.23),
+        date(2026, 4, 1): (31.91, 35.55, 36.36),
+        date(2026, 7, 1): (32.22, 37.19, 37.83),
+    }
+    table = creg_ev.parse(_csv())
+    for quarter, cents in circular.items():
+        for region, figure in zip(
+            (REGION_FLANDERS, REGION_BRUSSELS, REGION_WALLONIA), cents, strict=True
+        ):
+            assert table[region][quarter] == round(figure / 100, 6), (
+                region,
+                quarter,
+            )
+
+
+def test_a_quarter_is_priced_off_the_three_months_before_it() -> None:
+    """The rate of Q4/2026 is the mean of May, June and July.
 
     The three-month lead is what makes the rate known before its quarter
-    starts; read a row as the rate of its own month and every quarter would
-    be billed at the one before it.
+    starts; read a month as the rate of its own quarter and every quarter
+    would be billed at the one before it.
     """
     table = creg_ev.parse(_csv())
     # May, June and July 2026 for Wallonia, as the file prints them.
@@ -74,12 +101,16 @@ def test_a_quarter_is_priced_off_the_row_three_months_before_it() -> None:
         assert all(start.month in (1, 4, 7, 10) for start in rows)
 
 
-def test_a_row_without_a_mean_fixes_nothing() -> None:
-    """Two rows in three carry a monthly price and no mean; they are not rates."""
-    table = creg_ev.parse(_csv())
-    # 2026;6 and 2026;5 carry prices but no mean; 2026;7 does.
-    assert date(2026, 9, 1) not in table[REGION_WALLONIA]
-    assert date(2026, 8, 1) not in table[REGION_WALLONIA]
+def test_the_mean_column_is_not_read() -> None:
+    """Blanking the CREG's means changes nothing: the monthly prices decide."""
+    lines = _csv().splitlines()
+    blanked = []
+    for line in lines:
+        cells = line.split(";")
+        if len(cells) == 8 and cells[0].isdigit():
+            cells[3] = cells[5] = cells[7] = ""
+        blanked.append(";".join(cells))
+    assert creg_ev.parse("\r\n".join(blanked)) == creg_ev.parse(_csv())
 
 
 def test_a_header_a_blank_line_and_a_footnote_cost_nothing() -> None:
@@ -87,6 +118,8 @@ def test_a_header_a_blank_line_and_a_footnote_cost_nothing() -> None:
         "﻿Year;Month;a;b;c;d;e;f\r\n"
         "\r\n"
         "2026;7;33,65;32,25;38,22;36,88;39,1;37,79\r\n"
+        "2026;6;32,17;;36,86;;37,74;\r\n"
+        "2026;5;30,93;;35,57;;36,53;\r\n"
         "Source: CREG\r\n"
     )
     table = creg_ev.parse(text)
@@ -98,16 +131,22 @@ def test_a_header_a_blank_line_and_a_footnote_cost_nothing() -> None:
 
 
 def test_a_figure_in_the_wrong_unit_is_dropped_and_the_rest_kept() -> None:
-    """One misread cell must not empty the table: 377,9 is EUR/MWh, not cents."""
-    text = "2026;7;33,65;32,25;38,22;36,88;39,1;377,9\r\n"
+    """One misread cell must not empty the table: 377,4 is EUR/MWh, not cents."""
+    text = (
+        "2026;7;33,65;32,25;38,22;36,88;39,1;37,79\r\n"
+        "2026;6;32,17;;36,86;;377,4;\r\n"
+        "2026;5;30,93;;35,57;;36,53;\r\n"
+    )
     table = creg_ev.parse(text)
     assert REGION_WALLONIA not in table
     assert table[REGION_FLANDERS] == {date(2026, 10, 1): 0.3225}
 
 
-def test_a_mean_on_a_row_that_ends_no_window_is_refused() -> None:
-    """A file laid out otherwise is not read as if it were this one."""
-    text = "2026;8;33,65;32,25;38,22;36,88;39,1;37,79\r\n"
+def test_a_quarter_missing_a_month_is_not_priced() -> None:
+    """Two months of three are not the SPF's figure, whatever the mean says."""
+    text = (
+        "2026;7;33,65;32,25;38,22;36,88;39,1;37,79\r\n2026;5;30,93;;35,57;;36,53;\r\n"
+    )
     assert creg_ev.parse(text) == {}
 
 

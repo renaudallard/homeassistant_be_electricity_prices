@@ -107,7 +107,7 @@ pulls (all fields defined at `coordinator_data.py`).
 | Taxes component | `taxes_component` | - | MEASUREMENT | EUR/kWh | current slot `PriceBreakdown.taxes` |
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
-| EV home charging rate (CREG) | `ev_home_charging_rate` | - | MEASUREMENT | EUR/kWh | `ev_home_charging_rate_eur_per_kwh`, the CREG reimbursement rate for the entry's region this quarter (`creg_ev.py`); unavailable until the regulator's file has been read. Carries `quarter_start`, `region`, `source` and an unrecorded `history` of every published quarter |
+| EV home charging rate (CREG) | `ev_home_charging_rate` | - | MEASUREMENT | EUR/kWh | `ev_home_charging_rate_eur_per_kwh`, the SPF's flat-rate ceiling for reimbursing home charging of a company car, for the entry's region this quarter, computed from the CREG's monthly prices (`creg_ev.py`); unavailable until the regulator's file has been read. Carries `quarter_start`, `region`, `source` and an unrecorded `history` of every quarter the file covers |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
 | Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |

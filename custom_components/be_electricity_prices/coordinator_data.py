@@ -131,9 +131,10 @@ class CoordinatorData:
     # separate sensors lets users compute total monthly cost.
     yearly_fixed_fee_eur: float = 0.0
     energy_fund_eur_per_month: float = 0.0
-    # The CREG's home charging reimbursement rate for the entry's region and
-    # the running quarter, EUR/kWh (``creg_ev.py``). None until the file has
-    # been read, and for a quarter it does not cover.
+    # The SPF's flat-rate ceiling for reimbursing home charging of a company
+    # car, for the entry's region and the running quarter, EUR/kWh
+    # (``creg_ev.py``). None until the file has been read, and for a quarter
+    # it does not cover.
     ev_home_charging_rate_eur_per_kwh: float | None = None
     # Running annual bill in EUR, accumulated day by day from Jan 1.
     # Falls back to the (pro-rated) fees-only floor when no meter

@@ -23,20 +23,22 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""The CREG's published rate for reimbursing a company car charged at home.
+"""The CREG rate for reimbursing a company car charged at home.
 
 Circular 2024/C/77 lets an employer repay the electricity an employee puts
 into a company car at home at a flat rate per metered kWh, free of tax and
-social contributions, up to the rate the CREG publishes per region and per
-quarter. The CREG publishes the whole series as one CSV beside its page,
-and that file is what this reads.
+social contributions, up to a maximum the SPF Finances sets per region and
+per quarter from the CREG's monthly prices. The CREG publishes those prices
+as one CSV beside its page, and that file is what this reads.
 
 One row per month, oldest last: ``Year;Month;`` then a monthly price and a
 three-month mean per region, Flanders, Brussels, Wallonia in that order, in
-cents with a decimal comma. The mean is filled on one row in three, the last
-month of the window it averages, and it is the rate of the quarter starting
-three months later: the ``2026;7`` row averages May to July and is the rate
-the page prints under ``Q4/2026``.
+cents with a decimal comma. A quarter's rate is the mean of the monthly
+prices of the three months ending three months before it: May to July for
+``Q4/2026``. It is computed here from the monthly prices, as each addendum
+to the circular shows the SPF doing, rather than read off the mean column:
+the CREG rounds that column from unrounded prices, and it once disagreed
+with the circular, 36,18 against 36,17 for Wallonia in Q2/2025.
 
 Never raises: the fetch runs inside the coordinator tick, whose only handler
 is for ``UpdateFailed``. A failure logs and leaves the table as it was.
@@ -66,13 +68,13 @@ SOURCE_URL: Final = (
     "tarif-creg-pour-le-remboursement-de-la-recharge-a-domicile-des"
 )
 
-# The mean column of each region, by position. The headers name the meter
-# each series is computed on ("Digital meter" in Flanders, "Classic meter"
-# elsewhere), wording that is likely to change before the layout does.
-_MEAN_COLUMN: Final[dict[str, int]] = {
-    REGION_FLANDERS: 3,
-    REGION_BRUSSELS: 5,
-    REGION_WALLONIA: 7,
+# The monthly price column of each region, by position. The headers name the
+# meter each series is computed on ("Digital meter" in Flanders, "Classic
+# meter" elsewhere), wording that is likely to change before the layout does.
+_PRICE_COLUMN: Final[dict[str, int]] = {
+    REGION_FLANDERS: 2,
+    REGION_BRUSSELS: 4,
+    REGION_WALLONIA: 6,
 }
 # Catches a column read in the wrong unit (EUR, or per MWh), not a market move.
 _MIN_CENTS: Final = 5.0
@@ -188,26 +190,36 @@ def parse(text: str) -> dict[str, dict[date, float]]:
 
     Rows that do not read as ``Year;Month;...`` (the header, a footnote) and
     cells outside the plausible band are skipped one at a time, so a single
-    odd cell does not empty the table. Empty when nothing fixes a quarter.
+    odd cell costs only the quarter it feeds. A quarter missing one of its
+    three months is not priced. Empty when nothing fixes a quarter.
     """
-    table: dict[str, dict[date, float]] = {}
+    prices: dict[str, dict[date, float]] = {}
     for row in csv.reader(io.StringIO(text), delimiter=";"):
         if len(row) < 8:
             continue
         try:
-            year, month = int(row[0]), int(row[1])
-            last_month = date(year, month, 1)
+            month = date(int(row[0]), int(row[1]), 1)
         except ValueError:
             continue
-        quarter = _add_months(last_month, _LEAD_MONTHS)
-        if quarter != quarter_start(quarter):
-            # A mean that lands on no quarter start is another layout.
-            continue
-        for region, column in _MEAN_COLUMN.items():
+        for region, column in _PRICE_COLUMN.items():
             cents = _cents(row[column])
-            if cents is None:
+            if cents is not None:
+                prices.setdefault(region, {})[month] = cents
+    table: dict[str, dict[date, float]] = {}
+    for region, months in prices.items():
+        for last in months:
+            quarter = _add_months(last, _LEAD_MONTHS)
+            if quarter != quarter_start(quarter):
                 continue
-            table.setdefault(region, {})[quarter] = round(cents / 100.0, 6)
+            window = [_add_months(last, -back) for back in (2, 1, 0)]
+            if not all(month in months for month in window):
+                continue
+            # Rounded to the hundredth of a cent, as the circular prints it.
+            # The file prints each price to that precision, and a mean of
+            # three such figures never falls on a half, so the float rounding
+            # cannot tip it either way.
+            mean = round(sum(months[month] for month in window) / 3, 2)
+            table.setdefault(region, {})[quarter] = round(mean / 100.0, 6)
     return table
 
 
