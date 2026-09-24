@@ -138,7 +138,8 @@
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)",
           "daily_compare": "Täglich alle Anbieter vergleichen",
-          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen"
+          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen",
+          "ev_home_charging_rate": "CREG-Tarif für das Heimladen eines Firmenwagens veröffentlichen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -148,7 +149,8 @@
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
-          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet."
+          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet.",
+          "ev_home_charging_rate": "Standardmäßig aus. Für einen zu Hause geladenen Firmenwagen: veröffentlicht den Höchstbetrag pro kWh, den Ihr Arbeitgeber nach der Pauschalmethode steuerfrei erstatten darf, für Ihre Region und das laufende Quartal, wie ihn der FÖD Finanzen aus den Preisen der CREG festlegt. Ihr Arbeitgeber darf weniger zahlen oder Ihre tatsächlichen Kosten erstatten. Eingeschaltet liest die Integration einmal pro Quartal eine kleine Datei von creg.be."
         }
       },
       "custom_energy": {
@@ -443,7 +445,8 @@
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)",
           "daily_compare": "Täglich alle Anbieter vergleichen",
-          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen"
+          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen",
+          "ev_home_charging_rate": "CREG-Tarif für das Heimladen eines Firmenwagens veröffentlichen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -453,7 +456,8 @@
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
-          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet."
+          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet.",
+          "ev_home_charging_rate": "Standardmäßig aus. Für einen zu Hause geladenen Firmenwagen: veröffentlicht den Höchstbetrag pro kWh, den Ihr Arbeitgeber nach der Pauschalmethode steuerfrei erstatten darf, für Ihre Region und das laufende Quartal, wie ihn der FÖD Finanzen aus den Preisen der CREG festlegt. Ihr Arbeitgeber darf weniger zahlen oder Ihre tatsächlichen Kosten erstatten. Eingeschaltet liest die Integration einmal pro Quartal eine kleine Datei von creg.be."
         }
       },
       "custom_energy": {

@@ -50,6 +50,7 @@ from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
+    CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
@@ -61,6 +62,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     DEFAULT_DAILY_COMPARE,
+    DEFAULT_EV_HOME_CHARGING_RATE,
 )
 from .cohort import (
     _parse_iso_date,
@@ -603,7 +605,9 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
-    descriptions.extend(EV_RATE_SENSORS)
+    # Only for a household that asked for it: a company car charged at home.
+    if entry.data.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE):
+        descriptions.extend(EV_RATE_SENSORS)
     # Only where the two bands are a thing the household is billed on. On a
     # single-rate or dynamic meter these have no constant to report and would
     # sit unavailable for good, which is two dead entities per entry.

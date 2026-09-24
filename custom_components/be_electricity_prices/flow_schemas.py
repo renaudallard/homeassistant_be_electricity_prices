@@ -92,6 +92,7 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_CARD_ARCHIVE,
     CONF_DAILY_COMPARE,
+    CONF_EV_HOME_CHARGING_RATE,
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     METER_SENSOR_KEYS,
@@ -120,6 +121,7 @@ from .const import (
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CARD_ARCHIVE,
     DEFAULT_DAILY_COMPARE,
+    DEFAULT_EV_HOME_CHARGING_RATE,
     DEFAULT_INCLUDE_VAT,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
@@ -757,6 +759,17 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
         vol.Optional(
             CONF_CARD_ARCHIVE,
             default=bool(defaults.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE)),
+        )
+    ] = BooleanSelector()
+    # Off by default: only a household reimbursed for charging a company car
+    # at home has a use for the CREG rate, and ticking it is what lets the
+    # entry contact creg.be at all.
+    fields[
+        vol.Optional(
+            CONF_EV_HOME_CHARGING_RATE,
+            default=bool(
+                defaults.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE)
+            ),
         )
     ] = BooleanSelector()
     return vol.Schema(fields)

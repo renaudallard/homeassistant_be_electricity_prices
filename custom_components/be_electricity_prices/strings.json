@@ -138,7 +138,8 @@
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)",
           "daily_compare": "Compare every supplier daily",
-          "card_archive": "Read past cards from the project's archive"
+          "card_archive": "Read past cards from the project's archive",
+          "ev_home_charging_rate": "Publish the CREG home charging rate for a company car"
         },
         "data_description": {
           "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
@@ -148,7 +149,8 @@
           "consumption_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
           "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
           "daily_compare": "Off by default. Once a day, at a fixed time derived from this entry so installs do not all fetch at once, price every contract of your kind sold in your region and publish the yearly saving of the best one as a sensor. Most days this costs a handful of freshness checks, because tariff cards are republished about once a month.",
-          "card_archive": "On by default. For a past month your supplier no longer publishes a card for, fetch the card this project's own archive stored for it: one small file per month from GitHub, naming only the supplier, contract, region and month. Switch it off to keep the integration from contacting GitHub; those months are then priced on the current card."
+          "card_archive": "On by default. For a past month your supplier no longer publishes a card for, fetch the card this project's own archive stored for it: one small file per month from GitHub, naming only the supplier, contract, region and month. Switch it off to keep the integration from contacting GitHub; those months are then priced on the current card.",
+          "ev_home_charging_rate": "Off by default. For a company car charged at home: publish the most your employer may reimburse per kWh tax-free under the flat-rate method, for your region and the running quarter, as the SPF Finances sets it from the CREG's prices. Your employer may pay less, or reimburse your actual cost instead. Ticking it lets the integration read one small file from creg.be once a quarter."
         }
       },
       "custom_energy": {
@@ -443,7 +445,8 @@
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::consumption_kwh%]",
           "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::injection_kwh%]",
           "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data::daily_compare%]",
-          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data::card_archive%]"
+          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data::card_archive%]",
+          "ev_home_charging_rate": "[%key:component::be_electricity_prices::config::step::meters::data::ev_home_charging_rate%]"
         },
         "data_description": {
           "day_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::day_consumption_kwh%]",
@@ -453,7 +456,8 @@
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::consumption_kwh%]",
           "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::injection_kwh%]",
           "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data_description::daily_compare%]",
-          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data_description::card_archive%]"
+          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data_description::card_archive%]",
+          "ev_home_charging_rate": "[%key:component::be_electricity_prices::config::step::meters::data_description::ev_home_charging_rate%]"
         }
       },
       "custom_energy": {

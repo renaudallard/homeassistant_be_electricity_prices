@@ -707,7 +707,11 @@ the repository's card archive for a past month the supplier no longer serves,
 which is the only call the integration makes to GitHub;
 `_card_archive_may_hold` (`snapshot_months.py`) reads it, and a caller with
 no entry in hand keeps the default. Those months are then priced on the
-current card, as they were before the archive existed.
+current card, as they were before the archive existed. The last box,
+`CONF_EV_HOME_CHARGING_RATE` (default off), creates the
+`ev_home_charging_rate` sensor and is the only thing that lets the entry
+contact creg.be: the tick fetches the CREG's file only for an entry that
+ticked it (`creg_ev.py`).
  `async_run_daily_compare` (`compare_sweep_flow.py`) drives
 `run_full_sweep` (`compare_engine.py`) and parks the result on
 `coordinator.daily_compare`, which is all the delivery the sensor needs: it is

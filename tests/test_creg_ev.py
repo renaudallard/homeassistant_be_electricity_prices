@@ -26,6 +26,7 @@ from custom_components.be_electricity_prices.providers._rates import FixedRates
 from custom_components.be_electricity_prices.sensor import (
     EV_RATE_SENSORS,
     BePriceSensor,
+    async_setup_entry,
 )
 from tests import make_entry, make_snapshot
 
@@ -300,20 +301,24 @@ def test_the_sensor_reads_the_rate_and_is_unavailable_without_one() -> None:
     )
 
 
-async def test_the_tick_records_the_rate_it_fetched_with_its_quarter(
-    hass: HomeAssistant, freezer: Any
+@pytest.mark.parametrize("ticked", [True, False])
+async def test_the_tick_fetches_and_records_the_rate_only_when_asked(
+    hass: HomeAssistant, freezer: Any, ticked: bool
 ) -> None:
-    """The file lands during the tick, and the record that tick publishes
-    already carries its rate, beside the quarter that rate is for."""
+    """With the box ticked the file lands during the tick, and the record that
+    tick publishes already carries its rate, beside the quarter that rate is
+    for. Without it the entry never contacts creg.be."""
     freezer.move_to("2026-09-24 12:00:00+02:00")
-    entry = make_entry(region=REGION_WALLONIA)
+    entry = make_entry(region=REGION_WALLONIA, ev_home_charging_rate=ticked)
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
     coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    downloads: list[date] = []
 
-    async def _download(_session: object, _today: date) -> bool:
+    async def _download(_session: object, today: date) -> bool:
+        downloads.append(today)
         creg_ev._table.update(creg_ev.parse(_csv()))
         return True
 
@@ -335,8 +340,33 @@ async def test_the_tick_records_the_rate_it_fetched_with_its_quarter(
     ):
         data = await coord._update_body()
 
-    assert data.ev_home_charging_rate_eur_per_kwh == pytest.approx(0.3783)
-    assert data.ev_home_charging_quarter_start == date(2026, 7, 1)
+    if ticked:
+        assert downloads == [date(2026, 9, 24)]
+        assert data.ev_home_charging_rate_eur_per_kwh == pytest.approx(0.3783)
+        assert data.ev_home_charging_quarter_start == date(2026, 7, 1)
+    else:
+        assert downloads == []
+        assert data.ev_home_charging_rate_eur_per_kwh is None
+        assert data.ev_home_charging_quarter_start is None
+
+
+@pytest.mark.parametrize("ticked", [True, False])
+async def test_the_sensor_exists_only_when_the_box_is_ticked(ticked: bool) -> None:
+    """Some households have no company car; the box is off by default."""
+    entry = make_entry(ev_home_charging_rate=ticked)
+    entry.runtime_data = SimpleNamespace(
+        data=CoordinatorData(), entry=entry, daily_compare=None
+    )
+    added: list[Any] = []
+    await async_setup_entry(
+        None,  # type: ignore[arg-type]
+        entry,
+        lambda entities: added.extend(entities),  # type: ignore[arg-type]
+    )
+    keys = {e.entity_description.key for e in added if isinstance(e, BePriceSensor)}
+    assert ("ev_home_charging_rate" in keys) is ticked
+    # And nothing else moves with it.
+    assert "current_price" in keys
 
 
 def test_the_quarter_shown_is_the_quarter_of_the_rate_shown(freezer: Any) -> None:

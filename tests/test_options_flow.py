@@ -236,11 +236,16 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_meters_step_offers_the_card_archive_box_on_by_default(
-    hass: HomeAssistant,
+@pytest.mark.parametrize(
+    ("key", "default"),
+    [("card_archive", True), ("ev_home_charging_rate", False)],
+)
+async def test_meters_step_offers_its_boxes_with_their_defaults(
+    hass: HomeAssistant, key: str, default: bool
 ) -> None:
-    """The archive opt-out sits on the meters step, defaults to on for an
-    entry that never saw it, and a cleared box lands in the entry."""
+    """The archive opt-out and the CREG rate opt-in sit on the meters step,
+    default to on and off for an entry that never saw them, and a flipped box
+    lands in the entry."""
     entry = _make_entry()
     entry.add_to_hass(hass)
     result = await _enter_edit_branch(hass, entry)
@@ -266,13 +271,13 @@ async def test_meters_step_offers_the_card_archive_box_on_by_default(
     assert result["step_id"] == "meters"
     schema = result["data_schema"]
     assert schema is not None
-    box = next(k for k in schema.schema if k == "card_archive")
-    assert box.default() is True
+    box = next(k for k in schema.schema if k == key)
+    assert box.default() is default
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"card_archive": False}
+        result["flow_id"], {key: not default}
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
-    assert entry.data["card_archive"] is False
+    assert entry.data[key] is (not default)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

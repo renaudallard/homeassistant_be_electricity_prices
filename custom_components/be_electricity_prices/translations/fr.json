@@ -138,7 +138,8 @@
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)",
           "daily_compare": "Comparer tous les fournisseurs chaque jour",
-          "card_archive": "Lire les anciennes cartes dans l'archive du projet"
+          "card_archive": "Lire les anciennes cartes dans l'archive du projet",
+          "ev_home_charging_rate": "Publier le tarif CREG de recharge à domicile d'une voiture de société"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -148,7 +149,8 @@
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
-          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle."
+          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle.",
+          "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre."
         }
       },
       "custom_energy": {
@@ -443,7 +445,8 @@
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)",
           "daily_compare": "Comparer tous les fournisseurs chaque jour",
-          "card_archive": "Lire les anciennes cartes dans l'archive du projet"
+          "card_archive": "Lire les anciennes cartes dans l'archive du projet",
+          "ev_home_charging_rate": "Publier le tarif CREG de recharge à domicile d'une voiture de société"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -453,7 +456,8 @@
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
-          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle."
+          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle.",
+          "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre."
         }
       },
       "custom_energy": {

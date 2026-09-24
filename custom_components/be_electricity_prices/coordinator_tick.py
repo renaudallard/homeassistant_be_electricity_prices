@@ -39,10 +39,12 @@ from .const import (
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    DEFAULT_EV_HOME_CHARGING_RATE,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
@@ -233,11 +235,20 @@ class _TickMixin:
             await self._maybe_refresh_snapshot()
         self._reresolve_snapshot()
         await self._track_monthly_peak()
-        # Independent of the card: a failure only leaves its own sensor as is.
-        # One date for the fetch, the rate and its quarter, so the record can
-        # never name one quarter and carry another's rate.
-        ev_today = dt_util.now().date()
-        await ensure_ev_rates(self._session, ev_today)
+        # Only for an entry that ticked the box, which is the one thing that
+        # lets it contact creg.be. Independent of the card: a failure only
+        # leaves its own sensor as is. One date for the fetch, the rate and its
+        # quarter, so the record can never name one quarter and carry another's
+        # rate.
+        ev_rate: float | None = None
+        ev_quarter: date | None = None
+        if self.entry.data.get(
+            CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE
+        ):
+            ev_today = dt_util.now().date()
+            await ensure_ev_rates(self._session, ev_today)
+            ev_rate = ev_rate_for(self.entry.data.get(CONF_REGION, ""), ev_today)
+            ev_quarter = ev_quarter_start(ev_today)
 
         if self._snapshot is None:
             raise UpdateFailed(
@@ -757,8 +768,8 @@ class _TickMixin:
                 self.entry.data.get(CONF_METER, METER_MONO),
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
-            ev_home_charging_rate_eur_per_kwh=ev_rate_for(region, ev_today),
-            ev_home_charging_quarter_start=ev_quarter_start(ev_today),
+            ev_home_charging_rate_eur_per_kwh=ev_rate,
+            ev_home_charging_quarter_start=ev_quarter,
             current_year_cost_eur=current_year_cost,
             current_month_cost_eur=month_cost,
             current_year_cost_reset=ytd_window_reset(self.entry, window_now),

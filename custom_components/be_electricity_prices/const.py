@@ -395,6 +395,13 @@ DEFAULT_DAILY_COMPARE: Final = False
 CONF_CARD_ARCHIVE: Final = "card_archive"
 DEFAULT_CARD_ARCHIVE: Final = True
 
+# Whether this entry publishes the flat-rate ceiling for reimbursing a company
+# car charged at home (creg_ev.py). Off by default: only a household with a
+# company car has a use for it, and ticking it is what lets the integration
+# contact creg.be at all.
+CONF_EV_HOME_CHARGING_RATE: Final = "ev_home_charging_rate"
+DEFAULT_EV_HOME_CHARGING_RATE: Final = False
+
 # The scheduled sweep runs once a day at a minute derived from the entry id,
 # so installs land all over the clock instead of stampeding every supplier at
 # midnight. Derived rather than random: an install that runs at a different

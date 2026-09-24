@@ -828,7 +828,10 @@ stays the employee's actual cost, an employer may pay less, and one that
 ignores where its staff live is held to the lowest of the three regions for
 the whole year. No supplier card prints it and it is not part of the all-in
 price, so it is its own sensor, `ev_home_charging_rate`, computed from the
-CSV the CREG publishes beside its page.
+CSV the CREG publishes beside its page. Some households have no company car,
+so the sensor is opt-in: a box on the meters step
+(`CONF_EV_HOME_CHARGING_RATE`, default off) creates it, and an entry that
+never ticked it never contacts creg.be.
 
 ### What it fetches and how
 
@@ -851,13 +854,13 @@ priced.
 
 ### Caching and failure
 
-`ensure_rates` runs in the coordinator tick after the snapshot and fetches the
-file once per quarter, under one module lock so the entries that tick together
-cost one download. `rate_for` and `history` read the table synchronously, for
-the tick's record and the sensor's attributes. A failure logs, records a
-six-hour backoff and keeps the previous table, so a quarter already fetched
-keeps answering while the CREG is down; a first fetch that fails leaves the
-sensor unavailable. A file that answers but does not price the running quarter
-yet counts as a failure too: kept for the quarter, it would leave the sensor
-unavailable for three months after the CREG added the row. Nothing here
-raises, for the reason `brugel.py` gives.
+`ensure_rates` runs in the tick of an entry with the box ticked, after the
+snapshot, and fetches the file once per quarter, under one module lock so the
+entries that tick together cost one download. `rate_for` and `history` read
+the table synchronously, for the tick's record and the sensor's attributes. A
+failure logs, records a six-hour backoff and keeps the previous table, so a
+quarter already fetched keeps answering while the CREG is down; a first fetch
+that fails leaves the sensor unavailable. A file that answers but does not
+price the running quarter yet counts as a failure too: kept for the quarter,
+it would leave the sensor unavailable for three months after the CREG added
+the row. Nothing here raises, for the reason `brugel.py` gives.
