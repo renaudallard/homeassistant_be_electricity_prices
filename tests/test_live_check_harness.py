@@ -1675,6 +1675,7 @@ def _drive_run(
         "_check_vreg_ceiling_window": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
+        "_check_network_consensus": _sync_no_op,
         "_check_card_freshness": _async_no_op,
         "_check_spot_fallback": _async_no_op,
     }
@@ -1780,6 +1781,7 @@ async def _async_crash(*_args: Any) -> None:
             "_federal: VREG ceiling consensus check crashed",
         ),
         ("_check_federal_tax_consensus", _crash, "_federal: consensus check crashed"),
+        ("_check_network_consensus", _crash, "_network: consensus check crashed"),
         ("_check_card_freshness", _async_crash, "_freshness: probe crashed"),
         ("_check_spot_fallback", _async_crash, "spot/fallback: check crashed"),
     ],
@@ -2608,6 +2610,169 @@ def test_the_federal_check_stays_quiet_without_a_consensus(tmp_path: Path) -> No
     assert lc.CHECKS == []
     lc._check_federal_tax_consensus(None)
     assert lc.CHECKS == []
+
+
+def _network_archive(
+    root: Path, rows: dict[tuple[str, str, str], tuple[float, dict[str, float]]]
+) -> Path:
+    """A card archive holding, per row, its VAT rate and one DSO's figures."""
+    for (supplier, contract, region), (vat, figures) in rows.items():
+        path = root / "cards" / supplier / contract / region / "2026-09.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        dso = "ores" if region == "wallonia" else "fluvius_antwerpen"
+        path.write_text(
+            json.dumps({"taxes": {"vat_rate": vat}, "dsos": {dso: figures}}),
+            encoding="utf-8",
+        )
+    return root
+
+
+def test_a_card_printing_another_network_rate_than_the_fleet_is_caught(
+    tmp_path: Path,
+) -> None:
+    """Bolt's professional card printed the Pic rate in the Medium column for
+    four Walloon DSOs, so every Medium hour of an Impact entry was billed at
+    Pic, and nothing compared a card's network rows with anyone else's. The
+    rates are set per DSO by the regulator, so the other cards say what the
+    figure is. A professional card prints it ex VAT and a residential one with
+    6%, and those agree once put on one basis."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+            ("c", "c_pro", "wallonia"): (0.21, {"distribution_medium": 0.1022}),
+            ("odd", "odd_pro", "wallonia"): (0.21, {"distribution_medium": 0.1518}),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    (check,) = lc.CHECKS
+    assert not check.ok and not check.expected
+    assert check.kind == "network"
+    assert check.label == "odd/ores distribution_medium 0.1518 disagrees for 2026-09"
+    assert "0.102170 ex VAT on 3 suppliers' cards" in check.detail
+    assert lc._catalog_gates_ci(list(lc.CHECKS)) is True
+
+
+def test_a_known_network_figure_reports_without_filing_until_it_expires(
+    tmp_path: Path,
+) -> None:
+    """The cards already looked at are billed as printed, and filing about them
+    every day is noise. They report in their own table until the January
+    tariffs, and a supplier that moves the figure by a digit files again."""
+    rows: dict[tuple[str, str, str], tuple[float, dict[str, float]]] = {
+        ("a", "a_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+        ("b", "b_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+        ("bolt", "bolt_pro_fix", "wallonia"): (
+            0.21,
+            {"distribution_medium": 0.1518},
+        ),
+    }
+    archive = _network_archive(tmp_path, rows)
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    (check,) = lc.CHECKS
+    assert not check.ok and check.expected
+    assert "billed as printed" in check.detail
+    report = lc._render_report(list(lc.CHECKS))
+    assert "## Failures" not in report
+    assert "## Known network figures (expected, not a regression)" in report
+    assert lc._catalog_gates_ci(list(lc.CHECKS)) is False
+
+    lc.CHECKS.clear()
+    lc._check_network_consensus(archive, date(2027, 1, 1))
+    (check,) = lc.CHECKS
+    assert not check.expected
+
+    rows[("bolt", "bolt_pro_fix", "wallonia")] = (
+        0.21,
+        {"distribution_medium": 0.1519},
+    )
+    moved = _network_archive(tmp_path / "moved", rows)
+    lc.CHECKS.clear()
+    lc._check_network_consensus(moved, date(2026, 9, 25))
+    (check,) = lc.CHECKS
+    assert not check.expected
+
+
+def test_every_network_allowance_expires_with_the_tariff_year() -> None:
+    """An allowance that cannot expire is a mute button. The DSO tariffs are
+    set per calendar year, so none may outlive the next January."""
+    assert lc._KNOWN_NETWORK_FIGURES
+    for key, (expires, why) in lc._KNOWN_NETWORK_FIGURES.items():
+        assert expires <= date(2027, 1, 1), key
+        assert "billed as printed" in why, key
+
+
+def test_a_network_figure_that_differs_by_structure_does_not_vote(
+    tmp_path: Path,
+) -> None:
+    """Luminus's dynamic card bills the quarter-hourly metering fee its own
+    footnote prints, which is right and differs from every other card. It is
+    left out of the vote rather than allowed, since a structure does not
+    expire the way a stale figure does."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.0, {"data_management_per_year": 18.92}),
+            ("b", "b_fixed", "flanders"): (0.0, {"data_management_per_year": 18.92}),
+            ("luminus", "luminus_dynamic", "flanders"): (
+                0.0,
+                {"data_management_per_year": 18.56},
+            ),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    assert lc.CHECKS == []
+
+
+def test_the_network_check_stays_quiet_without_a_consensus(tmp_path: Path) -> None:
+    """Two suppliers disagreeing is not a majority, and a fork's run has no
+    archive at all."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_single": 0.1198}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_single": 0.1150}),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    assert lc.CHECKS == []
+    lc._check_network_consensus(None)
+    assert lc.CHECKS == []
+
+
+def test_a_network_disagreement_files_apart_from_the_tax_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A tax block is billed from the law and a network figure as printed, so
+    the two issues say different things and each gets its own report and
+    fingerprint."""
+    import yaml  # type: ignore[import-untyped]
+
+    def _consensus(*_args: Any) -> None:
+        lc._record(
+            "odd/ores distribution_medium 0.1518 disagrees for 2026-09",
+            False,
+            "wallonia ores: distribution_medium 0.1518",
+            kind="network",
+        )
+
+    rc = _drive_run(monkeypatch, tmp_path, _check_network_consensus=_consensus)
+    assert rc & 2 and not rc & 1
+    assert "## Failures" in (tmp_path / "network_report.md").read_text()
+    assert "## Failures" not in (tmp_path / "tax_report.md").read_text()
+    assert (tmp_path / "network_failures.txt").read_text() == (
+        "odd/ores distribution_medium 0.1518 disagrees for 2026-09\n"
+    )
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    steps = {s.get("name", ""): s for s in workflow["jobs"]["check"]["steps"]}
+    run = steps["Open or update network-figure issue"]["run"]
+    assert "--fingerprint network_failures.txt" in run
+    assert "--label 'live-check-network'" in run
 
 
 # ---- the workflow's retry loop -----------------------------------------------

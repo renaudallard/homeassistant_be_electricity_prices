@@ -69,6 +69,8 @@ NOT_OURS = frozenset(
         "drift_fingerprint.txt",
         "drift_report.md",
         "extractor_failures.txt",
+        "network_failures.txt",
+        "network_report.md",
         "parser.txt",
         "pdfs.json",
         "pdfs.md",

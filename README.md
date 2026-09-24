@@ -274,6 +274,12 @@ The daily live check compares every supplier's federal block against the rest
 and reports a card that drifts, which is how a supplier that corrects itself
 gets noticed: Bolt and Trevion both did between August and September.
 
+The network rows are compared the same way, per DSO: distribution, transport,
+metering, capacity and prosumer figures are set by the regulators, so a card
+printing another figure than the rest is reported. Unlike the federal levies,
+network figures are billed as each card prints them, so the report names the
+cards whose households pay a figure the others do not.
+
 ## Sensors
 
 All sensors share one device per config entry.

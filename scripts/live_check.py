@@ -224,6 +224,10 @@ class Check:
     #                own file and files its own issue: a run with no new
     #                product at all was opening one titled "new supplier
     #                products detected".
+    # "network"   -> a supplier's regulated network figure disagrees with
+    #                the month's consensus for its DSO. Same bit as "tax",
+    #                own report and own issue, because it is billed as
+    #                printed where a tax block is billed from the law.
     kind: str = "extractor"
     # A failure that is real but KNOWN and unactionable: the supplier
     # publishes its card as page images, so no parser change can read it.
@@ -588,6 +592,10 @@ _WITHDRAWN_MARKER = "SupplierWithdrawn"
 # prints it, the integration does not bill it, and nothing here can make the
 # supplier reprint. Reported in its own table, never filed.
 _ALLOWED_TAX_MARKER = "KnownTaxBlock"
+# A regulated network figure a card prints that the fleet contradicts,
+# already looked at. Unlike a tax block it IS billed as printed, so its table
+# says so.
+_ALLOWED_NETWORK_MARKER = "KnownNetworkFigure"
 
 # (supplier, excise, contribution) -> (expires, why). Keyed on the exact pair
 # the card prints, so a supplier that changes either figure by a digit stops
@@ -673,7 +681,12 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
             kind=kind,
             expected=not ok
             and detail.startswith(
-                (_UNREADABLE_MARKER, _WITHDRAWN_MARKER, _ALLOWED_TAX_MARKER)
+                (
+                    _UNREADABLE_MARKER,
+                    _WITHDRAWN_MARKER,
+                    _ALLOWED_TAX_MARKER,
+                    _ALLOWED_NETWORK_MARKER,
+                )
             ),
         )
     )
@@ -2551,6 +2564,250 @@ def _check_federal_tax_consensus(
             )
 
 
+# The regulated network figures a card prints, compared across suppliers.
+# Each is set by the distribution system operator and the regional regulator,
+# so for one month and one DSO every card carries the same figure once put on
+# one VAT basis. Excluded: the VREG ceiling, which has its own check above,
+# and the Brussels OSP table, which is a dict of tiers.
+_NETWORK_FIELDS: tuple[str, ...] = (
+    "distribution_single",
+    "distribution_peak",
+    "distribution_offpeak",
+    "distribution_exclusive_night",
+    "distribution_pic",
+    "distribution_medium",
+    "distribution_eco",
+    "transport",
+    "data_management_per_year",
+    "capacity_eur_per_kw_year",
+    "prosumer_eur_per_kva_year",
+    "brussels_power_term_above_13kva",
+)
+
+# Two figures within this share of each other are the same figure: a
+# residential card prints four decimals including 6% VAT and a professional
+# one the regulator's ex-VAT figure, and the round trip moves the last digit.
+# The smallest real disagreement in the September 2026 archive is 2%.
+_NETWORK_TOLERANCE = 0.01
+
+# Figures that differ from the fleet by the card's STRUCTURE rather than by a
+# stale or mistyped number, keyed (contract or supplier, region, field). They
+# do not vote and are not reported, like _NO_STANDING_CHARGE: a structure does
+# not drift the way a price does. Each one is documented where it is billed.
+_NETWORK_STRUCTURAL: dict[tuple[str, str, str], str] = {
+    # The card's own footnote: 18,56 for quarter-hourly metering, which a
+    # dynamic contract requires; the table's 18,92 is the standard figure.
+    ("luminus_dynamic", "flanders", "data_management_per_year"): "SMR3 metering fee",
+    # Bolt prints the metering term alone; resolve_brussels_power_term adds
+    # the Brugel power term the other cards fold into this figure.
+    ("bolt", "brussels", "data_management_per_year"): "power term added from Brugel",
+    # The trihoraire card prints only the three Impact bands, and tou_impact
+    # forces the Impact mode, so the single rate it stores (the Pic figure) is
+    # never billed.
+    ("cociter_variable_impact", "wallonia", "distribution_single"): "never billed",
+}
+
+# A card figure that disagrees with the fleet, already looked at: the
+# integration bills what each card prints, so an entry on these cards pays
+# the card's figure. Keyed on the exact figure stored, so a supplier that
+# changes it by a digit files again. Every allowance expires on 2027-01-01,
+# when the DSOs publish next year's tariffs and every card is reprinted.
+_KNOWN_NETWORK_FIGURES: dict[tuple[str, str, str, float], tuple[date, str]] = {}
+
+
+def _allow_network(
+    supplier: str, dso: str, figures: dict[str, float], why: str
+) -> None:
+    for field, value in figures.items():
+        _KNOWN_NETWORK_FIGURES[(supplier, dso, field, round(value, 6))] = (
+            date(2027, 1, 1),
+            why,
+        )
+
+
+_BOLT_PRO_STALE = (
+    "the professional card prints January's ORES and AIEG rates, which every "
+    "other card replaced in February; billed as printed"
+)
+_BOLT_PRO_MEDIUM = (
+    "the professional card prints the Pic rate in the Medium column; billed as printed"
+)
+_allow_network(
+    "bolt",
+    "ores",
+    {
+        "distribution_single": 0.1085,
+        "distribution_peak": 0.1207,
+        "distribution_offpeak": 0.0652,
+        "distribution_exclusive_night": 0.0652,
+        "distribution_pic": 0.1518,
+        "distribution_eco": 0.0435,
+    },
+    _BOLT_PRO_STALE,
+)
+_allow_network(
+    "bolt",
+    "ores",
+    {"distribution_medium": 0.1518},
+    f"{_BOLT_PRO_STALE}, and the Pic rate in the Medium column",
+)
+_allow_network(
+    "bolt",
+    "aieg",
+    {
+        "distribution_single": 0.0998,
+        "distribution_peak": 0.111,
+        "distribution_offpeak": 0.0602,
+        "distribution_exclusive_night": 0.0602,
+        "distribution_pic": 0.1395,
+        "distribution_medium": 0.0899,
+        "distribution_eco": 0.0403,
+    },
+    _BOLT_PRO_STALE,
+)
+_allow_network("bolt", "aiesh", {"distribution_medium": 0.1799}, _BOLT_PRO_MEDIUM)
+_allow_network("bolt", "resa", {"distribution_medium": 0.1426}, _BOLT_PRO_MEDIUM)
+_allow_network("bolt", "rew", {"distribution_medium": 0.1615}, _BOLT_PRO_MEDIUM)
+_allow_network(
+    "bolt",
+    "ores",
+    {"distribution_medium": 0.1038},
+    "the residential card's ORES Medium rate is 4% under every other card's; "
+    "billed as printed",
+)
+_allow_network(
+    "ebem",
+    "fluvius_antwerpen",
+    {"distribution_single": 0.0524},
+    "the dynamic card prints 5,24 where EBEM's own other cards print 5,35; "
+    "billed as printed",
+)
+_allow_network(
+    "mega",
+    "fluvius_halle_vilvoorde",
+    {"prosumer_eur_per_kva_year": 58.43},
+    "prints 58,43 where every other card prints 62,66; billed as printed",
+)
+_allow_network(
+    "mega",
+    "fluvius_halle_vilvoorde",
+    {"prosumer_eur_per_kva_year": 55.12},
+    "the professional card prints 55,12 ex VAT where the others print 59,11; "
+    "billed as printed",
+)
+
+
+def _network_allowance(
+    supplier: str, dso: str, field: str, printed: float, today: date
+) -> str | None:
+    """The reason this exact network figure is allowed today, or ``None``."""
+    known = _KNOWN_NETWORK_FIGURES.get((supplier, dso, field, round(printed, 6)))
+    if known is None or today >= known[0]:
+        return None
+    return known[1]
+
+
+def _check_network_consensus(archive: Path | None, today: date | None = None) -> None:
+    """Assert every supplier prints the same regulated network figures.
+
+    Distribution, transport, metering, capacity and prosumer tariffs are set
+    per DSO by the regulators, so for one month and one DSO every card carries
+    the same figures. The integration bills each card as printed, so a card
+    carrying a stale or mistyped row bills its households that figure: Bolt's
+    professional card printed the Pic rate in the Medium column for four
+    Walloon DSOs, which billed every Medium hour of an Impact entry at Pic,
+    and nothing reported it.
+
+    Read from the card archive like the federal check, and on the month most
+    cards are filed under, for the same reasons. Each row is put on the
+    ex-VAT basis first: a residential card stores the figure including 6% VAT
+    and a professional one the regulator's ex-VAT figure. Figures within
+    ``_NETWORK_TOLERANCE`` of each other are one figure, the supplier is the
+    voter, and a tie is not reported.
+    """
+    if archive is None:
+        return
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
+    if not rows:
+        return
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.stem] = counts.get(row.stem, 0) + 1
+    month = max(counts, key=lambda stem: (counts[stem], stem))
+    # (region, dso, field) -> {(supplier, printed): [ex-VAT value, contracts]}
+    seen: dict[tuple[str, str, str], dict[tuple[str, float], list[Any]]] = {}
+    for row in rows:
+        if row.stem != month:
+            continue
+        supplier, contract, region = row.parts[-4:-1]
+        try:
+            snap = json.loads(row.read_text(encoding="utf-8"))
+            vat = float(snap["taxes"].get("vat_rate") or 0.0)
+            dsos = snap.get("dsos") or {}
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        basis = 1.06 if vat == 0.0 else 1.0
+        for dso, overlay in dsos.items():
+            if not isinstance(overlay, dict):
+                continue
+            for field in _NETWORK_FIELDS:
+                value = overlay.get(field)
+                # Zero is a published value only where a whole region folds
+                # the term away (Flemish transport), and it agrees with itself.
+                if not isinstance(value, (int, float)) or not value:
+                    continue
+                if (contract, region, field) in _NETWORK_STRUCTURAL or (
+                    supplier,
+                    region,
+                    field,
+                ) in _NETWORK_STRUCTURAL:
+                    continue
+                printed = round(float(value), 6)
+                entry = seen.setdefault((region, dso, field), {}).setdefault(
+                    (supplier, printed), [printed / basis, 0]
+                )
+                entry[1] += 1
+    for (region, dso, field), figures in sorted(seen.items()):
+        clusters: list[list[tuple[str, float]]] = []
+        for key in sorted(figures, key=lambda k: figures[k][0]):
+            for cluster in clusters:
+                anchor = figures[cluster[0]][0]
+                if abs(figures[key][0] / anchor - 1.0) < _NETWORK_TOLERANCE:
+                    cluster.append(key)
+                    break
+            else:
+                clusters.append([key])
+        if len(clusters) < 2:
+            continue
+
+        def voters(cluster: list[tuple[str, float]]) -> set[str]:
+            return {supplier for supplier, _ in cluster}
+
+        ranked = sorted(clusters, key=lambda c: (-len(voters(c)), figures[c[0]][0]))
+        top, runner_up = ranked[0], ranked[1]
+        if len(voters(top)) == len(voters(runner_up)):
+            continue
+        agreed = figures[top[0]][0]
+        for cluster in ranked[1:]:
+            for supplier, printed in cluster:
+                detail = (
+                    f"{region} {dso}: {field} {printed} "
+                    f"({figures[(supplier, printed)][0]:.6f} ex VAT) on "
+                    f"{figures[(supplier, printed)][1]} card(s) against "
+                    f"{agreed:.6f} ex VAT on {len(voters(top))} suppliers' cards"
+                )
+                allowed = _network_allowance(supplier, dso, field, printed, today)
+                if allowed is not None:
+                    detail = f"{_ALLOWED_NETWORK_MARKER}: {detail}; {allowed}"
+                _record(
+                    f"{supplier}/{dso} {field} {printed} disagrees for {month}",
+                    False,
+                    detail,
+                    kind="network",
+                )
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
@@ -4180,6 +4437,9 @@ def _render_report(
     unreadable = [c for c in expected if c.detail.startswith(_UNREADABLE_MARKER)]
     withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
     allowed = [c for c in expected if c.detail.startswith(_ALLOWED_TAX_MARKER)]
+    known_network = [
+        c for c in expected if c.detail.startswith(_ALLOWED_NETWORK_MARKER)
+    ]
     headline = f"# Live extractor check: {pass_count} pass, {len(regressions)} fail"
     if unreadable:
         # Say it in the headline. A run that reads "0 fail" while the table
@@ -4189,6 +4449,8 @@ def _render_report(
         headline += f", {len(withdrawn)} withdrawn (expected)"
     if allowed:
         headline += f", {len(allowed)} known tax blocks (expected)"
+    if known_network:
+        headline += f", {len(known_network)} known network figures (expected)"
     rows.append(headline)
     rows.append("")
     if regressions:
@@ -4218,6 +4480,25 @@ def _render_report(
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
         for c in allowed:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
+        rows.append("")
+    if known_network:
+        rows.append("## Known network figures (expected, not a regression)")
+        rows.append("")
+        rows.append(
+            "These cards print a regulated network figure that disagrees with "
+            "the other suppliers' cards for the same DSO, and each has been "
+            "looked at. The integration bills what each card prints, so an "
+            "entry on one of these cards pays the figure shown. Each allowance "
+            "is keyed on the exact figure, so a supplier that changes it by a "
+            "digit files again, and each expires on 2027-01-01, when the DSOs "
+            "publish next year's tariffs and every card is reprinted."
+        )
+        rows.append("")
+        rows.append("| Check | Detail |")
+        rows.append("| --- | --- |")
+        for c in known_network:
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
@@ -4393,6 +4674,14 @@ async def _run(texts: Path | None = None) -> int:
                     f"{type(err).__name__}: {err}",
                 )
             try:
+                _check_network_consensus(texts)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_network: consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
                 await _check_card_freshness(session, modules)
             except Exception as err:  # noqa: BLE001
                 _record(
@@ -4416,6 +4705,7 @@ async def _run(texts: Path | None = None) -> int:
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
     tax_checks = [c for c in CHECKS if c.kind == "tax"]
+    network_checks = [c for c in CHECKS if c.kind == "network"]
     # Stdout = extractor report (existing workflow consumes this).
     # Metrics piggyback on the extractor report so silent slowdowns and
     # PDF-size jumps surface daily without a separate pipeline.
@@ -4442,6 +4732,9 @@ async def _run(texts: Path | None = None) -> int:
     # month's other cards do not, which is neither a new product nor
     # something a release here fixes.
     (ROOT / "tax_report.md").write_text(_render_report(tax_checks))
+    # And network figures apart from both: they are billed as printed, so the
+    # issue says a household pays the figure, which a tax row cannot say.
+    (ROOT / "network_report.md").write_text(_render_report(network_checks))
     # What the workflow fingerprints those two issues on: the failing labels.
     # Each report also carries its pass count and every passing row, so a
     # fingerprint over it changed with any unrelated row and the same open
@@ -4450,6 +4743,9 @@ async def _run(texts: Path | None = None) -> int:
         ROOT / "catalog_failures.txt", _extractor_regressions(catalog_checks)
     )
     _write_failure_labels(ROOT / "tax_failures.txt", _extractor_regressions(tax_checks))
+    _write_failure_labels(
+        ROOT / "network_failures.txt", _extractor_regressions(network_checks)
+    )
     failed_suppliers = _failed_suppliers(extractor_checks)
     drift_warnings = _drift_warnings(METRICS, failed_suppliers)
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
@@ -4466,12 +4762,13 @@ async def _run(texts: Path | None = None) -> int:
     extractor_failed = bool(regressions)
     # One bit for both: neither fails a pull request, and the workflow tells
     # them apart by which report carries failures.
-    catalog_failed = _catalog_gates_ci([*catalog_checks, *tax_checks])
+    catalog_failed = _catalog_gates_ci([*catalog_checks, *tax_checks, *network_checks])
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
     #   bit 0 (1) = extractor failure
     #   bit 1 (2) = catalog signal (a new product or a failed discovery,
-    #               or a tax block that disagrees; the two reports say which)
+    #               a tax block or a network figure that disagrees; the
+    #               three reports say which)
     #   bit 2 (4) = drift alert
     return (
         (1 if extractor_failed else 0)

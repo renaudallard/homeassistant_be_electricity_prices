@@ -427,6 +427,42 @@ jobs:
             --fingerprint tax_failures.txt \
             --workflow .github/workflows/live_check.yml
 
+      - name: Open or update network-figure issue
+        # The third half of rc bit 1: a card prints a regulated network
+        # figure the other cards for the same DSO do not. Its own thread,
+        # because the integration bills network figures as printed, so a
+        # household on that card pays it, which a tax row never says.
+        if: always() && github.event_name != 'pull_request' && (
+            steps.check.outputs.rc == '2'
+            || steps.check.outputs.rc == '3'
+            || steps.check.outputs.rc == '6'
+            || steps.check.outputs.rc == '7'
+          )
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! grep -q '^## Failures' network_report.md; then
+            echo "every card agrees on the month's network figures" >&2
+            exit 0
+          fi
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Network figures"
+            echo
+            cat network_report.md
+          } > network_issue_body.md
+
+          bash scripts/file_ci_issue.sh \
+            --label 'live-check-network' \
+            --title "[live-check] a supplier's network figure disagrees" \
+            --body network_issue_body.md \
+            --fingerprint network_failures.txt \
+            --workflow .github/workflows/live_check.yml
+
       - name: Fail PR job on extractor or drift signal
         # Surface live-check failures on the PR check status without
         # opening issues against the parent repo (which a fork-pushed

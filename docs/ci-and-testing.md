@@ -307,6 +307,32 @@ and three did not: Ecofix and TotalEnergies in every region they sell, Cociter i
 still printing the separate energy contribution the others had folded into the excise on
 1 August 2026. It is the supplier's card that is wrong, so the check reports rather than corrects.
 
+### Network figures
+
+`_check_network_consensus` (`scripts/live_check.py`) asks the same question of the regulated
+network rows. Distribution (every band, Impact included), transport, metering, capacity,
+prosumer and the Brussels power term above 13 kVA are set per DSO, so for one month and one DSO
+every card carries the same figure once put on one VAT basis: a residential card stores it
+including 6% and a professional card the regulator's ex-VAT figure. Figures within 1% of each
+other count as one (the round trip moves the last digit; the smallest real disagreement in the
+September 2026 archive is 2%), the supplier is the voter, a tie is not reported, and the month is
+the one most cards are filed under, as for the federal check.
+
+Unlike a tax block, a network figure is billed as printed, so a disagreeing card bills its
+households the card's figure. That is what nothing reported before the check existed: Bolt's
+professional card prints the Pic rate in the Medium column for ORES, RESA, REW and AIESH, which
+bills every Medium hour of an Impact entry at Pic.
+
+Three figures differ from the fleet by the card's structure and are left out of the vote
+(`_NETWORK_STRUCTURAL`): Luminus Dynamic's quarter-hourly metering fee (its own footnote), Bolt's
+Brussels metering term (the Brugel power term is added by the resolver) and the single rate on
+Cociter's trihoraire card (never billed, the contract forces the Impact mode). The disagreements
+already looked at go in `_KNOWN_NETWORK_FIGURES`, keyed on the exact figure and expiring on
+2027-01-01, when the DSOs publish next year's tariffs: Bolt's professional ORES and AIEG rows
+(January's set) and its Medium column, Bolt's residential ORES Medium rate, EBEM Dynamic's
+Antwerpen distribution rate and Mega's Halle-Vilvoorde prosumer tariff. The rows go to
+`network_report.md` and file their own issue.
+
 ### The keyless day-ahead fallback
 
 `_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts still serves the
@@ -721,29 +747,30 @@ expected and files nothing (`test_a_discovery_that_sees_nothing_fails`).
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog` and `tax` kinds. The
-extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
-catalog diff is written to `catalog_report.md`, the tax rows to `tax_report.md` and the drift
+`_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog`, `tax` and
+`network` kinds. The extractor report (with the metrics block) is printed to stdout, which the
+workflow captures. The catalog diff is written to `catalog_report.md`, the tax rows to
+`tax_report.md`, the network rows to `network_report.md` and the drift
 warnings to `drift_report.md` at the repo root (`scripts/live_check.py`), each a side-channel the
 workflow reads to file a separate issue so the failure modes never conflate in one thread. Beside
 the drift report goes `drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes`
 line per blown budget with no measurement in it, and beside the other two go
-`catalog_failures.txt` and `tax_failures.txt`, their failing labels; those three files are what
-the issues are fingerprinted on.
+`catalog_failures.txt`, `tax_failures.txt` and `network_failures.txt`, their failing labels;
+those four files are what the issues are fingerprinted on.
 
 The exit code is bit-encoded (`scripts/live_check.py`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
 | 0 | 1 | extractor **regression** (fetch or parse, the spot fallback included) or a phase of the run that crashed, excluding unreadable cards | yes |
-| 1 | 2 | catalog signal: a new product appeared at a supplier or its discovery failed, or a supplier's federal tax block disagrees with the month's consensus. One bit for two kinds of news, because neither is a regression in what this repository bills and neither should fail a pull request; `catalog_report.md` and `tax_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
+| 1 | 2 | catalog signal: a new product appeared at a supplier or its discovery failed, or a supplier's federal tax block or network figure disagrees with the month's consensus. One bit for three kinds of news, because none is a regression in what this repository bills and none should fail a pull request; `catalog_report.md`, `tax_report.md` and `network_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash: a top-level Python exception in the script, or, set by the workflow's loop itself, any exit above 7 and any odd exit with no `extractor_failures.txt` written (a module-level ImportError exits 1, an OOM kill 137, a runner SIGTERM 143) | no |
 
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
-Both halves of bit 1 run their step and then look at their own report: each begins with a
+All three parts of bit 1 run their step and then look at their own report: each begins with a
 `grep -q '^## Failures'` on it and exits quietly when its half is clean. Without that guard a
 run whose fifteen discovery rows all passed still opened an issue titled "new supplier products
 detected", carrying six rows about a stale tax block (issue #101).
@@ -1135,6 +1162,7 @@ the script through a fake `gh`.
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected`, or `[live-check] supplier product discovery failed` when no new product is among the failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees`, or `[live-check] a federal constant window needs extending` when every failure is a window reminder |
+| bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 
 The tax report carries four kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
