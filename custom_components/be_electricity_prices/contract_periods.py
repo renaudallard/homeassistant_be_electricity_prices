@@ -53,7 +53,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
+from .cohort import _tariff_card_month
 from .const import (
+    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_PREVIOUS_CONTRACTS,
@@ -66,6 +68,7 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
+from .flow_contracts import _contract_is_month_indexed
 from .providers import effective_kind, get as get_extractor, settlement_answer
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .providers.custom import build_snapshot as build_custom_snapshot
@@ -292,18 +295,41 @@ def _kind(period: ContractPeriod) -> str:
     )
 
 
+def _reprices_on_spots(period: ContractPeriod) -> bool:
+    """Whether the walk re-prices a variable contract's energy off the day-ahead.
+
+    Two ways, and only with an ENTSO-E key in the settings, which is the walk's
+    own guard (``cohort._month_indexed_leg`` and the variable cohort in
+    ``cohort._cohort_legs``): a card indexed on the delivery month's mean, which
+    the registry flags ``month_indexed_energy`` and mostly registers as variable,
+    and a signing cohort re-priced off its archived variable card's formula.
+    """
+    data = period.data
+    if not data.get(CONF_API_KEY):
+        return False
+    if _contract_is_month_indexed(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
+        return True
+    return (
+        _kind(period) == "variable"
+        and _tariff_card_month(cast(ConfigEntry, _QuoteEntry(data=dict(data))))
+        is not None
+    )
+
+
 def periods_need_spots(periods: list[ContractPeriod]) -> bool:
     """Whether an earlier contract bills off the day-ahead the entry's own may not.
 
     Asked of the registry rather than of the card, because the tick decides on
     the spots before anything has priced an old contract. A dynamic or monthly
-    spot contract needs them for its energy, and a feed-in credit may settle on
-    them whatever the energy does, so an earlier contract on the injection
-    regime asks for them too. The spots are the Belgian day-ahead, the same for
-    every supplier, so this only ever fetches what the year already holds.
+    spot contract needs them for its energy, a variable one whenever the walk
+    re-prices it on the month's mean, and a feed-in credit may settle on them
+    whatever the energy does, so an earlier contract on the injection regime
+    asks for them too. The spots are the Belgian day-ahead, the same for every
+    supplier, so this only ever fetches what the year already holds.
     """
     return any(
         _kind(p) in SPOT_PRICED_CONTRACT_KINDS
+        or _reprices_on_spots(p)
         or p.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
         for p in periods
     )

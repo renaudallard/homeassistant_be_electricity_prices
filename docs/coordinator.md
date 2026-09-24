@@ -485,7 +485,12 @@ is recorded, the year reads unknown rather than short by a whole contract,
 which on the recorder would read as a large negative change and then the same
 positive one. The spot and load-profile gates ask `periods_need_spots` and
 `periods_need_rlp` of the registry, not of a card, because they decide before
-anything has priced an old contract.
+anything has priced an old contract. The spot gate asks what the walk will do
+with the old contract rather than its kind alone: most cards indexed on the
+delivery month's mean are registered variable, and the walk re-prices them on
+that mean whenever the old settings hold an ENTSO-E key
+(`month_indexed_energy`, or a variable signing cohort), which the reload after
+a switch leaves with no spots at all.
 
 The comparison pages price the household's own year the same way
 (`with_previous_contracts`): the day's pricing while they quote the household

@@ -579,6 +579,54 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
     fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
 
 
+@pytest.mark.parametrize(
+    ("held", "fetched"),
+    [
+        # A card indexed on the delivery month's mean, re-priced by the walk
+        # whenever the settings hold a key: August on Mega Online Flex billed
+        # 53,42 EUR of its 108,27 with no spots.
+        (_held("engie", "engie_direct_online", api_key="OLDKEY"), True),
+        (_held("mega", "mega_online_flex", api_key="OLDKEY"), True),
+        # A variable signing cohort, re-priced off its archived card's formula.
+        (
+            _held(
+                "bolt",
+                "bolt_variable",
+                api_key="OLDKEY",
+                contract_start_date="2026-02-10",
+            ),
+            True,
+        ),
+        # The walk keeps the printed figure without a key, and a variable card
+        # that names no cohort month and is not month indexed prints its rate.
+        (_held("engie", "engie_direct_online"), False),
+        (_held("bolt", "bolt_variable", api_key="OLDKEY"), False),
+        (_held("engie", "engie_easy_fixed", api_key="OLDKEY"), False),
+    ],
+)
+async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spots(
+    hass: HomeAssistant, freezer: Any, held: dict[str, Any], fetched: bool
+) -> None:
+    """Asked of what the walk does with the old contract, not of its kind:
+    most month-indexed cards are registered variable, and the reload that
+    follows a switch drops the spots the old contract had collected."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(previous_contracts=[{"until": "2026-06-15", "data": held}])
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    fill = AsyncMock()
+    coord._ensure_historical_spots = fill  # type: ignore[method-assign]
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
+        await coord._price_previous(periods, date(2026, 9, 24))
+    if fetched:
+        fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
+    else:
+        fill.assert_not_awaited()
+
+
 async def test_pricing_closes_each_window_on_the_day_before_the_switch(
     hass: HomeAssistant, freezer: Any
 ) -> None:
