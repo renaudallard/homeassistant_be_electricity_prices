@@ -181,7 +181,7 @@
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich; lassen Sie nicht gezahlte Posten auf 0.",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
@@ -502,7 +502,7 @@
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich; lassen Sie nicht gezahlte Posten auf 0.",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",

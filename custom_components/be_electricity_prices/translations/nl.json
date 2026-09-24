@@ -181,7 +181,7 @@
       },
       "custom_dso": {
         "title": "Nettarieven (DNB)",
-        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht; laat wat je niet betaalt op 0.",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0.",
         "data": {
           "custom_dso_distribution_single": "Distributie (EUR/kWh)",
           "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",
@@ -502,7 +502,7 @@
       },
       "custom_dso": {
         "title": "Nettarieven (DNB)",
-        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht; laat wat je niet betaalt op 0.",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0.",
         "data": {
           "custom_dso_distribution_single": "Distributie (EUR/kWh)",
           "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",

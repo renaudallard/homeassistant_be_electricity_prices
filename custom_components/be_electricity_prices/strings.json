@@ -181,7 +181,7 @@
       },
       "custom_dso": {
         "title": "Grid (DSO) tariffs",
-        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required; leave anything you don't pay at 0.",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",

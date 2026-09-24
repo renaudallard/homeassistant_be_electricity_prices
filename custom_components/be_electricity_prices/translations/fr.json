@@ -181,7 +181,7 @@
       },
       "custom_dso": {
         "title": "Tarifs reseau (GRD)",
-        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise ; laissez a 0 ce que vous ne payez pas.",
+        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette separation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez a 0 les autres couts que vous ne payez pas.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
@@ -502,7 +502,7 @@
       },
       "custom_dso": {
         "title": "Tarifs reseau (GRD)",
-        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise ; laissez a 0 ce que vous ne payez pas.",
+        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette separation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez a 0 les autres couts que vous ne payez pas.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
