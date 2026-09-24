@@ -44,6 +44,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from . import creg_ev
 from .binary_sensor import _has_tomorrow
 from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
@@ -464,6 +465,15 @@ BI_HOURLY_INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
     ),
 )
 
+EV_RATE_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    # Unavailable rather than unknown until the CREG's file has been read.
+    _eur_per_kwh(
+        "ev_home_charging_rate",
+        lambda d: d.ev_home_charging_rate_eur_per_kwh,
+        unavailable_when_none=True,
+    ),
+)
+
 FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="fixed_fee_eur_per_year",
@@ -593,6 +603,7 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
+    descriptions.extend(EV_RATE_SENSORS)
     # Only where the two bands are a thing the household is billed on. On a
     # single-rate or dynamic meter these have no constant to report and would
     # sit unavailable for good, which is two dead entities per entry.
@@ -657,6 +668,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "tomorrow",
             "cheapest_4h_today",
             "most_expensive_4h_today",
+            "history",
             "snapshot_age_hours",
             "last_error",
             "card_read_by_ocr",
@@ -771,6 +783,21 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             if not today and not tomorrow:
                 return {}
             return {"today": today, "tomorrow": tomorrow}
+        if self.entity_description.key == "ev_home_charging_rate":
+            # The history lets last quarter's kWh be settled at last quarter's
+            # rate after the state has moved on. Unrecorded: it changes once a
+            # quarter and would otherwise be written every tick.
+            region = self.coordinator.entry.data.get(CONF_REGION, "")
+            now = dt_util.now().date()
+            return {
+                "quarter_start": creg_ev.quarter_start(now).isoformat(),
+                "region": region,
+                "source": creg_ev.SOURCE_URL,
+                "history": [
+                    {"quarter_start": start.isoformat(), "rate": rate}
+                    for start, rate in creg_ev.history(region)
+                ],
+            }
         if self.entity_description.key == "capacity_cost":
             # The cost is charged on the twelve-month mean, not on this month's
             # reading, so without these the number looks disconnected from the

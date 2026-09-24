@@ -109,6 +109,7 @@ from .snapshot_months import archived_months_present
 import asyncio
 from homeassistant.util import dt as dt_util
 from .brugel import ensure_power_term
+from .creg_ev import ensure_rates as ensure_ev_rates, rate_for as ev_rate_for
 from .synergrid import RlpWeights, SppWeights
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -228,6 +229,8 @@ class _TickMixin:
             await self._maybe_refresh_snapshot()
         self._reresolve_snapshot()
         await self._track_monthly_peak()
+        # Independent of the card: a failure only leaves its own sensor as is.
+        await ensure_ev_rates(self._session, dt_util.now().date())
 
         if self._snapshot is None:
             raise UpdateFailed(
@@ -747,6 +750,7 @@ class _TickMixin:
                 self.entry.data.get(CONF_METER, METER_MONO),
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
+            ev_home_charging_rate_eur_per_kwh=ev_rate_for(region, dt_util.now().date()),
             current_year_cost_eur=current_year_cost,
             current_month_cost_eur=month_cost,
             current_year_cost_reset=ytd_window_reset(self.entry, window_now),

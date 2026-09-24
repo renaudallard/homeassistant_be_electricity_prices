@@ -843,6 +843,9 @@
       "energy_fund_eur_per_month": {
         "name": "Fonds energie par mois"
       },
+      "ev_home_charging_rate": {
+        "name": "Tarif CREG recharge a domicile"
+      },
       "current_year_cost": {
         "name": "Cout de l annee"
       },
