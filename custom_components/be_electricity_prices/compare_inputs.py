@@ -124,9 +124,16 @@ class _QuoteEntry:
     Purpose-built rather than a copy of the real entry: HA's ConfigEntry
     refuses to rebind ``data``, and a copy would carry the same entry id
     into anything that later looked at it.
+
+    ``runtime_data`` is the one thing a contract the household held earlier in
+    the year (``contract_periods.py``) adds: its coordinator, so the card is
+    split against the household's measured yearly volume as the live one is.
+    The compare page leaves it ``None`` and quotes against the typed figure or
+    the default, as it always has.
     """
 
     data: Mapping[str, Any]
+    runtime_data: Any = None
 
 
 def _coordinator_rlp_weights(entry: ConfigEntry) -> RlpWeights | None:

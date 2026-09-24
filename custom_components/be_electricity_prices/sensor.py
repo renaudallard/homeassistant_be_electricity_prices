@@ -693,6 +693,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "prosumer_ytd_eur",
             "standing_charges_ytd_eur",
             "welcome_credit_eur",
+            "previous_contracts_eur",
+            "previous_contracts",
             "energy_basis",
             "fee_basis",
             "volume_basis",
@@ -824,9 +826,17 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             # hours_seen means the spot cache could not price part of the
             # window, so the bill is missing those hours' energy term.
             diag = data.ytd_diagnostics
-            if not diag:
-                return {}
-            return {k: round(v, 4) for k, v in diag.items()}
+            attrs: dict[str, Any] = (
+                {k: round(v, 4) for k, v in diag.items()} if diag else {}
+            )
+            # The contracts held earlier in the year, each with its own days
+            # and what it cost, when the household recorded a switch. The
+            # figure above already includes them (previous_contracts_eur).
+            if data.previous_contracts:
+                attrs["previous_contracts"] = [
+                    dict(row) for row in data.previous_contracts
+                ]
+            return attrs
         if self.entity_description.key == "projected_year_cost":
             # Its own branch rather than sharing the one above: these
             # attributes are a mix of strings and floats, and round() raises

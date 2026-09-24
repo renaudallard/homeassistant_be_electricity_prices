@@ -54,6 +54,7 @@ from .snapshot_codec import (
 )
 
 import asyncio
+import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -82,6 +83,7 @@ from .providers import (
     get as get_extractor,
 )
 from .synergrid import RlpWeights, SppWeights
+from .contract_periods import PricedPeriods
 from .coordinator_data import (
     CoordinatorData,
 )
@@ -179,6 +181,12 @@ class BePricesCoordinator(
         # publishes it is a CoordinatorEntity: setting this and asking for a
         # listener update is the whole delivery path, with no dispatcher.
         self.daily_compare: Any = None
+        # What the contracts the household held earlier in the year cost
+        # (contract_periods.py), priced once a day in the background because
+        # it fetches the old supplier's cards, and kept with the periods it was
+        # priced for. Persisted, so a restart the same day serves it.
+        self._previous_priced: PricedPeriods | None = None
+        self._previous_pricing: asyncio.Task[None] | None = None
         self._snapshot_raw: SupplierSnapshot | None = None
         # The household's measured yearly consumption, and the day it was
         # measured on. ``None`` until the recorder holds enough of it to be
@@ -459,8 +467,16 @@ class BePricesCoordinator(
         didn't). Every meaningful field on this integration lives in
         entry.data, so an entry.options change without entry.data
         change can be ignored.
+
+        Each value is compared by its JSON form. A recorded supplier switch
+        stores a list of the earlier contracts' settings, and a frozenset
+        cannot hold one: built from the values themselves, this would raise in
+        the constructor of any entry that had recorded a switch.
         """
-        return frozenset(entry.data.items())
+        return frozenset(
+            (key, json.dumps(value, sort_keys=True, default=str))
+            for key, value in entry.data.items()
+        )
 
 
 # ---- snapshot serialization for the HA Store ----------------------------------

@@ -105,6 +105,7 @@ async def _ytd_hourly_energy(
     rlp_index_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
     cached_only: bool = False,
+    window_end: date | None = None,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -149,6 +150,11 @@ async def _ytd_hourly_energy(
 
     Returns ``None`` only when neither side has any meters wired (the
     caller surfaces the fees-only floor).
+
+    ``window_end`` closes the window on an earlier day, the last one billed,
+    for a contract the household left during the year. ``today`` stays the
+    calendar's: it decides whether a month is still running, which is a fact
+    about the date and not about the window.
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
@@ -156,9 +162,10 @@ async def _ytd_hourly_energy(
     meter = meter or entry.data.get(CONF_METER, METER_MONO)
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    end = today if window_end is None else window_end
 
-    cons = await _metered_hourly_kwh(hass, entry, "consumption", window_start, today)
-    inj = await _metered_hourly_kwh(hass, entry, "injection", window_start, today)
+    cons = await _metered_hourly_kwh(hass, entry, "consumption", window_start, end)
+    inj = await _metered_hourly_kwh(hass, entry, "injection", window_start, end)
     if cons is None or inj is None:
         # Same rule the static per-day path applies: a half-wired pair, or one
         # whose other half records nothing, means the missing band's kWh are
@@ -180,8 +187,9 @@ async def _ytd_hourly_energy(
     # broken pair.
     # Neither side is topped up while a pair on either cannot bill today: its
     # hours drop out at midnight, and the other side's live reading would be
-    # billed against nothing in the meantime.
-    if cons.today_ok and inj.today_ok:
+    # billed against nothing in the meantime. Nor for a window that closed
+    # before today: the live reading is not one of its hours.
+    if window_end is None and cons.today_ok and inj.today_ok:
         await _top_up_today_hourly(hass, cons.sensors, cons_per_hour, today)
         await _top_up_today_hourly(hass, inj.sensors, inj_per_hour, today)
 
@@ -411,7 +419,14 @@ async def _ytd_hourly_energy(
         # window's buckets, so an entry billing from its contract start date
         # was reporting 1560 hours seen against 5892 elapsed and inviting its
         # owner to go looking for a recorder fault that was not there.
-        elapsed = dt_util.now() - dt_util.start_of_local_day(window_start)
+        # To the window's end: the running hour for a window that runs to
+        # today, the midnight after its last day for one that closed earlier.
+        until = (
+            dt_util.now()
+            if window_end is None
+            else dt_util.start_of_local_day(window_end + timedelta(days=1))
+        )
+        elapsed = until - dt_util.start_of_local_day(window_start)
         breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
@@ -446,6 +461,7 @@ async def _ytd_spot_injection_credit(
     *,
     window_start: date,
     billed_days: Collection[date] | None = None,
+    top_up: bool = True,
 ) -> float:
     """YTD solar-injection credit (EUR) for a contract whose injection is
     a per-hour spot formula with no monthly indicative.
@@ -477,6 +493,9 @@ async def _ytd_spot_injection_credit(
     terms. An hour whose month printed an indicative is skipped here, because
     the walk this term is added to already credited that month off it, and
     crediting it twice would double the feed-in.
+
+    ``today`` is the window's last day. ``top_up`` is off for a window that
+    closed before today, whose hours the live meter reading is not one of.
     """
     inj = snapshot.injection
     if not historical_spots:
@@ -510,7 +529,7 @@ async def _ytd_spot_injection_credit(
     # trailed the last COMPILED hour, so current_year_cost over-stated the
     # bill by whatever of today's injection statistics had not booked yet, and
     # did not heal at all while compilation was stalled.
-    if metered.today_ok:
+    if top_up and metered.today_ok:
         await _top_up_today_hourly(hass, metered.sensors, per_hour, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():

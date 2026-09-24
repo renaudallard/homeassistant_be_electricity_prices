@@ -338,6 +338,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 | `ev_home_charging_rate_eur_per_kwh` | `float \| None` | the SPF's flat-rate ceiling for reimbursing home charging of a company car, for the entry's region this quarter (`creg_ev.py`); `None` until the CREG's file has been read | `ev_home_charging_rate` sensor (`sensor.py`) |
 | `ev_home_charging_quarter_start` | `date \| None` | the quarter that rate is for, baked with it at the tick so the sensor never pairs one quarter's rate with the next quarter's start | `ev_home_charging_rate` sensor attribute (`sensor.py`) |
 | `current_year_cost_eur` | `float \| None` | running YTD bill since Jan 1; fees-only floor when no meters wired | `current_year_cost` sensor (`sensor.py`) |
+| `previous_contracts` | `tuple[dict, ...]` | the contracts held earlier in the year after a recorded supplier switch, one row each with its dates and cost (`contract_periods.previous_rows`); empty otherwise | `current_year_cost` sensor attribute (`sensor.py`) |
 | `ytd_diagnostics` | `dict[str, float] \| None` | optional breakdown behind the bill. Static path: YTD + today consumption/injection kWh, `energy_ytd_raw_eur` (pre-clamp energy term). Hourly path (TOU / dynamic / spot-monthly): `hours_seen` + `hours_priced`, which say how much of the window the spot cache could price, plus YTD consumption/injection kWh, and `energy_ytd_raw_eur` too on the compensation regime. `fees_ytd_eur` on both, split into `capacity_ytd_eur` + `prosumer_ytd_eur` + `standing_charges_ytd_eur` with the `billed_peak_kw` they were billed on, since the capacity leg is per kW of monthly peak per year and is the leg most able to separate two entries reading one meter; `None` when no meter is wired | `current_year_cost` sensor attributes (`sensor.py`) |
 | `projected_year_cost_eur` | `float \| None` | a full year priced at today's tariffs against the entry's own metered yearly volume, computed in one pass rather than as elapsed plus remainder. `None` for a dynamic or spot-monthly leg, whose future months have no knowable rate | `projected_year_cost` sensor |
 | `projection_diagnostics` | `dict[str, Any] \| None` | the basis behind that number: `energy_basis`, `fee_basis`, `volume_basis`, `injection_basis` and `contract_basis` as strings, plus `annual_kwh`, `annual_injection_kwh` and `welcome_credit_eur` (what is left of the first-year welcome credit over the coming year, 0.0 without a start date) | attributes of the same sensor |
@@ -436,6 +437,64 @@ Per-regime day math is documented at `ytd_cost.py`. For `compensation` the injec
 
 `DynamicRates.quarter_hourly` keeps the *live* table on 15-minute slots, but the HA recorder only retains **hourly** long-term statistics (`providers/_rates.py`). So `_ytd_hourly_energy` aggregates consumption/injection to the clock hour and prices each hour at its hourly spot (`ytd_energy.py`). When intra-hour load correlates with intra-hour price this is a close approximation, not a bit-exact reconciliation with the live 15-minute sensor. This is a deliberate constraint, not a bug.
 
+### 7.4 Contracts held earlier in the year
+
+A household that changed supplier during the year records the switch from the
+options menu (see [config-flow.md](config-flow.md)), which keeps the settings
+it held as `{"until": <first day of the next contract>, "data": {...}}` in
+`CONF_PREVIOUS_CONTRACTS`. `previous_periods` (`contract_periods.py`) turns the
+records into the days each earlier contract covers inside the year-to-date
+window, and `current_period_start` into the first day of the entry's own. The
+tick prices its own contract from that day (`window_start_override`) and adds
+the earlier contracts' share (`previous_costs`); `current_month_cost` does the
+same for the running month, which only an earlier contract that ended in it
+reaches into.
+
+An earlier contract is priced with the same engine closed on the day before
+the switch: `_compute_current_year_cost(..., window_start_override=start,
+window_end=end)`, handed a `_QuoteEntry` holding its settings and the
+coordinator as `runtime_data`, so the card is split against the household's
+measured volume. `window_end` is resolved once beside the window start and
+handed to every leg that took `today` as the window's last day: the fee walks
+(`_walk_ytd_months`), the welcome credit, the daily and hourly kWh reads and
+the spot-indexed feed-in credit. A closed window never reads the live meter:
+the daily read only overrides the running day, and the hourly top-ups are
+skipped when an end is passed. `today` stays the calendar's in the two places
+that ask whether a month is still running (`_hour_spot`,
+`_spp_injection_spot`). One window per contract is also what the Walloon rule
+asks for: a change of supplier splits the compensation year and each part nets
+its own injection (CWaPE CD-14d03, section 5.1.2).
+
+The card each earlier contract stands on (`period_card`) is the one its
+supplier publishes today, through `fetch_shared`; each month still bills on
+its own archived card through the walk. A supplier that no longer publishes one
+falls back to the newest card an archive kept inside the period, found by
+asking `_snapshot_for_month` for each month with the entry's card as the
+fallback and watching for a different object, and one with neither to the
+entry's current card, flagged `stand_in`.
+
+Pricing fetches the old supplier's cards, so the tick never does it. It runs
+in the background once a day (`_schedule_previous_pricing`,
+`_price_previous`), or on the next tick while a contract could not be priced,
+after filling the year's day-ahead when an earlier contract settles on it, with
+the ENTSO-E key the old contract's settings kept when the entry holds none, and
+asks for a refresh when it lands. The result is kept as
+`PricedPeriods` with `periods_key`, the days and settings it was priced for,
+and served only for those. Until one lands, which is the minutes after a switch
+is recorded, the year reads unknown rather than short by a whole contract,
+which on the recorder would read as a large negative change and then the same
+positive one. The spot and load-profile gates ask `periods_need_spots` and
+`periods_need_rlp` of the registry, not of a card, because they decide before
+anything has priced an old contract.
+
+The comparison pages price the household's own year the same way
+(`with_previous_contracts`): the day's pricing while they quote the household
+as it is, a fresh pricing under a what-if regime or DSO mode, which has to
+reach the earlier contracts too. The backfill cuts its hours at each switch
+(`_contract_segments`, `backfill_window.py`), builds a context per contract
+and accrues the cost series across them as one running total
+(`_accrue_cost`, `backfill_cost.py`).
+
 ## 8. Injection taxonomy and the spot-gating invariant
 
 Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/_rates.py`). `InjectionRates` (`providers/_rates.py`) can carry a monthly indicative (`current`), a formula (`factor`/`base`) that resolves either per hour or on a monthly mean depending on the `spp_indexed` / `month_indexed` flags, a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and a guaranteed floor (`floor_at_zero`, or `minimum` for a card that promises more than non-negative). The coordinator distinguishes four shapes:
@@ -526,7 +585,7 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py`, de
 
 ## 10. Persistence
 
-`_save_persistent` (`coordinator_persist.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
+`_save_persistent` (`coordinator_persist.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, `historical_spots` pruned to the current YTD window, and `previous_contracts`, the day's pricing of the contracts held earlier in the year (section 7.4), which is restored outside the tuple gate because it names the periods it was priced for. Two guards prevent a slow tick from clobbering a reloaded entry's state:
 
 - **Identity guard** (`coordinator_persist.py`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator_persist.py`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).

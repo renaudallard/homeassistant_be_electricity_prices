@@ -256,15 +256,29 @@
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region.",
-      "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden."
+      "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden.",
+      "switch_date_outside_year": "Das Wechseldatum muss zwischen dem 2. Januar und heute liegen.",
+      "switch_date_before_last": "Das Wechseldatum muss nach dem zuletzt erfassten Wechsel dieses Jahres liegen.",
+      "switch_date_before_start": "Das Wechseldatum muss nach dem Beginn des Vertrags liegen, den Sie verlassen."
     },
     "step": {
       "init": {
         "title": "Belgische Strompreise",
         "menu_options": {
           "edit": "Einstellungen bearbeiten",
+          "switch": "Lieferantenwechsel erfassen",
           "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)",
           "compare_all": "Alle Anbieter vergleichen (Rangliste)"
+        }
+      },
+      "switch": {
+        "title": "Lieferantenwechsel erfassen",
+        "description": "Im Laufe des Jahres den Lieferanten gewechselt? Geben Sie den ersten Liefertag des neuen Vertrags an. Ihre aktuellen Einstellungen bleiben als der Vertrag erhalten, den Sie bis zum Vortag hatten, und die folgenden Schritte richten den neuen ein, ausgehend von Ihren jetzigen Einstellungen. Die Kosten seit Jahresbeginn rechnen dann jeden Vertrag nach seinen eigenen Tarifkarten für seine eigenen Tage ab. In der Wallonie verrechnet im Kompensationsregime jeder Vertrag seine eigene Einspeisung, wie es der Regulator bei einem Wechsel im Laufe des Jahres vorsieht.",
+        "data": {
+          "switch_date": "Erster Tag mit dem neuen Vertrag"
+        },
+        "data_description": {
+          "switch_date": "Der Tag, an dem der neue Lieferant mit der Lieferung begann, wie auf seinem Willkommensschreiben oder der Schlussrechnung des bisherigen Lieferanten. Zwischen dem 2. Januar und heute, und nach einem bereits erfassten Wechsel dieses Jahres."
         }
       },
       "edit": {

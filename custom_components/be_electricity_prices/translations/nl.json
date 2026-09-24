@@ -256,15 +256,29 @@
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
-      "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze ingang is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden."
+      "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze ingang is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden.",
+      "switch_date_outside_year": "De wisseldatum moet tussen 2 januari en vandaag liggen.",
+      "switch_date_before_last": "De wisseldatum moet na de laatste geregistreerde wissel van dit jaar liggen.",
+      "switch_date_before_start": "De wisseldatum moet na de startdatum liggen van het contract dat u verlaat."
     },
     "step": {
       "init": {
         "title": "Belgische elektriciteitsprijzen",
         "menu_options": {
           "edit": "Instellingen wijzigen",
+          "switch": "Leverancierswissel registreren",
           "compare": "Andere leverancier vergelijken (eenmalige offerte)",
           "compare_all": "Alle leveranciers vergelijken (rangschikking)"
+        }
+      },
+      "switch": {
+        "title": "Leverancierswissel registreren",
+        "description": "In de loop van het jaar van leverancier gewisseld? Geef de eerste leveringsdag van het nieuwe contract op. Uw huidige instellingen blijven bewaard als het contract dat u tot de dag ervoor had, en de volgende stappen stellen het nieuwe in, vertrekkend van wat u nu hebt. De kost sinds het begin van het jaar rekent dan elk contract af op zijn eigen tariefkaarten voor zijn eigen dagen. In Wallonië onder het compensatiestelsel verrekent elk contract zijn eigen injectie, zoals de regulator bepaalt bij een wissel in de loop van het jaar.",
+        "data": {
+          "switch_date": "Eerste dag met het nieuwe contract"
+        },
+        "data_description": {
+          "switch_date": "De dag waarop de nieuwe leverancier begon te leveren, zoals op zijn welkomstbrief of op de slotfactuur van de vorige leverancier. Tussen 2 januari en vandaag, en na een eerder geregistreerde wissel van dit jaar."
         }
       },
       "edit": {

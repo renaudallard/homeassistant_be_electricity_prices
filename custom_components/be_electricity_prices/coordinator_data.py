@@ -141,6 +141,10 @@ class CoordinatorData:
     # of a quarter showed the new quarter beside the old quarter's rate until
     # the next tick.
     ev_home_charging_quarter_start: date | None = None
+    # The contracts the household held earlier this year, as the
+    # current_year_cost sensor lists them (contract_periods.previous_rows).
+    # Empty on an entry that recorded no switch.
+    previous_contracts: tuple[dict[str, Any], ...] = ()
     # Running annual bill in EUR, accumulated day by day from Jan 1.
     # Falls back to the (pro-rated) fees-only floor when no meter
     # sensors are wired. For compensation regime the math nets

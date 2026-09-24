@@ -66,7 +66,9 @@ from .const import (
 )
 from .cohort import (
     _cohort_energy_leg,
+    ytd_window_start,
 )
+from .contract_periods import periods_need_spots, previous_periods
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
 from .injection import (
@@ -86,6 +88,7 @@ from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
     _clear_all,
+    _contract_segments,
     _existing_stat_window,
     _floor_to_hour_utc,
     _hour_iter,
@@ -177,10 +180,15 @@ async def _ensure_dynamic_spots(
     )
     if cohort is not None:
         eff_energy = cohort
+    # A contract the household held earlier in the year may settle on the
+    # day-ahead when this one does not, and its hours are in the window too.
+    today = dt_util.now().date()
+    earlier = previous_periods(entry.data, ytd_window_start(entry, today), today)
     if (
         not _energy_needs_spot(eff_energy)
         and not _injection_needs_spot(snap, entry)
         and not _injection_needs_month_spot(snap, entry)
+        and not periods_need_spots(earlier)
     ):
         return {}, {}
     # _ensure_historical_spots anchors each fetched day on LOCAL midnight,
@@ -217,15 +225,10 @@ async def _backfill_price_sensors(
         StatisticMeanType,
         async_import_statistics,
     ) = _recorder_models()
-    ctx = await _build_context(hass, entry, coordinator, hours)
-    region = ctx.region
-    dso = ctx.dso
-    meter = ctx.meter
-    dso_mode = ctx.dso_mode
-    regime = ctx.regime
-
+    # Which series exist is the entry's own business: an earlier contract on
+    # another regime prices its hours, it does not add or remove a sensor.
     keys = list(_PRICE_SENSOR_KEYS)
-    if regime == SOLAR_REGIME_INJECTION:
+    if entry.data.get(CONF_SOLAR_REGIME, "none") == SOLAR_REGIME_INJECTION:
         keys.append(_INJECTION_PRICE_SENSOR_KEY)
 
     # Resolve statistic ids up front; skip the whole pass if nothing
@@ -242,74 +245,88 @@ async def _backfill_price_sensors(
         )
         return {}
 
-    _snap_for = ctx.snap_for
-    spp_weights = ctx.spp_weights
-    month_spp_cache = ctx.month_spp_cache
-    month_mean_cache = ctx.month_mean_cache
-    hourly_injection = ctx.hourly_injection
     # Bucketed once, like the live walk: the closed-month coverage gate needs
     # to know how much of a month is actually cached, not just its mean.
     month_bucket = _bucket_by_local_month(spots) if spots else {}
     today = dt_util.now().date()
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
-    for utc_hour in hours:
-        local = dt_util.as_local(utc_hour)
-        snap_h = await _snap_for(date(local.year, local.month, 1))
-        spot = _hour_spot(
-            snap_h.energy,
-            local,
-            utc_hour,
-            spots,
-            month_bucket,
-            month_mean_cache,
-            today,
-            ctx.rlp_weights,
+    # Each hour on the contract that supplied it: one piece for an entry that
+    # recorded no switch, one per contract for one that did.
+    for seg_entry, seg_snap, seg_hours in await _contract_segments(
+        hass, entry, coordinator, hours
+    ):
+        ctx = await _build_context(
+            hass, seg_entry, coordinator, seg_hours, snapshot=seg_snap
         )
-        # Dynamic / spot-monthly without a spot for this hour: nothing to
-        # write, the formula factor*spot+base (or factor*mean+base) needs both.
-        # Fixed / variable pass spot=None and ignore it in compute_breakdown.
-        if spot is None and _energy_needs_spot(snap_h.energy):
-            continue
-        try:
-            bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
-        except (KeyError, ValueError):
-            # Missing DSO row for an archived month or non-static rate
-            # kind in the static path; skip the hour rather than
-            # tearing the whole backfill down.
-            continue
-
-        for key, sid in stat_ids.items():
-            if key == "current_price":
-                value = bd.all_in
-            elif key == "energy_component":
-                value = bd.energy
-            elif key == "network_component":
-                value = bd.network
-            elif key == "taxes_component":
-                value = bd.taxes
-            elif key == _INJECTION_PRICE_SENSOR_KEY:
-                inj_rate = _injection_rate_for_hour(
-                    snap_h,
-                    spot=spot,
-                    spots=spots,
-                    quarters=quarters,
-                    utc_hour=utc_hour,
-                    local=local,
-                    spp_weights=spp_weights,
-                    month_spp_cache=month_spp_cache,
-                    hourly_injection=hourly_injection,
-                    today=today,
-                    meter=meter,
-                    region=region,
-                )
-                if inj_rate is None:
-                    continue
-                value = inj_rate
-            else:  # pragma: no cover - guarded by _PRICE_SENSOR_KEYS
-                continue
-            rows_per_key[key].append(
-                StatisticData(start=utc_hour, mean=value, min=value, max=value)
+        region = ctx.region
+        dso = ctx.dso
+        meter = ctx.meter
+        dso_mode = ctx.dso_mode
+        _snap_for = ctx.snap_for
+        spp_weights = ctx.spp_weights
+        month_spp_cache = ctx.month_spp_cache
+        month_mean_cache = ctx.month_mean_cache
+        hourly_injection = ctx.hourly_injection
+        for utc_hour in seg_hours:
+            local = dt_util.as_local(utc_hour)
+            snap_h = await _snap_for(date(local.year, local.month, 1))
+            spot = _hour_spot(
+                snap_h.energy,
+                local,
+                utc_hour,
+                spots,
+                month_bucket,
+                month_mean_cache,
+                today,
+                ctx.rlp_weights,
             )
+            # Dynamic / spot-monthly without a spot for this hour: nothing to
+            # write, the formula factor*spot+base (or factor*mean+base) needs both.
+            # Fixed / variable pass spot=None and ignore it in compute_breakdown.
+            if spot is None and _energy_needs_spot(snap_h.energy):
+                continue
+            try:
+                bd = compute_breakdown(
+                    snap_h, dso, region, local, spot, meter, dso_mode
+                )
+            except (KeyError, ValueError):
+                # Missing DSO row for an archived month or non-static rate
+                # kind in the static path; skip the hour rather than
+                # tearing the whole backfill down.
+                continue
+
+            for key, sid in stat_ids.items():
+                if key == "current_price":
+                    value = bd.all_in
+                elif key == "energy_component":
+                    value = bd.energy
+                elif key == "network_component":
+                    value = bd.network
+                elif key == "taxes_component":
+                    value = bd.taxes
+                elif key == _INJECTION_PRICE_SENSOR_KEY:
+                    inj_rate = _injection_rate_for_hour(
+                        snap_h,
+                        spot=spot,
+                        spots=spots,
+                        quarters=quarters,
+                        utc_hour=utc_hour,
+                        local=local,
+                        spp_weights=spp_weights,
+                        month_spp_cache=month_spp_cache,
+                        hourly_injection=hourly_injection,
+                        today=today,
+                        meter=meter,
+                        region=region,
+                    )
+                    if inj_rate is None:
+                        continue
+                    value = inj_rate
+                else:  # pragma: no cover - guarded by _PRICE_SENSOR_KEYS
+                    continue
+                rows_per_key[key].append(
+                    StatisticData(start=utc_hour, mean=value, min=value, max=value)
+                )
 
     counts: dict[str, int] = {}
     for key, sid in stat_ids.items():

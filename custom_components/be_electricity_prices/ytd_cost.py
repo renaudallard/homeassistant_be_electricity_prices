@@ -152,6 +152,7 @@ async def _compute_current_year_cost(
     billed_peak_kw: float = 0.0,
     cached_only: bool = False,
     window_start_override: date | None = None,
+    window_end: date | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -267,6 +268,12 @@ async def _compute_current_year_cost(
     ``rlp_index_weights`` names the second where they differ, so a foreign card
     is priced on the blend its own card names; it defaults to ``rlp_weights``,
     which is what the entry's own walk wants.
+
+    ``window_end`` closes the window on an earlier day, the last one billed, for
+    a contract the household left during the year (``contract_periods.py``). The
+    window is then priced exactly as a running one, from the recorder alone:
+    no live top-up for today and no fees past that day. ``today`` stays the
+    calendar's, since whether a month is still running is not about the window.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -314,6 +321,7 @@ async def _compute_current_year_cost(
     # deriving it: an override reaching the energy walk but not the fee walk is
     # how these legs have drifted apart before.
     window_start = window_start_override or ytd_window_start(entry, today)
+    end = today if window_end is None else window_end
     # A welcome credit belongs to the product version signed, and EnergyVision
     # moved that figure four times between March and September 2026, so the
     # amount comes off the SIGNING month's card rather than today's. Identity
@@ -337,7 +345,7 @@ async def _compute_current_year_cost(
         extractor,
         snapshot,
         entry,
-        today,
+        end,
         window_start=window_start,
         contract=contract,
         meter=meter,
@@ -349,7 +357,7 @@ async def _compute_current_year_cost(
         extractor,
         snapshot,
         entry,
-        today,
+        end,
         window_start=window_start,
         contract=contract,
         cached_only=cached_only,
@@ -360,7 +368,7 @@ async def _compute_current_year_cost(
         extractor,
         snapshot,
         entry,
-        today,
+        end,
         billed_peak_kw,
         window_start=window_start,
         contract=contract,
@@ -418,7 +426,7 @@ async def _compute_current_year_cost(
                 signing_snapshot,
                 _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
                 window_start,
-                today,
+                end,
                 # The three components a welcome credit may come off and no
                 # others: the supplier's ENERGY component of what the window's
                 # consumption was charged, the SUPPLIER's standing charge (not
@@ -487,6 +495,7 @@ async def _compute_current_year_cost(
             entry,
             today,
             window_start=window_start,
+            window_end=window_end,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -513,6 +522,7 @@ async def _compute_current_year_cost(
             entry,
             today,
             window_start=window_start,
+            window_end=window_end,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -551,6 +561,7 @@ async def _compute_current_year_cost(
             entry,
             today,
             window_start=window_start,
+            window_end=window_end,
             contract=contract,
             meter=meter,
             breakdown=stats,
@@ -574,7 +585,7 @@ async def _compute_current_year_cost(
     # totals sensor puts the whole day in d_cons, which the bi branch below
     # then bills at the peak rate for every kWh of the year.
     daily_kwh = await _resolve_daily_kwh(
-        hass, entry, today, start=window_start, meter=meter
+        hass, entry, end, start=window_start, meter=meter
     )
     if daily_kwh is None:
         # No meter inputs at all - fees-only floor.
@@ -648,7 +659,7 @@ async def _compute_current_year_cost(
     # shared helper fall back to the card's indicative when it is missing.
     day_spp: dict[tuple[int, int, bool], float | None] = {}
     day_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
-    for day in _days_through(window_start, today):
+    for day in _days_through(window_start, end):
         bundle = await _resolve_month(date(day.year, day.month, 1))
         if bundle is None:
             # Dynamic / TOU month: no stable rate to apply for any of
@@ -767,7 +778,7 @@ async def _compute_current_year_cost(
             hass,
             snapshot,
             entry,
-            today,
+            end,
             historical_spots,
             _month_snapshot_cache(
                 hass,
@@ -781,6 +792,7 @@ async def _compute_current_year_cost(
             ),
             window_start=window_start,
             billed_days=daily_kwh.keys(),
+            top_up=window_end is None,
         )
         # This regime has no compensation clamp, so the billed energy is
         # already the raw energy term.
@@ -801,7 +813,7 @@ async def _compute_current_year_cost(
         # Both sides of the pair span the window the walk covered. Counting
         # elapsed from 1 January against days the meter read from the contract
         # start is a coverage gap that is not there.
-        breakdown["days_elapsed"] = float((today - window_start).days + 1)
+        breakdown["days_elapsed"] = float((end - window_start).days + 1)
         breakdown["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
         today_kwh = daily_kwh.get(today, (0.0, 0.0, 0.0, 0.0))
         breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]

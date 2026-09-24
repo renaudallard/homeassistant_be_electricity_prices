@@ -6303,7 +6303,9 @@ def test_the_diagnostic_breakdowns_are_not_recorded() -> None:
         # The scan read the subscript alone, so a key written any other way
         # was recorded with the test green, and a write it cannot read the
         # key off fails it.
-        stores = {"breakdown", "stats"}
+        # And the tick's own name for the year-to-date breakdown, which it adds
+        # the earlier contracts' share to after a recorded supplier switch.
+        stores = {"breakdown", "stats", "ytd_breakdown"}
         grew = True
         while grew:
             grew = False
@@ -10514,7 +10516,7 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     import inspect
 
     from custom_components.be_electricity_prices import (
-        backfill,
+        backfill_cost,
         compare_quote,
         fees,
         ytd_cost,
@@ -10522,7 +10524,8 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
 
     windowed: dict[str, Any] = {
         "ytd_cost": ytd_cost._compute_current_year_cost,
-        "backfill": backfill._backfill_cost_sensor,
+        # Per contract since a supplier switch can split the year.
+        "backfill": backfill_cost._accrue_cost,
         "compare_quote": compare_quote._ytd_welcome_credit,
     }
     for name, func in windowed.items():

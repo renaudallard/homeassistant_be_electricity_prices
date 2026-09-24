@@ -293,7 +293,7 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
-| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_elapsed`, `days_seen` / `days_elapsed`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
+| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Changed supplier during the year? Record the switch and each contract is billed on its own supplier's cards for its own days, listed in the `previous_contracts` attribute: see [Switching supplier during the year](#switching-supplier-during-the-year). Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_elapsed`, `days_seen` / `days_elapsed`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
 | `current_month_cost` | The same bill as `current_year_cost` over the running month, which is the period a household budgets in and the one an invoice covers. Priced as its own window rather than sliced off the year, so under the Walloon compensation regime it nets **that month's** registers and twelve of these do not add up to the yearly figure; on every other regime they do. Resets on the 1st. See [docs/entities.md](./docs/entities.md). |
 | `tomorrow_prices_available` | Binary sensor. ON when the price table covers at least one hour with tomorrow's local date **and** the supplier's published validity still covers tomorrow. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET). For fixed/variable contracts it is ON throughout the month, but flips OFF on the last day of a month whose card stops at month-end, since next month's rates are not published yet. |
 | `projected_year_cost` | Roughly what a year on this contract costs in EUR, priced once at today's tariffs against your own measured yearly volume. An indication for ranking contracts, not a forecast of your settlement: tariffs move and your usage will not repeat exactly. Unknown when the rate is a formula over an index that does not exist yet. See [docs/entities.md](./docs/entities.md). |
@@ -528,13 +528,18 @@ the entry's options to clear it.
 ### Reconfiguring later
 
 **Settings → Devices & services → Belgian Electricity Prices → Configure**
-opens a three-option menu:
+opens a four-option menu:
 
 - **Edit settings** — walks the same chain of steps, pre-filled with the
   current values. Change supplier, contract, region, DSO, meter, DSO
   billing mode, ENTSO-E API key, capacity peak source, or solar
   parameters — anything. The integration reloads automatically when you
   finish, picking the new tariff card on the next refresh.
+- **Record a supplier switch** — for a household that changed supplier
+  during the year. Asks for the first day of the new contract, keeps your
+  current settings as the contract you held until the day before, then walks
+  the edit steps for the new one. See
+  [Switching supplier during the year](#switching-supplier-during-the-year).
 - **Compare every supplier (ranked)** — a separate menu entry from the one-off
   quote below, and a different question. It prices **every contract of your own
   kind sold in your region** against your own settings and sorts them, cheapest
@@ -636,6 +641,42 @@ opens a three-option menu:
   year-to-date rows are then left blank, since they replay meter
   history recorded under your configured regime.
   Submit closes the dialog without changing anything; nothing is saved.
+
+### Switching supplier during the year
+
+An entry prices one contract at a time, so a household that changes supplier
+during the year records the switch: **Configure → Record a supplier switch**,
+then the first day the new supplier supplied, as on its welcome letter or on
+the old supplier's final bill. Your current settings are kept as the contract
+you held until the day before, and the edit steps that follow set up the new
+one, starting from what you have now. From then on:
+
+- `current_year_cost` is the bill across both contracts: the old one priced on
+  its own supplier's cards for its own days (its own archive, or the project's
+  card archive, month by month), the new one from its first day. The
+  `previous_contracts` attribute lists each earlier contract with its dates
+  and cost, and `previous_contracts_eur` their total.
+- Under the Walloon compensation regime each contract nets its own injection,
+  as the regulator rules for a switch during the year (CWaPE communication
+  CD-14d03, section 5.1.2): a surplus banked before the switch does not offset
+  consumption after it.
+- The earlier contracts are priced once a day in the background, because that
+  means fetching the old supplier's cards. In the minutes after you record a
+  switch, until the first pricing lands, `current_year_cost` reads unknown
+  rather than a year missing a whole contract.
+- `current_month_cost` includes the old contract's days in the month of the
+  switch, the comparison pages price *your contract* the same way, and the
+  statistics backfill prices each hour on the contract that supplied it.
+- A supplier that can no longer be reached, and whose cards no archive kept,
+  has its days priced on your current card, and the contract's row in
+  `previous_contracts` says so (`priced_on_current_card`).
+
+Record a switch as soon as you can. Until then the new contract's days are
+priced as the old contract's, and recording it later corrects the figure,
+which the long-term statistics show as one step on the day you record it. A
+second switch in the same year is recorded the same way. Recording a switch
+unticks **Bill the year-to-date from the contract start date**; ticking it
+again leaves the earlier contracts out of the year.
 
 ## Daily operation
 
@@ -845,7 +886,9 @@ sensors (`current_price`, `energy_component`, `network_component`,
 `taxes_component`, plus `injection_price` for injection-regime users)
 and the `current_year_cost` running bill. The Energy dashboard and
 the Statistics graph card then show price + cost history that
-predates the entry's first live update tick.
+predates the entry's first live update tick. On an entry that recorded
+a supplier switch, each hour is priced on the contract that supplied it,
+and the running bill carries on across the switch.
 
 The integration auto-triggers a one-shot backfill on first install
 (or after a database reset) covering Jan 1 of the current local year

@@ -34,7 +34,9 @@ backfill are built on this, and neither of them owns it.
 from __future__ import annotations
 
 from .brugel import ensure_power_term
-from .cohort import _month_snapshot_cache, signing_month_snapshot
+from .cohort import _month_snapshot_cache, signing_month_snapshot, ytd_window_start
+from .compare_inputs import _coordinator_rlp_index_weights
+from .contract_periods import ContractPeriod, period_card, previous_periods
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -55,6 +57,7 @@ from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
+from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
@@ -272,14 +275,22 @@ async def _build_context(
     entry: ConfigEntry,
     coordinator: BePricesCoordinator,
     hours: list[datetime],
+    *,
+    snapshot: SupplierSnapshot | None = None,
 ) -> _BackfillContext:
     """Resolve the per-run inputs shared by both passes.
 
     ``_ensure_spp_weights`` must be awaited before ``_spp_weights`` is read;
     doing it here is what keeps that ordering from having to be remembered at
     two call sites.
+
+    ``snapshot`` is set for the hours of a contract the household held earlier
+    in the year (``_contract_segments``): its card, with ``entry`` the stand-in
+    holding its settings. The load profile is then read as loaded rather than
+    asked for, because asking for another card's blend would move the one the
+    live coordinator prices its own contract on.
     """
-    snap = coordinator._snapshot
+    snap = snapshot if snapshot is not None else coordinator._snapshot
     assert snap is not None
     extractor = get_extractor(entry.data[CONF_SUPPLIER])
     contract = entry.data[CONF_CONTRACT]
@@ -293,7 +304,17 @@ async def _build_context(
     # over the year, which is how such a meter is settled.
     rlp_weights = None
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
-    if (
+    if snapshot is not None:
+        rlp_weights = (
+            _coordinator_rlp_index_weights(coordinator.entry, snap)
+            if _energy_is_rlp_indexed(snap.energy)
+            else (
+                coordinator._rlp_weights or None
+                if regime == SOLAR_REGIME_COMPENSATION
+                else None
+            )
+        )
+    elif (
         _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY)
     ) or regime == SOLAR_REGIME_COMPENSATION:
         await coordinator._ensure_rlp_weights(_rlp_blend_for(snap.energy))
@@ -340,6 +361,63 @@ async def _build_context(
         signing=signing,
         annual_kwh=entry_annual_kwh(entry, coordinator),
     )
+
+
+async def _contract_segments(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    hours: list[datetime],
+) -> list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]]:
+    """``hours`` cut at each recorded supplier switch, oldest first.
+
+    Each piece is priced on the contract that supplied it: the stand-in entry
+    and card of a contract held earlier in the year (``period_card``), or the
+    entry itself with ``None`` for its own contract and card. An entry that
+    recorded no switch gets one piece, which is what every run was before. An
+    hour outside every earlier contract's days, including one in a previous
+    year, stays on the entry's own contract, as it always was.
+    """
+    if not hours:
+        return []
+    today = dt_util.now().date()
+    periods = previous_periods(entry.data, ytd_window_start(entry, today), today)
+    if not periods:
+        return [(entry, None, hours)]
+    segments: list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]] = []
+    owner: int | None = None
+    run: list[datetime] = []
+    for hour in hours:
+        day = dt_util.as_local(hour).date()
+        index = next((i for i, p in enumerate(periods) if p.start <= day <= p.end), -1)
+        if index != owner and run:
+            segments.append(
+                await _segment_for(hass, entry, coordinator, periods, owner, run)
+            )
+            run = []
+        owner = index
+        run.append(hour)
+    if run:
+        segments.append(
+            await _segment_for(hass, entry, coordinator, periods, owner, run)
+        )
+    return segments
+
+
+async def _segment_for(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    periods: list[ContractPeriod],
+    index: int | None,
+    hours: list[datetime],
+) -> tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]:
+    if index is None or index < 0:
+        return entry, None, hours
+    proxy, _extractor, card, _stand_in = await period_card(
+        hass, coordinator._session, coordinator, periods[index]
+    )
+    return proxy, card, hours
 
 
 _COST_SENSOR_KEY = "current_year_cost"

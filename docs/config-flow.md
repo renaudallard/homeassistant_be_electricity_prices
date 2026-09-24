@@ -32,7 +32,7 @@ Related docs:
 | --- | --- | --- |
 | `_WizardStepsMixin` | - | The shared step chain (`async_step_contract` through `async_step_meters`) plus the branch helpers (`config_flow.py`) |
 | `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py`) |
-| `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py`) |
+| `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled), `switch` (records a supplier switch, then re-runs the chain), `compare` (throwaway quote) or `compare_all` (ranking) (`config_flow.py`) |
 
 Both flows walk the *same* chain: `supplier/region -> contract -> (settlement) ->
 (signed_rate) -> dso -> meter ->
@@ -581,15 +581,37 @@ stale stored value never renders as an invalid pre-selection:
 ## Options flow
 
 `BePricesOptionsFlow` (`config_flow.py`) opens on `async_step_init`
-(`config_flow.py`) with a three-item menu (`async_show_menu`):
+(`config_flow.py`) with a four-item menu (`async_show_menu`):
 
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
+| `switch` | `async_step_switch` (`config_flow.py`) | Record a supplier switch, then re-run the chain for the new contract; the switch path below |
 | `compare` | `async_step_compare` (`compare_flow.py`) | One-off quote against another supplier; nothing saved |
 | `compare_all` | `async_step_compare_all` (`compare_sweep_flow.py`) | Rank every candidate card for the household; the ranking branch below |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json`).
+
+### Switch path
+
+`async_step_switch` asks one thing, `CONF_SWITCH_DATE`: the first day the new
+contract supplied. `_validate_switch_date` (`flow_schemas.py`) refuses a date
+on or before 1 January, which would leave the contract being left no day this
+year, a date after today, one not after the last switch recorded, and one
+on or before the start date of the contract being left, which cannot end before
+it began (`switch_date_outside_year`, `switch_date_before_last`,
+`switch_date_before_start`). `_record_switch`
+(`flow_schemas.py`) then appends `{"until": <date>, "data": <the settings as
+they stand>}` to `CONF_PREVIOUS_CONTRACTS`, dropping records of an earlier
+year, moves `CONF_CONTRACT_START_DATE` to the switch date and pops what
+belonged to the old contract: its tariff card month, a typed signing rate
+(`_MANUAL_RATE_KEYS`), its end date and `CONF_YTD_FROM_CONTRACT_START`, which
+would leave the earlier contract out of the year. The step then hands off to
+`_async_entry_step`, so the chain runs pre-filled exactly as on the edit path
+and `_finalize` saves the lot. The whole settings are kept rather than the
+contract keys alone, so the old contract is priced on exactly what was
+configured for it, meter, sensors and regime included. Pricing is in
+`contract_periods.py`; see [coordinator.md](coordinator.md).
 
 ### Edit path
 

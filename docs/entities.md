@@ -109,7 +109,7 @@ pulls (all fields defined at `coordinator_data.py`).
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
 | EV home charging rate (CREG) | `ev_home_charging_rate` | - | MEASUREMENT | EUR/kWh | `ev_home_charging_rate_eur_per_kwh`, the SPF's flat-rate ceiling for reimbursing home charging of a company car, for the entry's region this quarter, computed from the CREG's monthly prices (`creg_ev.py`); created only when `CONF_EV_HOME_CHARGING_RATE` is on, and unavailable until the regulator's file has been read. Carries `quarter_start`, `region`, `source` and an unrecorded `history` of every quarter the file covers |
-| Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
+| Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur`; after a recorded supplier switch the contracts held earlier in the year are included, listed in `previous_contracts` with their total in `previous_contracts_eur` ([coordinator.md](coordinator.md), section 7.4) |
 | Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
@@ -300,8 +300,12 @@ statistics setup, documented in its source comment:
 - `last_reset` (`sensor.py`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
-The value is always numeric: missing meter inputs collapse to the fees-only
-floor, so the sensor never goes `unknown`.
+The value is numeric in every case but one: missing meter inputs collapse to
+the fees-only floor, and the one `unknown` is the few minutes after a supplier
+switch is recorded, until the contract held before it has been priced, since a
+year missing a whole contract would reach the recorder as a large negative
+change and then the same positive one. `last_reset` stays on 1 January across
+a switch, so the year remains one statistics cycle.
 
 ### `current_month_cost`: the same bill over a shorter window
 

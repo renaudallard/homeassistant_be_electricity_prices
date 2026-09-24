@@ -50,6 +50,7 @@ from .cohort import _tariff_card_month, ytd_window_start
 from homeassistant.util import dt as dt_util
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
 from .providers.base import SupplierSnapshot
+from .contract_periods import PricedPeriods, priced_from_dict, priced_to_dict
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -69,6 +70,7 @@ class _PersistMixin:
     _peak_history: dict[str, float]
     _peak_kw: float
     _peak_month: date | None
+    _previous_priced: PricedPeriods | None
     _quarter_grid_days: set[date]
     _saved_payload: dict[str, Any] | None
     _snapshot_fetched_at: datetime | None
@@ -308,6 +310,12 @@ class _PersistMixin:
         stored_compare = stored.get("daily_compare")
         if isinstance(stored_compare, dict) and not tuple_mismatch:
             self.daily_compare = _daily_compare_from_dict(stored_compare)
+        # The earlier contracts' pricing, outside the tuple gate: it carries
+        # the periods it was priced for, and the tick serves it only for those,
+        # so a switch recorded since simply leaves it unused.
+        stored_previous = stored.get("previous_contracts")
+        if isinstance(stored_previous, dict):
+            self._previous_priced = priced_from_dict(stored_previous)
         # A blob written before the profiles moved to the shared store carries
         # them still, and adopting those is what keeps an upgrade from
         # downloading again what this entry already had. Irrespective of the
@@ -471,6 +479,8 @@ class _PersistMixin:
             }
         if self.daily_compare is not None:
             payload["daily_compare"] = _daily_compare_to_dict(self.daily_compare)
+        if self._previous_priced is not None:
+            payload["previous_contracts"] = priced_to_dict(self._previous_priced)
         # Nothing to write when nothing moved. The blob is rebuilt whole on
         # every tick and is mostly slow-changing: the card, the peak history,
         # the spot cache and the compare rows are identical on 23 ticks out of

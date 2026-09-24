@@ -533,6 +533,7 @@ class _PlaceholdersMixin(OptionsFlow):
         #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
         #      and same proration on both sides, so the delta still isolates
         #      the supplier-driven difference.
+        from .contract_periods import current_period_start, with_previous_contracts
         from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
@@ -591,6 +592,7 @@ class _PlaceholdersMixin(OptionsFlow):
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)
+            own_start = current_period_start(self.config_entry.data, ytd_from)
             try:
                 current_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -618,6 +620,21 @@ class _PlaceholdersMixin(OptionsFlow):
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, current_snapshot, own=True
                     ),
+                    # From the day the entry's contract started when it recorded
+                    # a switch; the contracts before it are added below.
+                    window_start_override=(
+                        own_start if own_start != ytd_from else None
+                    ),
+                )
+                current_ytd_val = await with_previous_contracts(
+                    self.hass,
+                    session,
+                    coord,
+                    self.config_entry,
+                    quote_entry,
+                    current_ytd_val,
+                    window_start=ytd_from,
+                    today=today_local,
                 )
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,

@@ -37,10 +37,11 @@ from __future__ import annotations
 from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
+    _contract_segments,
     _recorder_models,
     _stat_id,
 )
-from .cohort import _parse_iso_date, ytd_window_start
+from .cohort import _parse_iso_date
 from .const import (
     CONF_CONTRACT_START_DATE,
     METER_MONO,
@@ -62,6 +63,7 @@ from .fees import (
 )
 from .injection import _historical_injection_rate, _injection_is_spot_formula
 from .providers._rates import InjectionRates
+from .providers.base import SupplierSnapshot
 from .pricing import (
     MeterType,
     compute_breakdown,
@@ -222,7 +224,72 @@ async def _backfill_cost_sensor(
         StatisticMeanType,
         async_import_statistics,
     ) = _recorder_models()
-    ctx = await _build_context(hass, entry, coordinator, hours)
+    rows: list[Any] = []
+    # One contract at a time, each carrying on from the bill the ones before it
+    # ran up: an entry that recorded no switch is one piece, as it always was.
+    carried = 0.0
+    for seg_entry, seg_snap, seg_hours in await _contract_segments(
+        hass, entry, coordinator, hours
+    ):
+        carried = await _accrue_cost(
+            hass,
+            seg_entry,
+            coordinator,
+            seg_hours,
+            spots,
+            quarters,
+            snapshot=seg_snap,
+            carried=carried,
+            emit_from=emit_from,
+            rows=rows,
+            make_row=StatisticData,
+        )
+
+    if not rows:
+        return {sid: 0}
+
+    metadata = StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=None,
+        source="recorder",
+        statistic_id=sid,
+        unit_class=None,
+        unit_of_measurement="EUR",
+    )
+    async_import_statistics(hass, metadata, rows)
+    _seed_short_term_sum(hass, metadata, rows[-1], ytd_window_reset(entry))
+    return {sid: len(rows)}
+
+
+async def _accrue_cost(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    hours: list[datetime],
+    spots: dict[datetime, float],
+    quarters: dict[datetime, list[float]],
+    *,
+    snapshot: SupplierSnapshot | None,
+    carried: float,
+    emit_from: datetime | None,
+    rows: list[Any],
+    make_row: Any,
+) -> float:
+    """One contract's hours onto the running year-to-date bill.
+
+    ``entry`` and ``snapshot`` are the contract's: the entry and ``None`` for
+    its own, the stand-in and card of one held earlier in the year. Every row
+    emitted carries ``carried``, what the contracts before it ran up, so the
+    series stays one running total across a switch; the return is the bill at
+    the last hour, for the next contract to carry on from. Each contract nets
+    its own compensation, prorates its own fees and credits its own welcome
+    offer over its own days, which is how the live walk prices it.
+    """
+    if not hours:
+        return carried
+    bill = 0.0
+    ctx = await _build_context(hass, entry, coordinator, hours, snapshot=snapshot)
     region = ctx.region
     dso = ctx.dso
     meter = ctx.meter
@@ -287,7 +354,6 @@ async def _backfill_cost_sensor(
         d = dt_util.as_local(h).date()
         hours_per_local_date[d] = hours_per_local_date.get(d, 0) + 1
 
-    rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
     # The three components a welcome credit may come off, kept beside the bill
@@ -308,7 +374,10 @@ async def _backfill_cost_sensor(
     # The window the credit accrues over is the sensor's own, whichever year
     # the caller anchored the hours on, and the first year it counts from is
     # the entry's own start date, as on the live side.
-    credit_window_start = ytd_window_start(entry, dt_util.as_local(hours[0]).date())
+    # This contract's own first day: 1 January, or its start date on an entry
+    # that bills from it, for the entry's own contract, and the day an earlier
+    # one began for that one, which is the window the live walk credits over.
+    credit_window_start = dt_util.as_local(hours[0]).date()
     credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
     netting = _NetAllocation()
     allocated = ctx.rlp_weights is not None
@@ -478,29 +547,16 @@ async def _backfill_cost_sensor(
             ),
             window_energy_rate(running_energy_component, running_consumption_kwh),
         )
-        state = round(displayed_energy + running_fees - credit, 4)
+        bill = displayed_energy + running_fees - credit
+        state = round(carried + bill, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but
         # only emit rows inside the requested window, so a mid-year
         # ``start`` still carries the correct year-to-date sum instead of
         # restarting from zero and clashing with the pre-existing series.
         if emit_from is None or utc_hour >= emit_from:
-            rows.append(StatisticData(start=utc_hour, state=state, sum=state))
+            rows.append(make_row(start=utc_hour, state=state, sum=state))
 
-    if not rows:
-        return {sid: 0}
-
-    metadata = StatisticMetaData(
-        mean_type=StatisticMeanType.NONE,
-        has_sum=True,
-        name=None,
-        source="recorder",
-        statistic_id=sid,
-        unit_class=None,
-        unit_of_measurement="EUR",
-    )
-    async_import_statistics(hass, metadata, rows)
-    _seed_short_term_sum(hass, metadata, rows[-1], ytd_window_reset(entry))
-    return {sid: len(rows)}
+    return carried + bill
 
 
 def _seed_short_term_sum(

@@ -38,7 +38,8 @@ blanked box has to be popped from the entry or the stored value survives.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from collections.abc import Mapping
+from datetime import date, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -76,6 +77,8 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_PREVIOUS_CONTRACTS,
+    CONF_SWITCH_DATE,
     CONF_YTD_FROM_CONTRACT_START,
     CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
     CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
@@ -290,6 +293,77 @@ _MANUAL_RATE_KEYS: tuple[str, ...] = (
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_YEARLY_FEE,
 )
+
+
+def _switch_schema(today: date) -> vol.Schema:
+    """The one question a supplier switch asks: the new contract's first day."""
+    return vol.Schema(
+        {vol.Required(CONF_SWITCH_DATE, default=today.isoformat()): DateSelector()}
+    )
+
+
+def _validate_switch_date(
+    data: Mapping[str, Any], user_input: dict[str, Any]
+) -> dict[str, str]:
+    """Refuse a switch date that prices nothing, or that overlaps a recorded one.
+
+    It has to fall after 1 January, so the contract being left has at least one
+    day this year, and not after today, since the day is when the new contract
+    started supplying, not when it will. And after the last switch recorded,
+    because each contract ends where the next begins, and after the start date
+    of the contract being left, which cannot end before it began.
+    """
+    from .cohort import _parse_iso_date
+    from .contract_periods import recorded_contracts
+
+    until = _parse_iso_date(user_input.get(CONF_SWITCH_DATE))
+    today = dt_util.now().date()
+    if until is None or until > today or until <= date(today.year, 1, 1):
+        return {CONF_SWITCH_DATE: "switch_date_outside_year"}
+    records = recorded_contracts(data)
+    if records and until <= records[-1][0]:
+        return {CONF_SWITCH_DATE: "switch_date_before_last"}
+    # The contract being left cannot end before it began.
+    started = _parse_iso_date(data.get(CONF_CONTRACT_START_DATE))
+    if started is not None and until <= started:
+        return {CONF_SWITCH_DATE: "switch_date_before_start"}
+    return {}
+
+
+def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
+    """The entry's settings with its current contract kept as the one held until
+    the day before ``until``, ready for the new contract to be picked.
+
+    The settings are kept whole, so the old contract is priced on exactly what
+    was configured for it. A switch from an earlier year prices nothing this
+    year and is dropped. The start date moves to the switch day, since the
+    contract now being set up is the new one, and the answers that belonged to
+    the old contract go: its card month, a typed signing rate and its end date,
+    none of which describe the new one. So does the box that bills the year
+    from the contract start, which would leave the old contract out of the year.
+    """
+    from .contract_periods import recorded_contracts
+
+    held = {key: value for key, value in data.items() if key != CONF_PREVIOUS_CONTRACTS}
+    kept = [
+        {"until": when.isoformat(), "data": dict(settings)}
+        for when, settings in recorded_contracts(data)
+        if when > date(until.year, 1, 1)
+    ]
+    out = {
+        **data,
+        CONF_PREVIOUS_CONTRACTS: [*kept, {"until": until.isoformat(), "data": held}],
+        CONF_CONTRACT_START_DATE: until.isoformat(),
+    }
+    for key in (
+        CONF_TARIFF_CARD_DATE,
+        CONF_CONTRACT_END_DATE,
+        CONF_YTD_FROM_CONTRACT_START,
+        *_MANUAL_RATE_KEYS,
+    ):
+        out.pop(key, None)
+    return out
+
 
 # The custom-supplier rate boxes whose ABSENCE is meaningful: ``_routed_rate``
 # and ``_network_rate`` fall back to the single rate when these are None, so a

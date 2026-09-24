@@ -146,6 +146,7 @@ class _SweepEngine(_HouseholdMixin):
         self, sweep: dict[str, Any], coord: Any
     ) -> list[RankedRow]:
         """The pass itself; see :meth:`fill_ytd_column`, which memoises it."""
+        from .contract_periods import current_period_start, with_previous_contracts
         from .snapshot_months import (
             _snapshot_for_month,
             archived_months_present,
@@ -179,6 +180,7 @@ class _SweepEngine(_HouseholdMixin):
         hist_spots = dict(getattr(coord, "_historical_spots", {}) or {})
         hist_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
         own_ytd: float | None = None
+        own_start = current_period_start(current, hh.ytd_from)
         # Judged on the same raw card the walk below is handed, so the guard
         # and the thing it guards agree about whether a spot is needed: the
         # cohort splice can turn a spot-monthly leg into a variable one, which
@@ -210,6 +212,21 @@ class _SweepEngine(_HouseholdMixin):
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, hh.current_snapshot, own=True
                     ),
+                    # From the day the entry's contract started when it recorded
+                    # a switch; the contracts before it are added below.
+                    window_start_override=(
+                        own_start if own_start != hh.ytd_from else None
+                    ),
+                )
+                own_ytd = await with_previous_contracts(
+                    self.hass,
+                    session,
+                    coord,
+                    self.config_entry,
+                    hh.quote_entry,
+                    own_ytd,
+                    window_start=hh.ytd_from,
+                    today=today,
                 )
         baseline = archived_months_present(
             self.hass,

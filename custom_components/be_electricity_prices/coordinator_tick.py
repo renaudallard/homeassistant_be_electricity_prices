@@ -36,6 +36,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .const import (
+    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -98,6 +99,18 @@ from .cohort import (
 )
 from .fees import _compute_capacity, _compute_prosumer
 from .ytd_cost import _compute_current_year_cost
+from .contract_periods import (
+    ContractPeriod,
+    PricedPeriods,
+    current_period_start,
+    periods_key,
+    periods_need_rlp,
+    periods_need_spots,
+    previous_costs,
+    previous_periods,
+    previous_rows,
+    price_previous_periods,
+)
 from .projected_cost import _compute_projected_year_cost
 from .spot_stats import (
     _energy_is_quarter_hourly,
@@ -136,6 +149,8 @@ class _TickMixin:
     _last_error: str
     _peak_kw: float
     _peak_month: date | None
+    _previous_priced: PricedPeriods | None
+    _previous_pricing: asyncio.Task[None] | None
     _priced: SupplierSnapshot | None
     _rlp_blend: str
     _rlp_fetched_at: datetime | None
@@ -361,6 +376,15 @@ class _TickMixin:
                 )
                 spot_prices = self._fallback_spots()
 
+        # The contracts the household held earlier this year, when it recorded
+        # a switch. Their days are priced off the tick (_price_previous), but
+        # the gates below decide on the load profile and the year's spots
+        # first, and an old dynamic contract needs those whatever this one does.
+        gate_day = dt_util.now().date()
+        gate_periods = previous_periods(
+            self.entry.data, ytd_window_start(self.entry, gate_day), gate_day
+        )
+
         # Refresh the Synergrid SPP profile when this entry's injection is
         # SPP-weighted: a card that indexes on Belpex_SPP, or a custom monthly
         # entry that opted in. Soft-fail. What a failure degrades TO differs -
@@ -387,7 +411,9 @@ class _TickMixin:
         # yearly net is settled by spreading the volume over the year on it.
         allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
         wants_rlp = bool(
-            (rlp_weighted and (spot_prices or self._historical_spots)) or allocating
+            (rlp_weighted and (spot_prices or self._historical_spots))
+            or allocating
+            or periods_need_rlp(gate_periods)
         )
         blend = _rlp_blend_for(priced.energy)
         # FIRST tick only, same reason as the spots and the archived cards
@@ -431,6 +457,7 @@ class _TickMixin:
             isinstance(priced.energy, (DynamicRates, SpotMonthlyRates))
             or _injection_needs_spot(self._snapshot, self.entry)
             or _injection_needs_month_spot(self._snapshot, self.entry)
+            or periods_need_spots(gate_periods)
         ):
             today_local = dt_util.now().date()
             # An entry billing from its contract start date has no use for a
@@ -627,6 +654,12 @@ class _TickMixin:
         # One reading of the clock for both windows and the resets published
         # beside them, so a figure and its last_reset always name one period.
         window_now = dt_util.now()
+        ytd_start = ytd_window_start(self.entry, window_now.date())
+        # A recorded switch splits the window: this contract bills from the day
+        # it started and the earlier ones are added from their own pricing
+        # below. Without one this is the window's first day, as it always was.
+        periods = previous_periods(self.entry.data, ytd_start, window_now.date())
+        own_start = current_period_start(self.entry.data, ytd_start)
         current_year_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
@@ -642,6 +675,7 @@ class _TickMixin:
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
+            window_start_override=own_start if own_start != ytd_start else None,
         )
         # The same bill over the running month. A second pass rather than an
         # accumulator inside the first: the walk has four branches and four
@@ -650,6 +684,7 @@ class _TickMixin:
         # month cards and spots the first pass resolved are all cached, so what
         # it costs is one short recorder read and the pricing loop over ~30
         # days.
+        month_start = month_window_start(self.entry, window_now.date())
         month_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
@@ -664,8 +699,25 @@ class _TickMixin:
             ),
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
-            window_start_override=month_window_start(self.entry, window_now.date()),
+            window_start_override=max(month_start, own_start),
         )
+        if periods:
+            self._schedule_previous_pricing(periods, window_now.date())
+        # Unknown rather than short while the earlier contracts are not priced
+        # yet, which is only the minutes after a switch is recorded: a year
+        # missing a whole contract lands on the recorder as a large negative
+        # change and then the same positive one.
+        prev_year, prev_month = previous_costs(
+            self._previous_priced, periods, month_start
+        )
+        if current_year_cost is not None:
+            current_year_cost = (
+                None if prev_year is None else current_year_cost + prev_year
+            )
+        if month_cost is not None:
+            month_cost = None if prev_month is None else month_cost + prev_month
+        if periods and prev_year is not None:
+            ytd_breakdown["previous_contracts_eur"] = prev_year
         if cached_months_only:
             self._month_cards_deferred = False
             self.entry.async_create_background_task(
@@ -771,6 +823,7 @@ class _TickMixin:
             ev_home_charging_rate_eur_per_kwh=ev_rate,
             ev_home_charging_quarter_start=ev_quarter,
             current_year_cost_eur=current_year_cost,
+            previous_contracts=previous_rows(self._previous_priced, periods),
             current_month_cost_eur=month_cost,
             current_year_cost_reset=ytd_window_reset(self.entry, window_now),
             current_month_cost_reset=month_window_reset(self.entry, window_now),
@@ -879,6 +932,85 @@ class _TickMixin:
         after = archived_months_present(self.hass, supplier, contract, region, months)
         if self._unloaded or after == before:
             return
+        await self.async_request_refresh()
+
+    def _schedule_previous_pricing(
+        self, periods: list[ContractPeriod], today: date
+    ) -> None:
+        """Price the earlier contracts in the background, at most once a day.
+
+        A contract the household has left is a closed window: its figure moves
+        only when an archive publishes one of its months, or the day-ahead cache
+        fills an hour it lacked, so a day old is as good as an hour old, and
+        pricing it means fetching the old supplier's cards, which neither the
+        tick nor config-entry setup should wait on. Stale pricing for the same
+        periods keeps being served until the new one lands.
+
+        A pricing that could not price one of the periods is not kept for the
+        day: the year reads unknown while it stands, so the next tick asks
+        again rather than tomorrow's.
+        """
+        priced = self._previous_priced
+        if (
+            priced is not None
+            and priced.key == periods_key(periods)
+            and priced.day == today
+            and all(row.cost is not None for row in priced.rows)
+        ):
+            return
+        if self._previous_pricing is not None and not self._previous_pricing.done():
+            return
+        self._previous_pricing = self.entry.async_create_background_task(
+            self.hass,
+            self._price_previous(periods, today),
+            f"{DOMAIN}_previous_contracts_{self.entry.entry_id}",
+        )
+
+    async def _price_previous(self, periods: list[ContractPeriod], today: date) -> None:
+        """Price the earlier contracts, keep the result and ask for a refresh.
+
+        The year's day-ahead first when an old contract settles on it: on the
+        day a switch is recorded the tick's own fill is still running in the
+        background, and pricing an old dynamic contract before it lands would
+        settle that contract without its energy for the whole day. The fill is
+        behind the spot lock, so this waits for it rather than fetching twice.
+        """
+        if periods_need_spots(periods):
+            # The entry's own key first. A household that left a dynamic
+            # contract for a fixed one may hold none any more, and the settings
+            # kept with the contract it left still carry the one it used: the
+            # day-ahead is the same for every supplier, and the walk refuses to
+            # fetch at all without one.
+            api_key = self.entry.data.get(CONF_API_KEY) or next(
+                (p.data[CONF_API_KEY] for p in periods if p.data.get(CONF_API_KEY)),
+                None,
+            )
+            try:
+                await self._ensure_historical_spots(
+                    periods[0].start, periods[-1].end, api_key
+                )
+            except Exception as err:  # noqa: BLE001 - priced on what is cached
+                # An hour with no spot still bills its network and tax legs, as
+                # it does for the entry's own contract, so price on what the
+                # cache holds rather than not at all.
+                _LOGGER.debug("Day-ahead history for earlier contracts: %s", err)
+        try:
+            month_start = month_window_start(self.entry, today)
+            rows = await price_previous_periods(
+                self.hass, self._session, self, periods, month_start=month_start
+            )
+        except Exception as err:  # noqa: BLE001 - the next tick asks again
+            _LOGGER.warning(
+                "Could not price the contracts %s held earlier this year: %s",
+                self.entry.title,
+                err,
+            )
+            return
+        if self._unloaded:
+            return
+        self._previous_priced = PricedPeriods(
+            key=periods_key(periods), day=today, month=month_start, rows=tuple(rows)
+        )
         await self.async_request_refresh()
 
     def _build_hourly(

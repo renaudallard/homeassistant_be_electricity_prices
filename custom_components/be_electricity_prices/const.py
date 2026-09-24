@@ -208,6 +208,15 @@ CONF_TARIFF_CARD_DATE: Final = "tariff_card_date"
 # year: a window reaching back into last year does not survive that.
 CONF_YTD_FROM_CONTRACT_START: Final = "ytd_from_contract_start"
 
+# The contracts the household held earlier in the year, recorded from the
+# options menu when it changes supplier: a copy of the entry's settings on
+# each, and the day the next contract started (contract_periods.py). Priced on
+# their own cards for their own days, so the year-to-date is the bill paid.
+CONF_PREVIOUS_CONTRACTS: Final = "previous_contracts"
+# The one question the options flow asks when recording a switch: the first
+# day the new contract supplied. A form field, never stored under this name.
+CONF_SWITCH_DATE: Final = "switch_date"
+
 # Optional manual signing-rate override, offered on the config flow when a
 # start date is set on a fixed / dynamic contract. Used as the cohort energy
 # leg when the supplier keeps no archive of the signing month (or the archive

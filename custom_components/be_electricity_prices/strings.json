@@ -256,15 +256,29 @@
       "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region.",
-      "whatif_volumes_required": "Quoting a different regime needs your yearly consumption and injection in kWh: this entry has no injection meter wired, so they cannot be read from your meters."
+      "whatif_volumes_required": "Quoting a different regime needs your yearly consumption and injection in kWh: this entry has no injection meter wired, so they cannot be read from your meters.",
+      "switch_date_outside_year": "The switch date must fall between 2 January and today.",
+      "switch_date_before_last": "The switch date must be after the last switch recorded this year.",
+      "switch_date_before_start": "The switch date must be after the start date of the contract you are leaving."
     },
     "step": {
       "init": {
         "title": "Belgian Electricity Prices",
         "menu_options": {
           "edit": "Edit settings",
+          "switch": "Record a supplier switch",
           "compare": "Compare another supplier (one-off quote)",
           "compare_all": "Compare every supplier (ranked)"
+        }
+      },
+      "switch": {
+        "title": "Record a supplier switch",
+        "description": "Changed supplier during the year? Enter the first day the new contract supplied you. Your current settings are kept as the contract you held until the day before, and the next steps set up the new one, starting from what you have now. The year-to-date cost then bills each contract on its own tariff cards for its own days. In Wallonia under the compensation regime, each contract nets its own injection, as the regulator rules for a switch during the year.",
+        "data": {
+          "switch_date": "First day with the new contract"
+        },
+        "data_description": {
+          "switch_date": "The day the new supplier started supplying, as on its welcome letter or on the old supplier's final bill. Between 2 January and today, and after any switch already recorded this year."
         }
       },
       "edit": {

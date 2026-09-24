@@ -47,6 +47,7 @@ the coordinator from each supplier's own publication.
 from __future__ import annotations
 
 
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import (
@@ -56,9 +57,13 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import dt as dt_util
 
 from .flow_schemas import (
     _MANUAL_RATE_KEYS,
+    _record_switch,
+    _switch_schema,
+    _validate_switch_date,
     _METER_SENSOR_KEYS,
     _api_key_schema,
     _capacity_schema,
@@ -106,6 +111,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_SWITCH_DATE,
     CONF_YTD_FROM_CONTRACT_START,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -856,7 +862,33 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["edit", "compare", "compare_all"],
+            menu_options=["edit", "switch", "compare", "compare_all"],
+        )
+
+    async def async_step_switch(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Record a change of supplier, then set up the new contract.
+
+        Asks only for the new contract's first day. The entry's settings as
+        they stand are kept as the contract held until the day before
+        (``_record_switch``), and the edit chain that follows starts from them,
+        so only what changed has to be picked again. The year-to-date then
+        prices each contract on its own cards for its own days.
+        """
+        if not hasattr(self, "_data"):
+            self._data = self._seed_data()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_switch_date(self._data, user_input)
+            if not errors:
+                until = date.fromisoformat(user_input[CONF_SWITCH_DATE])
+                self._data = _record_switch(self._data, until)
+                return await self._async_entry_step()
+        return self.async_show_form(
+            step_id="switch",
+            data_schema=_switch_schema(dt_util.now().date()),
+            errors=errors,
         )
 
     _entry_step_id = "edit"
