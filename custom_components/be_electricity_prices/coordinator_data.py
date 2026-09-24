@@ -136,6 +136,11 @@ class CoordinatorData:
     # (``creg_ev.py``). None until the file has been read, and for a quarter
     # it does not cover.
     ev_home_charging_rate_eur_per_kwh: float | None = None
+    # The quarter that rate is for, baked with it at the tick. Read off the
+    # clock when the sensor rendered, the slot push at 00:00 on the first day
+    # of a quarter showed the new quarter beside the old quarter's rate until
+    # the next tick.
+    ev_home_charging_quarter_start: date | None = None
     # Running annual bill in EUR, accumulated day by day from Jan 1.
     # Falls back to the (pro-rated) fees-only floor when no meter
     # sensors are wired. For compensation regime the math nets

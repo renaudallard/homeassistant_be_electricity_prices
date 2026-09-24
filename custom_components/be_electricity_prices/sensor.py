@@ -784,13 +784,15 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 return {}
             return {"today": today, "tomorrow": tomorrow}
         if self.entity_description.key == "ev_home_charging_rate":
-            # The history lets last quarter's kWh be settled at last quarter's
-            # rate after the state has moved on. Unrecorded: it changes once a
-            # quarter and would otherwise be written every tick.
+            # The quarter comes from the tick that read the rate, never from
+            # the clock, for the reason CoordinatorData gives. The history lets
+            # last quarter's kWh be settled at last quarter's rate after the
+            # state has moved on. Unrecorded: it changes once a quarter and
+            # would otherwise be written every tick.
             region = self.coordinator.entry.data.get(CONF_REGION, "")
-            now = dt_util.now().date()
+            quarter = data.ev_home_charging_quarter_start
             return {
-                "quarter_start": creg_ev.quarter_start(now).isoformat(),
+                "quarter_start": quarter.isoformat() if quarter else None,
                 "region": region,
                 "source": creg_ev.SOURCE_URL,
                 "history": [

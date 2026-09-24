@@ -5,18 +5,29 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices import creg_ev
+from custom_components.be_electricity_prices.cohort import _CohortLegs
 from custom_components.be_electricity_prices.const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
-from custom_components.be_electricity_prices.sensor import EV_RATE_SENSORS
+from custom_components.be_electricity_prices.providers._rates import FixedRates
+from custom_components.be_electricity_prices.sensor import (
+    EV_RATE_SENSORS,
+    BePriceSensor,
+)
+from tests import make_entry, make_snapshot
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "creg_tariff_ev.csv"
 
@@ -289,14 +300,69 @@ def test_the_sensor_reads_the_rate_and_is_unavailable_without_one() -> None:
     )
 
 
-def test_the_rate_is_fetched_by_the_tick_and_read_into_the_record() -> None:
-    """Held on the source: the tick fetches, then reads the cache synchronously."""
-    import inspect
+async def test_the_tick_records_the_rate_it_fetched_with_its_quarter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The file lands during the tick, and the record that tick publishes
+    already carries its rate, beside the quarter that rate is for."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(region=REGION_WALLONIA)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
 
-    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    async def _download(_session: object, _today: date) -> bool:
+        creg_ev._table.update(creg_ev.parse(_csv()))
+        return True
 
-    body = inspect.getsource(BePricesCoordinator._update_body)
-    assert body.index("ensure_ev_rates(") < body.index("ev_rate_for("), (
-        "the rate must be fetched before the record reads it, "
-        "or the tick that fetched the file publishes nothing"
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick.ensure_ev_rates",
+            _download,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
+            AsyncMock(return_value=_CohortLegs(None, None)),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    assert data.ev_home_charging_rate_eur_per_kwh == pytest.approx(0.3783)
+    assert data.ev_home_charging_quarter_start == date(2026, 7, 1)
+
+
+def test_the_quarter_shown_is_the_quarter_of_the_rate_shown(freezer: Any) -> None:
+    """At 00:00 on the first day of a quarter the slot push re-renders the
+    sensor before any tick has run. It must go on naming the quarter its rate
+    is for, not the one the clock has moved into."""
+    creg_ev._table.update(creg_ev.parse(_csv()))
+    data = CoordinatorData(
+        ev_home_charging_rate_eur_per_kwh=creg_ev.rate_for(
+            REGION_WALLONIA, date(2026, 9, 30)
+        ),
+        ev_home_charging_quarter_start=date(2026, 7, 1),
     )
+    sensor = BePriceSensor(
+        SimpleNamespace(  # type: ignore[arg-type]
+            data=data,
+            entry=SimpleNamespace(
+                entry_id="x", data={"region": REGION_WALLONIA}, title="t"
+            ),
+            last_update_success=True,
+        ),
+        EV_RATE_SENSORS[0],
+    )
+    freezer.move_to("2026-10-01 00:00:00+02:00")
+    attrs = sensor.extra_state_attributes
+    assert sensor.native_value == pytest.approx(0.3783)
+    assert attrs["quarter_start"] == "2026-07-01"
+    # The next tick moves both at once; the history already holds the rate.
+    assert {"quarter_start": "2026-10-01", "rate": 0.3779} in attrs["history"]
