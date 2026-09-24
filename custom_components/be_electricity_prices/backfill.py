@@ -309,6 +309,7 @@ async def _backfill_price_sensors(
                         snap_h,
                         spot=spot,
                         spots=spots,
+                        bucket=month_bucket,
                         quarters=quarters,
                         utc_hour=utc_hour,
                         local=local,

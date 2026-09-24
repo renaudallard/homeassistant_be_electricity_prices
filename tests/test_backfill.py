@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from custom_components.be_electricity_prices import energy_meters
 
@@ -53,6 +55,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from custom_components.be_electricity_prices.spot_stats import _bucket_by_local_month
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -1748,10 +1751,12 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
         injection=InjectionRates(current=0.03, factor=0.5, base=0.0, spp_indexed=True),
     )
     utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    spots = {utc_hour: 0.20}
     rate = _injection_rate_for_hour(
         snap,
         spot=0.20,  # the ENERGY leg's flat month mean - the wrong index here
-        spots={utc_hour: 0.20},
+        spots=spots,
+        bucket=_bucket_by_local_month(spots),
         quarters={},
         utc_hour=utc_hour,
         local=dt_util.as_local(utc_hour),
@@ -1790,10 +1795,12 @@ def test_the_backfill_asks_the_per_hour_gate_of_the_hours_own_leg() -> None:
         injection=InjectionRates(factor=0.9, base=-0.01, month_indexed=True),
     )
     utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    spots = {utc_hour: 0.20}
     _injection_rate_for_hour(
         snap,
         spot=0.20,
-        spots={utc_hour: 0.20},
+        spots=spots,
+        bucket=_bucket_by_local_month(spots),
         quarters={},
         utc_hour=utc_hour,
         local=dt_util.as_local(utc_hour),
@@ -1831,11 +1838,14 @@ async def test_backfill_injection_replays_floored_quarters() -> None:
     utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
     quarters = [-0.060, -0.020, 0.010, 0.050]
 
+    spots = {utc_hour: sum(quarters) / 4}
+
     def _rate(cached: dict[datetime, list[float]]) -> float | None:
         return _injection_rate_for_hour(
             snap,
             spot=sum(quarters) / 4,
-            spots={utc_hour: sum(quarters) / 4},
+            spots=spots,
+            bucket=_bucket_by_local_month(spots),
             quarters=cached,
             utc_hour=utc_hour,
             local=dt_util.as_local(utc_hour),
@@ -2076,10 +2086,12 @@ def test_backfilled_feed_in_bills_the_printed_indicative_beside_a_formula() -> N
         injection=InjectionRates(current=0.05, factor=0.9, base=-0.01),
     )
     utc_hour = datetime(2026, 1, 6, 11, tzinfo=UTC)
+    spots = {utc_hour: 0.06}
     rate = bf._injection_rate_for_hour(
         snap,
         spot=0.06,
-        spots={utc_hour: 0.06},
+        spots=spots,
+        bucket=_bucket_by_local_month(spots),
         quarters={},
         utc_hour=utc_hour,
         local=dt_util.as_local(utc_hour),
@@ -2165,3 +2177,114 @@ async def test_the_credit_cap_reads_each_month_own_green_levy(
     assert breakdown["green_component_ytd_eur"] == pytest.approx(volume * 0.010)
     # Not today's card at 0,040, which is what the cap used to be built on.
     assert breakdown["green_component_ytd_eur"] != pytest.approx(volume * 0.040)
+
+
+@contextmanager
+def _month_indexed_backfill(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> Iterator[tuple[Any, list[datetime], dict[datetime, float]]]:
+    """Ten June days of an injection-regime entry whose feed-in credit settles
+    on the month's mean, as Eneco's and Luminus's cards do: the shape that
+    sends both passes to _spp_injection_spot for every hour."""
+    from custom_components.be_electricity_prices import backfill_window
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=60.0),
+        injection=InjectionRates(
+            current=0.05, factor=0.9, base=-0.01, month_indexed=True
+        ),
+    )
+    entry.add_to_hass(hass)
+    _register_sensors(
+        hass,
+        entry,
+        [
+            "current_price",
+            "energy_component",
+            "network_component",
+            "taxes_component",
+            "injection_price",
+            "current_year_cost",
+        ],
+    )
+    hours = bf._hour_iter(
+        datetime(2026, 6, 1, tzinfo=BRUSSELS), datetime(2026, 6, 11, tzinfo=BRUSSELS)
+    )
+    spots = {hour: 0.05 + 0.001 * (hour.hour % 7) for hour in hours}
+    coord = SimpleNamespace(
+        hass=None,
+        entry=entry,
+        _snapshot=snap,
+        _session=None,
+        _spp_weights={},
+        _ensure_spp_weights=AsyncMock(),
+        _rlp_weights={},
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+
+    async def _snap_for(_month_first: object) -> Any:
+        return snap
+
+    async def _hourly(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        kwh = 0.4 if entity_id == "sensor.cons" else 0.3
+        return {hour: kwh for hour in hours}
+
+    with (
+        patch.object(
+            backfill_window, "_month_snapshot_cache", lambda *_a, **_k: _snap_for
+        ),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=lambda *_a: None,
+        ),
+    ):
+        yield coord, hours, spots
+
+
+async def test_the_backfill_groups_the_day_ahead_once_per_pass(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Each pass groups the spot cache by month once, not once per hour.
+
+    _spp_injection_spot groups whatever raw cache it is handed before it looks
+    at its own month cache, and both passes handed it the raw cache for every
+    hour of a credit settling on a month mean. A year-to-date backfill of such
+    an entry grouped the year's spot cache 12.602 times, about nine minutes of
+    work on a Raspberry Pi, all of it on Home Assistant's event loop.
+    """
+    from custom_components.be_electricity_prices import backfill_cost, spot_stats
+
+    freezer.move_to("2026-06-20 12:00:00+02:00")
+    entry = make_entry(
+        title="Eneco Fix",
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    grouped = 0
+
+    def _counting(spots: dict[datetime, float]) -> Any:
+        nonlocal grouped
+        grouped += 1
+        return _bucket_by_local_month(spots)
+
+    with (
+        _month_indexed_backfill(hass, entry) as (coord, hours, spots),
+        patch.object(spot_stats, "_bucket_by_local_month", _counting),
+        patch.object(bf, "_bucket_by_local_month", _counting),
+        patch.object(backfill_cost, "_bucket_by_local_month", _counting),
+    ):
+        written = await bf._backfill_price_sensors(hass, entry, coord, hours, spots, {})
+        written |= await bf._backfill_cost_sensor(hass, entry, coord, hours, spots, {})
+
+    # Both passes priced every hour, the feed-in credit included.
+    assert set(written.values()) == {len(hours)}
+    assert len(written) == 6
+    assert grouped == 2

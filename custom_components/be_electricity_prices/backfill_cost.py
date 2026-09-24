@@ -73,6 +73,7 @@ from .pricing import (
 )
 from .spot_stats import (
     _NetAllocation,
+    _SpotMonthBucket,
     _bucket_by_local_month,
     _energy_needs_spot,
     _hour_spot,
@@ -108,6 +109,7 @@ def _injection_rate_for_hour(
     *,
     spot: float | None,
     spots: dict[datetime, float],
+    bucket: _SpotMonthBucket,
     quarters: dict[datetime, list[float]],
     utc_hour: datetime,
     local: datetime,
@@ -130,6 +132,12 @@ def _injection_rate_for_hour(
     this hour is priced off its own spot: a credit settling on a month mean is
     not priced by what one hour's quarters did. ``quarters`` is empty except
     on an entry whose feed-in formula is floored.
+
+    ``bucket`` is ``spots`` grouped by month, which each pass builds once.
+    Handed the raw cache instead, _spp_injection_spot grouped the whole year
+    again on every call before it looked at its month cache, and a backfill
+    made that call once an hour in each pass: 12.602 groupings of a
+    6.311-hour cache at about 41 ms apiece on a Raspberry Pi.
     """
     monthly_mean = _injection_on_month_mean(snap_h)
     hourly = hourly_injection(snap_h.injection)
@@ -154,7 +162,7 @@ def _injection_rate_for_hour(
         # which makes every source below moot.
         index_realised=getattr(snap_h.injection, "index_realised", None),
         spp_weights=spp_weights,
-        historical_spots=spots,
+        bucket=bucket,
         year=local.year,
         month=local.month,
         today=today,
@@ -438,6 +446,7 @@ async def _accrue_cost(
                     snap_h,
                     spot=spot,
                     spots=spots,
+                    bucket=month_bucket,
                     quarters=quarters,
                     utc_hour=utc_hour,
                     local=local,
