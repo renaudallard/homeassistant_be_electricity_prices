@@ -372,10 +372,17 @@ def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
 # but never cleared, and 0.11.40/0.11.41 briefly shipped these boxes with a
 # 0.0 default, so entries edited in that window hold a billed zero with no
 # route out of it.
-_CUSTOM_FALLBACK_KEYS: tuple[str, ...] = (
+#
+# One tuple per step. Each step pops its own boxes, shown or not (a box a meter
+# or mode change hid is stale), and never the other step's: popping every
+# absent key made the network step throw away the energy split the step
+# before had just stored.
+_CUSTOM_ENERGY_FALLBACK_KEYS: tuple[str, ...] = (
     CONF_CUSTOM_ENERGY_PEAK,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+)
+_CUSTOM_DSO_FALLBACK_KEYS: tuple[str, ...] = (
     CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
@@ -393,14 +400,16 @@ _CUSTOM_FALLBACK_KEYS: tuple[str, ...] = (
 )
 
 
-def _drop_blanked(data: dict[str, Any], user_input: dict[str, Any]) -> None:
-    """Remove any fallback key the user cleared from the form.
+def _drop_blanked(
+    data: dict[str, Any], user_input: dict[str, Any], keys: tuple[str, ...]
+) -> None:
+    """Remove any of the submitting step's fallback ``keys`` the user cleared.
 
     ha-form omits a blanked selector from ``user_input`` entirely, so a bare
     ``data.update(user_input)`` leaves the stored number in place and the
     re-shown form pre-fills it again as a suggestion.
     """
-    for key in _CUSTOM_FALLBACK_KEYS:
+    for key in keys:
         if key not in user_input:
             data.pop(key, None)
 

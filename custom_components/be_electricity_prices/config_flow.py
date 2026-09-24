@@ -70,6 +70,8 @@ from .flow_schemas import (
     _connection_power_schema,
     _contract_schema,
     _direct_debit_schema,
+    _CUSTOM_DSO_FALLBACK_KEYS,
+    _CUSTOM_ENERGY_FALLBACK_KEYS,
     _drop_blanked,
     _dso_schema,
     _dso_tariff_mode_schema,
@@ -737,7 +739,7 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            _drop_blanked(self._data, user_input)
+            _drop_blanked(self._data, user_input, _CUSTOM_ENERGY_FALLBACK_KEYS)
             self._data.update(user_input)
             return await self._after_energy_collected()
         return self.async_show_form(
@@ -760,7 +762,7 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            _drop_blanked(self._data, user_input)
+            _drop_blanked(self._data, user_input, _CUSTOM_DSO_FALLBACK_KEYS)
             self._data.update(user_input)
             return await self.async_step_custom_tax()
         return self.async_show_form(

@@ -852,10 +852,15 @@ def test_a_blanked_fallback_box_is_removed_from_the_entry() -> None:
     data.update(user_input) leaves the stored number in place and the re-shown
     form pre-fills it again as a suggestion. That matters because 0.11.40 and
     0.11.41 briefly shipped these boxes with a 0.0 default, so an entry edited
-    in that window holds a billed zero -- and without the pop there is no way
-    to clear it.
+    in that window holds a billed zero, and without the pop there is no way
+    to clear it. Each step pops only its own boxes: the other step's rates
+    are not on its form and stay.
     """
-    from custom_components.be_electricity_prices.flow_schemas import _drop_blanked
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _CUSTOM_DSO_FALLBACK_KEYS,
+        _CUSTOM_ENERGY_FALLBACK_KEYS,
+        _drop_blanked,
+    )
 
     data = {
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
@@ -865,19 +870,132 @@ def test_a_blanked_fallback_box_is_removed_from_the_entry() -> None:
         const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.0,
         const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.0,
     }
-    # The user clears every fallback box and submits just the single rate.
-    _drop_blanked(data, {const.CONF_CUSTOM_ENERGY_SINGLE: 0.30})
+    # The user clears the energy step's fallback box and submits just the
+    # single rate: the network step's boxes are not on that form and stay.
+    _drop_blanked(
+        data, {const.CONF_CUSTOM_ENERGY_SINGLE: 0.30}, _CUSTOM_ENERGY_FALLBACK_KEYS
+    )
+    assert const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT not in data
+    assert data[const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK] == 0.0
+    # The network step pops its own, including the peak / off-peak pair an
+    # earlier bi-hourly meter left behind and this meter no longer shows.
+    _drop_blanked(
+        data,
+        {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05},
+        _CUSTOM_DSO_FALLBACK_KEYS,
+    )
     for key in (
-        const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
         const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
         const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
     ):
         assert key not in data, key
     # A box the user DID fill is kept, and the non-fallback rates are untouched.
-    _drop_blanked(data, {const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.12})
-    data.update({const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.12})
+    user_input = {const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.12}
+    _drop_blanked(data, user_input, _CUSTOM_ENERGY_FALLBACK_KEYS)
+    data.update(user_input)
     assert data[const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT] == pytest.approx(0.12)
     assert data[const.CONF_CUSTOM_ENERGY_SINGLE] == pytest.approx(0.30)
+
+
+async def _custom_bi_install(hass: HomeAssistant) -> Any:
+    """Walk a Walloon custom fixed entry on a bi-hourly meter, filling the
+    day / night split on both the energy and the network step."""
+    result = await _start(hass, const.SUPPLIER_CUSTOM, const.REGION_WALLONIA)
+    flow = result["flow_id"]
+    cfg = hass.config_entries.flow.async_configure
+    await cfg(flow, {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED})
+    await cfg(flow, {const.CONF_DSO: const.DSO_ORES})
+    await cfg(flow, {const.CONF_METER: const.METER_BI})
+    result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE})
+    assert result["step_id"] == "custom_energy"
+    await cfg(
+        flow,
+        {
+            const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
+            const.CONF_CUSTOM_ENERGY_PEAK: 0.34,
+            const.CONF_CUSTOM_ENERGY_OFFPEAK: 0.24,
+        },
+    )
+    result = await cfg(
+        flow,
+        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+    )
+    assert result["step_id"] == "custom_dso"
+    await cfg(
+        flow,
+        {
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.10,
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.12,
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.07,
+        },
+    )
+    await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: 0.06})
+    result = await cfg(flow, {})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    return result
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_network_step_keeps_the_energy_split(
+    hass: HomeAssistant, _no_setup: Any
+) -> None:
+    """Each custom step pops only the boxes it shows. Both steps used to pop
+    every fallback key missing from their own input, so the network step
+    threw away the energy peak / off-peak the step before had just stored
+    and a bi-hourly card billed its single rate (zero, left at the default)
+    every hour."""
+    data = (await _custom_bi_install(hass))["data"]
+    assert data[const.CONF_CUSTOM_ENERGY_PEAK] == 0.34
+    assert data[const.CONF_CUSTOM_ENERGY_OFFPEAK] == 0.24
+    assert data[const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK] == 0.12
+    assert data[const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK] == 0.07
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_edit_still_suggests_the_stored_network_split(
+    hass: HomeAssistant, _no_setup: Any
+) -> None:
+    """The energy step of an edit must not empty the network step's boxes
+    before that step builds its suggestions from the entry."""
+    await _custom_bi_install(hass)
+    entry = hass.config_entries.async_entries(const.DOMAIN)[0]
+    cfg = hass.config_entries.options.async_configure
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await cfg(result["flow_id"], {"next_step_id": "edit"})
+    flow = result["flow_id"]
+    await cfg(
+        flow,
+        {
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_REGION: const.REGION_WALLONIA,
+        },
+    )
+    await cfg(flow, {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED})
+    await cfg(flow, {const.CONF_DSO: const.DSO_ORES})
+    await cfg(flow, {const.CONF_METER: const.METER_BI})
+    result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE})
+    assert result["step_id"] == "custom_energy"
+    await cfg(
+        flow,
+        {
+            const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
+            const.CONF_CUSTOM_ENERGY_PEAK: 0.34,
+            const.CONF_CUSTOM_ENERGY_OFFPEAK: 0.24,
+        },
+    )
+    result = await cfg(
+        flow,
+        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+    )
+    assert result["step_id"] == "custom_dso"
+    schema = result["data_schema"]
+    assert schema is not None
+    suggested = {
+        str(k.schema): (k.description or {}).get("suggested_value")
+        for k in schema.schema
+    }
+    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK] == 0.12
+    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK] == 0.07
 
 
 def test_absent_fallback_rates_price_off_the_single_rate() -> None:
