@@ -3086,19 +3086,19 @@ async def test_live_today_kwh_handles_meter_reset(
     assert kwh == 5.0
 
 
-async def test_live_today_kwh_total_meter_may_run_backwards(
+async def test_live_today_kwh_a_falling_total_meter_reads_zero(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A ``total`` register is allowed to fall, so a reading below midnight's
-    is a net export, not a counter reset.
+    """A ``total`` register that falls is not a counter reset, and today reads
+    it as zero, the answer the past days get.
 
     The picker accepts any device_class=energy sensor, so a utility_meter with
-    net_consumption or a bidirectional register is a legitimate choice. Reading
-    its decrease as a reset billed the meter's whole lifetime total as one
-    day's consumption: a 12350 kWh register that exported 4.5 kWh reported
-    12345.6 kWh, roughly 4300 EUR onto current_year_cost. The signed delta is
-    also exactly what the recorder reports as that day's ``change``, so past
-    days and today stay on the same basis."""
+    net_consumption or a bidirectional register can be wired. Reading its
+    decrease as a reset billed the meter's whole lifetime total as one day's
+    consumption: a 12350 kWh register that exported 4.5 kWh reported
+    12345.6 kWh, roughly 4300 EUR onto current_year_cost. Billing it signed
+    disagreed with the statistics, which drop a negative change, so the day
+    moved at midnight (tests/recorder/test_net_meter.py)."""
     freezer.move_to("2026-07-16 10:00:00+02:00")
     hass.states.async_set(
         "sensor.meter",
@@ -3112,13 +3112,13 @@ async def test_live_today_kwh_total_meter_may_run_backwards(
     inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "12350.1")]})
     with patch("homeassistant.components.recorder.get_instance", return_value=inst):
         kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
-    assert kwh == pytest.approx(-4.5)
+    assert kwh == 0.0
 
 
 async def test_live_today_kwh_reset_substitution_needs_total_increasing(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A meter that publishes no state class gets the signed delta too: the
+    """A meter that publishes no state class reads a fall as zero too: the
     reset reading is only safe for the one class that cannot decrease."""
     freezer.move_to("2026-07-16 10:00:00+02:00")
     hass.states.async_set(
@@ -3129,7 +3129,7 @@ async def test_live_today_kwh_reset_substitution_needs_total_increasing(
     inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
     with patch("homeassistant.components.recorder.get_instance", return_value=inst):
         kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
-    assert kwh == pytest.approx(-95.0)
+    assert kwh == 0.0
 
 
 async def test_live_today_kwh_honours_a_cycle_reset_on_a_total_meter(
@@ -3178,7 +3178,7 @@ async def test_live_today_kwh_ignores_a_stale_last_reset(
     inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "12350.1")]})
     with patch("homeassistant.components.recorder.get_instance", return_value=inst):
         kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 16))
-    assert kwh == pytest.approx(-4.5)
+    assert kwh == 0.0
 
 
 async def test_top_up_today_hourly_adds_the_uncompiled_remainder(

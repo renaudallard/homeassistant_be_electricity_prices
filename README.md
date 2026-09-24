@@ -455,9 +455,12 @@ formula** supplier, which has no card and asks for the whole set.
    field wants a **cumulative** kWh reading, one that only ever climbs.
    A sensor that resets, such as a "this year" or "this month" total,
    will not work: the integration bills the day-to-day *change* in the
-   reading, and a reset reads as a large negative day. If you fill both
-   wirings for the same side, the day/night registers win and the totals
-   field on that side is ignored. Two ways to wire it:
+   reading, and a reset reads as a large negative day. A net register that
+   counts down while you export (a `utility_meter` with `net_consumption`,
+   a bidirectional meter) is not supported either: a fall reads as zero,
+   so wire consumption and injection as two separate climbing sensors.
+   If you fill both wirings for the same side, the day/night registers
+   win and the totals field on that side is ignored. Two ways to wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
      kWh registers from your meter. The integration reads each day's
      delta from HA's long-term statistics, so the sensor reflects

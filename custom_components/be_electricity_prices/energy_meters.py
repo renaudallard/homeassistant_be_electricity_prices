@@ -286,12 +286,13 @@ async def _live_today_kwh(
     unit that can't be converted to kWh; the caller then keeps the daily
     statistic as a fallback rather than risk a wrong figure.
 
-    A reading below the midnight one means different things per state class,
-    so the class decides how it is read: only ``total_increasing`` can be
-    read as a counter reset, matching how the recorder's own statistics
-    engine treats that class. A ``total`` meter is allowed to fall, and the
-    signed delta is exactly what the recorder reports as that day's
-    ``change``, so it is returned as-is.
+    A reading below the midnight one is a counter reset when the meter says
+    so (``last_reset``) or its class promises it cannot fall
+    (``total_increasing``). Any other fall reads as zero, the same answer the
+    past days get: :func:`_recorder_deltas` drops a negative ``change``,
+    because a sum-chain restart looks exactly like one. A register netting
+    export against consumption is therefore not supported, and today must
+    not bill it signed only to have midnight take the figure back.
     """
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
@@ -354,10 +355,13 @@ async def _live_today_kwh(
         # Gated on the state class on purpose. The picker accepts any
         # device_class=energy sensor, so a ``total`` register that nets
         # injection against consumption (a utility_meter with
-        # net_consumption, a bidirectional meter) is a legitimate choice,
-        # and it falls whenever the site exports more than it draws. Reading
-        # that as a reset would bill its whole lifetime total as one day.
+        # net_consumption, a bidirectional meter) can be wired, and it falls
+        # whenever the site exports more than it draws. Reading that as a
+        # reset would bill its whole lifetime total as one day.
         delta = current
+    elif delta < 0.0:
+        # Any other fall is what the past days drop, so today drops it too.
+        delta = 0.0
     if unit == UnitOfEnergy.KILO_WATT_HOUR:
         return delta
     try:
