@@ -334,7 +334,15 @@ present, the parser walks it to attach the fifth column as
 `prosumer_eur_per_kva_year` (`ebem.py`). The dynamic card is SMR3-only, so
 it has no analog table and the prosumer column stays `None`
 (`tests/test_ebem.py`). A DSO row that fails to match is skipped, not
-fatal (`ebem.py`). Illustrative for `fluvius_iveka`: capacity `59.58`,
+fatal (`ebem.py`).
+
+The dynamic card prints Fluvius Antwerpen's `netkosten` as 5,24 c/kWh where
+EBEM's own variable and B@sic+ cards, and every other supplier's, print 5,35:
+about 3,85 EUR/yr at 3500 kWh. It is billed as printed, since no EUR value
+may live in Python source and a figure copied from another card would
+contradict this one. `_check_network_consensus` (`scripts/live_check.py`)
+reports it, allowed on the exact figure in `_KNOWN_NETWORK_FIGURES` until
+2027-01-01, so a card that changes it is reported again. Illustrative for `fluvius_iveka`: capacity `59.58`,
 `distribution_single 0.0634`, `distribution_exclusive_night 0.0566`,
 `data_management_per_year 18.92`, prosumer `67.79` (`tests/test_ebem.py`).
 

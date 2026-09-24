@@ -503,6 +503,27 @@ The swap needs manual re-validation at least every 6 months (last done 2026-05, 
 `_bolt_overlays.py`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py`) guards
 the invariant in CI.
 
+**Walloon figures the card prints differently from every other card.** The network rates are set
+per DSO by the CWaPE, so every card for one month carries the same row, and Bolt's does not in
+four places. Each is billed as printed: `providers/base.py` forbids EUR values in Python
+source, and filling a Bolt row from another supplier's card would import a figure Bolt's own card
+contradicts. `_check_network_consensus` (`scripts/live_check.py`) reports each one, and each is
+allowed on its exact figure in `_KNOWN_NETWORK_FIGURES` until 2027-01-01, so a Bolt card that
+changes the figure is reported again.
+
+- **Professional cards, Medium = Pic.** All six professional contracts print the Pic rate in the
+  Medium column for ORES (15,18), RESA, REW and AIESH, every month held; AIEG is right. An entry on
+  the Impact network mode is therefore billed Pic for every Medium hour: on ORES about 51 EUR/yr ex
+  VAT at 3500 kWh on a flat load, 289 at 20 MWh. The residential card prints distinct columns.
+  This is the network overlay, not the energy bands, which Bolt derives from each row's formula
+  (see [Wallonia Tarif Impact](#wallonia-tarif-impact)).
+- **Professional cards, ORES and AIEG rows.** The whole row is the January set (ORES 10,85 c/kWh
+  ex VAT) where every other card has printed 11,30 since February: about 16 EUR/yr low at 3500 kWh.
+- **Residential fixed cards, January to August.** `bolt_fix` and `bolt_plenty_fix` printed the
+  January ORES and AIEG rows (ORES 11,50 including VAT against 11,98) until the September card
+  corrected them, so a past month re-priced off the archive bills that figure.
+- **Residential cards, ORES Medium.** 10,38 including VAT where every other card prints 10,83.
+
 **Brussels (`_extract_brussels_dsos`, `_bolt_overlays.py`).** One row, `Sibelga`, with six captured
 numbers: mono, jour, nuit, excl_nuit, transport, terme_fixe (the prosumer trailing token is `-`).
 The exclusive-night column (group 4) is wired into `distribution_exclusive_night` via the shared
@@ -542,6 +563,8 @@ case-insensitive helper handles. A missing Sibelga row returns an empty dict (pe
   (`_bolt_cards.py`).
 - **Vertical `pdfplumber` rows.** Every DSO regex uses `\s+` to span one-number-per-line renders
   (`_bolt_overlays.py`).
+- **Walloon network rows that disagree with the fleet.** Billed as printed and watched by the live
+  check; see the DSO overlays section.
 - **Exclusive-night everywhere.** `Prix mensuel` group 2 and Fluvius group 4 and the Sibelga column
   are all dedicated night-circuit rates, not day/peak rates (`_bolt_cards.py`,
   `_bolt_overlays.py`).
