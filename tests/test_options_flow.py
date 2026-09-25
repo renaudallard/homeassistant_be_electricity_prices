@@ -1913,10 +1913,11 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A static card whose feed-in follows the spot price per slot is quoted on
-    the closed days of day-ahead the coordinator holds, the window the
-    projection credits the same contract on, so the page's annual row no
-    longer moves with the day the dialog is opened. With less than a month
-    held it keeps the day-ahead in front of it."""
+    the closed days of day-ahead the coordinator holds, each hour weighted by
+    the household's own export in it, the window the projection credits the
+    same contract on, so the page's annual row no longer moves with the day
+    the dialog is opened. Short of a full year held it keeps the day-ahead in
+    front of it."""
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
@@ -1977,6 +1978,20 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
             return _spread(3000.0, start, end)
         return {}
 
+    async def _fake_recorder_hourly_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[datetime, float]:
+        # Midday export on every day asked for, the hours HA records it in.
+        if entity_id != "sensor.inj":
+            return {}
+        out: dict[datetime, float] = {}
+        day = start
+        while day <= end:
+            first = dt_util.start_of_local_day(day).astimezone(UTC)
+            out.update({first + timedelta(hours=h): 1.0 for h in range(9, 15)})
+            day += timedelta(days=1)
+        return out
+
     async def _quote(live: float, held_days: int) -> str:
         held: dict[datetime, float] = {}
         for back in range(1, held_days + 1):
@@ -1985,9 +2000,15 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
             held.update({start + timedelta(hours=h): 0.10 for h in range(24)})
         coord._historical_spots = held
         coord._spot_cache = {today_start + timedelta(hours=h): live for h in range(24)}
-        with patch(
-            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
-            new=_fake_recorder_daily_kwh,
+        with (
+            patch(
+                "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+                new=_fake_recorder_daily_kwh,
+            ),
+            patch(
+                "custom_components.be_electricity_prices.energy_meters._recorder_hourly_kwh",
+                new=_fake_recorder_hourly_kwh,
+            ),
         ):
             ph = await _drive_compare(
                 hass,
@@ -1999,9 +2020,9 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
         return ph["current_annual"]
 
     # Two very different days in front of the dialog, the same year held.
-    assert await _quote(0.90, 60) == await _quote(-0.30, 60)
-    # Too little held: the day-ahead in front of it still prices the credit.
-    assert await _quote(0.90, 10) != await _quote(-0.30, 10)
+    assert await _quote(0.90, 365) == await _quote(-0.30, 365)
+    # Short of a full year: the day-ahead in front of it still prices it.
+    assert await _quote(0.90, 200) != await _quote(-0.30, 200)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

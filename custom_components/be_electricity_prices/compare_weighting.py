@@ -49,7 +49,10 @@ from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta
 from functools import lru_cache
 from homeassistant.util import dt as dt_util
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .compare_inputs import CreditYear
 
 
 @lru_cache(maxsize=8)
@@ -293,6 +296,26 @@ def _export_weighted_credit(
     return _hour_weighted_mean(rates, None)
 
 
+def _year_weighted_credit(inj: Any, year: CreditYear) -> float | None:
+    """Spot-indexed feed-in credit over the past year, each hour weighted by
+    what the household exported in it.
+
+    The one rate ``_annual_bill`` multiplies the year's export by. Weighted by
+    the hour of the day alone, a winter hour counted as much as a summer one,
+    which on a curve dear in winter and cheap in summer credited about
+    0,7 c/kWh too much even over a full year.
+    """
+    from .injection import _floor_injection
+
+    credit = total = 0.0
+    for when, kwh in year.export.items():
+        rate = _floor_injection(inj.factor * year.spots[when] + inj.base, inj)
+        if kwh > 0.0 and rate is not None:
+            credit += rate * kwh
+            total += kwh
+    return credit / total if total > 0.0 else None
+
+
 def _compare_injection_credit(
     snapshot: Any,
     entry: Any,
@@ -302,7 +325,7 @@ def _compare_injection_credit(
     inj_hour_weights: dict[int, float] | None = None,
     raw_snapshot: Any = None,
     meter: str | None = None,
-    credit_spots: dict[datetime, float] | None = None,
+    credit_year: CreditYear | None = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
@@ -329,12 +352,13 @@ def _compare_injection_credit(
     Variable), and a card that prints one but settles per slot anyway, which
     is every Bolt fixed and variable card.
 
-    ``credit_spots`` is the closed days of day-ahead held for the year
-    (``compare_inputs._credit_spots``). A static card's spot-indexed credit is
-    priced on it when given, since the one rate multiplies a whole year of
-    export; ``spot_dict`` is the day or two the page fetched, which moved a
-    recorded projection by tens of euro a day. A dynamic card keeps
-    ``spot_dict``, the window its energy leg is priced on.
+    ``credit_year`` is the past year of day-ahead and of the household's
+    export (``compare_inputs._credit_year``). A static card's spot-indexed
+    credit is priced on it when given, each hour weighted by its own export,
+    since the one rate multiplies a whole year of it; ``spot_dict`` is the day
+    or two the page fetched, which moved a recorded projection by tens of euro
+    a day. A dynamic card keeps ``spot_dict``, the window its energy leg is
+    priced on.
 
     A MONTH-INDEXED credit resolves against ``month_spot``, the delivery
     month's mean: the solar-weighted one for a card that names Belpex_SPP
@@ -445,9 +469,12 @@ def _compare_injection_credit(
             or inj.slot_indexed
         )
     ):
-        if credit_spots and not isinstance(energy, DynamicRates):
-            spot_dict = credit_spots
-            avg_spot = sum(credit_spots.values()) / len(credit_spots)
+        if (
+            credit_year is not None
+            and not bakes
+            and not isinstance(energy, DynamicRates)
+        ):
+            return _year_weighted_credit(inj, credit_year)
         if avg_spot is None:
             return None
         # Asked of the RAW, pre-splice snapshot when the caller has one. The

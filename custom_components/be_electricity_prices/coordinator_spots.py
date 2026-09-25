@@ -772,7 +772,7 @@ class _SpotsMixin(_ProfilesMixin):
         bounded: a year of closed days plus today and tomorrow, which is what
         the blob used to reach each 31 December. Kept for a trailing year
         rather than cut at 1 January because a static card's per-slot feed-in
-        is credited on the past year's closed days (``_credit_spots``), and a
+        is credited on the past year's closed days (``_credit_year``), and a
         January cut emptied that window every new year. Fetching still starts
         at the year-to-date window; this only decides what is KEPT. Keeping
         December beside January changes no bill: every walk reads an hour by

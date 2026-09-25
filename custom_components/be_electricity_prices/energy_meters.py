@@ -1107,11 +1107,40 @@ async def _measured_hour_weights(
     dead half, or the window recorded nothing. The caller then stays on the
     clock-hour weighting rather than inventing a profile from one band.
     """
+    return _hour_of_day_shares(
+        await _measured_hourly(hass, entry, start, end, side=side)
+    )
+
+
+async def _measured_hourly(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    start: date,
+    end: date,
+    *,
+    side: str = "consumption",
+) -> dict[datetime, float] | None:
+    """``side``'s metered kWh per UTC hour, or ``None`` when there is none.
+
+    The read :func:`_measured_hour_weights` folds into an hour-of-day shape,
+    for a caller that also needs each hour's own kWh: a spot-indexed feed-in
+    credit weighs every hour of the year by what was exported in it, so the
+    one read serves both.
+    """
     metered = await _metered_hourly_kwh(hass, entry, side, start, end)
     if metered is None or not metered.kwh:
         return None
+    return metered.kwh
+
+
+def _hour_of_day_shares(
+    kwh_by_hour: Mapping[datetime, float] | None,
+) -> dict[int, float] | None:
+    """Share of the kWh falling in each hour of the local day, or ``None``."""
+    if not kwh_by_hour:
+        return None
     per_hour: dict[int, float] = {}
-    for when, kwh in metered.kwh.items():
+    for when, kwh in kwh_by_hour.items():
         hour = dt_util.as_local(when).hour
         per_hour[hour] = per_hour.get(hour, 0.0) + kwh
     total = sum(per_hour.values())

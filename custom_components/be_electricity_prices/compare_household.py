@@ -75,7 +75,12 @@ from .compare_weighting import (
 )
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
-from .energy_meters import _measured_hour_weights, _measured_kwh
+from .energy_meters import (
+    _hour_of_day_shares,
+    _measured_hour_weights,
+    _measured_hourly,
+    _measured_kwh,
+)
 from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
 from .contract_periods import billed_from
 from .compare_table import _solar_note
@@ -88,7 +93,7 @@ from .compare_inputs import (
     _HouseholdQuote,
     _borrowed_spot_cache,
     _credit_index_for,
-    _credit_spots,
+    _credit_year,
     _effective_regime,
     _label_for_contract,
     _label_for_supplier,
@@ -624,10 +629,12 @@ class _HouseholdMixin:
         )
         # And the export shape, for a per-slot feed-in credit. Averaging those
         # slots by duration credits the overnight block, which is a third of
-        # the clock and produces nothing.
-        inj_hour_weights = await _measured_hour_weights(
+        # the clock and produces nothing. Kept per hour too: a static card's
+        # spot-indexed credit weighs each hour of the year by its own export.
+        export = await _measured_hourly(
             self.hass, self.config_entry, year_ago, today_local, side="injection"
         )
+        inj_hour_weights = _hour_of_day_shares(export)
         current_per_kwh: float | None = None
         current_export_per_kwh: float | None = None
 
@@ -747,8 +754,8 @@ class _HouseholdMixin:
             spot_for=_spot_for,
             credit_month_spot_for=_credit_month_spot_for,
             export_rate_for=_export_rate_for,
-            credit_spots=_credit_spots(
-                getattr(coord, "_historical_spots", None) or {}, today_local
+            credit_year=_credit_year(
+                getattr(coord, "_historical_spots", None) or {}, export, today_local
             ),
         )
 

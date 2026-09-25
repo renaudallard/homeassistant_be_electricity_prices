@@ -5956,7 +5956,15 @@ def _daily(per_day: float, inj_per_day: float = 0.0) -> Any:
 
 async def _project(hass: HomeAssistant, entry: Any, fake: Any, **kw: Any) -> Any:
     diag: dict[str, Any] = {}
-    with patch.object(energy_meters, "_recorder_daily_kwh", new=fake):
+    hourly = kw.pop("hourly", None)
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake),
+        patch.object(
+            energy_meters,
+            "_recorder_hourly_kwh",
+            new=hourly or energy_meters._recorder_hourly_kwh,
+        ),
+    ):
         got = await _compute_projected_year_cost(
             hass,
             entry,
@@ -6365,14 +6373,72 @@ def _closed_days(first: date, last: date, price: float) -> dict[datetime, float]
     return out
 
 
+def _seasonal_days(first: date, last: date) -> dict[datetime, float]:
+    """Hourly day-ahead for every local day from first to last: 0,20 from
+    October to March and 0,05 from April to September, the shape that makes a
+    season-blind export weighting over-credit."""
+    out: dict[datetime, float] = {}
+    day = first
+    while day <= last:
+        price = 0.05 if 4 <= day.month <= 9 else 0.20
+        out.update(_closed_days(day, day, price))
+        day += timedelta(days=1)
+    return out
+
+
+def _export_hours(summer: float, winter: float) -> Any:
+    """Recorder fake for the hourly reader: the panels export from 10:00 to
+    15:59 local, ``summer`` kWh an hour from April to September and ``winter``
+    otherwise, and every other hour reads 0 as Home Assistant records it."""
+
+    async def _fake(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        if entity_id != "sensor.inj":
+            return {}
+        out: dict[datetime, float] = {}
+        day = start
+        while day <= end:
+            kwh = summer if 4 <= day.month <= 9 else winter
+            for when, _ in _closed_days(day, day, 0.0).items():
+                out[when] = kwh if 10 <= dt_util.as_local(when).hour <= 15 else 0.0
+            day += timedelta(days=1)
+        return out
+
+    return _fake
+
+
+def _exact_credit(
+    spots: dict[datetime, float], export: dict[datetime, float], today: date
+) -> float:
+    """The past year's feed-in credit of a ``1 x spot - 0,02`` card, each hour
+    weighted by what the household exported in it."""
+    first = today - timedelta(days=365)
+    hours = [
+        h for h in spots if first <= dt_util.as_local(h).date() < today and h in export
+    ]
+    total = sum(export[h] for h in hours)
+    return sum((spots[h] - 0.02) * export[h] for h in hours) / total
+
+
+async def _export_of(fake: Any, today: date) -> dict[datetime, float]:
+    """The export the projection reads: the trailing year through today."""
+    return cast(
+        dict[datetime, float],
+        await fake(None, "sensor.inj", today - timedelta(days=364), today),
+    )
+
+
 async def test_projection_credits_a_spot_indexed_feed_in_on_the_year_held(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A spot-indexed feed-in is credited on the closed days of day-ahead the
-    coordinator holds for the year, not on the day or two the live table
-    reads. Priced on today's curve, the projection of a Bolt Fix prosumer in
-    Wallonia moved by a median 76 EUR from one day to the next and jumped
-    again at 11:00 when tomorrow's curve arrived."""
+    """A spot-indexed feed-in is credited on the past year of day-ahead the
+    coordinator holds, each hour weighted by what the household exported in
+    that very hour. Weighted by the hour of the day alone, a winter hour
+    counted as much as a summer one, and on a curve dear in winter and cheap
+    in summer the credit came out about 5 c/kWh generous. Today's and
+    tomorrow's curves move nothing: priced on them, the projection of a Bolt
+    Fix prosumer in Wallonia moved by a median 76 EUR a day."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
     snap = replace(
@@ -6381,37 +6447,39 @@ async def test_projection_credits_a_spot_indexed_feed_in_on_the_year_held(
     )
     entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
     today = dt_util.now().date()
-    held = _closed_days(date(2026, 1, 1), today - timedelta(days=1), 0.10)
+    held = _seasonal_days(today - timedelta(days=400), today - timedelta(days=1))
     live = _closed_days(today, today + timedelta(days=1), 0.90)
     swung = _closed_days(today, today + timedelta(days=1), -0.30)
     fake = _daily(10.0, inj_per_day=8.0)
-    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
+    hourly = _export_hours(summer=1.0, winter=0.2)
+    exact = _exact_credit(held, await _export_of(hourly, today), today)
+    without, _ = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, hourly=hourly
+    )
     got, diag = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots={**held, **live}
+        hass,
+        entry,
+        fake,
+        snapshot=snap,
+        priced=snap,
+        spots={**held, **live},
+        hourly=hourly,
     )
     other, _ = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots={**held, **swung}
+        hass,
+        entry,
+        fake,
+        snapshot=snap,
+        priced=snap,
+        spots={**held, **swung},
+        hourly=hourly,
     )
     assert without is not None and got is not None
-    # Today's and tomorrow's curves move nothing: only closed days count.
     assert other == pytest.approx(got)
-    # A flat history, so the export weighting cannot move it: 0,10 - 0,02.
-    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
+    assert without - got == pytest.approx(exact * diag["annual_injection_kwh"])
+    # Well under the season-blind 0,105 the hour-of-day weighting gave.
+    assert exact < 0.07
     assert "day-ahead" in diag["injection_basis"]
-
-    # One more closed day moves the credit by that day's share of the window
-    # and no more: 90 days at 0,10 and one at 1,00, all after the spring
-    # clock change so every hour of the clock holds all 91 days.
-    shorter = _closed_days(date(2026, 4, 1), today - timedelta(days=2), 0.10)
-    last = _closed_days(today - timedelta(days=1), today - timedelta(days=1), 1.00)
-    before, _ = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots=shorter
-    )
-    after, diag = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots={**shorter, **last}
-    )
-    assert before is not None and after is not None
-    assert before - after == pytest.approx(0.90 / 91 * diag["annual_injection_kwh"])
 
 
 async def test_projection_keeps_its_credit_across_new_year(
@@ -6434,26 +6502,37 @@ async def test_projection_keeps_its_credit_across_new_year(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     today = dt_util.now().date()
-    coord._historical_spots.update(
-        _closed_days(today - timedelta(days=400), today, 0.10)
-    )
+    coord._historical_spots.update(_seasonal_days(today - timedelta(days=400), today))
     coord._prune_historical_spots()
     fake = _daily(10.0, inj_per_day=8.0)
-    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
+    hourly = _export_hours(summer=1.0, winter=0.2)
+    exact = _exact_credit(
+        coord._historical_spots, await _export_of(hourly, today), today
+    )
+    without, _ = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, hourly=hourly
+    )
     got, diag = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots=coord._historical_spots
+        hass,
+        entry,
+        fake,
+        snapshot=snap,
+        priced=snap,
+        spots=coord._historical_spots,
+        hourly=hourly,
     )
     assert without is not None and got is not None
     assert "credited on" in diag["injection_basis"]
-    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
+    assert without - got == pytest.approx(exact * diag["annual_injection_kwh"])
 
 
-async def test_projection_leaves_the_credit_out_on_too_short_a_history(
+async def test_projection_leaves_the_credit_out_without_a_full_year(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Below a month of closed days the mean is a few weeks' weather, so the
-    credit is left out and the basis says why, as it was before the history
-    was read at all."""
+    """A part of the year prices the credit on that part's season: six winter
+    months of a curve dear in winter credited about 5 c/kWh more than the
+    year. So it is left out, and the basis says why, until a full year of
+    both the day-ahead and the household's own export is held."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
     snap = replace(
@@ -6463,19 +6542,34 @@ async def test_projection_leaves_the_credit_out_on_too_short_a_history(
     entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
     today = dt_util.now().date()
     fake = _daily(10.0, inj_per_day=8.0)
-    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
-    short = _closed_days(today - timedelta(days=29), today - timedelta(days=1), 0.10)
+    hourly = _export_hours(summer=1.0, winter=0.2)
+    without, _ = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, hourly=hourly
+    )
+    # Half a year of day-ahead.
+    half = _seasonal_days(date(2026, 1, 1), today - timedelta(days=1))
     got, diag = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots=short
+        hass, entry, fake, snapshot=snap, priced=snap, spots=half, hourly=hourly
     )
     assert got == pytest.approx(without)
     assert "not credited" in diag["injection_basis"]
-    enough = _closed_days(today - timedelta(days=30), today - timedelta(days=1), 0.10)
+    assert "full year" in diag["injection_basis"]
+
+    # A full year of day-ahead, but export recorded for 200 days only.
+    held = _seasonal_days(today - timedelta(days=400), today - timedelta(days=1))
+
+    async def recent(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        rows = await hourly(_hass, entity_id, start, end)
+        cut = today - timedelta(days=200)
+        return {h: v for h, v in rows.items() if dt_util.as_local(h).date() >= cut}
+
     got, diag = await _project(
-        hass, entry, fake, snapshot=snap, priced=snap, spots=enough
+        hass, entry, fake, snapshot=snap, priced=snap, spots=held, hourly=recent
     )
-    assert got is not None and without is not None
-    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
+    assert got == pytest.approx(without)
+    assert "not credited" in diag["injection_basis"]
 
 
 async def test_projection_discloses_a_contract_ending_inside_the_year(

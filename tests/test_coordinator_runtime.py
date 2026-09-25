@@ -1219,7 +1219,7 @@ async def test_the_prune_keeps_a_trailing_year_across_new_year(
     Wallonia, then came back. The quarters, the complete-day set and the
     quarter-grid days follow the same rule, and nothing older than the
     trailing year survives."""
-    from custom_components.be_electricity_prices.compare_inputs import _credit_spots
+    from custom_components.be_electricity_prices.compare_inputs import _credit_year
 
     freezer.move_to("2026-01-02 12:00:00+01:00")
     entry = _entry()
@@ -1243,9 +1243,10 @@ async def test_the_prune_keeps_a_trailing_year_across_new_year(
     assert coord._complete_spot_days == {date(2025, 6, 1), today}
     assert coord._quarter_grid_days == {date(2025, 12, 31)}
     # The credit window is whole on 2 January.
-    window = _credit_spots(coord._historical_spots, today)
+    export = dict.fromkeys(coord._historical_spots, 0.5)
+    window = _credit_year(coord._historical_spots, export, today)
     assert window is not None
-    assert len({dt_util.as_local(h).date() for h in window}) == 365
+    assert len({dt_util.as_local(h).date() for h in window.spots}) == 365
 
 
 async def test_a_year_of_spots_keeps_the_store_bounded(

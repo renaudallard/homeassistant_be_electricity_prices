@@ -101,7 +101,7 @@ _UNNETTABLE = (
 )
 _NO_INJECTION_RATE = (
     "measured, but not credited: this card indexes its feed-in on the spot "
-    "price, and fewer than 30 days of day-ahead prices are held yet"
+    "price, and a full year of day-ahead prices and of feed-in is not held yet"
 )
 _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
 _COHORT_SPOT_BASIS = (
@@ -188,10 +188,10 @@ async def _compute_projected_year_cost(
     ``spots`` is the day-ahead history the coordinator holds, read and never
     written. A static card whose feed-in follows the spot price per slot
     (every Bolt fixed and variable card) is credited on its closed days of
-    the past year (``compare_inputs._credit_spots``), weighted by when the
-    panels export, which is what the compare page's annual row credits the
-    same contract at. Below a month of them the credit is left out and the
-    basis says so.
+    the past year, each hour weighted by what the household exported in it
+    (``compare_inputs._credit_year``), which is what the compare page's
+    annual row credits the same contract at. Short of a full year of both
+    the credit is left out and the basis says so.
 
     Returns ``None`` when the contract cannot be projected or the rate cannot
     be resolved. It never raises: the caller runs inside the coordinator tick,
@@ -203,12 +203,17 @@ async def _compute_projected_year_cost(
         _annual_volume,
         _covers_a_year,
     )
-    from .compare_inputs import _credit_spots
+    from .compare_inputs import _credit_year
     from .compare_weighting import (
         _compare_injection_credit,
         _tou_weighted_per_kwh,
     )
-    from .energy_meters import _measured_hour_weights, _measured_kwh
+    from .energy_meters import (
+        _hour_of_day_shares,
+        _measured_hour_weights,
+        _measured_hourly,
+        _measured_kwh,
+    )
 
     if breakdown is None:
         breakdown = {}
@@ -287,9 +292,10 @@ async def _compute_projected_year_cost(
         # Weighted by the household's own export shape, not by slot duration:
         # the overnight off-peak block is a third of the clock and produces
         # nothing, so a duration mean always under-credits a per-slot card.
-        inj_hour_weights = await _measured_hour_weights(
+        export = await _measured_hourly(
             hass, entry, trailing_start, today, side="injection"
         )
+        inj_hour_weights = _hour_of_day_shares(export)
         inj_rate = _compare_injection_credit(
             credited if credited is not None else priced,
             entry,
@@ -299,17 +305,17 @@ async def _compute_projected_year_cost(
             inj_hour_weights,
         )
         # A feed-in that follows the spot price per slot has no rate without
-        # one. The compare page credits it on the day-ahead held for the past
-        # year, through this same helper with the same weights, so the
+        # one. The compare page credits it on the past year of day-ahead and
+        # of the household's own export, through this same helper, so the
         # projection does too rather than quoting the same contract's year
         # without its feed-in: on Bolt Fix in Wallonia the two stood 231 EUR
         # apart. Closed days only, not the live table's day or two, which
-        # moved this recorded figure by tens of euro a day. Asked only where
-        # the no-spot answer is empty, so every card that already had a
-        # credit keeps exactly the one it had.
+        # moved this recorded figure by tens of euro a day, and a full year
+        # of both. Asked only where the no-spot answer is empty, so every
+        # card that already had a credit keeps exactly the one it had.
         spot_credited = False
-        window = _credit_spots(spots, today) if spots else None
-        if inj_rate is None and window:
+        year = _credit_year(spots, export, today) if spots else None
+        if inj_rate is None and year is not None:
             inj_rate = _compare_injection_credit(
                 credited if credited is not None else priced,
                 entry,
@@ -318,7 +324,7 @@ async def _compute_projected_year_cost(
                 None,
                 inj_hour_weights,
                 raw_snapshot=snapshot,
-                credit_spots=window,
+                credit_year=year,
             )
             spot_credited = inj_rate is not None
         if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:

@@ -467,34 +467,49 @@ def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> b
     return True
 
 
-# The fewest closed days of day-ahead a year's spot-indexed feed-in credit is
-# priced on. Below it the mean is a few weeks' weather. The coordinator keeps a
-# trailing year once it has one, so this bites only in an entry's first month.
-_CREDIT_SPOT_MIN_DAYS = 30
+@dataclass(frozen=True)
+class CreditYear:
+    """The past year's day-ahead, and the household's export in each hour of it.
 
-
-def _credit_spots(
-    history: Mapping[datetime, float], today: date
-) -> dict[datetime, float] | None:
-    """The day-ahead a whole year's spot-indexed feed-in credit is priced on.
-
-    Every hour of the closed days in the year before ``today``, or ``None``
-    when fewer than ``_CREDIT_SPOT_MIN_DAYS`` of them are held. A credit that
-    multiplies a year of export was priced on the day or two of day-ahead the
-    live table reads, so a recorded figure moved by tens of euro from one day
-    to the next and again when tomorrow's curve arrived. On closed days only,
-    a new day moves it by that day's share of the window and nothing moves it
-    during the day.
+    ``export`` holds only hours ``spots`` prices, so the two are one window.
     """
+
+    spots: dict[datetime, float]
+    export: dict[datetime, float]
+
+
+def _credit_year(
+    history: Mapping[datetime, float],
+    export: Mapping[datetime, float] | None,
+    today: date,
+) -> CreditYear | None:
+    """What a whole year's spot-indexed feed-in credit is priced on, or ``None``.
+
+    The closed days of the year before ``today``, never the day or two the live
+    table reads: priced on those, a figure multiplying a year of export moved by
+    tens of euro a day and again when tomorrow's curve arrived. And only once a
+    full year of both the day-ahead and the household's export is held. Each
+    hour is weighted by what was exported in it, and a part of the year prices
+    the credit on that part's season: six winter months of a curve dear in
+    winter credited about 5 c/kWh more than the year.
+    """
+    from .compare_quote import _covers_a_year
+
     first = today - timedelta(days=MEASURED_FULL_YEAR_DAYS)
-    window: dict[datetime, float] = {}
-    days: set[date] = set()
+    spots: dict[datetime, float] = {}
+    spot_days: set[date] = set()
     for when, price in history.items():
         day = dt_util.as_local(when).date()
         if first <= day < today:
-            window[when] = price
-            days.add(day)
-    return window if len(days) >= _CREDIT_SPOT_MIN_DAYS else None
+            spots[when] = price
+            spot_days.add(day)
+    if not _covers_a_year(len(spot_days)):
+        return None
+    kwh = {when: value for when, value in (export or {}).items() if when in spots}
+    export_days = {dt_util.as_local(when).date() for when in kwh}
+    if not _covers_a_year(len(export_days)) or sum(kwh.values()) <= 0:
+        return None
+    return CreditYear(spots, kwh)
 
 
 def _kva(data: Mapping[str, Any]) -> float:
@@ -563,10 +578,11 @@ class _HouseholdQuote:
     spot_for: Any
     credit_month_spot_for: Any
     export_rate_for: Any
-    # The closed days of day-ahead held for the past year, on which a static
-    # card's spot-indexed feed-in credit is quoted (_credit_spots); None
-    # below a month of them, where the day-ahead window above prices it.
-    credit_spots: dict[datetime, float] | None = None
+    # The past year of day-ahead and of the household's export, on which a
+    # static card's spot-indexed feed-in credit is quoted (_credit_year); None
+    # short of a full year of either, where the day-ahead window above prices
+    # it as it always did.
+    credit_year: CreditYear | None = None
 
 
 @contextmanager
