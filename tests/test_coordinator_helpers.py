@@ -11053,6 +11053,72 @@ async def test_month_window_bills_only_the_running_month(
     assert march > 31.0
 
 
+async def test_a_percentage_credit_is_valued_on_the_contracts_own_months(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Luminus's campaign is a share of what the contract charged for
+    energy, so it is valued at the rate of the days the contract ran. The
+    year window valued it at the whole window's blended rate, months before
+    the start included, and the month window beside it at the month's own:
+    a September signing's months then summed to 3,53 EUR less than its year."""
+    from custom_components.be_electricity_prices import cohort
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-09-05",
+        consumption_kwh="sensor.cons_total",
+    )
+    summer = _snapshot(prosumer=None, capacity=None, energy=FixedRates(single=0.15))
+    september = replace(
+        _snapshot(prosumer=None, capacity=None, energy=FixedRates(single=0.25)),
+        welcome_credit_pct_of_energy=0.33,
+    )
+
+    async def _month(*args: Any, **_k: Any) -> Any:
+        month = next(a for a in args if isinstance(a, date))
+        return september if month.month == 9 else summer
+
+    async def _signing(*_a: Any, **_k: Any) -> Any:
+        return september
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        days = (end - start).days + 1
+        return {start + timedelta(days=n): 10.0 for n in range(days)}
+
+    async def _credit(window: date | None) -> float:
+        stats: dict[str, float] = {}
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+            patch.object(cohort, "_effective_snapshot_for_month", new=_month),
+            patch.object(ytd_cost, "_effective_snapshot_for_month", new=_month),
+            patch.object(ytd_cost, "signing_month_snapshot", new=_signing),
+        ):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                september,
+                entry,
+                window_start_override=window,
+                breakdown=stats,
+            )
+        return stats["welcome_credit_eur"]
+
+    year = await _credit(None)
+    month = await _credit(date(2026, 9, 1))
+    # Sixteen days of the campaign, both times at September's 0,25.
+    assert month > 0.0
+    assert year == pytest.approx(month)
+
+
 async def test_month_window_is_a_no_op_on_the_year_when_omitted() -> None:
     """The override defaults to None and the year-to-date figure must be the
     number it always was; every existing entry gets the second pass for free

@@ -75,6 +75,7 @@ from .fees import (
     _welcome_credit_eur,
     first_year_net_kwh,
     grants_a_welcome_credit,
+    in_first_contract_year,
     window_energy_rate,
 )
 from .injection import (
@@ -397,6 +398,18 @@ async def _compute_current_year_cost(
     stats["standing_charges_ytd_eur"] = static_fees.total
     stats["billed_peak_kw"] = billed_peak_kw
 
+    def _credit_energy_rate(stats: dict[str, float]) -> float:
+        """The first-year days' energy rate, else the window's."""
+        if stats.get("credit_consumption_kwh", 0.0) > 0.0:
+            return window_energy_rate(
+                stats.get("credit_energy_component_eur", 0.0),
+                stats["credit_consumption_kwh"],
+            )
+        return window_energy_rate(
+            stats.get("energy_component_ytd_eur", 0.0),
+            stats.get("consumption_ytd_kwh", 0.0),
+        )
+
     def _bill(energy: float) -> float:
         """The window's bill: energy plus fees, less any welcome credit.
 
@@ -468,12 +481,12 @@ async def _compute_current_year_cost(
                     compensation=regime == SOLAR_REGIME_COMPENSATION,
                 ),
                 # What a percentage credit is a percentage of, and what a
-                # volume of free energy is worth: the rate this window really
-                # billed, blended across whatever registers and hours it drew.
-                window_energy_rate(
-                    stats.get("energy_component_ytd_eur", 0.0),
-                    stats.get("consumption_ytd_kwh", 0.0),
-                ),
+                # volume of free energy is worth: the rate this contract really
+                # billed in the window's first-year days, blended across
+                # whatever registers and hours it drew. The whole window's rate
+                # took in the months before the start, so a September signing's
+                # months summed to less than its year.
+                _credit_energy_rate(stats),
                 # A year of SOLD export for a first-year feed-in bonus, zero
                 # off the injection regime or without a measured year of it.
                 first_year_injection_kwh=entry_annual_injection_kwh(entry),
@@ -655,6 +668,11 @@ async def _compute_current_year_cost(
     # walk above, which keeps the same running sum for the same reason).
     energy_component = 0.0
     green_component = 0.0
+    # Over the contract's own first-year days alone, as the hourly walk keeps
+    # them: the rate a percentage welcome credit is a share of.
+    credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    credit_component = 0.0
+    credit_kwh = 0.0
     netting = _NetAllocation()
     # A flat energy leg can still carry a monthly-indexed feed-in credit
     # (energie.be Vast). The daily walk has no spot of its own, so resolve the
@@ -675,11 +693,15 @@ async def _compute_current_year_cost(
         total_inj = d_inj + n_inj
 
         bi_capable = meter in ("bi", "dynamic")
-        energy_component += (
+        day_component = (
             d_cons * peak_bd.energy + n_cons * offpeak_bd.energy
             if bi_capable
             else total_cons * single_bd.energy
         )
+        energy_component += day_component
+        if in_first_contract_year(credit_start, day):
+            credit_component += day_component
+            credit_kwh += total_cons
         green_component += total_cons * renewables_eur_per_kwh(snap_d.taxes, region)
         if regime == SOLAR_REGIME_COMPENSATION:
             # Yearly net metering, per register, priced after the walk by
@@ -808,6 +830,8 @@ async def _compute_current_year_cost(
     stats["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
     stats["energy_component_ytd_eur"] = energy_component
     stats["green_component_ytd_eur"] = green_component
+    stats["credit_energy_component_eur"] = credit_component
+    stats["credit_consumption_kwh"] = credit_kwh
     if breakdown is not None:
         # The per-day counterpart of hours_seen / hours_elapsed above: the
         # static branch reported no coverage at all, so a gap here was

@@ -34,12 +34,13 @@ arithmetic on a count of days.
 
 from __future__ import annotations
 
-from .cohort import _month_snapshot_cache
+from .cohort import _month_snapshot_cache, _parse_iso_date
 from .const import (
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
+    CONF_CONTRACT_START_DATE,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DSO_MODE_BI_HORAIRE,
@@ -52,6 +53,7 @@ from .energy_meters import (
     _metered_hourly_kwh,
     _top_up_today_hourly,
 )
+from .fees import in_first_contract_year
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
@@ -255,6 +257,11 @@ async def _ytd_hourly_energy(
     # network or tax legs beside it and not the feed-in line either.
     energy_component = 0.0
     green_component = 0.0
+    # The same component over the contract's own first-year hours alone, and
+    # what they drew: the rate a percentage welcome credit is a share of.
+    credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    credit_component = 0.0
+    credit_kwh = 0.0
     # How much of the window actually got an energy price. A YTD that is low
     # because the spot cache is thin looks identical to a low one that is
     # correct, so report the coverage instead of leaving the user to guess.
@@ -315,6 +322,9 @@ async def _ytd_hourly_energy(
         # An unpriced hour carries a zero energy component, so it adds nothing
         # here either: what could not be charged cannot be credited against.
         energy_component += kwh_cons * bd.energy
+        if in_first_contract_year(credit_start, local.date()):
+            credit_component += kwh_cons * bd.energy
+            credit_kwh += kwh_cons
         # On the HOUR's own card, the way the backfill accumulates it: the
         # green levy belongs to the delivery month, and a welcome credit is
         # capped against what the window was actually charged.
@@ -432,6 +442,8 @@ async def _ytd_hourly_energy(
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
         breakdown["energy_component_ytd_eur"] = energy_component
         breakdown["green_component_ytd_eur"] = green_component
+        breakdown["credit_energy_component_eur"] = credit_component
+        breakdown["credit_consumption_kwh"] = credit_kwh
     return energy_cost
 
 

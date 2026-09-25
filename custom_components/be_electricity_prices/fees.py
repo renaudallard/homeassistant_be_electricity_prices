@@ -484,6 +484,20 @@ def window_energy_rate(energy_component_eur: float, consumption_kwh: float) -> f
     return max(energy_component_eur, 0.0) / consumption_kwh
 
 
+def in_first_contract_year(start: date | None, day: date) -> bool:
+    """Whether ``day`` falls in the first year from ``start``, the days a
+    welcome credit is granted over.
+
+    What a percentage credit's rate is measured on: the campaign is a share
+    of what THIS contract charged for energy in its first year, so the
+    window's months before the start, or after the year, carry a rate it
+    was never a share of.
+    """
+    if start is None:
+        return False
+    return start <= day < start + timedelta(days=_WELCOME_YEAR_DAYS)
+
+
 def grants_a_welcome_credit(snapshot: SupplierSnapshot) -> bool:
     """Whether the card grants a welcome credit at all, in ANY of its shapes.
 

@@ -693,6 +693,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "days_elapsed",
             "energy_component_ytd_eur",
             "green_component_ytd_eur",
+            "credit_energy_component_eur",
+            "credit_consumption_kwh",
             "capacity_ytd_eur",
             "prosumer_ytd_eur",
             "standing_charges_ytd_eur",

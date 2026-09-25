@@ -1939,7 +1939,7 @@ async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
     ],
     ids=["fixed", "dynamic"],
 )
-@pytest.mark.parametrize("credit", ["pro_rata", "feed_in_bonus"])
+@pytest.mark.parametrize("credit", ["pro_rata", "feed_in_bonus", "percentage"])
 async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     hass: HomeAssistant, energy: Any, credit: str
 ) -> None:
@@ -1951,15 +1951,21 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
 
     And a first-year bonus on the feed-in, which multiplies the measured year
     of SOLD export rather than any volume the window holds, so the backfill
-    has to read the same year the live walk reads."""
+    has to read the same year the live walk reads.
+
+    And a percentage of the energy cost, valued at the rate of the contract's
+    own first-year hours, on cards that change price at the start date."""
     from custom_components.be_electricity_prices import backfill_window
     from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from dataclasses import replace
+
     from custom_components.be_electricity_prices.const import (
         WELCOME_CREDIT_ANNIVERSARY,
     )
 
     bonus = credit == "feed_in_bonus"
+    percentage = credit == "percentage"
     snap = (
         make_snapshot(
             energy=energy,
@@ -1967,8 +1973,23 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
             welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
         )
         if bonus
+        else make_snapshot(energy=energy, welcome_credit_pct_of_energy=0.33)
+        if percentage
         else make_snapshot(energy=energy, welcome_credit_eur=200.0)
     )
+    # A dearer card from March, the month the percentage contract starts in.
+    march = replace(
+        snap,
+        energy=replace(
+            energy,
+            **({"single": 0.30} if isinstance(energy, FixedRates) else {"base": 0.12}),
+        ),
+    )
+
+    async def _month_card(*args: Any, **_k: Any) -> Any:
+        month = next(a for a in args if isinstance(a, date))
+        return march if percentage and month.month == 3 else snap
+
     entry = make_entry(
         region="wallonia",
         dso="ores",
@@ -1977,7 +1998,9 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         solar_regime="injection" if bonus else "none",
         consumption_kwh="sensor.cons_total",
         # A bonus is paid at the anniversary, which has to fall in the window.
-        contract_start_date="2025-02-01" if bonus else "2026-01-01",
+        contract_start_date=(
+            "2025-02-01" if bonus else "2026-03-10" if percentage else "2026-01-01"
+        ),
     )
     entry.add_to_hass(hass)
     _register_sensors(hass, entry, ["current_year_cost"])
@@ -2038,12 +2061,8 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
         patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
-        patch.object(
-            cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
-        ),
-        patch.object(
-            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
-        ),
+        patch.object(cohort, "_effective_snapshot_for_month", new=_month_card),
+        patch.object(ytd_cost, "_effective_snapshot_for_month", new=_month_card),
         patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
         # The signing month's card is the current one here; what is under test
         # is that the backfill reads the same card the live walk does.
@@ -2087,8 +2106,11 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     assert live is not None
     # The live side really carries the credit, 90 of the first year's 365
     # days of it or the whole bonus, or agreeing with it would prove nothing.
-    expected = 0.0106 * 3000.0 if bonus else 200.0 * 90 / 365
-    assert stats["welcome_credit_eur"] == pytest.approx(expected)
+    if percentage:
+        assert stats["welcome_credit_eur"] > 0.0
+    else:
+        expected = 0.0106 * 3000.0 if bonus else 200.0 * 90 / 365
+        assert stats["welcome_credit_eur"] == pytest.approx(expected)
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 

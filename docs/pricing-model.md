@@ -665,7 +665,15 @@ The percentage takes the household's OWN realised rate over the window
 window drew. Its sentence names both registers (*"en heures pleines et creuses"*), and a
 realised rate is what makes that work on every rate shape, blending a bi-hourly card by
 the hours actually drawn rather than needing register weights, and a variable or
-spot-priced card by what it really billed.
+spot-priced card by what it really billed. It is measured over the contract's own
+first-year days inside the window (`in_first_contract_year`, `fees.py`), which the
+year-to-date walks and the backfill each sum beside the window's total: the campaign is a
+share of what that contract charged, and the window's months before the start carry a
+rate it was never a share of. Measured over the whole window, a Luminus Comfy signing on
+5 September was credited at January to September's blended rate on the year and at
+September's own on the month, and its months summed to 3,53 EUR less than its year. A
+window holding none of those days (an anniversary lump paid in a later year) falls back
+to the window's rate.
 
 The volume takes the card's own single rate (`static_energy_eur_per_kwh`, band `single`),
 because its sentence names one register: *"le prix unitaire en EUR/kWh TTC du cout de

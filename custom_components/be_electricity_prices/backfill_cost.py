@@ -60,6 +60,7 @@ from .fees import (
     _prosumer_monthly_fee,
     _welcome_credit_eur,
     first_year_net_kwh,
+    in_first_contract_year,
     window_energy_rate,
 )
 from .injection import _historical_injection_rate, _injection_is_spot_formula
@@ -380,6 +381,10 @@ async def _accrue_cost(
     # volume (first_year_net_kwh).
     running_consumption_kwh = 0.0
     running_net_kwh = 0.0
+    # The energy component and volume of the contract's own first-year hours,
+    # the rate a percentage credit is a share of, as the live walk keeps them.
+    running_credit_component = 0.0
+    running_credit_kwh = 0.0
     # The window the credit accrues over is the sensor's own, whichever year
     # the caller anchored the hours on, and the first year it counts from is
     # the entry's own start date, as on the live side.
@@ -434,6 +439,9 @@ async def _accrue_cost(
             running_green += cons * renewables_eur_per_kwh(snap_h.taxes, region)
             running_consumption_kwh += cons
             running_net_kwh += cons - inj
+            if in_first_contract_year(credit_start, local.date()):
+                running_credit_component += cons * bd.energy
+                running_credit_kwh += cons
             if is_compensation:
                 netting.add(
                     _register_for(local, meter, dso_mode, region),
@@ -555,7 +563,13 @@ async def _accrue_cost(
                 running_consumption_kwh - running_net_kwh,
                 compensation=is_compensation,
             ),
-            window_energy_rate(running_energy_component, running_consumption_kwh),
+            (
+                window_energy_rate(running_credit_component, running_credit_kwh)
+                if running_credit_kwh > 0.0
+                else window_energy_rate(
+                    running_energy_component, running_consumption_kwh
+                )
+            ),
             first_year_injection_kwh=ctx.annual_injection_kwh,
         )
         bill = displayed_energy + running_fees - credit
