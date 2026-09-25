@@ -354,11 +354,12 @@ def _compare_injection_credit(
 
     ``credit_year`` is the past year of day-ahead and of the household's
     export (``compare_inputs._credit_year``). A static card's spot-indexed
-    credit is priced on it when given, each hour weighted by its own export,
-    since the one rate multiplies a whole year of it; ``spot_dict`` is the day
-    or two the page fetched, which moved a recorded projection by tens of euro
-    a day. A dynamic card keeps ``spot_dict``, the window its energy leg is
-    priced on.
+    credit is priced on it alone, each hour weighted by its own export, since
+    the one rate multiplies a whole year of it, and is left out (None) while
+    no full year is held, as the projection leaves it out. ``spot_dict`` is
+    the day or two the page fetched, which moved a year of export by hundreds
+    of euro a day. A dynamic card keeps ``spot_dict``, the window its energy
+    leg is priced on.
 
     A MONTH-INDEXED credit resolves against ``month_spot``, the delivery
     month's mean: the solar-weighted one for a card that names Belpex_SPP
@@ -469,11 +470,13 @@ def _compare_injection_credit(
             or inj.slot_indexed
         )
     ):
-        if (
-            credit_year is not None
-            and not bakes
-            and not isinstance(energy, DynamicRates)
-        ):
+        if not bakes and not isinstance(energy, DynamicRates):
+            # Short of a full year the credit is left out, as the projection
+            # leaves it out, rather than quoted on the day or two in front of
+            # the page: that window moved a year of export by hundreds of euro
+            # from one day to the next and set the page against the projection.
+            if credit_year is None:
+                return None
             return _year_weighted_credit(inj, credit_year)
         if avg_spot is None:
             return None

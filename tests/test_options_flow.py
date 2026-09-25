@@ -1916,8 +1916,10 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
     the closed days of day-ahead the coordinator holds, each hour weighted by
     the household's own export in it, the window the projection credits the
     same contract on, so the page's annual row no longer moves with the day
-    the dialog is opened. Short of a full year held it keeps the day-ahead in
-    front of it."""
+    the dialog is opened. Short of a full year held it leaves the credit out,
+    as the projection does, and says so: the day-ahead in front of the page
+    moved the same year of export by hundreds of euro from one day to the
+    next."""
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
@@ -1992,7 +1994,7 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
             day += timedelta(days=1)
         return out
 
-    async def _quote(live: float, held_days: int) -> str:
+    async def _quote(live: float, held_days: int) -> tuple[str, str]:
         held: dict[datetime, float] = {}
         for back in range(1, held_days + 1):
             day = dt_util.start_of_local_day(today - timedelta(days=back))
@@ -2017,12 +2019,18 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
                 other_supplier="mega",
                 other_contract="mega_online_fixed",
             )
-        return ph["current_annual"]
+        return ph["current_annual"], ph["solar_note"]
 
     # Two very different days in front of the dialog, the same year held.
-    assert await _quote(0.90, 365) == await _quote(-0.30, 365)
-    # Short of a full year: the day-ahead in front of it still prices it.
-    assert await _quote(0.90, 200) != await _quote(-0.30, 200)
+    year_high, year_note = await _quote(0.90, 365)
+    assert (year_high, year_note) == await _quote(-0.30, 365)
+    assert "not enough day-ahead" not in year_note
+    # Short of a full year: left out whatever the day in front of it, and the
+    # page names it, so the annual row carries no credit the projection lacks.
+    short_high, short_note = await _quote(0.90, 200)
+    assert (short_high, short_note) == await _quote(-0.30, 200)
+    assert "not enough day-ahead is held" in short_note
+    assert float(short_high) > float(year_high)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -3702,20 +3710,25 @@ def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     is not spread evenly around the clock: it is nothing all night and peaks
     at midday, which on a day-ahead curve is the trough. Weighting by the
     household's own measured shape is the basis the TOU branch beside it uses
-    and the one current_year_cost bills on."""
+    and the one current_year_cost bills on.
+
+    The window is a dynamic card's, the one its energy leg is priced on. A
+    card whose energy is not dynamic is credited on a year of day-ahead and
+    of export or not at all, which the last assertion pins."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers._rates import (
+        DynamicRates,
         InjectionRates,
         VariableRates,
     )
     from tests import make_snapshot
 
     snap = make_snapshot(
-        energy=VariableRates(current=0.20),
+        energy=DynamicRates(factor=1.0, base=0.0),
         injection=InjectionRates(current=None, factor=0.97, base=-0.021, formula="x"),
     )
     entry = SimpleNamespace(data={"solar_regime": "injection"})
@@ -3750,6 +3763,18 @@ def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     assert credit < 0.97 * avg_spot - 0.021
     # And never the slot the dialog opened in.
     assert credit != pytest.approx(0.97 * curve[0] - 0.021)
+
+    # The same feed-in on a variable card: no year held, nothing credited.
+    variable = make_snapshot(
+        energy=VariableRates(current=0.20),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021, formula="x"),
+    )
+    assert (
+        _compare_injection_credit(
+            variable, entry, spot_dict, avg_spot=avg_spot, inj_hour_weights=shape
+        )
+        is None
+    )
 
 
 def test_compare_prices_a_dynamic_energy_leg_on_the_consumption_shape() -> None:
@@ -3934,7 +3959,12 @@ def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
     there no printed figure", so these cards fell past it into the live
     helper, which resolves the credit at the current slot. That valued a
     whole year of export at one hour's spot, and the answer moved every time
-    the page was reopened."""
+    the page was reopened.
+
+    Such a card is now credited on the year of day-ahead and of export the
+    household holds (``CreditYear``), so the curve below stands for that year,
+    and without one it is left out rather than quoted on the page's window."""
+    from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -3963,11 +3993,15 @@ def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
     }
     avg_spot = sum(curve) / len(curve)
 
-    # Unfloored and unweighted, the window mean of the slot rates is exactly
-    # the formula at the mean spot.
+    year = CreditYear(spot_dict, {when: 1.0 for when in spot_dict})
+
+    # Unfloored and exported evenly, the mean of the slot rates is exactly the
+    # formula at the mean spot.
     expected = 0.94 * avg_spot - 0.01133
     freezer.move_to("2026-04-29 13:00:00+02:00")
-    midday = _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot)
+    midday = _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot, credit_year=year
+    )
     assert midday is not None
     assert midday == pytest.approx(expected)
 
@@ -3976,18 +4010,26 @@ def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
     # evening peak is the day's highest, so before the fix these two differed
     # by more than 15 c/kWh.
     freezer.move_to("2026-04-29 21:00:00+02:00")
-    evening = _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot)
+    evening = _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot, credit_year=year
+    )
     assert evening == pytest.approx(midday)
 
     # And it is the formula that is quoted, not the illustration beside it.
     assert midday != pytest.approx(0.0531)
 
-    # The export shape still applies, as it does for every other spot formula.
-    shape = {12: 0.5, 13: 0.5}
-    weighted = sum(w * (0.94 * curve[h - 2] - 0.01133) for h, w in shape.items())
+    # Each hour weighted by what was exported in it (local 12:00 and 13:00,
+    # UTC 10 and 11 in April).
+    shaped = CreditYear(
+        spot_dict, {when: 1.0 for when in spot_dict if when.hour in (10, 11)}
+    )
+    weighted = sum(0.5 * (0.94 * curve[h - 2] - 0.01133) for h in (12, 13))
     assert _compare_injection_credit(
-        snap, entry, spot_dict, avg_spot=avg_spot, inj_hour_weights=shape
+        snap, entry, spot_dict, avg_spot=avg_spot, credit_year=shaped
     ) == pytest.approx(weighted)
+
+    # No year held: left out, whatever the window in front of the page.
+    assert _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot) is None
 
 
 def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> None:
@@ -5483,10 +5525,14 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     which weighs every hour of the clock alike and ignores that panels export
     into the midday trough. That understates the user's OWN bill and so biases
     the comparison toward staying put.
+
+    Judged on the raw card it is a per-hour formula on a card whose energy is
+    not dynamic, credited on the year held, here one day standing for it.
     """
     from datetime import UTC, datetime as dt
     from types import SimpleNamespace
 
+    from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -5528,6 +5574,7 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     }
     weights = {h: (3.0 if 10 <= h <= 15 else 0.1) for h in range(24)}
     avg = sum(curve.values()) / len(curve)
+    year = CreditYear(curve, {when: weights[when.hour] for when in curve})
 
     on_window_mean = _compare_injection_credit(
         spliced,
@@ -5545,6 +5592,7 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
         None,
         weights,
         raw_snapshot=raw,
+        credit_year=year,
     )
     assert on_window_mean is not None and export_weighted is not None
     # Weighting by when the panels actually export lands well below the flat
@@ -5553,15 +5601,15 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     # the gap are the point.
     assert export_weighted < on_window_mean
     assert on_window_mean - export_weighted > 0.02
-    # And it equals what the shared export-weighting helper computes, so the
+    # And it equals what the shared year-weighting helper computes, so the
     # raw snapshot really did route through that branch.
     from custom_components.be_electricity_prices.compare_weighting import (
-        _export_weighted_credit,
+        _year_weighted_credit,
     )
 
     assert spliced.injection is not None
     assert export_weighted == pytest.approx(
-        _export_weighted_credit(spliced.injection, curve, weights)
+        _year_weighted_credit(spliced.injection, year)
     )
 
 
@@ -7750,7 +7798,11 @@ def test_the_compare_credit_refuses_a_plain_mean_for_a_month_index() -> None:
     Unreachable today, because all 772 month or SPP indexed rows in the archive
     print a current. That is what makes it worth a test rather than a
     differential: nothing priced can see it.
+
+    The per-hour formula on a fixed card is credited on a year held, so the
+    year here is one flat hour at the same spot as the mean.
     """
+    from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -7771,16 +7823,20 @@ def test_the_compare_credit_refuses_a_plain_mean_for_a_month_index() -> None:
         },
     )
 
+    hour = datetime(2026, 4, 15, 10, tzinfo=UTC)
+    year = CreditYear({hour: 0.05}, {hour: 1.0})
+
     def credited(inj: InjectionRates) -> float | None:
         return _compare_injection_credit(
             make_snapshot(energy=FixedRates(single=0.20), injection=inj),
             entry,
             {},
             0.05,
+            credit_year=year,
         )
 
     formula = 0.9 * 0.05 + 0.001
-    # A per-hour formula with no printed indicative is priced off the mean.
+    # A per-hour formula with no printed indicative is priced off the spot.
     assert credited(InjectionRates(factor=0.9, base=0.001)) == pytest.approx(formula)
     # The same coefficients on a MONTH index are not: a mean of the window says
     # nothing about the months it spans.
@@ -8090,6 +8146,7 @@ def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
     says so: consumption monthly on BELIX, injection per hour. A signing
     cohort re-prices the ENERGY leg to a monthly one, and the feed-in must not
     follow it onto that index."""
+    from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -8112,7 +8169,14 @@ def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
         dt_util.utcnow().replace(minute=0, second=0, microsecond=0): 0.05,
     }
     quoted = _compare_injection_credit(
-        spliced, entry, dict(spots), 0.05, 0.09, None, raw_snapshot=raw
+        spliced,
+        entry,
+        dict(spots),
+        0.05,
+        0.09,
+        None,
+        raw_snapshot=raw,
+        credit_year=CreditYear(dict(spots), dict.fromkeys(spots, 1.0)),
     )
     # Priced off the day-ahead slots, not off the 0.09 month mean the energy
     # leg was handed.
@@ -8443,6 +8507,7 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
     from statistics import fmean
 
     from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -8513,6 +8578,7 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
         None,
         None,
         raw_snapshot=cociter_raw,
+        credit_year=CreditYear(dict(spots), dict.fromkeys(spots, 1.0)),
     )
     assert per_slot is not None
     assert per_slot != pytest.approx(0.97 * month_mean - 0.021)

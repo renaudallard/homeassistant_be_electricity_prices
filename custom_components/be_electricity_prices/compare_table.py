@@ -438,8 +438,10 @@ def _uncredited_note(snapshot: Any, label: str) -> str:
 
     ``_compare_injection_credit`` returns None for two different reasons:
     the card publishes no injection tariff at all, or a spot-indexed
-    injection had no day-ahead window to price against. The first is the
-    true bill with that supplier; the second understates the credit. Both
+    injection had not enough day-ahead to price against: none for a dynamic
+    card, less than a full year of it and of the household's export for any
+    other. The first is the true bill with that supplier; the second
+    understates the credit. Both
     fall through to the no-credit branch of ``_annual_bill``, so without a
     note on the page the two are indistinguishable from a supplier that
     genuinely pays nothing.
@@ -447,8 +449,9 @@ def _uncredited_note(snapshot: Any, label: str) -> str:
     if getattr(snapshot, "injection", None) is None:
         return f"{label} publishes no injection tariff, so nothing is credited there"
     return (
-        f"{label}'s injection is spot-indexed and no day-ahead price was "
-        "available, so nothing is credited there"
+        f"{label}'s injection is spot-indexed and not enough day-ahead is held "
+        "to price it (a year of it and of your export, on a card whose energy "
+        "is not dynamic), so nothing is credited there"
     )
 
 

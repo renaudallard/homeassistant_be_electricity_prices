@@ -580,8 +580,7 @@ class _HouseholdQuote:
     export_rate_for: Any
     # The past year of day-ahead and of the household's export, on which a
     # static card's spot-indexed feed-in credit is quoted (_credit_year); None
-    # short of a full year of either, where the day-ahead window above prices
-    # it as it always did.
+    # short of a full year of either, where that credit is left out.
     credit_year: CreditYear | None = None
 
 
