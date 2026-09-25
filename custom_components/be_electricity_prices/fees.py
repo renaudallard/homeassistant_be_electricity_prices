@@ -348,12 +348,14 @@ def compensation_lacks_kva(data: Mapping[str, Any]) -> bool:
     """A Walloon compensation install with no inverter capacity entered.
 
     The flat prosumer fee is worked out from the capacity, so 0 bills none of
-    it, about 429 EUR a year at 5 kVA on ORES. A household with a
-    communicating meter may be billed CWaPE's proportional option instead,
-    which is capped at that fee and not modelled (docs/pricing-model.md): the
-    fee is its upper bound, so the capacity is needed either way. The solar
-    step refuses it, and the coordinator raises a Repairs card for an entry
-    saved before it did.
+    it, about 429 EUR a year at 5 kVA on ORES. A household with a double-flow
+    or communicating meter is billed CWaPE's proportional option instead:
+    distribution and transport on its gross draws, capped by article 81 at
+    what the flat fee plus the network charges on its net draws would cost.
+    That option is not modelled (docs/pricing-model.md), so such a household
+    is billed its cap, and the capacity is needed either way. The solar step
+    refuses it, and the coordinator raises a Repairs card for an entry saved
+    before it did.
     """
     kva = _walloon_compensation_kva(data)
     return kva is not None and not kva > 0.0

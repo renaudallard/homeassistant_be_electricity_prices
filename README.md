@@ -839,9 +839,11 @@ successful refresh:
 - **`compensation_kva_missing_<entry>`** — the entry is on the Walloon
   compensation regime with an inverter capacity of 0, so no prosumer fee
   is billed at all. The solar step refuses that now; an entry saved before
-  it gets this notice until the capacity is filled in. With a communicating
-  meter CWaPE may bill a proportional tariff instead, capped at the per-kVA
-  fee; that option is not modelled, so such a household is billed the cap.
+  it gets this notice until the capacity is filled in. With a double-flow or
+  communicating meter CWaPE bills distribution and transport on the gross
+  draws instead, capped at the per-kVA fee plus the network charges on the
+  net draws; that option is not modelled, so such a household is billed the
+  cap.
 - **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
   payer differently and this entry has no stored answer, which an entry
   created before the question existed does not. The credit is left out

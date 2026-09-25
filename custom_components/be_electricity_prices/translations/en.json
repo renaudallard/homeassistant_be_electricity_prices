@@ -794,7 +794,7 @@
     },
     "compensation_kva_missing": {
       "title": "No inverter capacity on this compensation entry ({supplier}, {contract})",
-      "description": "This entry is on the Walloon compensation regime, whose prosumer tariff is worked out from the inverter capacity, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter. With a communicating meter the network may bill a proportional tariff instead, never above that amount; the integration bills the amount itself, as the upper bound.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
+      "description": "This entry is on the Walloon compensation regime, whose prosumer tariff is worked out from the inverter capacity, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter. With a double-flow or communicating meter the network bills distribution and transport on the gross draws instead, capped at the prosumer fee plus the network charges on the net draws; that option is not modelled, so the integration bills the cap, which needs the capacity too.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
     },
     "register_pair_incomplete": {
       "title": "A day/night register of {supplier} ({contract}) stopped recording",
