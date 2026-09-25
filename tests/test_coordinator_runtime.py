@@ -2376,6 +2376,61 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots.assert_awaited()
 
 
+async def test_the_projection_is_handed_the_ticks_day_ahead(
+    hass: HomeAssistant,
+) -> None:
+    """A static card whose feed-in follows the spot price per slot is
+    projected with the day-ahead the tick fetched for it, the prices the
+    compare page credits the same contract's year at."""
+    from custom_components.be_electricity_prices import coordinator_tick
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "TESTKEY",
+        },
+        title="Cociter Variable injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+    )
+    hour = dt_util.start_of_local_day().astimezone(UTC)
+    curve = {hour + timedelta(hours=h): 0.10 for h in range(24)}
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value=curve)  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    projection = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coordinator_tick, "_compute_projected_year_cost", projection),
+    ):
+        await coord._async_update_data()
+
+    assert projection.await_args is not None
+    assert projection.await_args.kwargs["spots"] == curve
+
+
 async def test_successful_tick_clears_stuck_extractor_failed_issue(
     hass: HomeAssistant,
 ) -> None:

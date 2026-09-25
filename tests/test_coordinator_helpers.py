@@ -6168,6 +6168,40 @@ async def test_projection_says_when_a_measured_year_earns_no_credit(
     assert "not credited" in diag["injection_basis"]
 
 
+async def test_projection_credits_a_spot_indexed_feed_in_on_the_day_ahead(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The compare page's annual row credits a spot-indexed feed-in at the
+    day-ahead prices the coordinator holds, weighted by when the panels
+    export, and the projection left it out: on Bolt Fix in Wallonia the two
+    year-ahead figures for the same contract stood 231 EUR apart. Both now
+    read the same prices through the same helper."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    snap = replace(
+        _yearly_snapshot(),
+        injection=InjectionRates(current=None, factor=1.0, base=-0.02),
+    )
+    entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
+    day = dt_util.start_of_local_day(dt_util.now().date()).astimezone(UTC)
+    spots = {day + timedelta(hours=h): 0.10 for h in range(24)}
+    without, _ = await _project(
+        hass, entry, _daily(10.0, inj_per_day=8.0), snapshot=snap, priced=snap
+    )
+    got, diag = await _project(
+        hass,
+        entry,
+        _daily(10.0, inj_per_day=8.0),
+        snapshot=snap,
+        priced=snap,
+        spots=spots,
+    )
+    assert without is not None and got is not None
+    # A flat day-ahead, so the export weighting cannot move it: 0,10 - 0,02.
+    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
+    assert "day-ahead" in diag["injection_basis"]
+
+
 async def test_projection_discloses_a_contract_ending_inside_the_year(
     hass: HomeAssistant, freezer: Any
 ) -> None:
