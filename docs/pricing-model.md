@@ -1085,7 +1085,8 @@ The per-slot TOU triplet is never clamped. No card ships both a triplet and a
 floor, and `tests/test_custom.py` pins that rather than the pricing code
 carrying a branch that cannot run.
 
-The compare page's simple model, the one it falls back to when the archive
+The compare page's simple model, the one it falls back to when a side keeps
+no archive, a spot-priced side has no day-ahead for the window, or the archive
 engine throws, carries the welcome credit on its year-to-date rows too
 (`_ytd_welcome_credit`, `compare_quote.py`). Scoped to the window rather than the
 year the annual rows quote, with the standing charge in the eligible base

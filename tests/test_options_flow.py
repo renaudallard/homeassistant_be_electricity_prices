@@ -8471,3 +8471,100 @@ async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
     assert own is not None
     assert page["compare_ytd"] != "-"
     assert page["current_ytd"] == f"{own + 250.0:.2f}"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A dynamic entry's coordinator holds the year's day-ahead, since its
+    own bill needs every hour of it. The page still sent any spot-priced
+    side to the one-rate model, which priced the whole year at a recent mean
+    spot, so the own row sat 5 to 11% off the current_year_cost sensor
+    beside it. With the spots in hand the own row is the sensor's figure."""
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.providers._rates import (
+        DynamicRates,
+    )
+    from custom_components.be_electricity_prices.ytd_cost import (
+        _compute_current_year_cost,
+    )
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+    from tests import make_snapshot
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(
+        supplier="engie",
+        contract="engie_dynamic",
+        consumption_kwh="sensor.cons",
+        solar_regime="none",
+        api_key="valid-token",
+    )
+    entry.add_to_hass(hass)
+    own_card = make_snapshot(
+        supplier="engie",
+        contract="engie_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=60.0),
+    )
+    coord = _real_coordinator(hass, entry, own_card)
+    entry.runtime_data = coord
+    # Dear in the first half of the year, cheap since: a recent mean says
+    # nothing about what the year's kWh cost.
+    hour = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    now = dt_util.utcnow()
+    while hour < now:
+        coord._historical_spots[hour] = 0.20 if hour.month < 7 else 0.05
+        hour += timedelta(hours=1)
+
+    coord._spot_cache = {
+        dt_util.start_of_local_day().astimezone(UTC) + timedelta(hours=h): 0.05
+        for h in range(24)
+    }
+
+    async def _fake_deltas(
+        _hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        # A flat 0,3 kWh an hour: the hourly engine and the daily one-rate
+        # model read the same household.
+        if entity_id != "sensor.cons":
+            return []
+        step = timedelta(hours=1 if period == "hour" else 24)
+        kwh = 0.3 if period == "hour" else 7.2
+        slot = dt_util.start_of_local_day(start).astimezone(UTC)
+        stop = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+        out = []
+        while slot < min(stop, now):
+            out.append((slot, kwh))
+            slot += step
+        return out
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_deltas",
+            new=_fake_deltas,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._live_today_kwh",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        page = await _drive_compare(
+            hass,
+            entry,
+            other_snap=_stub_snapshot("eneco", "power_fix", 0.18),
+            other_supplier="eneco",
+            other_contract="power_fix",
+        )
+        sensor = await _compute_current_year_cost(
+            hass,
+            async_get_clientsession(hass),
+            get("engie"),
+            coord._snapshot,
+            entry,
+            historical_spots=coord._historical_spots,
+            spot_quarters=coord._historical_spot_quarters,
+            billed_peak_kw=coord._peak_kw,
+        )
+    assert sensor is not None
+    assert page["current_ytd"] == f"{sensor:.2f}"
+    assert page["compare_ytd"] != "-"

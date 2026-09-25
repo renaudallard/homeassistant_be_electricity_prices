@@ -72,6 +72,7 @@ from .compare_inputs import (
     _label_for_contract,
     _label_for_supplier,
     _quote_entry,
+    _spots_cover,
     _target_dso_mode,
 )
 from collections.abc import Mapping
@@ -591,25 +592,24 @@ class _PlaceholdersMixin(OptionsFlow):
                 today=today_local,
             )
 
-        # Exclude spot-priced sides from the archive engine: it bills each
-        # past hour at factor*spot+base (or the month's mean) and needs the
-        # historical spot cache, which _compute_current_year_cost only
-        # receives on the live coordinator path: called without it here it
-        # returns the fees-only floor (zero energy), so a fixed-vs-dynamic
-        # compare would show the dynamic side missing its entire energy bill.
-        # The simple per-kwh model below prices both sides off the same
-        # current per-kwh rate and proration, so the delta stays honest.
-        # spot_monthly is in that set for the same reason as dynamic, and it
-        # is what holds archive_capable False for Energy Knights Essentia:
-        # that contract DOES keep an archive now, so the fetch_for_month test
-        # alone no longer excludes it and the kind test is the one doing the
-        # work. Quoting it through the historical replay would need the same
-        # spot cache the dynamic side needs and does not have here.
+        # A spot-priced side bills each past hour at factor*spot+base (or the
+        # month's mean), so the engine needs the year's day-ahead for it:
+        # called without them it returns the fees-only floor, a dynamic side
+        # missing its whole energy bill. They are the Belgian day-ahead,
+        # supplier-independent, and a spot-priced entry's coordinator keeps
+        # the year of them for its own bill, so such a pair takes the engine
+        # like any other and the own row reads what current_year_cost reads.
+        # Read, never fetched for this: a year of day-ahead is not a page's
+        # to download. A side whose spots the cache does not hold falls back
+        # to the one-rate model below, which prices the whole window at a
+        # recent mean spot, 5 to 11% off the sensor on a dynamic household.
+        spot_priced = (
+            current_kind in SPOT_PRICED_CONTRACT_KINDS
+            or other_kind in SPOT_PRICED_CONTRACT_KINDS
+        )
         archive_capable = (
             current_extractor.fetch_for_month is not None
             and other_extractor.fetch_for_month is not None
-            and current_kind not in SPOT_PRICED_CONTRACT_KINDS
-            and other_kind not in SPOT_PRICED_CONTRACT_KINDS
         )
         if archive_capable and other_snap is not None and current_snapshot is not None:
             # Replay the coordinator's historical spot cache so a
@@ -646,6 +646,9 @@ class _PlaceholdersMixin(OptionsFlow):
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)
+            if spot_priced and not _spots_cover(hist_spots, ytd_from, today_local):
+                archive_capable = False
+        if archive_capable and other_snap is not None and current_snapshot is not None:
             try:
                 current_ytd_val = await _own_year(hist_spots, hist_quarters)
                 compare_ytd_val = await _compute_current_year_cost(

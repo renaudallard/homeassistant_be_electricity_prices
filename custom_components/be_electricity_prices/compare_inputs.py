@@ -62,6 +62,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.util import dt as dt_util
 from typing import Any, cast
 from contextlib import contextmanager
 
@@ -444,6 +445,19 @@ def _needs_missing_spots(
     would otherwise be swept in and lose a figure it could have carried.
     """
     return not spots and _injection_needs_spot(snapshot, entry)
+
+
+def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> bool:
+    """Whether ``spots`` holds some hour of every local day from ``start`` to
+    the day before ``today``: a cache kept for the window, not one that
+    happens to hold a few days of it. Today is still being filled in."""
+    held = {dt_util.as_local(when).date() for when in spots}
+    day = start
+    while day < today:
+        if day not in held:
+            return False
+        day += timedelta(days=1)
+    return True
 
 
 def _kva(data: Mapping[str, Any]) -> float:

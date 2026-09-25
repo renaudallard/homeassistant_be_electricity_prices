@@ -633,8 +633,10 @@ opens a four-option menu:
   **measured rolling-year kWh** (recorder data from the consumption
   sensor configured in the meters step, scaled up when the window is
   short, or a fallback volume when there is too little history), and
-  a **year-to-date what-if** that re-prices your actual YTD kWh at
-  each supplier's current rate with pro-rated annual fees, plus
+  a **year-to-date what-if** that re-prices your actual YTD kWh month
+  by month on each supplier's archived cards (today's rate for a
+  supplier that keeps no archive, or a spot-priced side whose day-ahead
+  prices are missing) with pro-rated annual fees, plus
   unicode bar charts so the difference reads at a glance. The yearly
   bill is an indication of the order of magnitude and will not match
   your settlement: it holds today's tariffs for twelve months and
