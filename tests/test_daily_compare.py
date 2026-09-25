@@ -385,7 +385,7 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
         patch(
             "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
-            return_value=months,
+            return_value={(m.year, m.month) for m in months},
         ),
         # The January warm-up fetch the pass makes before asking about
         # coverage; its result is discarded, the cache it fills is stubbed.
@@ -473,8 +473,8 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
 
     def _present(
         hass_: Any, supplier: str, contract: str, region: str, months: Any
-    ) -> list[date]:
-        return [m for m in months if m in cache.get(contract, set())]
+    ) -> set[tuple[int, int]]:
+        return {(m.year, m.month) for m in months if m in cache.get(contract, set())}
 
     household = SimpleNamespace(
         today_local=today,
@@ -527,6 +527,143 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
     assert [r.ytd for r in rows] == [2426.56, 2426.56]
     # And nothing before the window was ever asked for.
     assert min(cache["engie_easy_fixed"]) == date(2026, 4, 1)
+
+
+async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
+    hass: HomeAssistant,
+) -> None:
+    """After a recorded switch the own walk starts on the switch day, so the
+    own contract's cards are fetched only from that month on, while each
+    candidate is walked from 1 January. Held to the own contract's months
+    alone, no candidate could ever match and the whole column went blank. The
+    months before the switch are the earlier contract's, priced on its own
+    cards, and a candidate is asked to replay every one of them.
+    """
+    from custom_components.be_electricity_prices import (
+        compare_engine,
+        contract_periods,
+    )
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+    from tests import make_snapshot
+
+    today = date(2026, 9, 16)
+    held = {**make_entry(supplier="engie", contract="engie_easy_fixed").data}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "contract_start_date": "2026-06-15",
+            "previous_contracts": [{"until": "2026-06-15", "data": held}],
+        },
+    )
+    entry.add_to_hass(hass)
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    cache: dict[str, set[date]] = {}
+
+    async def _walk(
+        hass_: Any, session: Any, ext: Any, snap: Any, e: Any, **kw: Any
+    ) -> float:
+        # As the real walk does: from the override when one is given.
+        contract = kw.get("contract_override") or e.data["contract"]
+        start = kw.get("window_start_override") or ytd_window_start(e, today)
+        cache.setdefault(contract, set()).update(
+            date(today.year, m, 1) for m in range(start.month, today.month + 1)
+        )
+        return 1000.0
+
+    async def _warm(
+        hass_: Any,
+        session: Any,
+        ext: Any,
+        contract: str,
+        region: str,
+        month: date,
+        *a: Any,
+        **kw: Any,
+    ) -> Any:
+        cache.setdefault(contract, set()).add(month)
+        return object()
+
+    def _present(
+        hass_: Any, supplier: str, contract: str, region: str, months: Any
+    ) -> set[tuple[int, int]]:
+        return {(m.year, m.month) for m in months if m in cache.get(contract, set())}
+
+    async def _with_previous(*a: Any, **kw: Any) -> float | None:
+        own = a[5]
+        return None if own is None else own + 250.0
+
+    household = SimpleNamespace(
+        today_local=today,
+        ytd_from=ytd_window_start(entry, today),
+        current_snapshot=object(),
+        raw_snapshot=object(),
+        quote_entry=entry,
+        peak_kw=4.0,
+        current_meter="mono",
+        dso_mode="bi_horaire",
+        regime="none",
+    )
+    sweep = {
+        "region": "wallonia",
+        "rows": [
+            RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True),
+            RankedRow(label="Engie Easy Fixed", annual=3432.93),
+        ],
+        "labels": {"Engie Easy Fixed": ("engie", "engie_easy_fixed", False)},
+        "household": household,
+    }
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _walk,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_months"
+            "._snapshot_for_month",
+            _warm,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_months"
+            ".archived_months_present",
+            _present,
+        ),
+        patch.object(contract_periods, "with_previous_contracts", _with_previous),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
+        patch.object(
+            compare_engine,
+            "_sweep_rows",
+            return_value={
+                ("wallonia", "engie", "engie_easy_fixed"): (make_snapshot(), False)
+            },
+        ),
+    ):
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+        assert [r.ytd for r in rows] == [1250.0, 1000.0]
+        # A candidate missing a month before the switch is still refused.
+        cache.clear()
+        cache["engie_easy_fixed"] = {date(2026, m, 1) for m in range(1, 10) if m != 3}
+
+        async def _gap(
+            hass_: Any, session: Any, ext: Any, snap: Any, e: Any, **kw: Any
+        ) -> float:
+            if kw.get("contract_override"):
+                return 1000.0
+            return await _walk(hass_, session, ext, snap, e, **kw)
+
+        with patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _gap,
+        ):
+            rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+    assert [r.ytd for r in rows] == [1250.0, None]
 
 
 async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(

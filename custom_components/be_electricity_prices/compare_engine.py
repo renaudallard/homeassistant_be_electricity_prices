@@ -228,13 +228,25 @@ class _SweepEngine(_HouseholdMixin):
                     window_start=hh.ytd_from,
                     today=today,
                 )
+        # The own contract's cards only from the month it started in: the walk
+        # above starts there after a recorded switch, so the months before it
+        # were never fetched for this contract. They are the earlier
+        # contracts', priced on their own cards, and a candidate replaying the
+        # year from January is asked to hold a real card for every one of
+        # them. Held to the own contract's months alone, no candidate could
+        # ever match and a switch emptied the whole column.
+        own_first = own_start.replace(day=1)
         baseline = archived_months_present(
             self.hass,
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
             sweep["region"],
-            months,
+            [month for month in months if month >= own_first],
         )
+        if baseline:
+            baseline |= {
+                (month.year, month.month) for month in months if month < own_first
+            }
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
         rows: list[RankedRow] = []
         for row in sweep["rows"]:
