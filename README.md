@@ -550,6 +550,8 @@ opens a four-option menu:
   settings no longer create (the EV rate after unticking its box, the band
   sensors after leaving a bi-hourly meter, the capacity sensors after leaving
   Flanders) is removed rather than left unavailable; its history stays.
+  Turning the setting back on creates it afresh, under its default entity
+  ID, name and area, so a rename or area you gave it has to be set again.
 - **Record a supplier switch** — for a household that changed supplier
   during the year. Asks for the first day of the new contract, keeps your
   current settings as the contract you held until the day before, then walks

@@ -96,6 +96,10 @@ added: Home Assistant logs a platform whose setup raises and carries on, and
 removing that platform's rows would lose the user's renames, areas and icons.
 If any platform did not record its set, nothing is removed. A row the user
 disabled is kept, since removing it would bring it back enabled.
+Turning the setting back on creates the entity afresh: its registry row went
+with the removal, so it comes back under its default entity ID, name and area,
+and a rename, area or icon the user gave it has to be set again. The history
+recorded under the old entity ID stays in the recorder.
 
 ### Sensor catalog
 
