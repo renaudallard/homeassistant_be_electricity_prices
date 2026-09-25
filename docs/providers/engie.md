@@ -415,16 +415,24 @@ unlike the mandatory levies which raise.
 
 ## Injection
 
-`_extract_injection` (`_engie_cards.py`) produces all three shapes of the injection
+`_extract_injection` (`_engie_cards.py`) produces four shapes of the injection
 taxonomy (see [../pricing-model.md](../pricing-model.md)) depending on the
 contract:
 
 - Monthly-indicative-only (`current`): the first `Injection(3)` row's first
   column (`_engie_cards.py`, divided by 100). The second `Injection(3)` row is the
-  annual estimate and is ignored. Fixed and non-Flextime variable contracts carry
-  only this (test `test_easy_fixed_extracts_bihourly_rates`
-  `tests/test_engie.py`: `current` set, `factor`/`base` None;
-  `test_empower_variable_injection_is_single_rate` `tests/test_engie.py`).
+  annual estimate and is ignored. The fixed contracts and both Easy Variable
+  editions carry only this (test `test_easy_fixed_extracts_bihourly_rates`
+  `tests/test_engie.py`: `current` set, `factor`/`base` None).
+- Month-indexed single band (`current` plus `factor` / `base`, `month_indexed`):
+  the other variable products in `_EPEXDAM_INJECTION_CONTRACTS` (Empower
+  Variable, Flow, Direct Online, Basic Online, Empty House and their
+  professional editions) print one feed-in formula on the monthly EPEXDAM, so
+  `current` is last month's figure and the pair re-prices each delivery month on
+  its own mean. The coefficients are not VAT-grossed: the formula reproduces the
+  printed figure with no 1,06 (test
+  `test_empower_variable_injection_is_single_band_but_month_indexed`
+  `tests/test_engie.py`).
 - Per-slot TOU triplet (`peak`/`transition`/`offpeak`): only for `kind == "tou"`
   when the row has >=6 numbers (`_engie_cards.py`), reading columns 4/5/6. Engie
   Empower Flextime's feed-in tariff varies by slot, so the pricing engine selects
