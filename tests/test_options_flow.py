@@ -541,6 +541,58 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     assert entry.data["dso_tariff_mode"] == "impact"
 
 
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_keeps_an_unchanged_required_key_unasked(
+    hass: HomeAssistant, _bypass_entsoe_validation: MagicMock
+) -> None:
+    """A dynamic entry's key step is required, so every options edit walks
+    through it with the stored key. Sending that key to ENTSO-E again meant
+    that while it answers an exhausted quota or maintenance, which reads as an
+    invalid key, no setting of a dynamic or spot-monthly entry could be saved.
+    The stored key goes through unasked, as on the optional step."""
+    _bypass_entsoe_validation.return_value = "invalid_api_key"
+    entry = make_entry(
+        supplier="engie",
+        contract="engie_dynamic",
+        region="wallonia",
+        dso="ores",
+        meter="dynamic",
+        api_key="kept-key",
+        solar_regime="none",
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "engie", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "engie_dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    assert result["step_id"] == "api_key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "kept-key"}
+    )
+    assert result["step_id"] == "solar"
+    _bypass_entsoe_validation.assert_not_called()
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["api_key"] == "kept-key"
+    assert entry.data["dso_tariff_mode"] == "bi_horaire"
+
+
 async def _walk_to_solar_cociter_variable(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> ConfigFlowResult:

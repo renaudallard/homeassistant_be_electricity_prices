@@ -533,7 +533,9 @@ The token does not expire unless you regenerate it. If
 `transparency.entsoe.eu` later rejects it with 401, the
 `entsoe_auth_failed_<entry>` repair issue fires; paste a fresh token in
 the entry's options to clear it. The key step shows on every edit of a
-contract that reads a key, with the stored token filled in.
+contract that reads a key, with the stored token filled in; submitting
+it unchanged saves without asking ENTSO-E again, so an edit still goes
+through while ENTSO-E is down or out of quota.
 
 ### Reconfiguring later
 

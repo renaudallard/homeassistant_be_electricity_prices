@@ -522,6 +522,12 @@ class _WizardStepsMixin:
                 # key at least prices the entry off the fallback until ENTSO-E
                 # is back to reject it.
                 errors[CONF_API_KEY] = "empty_api_key"
+            elif key == self._data.get(CONF_API_KEY):
+                # The stored key, which every options edit of a dynamic or
+                # spot-monthly entry walks through. Asking ENTSO-E about it
+                # again blocked every edit while ENTSO-E answered an exhausted
+                # quota or maintenance, which reads as an invalid key.
+                return await self._after_api_key()
             else:
                 err = await _validate_entsoe_key(self.hass, key)
                 if err is None:

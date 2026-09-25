@@ -296,7 +296,10 @@ Schema `_api_key_schema` (`flow_schemas.py`), a `PASSWORD` text field. Reached
 from `_after_dso_tariff_mode` when the contract kind is `dynamic` or
 `spot_monthly` (both price off ENTSO-E spots — live per-slot for dynamic, monthly
 mean for spot-monthly). The typed key is stripped, rejected outright when what is
-left is empty, and otherwise validated live against the ENTSO-E day-ahead endpoint
+left is empty, kept without asking ENTSO-E when it is the key already stored (every
+options edit of a dynamic or spot-monthly entry walks through this step, and asking
+again blocked every edit while ENTSO-E answered an exhausted quota, which reads as an
+invalid key), and otherwise validated live against the ENTSO-E day-ahead endpoint
 by `_validate_entsoe_key` (`flow_schemas.py`) before the flow proceeds:
 
 - returns `None` on success,
