@@ -66,6 +66,15 @@ CASES = {
         22.0,
     ),
     "a dip and a recovery": ([(-8, "500"), (3, "499.5"), (6, "503")], 3.0),
+    # A reset is judged against the reading before it, not against midnight:
+    # 50 is no reset against 10 but is one against 100.
+    "a reset judged against the previous reading": (
+        [(-8, "10"), (3, "100"), (5, "50"), (12, "60")],
+        150.0,
+    ),
+    # A real reset rarely lands on 0, and the new cycle counts from zero
+    # whatever it lands on.
+    "a reset that lands above zero": ([(-8, "20"), (7, "1.5"), (12, "4")], 4.0),
 }
 
 
