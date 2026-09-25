@@ -4421,6 +4421,60 @@ async def test_contract_step_rejects_end_before_start(hass: HomeAssistant) -> No
     assert result["errors"] == {"contract_end_date": "end_before_start"}
 
 
+def _shown_values(result: ConfigFlowResult) -> dict[str, Any]:
+    """What a form puts in its boxes: the suggestion, else the default."""
+    shown: dict[str, Any] = {}
+    schema = result["data_schema"]
+    assert schema is not None
+    for marker in schema.schema:
+        suggested = (marker.description or {}).get("suggested_value")
+        default = marker.default() if callable(marker.default) else None
+        shown[str(marker.schema)] = suggested if suggested is not None else default
+    return shown
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_rejected_contract_form_comes_back_with_what_was_typed(
+    hass: HomeAssistant,
+) -> None:
+    """The frontend fills a re-shown form from its schema, so the error
+    re-show has to carry the answers or the user retypes all of them."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    typed = {
+        "contract": "power_flex",
+        "contract_start_date": "2026-01-01",
+        "tariff_card_date": "2025-12-01",
+        "contract_end_date": "2025-12-01",
+    }
+    result = await hass.config_entries.options.async_configure(result["flow_id"], typed)
+    assert result["errors"] == {"contract_end_date": "end_before_start"}
+    shown = _shown_values(result)
+    assert {key: shown.get(key) for key in typed} == typed
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_rejected_switch_date_comes_back_as_typed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "switch"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"switch_date": "2026-10-01"}
+    )
+    assert result["errors"] == {"switch_date": "switch_date_outside_year"}
+    assert _shown_values(result)["switch_date"] == "2026-10-01"
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_signed_rate_step_for_fixed_with_start_date(
     hass: HomeAssistant,

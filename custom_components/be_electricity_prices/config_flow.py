@@ -50,6 +50,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
+import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -186,6 +187,9 @@ class _WizardStepsMixin:
         def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
         def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
         def async_show_menu(self, **kwargs: Any) -> ConfigFlowResult: ...
+        def add_suggested_values_to_schema(
+            self, data_schema: vol.Schema, suggested_values: Any
+        ) -> vol.Schema: ...
 
     def _seed_data(self) -> dict[str, Any]:
         """What ``_data`` starts as. Install starts empty; the OptionsFlow
@@ -247,10 +251,22 @@ class _WizardStepsMixin:
                 if not self._data.get(CONF_CONTRACT_START_DATE):
                     self._data.pop(CONF_YTD_FROM_CONTRACT_START, None)
                 return await self._after_contract()
+        schema = _contract_schema(supplier, region, self._data)
+        if user_input is not None:
+            # The frontend fills a re-shown form from its schema, so the
+            # answers go back in or every box reverts to the stored value.
+            # A date left blank stays blank.
+            schema = self.add_suggested_values_to_schema(
+                schema,
+                {
+                    CONF_CONTRACT_START_DATE: None,
+                    CONF_TARIFF_CARD_DATE: None,
+                    CONF_CONTRACT_END_DATE: None,
+                    **user_input,
+                },
+            )
         return self.async_show_form(
-            step_id="contract",
-            data_schema=_contract_schema(supplier, region, self._data),
-            errors=errors,
+            step_id="contract", data_schema=schema, errors=errors
         )
 
     async def async_step_settlement(
@@ -909,7 +925,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                 return await self._async_entry_step()
         return self.async_show_form(
             step_id="switch",
-            data_schema=_switch_schema(dt_util.now().date()),
+            # A rejected date comes back as typed, not reset to today.
+            data_schema=self.add_suggested_values_to_schema(
+                _switch_schema(dt_util.now().date()), user_input
+            ),
             errors=errors,
         )
 
