@@ -1160,8 +1160,10 @@ the script through a fake `gh`.
 | --- | --- | --- | --- |
 | bit 0 (rc 1/3/5/7) | Open or update extractor-broken issue | `live-check-extractor` | `[live-check] supplier extractor broken` |
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
-| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected`, or `[live-check] supplier product discovery failed` when no new product is among the failures |
-| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees`, or `[live-check] a federal constant window needs extending` when every failure is a window reminder |
+| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
+| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-discovery` | `[live-check] supplier product discovery failed`, when no new product is among the failures |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 
 The tax report carries four kinds of row: a supplier whose federal block disagrees with the
@@ -1171,8 +1173,9 @@ lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until ei
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
 and fail no pull request. The issue is titled after what failed, as the products one is: a run
 whose only failures are the window reminders files under the window title, so the triager is
-not sent looking for a card printing a wrong levy. An issue already open keeps its title, since
-the thread is found by its label.
+not sent looking for a card printing a wrong levy. Every title has its own label: the thread is
+found by its label and the title is only read when an issue is opened, so two titles sharing one
+posted each problem inside the other's open issue (`test_every_issue_title_files_under_its_own_label`).
 
 A disagreement that has been looked at and decided goes in `_KNOWN_TAX_BLOCKS`
 (`scripts/live_check.py`) and is then reported in its own section without filing: the
@@ -1273,7 +1276,7 @@ whole manifest for each took longer than some of the uploads.
 
 The `Warn before the upload token expires` step asks GitHub for the token's expiry (a fine-grained
 token reports it in the `github-authentication-token-expiration` response header) and, from two
-weeks before it, files an issue under the same `archive-cards` label through
+weeks before it, files an issue under its own `archive-cards-token` label through
 `scripts/file_ci_issue.sh`, fingerprinted on the expiry date so it repeats once a week until the
 secret is replaced. A token that reports no expiry, or none at all, files nothing; the failure
 issue still covers a token that has already expired. They cannot live in the cards repository's tree: one walk downloads about 100 MB of PDFs

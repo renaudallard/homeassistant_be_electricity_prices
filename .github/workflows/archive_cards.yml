@@ -302,8 +302,11 @@ jobs:
             echo "that has a working token."
           } > token_body.md
           echo "token expires $expires" > token_fingerprint.txt
+          # Its own label: file_ci_issue.sh finds the open issue by label, so
+          # sharing the failure issue's posted this warning inside an open
+          # failure thread, and a failure inside this one.
           bash scripts/file_ci_issue.sh \
-            --label archive-cards \
+            --label archive-cards-token \
             --title "[archive-cards] the upload token expires soon" \
             --body token_body.md \
             --fingerprint token_fingerprint.txt \
@@ -345,7 +348,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          label='archive-cards'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           failed=''
           [ "${{ steps.store.outcome }}" = 'failure' ] && failed='Store today'"'"'s cards (the walk stored nothing, or crashed)'
@@ -364,7 +366,7 @@ jobs:
           # within the week adds nothing, a different one is posted at once.
           echo "${failed:-unknown}" > failed_step.txt
           bash scripts/file_ci_issue.sh \
-            --label "$label" \
+            --label archive-cards \
             --title "[archive-cards] the card archive run failed" \
             --body issue_body.md \
             --fingerprint failed_step.txt \

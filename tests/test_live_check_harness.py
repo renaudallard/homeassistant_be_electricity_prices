@@ -1851,6 +1851,7 @@ def _file_catalog_issue(
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "file_ci_issue.sh").write_text(
         'while [ $# -gt 0 ]; do [ "$1" = --title ] && printf %s "$2" > title; '
+        '[ "$1" = --label ] && printf %s "$2" > label; '
         "shift; done\n"
     )
     (tmp_path / f"{kind}_report.md").write_text("## Failures\n")
@@ -1899,6 +1900,50 @@ def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
         step,
         "tax",
     ) == ("[live-check] a supplier's federal tax block disagrees")
+
+
+def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
+    """file_ci_issue.sh finds the open issue by its label and reads the title
+    only when it opens one. Two titles sharing a label therefore posted a
+    failed discovery inside an open "new products" issue, and a window
+    reminder inside an open tax-block one, under the wrong title."""
+    cases = (
+        (
+            "Open or update new-products issue",
+            "catalog",
+            "a/catalog: no new products at supplier\n",
+        ),
+        (
+            "Open or update new-products issue",
+            "catalog",
+            "a/catalog: discovery raised\n",
+        ),
+        (
+            "Open or update tax-block issue",
+            "tax",
+            "_federal: the excise window needs extending\n",
+        ),
+        (
+            "Open or update tax-block issue",
+            "tax",
+            "a/federal tax block disagrees for 2026-09\n",
+        ),
+    )
+    labels: dict[str, str] = {}
+    for n, (step, kind, failures) in enumerate(cases):
+        root = tmp_path / str(n)
+        root.mkdir()
+        title = _file_catalog_issue(root, failures, step, kind)
+        labels[title] = (root / "label").read_text()
+    assert len(labels) == 4
+    assert len(set(labels.values())) == 4, labels
+
+    archive = (
+        Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
+    ).read_text()
+    pairs = re.findall(r'--label (\S+) \\\n\s+--title "([^"]+)"', archive)
+    assert len(pairs) == 2, pairs
+    assert len({label for label, _ in pairs}) == 2, pairs
 
 
 def _failures(run: Callable[[], None]) -> list[str]:

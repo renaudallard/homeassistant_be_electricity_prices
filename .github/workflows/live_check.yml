@@ -351,12 +351,17 @@ jobs:
           # The report also carries a discovery that failed. Titled after a
           # new product whatever failed, it sent the triager looking for a
           # product that did not exist.
+          # Each title has its own label: file_ci_issue.sh finds the open
+          # issue by label and only reads the title when it opens one, so a
+          # shared label posted a failed discovery under an open "new
+          # products" issue and the other way round.
           if grep -q '/catalog: no new products at supplier$' catalog_failures.txt; then
             title_prefix='[live-check] new supplier products detected'
+            label='live-check-catalog'
           else
             title_prefix='[live-check] supplier product discovery failed'
+            label='live-check-discovery'
           fi
-          label='live-check-catalog'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## Run"
@@ -411,17 +416,21 @@ jobs:
           # rows are reminders to move a constant before its window lapses,
           # and filed as a supplier's block they sent the triager looking for
           # a card printing a wrong levy.
+          # Each title has its own label, for the reason the products step
+          # gives.
           if [ -s tax_failures.txt ] \
             && ! grep -qv 'window needs extending$' tax_failures.txt; then
             title='[live-check] a federal constant window needs extending'
+            label='live-check-tax-window'
           else
             title="[live-check] a supplier's federal tax block disagrees"
+            label='live-check-tax'
           fi
           # On the failing labels, for the same reason as the products
           # issue, and because a row's detail counts the other suppliers,
           # which moves whenever one of them publishes its month.
           bash scripts/file_ci_issue.sh \
-            --label 'live-check-tax' \
+            --label "$label" \
             --title "$title" \
             --body tax_issue_body.md \
             --fingerprint tax_failures.txt \

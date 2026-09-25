@@ -4,6 +4,9 @@
 #
 # The issue is found by its label, never by a title substring, so a
 # manually opened "Re: ..." issue can never catch a job's comments. The
+# title is only read when an issue is opened, so every title a job files
+# under needs a label of its own, or one problem is posted under the
+# other's open issue. The
 # body carries a fingerprint of what failed; when the open issue's latest
 # post carries the same fingerprint and is younger than the cooldown, the
 # run says so and posts nothing. A permanent upstream outage therefore
