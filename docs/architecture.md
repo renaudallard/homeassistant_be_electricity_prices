@@ -88,6 +88,7 @@ relative to that package directory.
 | `ytd_energy.py` | The two legs that have to replay the year hour by hour: the energy a spot-priced contract is billed at, and the feed-in credit settled the same way. |
 | `ytd_legs.py` | The legs charged per day rather than per kWh: the standing charges, the Walloon prosumer fee and the Flemish capacity term, each pro-rated over the days the contract covered. |
 | `projected_cost.py` | The full-calendar-year projection behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered yearly volume, plus the basis strings that say what was measured and what was assumed. |
+| `projected_volume.py` | The calendar-year consumption and injection projections: this year's closed days plus last year's same remaining days, with a Synergrid profile fallback only where the entry already holds one. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |

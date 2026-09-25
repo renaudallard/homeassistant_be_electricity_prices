@@ -886,6 +886,12 @@
       "projected_year_cost": {
         "name": "Projected year cost"
       },
+      "projected_year_consumption": {
+        "name": "Projected year consumption"
+      },
+      "projected_year_injection": {
+        "name": "Projected year injection"
+      },
       "contract_end_date": {
         "name": "Contract end date"
       },

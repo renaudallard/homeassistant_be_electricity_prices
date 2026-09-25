@@ -202,6 +202,7 @@ async def async_get_config_entry_diagnostics(
         month_key = f"{local.year:04d}-{local.month:02d}"
         quarter_hours[month_key] = quarter_hours.get(month_key, 0) + 1
 
+    volume = data.volume_projection_diagnostics or {}
     return {
         "entry": {
             "title": entry.title,
@@ -253,10 +254,14 @@ async def async_get_config_entry_diagnostics(
         "consumption": {
             "rolling_year_kwh": cons_year,
             "ytd_kwh": cons_ytd,
+            "projected_year_kwh": data.projected_year_consumption_kwh,
+            "projection": volume.get("consumption"),
         },
         "injection": {
             "rolling_year_kwh": inj_year,
             "ytd_kwh": inj_ytd,
+            "projected_year_kwh": data.projected_year_injection_kwh,
+            "projection": volume.get("injection"),
         },
         "monthly_snapshot_labels": monthly_labels,
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average

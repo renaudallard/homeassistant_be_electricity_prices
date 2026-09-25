@@ -562,6 +562,28 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
 )
 
 
+# What this calendar year will have metered by 31 December. No device class
+# for the reason projected_year_cost carries none: ``ENERGY`` admits only
+# ``TOTAL`` and ``TOTAL_INCREASING``, and a projection revised both ways is
+# neither.
+_PROJECTED_CONSUMPTION = BePriceSensorDescription(
+    key="projected_year_consumption",
+    translation_key="projected_year_consumption",
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement="kWh",
+    suggested_display_precision=0,
+    value_fn=lambda d: d.projected_year_consumption_kwh,
+)
+_PROJECTED_INJECTION = BePriceSensorDescription(
+    key="projected_year_injection",
+    translation_key="projected_year_injection",
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement="kWh",
+    suggested_display_precision=0,
+    value_fn=lambda d: d.projected_year_injection_kwh,
+)
+
+
 CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="capacity_cost",
@@ -606,6 +628,7 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
+    descriptions.append(_PROJECTED_CONSUMPTION)
     # Only for a household that asked for it: a company car charged at home.
     if entry.data.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE):
         descriptions.extend(EV_RATE_SENSORS)
@@ -624,6 +647,8 @@ async def async_setup_entry(
     regime = entry.data.get(CONF_SOLAR_REGIME)
     if solar_kva > 0.0 and regime == SOLAR_REGIME_COMPENSATION:
         descriptions.extend(PROSUMER_SENSORS)
+    if regime in (SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION):
+        descriptions.append(_PROJECTED_INJECTION)
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
         # The engine credits a register pair on both two-register meters, the
@@ -708,6 +733,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "annual_kwh",
             "annual_injection_kwh",
             "contract_basis",
+            "ytd_kwh",
+            "remaining_kwh",
         }
     )
     entity_description: BePriceSensorDescription
@@ -843,18 +870,21 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                     dict(row) for row in data.previous_contracts
                 ]
             return attrs
-        if self.entity_description.key == "projected_year_cost":
-            # Its own branch rather than sharing the one above: these
-            # attributes are a mix of strings and floats, and round() raises
-            # TypeError on a string. The strings are the point of them, since
-            # a projection is only as trustworthy as the basis it names.
+        key = self.entity_description.key
+        if key == "projected_year_cost":
             proj = data.projection_diagnostics
-            if not proj:
-                return {}
-            return {
-                k: round(v, 4) if isinstance(v, float) else v for k, v in proj.items()
-            }
-        return {}
+        elif key in ("projected_year_consumption", "projected_year_injection"):
+            side = key.removeprefix("projected_year_")
+            proj = (data.volume_projection_diagnostics or {}).get(side)
+        else:
+            return {}
+        # Its own branch rather than sharing the one above: these attributes
+        # are a mix of strings and floats, and round() raises TypeError on a
+        # string. The strings are the point of them, since a projection is only
+        # as trustworthy as the basis it names.
+        if not proj:
+            return {}
+        return {k: round(v, 4) if isinstance(v, float) else v for k, v in proj.items()}
 
 
 class ContractEndDateSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):

@@ -127,6 +127,8 @@ pulls (all fields defined at `coordinator_data.py`).
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur`; after a recorded supplier switch the contracts held earlier in the year are included, listed in `previous_contracts` with their total in `previous_contracts_eur` ([coordinator.md](coordinator.md), section 7.4) |
 | Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
+| Projected year consumption | `projected_year_consumption` | - | MEASUREMENT | kWh | `projected_year_consumption_kwh` (`projected_volume.py`); `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes from `volume_projection_diagnostics["consumption"]` |
+| Projected year injection | `projected_year_injection` | - | MEASUREMENT | kWh | `projected_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only) |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
@@ -276,7 +278,7 @@ scalar while the array had moved on (issue #44).
 frozenset shared by every key the class produces. It excludes the live display
 helpers (`today`, `tomorrow`, `cheapest_4h_today`, `most_expensive_4h_today`),
 the diagnostic fields behind `current_year_cost`, and every attribute the
-projection publishes. All of them are re-emitted on each tick and none is
+projections publish. All of them are re-emitted on each tick and none is
 queried as history, so keeping them out of state-attribute storage stops
 long-term-database bloat. The one diagnostic key left recorded is
 `billed_peak_kw`, which the capacity sensor publishes as history and which
@@ -297,6 +299,28 @@ revised both up and down as the year runs and as history accumulates, so that
 sum would record the drift of the estimate rather than money. The trade is that
 the Energy dashboard will not auto-suggest the entity in its Cost picker, which
 is the correct outcome for a figure that is explicitly not a forecast.
+
+`projected_year_consumption` and `projected_year_injection` make the same call
+for the same reason: `ENERGY` admits only `TOTAL` and `TOTAL_INCREASING`
+(`DEVICE_CLASS_STATE_CLASSES[ENERGY]`), and a projection revised both ways is
+neither.
+
+### `projected_year_consumption` and `projected_year_injection`
+
+What the calendar year will have metered by 31 December (`projected_volume.py`).
+The closed days since 1 January are read as measured, scaled across a few
+missing buckets (the `MEASURED_YEAR_GAP_DAYS` allowance, pro rata to the
+window), and today onwards is last year's same calendar days, scaled to this
+year's day count, so 29 February reads the 28th. Today is part of the rest, so
+the figure moves once a day rather than with the live reading. The rest is
+never a day count applied to a yearly total: on Synergrid's 2026 residential
+profile the last 97 days carry 30% of the load against 27% of the calendar.
+
+When the recorder does not cover last year's days, an entry already holding
+this year's Synergrid profile (the RLP for consumption, the SPP for injection)
+extrapolates this year's days on it, from `MEASURED_MIN_DAYS` of them. The
+profile is never fetched for this. Otherwise the value is unknown and
+`volume_basis` names what is missing.
 
 Its `key` is permanent from first release: `unique_id` is
 `f"{entry.entry_id}_{description.key}"`, so renaming it later orphans the
@@ -562,6 +586,7 @@ Top-level dump keys:
 | `coordinator` | live snapshot metadata and the full hourly price table (see below) |
 | `consumption.rolling_year_kwh` / `.ytd_kwh` | recorder-summed consumption over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
+| `consumption.projected_year_kwh` / `.projection` and the same under `injection` | the calendar-year projection and its basis (`volume_basis`, `ytd_kwh`, `remaining_kwh`); `ytd_kwh` there counts from 1 January to yesterday whatever the billing window |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `spot_cache_by_month` | `{ "YYYY-MM": {hours, mean, min, max} }` over the day-ahead prices `current_year_cost` is replayed from, in EUR/kWh: a month whose mean sits far off the Belgian day-ahead average is the cache, not the card |
 | `spot_quarter_hours_by_month` | `{ "YYYY-MM": hours }` whose 15-minute prices are held; empty unless the entry's feed-in formula is floored, where an hour missing here is replayed off its mean and under-credits |

@@ -886,6 +886,12 @@
       "projected_year_cost": {
         "name": "Voraussichtliche Jahreskosten"
       },
+      "projected_year_consumption": {
+        "name": "Voraussichtlicher Jahresverbrauch"
+      },
+      "projected_year_injection": {
+        "name": "Voraussichtliche Jahreseinspeisung"
+      },
       "contract_end_date": {
         "name": "Vertragsende"
       },

@@ -186,6 +186,14 @@ class CoordinatorData:
     # projection carries more assumptions than the running bill does, so it
     # ships the means to audit it.
     projection_diagnostics: dict[str, Any] | None = None
+    # What this calendar year will have metered by 31 December on each side:
+    # the closed days since 1 January plus last year's same remaining days,
+    # or this year's extrapolated on a Synergrid profile the entry already
+    # holds. None when neither is available. The basis behind each, keyed by
+    # side, rides along for the same reason the cost projection's does.
+    projected_year_consumption_kwh: float | None = None
+    projected_year_injection_kwh: float | None = None
+    volume_projection_diagnostics: dict[str, dict[str, Any]] | None = None
 
 
 def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:

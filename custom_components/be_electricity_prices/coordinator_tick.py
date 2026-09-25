@@ -112,6 +112,7 @@ from .contract_periods import (
     price_previous_periods,
 )
 from .projected_cost import _compute_projected_year_cost
+from .projected_volume import _compute_projected_year_kwh
 from .spot_stats import (
     _energy_is_quarter_hourly,
     _energy_is_rlp_indexed,
@@ -156,11 +157,13 @@ class _TickMixin:
     _rlp_blend: str
     _rlp_fetched_at: datetime | None
     _rlp_weights: RlpWeights
+    _rlp_weights_year: int | None
     _session: aiohttp.ClientSession
     _snapshot: SupplierSnapshot | None
     _spot_source: str
     _spp_fetched_at: datetime | None
     _spp_weights: SppWeights
+    _spp_weights_year: int | None
     _supplier_tuple: tuple[str, str, str]
     entry: ConfigEntry
     _card_read_by_ocr: bool
@@ -758,6 +761,36 @@ class _TickMixin:
             ),
             breakdown=projection_breakdown,
         )
+        # The calendar year's metered volume on each side. A profile is used
+        # only where the pricing already loaded this year's: never fetched
+        # for this.
+        today = window_now.date()
+        volume_breakdown: dict[str, dict[str, Any]] = {"consumption": {}}
+        projected_consumption = await _compute_projected_year_kwh(
+            self.hass,
+            self.entry,
+            today,
+            side="consumption",
+            profile=self._rlp_weights if self._rlp_weights_year == today.year else None,
+            breakdown=volume_breakdown["consumption"],
+        )
+        projected_injection = None
+        if self.entry.data.get(CONF_SOLAR_REGIME) in (
+            SOLAR_REGIME_COMPENSATION,
+            SOLAR_REGIME_INJECTION,
+        ):
+            volume_breakdown["injection"] = {}
+            projected_injection = await _compute_projected_year_kwh(
+                self.hass,
+                self.entry,
+                today,
+                side="injection",
+                profile=(
+                    self._spp_weights if self._spp_weights_year == today.year else None
+                ),
+                profile_utc=True,
+                breakdown=volume_breakdown["injection"],
+            )
 
         await self._save_persistent()
 
@@ -838,6 +871,9 @@ class _TickMixin:
             ytd_diagnostics=ytd_breakdown or None,
             projected_year_cost_eur=projected_year_cost,
             projection_diagnostics=projection_breakdown or None,
+            projected_year_consumption_kwh=projected_consumption,
+            projected_year_injection_kwh=projected_injection,
+            volume_projection_diagnostics=volume_breakdown,
             static_peak_price=static_peak,
             static_offpeak_price=static_offpeak,
             static_injection_peak=static_inj_peak,

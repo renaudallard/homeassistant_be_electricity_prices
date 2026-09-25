@@ -886,6 +886,12 @@
       "projected_year_cost": {
         "name": "Verwachte jaarkost"
       },
+      "projected_year_consumption": {
+        "name": "Verwacht jaarverbruik"
+      },
+      "projected_year_injection": {
+        "name": "Verwachte jaarinjectie"
+      },
       "contract_end_date": {
         "name": "Einddatum van het contract"
       },

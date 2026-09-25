@@ -886,6 +886,12 @@
       "projected_year_cost": {
         "name": "Cout annuel projete"
       },
+      "projected_year_consumption": {
+        "name": "Consommation annuelle projetee"
+      },
+      "projected_year_injection": {
+        "name": "Injection annuelle projetee"
+      },
       "contract_end_date": {
         "name": "Date de fin du contrat"
       },
