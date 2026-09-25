@@ -564,6 +564,27 @@ set `spot_indexed_injection`, because a monthly-mean credit needs spots the ener
 leg never fetches. `_extract_injection` returns `None` only
 when both `current` and `factor` are absent (`_mega_cards.py`).
 
+### First-year feed-in bonus
+
+Every card with a feed-in formula prints a bonus on the first year's export beside the
+ristourne: *"Si vous injectez de l'energie, en regime de commercialisation contrainte,
+vous pouvez egalement beneficier d'un bonus (\*\*) de 1,06 c€/kWh (TVA de 6% incluse)
+... pour votre injection sur le reseau de distribution pour votre premiere annee de
+souscription"*. `extract_injection_bonus` (`_mega_overlays.py`) reads it into
+`welcome_credit_injection_eur_per_kwh` on all 373 archived cards that print it and on
+none that do not: 1,06 TVAC on the residential cards, 1 HTVA on the professional ones,
+3,52 to 5,32 on Smart Fixed and Smart Flex. The Off-peak cards mark it `(*)` and the
+Smart cards write "visant votre injection"; the pattern takes both.
+
+"Commercialisation" is the export being SOLD to the supplier, which is the injection
+regime: under compensation the meter nets it and the card prints no feed-in price to add
+a bonus to. So it is credited on the injection regime only, on a full measured year of
+export, at the anniversary with the ristourne (the two footnotes state the same wait on
+every archived card) and outside the ristourne's ceiling. The Smart cards' "puissance de
+raccordement inferieure ou egale a 10 kVA" is not checked: the flow asks no connection
+power on the injection regime. How the five cost paths credit it is in
+[../pricing-model.md](../pricing-model.md).
+
 ### Supplier-side PV forfait
 
 `_extract_supplier_prosumer` (`_mega_overlays.py`) parses the compensation-regime

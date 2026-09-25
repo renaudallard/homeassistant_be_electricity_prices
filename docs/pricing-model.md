@@ -624,6 +624,27 @@ Flex has printed each wording in different months, which is why it is parsed off
 rather than listed. The two readings are exclusive and the supplement wins: a card
 printing it is offering the rest a smaller credit, not none.
 
+Beside the ristourne every Mega card with a feed-in formula prints a bonus on the first
+year's EXPORT: *"Si vous injectez de l'energie, en regime de commercialisation contrainte,
+vous pouvez egalement beneficier d'un bonus de 1,06 c EUR/kWh (TVA de 6% incluse) ... pour
+votre injection sur le reseau de distribution pour votre premiere annee de souscription"*,
+1 c/kWh HTVA on the professional cards and up to 5,32 on Smart Flex.
+`welcome_credit_injection_eur_per_kwh` carries it (`extract_injection_bonus`,
+`_mega_overlays.py`), `apply_vat` grosses it only where the card taxes its feed-in, and
+`_welcome_credit_eur` adds it after the ceiling, which the card states for the ristourne
+alone. It is paid with the ristourne and on its wait, the two footnotes agreeing on every
+archived card. Only a household whose export is SOLD earns it: that is the injection
+regime, since under compensation the meter nets the export and there is no feed-in price
+to add a bonus to. The volume is a full measured year of that export
+(`entry_annual_injection_kwh`, measured daily beside the consumption volume) or nothing,
+the rule the projection already holds feed-in to, because PV is too seasonal for a short
+window scaled by a day count. The compare page's year-to-date columns quote through a
+proxy entry that carries no measurement, so they credit no bonus on either side; the
+annual columns and the projection credit it on the year of export they already quote.
+The Smart cards add "et disposez d'une puissance de raccordement inferieure ou egale a
+10 kVA", which the entry cannot answer: the flow asks no connection power on the
+injection regime, so the bonus is credited as printed.
+
 Seventeen products therefore depend on how the household pays, and the flow asks only
 where `direct_debit_discount` is set in the registry (`_DIRECT_DEBIT_RISTOURNE`,
 `mega.py`). A product whose card states either dependence and which is missing from that

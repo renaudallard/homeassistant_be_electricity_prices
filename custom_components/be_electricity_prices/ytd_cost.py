@@ -95,7 +95,7 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
 )
-from .snapshot_resolve import entry_annual_kwh
+from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import (
     _NetAllocation,
     _bucket_by_local_month,
@@ -474,6 +474,9 @@ async def _compute_current_year_cost(
                     stats.get("energy_component_ytd_eur", 0.0),
                     stats.get("consumption_ytd_kwh", 0.0),
                 ),
+                # A year of SOLD export for a first-year feed-in bonus, zero
+                # off the injection regime or without a measured year of it.
+                first_year_injection_kwh=entry_annual_injection_kwh(entry),
             )
         stats["welcome_credit_eur"] = credit
         return energy + fees - credit

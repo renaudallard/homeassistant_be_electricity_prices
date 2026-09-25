@@ -54,10 +54,12 @@ from .const import (
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
+    CONF_SOLAR_REGIME,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_INCLUDE_VAT,
     METER_MONO,
+    SOLAR_REGIME_INJECTION,
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers.base import SupplierSnapshot
@@ -185,6 +187,29 @@ def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
     if measured:
         return float(measured)
     return float(DEFAULT_ANNUAL_CONSUMPTION_KWH)
+
+
+def entry_annual_injection_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
+    """How much this household SELLS back in a year, in kWh, or 0.0.
+
+    What a first-year feed-in bonus multiplies (Mega's "bonus ... pour votre
+    injection sur le reseau de distribution pour votre premiere annee de
+    souscription"). Only the injection regime sells its export; under
+    compensation it nets against the draw and there is no feed-in price for a
+    bonus to add to, and without solar there is nothing to sell.
+
+    A FULL trailing year of meter or nothing, the rule the projection already
+    holds its feed-in to: PV is too seasonal for a shorter window scaled by a
+    day count, and no typed figure or default exists for the export, so an
+    entry without a year of it is credited no bonus rather than a guess.
+    Measured once a day by the coordinator, beside the consumption volume.
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return 0.0
+    if coordinator is None:
+        coordinator = getattr(entry, "runtime_data", None)
+    measured = getattr(coordinator, "_annual_injection_kwh", None)
+    return float(measured) if measured else 0.0
 
 
 def _resolve_snapshot(

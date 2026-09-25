@@ -10542,6 +10542,160 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     assert "first_year_net_kwh(" not in ahead
 
 
+def test_the_feed_in_bonus_rides_the_first_years_export_outside_the_cap() -> None:
+    """Mega adds a bonus on the first year's FEED-IN beside its ristourne:
+    "Si vous injectez de l'energie ... un bonus de 1,06 c EUR/kWh ... pour
+    votre injection sur le reseau de distribution pour votre premiere annee de
+    souscription". It multiplies the export, not the draw, it is paid with the
+    ristourne at the anniversary, and the ceiling the card prints is the
+    ristourne's alone."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _welcome_credit_eur,
+        _year_ahead_welcome_credit,
+        grants_a_welcome_credit,
+    )
+
+    card = make_snapshot(
+        welcome_credit_eur_per_kwh=0.05,
+        welcome_credit_cap_eur=100.0,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    def year(injected: float) -> float:
+        return _welcome_credit_eur(
+            card,
+            date(2025, 6, 1),
+            date(2026, 1, 1),
+            date(2026, 12, 31),
+            99_999.0,
+            3500.0,
+            first_year_injection_kwh=injected,
+        )
+
+    # 175 EUR of ristourne capped at 100, and the bonus on top of the cap.
+    assert year(3000.0) == pytest.approx(100.0 + 0.0106 * 3000.0)
+    # No sold export, no bonus.
+    assert year(0.0) == pytest.approx(100.0)
+    # A card granting the bonus alone is a card granting a credit.
+    bonus_only = make_snapshot(
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    assert grants_a_welcome_credit(bonus_only)
+    # And the year-ahead quote carries it for a fresh signing.
+    assert _year_ahead_welcome_credit(
+        bonus_only,
+        date(2026, 9, 1),
+        date(2026, 9, 1),
+        99_999.0,
+        first_year_injection_kwh=3000.0,
+    ) == pytest.approx(31.8)
+
+
+def test_the_feed_in_bonus_takes_the_feed_in_price_vat() -> None:
+    """A professional card prints the bonus HTVA ("1 c EUR/kWh (HTVA)"). It is
+    a bonus on the feed-in price, so it is grossed where the card taxes its
+    feed-in and left as printed where it does not."""
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+    )
+
+    taxed = make_snapshot(
+        welcome_credit_injection_eur_per_kwh=0.01,
+        injection=InjectionRates(current=0.05, vat_applies=True),
+    )
+    taxed = replace(taxed, taxes=replace(taxed.taxes, vat_rate=0.21))
+    assert apply_vat(
+        taxed, include_vat=True
+    ).welcome_credit_injection_eur_per_kwh == pytest.approx(0.0121)
+    assert apply_vat(
+        taxed, include_vat=False
+    ).welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+    exempt = replace(taxed, injection=InjectionRates(current=0.05, vat_applies=False))
+    assert apply_vat(
+        exempt, include_vat=True
+    ).welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+
+
+async def test_the_year_to_date_credits_the_feed_in_bonus_to_a_seller_only(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The running bill takes the bonus off in the window the anniversary
+    falls in, on a measured year of export, and only on the injection regime:
+    under compensation the meter nets the export and there is no feed-in
+    price for the bonus to add to."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    plain = _snapshot(prosumer=None, capacity=None)
+    card = replace(
+        plain,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+        return {}
+
+    async def _cost(regime: str, snap: Any, measured: float | None) -> float:
+        entry = _entry(
+            region="flanders",
+            solar_regime=regime,
+            meter="mono",
+            contract="test",
+            # The anniversary, 1 March 2026, falls inside the window.
+            contract_start_date="2025-03-01",
+            consumption_kwh="sensor.cons_total",
+        )
+        entry.runtime_data = SimpleNamespace(_annual_injection_kwh=measured)
+
+        async def _signing(*_a: Any, **_k: Any) -> Any:
+            return snap
+
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+            patch(
+                "custom_components.be_electricity_prices.ytd_cost."
+                "signing_month_snapshot",
+                new=_signing,
+            ),
+        ):
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                ),
+            )
+
+    sold = await _cost("injection", plain, 3000.0) - await _cost(
+        "injection", card, 3000.0
+    )
+    assert sold == pytest.approx(0.0106 * 3000.0)
+    # Netted, not sold: nothing.
+    assert await _cost("compensation", card, 3000.0) == pytest.approx(
+        await _cost("compensation", plain, 3000.0)
+    )
+    # No measured year of export: nothing rather than a guess.
+    assert await _cost("injection", card, None) == pytest.approx(
+        await _cost("injection", plain, None)
+    )
+
+
 def test_the_direct_debit_part_of_a_credit_is_settled_once() -> None:
     """ "une reduction de base de 37.1 EUR + 5.3 EUR supplementaires en cas de
     paiement par domiciliation bancaire": how the household pays is a

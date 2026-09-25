@@ -3838,6 +3838,10 @@ _MIN_WELCOME_CREDIT_SHARE: float = 0.058
 # largest real value is 42,40, a thirty-fifth of the flat fence, so a x10 slip
 # would pass there. Five times its own largest.
 _MAX_WELCOME_SUPPLEMENT_EUR: float = 212.0
+# Mega's first-year feed-in bonus, fenced on its own figures for the same
+# reason: 1 c/kWh on the pro cards to 5,32 on residential Smart Flex.
+_MIN_WELCOME_INJECTION_BONUS: float = 0.002
+_MAX_WELCOME_INJECTION_BONUS: float = 0.266
 
 
 def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
@@ -3864,6 +3868,7 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
     supplement = getattr(snap, "welcome_credit_direct_debit_eur", None)
     pct = getattr(snap, "welcome_credit_pct_of_energy", None)
     kwh = getattr(snap, "welcome_credit_kwh", None)
+    bonus = getattr(snap, "welcome_credit_injection_eur_per_kwh", None)
     months = getattr(snap, "welcome_credit_after_months", None)
     for label, value, floor, ceiling in (
         ("flat", flat, _MIN_WELCOME_CREDIT_EUR, _MAX_WELCOME_CREDIT_EUR),
@@ -3881,6 +3886,12 @@ def _expect_welcome_credit(prefix: str, contract_id: str, snap: object) -> None:
             _MAX_WELCOME_CREDIT_PER_KWH,
         ),
         ("volume", kwh, _MIN_WELCOME_CREDIT_KWH, _MAX_WELCOME_CREDIT_KWH),
+        (
+            "feed-in bonus",
+            bonus,
+            _MIN_WELCOME_INJECTION_BONUS,
+            _MAX_WELCOME_INJECTION_BONUS,
+        ),
     ):
         if value is None:
             continue

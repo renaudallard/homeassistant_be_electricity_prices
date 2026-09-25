@@ -181,6 +181,7 @@ def make_snapshot(
     welcome_credit_pct_of_energy: float | None = None,
     welcome_credit_kwh: float | None = None,
     welcome_credit_excludes_night_meter: bool = False,
+    welcome_credit_injection_eur_per_kwh: float | None = None,
 ) -> SupplierSnapshot:
     """SupplierSnapshot with sensible defaults for tests.
 
@@ -215,6 +216,7 @@ def make_snapshot(
         welcome_credit_pct_of_energy=welcome_credit_pct_of_energy,
         welcome_credit_kwh=welcome_credit_kwh,
         welcome_credit_excludes_night_meter=welcome_credit_excludes_night_meter,
+        welcome_credit_injection_eur_per_kwh=welcome_credit_injection_eur_per_kwh,
     )
 
 

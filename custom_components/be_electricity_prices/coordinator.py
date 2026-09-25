@@ -202,6 +202,9 @@ class BePricesCoordinator(
         # scaled up to one. Only the first outranks a volume a business typed.
         self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
+        # A full trailing year of the export on the injection regime, read the
+        # same day; None otherwise. A first-year feed-in bonus multiplies it.
+        self._annual_injection_kwh: float | None = None
         # The day/night register(s) the daily measurement found silent or
         # stopped, which the Repairs card names; empty while every pair is
         # whole.

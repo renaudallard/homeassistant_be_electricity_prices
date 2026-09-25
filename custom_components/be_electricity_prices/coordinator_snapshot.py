@@ -45,8 +45,10 @@ from .const import (
     CONF_CONTRACT,
     CONF_DSO,
     CONF_REGION,
+    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     MEASURED_FULL_YEAR_DAYS,
+    SOLAR_REGIME_INJECTION,
 )
 from .snapshot_store import (
     _SharedSnapshot,
@@ -103,6 +105,7 @@ class _SnapshotMixin:
     _annual_kwh: float | None
     _annual_kwh_full_year: bool
     _annual_kwh_day: date | None
+    _annual_injection_kwh: float | None
     _register_pair_fault: str
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
@@ -208,12 +211,16 @@ class _SnapshotMixin:
         self._annual_kwh_full_year = volume.measured and _covers_a_year(
             volume.days_with_data
         )
-        # The same trailing year read for the injection side, only where an
-        # injection register PAIR is wired: that is the one wiring whose half
-        # can go silent, and every other entry pays nothing for the check.
+        # The same trailing year read for the injection side, where an
+        # injection register PAIR is wired (the one wiring whose half can go
+        # silent) and where the export is SOLD, which is what a first-year
+        # feed-in bonus multiplies (entry_annual_injection_kwh). Every other
+        # entry pays nothing for it.
         faults = [volume.pair_fault]
         day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
-        if day_id and night_id:
+        sells = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        self._annual_injection_kwh = None
+        if (day_id and night_id) or sells:
             with contextlib.suppress(Exception):
                 injected = await _measured_kwh(
                     self.hass,
@@ -223,6 +230,14 @@ class _SnapshotMixin:
                     side="injection",
                 )
                 faults.append(injected.pair_fault)
+                if (
+                    sells
+                    and injected.kwh > 0
+                    and _covers_a_year(injected.days_with_data)
+                ):
+                    self._annual_injection_kwh = (
+                        injected.kwh * MEASURED_FULL_YEAR_DAYS / injected.days_with_data
+                    )
         self._register_pair_fault = ", ".join(f for f in faults if f)
 
     def _reresolve_snapshot(self) -> None:

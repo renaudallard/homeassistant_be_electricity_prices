@@ -556,6 +556,7 @@ async def _accrue_cost(
                 compensation=is_compensation,
             ),
             window_energy_rate(running_energy_component, running_consumption_kwh),
+            first_year_injection_kwh=ctx.annual_injection_kwh,
         )
         bill = displayed_energy + running_fees - credit
         state = round(carried + bill, 4)

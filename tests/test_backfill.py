@@ -1939,27 +1939,45 @@ async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
     ],
     ids=["fixed", "dynamic"],
 )
+@pytest.mark.parametrize("credit", ["pro_rata", "feed_in_bonus"])
 async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
-    hass: HomeAssistant, energy: Any
+    hass: HomeAssistant, energy: Any, credit: str
 ) -> None:
     """A welcome credit is subtracted from the live year-to-date figure, so
     the backfilled series has to carry it too or the two meet at a step: the
     imported rows ended a quarter of a 200 EUR credit (49,32 EUR) ABOVE the
     live sensor, and the seed row then handed the live chain a sum the sensor
-    stepped down from. Per-day and per-hour kinds alike."""
+    stepped down from. Per-day and per-hour kinds alike.
+
+    And a first-year bonus on the feed-in, which multiplies the measured year
+    of SOLD export rather than any volume the window holds, so the backfill
+    has to read the same year the live walk reads."""
     from custom_components.be_electricity_prices import backfill_window
     from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
 
-    snap = make_snapshot(energy=energy, welcome_credit_eur=200.0)
+    bonus = credit == "feed_in_bonus"
+    snap = (
+        make_snapshot(
+            energy=energy,
+            welcome_credit_injection_eur_per_kwh=0.0106,
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        )
+        if bonus
+        else make_snapshot(energy=energy, welcome_credit_eur=200.0)
+    )
     entry = make_entry(
         region="wallonia",
         dso="ores",
         meter="dynamic",
         title="Credited",
-        solar_regime="none",
+        solar_regime="injection" if bonus else "none",
         consumption_kwh="sensor.cons_total",
-        contract_start_date="2026-01-01",
+        # A bonus is paid at the anniversary, which has to fall in the window.
+        contract_start_date="2025-02-01" if bonus else "2026-01-01",
     )
     entry.add_to_hass(hass)
     _register_sensors(hass, entry, ["current_year_cost"])
@@ -1992,6 +2010,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         _ensure_spp_weights=AsyncMock(),
         _ensure_rlp_weights=AsyncMock(),
         _billed_peak_kw=lambda: 0.0,
+        _annual_injection_kwh=3000.0,
     )
     entry.runtime_data = coordinator
 
@@ -2066,9 +2085,10 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     rows = [row for batch in captured for row in batch]
     assert rows, "the backfill imported nothing"
     assert live is not None
-    # The live side really carries 90 of the first year's 365 days of credit,
-    # or agreeing with it would prove nothing.
-    assert stats["welcome_credit_eur"] == pytest.approx(200.0 * 90 / 365)
+    # The live side really carries the credit, 90 of the first year's 365
+    # days of it or the whole bonus, or agreeing with it would prove nothing.
+    expected = 0.0106 * 3000.0 if bonus else 200.0 * 90 / 365
+    assert stats["welcome_credit_eur"] == pytest.approx(expected)
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 

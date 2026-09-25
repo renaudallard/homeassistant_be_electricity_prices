@@ -7734,6 +7734,55 @@ def test_the_annual_credit_nets_the_export_only_where_the_meter_nets() -> None:
     )
 
 
+def test_the_annual_credit_carries_the_feed_in_bonus_for_a_seller_only() -> None:
+    """Mega's first-year bonus on the feed-in ("bonus de 1,06 c EUR/kWh ...
+    pour votre injection") multiplies the year's export where it is sold. The
+    projection and every comparison row read this, so a Mega card was ranked
+    one bonus short for a prosumer on the injection regime."""
+    from datetime import date, datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _annual_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, yearly_fixed_fee=60.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    now = datetime(2026, 9, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    def credited(regime: str) -> float:
+        return _annual_welcome_credit(
+            snap,
+            snap,
+            date(2026, 9, 15),
+            now,
+            "ores",
+            "wallonia",
+            None,
+            "mono",
+            "bi_horaire",
+            None,
+            3500.0,
+            3000.0,
+            regime=regime,
+        )
+
+    assert credited("injection") == pytest.approx(0.0106 * 3000.0)
+    assert credited("compensation") == 0.0
+    assert credited("none") == 0.0
+
+
 def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
     """The year-to-date engine takes its pricing inputs as keyword arguments,
     and a call site that omits one degrades silently rather than failing.

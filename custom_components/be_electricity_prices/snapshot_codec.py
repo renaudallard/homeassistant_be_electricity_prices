@@ -388,7 +388,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v72: Mega's September 2026 Cosy Flex card in Flanders prints its off-peak
 # formula in "€/kWh" where the three around it say "c€/kWh". A v71 row holds
 # the peak formula and no off-peak one, and a bi-hourly entry with a key was
-# billed the mono pair every hour.
+# billed the mono pair every hour. v72 also carries
+# welcome_credit_injection_eur_per_kwh, the first-year feed-in bonus every Mega
+# card with a feed-in formula prints beside its ristourne: an entry already on
+# one of those cards is owed it and a v71 row cannot say so.
 _SNAPSHOT_SCHEMA_VERSION = 72
 
 # The oldest stored schema a rejected blob may still be replayed from when no
@@ -496,6 +499,9 @@ def _snapshot_to_dict(
         "welcome_credit_eur": snap.welcome_credit_eur,
         "direct_debit_discount_eur": snap.direct_debit_discount_eur,
         "welcome_credit_eur_per_kwh": snap.welcome_credit_eur_per_kwh,
+        "welcome_credit_injection_eur_per_kwh": (
+            snap.welcome_credit_injection_eur_per_kwh
+        ),
         "welcome_credit_cap_eur": snap.welcome_credit_cap_eur,
         "welcome_credit_direct_debit_eur": snap.welcome_credit_direct_debit_eur,
         "welcome_credit_requires_direct_debit": (
@@ -592,6 +598,9 @@ def _snapshot_from_dict(
         welcome_credit_eur=data.get("welcome_credit_eur"),
         direct_debit_discount_eur=data.get("direct_debit_discount_eur"),
         welcome_credit_eur_per_kwh=data.get("welcome_credit_eur_per_kwh"),
+        welcome_credit_injection_eur_per_kwh=data.get(
+            "welcome_credit_injection_eur_per_kwh"
+        ),
         welcome_credit_cap_eur=data.get("welcome_credit_cap_eur"),
         welcome_credit_direct_debit_eur=data.get("welcome_credit_direct_debit_eur"),
         welcome_credit_requires_direct_debit=bool(

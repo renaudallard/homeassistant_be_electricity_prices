@@ -1883,6 +1883,41 @@ def test_residential_excise_is_read_as_the_schedule_the_card_prints() -> None:
     assert _extract_federal_excise(flat) == (pytest.approx(0.04876), None)
 
 
+def test_the_first_year_injection_bonus_is_read() -> None:
+    """Every Mega card with a feed-in formula prints a first-year bonus on the
+    export beside its ristourne: "Si vous injectez de l'energie, en regime de
+    commercialisation contrainte, vous pouvez egalement beneficier d'un bonus
+    (**) de 1,06 c EUR/kWh (TVA de 6% incluse) ... pour votre injection".
+    TVAC on a residential card, HTVA on a professional one, "(*)" on the
+    Off-peak cards, and the Smart cards word it "visant votre injection"."""
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        extract_injection_bonus,
+    )
+
+    residential = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+    )
+    assert residential.welcome_credit_injection_eur_per_kwh == pytest.approx(0.0106)
+    pro = parse_snapshot(
+        "mega_pro_smart_fixed", fixture_text("mega_pro_smart_fixed_v.pdf"), "flanders"
+    )
+    assert pro.welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+    assert extract_injection_bonus(
+        fixture_text("mega_offpeak_fixed_w.pdf")
+    ) == pytest.approx(0.0106)
+    # The September 2026 Smart Fixed wording.
+    assert extract_injection_bonus(
+        "Si vous injectez de l'energie, en regime de commercialisation "
+        "contrainte, et disposez d'une puissance de raccordement inferieure ou "
+        "egale a 10 kVa, vous pouvez egalement beneficier d'un bonus (**) de "
+        "3,52 c€/kWh (HTVA) sur le prix de l'energie de Smart Fixed pendant 12 "
+        "mois a compter du debut de fourniture, tel que mentionne sur la carte "
+        "tarifaire, visant votre injection sur le reseau de distribution."
+    ) == pytest.approx(0.0352)
+    # A card with no feed-in formula prints none.
+    assert extract_injection_bonus(fixture_text("mega_dynamic_w.pdf")) is None
+
+
 def test_the_ristourne_wait_is_read_off_the_card() -> None:
     """ "apres QUATORZE mois ininterrompus" on four of the cards.
 

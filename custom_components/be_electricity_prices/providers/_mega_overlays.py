@@ -324,6 +324,41 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
     }
 
 
+# The first-year feed-in bonus printed beside the ristourne on every card with
+# a feed-in formula:
+#
+#   "Si vous injectez de l'energie, en regime de commercialisation contrainte,
+#    vous pouvez egalement beneficier d'un bonus (**) de 1,06 c EUR/kWh (TVA de
+#    6% incluse) sur le prix de l'energie ... pour votre injection sur le reseau
+#    de distribution pour votre premiere annee de souscription"
+#
+# The marker is "(**)" beside a ristourne and "(*)" on the Off-peak cards,
+# the decimal a comma or a dot, the basis TVAC on a residential card and
+# HTVA on a professional one, which the caller's VAT resolution handles as
+# it does every other figure on the card. The Smart cards word it "pendant 12
+# mois a compter du debut de fourniture ... visant votre injection" and add
+# "et disposez d'une puissance de raccordement inferieure ou egale a 10 kVA",
+# a condition the entry cannot answer: the flow asks for no connection power
+# on the injection regime, so the bonus is credited as printed.
+#
+# Paid on the ristourne's wait. The bonus footnote states its own ("Le bonus
+# vous est uniquement accorde apres douze mois ininterrompus d'injection")
+# and it equals the ristourne's on every archived card, fourteen included.
+_INJECTION_BONUS_RE = re.compile(
+    r"bonus\s*(?:\(\*+\)\s*)?de\s+([\d.,]+)\s*c€\s*/\s*kWh[^.]{0,200}?"
+    r"(?:pour|visant)\s+votre\s+injection",
+    re.IGNORECASE,
+)
+
+
+def extract_injection_bonus(text: str) -> float | None:
+    """The first-year feed-in bonus in EUR/kWh, or None when the card grants none."""
+    match = _INJECTION_BONUS_RE.search(re.sub(r"\s+", " ", text))
+    if match is None:
+        return None
+    return to_float(match.group(1)) / 100.0
+
+
 # How long the card makes the household wait. The footnote is "La ristourne
 # vous est uniquement accordee apres DOUZE mois ininterrompus de consommation
 # ... et octroyee sur la premiere facture de regularisation apres cette

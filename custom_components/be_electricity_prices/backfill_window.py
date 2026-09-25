@@ -63,7 +63,7 @@ from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
-from .snapshot_resolve import entry_annual_kwh
+from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -274,6 +274,9 @@ class _BackfillContext:
     # the series covers. Resolved once here for the same reason everything
     # else on this class is.
     annual_kwh: float
+    # A year of the export the household SELLS, for a first-year feed-in
+    # bonus; zero off the injection regime, like the live walk's.
+    annual_injection_kwh: float = 0.0
 
 
 def _recorder_models() -> tuple[Any, Any, Any, Any]:
@@ -386,6 +389,7 @@ async def _build_context(
         hourly_injection=partial(_injection_hourly_on_cohort, snap, entry=entry),
         signing=signing,
         annual_kwh=entry_annual_kwh(entry, coordinator),
+        annual_injection_kwh=entry_annual_injection_kwh(entry, coordinator),
     )
 
 

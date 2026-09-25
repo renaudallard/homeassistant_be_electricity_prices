@@ -511,6 +511,7 @@ def grants_a_welcome_credit(snapshot: SupplierSnapshot) -> bool:
         or getattr(snapshot, "welcome_credit_eur_per_kwh", None)
         or getattr(snapshot, "welcome_credit_pct_of_energy", None)
         or getattr(snapshot, "welcome_credit_kwh", None)
+        or getattr(snapshot, "welcome_credit_injection_eur_per_kwh", None)
     )
 
 
@@ -522,6 +523,7 @@ def _welcome_credit_eur(
     eligible_eur: float,
     first_year_kwh: float = 0.0,
     energy_eur_per_kwh: float = 0.0,
+    first_year_injection_kwh: float = 0.0,
 ) -> float:
     """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
 
@@ -581,6 +583,14 @@ def _welcome_credit_eur(
     running figure, because it caps the whole credit rather than this window's
     share of it.
 
+    A card may add a bonus on the FEED-IN of the first year: Mega's *"bonus de
+    1,06 c EUR/kWh ... pour votre injection sur le reseau de distribution pour
+    votre premiere annee de souscription"*. ``first_year_injection_kwh`` is
+    that year's export, zero unless the household's feed-in is sold (the
+    injection regime) and a year of it has been measured. It joins the amount
+    after the ceiling, which the card states for the ristourne alone, and is
+    paid when and how the rest is.
+
     Returns a POSITIVE number; the caller subtracts it.
     """
     amount = snapshot.welcome_credit_eur or 0.0
@@ -628,6 +638,9 @@ def _welcome_credit_eur(
     ceiling = snapshot.welcome_credit_cap_eur
     if ceiling is not None:
         amount = min(amount, ceiling)
+    injection_bonus = getattr(snapshot, "welcome_credit_injection_eur_per_kwh", None)
+    if injection_bonus and first_year_injection_kwh > 0.0:
+        amount += injection_bonus * first_year_injection_kwh
     if amount <= 0.0:
         return 0.0
     if start is None:
@@ -661,6 +674,7 @@ def _year_ahead_welcome_credit(
     eligible_eur: float,
     first_year_kwh: float = 0.0,
     energy_eur_per_kwh: float = 0.0,
+    first_year_injection_kwh: float = 0.0,
 ) -> float:
     """The welcome credit the coming year takes off a bill quoted today, in EUR.
 
@@ -706,4 +720,5 @@ def _year_ahead_welcome_credit(
         eligible_eur,
         first_year_kwh,
         energy_eur_per_kwh,
+        first_year_injection_kwh,
     )

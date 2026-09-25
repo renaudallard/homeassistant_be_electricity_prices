@@ -57,6 +57,7 @@ from .const import (
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
 from .compare_weighting import (
@@ -417,6 +418,11 @@ def _annual_welcome_credit(
             compensation=regime == SOLAR_REGIME_COMPENSATION,
         ),
         window_energy_rate(consumption_kwh * energy_per_kwh, consumption_kwh),
+        # The year's export, which a first-year feed-in bonus multiplies, and
+        # only where it is sold: under compensation it nets against the draw.
+        first_year_injection_kwh=(
+            injection_kwh if regime == SOLAR_REGIME_INJECTION else 0.0
+        ),
     )
 
 

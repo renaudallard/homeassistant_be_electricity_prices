@@ -232,6 +232,15 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             if snapshot.welcome_credit_direct_debit_eur is None
             else snapshot.welcome_credit_direct_debit_eur * factor
         ),
+        # A bonus on the feed-in price, so it takes that price's VAT
+        # treatment rather than the consumption credit's: grossed where the
+        # card taxes its feed-in, left as printed where it does not.
+        welcome_credit_injection_eur_per_kwh=(
+            None
+            if snapshot.welcome_credit_injection_eur_per_kwh is None
+            else snapshot.welcome_credit_injection_eur_per_kwh
+            * (factor if injection is not None and injection.vat_applies else 1.0)
+        ),
     )
 
 
@@ -458,12 +467,17 @@ def resolve_direct_debit(
         # 3500 kWh. The cap goes with them so no later reader sees a ceiling
         # over an absent credit.
         #
-        # All five amounts, the way resolve_welcome_credit_meter clears all
-        # five: this listed three and left the share and the volume behind,
-        # which a card both direct-debit-conditional and percentage-stated
-        # would have credited to a household its own terms grant nothing. No
-        # card is both shapes today, and the same gap existed for the per-kWh
-        # leg until a card turned up that was.
+        # All five ristourne amounts, the way resolve_welcome_credit_meter
+        # clears them: this listed three and left the share and the volume
+        # behind, which a card both direct-debit-conditional and
+        # percentage-stated would have credited to a household its own terms
+        # grant nothing. No card is both shapes today, and the same gap existed
+        # for the per-kWh leg until a card turned up that was.
+        #
+        # The feed-in bonus stays. The condition is the ristourne's own
+        # sentence; the bonus is the next one ("Si vous injectez de l'energie
+        # ... vous pouvez egalement beneficier d'un bonus"), and its footnote
+        # sets its terms without the domiciliation.
         return replace(
             snapshot,
             direct_debit_discount_eur=None,
@@ -532,6 +546,7 @@ def resolve_welcome_credit_meter(
         welcome_credit_excludes_night_meter=False,
         welcome_credit_eur=None,
         welcome_credit_eur_per_kwh=None,
+        welcome_credit_injection_eur_per_kwh=None,
         welcome_credit_cap_eur=None,
         welcome_credit_pct_of_energy=None,
         welcome_credit_kwh=None,
@@ -546,13 +561,14 @@ def without_welcome_credit(snapshot: SupplierSnapshot) -> SupplierSnapshot:
     property of the version signed, by its own terms, and Luminus's campaign
     is only ever printed on the live card of the month it ran in.
 
-    All five amount fields, for the reason :func:`resolve_welcome_credit_meter`
-    clears all five: a card's offer is one offer, and leaving one leg behind
+    Every amount field, for the reason :func:`resolve_welcome_credit_meter`
+    clears them all: a card's offer is one offer, and leaving one leg behind
     credits a household a fragment of something it was never granted.
     """
     if not (
         snapshot.welcome_credit_eur
         or snapshot.welcome_credit_eur_per_kwh
+        or snapshot.welcome_credit_injection_eur_per_kwh
         or snapshot.welcome_credit_pct_of_energy
         or snapshot.welcome_credit_kwh
         or snapshot.welcome_credit_direct_debit_eur
@@ -562,6 +578,7 @@ def without_welcome_credit(snapshot: SupplierSnapshot) -> SupplierSnapshot:
         snapshot,
         welcome_credit_eur=None,
         welcome_credit_eur_per_kwh=None,
+        welcome_credit_injection_eur_per_kwh=None,
         welcome_credit_cap_eur=None,
         welcome_credit_pct_of_energy=None,
         welcome_credit_kwh=None,

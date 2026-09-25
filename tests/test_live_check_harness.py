@@ -3447,6 +3447,7 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
         "welcome_credit_direct_debit_eur": (5.0, 42.4),
         "welcome_credit_cap_eur": (800.0, 848.0),
         "welcome_credit_kwh": (750.0, 750.0),
+        "welcome_credit_injection_eur_per_kwh": (0.01, 0.0532),
     }
     for field, (smallest, largest) in extremes.items():
         assert not _fails(**{field: smallest}), field

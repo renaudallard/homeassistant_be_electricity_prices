@@ -410,6 +410,19 @@ class SupplierSnapshot:
     # into a later window without changing it. Inert on a pro-rata card,
     # which accrues by the day and never waits.
     welcome_credit_after_months: int = 12
+    # A first-year bonus on the FEED-IN rather than on consumption: "Si vous
+    # injectez de l'energie, en regime de commercialisation contrainte, vous
+    # pouvez egalement beneficier d'un bonus de 1,06 c EUR/kWh (TVA de 6%
+    # incluse) ... pour votre injection sur le reseau de distribution pour
+    # votre premiere annee de souscription", on every Mega card with a feed-in
+    # formula. In EUR/kWh of the first year's export, on the card's basis.
+    #
+    # Only a household whose feed-in is SOLD earns it, which is the injection
+    # regime: under compensation the meter nets the export and no feed-in
+    # price exists to add a bonus to. Paid with the ristourne and on the same
+    # wait ("apres douze mois ininterrompus d'injection"), and outside its
+    # ceiling, which the card states for the ristourne alone.
+    welcome_credit_injection_eur_per_kwh: float | None = None
 
 
 SnapshotFetcher = Callable[

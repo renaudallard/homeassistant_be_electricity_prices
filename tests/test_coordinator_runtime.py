@@ -2627,6 +2627,60 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_year_of_sold_export_is_measured_for_the_feed_in_bonus(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A first-year feed-in bonus multiplies a year of the export the
+    household sells. The daily volume read measures it on the injection
+    regime, a full trailing year or nothing, and on no other regime."""
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        entry_annual_injection_kwh,
+    )
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+
+    async def measured(regime: str, days: int) -> float:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                "supplier": "mega",
+                "contract": "mega_smart_fixed",
+                "region": "flanders",
+                "dso": "fluvius_antwerpen",
+                "meter": "mono",
+                "solar_regime": regime,
+                "consumption_kwh": "sensor.cons",
+                "injection_kwh": "sensor.inj",
+            },
+            title="Mega (Flanders)",
+        )
+        entry.add_to_hass(hass)
+        coord = BePricesCoordinator(hass, entry)
+        with (
+            patch.object(
+                compare_quote, "_annual_volume", AsyncMock(return_value=volume)
+            ),
+            patch.object(
+                coordinator_snapshot,
+                "_measured_kwh",
+                AsyncMock(return_value=MeasuredKwh(2900.0, days)),
+            ),
+        ):
+            await coord._ensure_annual_volume()
+        return entry_annual_injection_kwh(entry, coord)
+
+    # 360 days of it covers the year and is scaled over the five missing.
+    assert await measured("injection", 360) == pytest.approx(2900.0 * 365 / 360)
+    # A summer is not a year.
+    assert await measured("injection", 120) == 0.0
+    # Netted, not sold.
+    assert await measured("compensation", 360) == 0.0
+
+
 def test_repair_issue_kinds_match_the_declared_strings() -> None:
     """strings.json is the source of truth for what can be raised. Adding an
     issue there without adding it here (and to async_remove_entry) leaves it
