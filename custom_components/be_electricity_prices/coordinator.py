@@ -187,6 +187,9 @@ class BePricesCoordinator(
         # priced for. Persisted, so a restart the same day serves it.
         self._previous_priced: PricedPeriods | None = None
         self._previous_pricing: asyncio.Task[None] | None = None
+        # Which periods the last pricing was started for, and when, so one
+        # that could not price them waits for the next hourly tick.
+        self._previous_tried: tuple[str, datetime] | None = None
         self._snapshot_raw: SupplierSnapshot | None = None
         # The household's measured yearly consumption, and the day it was
         # measured on. ``None`` until the recorder holds enough of it to be

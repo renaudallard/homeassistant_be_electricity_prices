@@ -151,6 +151,7 @@ class _TickMixin:
     _peak_month: date | None
     _previous_priced: PricedPeriods | None
     _previous_pricing: asyncio.Task[None] | None
+    _previous_tried: tuple[str, datetime] | None
     _priced: SupplierSnapshot | None
     _rlp_blend: str
     _rlp_fetched_at: datetime | None
@@ -947,19 +948,28 @@ class _TickMixin:
         periods keeps being served until the new one lands.
 
         A pricing that could not price one of the periods is not kept for the
-        day: the year reads unknown while it stands, so the next tick asks
-        again rather than tomorrow's.
+        day: the year reads unknown while it stands, so the next hourly tick
+        asks again rather than tomorrow's. Not sooner: the pricing asks for a
+        refresh when it lands, and that refresh is a tick, so without the wait
+        a period that cannot be priced was fetched and walked again every few
+        seconds.
         """
+        key = periods_key(periods)
         priced = self._previous_priced
         if (
             priced is not None
-            and priced.key == periods_key(periods)
+            and priced.key == key
             and priced.day == today
             and all(row.cost is not None for row in priced.rows)
         ):
             return
         if self._previous_pricing is not None and not self._previous_pricing.done():
             return
+        now = dt_util.utcnow()
+        tried = self._previous_tried
+        if tried is not None and tried[0] == key and now - tried[1] < _PREVIOUS_RETRY:
+            return
+        self._previous_tried = (key, now)
         self._previous_pricing = self.entry.async_create_background_task(
             self.hass,
             self._price_previous(periods, today),
@@ -1144,3 +1154,9 @@ class _TickMixin:
 # this only ever bites on a source that hangs, which is exactly the case where
 # waiting buys nothing: the fill retries it off the setup path a moment later.
 _FIRST_TICK_SPOT_BUDGET = 45.0
+
+# How long an earlier contract's pricing that could not price a period waits
+# before it is tried again. Just under the hourly tick, so the next one asks
+# rather than the one after it, and well over the few seconds between the
+# refresh a pricing asks for and the tick that answers it.
+_PREVIOUS_RETRY = timedelta(minutes=50)

@@ -550,6 +550,46 @@ async def test_a_pricing_that_missed_a_contract_is_asked_again_next_tick(
     assert coord._previous_pricing is None
 
 
+async def test_a_pricing_that_keeps_failing_waits_for_the_next_hourly_tick(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The pricing asks for a refresh when it lands, and that refresh is a
+    tick, which asked for the pricing again: a period that cannot be priced
+    was fetched and walked again about every 10 s, all day."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = {**_held("eneco", "power_fix"), "supplier": "gone_supplier"}
+    entry = make_entry(previous_contracts=[{"until": "2026-06-15", "data": held}])
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    runs = 0
+
+    async def refresh() -> None:
+        # All a refresh does here: the tick asks for the pricing again.
+        nonlocal runs
+        runs += 1
+        coord._schedule_previous_pricing(periods, date(2026, 9, 24))
+
+    coord.async_request_refresh = refresh  # type: ignore[method-assign]
+    coord._schedule_previous_pricing(periods, date(2026, 9, 24))
+    for _ in range(5):
+        task = coord._previous_pricing
+        if task is not None and not task.done():
+            await task
+    assert runs == 1
+    assert coord._previous_priced is not None
+    assert coord._previous_priced.rows[0].cost is None
+    # The next hourly tick asks again.
+    freezer.tick(timedelta(hours=1))
+    before = coord._previous_pricing
+    coord._schedule_previous_pricing(periods, date(2026, 9, 24))
+    assert coord._previous_pricing is not None
+    assert coord._previous_pricing is not before
+    await coord._previous_pricing
+    assert runs == 2
+
+
 async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
     hass: HomeAssistant, freezer: Any
 ) -> None:

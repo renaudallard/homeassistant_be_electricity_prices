@@ -475,13 +475,15 @@ entry's current card, flagged `stand_in`.
 
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,
-`_price_previous`), or on the next tick while a contract could not be priced,
+`_price_previous`), or on the next hourly tick while a contract could not be
+priced (`_PREVIOUS_RETRY`: not on the tick its own refresh asks for, which
+would price it again every few seconds),
 after filling the year's day-ahead when an earlier contract settles on it, with
 the ENTSO-E key the old contract's settings kept when the entry holds none, and
 asks for a refresh when it lands. The result is kept as
 `PricedPeriods` with `periods_key`, the days and settings it was priced for,
-and served only for those. Until one lands, which is the minutes after a switch
-is recorded, the year reads unknown rather than short by a whole contract,
+and served only for those. Until one lands, usually the minutes after a switch
+is recorded, and while any contract fails to price, the year reads unknown rather than short by a whole contract,
 which on the recorder would read as a large negative change and then the same
 positive one. The spot and load-profile gates ask `periods_need_spots` and
 `periods_need_rlp` of the registry, not of a card, because they decide before
