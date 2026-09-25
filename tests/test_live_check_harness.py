@@ -3564,3 +3564,46 @@ def _read_ceiling(text: str) -> float | None:
     """The shared reader, on the shape these fake cards print."""
     found = re.search(r"tarif maximal de\s+([\d.,]+)\s*€", text)
     return float(found.group(1).replace(",", ".")) if found else None
+
+
+# ---- the endpoint probe workflow ---------------------------------------------
+
+
+def test_the_endpoint_probe_installs_what_it_imports(tmp_path: Path) -> None:
+    """The probe workflow installed aiohttp alone, but the probe imports
+    USER_AGENT through the package, whose __init__ imports Home Assistant, so
+    it died on import on the runner. Behind ``| tee`` on a shell with no
+    pipefail the run still ended green with an empty summary. Run the probe
+    with every package the workflow does not install made unimportable."""
+    import yaml  # type: ignore[import-untyped]
+
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load(
+        (root / ".github/workflows/endpoint_probe.yml").read_text()
+    )
+    steps = workflow["jobs"]["probe"]["steps"]
+    install = next(s["run"] for s in steps if "pip install" in s.get("run", ""))
+    installed = set(install.split("-c requirements-dev.txt", 1)[1].split())
+    if "homeassistant" in installed:
+        installed.add("voluptuous")
+    blocked = {
+        "homeassistant",
+        "voluptuous",
+        "pypdf",
+        "pdfplumber",
+        "defusedxml",
+    } - installed
+    runner = tmp_path / "runner.py"
+    runner.write_text(
+        "import runpy, sys\n"
+        f"for name in {sorted(blocked)!r}:\n"
+        "    sys.modules[name] = None\n"
+        "sys.argv = ['probe_endpoint.py', '--help']\n"
+        "runpy.run_path('scripts/probe_endpoint.py', run_name='__main__')\n"
+    )
+    done = subprocess.run(
+        [sys.executable, str(runner)], cwd=root, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    probe = next(s for s in steps if s.get("name") == "Probe")
+    assert probe.get("shell") == "bash"

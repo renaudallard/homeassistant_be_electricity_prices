@@ -46,11 +46,18 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      # aiohttp alone: the probe imports USER_AGENT from the providers package
-      # but touches no Home Assistant code, so the full test extra would just
-      # slow the answer down.
-      - run: pip install -c requirements-dev.txt aiohttp
+      # The probe imports USER_AGENT from the providers package, and importing
+      # any module under the package runs its __init__, which imports Home
+      # Assistant; _pdf itself needs the PDF readers. aiohttp alone died on
+      # import before probing anything. The same list the archive job
+      # installs to import the package.
+      - run: >-
+          pip install -c requirements-dev.txt
+          aiohttp homeassistant pypdf pdfplumber defusedxml
       - name: Probe
+        # bash with pipefail: the default shell has none, so a probe that
+        # died still ended green behind tee with an empty summary.
+        shell: bash
         # Inputs reach the shell through env, never interpolated into the
         # script: a workflow_dispatch input is attacker-controlled text and
         # "${{ ... }}" splices it in before bash ever sees it.

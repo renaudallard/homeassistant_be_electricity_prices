@@ -1244,6 +1244,13 @@ from a blocked runner* above for how to read the two against each other).
 Nothing gates on it, and it is deliberately not scheduled. It answers a question someone is asking,
 and a supplier being slow today is not a reason to fail a workflow.
 
+It installs what importing the package takes (Home Assistant and the PDF readers, the archive job's
+list), because the probe reads `USER_AGENT` through the package so it cannot drift from what the
+extractors send, and the package's `__init__` imports Home Assistant. With aiohttp alone it died on
+import, and with no pipefail behind `| tee` the run still ended green with an empty summary; the
+step now runs under `shell: bash`, which sets pipefail
+(`test_the_endpoint_probe_installs_what_it_imports`).
+
 ### archive_cards.yml - Archive tariff cards
 
 Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
