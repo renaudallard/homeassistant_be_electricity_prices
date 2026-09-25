@@ -64,6 +64,7 @@ from .flow_schemas import (
     _MANUAL_RATE_KEYS,
     _record_switch,
     _remove_last_switch,
+    _removable_switch,
     _switch_schema,
     _validate_switch_date,
     _METER_SENSOR_KEYS,
@@ -905,10 +906,11 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        from .contract_periods import recorded_contracts
-
-        # Removing a switch is offered only to an entry that holds one.
-        switched = bool(recorded_contracts(self.config_entry.data))
+        # Removing a switch is offered only to an entry that holds one from
+        # this year.
+        switched = (
+            _removable_switch(self.config_entry.data, dt_util.now().date()) is not None
+        )
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -961,15 +963,14 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
         recorded by mistake.
         """
         from .compare_inputs import _label_for_contract, _label_for_supplier
-        from .contract_periods import recorded_contracts
 
-        records = recorded_contracts(self.config_entry.data)
-        if not records:
+        last = _removable_switch(self.config_entry.data, dt_util.now().date())
+        if last is None:
             return self.async_abort(reason="no_switch_recorded")
         if user_input is not None:
             self._data = _remove_last_switch(self._seed_data())
             return self._finalize()
-        until, held = records[-1]
+        until, held = last
         supplier = str(held.get(CONF_SUPPLIER, ""))
         return self.async_show_form(
             step_id="remove_switch",

@@ -57,6 +57,7 @@ from custom_components.be_electricity_prices.coordinator import BePricesCoordina
 from custom_components.be_electricity_prices.flow_schemas import (
     _record_switch,
     _remove_last_switch,
+    _removable_switch,
     _validate_contract_dates,
     _validate_switch_date,
 )
@@ -493,6 +494,30 @@ async def test_the_options_menu_removes_the_last_switch(
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert dict(entry.data) == before
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_switch_from_an_earlier_year_is_not_offered_for_removal(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A switch recorded last year prices nothing this year and is a real
+    change of supplier, long settled. Removing it would put back a contract
+    the household left before the year began, so the menu does not offer it
+    and the step refuses it."""
+    freezer.move_to("2027-02-10 12:00:00+01:00")
+    before = dict(make_entry(contract_start_date="2025-03-01").data)
+    after = {
+        **_record_switch(before, date(2026, 6, 15)),
+        "supplier": "cociter",
+        "contract": "cociter_variable",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=after, title="Cociter")
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "remove_switch" not in result["menu_options"]
+    # The step asks the same question, so it refuses the record too.
+    assert _removable_switch(after, date(2027, 2, 10)) is None
+    assert _removable_switch(after, date(2026, 9, 24)) is not None
 
 
 def test_the_reload_signature_takes_a_list_of_earlier_contracts() -> None:

@@ -247,7 +247,7 @@
       "compare_all_no_alternatives": "No other contract of this kind is sold in your region, so there is nothing to rank. The one-off compare can still quote a different kind of contract.",
       "compare_all_unknown_contract": "This entry's contract is no longer in the supplier's catalogue, so it cannot be placed against the others. Re-pick it under Edit settings first.",
       "compare_all_entry_reloading": "The entry is still loading. Try again in a moment.",
-      "no_switch_recorded": "No supplier switch is recorded on this entry."
+      "no_switch_recorded": "No supplier switch is recorded on this entry for this year."
     },
     "error": {
       "invalid_api_key": "[%key:component::be_electricity_prices::config::error::invalid_api_key%]",

@@ -247,7 +247,7 @@
       "compare_all_no_alternatives": "In Ihrer Region wird kein weiterer Vertrag dieser Art verkauft, es gibt also nichts zu ordnen. Der einmalige Vergleich kann weiterhin eine andere Vertragsart berechnen.",
       "compare_all_unknown_contract": "Der Vertrag dieses Eintrags steht nicht mehr im Katalog des Anbieters und kann daher nicht eingeordnet werden. Waehlen Sie ihn zuerst unter Einstellungen bearbeiten neu aus.",
       "compare_all_entry_reloading": "Der Eintrag wird noch geladen. Bitte gleich erneut versuchen.",
-      "no_switch_recorded": "Für diesen Eintrag ist kein Lieferantenwechsel erfasst."
+      "no_switch_recorded": "Für diesen Eintrag ist in diesem Jahr kein Lieferantenwechsel erfasst."
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",

@@ -376,6 +376,24 @@ def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
     return out
 
 
+def _removable_switch(
+    data: Mapping[str, Any], today: date
+) -> tuple[date, Mapping[str, Any]] | None:
+    """The last recorded switch, when it falls in ``today``'s year.
+
+    Only such a switch prices anything, so only it can be a mistake worth
+    undoing. One recorded in an earlier year is a real change of supplier
+    long settled, kept until the next switch drops it, and removing it would
+    put back a contract the household left before the year began.
+    """
+    from .contract_periods import recorded_contracts
+
+    records = recorded_contracts(data)
+    if not records or records[-1][0] <= date(today.year, 1, 1):
+        return None
+    return records[-1]
+
+
 def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
     """The entry's settings as they stood before its last switch was recorded.
 

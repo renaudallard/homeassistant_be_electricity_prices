@@ -604,7 +604,7 @@ stale stored value never renders as an invalid pre-selection:
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
 | `switch` | `async_step_switch` (`config_flow.py`) | Record a supplier switch, then re-run the chain for the new contract; the switch path below |
-| `remove_switch` | `async_step_remove_switch` (`config_flow.py`) | Only offered while a switch is recorded. Names the last one and, on submit, puts the entry back as it stood before it was recorded (`_remove_last_switch`, `flow_schemas.py`); aborts `no_switch_recorded` if there is none |
+| `remove_switch` | `async_step_remove_switch` (`config_flow.py`) | Only offered while a switch is recorded in the running year (`_removable_switch`, `flow_schemas.py`): one from an earlier year prices nothing and is a real, settled change. Names the last one and, on submit, puts the entry back as it stood before it was recorded (`_remove_last_switch`, `flow_schemas.py`); aborts `no_switch_recorded` if there is none this year |
 | `compare` | `async_step_compare` (`compare_flow.py`) | One-off quote against another supplier; nothing saved |
 | `compare_all` | `async_step_compare_all` (`compare_sweep_flow.py`) | Rank every candidate card for the household; the ranking branch below |
 
