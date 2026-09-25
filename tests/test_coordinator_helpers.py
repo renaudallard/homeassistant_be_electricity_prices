@@ -5977,10 +5977,36 @@ async def test_projection_blames_the_cohort_splice_when_that_is_the_cause(
     card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
     spliced = replace(_yearly_snapshot(), energy=SpotMonthlyRates(factor=1.0, base=0.0))
     got, diag = await _project(
-        hass, _projection_entry(), _daily(10.0), snapshot=card, priced=spliced
+        hass,
+        _projection_entry(contract_start_date="2025-03-01"),
+        _daily(10.0),
+        snapshot=card,
+        priced=spliced,
     )
     assert got is None
     assert "contract start date" in diag["energy_basis"]
+
+
+async def test_projection_names_the_month_re_price_without_a_start_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An entry with no start date is re-priced onto the month's index too,
+    once it holds an ENTSO-E key on a month-indexed card. Blaming a start
+    date the user never entered sent them looking for the wrong setting."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+    spliced = replace(_yearly_snapshot(), energy=SpotMonthlyRates(factor=1.0, base=0.0))
+    got, diag = await _project(
+        hass,
+        _projection_entry(api_key="KEY"),
+        _daily(10.0),
+        snapshot=card,
+        priced=spliced,
+    )
+    assert got is None
+    assert "contract start date" not in diag["energy_basis"]
+    assert "ENTSO-E key" in diag["energy_basis"]
 
 
 async def test_projection_prices_a_resolved_monthly_indexed_card(

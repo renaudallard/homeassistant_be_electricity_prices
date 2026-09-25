@@ -52,7 +52,8 @@ rate flat is the same assumption the whole sensor rests on. A contract start
 date can move a card across that line: the signing-cohort splice rewrites a
 Variable card with parsed coefficients into SpotMonthlyRates, which genuinely
 is a formula over a future index, so such an entry reports no value and the
-basis says the cohort re-price is why.
+basis says the cohort re-price is why. An ENTSO-E key does the same on a
+month-indexed card without any start date, and the basis names the key then.
 """
 
 from __future__ import annotations
@@ -105,6 +106,10 @@ _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in
 _COHORT_SPOT_BASIS = (
     "not projected: the contract start date re-prices this card to its signing "
     "cohort, which settles on a monthly Belpex index that does not exist yet"
+)
+_KEYED_SPOT_BASIS = (
+    "not projected: with an ENTSO-E key this card is re-priced on each month's "
+    "Belpex index, as the supplier bills it, and that index does not exist yet"
 )
 
 
@@ -211,7 +216,17 @@ async def _compute_projected_year_cost(
         spliced = isinstance(priced.energy, SpotMonthlyRates) and not isinstance(
             snapshot.energy, SpotMonthlyRates
         )
-        breakdown["energy_basis"] = _COHORT_SPOT_BASIS if spliced else _SPOT_BASIS
+        # Two things splice that leg on: a start date locking a signing
+        # cohort's formula, and on its own an ENTSO-E key on a month-indexed
+        # card, which re-prices each month on its index. Naming the start date
+        # to an entry that set none sent the user looking for the wrong box.
+        if not spliced:
+            basis = _SPOT_BASIS
+        elif entry.data.get(CONF_CONTRACT_START_DATE):
+            basis = _COHORT_SPOT_BASIS
+        else:
+            basis = _KEYED_SPOT_BASIS
+        breakdown["energy_basis"] = basis
         return None
 
     dso = entry.data[CONF_DSO]
