@@ -3177,6 +3177,30 @@ async def test_live_today_kwh_honours_a_cycle_reset_on_a_total_meter(
     assert kwh == pytest.approx(4.2)
 
 
+async def test_live_today_kwh_a_cycle_that_restarted_negative_reads_zero(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A net_consumption utility_meter that reset today and has exported more
+    than it drew since reads below zero. The reset branch took that reading as
+    today's kWh, signed, which the statistics drop at midnight like any other
+    negative change: today reads zero, as it does for any other fall."""
+    freezer.move_to("2026-08-01 14:00:00+02:00")
+    hass.states.async_set(
+        "sensor.meter",
+        "-2.5",
+        {
+            "unit_of_measurement": "kWh",
+            "device_class": "energy",
+            "state_class": "total",
+            "last_reset": "2026-08-01T00:00:00+02:00",
+        },
+    )
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "312.4")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 1))
+    assert kwh == 0.0
+
+
 async def test_live_today_kwh_ignores_a_stale_last_reset(
     hass: HomeAssistant, freezer: Any
 ) -> None:

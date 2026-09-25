@@ -351,8 +351,10 @@ async def _live_today_kwh(
         # TOTAL_INCREASING (HA returns one or the other on exactly that
         # option), and it still cycles. Gating on the class alone read its
         # monthly rollover as a genuine fall and returned minus the whole
-        # previous cycle as today's kWh.
-        delta = current
+        # previous cycle as today's kWh. A net_consumption cycle can itself
+        # stand below zero after a day of export, and that reads as zero like
+        # any other fall.
+        delta = max(current, 0.0)
     elif (
         delta < 0.0
         and state_class == SensorStateClass.TOTAL_INCREASING
