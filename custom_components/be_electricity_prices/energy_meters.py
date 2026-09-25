@@ -87,6 +87,11 @@ _P = TypeVar("_P", date, datetime)
 # _split_today).
 _REGISTER_STOPPED_AFTER_DAYS = 2
 
+# A total_increasing reading below this share of the previous one is a reset,
+# anything above it a dip: the line Home Assistant's own statistics draw
+# (sensor/recorder.py, reset_detected).
+_RESET_BELOW = 0.9
+
 
 async def _recorder_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
@@ -288,7 +293,8 @@ async def _live_today_kwh(
 
     A reading below the midnight one is a counter reset when the meter says
     so (``last_reset``) or its class promises it cannot fall
-    (``total_increasing``). Any other fall reads as zero, the same answer the
+    (``total_increasing``) and it fell below 0.9 x the midnight reading, Home
+    Assistant's own reset line. Any other fall reads as zero, the same answer the
     past days get: :func:`_recorder_deltas` drops a negative ``change``,
     because a sum-chain restart looks exactly like one. A register netting
     export against consumption is therefore not supported, and today must
@@ -347,10 +353,18 @@ async def _live_today_kwh(
         # monthly rollover as a genuine fall and returned minus the whole
         # previous cycle as today's kWh.
         delta = current
-    elif delta < 0.0 and state_class == SensorStateClass.TOTAL_INCREASING:
+    elif (
+        delta < 0.0
+        and state_class == SensorStateClass.TOTAL_INCREASING
+        and current < _RESET_BELOW * opening
+    ):
         # A ``total_increasing`` meter that reset since midnight without
-        # publishing ``last_reset``: the class alone promises it cannot fall,
-        # so a fall is a reset.
+        # publishing ``last_reset``: the class promises it cannot fall, so a
+        # fall is a reset, but only a large one. Home Assistant draws the line
+        # at 0.9 x the previous reading and logs anything smaller as a dip,
+        # which its statistics carry as a negative change the past days drop.
+        # Taking every fall as a reset billed a 0,01 kWh dip of a 12345,60
+        # register as 12345,59 kWh for the day.
         #
         # Gated on the state class on purpose. The picker accepts any
         # device_class=energy sensor, so a ``total`` register that nets
@@ -360,7 +374,8 @@ async def _live_today_kwh(
         # reset would bill its whole lifetime total as one day.
         delta = current
     elif delta < 0.0:
-        # Any other fall is what the past days drop, so today drops it too.
+        # Any other fall, a dip included, is what the past days drop, so today
+        # drops it too.
         delta = 0.0
     if unit == UnitOfEnergy.KILO_WATT_HOUR:
         return delta

@@ -3086,6 +3086,24 @@ async def test_live_today_kwh_handles_meter_reset(
     assert kwh == 5.0
 
 
+async def test_live_today_kwh_a_small_dip_is_not_a_reset(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A total_increasing meter that dips a little below its midnight reading
+    has not reset, and today reads the dip as zero.
+
+    Home Assistant itself only calls a fall a reset below 0.9 x the previous
+    reading (sensor/recorder.py reset_detected) and logs a smaller one as a
+    dip. Reading every fall as a reset billed a 0,01 kWh dip of a 12345,60
+    register as 12345,59 kWh for the day."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "12345.59", _meter_attrs("kWh"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "12345.60")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh == 0.0
+
+
 async def test_live_today_kwh_a_falling_total_meter_reads_zero(
     hass: HomeAssistant, freezer: Any
 ) -> None:
