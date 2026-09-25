@@ -84,7 +84,11 @@ async def async_setup_entry(
 ) -> None:
     """Create binary sensors for one config entry."""
     coordinator: BePricesCoordinator = entry.runtime_data
-    async_add_entities([TomorrowPricesAvailable(coordinator)])
+    entities = [TomorrowPricesAvailable(coordinator)]
+    coordinator.intended_unique_ids["binary_sensor"] = {
+        e.unique_id for e in entities if e.unique_id
+    }
+    async_add_entities(entities)
 
 
 class TomorrowPricesAvailable(

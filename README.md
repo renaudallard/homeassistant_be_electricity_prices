@@ -543,7 +543,10 @@ opens a four-option menu:
   current values. Change supplier, contract, region, DSO, meter, DSO
   billing mode, ENTSO-E API key, capacity peak source, or solar
   parameters — anything. The integration reloads automatically when you
-  finish, picking the new tariff card on the next refresh.
+  finish, picking the new tariff card on the next refresh. A sensor your new
+  settings no longer create (the EV rate after unticking its box, the band
+  sensors after leaving a bi-hourly meter, the capacity sensors after leaving
+  Flanders) is removed rather than left unavailable; its history stays.
 - **Record a supplier switch** — for a household that changed supplier
   during the year. Asks for the first day of the new contract, keeps your
   current settings as the contract you held until the day before, then walks

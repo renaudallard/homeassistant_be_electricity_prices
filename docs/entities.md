@@ -86,6 +86,17 @@ two solar groups are mutually exclusive by regime: the Walloon compensation
 regime ("compteur qui tourne a l'envers") yields a net-cost sensor, the
 post-2024 injection tariff yields a per-kWh injection credit sensor.
 
+When a settings change stops creating one of these (or the Flemish reset
+button), the reload removes its registry row
+(`_remove_unprovided_entities`, `__init__.py`) rather than leaving it restored
+as unavailable. Its recorded history stays in the recorder. The judgement is
+made on what each platform set out to create, which it records in
+`coordinator.intended_unique_ids` before adding anything, never on what got
+added: Home Assistant logs a platform whose setup raises and carries on, and
+removing that platform's rows would lose the user's renames, areas and icons.
+If any platform did not record its set, nothing is removed. A row the user
+disabled is kept, since removing it would bring it back enabled.
+
 ### Sensor catalog
 
 `unique_id suffix` is the description `key`; the full unique id is

@@ -355,7 +355,10 @@ async def test_the_sensor_exists_only_when_the_box_is_ticked(ticked: bool) -> No
     """Some households have no company car; the box is off by default."""
     entry = make_entry(ev_home_charging_rate=ticked)
     entry.runtime_data = SimpleNamespace(
-        data=CoordinatorData(), entry=entry, daily_compare=None
+        data=CoordinatorData(),
+        entry=entry,
+        daily_compare=None,
+        intended_unique_ids={},
     )
     added: list[Any] = []
     await async_setup_entry(

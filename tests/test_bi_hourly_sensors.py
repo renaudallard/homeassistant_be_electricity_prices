@@ -19,7 +19,9 @@ from tests import make_entry
 
 def _added(entry: Any) -> set[str]:
     """The sensor keys the platform creates for one entry."""
-    entry.runtime_data = SimpleNamespace(data=CoordinatorData(), entry=entry)
+    entry.runtime_data = SimpleNamespace(
+        data=CoordinatorData(), entry=entry, intended_unique_ids={}
+    )
     out: list[Any] = []
 
     async def _run() -> None:

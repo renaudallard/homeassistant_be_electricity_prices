@@ -56,10 +56,19 @@ async def async_setup_entry(
     forced to 0 every tick by ``_track_monthly_peak`` anyway, so a
     user-facing reset would do nothing.
     """
-    if entry.data.get(CONF_REGION) != REGION_FLANDERS:
-        return
     coordinator: BePricesCoordinator = entry.runtime_data
-    async_add_entities([ResetMonthlyPeakButton(coordinator)])
+    entities = (
+        [ResetMonthlyPeakButton(coordinator)]
+        if entry.data.get(CONF_REGION) == REGION_FLANDERS
+        else []
+    )
+    # Recorded even when empty: an entry outside Flanders intends no button,
+    # which is what lets a Flemish entry that moved lose its old one.
+    coordinator.intended_unique_ids["button"] = {
+        e.unique_id for e in entities if e.unique_id
+    }
+    if entities:
+        async_add_entities(entities)
 
 
 class ResetMonthlyPeakButton(CoordinatorEntity[BePricesCoordinator], ButtonEntity):

@@ -639,6 +639,9 @@ async def async_setup_entry(
         entities.append(ContractEndDateSensor(coordinator, end_date))
     if entry.data.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE):
         entities.append(PotentialSavingSensor(coordinator))
+    coordinator.intended_unique_ids["sensor"] = {
+        e.unique_id for e in entities if e.unique_id
+    }
     async_add_entities(entities)
 
 

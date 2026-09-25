@@ -157,6 +157,43 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
 
 
 @callback
+def _remove_unprovided_entities(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: BePricesCoordinator
+) -> None:
+    """Drop the registry rows of entities this entry's settings no longer create.
+
+    Several entities exist only for some settings (the EV rate box, the band
+    sensors of a bi-hourly meter, the Flemish capacity sensors and reset
+    button, the solar sensors, the contract end and saving sensors). An edit
+    or a recorded switch that turns one off stops creating it, and without
+    this the registry kept its row, restored as unavailable, until the user
+    deleted it by hand. Its recorded history is not touched.
+
+    Judged on what each platform set out to create, never on what got added.
+    Home Assistant logs a platform whose setup raises or times out and carries
+    on, so a failed platform adds nothing; removing its rows then would lose
+    every rename, area and icon the user gave them. A platform that did not
+    record its set failed before it got that far, so nothing is removed at
+    all. A disabled row is kept too: it is the user's choice, and removing it
+    would bring the entity back enabled.
+    """
+    intended = coordinator.intended_unique_ids
+    missing = [platform for platform in PLATFORMS if platform not in intended]
+    if missing:
+        _LOGGER.debug(
+            "%s: %s did not set up, so no entity is removed",
+            entry.entry_id,
+            ", ".join(missing),
+        )
+        return
+    keep: set[str] = set().union(*intended.values())
+    registry = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if reg_entry.disabled_by is None and reg_entry.unique_id not in keep:
+            registry.async_remove(reg_entry.entity_id)
+
+
+@callback
 def _migrate_current_year_cost_unique_id(
     hass: HomeAssistant, entry: BePricesConfigEntry
 ) -> None:
@@ -327,6 +364,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _remove_unprovided_entities(hass, entry, coordinator)
 
     # Re-evaluate the price sensors at every slot boundary without
     # re-fetching: current_price / next_hour_price read the wall clock

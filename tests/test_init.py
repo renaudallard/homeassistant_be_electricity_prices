@@ -350,3 +350,176 @@ async def test_a_setup_that_fails_before_the_first_refresh_leaves_no_coordinator
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_ERROR
     assert not hasattr(entry, "runtime_data")
+
+
+# ---- entities an options change stops creating --------------------------------
+
+
+async def _setup_with_ev_box(hass: HomeAssistant, entry: Any) -> Any:
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from tests import make_snapshot, make_stub_extractor
+
+    overlay = DsoOverlay(distribution_single=0.10, transport=0.0145)
+
+    async def _fetch(*_a: Any, **_k: Any) -> Any:
+        # Both regions' DSOs, so an entry may move between them.
+        return make_snapshot(dsos={"ores": overlay, "fluvius_antwerpen": overlay})
+
+    return (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=_fetch),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.backfill_if_missing",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick.ensure_ev_rates",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick.ev_rate_for",
+            lambda *_a: 0.25,
+        ),
+    )
+
+
+def _ev_entity(hass: HomeAssistant, entry: Any) -> er.RegistryEntry | None:
+    registry = er.async_get(hass)
+    return next(
+        (
+            e
+            for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if e.unique_id == f"{entry.entry_id}_ev_home_charging_rate"
+        ),
+        None,
+    )
+
+
+async def test_an_entity_the_options_stop_creating_leaves_the_registry(
+    hass: HomeAssistant,
+) -> None:
+    """Unticking the EV box stops creating its sensor, and the reload used to
+    leave the registry row behind, restored as unavailable ("no longer
+    provided") until the user deleted it by hand. The same happened to the
+    band, capacity, solar, contract-end and saving sensors and to the peak
+    reset button whenever an edit, or a recorded switch, moved the meter,
+    region or regime."""
+    from contextlib import ExitStack
+
+    from custom_components.be_electricity_prices.const import (
+        CONF_EV_HOME_CHARGING_RATE,
+    )
+
+    entry = make_entry(ev_home_charging_rate=True)
+    entry.add_to_hass(hass)
+    with ExitStack() as stack:
+        for p in await _setup_with_ev_box(hass, entry):
+            stack.enter_context(p)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert _ev_entity(hass, entry) is not None
+
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_EV_HOME_CHARGING_RATE: False}
+        )
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.LOADED
+        assert _ev_entity(hass, entry) is None
+        # Everything still provided keeps its row.
+        registry = er.async_get(hass)
+        assert registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entry.entry_id}_current_price"
+        )
+
+
+async def test_a_disabled_entity_keeps_its_row(hass: HomeAssistant) -> None:
+    """A row the user disabled is their choice, even for an entity the
+    settings no longer create: removing it would bring the entity back
+    enabled if the setting is turned on again."""
+    from contextlib import ExitStack
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    disabled = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_ev_home_charging_rate",
+        config_entry=entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+    with ExitStack() as stack:
+        for p in await _setup_with_ev_box(hass, entry):
+            stack.enter_context(p)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert registry.async_get(disabled.entity_id) is not None
+
+
+async def test_a_platform_that_fails_to_set_up_keeps_its_rows(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant catches whatever a platform's setup raises and carries
+    on, so a failed platform adds nothing. That is not the settings dropping
+    its entities: removing its rows would lose every rename, area and icon
+    the user gave them."""
+    from contextlib import ExitStack
+
+    from custom_components.be_electricity_prices import sensor
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    with ExitStack() as stack:
+        for p in await _setup_with_ev_box(hass, entry):
+            stack.enter_context(p)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        price = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entry.entry_id}_current_price"
+        )
+        assert price is not None
+        registry.async_update_entity(price, name="My price")
+
+        async def _broken(*_a: Any, **_k: Any) -> None:
+            raise RuntimeError("platform setup failed")
+
+        stack.enter_context(patch.object(sensor, "async_setup_entry", _broken))
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    kept = registry.async_get(price)
+    assert kept is not None
+    assert kept.name == "My price"
+
+
+async def test_leaving_flanders_removes_the_peak_reset_button(
+    hass: HomeAssistant,
+) -> None:
+    """The button platform adds nothing outside Flanders, and records that it
+    meant to, so the button of an entry that moved region goes with it."""
+    from contextlib import ExitStack
+
+    entry = make_entry(
+        region="flanders", dso="fluvius_antwerpen", title="Eneco (Flanders)"
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    with ExitStack() as stack:
+        for p in await _setup_with_ev_box(hass, entry):
+            stack.enter_context(p)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        button = registry.async_get_entity_id(
+            "button", DOMAIN, f"{entry.entry_id}_reset_monthly_peak"
+        )
+        assert button is not None
+
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "region": "wallonia", "dso": "ores"}
+        )
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert registry.async_get(button) is None

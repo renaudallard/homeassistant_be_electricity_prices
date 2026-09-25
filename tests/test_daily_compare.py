@@ -76,7 +76,12 @@ def _result(**kw: Any) -> DailyCompare:
 def _coord(
     entry: MockConfigEntry, result: DailyCompare | None = None
 ) -> SimpleNamespace:
-    return SimpleNamespace(data=CoordinatorData(), entry=entry, daily_compare=result)
+    return SimpleNamespace(
+        data=CoordinatorData(),
+        entry=entry,
+        daily_compare=result,
+        intended_unique_ids={},
+    )
 
 
 def _coord_with_spots(spots: dict[datetime, float]) -> SimpleNamespace:

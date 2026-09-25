@@ -51,7 +51,7 @@ def _entry(end_date: str | None = "2027-11-14") -> MockConfigEntry:
 
 
 def _coord(entry: MockConfigEntry) -> SimpleNamespace:
-    return SimpleNamespace(data=CoordinatorData(), entry=entry)
+    return SimpleNamespace(data=CoordinatorData(), entry=entry, intended_unique_ids={})
 
 
 def test_native_value_is_tz_aware_local_midnight() -> None:

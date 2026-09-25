@@ -316,6 +316,12 @@ class BePricesCoordinator(
         # itself, and a window in a past year needs exactly the hours the
         # prune drops, so the prune waits while this is non-zero.
         self._spot_prune_holds = 0
+        # The unique_ids each platform's setup is about to add, by platform,
+        # recorded before it adds them. What the settings create, as opposed
+        # to what got added: Home Assistant swallows a platform that fails to
+        # set up, and that must not read as the settings dropping its
+        # entities (_remove_unprovided_entities).
+        self.intended_unique_ids: dict[str, set[str]] = {}
         # Which cache the days above were measured against: the hourly one or
         # the quarter one; the set is dropped when that flips.
         self._complete_spot_days_quarters = False
