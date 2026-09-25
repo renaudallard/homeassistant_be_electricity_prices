@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     backfill_window,
@@ -55,6 +56,7 @@ from custom_components.be_electricity_prices.contract_periods import (
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.flow_schemas import (
     _record_switch,
+    _remove_last_switch,
     _validate_switch_date,
 )
 from custom_components.be_electricity_prices.providers._rates import (
@@ -386,6 +388,62 @@ async def test_the_options_menu_records_a_switch_and_sets_up_the_new_contract(
     assert record["until"] == "2026-06-15"
     assert record["data"]["supplier"] == old_supplier
     assert record["data"][CONF_CONTRACT_START_DATE] == "2025-03-01"
+
+
+def test_removing_the_last_switch_puts_the_settings_back_as_they_were() -> None:
+    first = _held("bolt", "bolt_variable")
+    data = dict(
+        make_entry(
+            contract_start_date="2025-03-01",
+            tariff_card_date="2025-02-01",
+            ytd_from_contract_start=True,
+            manual_energy_single=0.2,
+            previous_contracts=[{"until": "2026-02-01", "data": first}],
+        ).data
+    )
+    recorded = _record_switch(data, date(2026, 6, 15))
+    # What the edit chain changes after the switch step.
+    recorded.update(supplier="cociter", contract="cociter_variable")
+    out = contract_periods.recorded_contracts(recorded)
+    assert len(out) == 2
+    back = _remove_last_switch(recorded)
+    assert back == data
+    # The earlier switch stays, and removing it too leaves none.
+    assert [r["until"] for r in back[CONF_PREVIOUS_CONTRACTS]] == ["2026-02-01"]
+    assert CONF_PREVIOUS_CONTRACTS not in _remove_last_switch(back)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_options_menu_removes_the_last_switch(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    plain = make_entry()
+    plain.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(plain.entry_id)
+    assert "remove_switch" not in result["menu_options"]
+
+    before = dict(make_entry(contract_start_date="2025-03-01").data)
+    after = {
+        **_record_switch(before, date(2026, 6, 15)),
+        "supplier": "cociter",
+        "contract": "cociter_variable",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=after, title="Cociter")
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "remove_switch" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "remove_switch"}
+    )
+    assert result["step_id"] == "remove_switch"
+    placeholders = result["description_placeholders"]
+    assert placeholders is not None
+    assert placeholders["until"] == "2026-06-15"
+    assert placeholders["supplier"] == "Eneco"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert dict(entry.data) == before
 
 
 def test_the_reload_signature_takes_a_list_of_earlier_contracts() -> None:

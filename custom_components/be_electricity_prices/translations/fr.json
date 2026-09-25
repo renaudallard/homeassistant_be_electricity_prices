@@ -246,7 +246,8 @@
       "compare_done": "Comparaison terminee - aucune modification enregistree.",
       "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre region, il n'y a donc rien a classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",
       "compare_all_unknown_contract": "Le contrat de cette entree ne figure plus au catalogue du fournisseur, il ne peut donc pas etre situe par rapport aux autres. Re-selectionnez-le d'abord dans Modifier les parametres.",
-      "compare_all_entry_reloading": "L'entree est encore en cours de chargement. Reessayez dans un instant."
+      "compare_all_entry_reloading": "L'entree est encore en cours de chargement. Reessayez dans un instant.",
+      "no_switch_recorded": "Aucun changement de fournisseur n'est enregistré sur cette entrée."
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -269,6 +270,7 @@
         "menu_options": {
           "edit": "Modifier les parametres",
           "switch": "Enregistrer un changement de fournisseur",
+          "remove_switch": "Supprimer le dernier changement de fournisseur",
           "compare": "Comparer un autre fournisseur (devis ponctuel)",
           "compare_all": "Comparer tous les fournisseurs (classement)"
         }
@@ -282,6 +284,10 @@
         "data_description": {
           "switch_date": "Le jour où le nouveau fournisseur a commencé à vous fournir, tel qu'il figure sur son courrier de bienvenue ou sur la facture de clôture de l'ancien fournisseur. Entre le 2 janvier et aujourd'hui, et après tout changement déjà enregistré cette année."
         }
+      },
+      "remove_switch": {
+        "title": "Supprimer le dernier changement de fournisseur",
+        "description": "Ceci supprime le changement enregistré pour le {until}, quand vous avez quitté {supplier} - {contract}, et remet l'entrée dans l'état où elle était avant l'enregistrement de ce changement : {supplier} - {contract} redevient votre contrat actuel, avec les paramètres qu'il avait alors, et tout ce qui a été modifié depuis est annulé. Pour corriger la date d'un changement, supprimez-le, puis enregistrez-le à nouveau avec la bonne date et choisissez à nouveau le nouveau contrat. Validez pour le supprimer."
       },
       "edit": {
         "title": "Prix de l'electricite en Belgique",

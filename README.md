@@ -553,6 +553,9 @@ opens a four-option menu:
   current settings as the contract you held until the day before, then walks
   the edit steps for the new one. See
   [Switching supplier during the year](#switching-supplier-during-the-year).
+- **Remove the last supplier switch** — shown once a switch is recorded. Puts
+  the entry back as it stood before the last switch was recorded, the
+  contract you left becoming the current one again.
 - **Compare every supplier (ranked)** — a separate menu entry from the one-off
   quote below, and a different question. It prices **every contract of your own
   kind sold in your region** against your own settings and sorts them, cheapest
@@ -696,6 +699,20 @@ which the long-term statistics show as one step on the day you record it. A
 second switch in the same year is recorded the same way. Recording a switch
 unticks **Bill the year-to-date from the contract start date**; ticking it
 again leaves the earlier contracts out of the year.
+
+The switch step keeps your settings *as they stand* as the contract you left.
+If you already set the entry up for the new contract before recording the
+switch, which is the case for anyone who switched before version 0.28.1, do it
+in this order: **Edit settings** back to the contract you left, then
+**Record a supplier switch** with the first day of the new one, and pick the
+new contract again in the steps that follow.
+
+A switch recorded with the wrong date, or by mistake, is undone with
+**Configure → Remove the last supplier switch**, which puts the entry back as
+it stood before that switch was recorded: the contract you left becomes the
+current one again, with the settings it had then, and anything changed since
+is undone. To correct the date, remove the switch, record it again with the
+right date and pick the new contract again.
 
 ## Daily operation
 

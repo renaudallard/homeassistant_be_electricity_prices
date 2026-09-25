@@ -601,6 +601,7 @@ stale stored value never renders as an invalid pre-selection:
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
 | `switch` | `async_step_switch` (`config_flow.py`) | Record a supplier switch, then re-run the chain for the new contract; the switch path below |
+| `remove_switch` | `async_step_remove_switch` (`config_flow.py`) | Only offered while a switch is recorded. Names the last one and, on submit, puts the entry back as it stood before it was recorded (`_remove_last_switch`, `flow_schemas.py`); aborts `no_switch_recorded` if there is none |
 | `compare` | `async_step_compare` (`compare_flow.py`) | One-off quote against another supplier; nothing saved |
 | `compare_all` | `async_step_compare_all` (`compare_sweep_flow.py`) | Rank every candidate card for the household; the ranking branch below |
 
@@ -626,6 +627,16 @@ and `_finalize` saves the lot. The whole settings are kept rather than the
 contract keys alone, so the old contract is priced on exactly what was
 configured for it, meter, sensors and regime included. Pricing is in
 `contract_periods.py`; see [coordinator.md](coordinator.md).
+
+Because the kept copy is the whole settings as they stood, it is also the way
+back. `async_step_remove_switch` shows the last record's date and contract and,
+on submit, `_remove_last_switch` makes that copy the entry's settings again,
+keeping the records before it. It is the only way to correct a switch date:
+`_validate_switch_date` refuses a new switch on or before the last one, and
+recording one would keep the contract set up since as the one left. An entry
+already set up for its new contract before the switch step existed has to be
+edited back to the old contract first, then the switch recorded, then the new
+contract picked again; README.md says so.
 
 ### Edit path
 

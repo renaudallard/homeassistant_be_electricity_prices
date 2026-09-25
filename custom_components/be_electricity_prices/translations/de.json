@@ -246,7 +246,8 @@
       "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert.",
       "compare_all_no_alternatives": "In Ihrer Region wird kein weiterer Vertrag dieser Art verkauft, es gibt also nichts zu ordnen. Der einmalige Vergleich kann weiterhin eine andere Vertragsart berechnen.",
       "compare_all_unknown_contract": "Der Vertrag dieses Eintrags steht nicht mehr im Katalog des Anbieters und kann daher nicht eingeordnet werden. Waehlen Sie ihn zuerst unter Einstellungen bearbeiten neu aus.",
-      "compare_all_entry_reloading": "Der Eintrag wird noch geladen. Bitte gleich erneut versuchen."
+      "compare_all_entry_reloading": "Der Eintrag wird noch geladen. Bitte gleich erneut versuchen.",
+      "no_switch_recorded": "Für diesen Eintrag ist kein Lieferantenwechsel erfasst."
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -269,6 +270,7 @@
         "menu_options": {
           "edit": "Einstellungen bearbeiten",
           "switch": "Lieferantenwechsel erfassen",
+          "remove_switch": "Letzten Lieferantenwechsel entfernen",
           "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)",
           "compare_all": "Alle Anbieter vergleichen (Rangliste)"
         }
@@ -282,6 +284,10 @@
         "data_description": {
           "switch_date": "Der Tag, an dem der neue Lieferant mit der Lieferung begann, wie auf seinem Willkommensschreiben oder der Schlussrechnung des bisherigen Lieferanten. Zwischen dem 2. Januar und heute, und nach einem bereits erfassten Wechsel dieses Jahres."
         }
+      },
+      "remove_switch": {
+        "title": "Letzten Lieferantenwechsel entfernen",
+        "description": "Dies entfernt den für den {until} erfassten Wechsel, bei dem Sie {supplier} - {contract} verlassen haben, und setzt den Eintrag auf den Stand vor der Erfassung dieses Wechsels zurück: {supplier} - {contract} wird wieder Ihr aktueller Vertrag, mit den damaligen Einstellungen, und alles seitdem Geänderte wird rückgängig gemacht. Um ein Wechseldatum zu korrigieren, entfernen Sie den Wechsel, erfassen ihn erneut mit dem richtigen Datum und wählen den neuen Vertrag erneut. Bestätigen Sie, um ihn zu entfernen."
       },
       "edit": {
         "title": "Belgische Strompreise",

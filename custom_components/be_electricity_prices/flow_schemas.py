@@ -364,6 +364,32 @@ def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
     return out
 
 
+def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
+    """The entry's settings as they stood before its last switch was recorded.
+
+    ``_record_switch`` keeps those settings whole as the contract held until the
+    switch, so they are put back as they were: the contract being left, its
+    start date, card month, signing rate, end date and year-to-date box. The
+    switches recorded before it stay. A switch recorded with the wrong date, or
+    that never happened, has no other way out: a new one must be later than the
+    last, and it would keep the contract set up since as the one left.
+    """
+    from .contract_periods import recorded_contracts
+
+    records = recorded_contracts(data)
+    if not records:
+        return dict(data)
+    held = dict(records[-1][1])
+    held.pop(CONF_PREVIOUS_CONTRACTS, None)
+    kept = [
+        {"until": when.isoformat(), "data": dict(settings)}
+        for when, settings in records[:-1]
+    ]
+    if kept:
+        held[CONF_PREVIOUS_CONTRACTS] = kept
+    return held
+
+
 # The custom-supplier rate boxes whose ABSENCE is meaningful: ``_routed_rate``
 # and ``_network_rate`` fall back to the single rate when these are None, so a
 # stored 0.0 is a different answer, not an empty box. Their steps have to pop a

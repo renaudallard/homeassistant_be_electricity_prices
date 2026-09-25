@@ -63,6 +63,7 @@ from homeassistant.util import dt as dt_util
 from .flow_schemas import (
     _MANUAL_RATE_KEYS,
     _record_switch,
+    _remove_last_switch,
     _switch_schema,
     _validate_switch_date,
     _METER_SENSOR_KEYS,
@@ -898,9 +899,19 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        from .contract_periods import recorded_contracts
+
+        # Removing a switch is offered only to an entry that holds one.
+        switched = bool(recorded_contracts(self.config_entry.data))
         return self.async_show_menu(
             step_id="init",
-            menu_options=["edit", "switch", "compare", "compare_all"],
+            menu_options=[
+                "edit",
+                "switch",
+                *(["remove_switch"] if switched else []),
+                "compare",
+                "compare_all",
+            ],
         )
 
     async def async_step_switch(
@@ -930,6 +941,39 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                 _switch_schema(dt_util.now().date()), user_input
             ),
             errors=errors,
+        )
+
+    async def async_step_remove_switch(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Undo the last recorded switch, after saying which one it is.
+
+        The entry goes back to the settings it had when that switch was
+        recorded (``_remove_last_switch``): the contract left becomes the
+        current one again. That is the way to correct a mistyped switch date,
+        by removing it and recording it again, and to take back a switch
+        recorded by mistake.
+        """
+        from .compare_inputs import _label_for_contract, _label_for_supplier
+        from .contract_periods import recorded_contracts
+
+        records = recorded_contracts(self.config_entry.data)
+        if not records:
+            return self.async_abort(reason="no_switch_recorded")
+        if user_input is not None:
+            self._data = _remove_last_switch(self._seed_data())
+            return self._finalize()
+        until, held = records[-1]
+        supplier = str(held.get(CONF_SUPPLIER, ""))
+        return self.async_show_form(
+            step_id="remove_switch",
+            description_placeholders={
+                "until": until.isoformat(),
+                "supplier": _label_for_supplier(supplier),
+                "contract": _label_for_contract(
+                    supplier, str(held.get(CONF_CONTRACT, ""))
+                ),
+            },
         )
 
     _entry_step_id = "edit"
