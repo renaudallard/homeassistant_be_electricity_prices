@@ -384,6 +384,18 @@ async def _save_profile_cache(hass: HomeAssistant) -> None:
     )
 
 
+async def async_remove_profile_store(hass: HomeAssistant) -> None:
+    """Delete the shared file and forget what was read from it.
+
+    For the removal of the last entry: nothing else ever deletes it, and the
+    curves are national, so an entry added later downloads them again.
+    """
+    await _profile_store(hass).async_remove()
+    bucket: dict[str, Any] = hass.data.get(DOMAIN, {})
+    for key in (_PROFILE_CACHE_KEY, _PROFILE_LOADED_KEY, _PROFILE_STORE_KEY):
+        bucket.pop(key, None)
+
+
 def _parse_curve(raw: Any) -> dict[tuple[int, ...], float]:
     """One persisted curve back into slot-keyed weights, skipping bad rows."""
     out: dict[tuple[int, ...], float] = {}

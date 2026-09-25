@@ -2754,6 +2754,39 @@ async def test_async_remove_entry_clears_stale_issue(hass: HomeAssistant) -> Non
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_the_shared_profile_store_goes_with_the_last_entry(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The Synergrid curves are kept once per installation, not per entry,
+    so removing an entry must leave them for the others; removing the last
+    one left up to about 0,8 MB in .storage for good."""
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+        _save_profile_cache,
+    )
+
+    first = _entry()
+    first.add_to_hass(hass)
+    second = _entry()
+    second.add_to_hass(hass)
+    _profile_cache(hass)[("spp", 2026, "")] = (
+        {(1, 1, 0): 0.5},
+        dt_util.utcnow(),
+    )
+    await _save_profile_cache(hass)
+    await hass.async_block_till_done()
+    key = f"{DOMAIN}_profiles"
+    assert key in hass_storage
+
+    await hass.config_entries.async_remove(first.entry_id)
+    await hass.async_block_till_done()
+    assert key in hass_storage
+
+    await hass.config_entries.async_remove(second.entry_id)
+    await hass.async_block_till_done()
+    assert key not in hass_storage
+
+
 async def test_save_persistent_skipped_after_runtime_data_swapped(
     hass: HomeAssistant,
 ) -> None:

@@ -721,7 +721,9 @@ blob was discarded finds what another entry downloaded rather than fetching
 again. A blob written before this carries the curves still and
 `_seed_profile_cache` adopts both shapes it ever had, one curve under `weights`
 and one per blend under `blends`, writing them through to the shared store so the
-restart after an upgrade still has them.
+restart after an upgrade still has them. Removing the last entry deletes the
+store (`async_remove_profile_store`, called from `async_remove_entry`); removing
+any other leaves it for the entries still using it.
 
 Every blend comes out of one download. The three are reductions of the same
 sheet and the read is the expensive half (16 s against 2 s apiece on a Raspberry

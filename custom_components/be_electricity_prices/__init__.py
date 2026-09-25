@@ -74,6 +74,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .coordinator import BePricesCoordinator
+from .coordinator_profiles import async_remove_profile_store
 from .compare_engine import evict_sweep_rows
 from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
@@ -556,7 +557,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     HA calls this hook after ``async_unload_entry`` for a removal (not
     for a reload). The persistent snapshot Store is also deleted so the
     JSON blob the coordinator writes under ``.storage/`` doesn't outlive
-    the entry.
+    the entry, and with the last entry the installation-wide profile store
+    goes too.
     """
     for issue_kind in (
         "snapshot_stale",
@@ -582,6 +584,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
     )
     await store.async_remove()
+    if not any(
+        other.entry_id != entry.entry_id
+        for other in hass.config_entries.async_entries(DOMAIN)
+    ):
+        await async_remove_profile_store(hass)
 
 
 async def _async_options_updated(
