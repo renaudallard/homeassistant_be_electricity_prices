@@ -517,11 +517,14 @@ changes the figure is reported again.
   VAT at 3500 kWh on a flat load, 289 at 20 MWh. The residential card prints distinct columns.
   This is the network overlay, not the energy bands, which Bolt derives from each row's formula
   (see [Wallonia Tarif Impact](#wallonia-tarif-impact)).
-- **Professional cards, ORES and AIEG rows.** The whole row is the January set (ORES 10,85 c/kWh
+- **Professional cards, ORES and AIEG rows.** The whole row is the older set (ORES 10,85 c/kWh
   ex VAT) where every other card has printed 11,30 since February: about 16 EUR/yr low at 3500 kWh.
+  In January the archive splits four against four: Bolt, EnergyVision, Mega and OCTA+ printed the
+  older set, while Cociter, Eneco, Engie and Luminus already printed the newer one. By February
+  Bolt was the only one left on it.
 - **Residential fixed cards, January to August.** `bolt_fix` and `bolt_plenty_fix` printed the
-  January ORES and AIEG rows (ORES 11,50 including VAT against 11,98) until the September card
-  corrected them, so a past month re-priced off the archive bills that figure.
+  older ORES and AIEG rows (ORES 11,50 including VAT against 11,98), the same January split, until
+  the September card corrected them, so a past month re-priced off the archive bills that figure.
 - **Residential cards, ORES Medium.** 10,38 including VAT where every other card prints 10,83.
 
 **Brussels (`_extract_brussels_dsos`, `_bolt_overlays.py`).** One row, `Sibelga`, with six captured

@@ -2626,8 +2626,8 @@ def _allow_network(
 
 
 _BOLT_PRO_STALE = (
-    "the professional card prints January's ORES and AIEG rates, which every "
-    "other card replaced in February; billed as printed"
+    "the professional card prints the ORES and AIEG rates half the cards printed "
+    "in January and every other card had dropped by February; billed as printed"
 )
 _BOLT_PRO_MEDIUM = (
     "the professional card prints the Pic rate in the Medium column; billed as printed"
