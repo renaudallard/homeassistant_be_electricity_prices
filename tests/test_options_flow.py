@@ -609,6 +609,72 @@ async def test_options_flow_spot_injection_api_key_is_skippable(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_lets_a_stored_optional_key_be_replaced(
+    hass: HomeAssistant, _bypass_entsoe_validation: MagicMock
+) -> None:
+    """A month-indexed card collects its key on the optional step, so that
+    step is the only place the key can ever be replaced. It used to be
+    skipped as soon as a key was stored, while the entsoe_auth_failed Repairs
+    card sends the user to the options to replace a rejected one."""
+    entry = make_entry(
+        supplier="cociter",
+        contract="cociter_variable",
+        api_key="rejected-key",
+    )
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "injection_api_key"
+    schema = result["data_schema"]
+    assert schema is not None
+    marker = next(k for k in schema.schema if str(k) == "api_key")
+    assert (marker.description or {}).get("suggested_value") == "rejected-key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "fresh-key"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["api_key"] == "fresh-key"
+    _bypass_entsoe_validation.assert_called_once()
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_keeps_an_unchanged_optional_key_unasked(
+    hass: HomeAssistant, _bypass_entsoe_validation: MagicMock
+) -> None:
+    """Clicking through with the stored key must not ask ENTSO-E again: an
+    edit of an unrelated setting would otherwise fail while ENTSO-E is down.
+    Blanking the box still removes the key, as on install."""
+    entry = make_entry(
+        supplier="cociter", contract="cociter_variable", api_key="kept-key"
+    )
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "kept-key"}
+    )
+    assert result["step_id"] == "meters"
+    _bypass_entsoe_validation.assert_not_called()
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert entry.data["api_key"] == "kept-key"
+
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert not entry.data.get("api_key")
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_month_indexed_energy_offers_the_key_on_every_regime(
     hass: HomeAssistant,
 ) -> None:

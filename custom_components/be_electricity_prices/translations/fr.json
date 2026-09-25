@@ -749,7 +749,7 @@
     },
     "entsoe_auth_failed": {
       "title": "ENTSO-E a refuse la cle API pour {supplier} ({contract})",
-      "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, les capteurs de prix dynamiques resteront inconnus."
+      "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, cette entree ne peut pas etre calculee et ses capteurs sont indisponibles."
     },
     "supplier_deprecated": {
       "title": "{supplier} transfere votre contrat a {successor} le {ends_on}",

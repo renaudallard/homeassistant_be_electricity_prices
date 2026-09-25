@@ -749,7 +749,7 @@
     },
     "entsoe_auth_failed": {
       "title": "ENTSO-E hat den API-Schluessel fuer {supplier} ({contract}) abgelehnt",
-      "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin bleiben die dynamischen Preissensoren unbekannt."
+      "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin kann dieser Eintrag nicht berechnet werden und seine Sensoren sind nicht verfuegbar."
     },
     "supplier_deprecated": {
       "title": "{supplier} uebertraegt Ihren Vertrag am {ends_on} an {successor}",

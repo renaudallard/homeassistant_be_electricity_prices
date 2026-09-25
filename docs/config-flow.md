@@ -425,9 +425,9 @@ falls back to `SOLAR_REGIME_NONE` (`const.py`).
 ### `injection_api_key`: optional ENTSO-E token for an index-linked leg
 
 Schema is inline (`config_flow.py`), an *optional* `PASSWORD` field. The gate is
-`_needs_optional_api_key` (`config_flow.py`), which is true when no
-`CONF_API_KEY` was already collected (dynamic or spot-monthly energy would have
-collected one) and either:
+`_needs_optional_api_key` (`config_flow.py`), which is true when the contract's
+kind has no key step of its own (dynamic or spot-monthly energy collects one on
+`api_key`) and either:
 
 1. `_contract_is_month_indexed(supplier, contract)` is true: the contract's ENERGY
    is indexed on the delivery month's mean and its card prints last month's figure
@@ -450,7 +450,16 @@ as a delivery-month mean. Unlike the required `api_key`
 step, this one is skippable (`flow_schemas.py` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, leaving the injection price unavailable
 until a key is added via Reconfigure. A typed key is validated by
-`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py`).
+`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py`),
+except the one already stored, which is kept without asking ENTSO-E so an edit of
+another setting does not fail while it is down.
+
+The step is offered whether or not a key is stored, with the stored one as a
+suggestion rather than a default (a default is re-injected on a blank submit, so
+it could never be removed). It is the only place these contracts take a key, and
+it used to be skipped once one was stored: a key ENTSO-E later rejected could
+not be replaced, while the `entsoe_auth_failed` Repairs card sends the user to
+the options to do exactly that.
 
 ### `meters`: cumulative kWh sensors (current-year cost)
 

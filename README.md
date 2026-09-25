@@ -532,7 +532,8 @@ you have to request access explicitly:
 The token does not expire unless you regenerate it. If
 `transparency.entsoe.eu` later rejects it with 401, the
 `entsoe_auth_failed_<entry>` repair issue fires; paste a fresh token in
-the entry's options to clear it.
+the entry's options to clear it. The key step shows on every edit of a
+contract that reads a key, with the stored token filled in.
 
 ### Reconfiguring later
 

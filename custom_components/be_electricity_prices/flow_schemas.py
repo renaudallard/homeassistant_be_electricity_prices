@@ -660,13 +660,16 @@ def _injection_api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
     """The optional twin of :func:`_api_key_schema`, for the injection-only
     key step, which may be left blank to skip. The re-check path re-shows
     whichever key step is pending and has to keep this one optional: shown
-    as required, the documented "leave blank to skip" exit disappeared."""
+    as required, the documented "leave blank to skip" exit disappeared.
+
+    The stored key is a suggestion, not a default: a default is re-injected
+    on a blank submit, so a stored key could never be removed here."""
     current = defaults.get(CONF_API_KEY, "")
     return vol.Schema(
         {
-            vol.Optional(CONF_API_KEY, default=current): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.PASSWORD)
-            )
+            vol.Optional(
+                CONF_API_KEY, description={"suggested_value": current}
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
         }
     )
 

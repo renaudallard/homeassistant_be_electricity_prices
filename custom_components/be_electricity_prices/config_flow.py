@@ -549,17 +549,25 @@ class _WizardStepsMixin:
         the chosen contract prices something off the day-ahead market that
         its kind does not already collect a key for: an energy leg indexed on
         the delivery month's mean, on ANY solar regime, or an index-linked
-        feed-in credit on the injection regime. A key already collected
-        (dynamic or spot-monthly energy) skips the step.
+        feed-in credit on the injection regime. A kind whose key step already
+        ran (dynamic or spot-monthly energy) skips it.
+
+        Asked of the kind, not of a stored key: this step is the only place
+        such a contract's key is entered, so skipping it once one is stored
+        left a rejected key with no way to replace it, while the
+        entsoe_auth_failed Repairs card sends the user here to do exactly that.
 
         Which products those are is the registry's ``month_indexed_energy``
         and ``spot_indexed_injection``, not a list kept here: the list ran a
         supplier behind twice, and a contract missing from it is a household
         billing last month's index with no step that could fix it."""
-        if self._data.get(CONF_API_KEY):
+        supplier = self._data[CONF_SUPPLIER]
+        contract = self._data[CONF_CONTRACT]
+        if (
+            _contract_kind(supplier, contract, quarter_hourly=self._quarter_hourly())
+            in SPOT_PRICED_CONTRACT_KINDS
+        ):
             return False
-        supplier = self._data.get(CONF_SUPPLIER)
-        contract = self._data.get(CONF_CONTRACT)
         if _contract_is_month_indexed(supplier, contract):
             return True
         return self._data.get(
@@ -589,13 +597,17 @@ class _WizardStepsMixin:
         Unlike the dynamic-energy ``api_key`` step this one is skippable:
         the card prints a figure to fall back on, so leaving it blank bills
         that figure (last month's index) until a key is added via
-        Reconfigure. A typed key is validated against the live endpoint.
+        Reconfigure. A typed key is validated against the live endpoint,
+        except the one already stored, so an edit of some other setting does
+        not fail on it while ENTSO-E is down.
         """
         errors: dict[str, str] = {}
         if user_input is not None:
             key = (user_input.get(CONF_API_KEY) or "").strip()
             if not key:
                 self._data.pop(CONF_API_KEY, None)
+                return await self.async_step_meters()
+            if key == self._data.get(CONF_API_KEY):
                 return await self.async_step_meters()
             err = await _validate_entsoe_key(self.hass, key)
             if err is None:
