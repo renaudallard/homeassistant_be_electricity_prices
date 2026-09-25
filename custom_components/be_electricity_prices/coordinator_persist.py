@@ -203,8 +203,8 @@ class _PersistMixin:
         # were collected while the entry was on a *dynamic* contract on
         # the previous tuple. After an OptionsFlow swap to a static
         # supplier they're never queried again but would otherwise be
-        # re-saved indefinitely (pruned only at year-end), wasting
-        # ~140KB of disk/memory until the next Jan 1.
+        # re-saved for a year (the prune keeps a trailing year), wasting
+        # up to ~0,4 MB of disk and memory.
         hist = stored.get("historical_spots")
         dropped_spots = 0
         if isinstance(hist, dict) and not tuple_mismatch:
@@ -446,9 +446,8 @@ class _PersistMixin:
                 # Restored with the card, so a restart keeps saying where the
                 # figures came from until a readable card lands.
                 payload["snapshot"]["_read_by_ocr"] = True
-        # Prune in memory (not just in the serialized copy) so a coordinator
-        # running across a year boundary doesn't retain the prior year's
-        # ~8760 hourly entries forever.
+        # Prune in memory (not just in the serialized copy) so a long-running
+        # coordinator keeps a trailing year of hours and no more.
         self._prune_historical_spots()
         # The archived cards each past month is billed with. Written under
         # the tuple guard above like everything else, and only for the months

@@ -371,8 +371,8 @@ async def backfill_range(
     if coordinator._snapshot is None:
         raise RuntimeError("supplier snapshot not loaded; refresh the entry first")
     # Both passes read the coordinator's own spot cache and yield to the loop
-    # once a day, and every tick prunes that cache to the current year. A
-    # window in a past year lost every hour the pass had not reached when a
+    # once a day, and every tick prunes that cache to the trailing year. A
+    # window older than that lost every hour the pass had not reached when a
     # tick landed, so the prune waits until the backfill is done.
     coordinator._spot_prune_holds += 1
     try:

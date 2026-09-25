@@ -1462,6 +1462,100 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     assert cost == pytest.approx(-30.0 * live)
 
 
+async def test_no_december_hour_reaches_a_january_bill(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The day-ahead is kept for a trailing year, so on 3 January the cache
+    holds December beside January. Every walk reads an hour by its own key or
+    a month by its (year, month), so the year-to-date and a month window bill
+    exactly what they bill with December absent, on each shape that reads the
+    cache: an hourly dynamic leg, a month-mean leg and a per-slot feed-in, and
+    on the month-indexed feed-in re-priced on its month."""
+
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    january = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 2 + 12)
+    ]
+    december = [
+        dt_util.start_of_local_day(date(2025, 12, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 31)
+    ]
+    held = {h: 0.08 + 0.001 * (h.hour % 7) for h in january}
+    with_december = {**{h: 3.0 for h in december}, **held}
+    moved = {h: v + 0.05 for h, v in held.items()}
+
+    async def _fake_daily(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        return {start + timedelta(days=i): 12.0 for i in range((end - start).days + 1)}
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {h: 0.5 for h in january}
+
+    shapes = {
+        "dynamic": _snapshot(
+            prosumer=None, capacity=None, energy=DynamicRates(factor=1.0, base=0.02)
+        ),
+        "spot_monthly": _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=SpotMonthlyRates(factor=1.1, base=0.01),
+        ),
+        "per_slot_feed_in": _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.18),
+            injection=InjectionRates(
+                current=0.05, factor=0.94, base=-0.01, slot_indexed=True
+            ),
+        ),
+        "month_feed_in": _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.18),
+            injection=InjectionRates(
+                current=0.05, factor=0.9, base=-0.01, month_indexed=True
+            ),
+        ),
+    }
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="mono",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+        api_key="K",
+    )
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+    ):
+        for name, snap in shapes.items():
+            for window in (None, date(2026, 1, 2)):
+                bills = [
+                    await _compute_current_year_cost(
+                        hass,
+                        None,  # type: ignore[arg-type]
+                        make_stub_extractor(),
+                        snap,
+                        entry,
+                        historical_spots=dict(spots),
+                        window_start_override=window,
+                    )
+                    for spots in (held, with_december, moved)
+                ]
+                assert bills[0] == pytest.approx(bills[1], abs=1e-9), (name, window)
+                # The control: January's own prices do move each bill, so the
+                # equality above is not a walk that ignores the cache.
+                assert bills[2] != pytest.approx(bills[0], abs=1e-6), (name, window)
+
+
 async def test_a_day_one_register_did_not_report_is_billed_on_neither_side(
     hass: HomeAssistant,
 ) -> None:
@@ -6318,6 +6412,40 @@ async def test_projection_credits_a_spot_indexed_feed_in_on_the_year_held(
     )
     assert before is not None and after is not None
     assert before - after == pytest.approx(0.90 / 91 * diag["annual_injection_kwh"])
+
+
+async def test_projection_keeps_its_credit_across_new_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """On 2 January the credit is still priced: the tick prunes the day-ahead
+    to the trailing year rather than to 1 January, so the window the credit
+    reads stays whole. Cut at 1 January it held one day, and the projection
+    dropped the credit for a month every new year."""
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    freezer.move_to("2026-01-02 12:00:00+01:00")
+    snap = replace(
+        _yearly_snapshot(),
+        injection=InjectionRates(current=None, factor=1.0, base=-0.02),
+    )
+    entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    today = dt_util.now().date()
+    coord._historical_spots.update(
+        _closed_days(today - timedelta(days=400), today, 0.10)
+    )
+    coord._prune_historical_spots()
+    fake = _daily(10.0, inj_per_day=8.0)
+    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
+    got, diag = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots=coord._historical_spots
+    )
+    assert without is not None and got is not None
+    assert "credited on" in diag["injection_basis"]
+    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
 
 
 async def test_projection_leaves_the_credit_out_on_too_short_a_history(

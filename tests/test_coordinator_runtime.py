@@ -1174,22 +1174,132 @@ async def test_pruning_spots_keeps_the_same_dict_object(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     before = coord._historical_spots
-    before[datetime(2025, 6, 1, 10, tzinfo=UTC)] = 0.05  # prior year, prunable
-    before[datetime(2026, 1, 1, 10, tzinfo=UTC)] = 0.06  # current year, kept
+    before[datetime(2024, 12, 1, 10, tzinfo=UTC)] = 0.05  # over a year old
+    before[datetime(2026, 1, 1, 10, tzinfo=UTC)] = 0.06  # kept
     before_quarters = coord._historical_spot_quarters
-    before_quarters[datetime(2025, 6, 1, 10, tzinfo=UTC)] = [0.05] * 4
+    before_quarters[datetime(2024, 12, 1, 10, tzinfo=UTC)] = [0.05] * 4
     before_quarters[datetime(2026, 1, 1, 10, tzinfo=UTC)] = [0.06] * 4
 
     coord._prune_historical_spots()
 
     assert coord._historical_spots is before, "prune rebound the dict"
-    assert datetime(2025, 6, 1, 10, tzinfo=UTC) not in before
+    assert datetime(2024, 12, 1, 10, tzinfo=UTC) not in before
     assert before[datetime(2026, 1, 1, 10, tzinfo=UTC)] == 0.06
     # The sibling cache is pruned the same way, and in place for the same
     # reason: a fetch mid-flight holds a reference to it too.
     assert coord._historical_spot_quarters is before_quarters
-    assert datetime(2025, 6, 1, 10, tzinfo=UTC) not in before_quarters
+    assert datetime(2024, 12, 1, 10, tzinfo=UTC) not in before_quarters
     assert before_quarters[datetime(2026, 1, 1, 10, tzinfo=UTC)] == [0.06] * 4
+
+
+def _year_of_hours(first: date, last: date, price: float) -> dict[datetime, float]:
+    """One price for every local hour from ``first`` to ``last``, UTC keyed."""
+    out: dict[datetime, float] = {}
+    day = first
+    while day <= last:
+        start = dt_util.start_of_local_day(day).astimezone(UTC)
+        stop = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
+        hour = start
+        while hour < stop:
+            out[hour] = price
+            hour += timedelta(hours=1)
+        day += timedelta(days=1)
+    return out
+
+
+async def test_the_prune_keeps_a_trailing_year_across_new_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The day-ahead is kept for the trailing year, not cut at 1 January.
+
+    A static card's per-slot feed-in is credited on the past year's closed
+    days in projected_year_cost and on the compare page. Cut at 1 January,
+    that window emptied every new year and the credit dropped out of the
+    projection for a month, about 364 EUR on a Bolt Fix prosumer in
+    Wallonia, then came back. The quarters, the complete-day set and the
+    quarter-grid days follow the same rule, and nothing older than the
+    trailing year survives."""
+    from custom_components.be_electricity_prices.compare_inputs import _credit_spots
+
+    freezer.move_to("2026-01-02 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    today = dt_util.now().date()
+    coord._historical_spots.update(_year_of_hours(date(2024, 11, 1), today, 0.10))
+    coord._historical_spot_quarters.update(
+        {h: [0.10] * 4 for h in coord._historical_spots}
+    )
+    coord._complete_spot_days.update({date(2024, 11, 5), date(2025, 6, 1), today})
+    coord._quarter_grid_days.update({date(2024, 11, 5), date(2025, 12, 31)})
+
+    coord._prune_historical_spots()
+
+    first_kept = today - timedelta(days=365)
+    held = {dt_util.as_local(h).date() for h in coord._historical_spots}
+    assert min(held) == first_kept
+    assert date(2025, 12, 31) in held
+    assert set(coord._historical_spot_quarters) == set(coord._historical_spots)
+    assert coord._complete_spot_days == {date(2025, 6, 1), today}
+    assert coord._quarter_grid_days == {date(2025, 12, 31)}
+    # The credit window is whole on 2 January.
+    window = _credit_spots(coord._historical_spots, today)
+    assert window is not None
+    assert len({dt_util.as_local(h).date() for h in window}) == 365
+
+
+async def test_a_year_of_spots_keeps_the_store_bounded(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Kept for a trailing year, the persisted day-ahead holds every day of
+    the year what it used to reach on 31 December: 365 closed days plus today
+    and tomorrow, of hours and of quarters, and nothing older survives the
+    write. Measured on 15-minute prices of the shape ENTSO-E publishes, the
+    payload is within 1% of a full calendar year's (about 0,37 MB of hours
+    and 1,06 MB with the quarters a floored feed-in keeps)."""
+    import json
+    import random
+    from statistics import fmean
+
+    rng = random.Random(1)
+
+    def _payload(hours: list[datetime]) -> int:
+        quarters = {
+            h: [round(rng.uniform(-20, 300), 2) / 1000.0 for _ in range(4)]
+            for h in hours
+        }
+        return len(
+            json.dumps(
+                {
+                    "historical_spots": {
+                        h.isoformat(): fmean(q) for h, q in quarters.items()
+                    },
+                    "historical_spot_quarters": {
+                        h.isoformat(): q for h, q in quarters.items()
+                    },
+                }
+            )
+        )
+
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    today = dt_util.now().date()
+    coord._historical_spots.update(
+        _year_of_hours(date(2024, 6, 1), today + timedelta(days=1), 0.1)
+    )
+    coord._historical_spot_quarters.update(
+        {h: [0.1] * 4 for h in coord._historical_spots}
+    )
+    coord._prune_historical_spots()
+    kept = sorted(coord._historical_spots)
+    days = {dt_util.as_local(h).date() for h in kept}
+    assert len(days) == 367
+    assert min(days) == today - timedelta(days=365)
+    assert set(coord._historical_spot_quarters) == set(kept)
+    december_ceiling = sorted(_year_of_hours(date(2025, 1, 1), date(2025, 12, 31), 0.1))
+    assert _payload(kept) <= 1.01 * _payload(december_ceiling)
 
 
 async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(

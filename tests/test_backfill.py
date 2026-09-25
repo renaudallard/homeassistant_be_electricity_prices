@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.spot_stats import _bucket_by_local_
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
+    SpotMonthlyRates,
 )
 from tests import make_entry, make_snapshot, make_stub_extractor
 
@@ -2374,14 +2375,90 @@ async def test_the_backfill_gives_the_event_loop_a_turn_every_day(
     assert during >= 2 * 9
 
 
+async def test_a_january_backfill_prices_no_december_hour(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The tick keeps the day-ahead for a trailing year, so a backfill over
+    the first days of January runs with December in the cache beside them.
+    Its price rows are exactly the rows it writes with December absent."""
+    from custom_components.be_electricity_prices import backfill_window
+
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    start = datetime(2026, 1, 1, tzinfo=BRUSSELS)
+    end = datetime(2026, 1, 4, tzinfo=BRUSSELS)
+    january = {
+        hour: 0.08 + 0.001 * (hour.hour % 5) for hour in bf._hour_iter(start, end)
+    }
+    december = {
+        hour: 3.0
+        for hour in bf._hour_iter(
+            datetime(2025, 12, 1, tzinfo=BRUSSELS),
+            datetime(2026, 1, 1, tzinfo=BRUSSELS),
+        )
+    }
+    rows: dict[str, list[Any]] = {}
+    for label, spots in (("alone", january), ("beside", {**december, **january})):
+        for snap in (
+            make_snapshot(energy=DynamicRates(factor=1.0, base=0.02)),
+            make_snapshot(energy=SpotMonthlyRates(factor=1.1, base=0.01)),
+        ):
+            entry = make_entry(title="Eneco Fix", solar_regime="none")
+            entry.add_to_hass(hass)
+            ids = _register_sensors(hass, entry, ["current_price"])
+            coord = SimpleNamespace(
+                hass=None,
+                entry=entry,
+                _snapshot=snap,
+                _session=None,
+                _spp_weights={},
+                _ensure_spp_weights=AsyncMock(),
+                _rlp_weights={},
+                _ensure_rlp_weights=AsyncMock(),
+                _billed_peak_kw=lambda: 0.0,
+                _historical_spots=dict(spots),
+                _historical_spot_quarters={},
+                _ensure_historical_spots=AsyncMock(),
+                _quarter_grid_days=set(),
+                _complete_spot_days=set(),
+                _spot_prune_holds=0,
+            )
+            entry.runtime_data = coord
+
+            async def _snap_for(_month_first: object, snap: Any = snap) -> Any:
+                return snap
+
+            with (
+                patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+                patch.object(
+                    backfill_window,
+                    "_month_snapshot_cache",
+                    lambda *_a, _s=_snap_for, **_k: _s,
+                ),
+                patch(
+                    "homeassistant.components.recorder.statistics."
+                    "async_import_statistics",
+                    new=lambda _h, meta, got, _l=label, _k=type(snap.energy).__name__: (
+                        rows.__setitem__(
+                            f"{_l}:{_k}", [(r["start"], r["mean"]) for r in got]
+                        )
+                    ),
+                ),
+            ):
+                await bf.backfill_range(hass, entry, start, end)
+            assert ids
+    for kind in ("DynamicRates", "SpotMonthlyRates"):
+        assert rows[f"alone:{kind}"], kind
+        assert rows[f"alone:{kind}"] == rows[f"beside:{kind}"], kind
+
+
 async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """The backfill reads the coordinator's own spot cache, and every tick
-    prunes that cache down to the current year.
+    prunes that cache down to the trailing year.
 
-    A window in the previous year is accepted (only its cost leg is skipped),
-    and both passes yield to the loop once a day, so a tick landing mid-run
+    A window older than that is accepted (only its cost leg is skipped), and
+    both passes yield to the loop once a day, so a tick landing mid-run
     deleted every hour the pass had not reached yet: 240 price rows came out
     as 48, with nothing logged.
     """
@@ -2390,7 +2467,7 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
         _SpotsMixin,
     )
 
-    freezer.move_to("2026-01-05 12:00:00+01:00")
+    freezer.move_to("2027-01-05 12:00:00+01:00")
     snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
     entry = make_entry(title="Eneco Fix", solar_regime="none")
     entry.add_to_hass(hass)

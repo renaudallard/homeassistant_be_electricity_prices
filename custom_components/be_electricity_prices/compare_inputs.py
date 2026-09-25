@@ -468,8 +468,8 @@ def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> b
 
 
 # The fewest closed days of day-ahead a year's spot-indexed feed-in credit is
-# priced on. Below it the mean is a few weeks' weather, and the coordinator
-# holds its day-ahead from 1 January only, so early in a year there is little.
+# priced on. Below it the mean is a few weeks' weather. The coordinator keeps a
+# trailing year once it has one, so this bites only in an entry's first month.
 _CREDIT_SPOT_MIN_DAYS = 30
 
 

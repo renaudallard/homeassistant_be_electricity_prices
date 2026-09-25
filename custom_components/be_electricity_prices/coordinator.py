@@ -312,12 +312,13 @@ class BePricesCoordinator(
         # Local days already confirmed to hold >= 20 cached spot hours. Within
         # a calendar year spots are only ever added, so a complete day stays
         # complete; caching the set lets the per-tick coverage scan skip the
-        # timezone conversion and 24 dict lookups for every settled day. Prior
-        # year entries are dropped in _prune_historical_spots at the boundary.
+        # timezone conversion and 24 dict lookups for every settled day. Days
+        # older than the trailing year go with their spots in
+        # _prune_historical_spots.
         self._complete_spot_days: set[date] = set()
         # Backfills running right now. The backfill reads _historical_spots
-        # itself, and a window in a past year needs exactly the hours the
-        # prune drops, so the prune waits while this is non-zero.
+        # itself, and a window older than the trailing year needs exactly the
+        # hours the prune drops, so the prune waits while this is non-zero.
         self._spot_prune_holds = 0
         # The unique_ids each platform's setup is about to add, by platform,
         # recorded before it adds them. What the settings create, as opposed

@@ -394,6 +394,11 @@ gated on a "tuple" match (supplier / contract / region): spots collected while
 the entry was dynamic are dropped after an options-flow swap to a static supplier
 rather than being re-saved indefinitely (`coordinator_persist.py`). Persisted keys
 are ISO strings; a naive one is treated as UTC on load (`coordinator_persist.py`).
+It is fetched from the year-to-date window's first day and kept for a trailing
+year (`_prune_historical_spots`, `coordinator_spots.py`), not cut at 1 January:
+the projection and the compare page credit a static card's per-slot feed-in on
+the past year's closed days, and the walks read each hour or month by its own
+key, so December kept beside January bills nothing extra.
 
 ## Part 2: recorder backfill (`backfill.py`)
 

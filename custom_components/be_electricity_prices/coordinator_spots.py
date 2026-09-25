@@ -47,6 +47,7 @@ from .api import (
 )
 from .const import (
     CONF_API_KEY,
+    MEASURED_FULL_YEAR_DAYS,
 )
 from .injection import (
     _injection_needs_spot_quarters,
@@ -765,38 +766,40 @@ class _SpotsMixin(_ProfilesMixin):
         return _mean_of_month(self._billable_spots(extra_spots), year, month)
 
     def _prune_historical_spots(self) -> None:
-        """Drop cached spots older than the current YTD window.
+        """Drop cached spots older than the trailing year.
 
-        Called each tick so the in-memory dict (and the persisted blob) do
-        not grow unbounded across year boundaries. Anchor on local midnight:
-        in Brussels (UTC+1/+2) the local Jan 1 00:00 falls one or two hours
-        BEFORE UTC Jan 1 00:00, so a UTC anchor would silently drop the first
-        hour or two of YTD. Prior-year keys are pure dead weight: every
-        consumer filters by the current (year, month) or an exact current-year
-        hour key, so removing them changes no result. The one exception is a
-        backfill over a past year, which reads this dict between turns of the
-        loop, so nothing is dropped while one runs (``_spot_prune_holds``)."""
+        Called each tick so the in-memory dict (and the persisted blob) stay
+        bounded: a year of closed days plus today and tomorrow, which is what
+        the blob used to reach each 31 December. Kept for a trailing year
+        rather than cut at 1 January because a static card's per-slot feed-in
+        is credited on the past year's closed days (``_credit_spots``), and a
+        January cut emptied that window every new year. Fetching still starts
+        at the year-to-date window; this only decides what is KEPT. Keeping
+        December beside January changes no bill: every walk reads an hour by
+        its own key or a month by its local (year, month).
+
+        Anchor on local midnight: in Brussels the local day starts one or two
+        hours before the UTC one. A backfill over an older window reads this
+        dict between turns of the loop, so nothing is dropped while one runs
+        (``_spot_prune_holds``)."""
         if not self._historical_spots or self._spot_prune_holds:
             return
-        today = dt_util.now().date()
-        keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(UTC)
-        # Within a calendar year every cached hour already sits at or after the
-        # cutoff, so skip rebuilding the whole dict every tick. Only rebuild
-        # when a prior-year key actually needs dropping (the year boundary).
-        # The min() scan is a cheap comparison; it avoids a full dict
-        # reallocation on each of the other 364 days.
+        first_kept = dt_util.now().date() - timedelta(days=MEASURED_FULL_YEAR_DAYS)
+        keep_after = dt_util.start_of_local_day(first_kept).astimezone(UTC)
+        # Most ticks drop nothing: only the first one of a day finds an hour
+        # past the window. The min() scan is a cheap comparison and avoids a
+        # full pass over the dict on every other tick.
         if min(self._historical_spots) >= keep_after:
             return
         _drop_hours_before(self._historical_spots, keep_after)
         self._quarter_grid_days = {
-            d for d in self._quarter_grid_days if d >= date(today.year, 1, 1)
+            d for d in self._quarter_grid_days if d >= first_kept
         }
         # The quarter cache is only ever written beside the hourly one, so it
         # holds no hour the hourly cache does not and the two early returns
         # above answer for it too.
         _drop_hours_before(self._historical_spot_quarters, keep_after)
-        # Drop prior year days from the completeness set alongside their spots
-        # so it doesn't grow without bound across years.
+        # The completeness set follows the same window so it stays bounded.
         self._complete_spot_days = {
-            d for d in self._complete_spot_days if d.year >= today.year
+            d for d in self._complete_spot_days if d >= first_kept
         }
