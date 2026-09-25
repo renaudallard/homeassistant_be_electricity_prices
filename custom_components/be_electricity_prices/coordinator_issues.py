@@ -55,6 +55,7 @@ from .const import (
 )
 from .fees import (
     _compensation_kva,
+    compensation_lacks_kva,
 )
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
@@ -312,6 +313,17 @@ class _IssuesMixin:
             and overlay is not None
             and overlay.prosumer_eur_per_kva_year is None,
             extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
+        )
+
+    def _sync_compensation_kva_issue(self) -> None:
+        """Flag a compensation install saved with no inverter capacity.
+
+        The solar step refuses it now, but an entry saved before that holds
+        the pre-filled 0 and bills no prosumer fee on any cost path, with the
+        prosumer sensor absent too, so nothing on the dashboard shows the gap.
+        """
+        self._sync_issue(
+            "compensation_kva_missing", compensation_lacks_kva(self.entry.data)
         )
 
     def _entry_extractor(self) -> SupplierExtractor | None:

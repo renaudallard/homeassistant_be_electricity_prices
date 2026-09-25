@@ -2550,6 +2550,7 @@ _REPAIR_ISSUE_KINDS = (
     "register_pair_incomplete",
     "direct_debit_unanswered",
     "brussels_power_term_missing",
+    "compensation_kva_missing",
 )
 
 
@@ -4409,6 +4410,44 @@ async def test_prosumer_gap_is_silent_outside_the_compensation_regime(
         )
         is None
     )
+
+
+async def test_a_compensation_entry_without_an_inverter_is_named_in_repairs(
+    hass: HomeAssistant,
+) -> None:
+    """The solar step refuses compensation with 0 kVA now, but an entry saved
+    before it holds exactly that and bills no prosumer fee at all. Say so
+    until the capacity is filled in."""
+    from homeassistant.helpers import issue_registry as ir
+
+    data = {
+        "supplier": "cociter",
+        "contract": "cociter_variable",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "compensation",
+        "solar_kva": 0.0,
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Cociter")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"compensation_kva_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._sync_compensation_kva_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    hass.config_entries.async_update_entry(entry, data={**data, "solar_kva": 5.0})
+    coord._sync_compensation_kva_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # No inverter on the injection regime is no gap: no fee is due there.
+    hass.config_entries.async_update_entry(
+        entry, data={**data, "solar_regime": "injection"}
+    )
+    coord._sync_compensation_kva_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
 def test_every_repair_is_invoked_by_the_coordinator() -> None:

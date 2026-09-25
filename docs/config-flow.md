@@ -409,7 +409,12 @@ straight to solar (`config_flow.py` comment).
 Schema `_solar_schema` (`flow_schemas.py`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
-  panels, no prosumer cost; `const.py`).
+  panels, no prosumer cost; `const.py`). With the compensation regime the step
+  refuses 0 (`compensation_kva_missing` on `solar_kva`, via
+  `compensation_lacks_kva` in `fees.py`): that regime bills the prosumer fee per
+  kVA, and leaving the pre-filled 0 in place dropped it from every cost path in
+  silence. An entry saved before the check gets the Repairs card of the same
+  name.
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
   `SOLAR_REGIMES` (`const.py`) with a region filter.
 

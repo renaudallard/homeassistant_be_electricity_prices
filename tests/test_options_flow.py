@@ -694,6 +694,28 @@ async def test_options_flow_month_indexed_energy_offers_the_key_on_every_regime(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_solar_step_refuses_compensation_without_an_inverter(
+    hass: HomeAssistant,
+) -> None:
+    """The compensation regime bills a prosumer fee per kVA of inverter, and a
+    household on it has one. Leaving the pre-filled 0 in place dropped the fee
+    from every cost path with nothing to say so, about 429 EUR a year at
+    5 kVA on ORES."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "compensation"}
+    )
+    assert result["step_id"] == "solar"
+    assert result["errors"] == {"solar_kva": "compensation_kva_missing"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 5.0, "solar_regime": "compensation"}
+    )
+    assert result["step_id"] != "solar"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_spot_injection_skipped_when_not_injection_regime(
     hass: HomeAssistant,
 ) -> None:

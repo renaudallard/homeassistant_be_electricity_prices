@@ -102,6 +102,7 @@ from .flow_contracts import (
     _region_mismatch_error,
 )
 from .compare_sweep_flow import _SweepStepsMixin
+from .fees import compensation_lacks_kva
 from .flow_prefill import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
@@ -123,6 +124,7 @@ from .const import (
     CONF_DIRECT_DEBIT,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     CONF_TARIFF_CARD_DATE,
@@ -538,8 +540,14 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            self._data.update(user_input)
-            return await self._after_solar()
+            if not compensation_lacks_kva({**self._data, **user_input}):
+                self._data.update(user_input)
+                return await self._after_solar()
+            return self.async_show_form(
+                step_id="solar",
+                data_schema=_solar_schema({**self._data, **user_input}),
+                errors={CONF_SOLAR_KVA: "compensation_kva_missing"},
+            )
         return self.async_show_form(
             step_id="solar", data_schema=_solar_schema(self._data)
         )

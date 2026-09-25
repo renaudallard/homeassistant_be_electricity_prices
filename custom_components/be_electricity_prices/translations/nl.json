@@ -234,6 +234,7 @@
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "compensation_kva_missing": "Het compensatieregime rekent een prosumententarief per kVA omvormervermogen aan: vul het vermogen van je omvormer in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     }
   },
@@ -255,6 +256,7 @@
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "compensation_kva_missing": "Het compensatieregime rekent een prosumententarief per kVA omvormervermogen aan: vul het vermogen van je omvormer in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
       "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze ingang is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden.",
       "switch_date_outside_year": "De wisseldatum moet tussen 2 januari en vandaag liggen.",
@@ -782,6 +784,10 @@
     "prosumer_tariff_missing": {
       "title": "{supplier} ({contract}) publiceert het prosumententarief van {dso} niet",
       "description": "Deze vermelding valt onder het Waalse compensatieregime, waardoor de distributienetbeheerder een prosumententarief per kVA omvormervermogen aanrekent. De kaart van {supplier} voor {contract} vermeldt wel het eigen fotovoltaïsche forfait, maar laat de kolom \"Tarif prosumer\" weg die op de andere kaarten wel staat, zodat het netgedeelte nergens staat waar deze integratie het kan lezen.\n\nDe prijzen voor deze vermelding sluiten het daarom uit. Het tarief loopt van ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus een omvormer van 5 kVA wordt jaarlijks ongeveer €400 tot €500 te weinig aangerekend. Al de rest van de kaart, inclusief het forfait van de leverancier zelf, wordt normaal aangerekend. Deze melding verdwijnt automatisch zodra {supplier} de kolom opnieuw publiceert."
+    },
+    "compensation_kva_missing": {
+      "title": "Geen omvormervermogen op deze vermelding met compensatie ({supplier}, {contract})",
+      "description": "Deze vermelding valt onder het Waalse compensatieregime, dat een prosumententarief per kVA omvormervermogen aanrekent, maar het omvormervermogen staat op 0. Het prosumententarief ontbreekt daardoor in elke kost die deze vermelding berekent: ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus zo'n €430 per jaar voor een omvormer van 5 kVA.\n\nBewerk de opties van de vermelding en vul het omvormervermogen (kVA) in bij de stap zonnepanelen. Deze melding verdwijnt zodra het is ingevuld."
     },
     "register_pair_incomplete": {
       "title": "Een dag/nachtregister van {supplier} ({contract}) registreert niet meer",

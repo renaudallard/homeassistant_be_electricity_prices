@@ -574,6 +574,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "impact_rates_missing",
         "connection_fee_missing",
         "prosumer_tariff_missing",
+        "compensation_kva_missing",
         "register_pair_incomplete",
         "direct_debit_unanswered",
         "brussels_power_term_missing",

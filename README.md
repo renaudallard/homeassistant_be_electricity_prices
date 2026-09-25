@@ -738,7 +738,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Fifteen repair issues surface
+TimeoutError` rather than trailing off after the colon. Sixteen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -806,6 +806,10 @@ successful refresh:
   compensation install but its card omits the DSO prosumer tariff, so only
   the supplier's own PV forfait is billed and the network half is left out
   rather than borrowed from another supplier's card.
+- **`compensation_kva_missing_<entry>`** — the entry is on the Walloon
+  compensation regime with an inverter capacity of 0, so no prosumer fee
+  is billed at all. The solar step refuses that now; an entry saved before
+  it gets this notice until the capacity is filled in.
 - **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
   payer differently and this entry has no stored answer, which an entry
   created before the question existed does not. The credit is left out

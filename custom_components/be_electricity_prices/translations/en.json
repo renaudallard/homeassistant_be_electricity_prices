@@ -234,6 +234,7 @@
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "compensation_kva_missing": "The compensation regime bills a prosumer fee per kVA of inverter: enter your inverter capacity in kVA.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
     }
   },
@@ -255,6 +256,7 @@
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "compensation_kva_missing": "The compensation regime bills a prosumer fee per kVA of inverter: enter your inverter capacity in kVA.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region.",
       "whatif_volumes_required": "Quoting a different regime needs your yearly consumption and injection in kWh: this entry has no injection meter wired, so they cannot be read from your meters.",
       "switch_date_outside_year": "The switch date must fall between 2 January and today.",
@@ -782,6 +784,10 @@
     "prosumer_tariff_missing": {
       "title": "{supplier} ({contract}) does not publish the {dso} prosumer tariff",
       "description": "This entry is on the Walloon compensation regime, so the DSO levies a prosumer tariff per kVA of inverter. {supplier}'s card for {contract} prints its own photovoltaic forfait but omits the \"Tarif prosumer\" column that its other cards carry, so the network half of the fee is published nowhere this integration can read.\n\nPrices for this entry therefore exclude it. The tariff runs from about €81 to €99 per kVA per year across the Walloon network operators, so a 5 kVA inverter is under-billed by roughly €400 to €500 a year. Everything else on the card, including the supplier's own forfait, is priced normally. This notice clears automatically once {supplier} prints the column again."
+    },
+    "compensation_kva_missing": {
+      "title": "No inverter capacity on this compensation entry ({supplier}, {contract})",
+      "description": "This entry is on the Walloon compensation regime, which bills a prosumer tariff per kVA of inverter, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
     },
     "register_pair_incomplete": {
       "title": "A day/night register of {supplier} ({contract}) stopped recording",

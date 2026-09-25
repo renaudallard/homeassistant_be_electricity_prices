@@ -34,7 +34,9 @@ why they must not be duplicated per caller."""
 from __future__ import annotations
 
 from calendar import monthrange
+from collections.abc import Mapping
 from datetime import date, timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 
@@ -338,15 +340,33 @@ def _compensation_kva(entry: ConfigEntry) -> float:
     (not modelled here) or on a digital meter paying the capaciteitstarief, and
     billing the prosumer fee there too would double-count grid recovery.
     """
-    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
-        return 0.0
-    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
-        return 0.0
+    kva = _walloon_compensation_kva(entry.data)
+    return kva if kva is not None and kva > 0.0 else 0.0
+
+
+def compensation_lacks_kva(data: Mapping[str, Any]) -> bool:
+    """A Walloon compensation install with no inverter capacity entered.
+
+    Always an omission: the regime exists for households with panels, and
+    ``_compensation_kva`` then bills no prosumer fee at all, about 429 EUR a
+    year at 5 kVA on ORES. The solar step refuses it, and the coordinator
+    raises a Repairs card for an entry saved before it did.
+    """
+    kva = _walloon_compensation_kva(data)
+    return kva is not None and not kva > 0.0
+
+
+def _walloon_compensation_kva(data: Mapping[str, Any]) -> float | None:
+    """The entered kVA of a Walloon compensation install, 0.0 when it does not
+    parse, None for any other regime or region."""
+    if data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
+        return None
+    if data.get(CONF_REGION) != REGION_WALLONIA:
+        return None
     try:
-        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+        return float(data.get(CONF_SOLAR_KVA, 0.0))
     except (TypeError, ValueError):
         return 0.0
-    return kva if kva > 0.0 else 0.0
 
 
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
