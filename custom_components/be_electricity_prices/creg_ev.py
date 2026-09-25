@@ -40,6 +40,10 @@ to the circular shows the SPF doing, rather than read off the mean column:
 the CREG rounds that column from unrounded prices, and it once disagreed
 with the circular, 36,18 against 36,17 for Wallonia in Q2/2025.
 
+The table is kept in a store, so a restart inside a quarter reuses it
+rather than reading the file again, and a sensor whose quarter was already
+read stays available while creg.be is down.
+
 Never raises: the fetch runs inside the coordinator tick, whose only handler
 is for ``UpdateFailed``. A failure logs and leaves the table as it was.
 """
@@ -51,12 +55,14 @@ import csv
 import io
 import logging
 from datetime import date, datetime
-from typing import Final
+from typing import Any, Final
 
 import aiohttp
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from .const import DOMAIN, REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,11 +93,17 @@ _LEAD_MONTHS: Final = 3
 # added the quarter to yet, is retried after a few hours rather than every
 # tick.
 _FAILURE_RETRY_S: Final = 6 * 3600
+# One file for the installation: the rates are the regulator's, the same for
+# every entry that shows them.
+_STORE_KEY: Final = f"{DOMAIN}_creg_ev"
+_STORE_VERSION: Final = 1
 # Rate per region per quarter start, EUR/kWh.
 _table: dict[str, dict[date, float]] = {}
 _fetched_quarter: date | None = None
 _failed_at: datetime | None = None
 _lock: asyncio.Lock | None = None
+# Whether the store has been read since the process started.
+_loaded = False
 
 
 def _get_lock() -> asyncio.Lock:
@@ -127,22 +139,82 @@ def history(region: str) -> list[tuple[date, float]]:
     return sorted(_table.get(region, {}).items())
 
 
-async def ensure_rates(session: aiohttp.ClientSession, today: date) -> bool:
+async def ensure_rates(
+    hass: HomeAssistant, session: aiohttp.ClientSession, today: date
+) -> bool:
     """Fetch the CSV once per quarter; return whether ``today`` has a rate.
 
     A quarter counts as fetched only once the file prices it. A failed
     download, or a file that does not price the quarter yet, leaves the
     previous table, which may still answer, and is retried after the backoff.
+    The stored table is read first, once per process, so a restart does not
+    count as a new quarter.
     """
     current = quarter_start(today)
     if _fetched_quarter == current:
         return _has(_table, current)
     async with _get_lock():
+        await _load(hass)
         # Re-read under the lock: entries tick together.
         if _fetched_quarter == current:
             return _has(_table, current)
         await _fetch(session, current)
+        if _fetched_quarter == current:
+            try:
+                await _store(hass).async_save(_to_store())
+            except Exception as err:  # noqa: BLE001 - kept in memory regardless
+                _LOGGER.debug("CREG home charging rates not stored: %s", err)
     return _has(_table, current)
+
+
+def _store(hass: HomeAssistant) -> Store[dict[str, Any]]:
+    return Store(hass, _STORE_VERSION, _STORE_KEY)
+
+
+async def async_remove_store(hass: HomeAssistant) -> None:
+    """Delete the stored table, for the removal of the last entry."""
+    global _loaded
+    await _store(hass).async_remove()
+    _loaded = False
+
+
+async def _load(hass: HomeAssistant) -> None:
+    """Adopt the stored table, once per process, if nothing is held yet."""
+    global _loaded, _fetched_quarter
+    if _loaded:
+        return
+    _loaded = True
+    try:
+        blob = await _store(hass).async_load()
+    except Exception as err:  # noqa: BLE001 - a bad file costs one download
+        _LOGGER.debug("CREG home charging rates: stored table unreadable: %s", err)
+        return
+    if not isinstance(blob, dict) or _table:
+        return
+    table: dict[str, dict[date, float]] = {}
+    try:
+        quarter = date.fromisoformat(str(blob["quarter"]))
+        for region, rows in blob["rates"].items():
+            for start, rate in rows.items():
+                table.setdefault(str(region), {})[date.fromisoformat(start)] = float(
+                    rate
+                )
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return
+    if not _has(table, quarter):
+        return
+    _table.update(table)
+    _fetched_quarter = quarter
+
+
+def _to_store() -> dict[str, Any]:
+    return {
+        "quarter": _fetched_quarter.isoformat() if _fetched_quarter else None,
+        "rates": {
+            region: {start.isoformat(): rate for start, rate in rows.items()}
+            for region, rows in _table.items()
+        },
+    }
 
 
 def _has(table: dict[str, dict[date, float]], quarter: date) -> bool:

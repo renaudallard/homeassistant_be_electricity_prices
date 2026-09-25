@@ -262,7 +262,7 @@ class _TickMixin:
             CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE
         ):
             ev_today = dt_util.now().date()
-            await ensure_ev_rates(self._session, ev_today)
+            await ensure_ev_rates(self.hass, self._session, ev_today)
             ev_rate = ev_rate_for(self.entry.data.get(CONF_REGION, ""), ev_today)
             ev_quarter = ev_quarter_start(ev_today)
 

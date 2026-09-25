@@ -862,7 +862,13 @@ priced.
 
 `ensure_rates` runs in the tick of an entry with the box ticked, after the
 snapshot, and fetches the file once per quarter, under one module lock so the
-entries that tick together cost one download. `rate_for` and `history` read
+entries that tick together cost one download. The table and the quarter it was
+read for are kept in one installation-wide store (`{DOMAIN}_creg_ev`), read
+once per process before anything is fetched, so a restart or reload inside a
+quarter reuses it rather than reading creg.be again, and a sensor whose quarter
+was already read stays available after a restart while creg.be is down. A
+stored table that does not hold the quarter it names is ignored. Removing the
+last entry deletes the store. `rate_for` and `history` read
 the table synchronously, for the tick's record and the sensor's attributes. A
 failure logs, records a six-hour backoff and keeps the previous table, so a
 quarter already fetched keeps answering while the CREG is down; a first fetch

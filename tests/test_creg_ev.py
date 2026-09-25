@@ -49,11 +49,13 @@ def _clear_creg_cache() -> Iterator[None]:
     creg_ev._fetched_quarter = None
     creg_ev._failed_at = None
     creg_ev._lock = None
+    creg_ev._loaded = False
     yield
     creg_ev._table.clear()
     creg_ev._fetched_quarter = None
     creg_ev._failed_at = None
     creg_ev._lock = None
+    creg_ev._loaded = False
 
 
 def test_the_published_file_reads_as_the_page_prints_it() -> None:
@@ -216,62 +218,66 @@ class _Session:
     ],
 )
 async def test_a_body_that_is_not_the_file_never_raises(
-    label: str, body: bytes, status: int
+    hass: HomeAssistant, label: str, body: bytes, status: int
 ) -> None:
     """The fetch runs inside the coordinator tick; nothing may escape it."""
     session = _Session(body, status)
-    assert await creg_ev.ensure_rates(session, date(2026, 9, 23)) is False, label  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 9, 23)) is False, label  # type: ignore[arg-type]
     assert creg_ev.rate_for(REGION_WALLONIA, date(2026, 9, 23)) is None
 
 
-async def test_a_failure_is_only_attempted_once() -> None:
+async def test_a_failure_is_only_attempted_once(hass: HomeAssistant) -> None:
     session = _Session(b"<html>nope</html>")
-    await creg_ev.ensure_rates(session, date(2026, 9, 23))  # type: ignore[arg-type]
+    await creg_ev.ensure_rates(hass, session, date(2026, 9, 23))  # type: ignore[arg-type]
     assert creg_ev._failed_at is not None
     after_first = session.calls
     assert after_first == 1
-    await creg_ev.ensure_rates(session, date(2026, 9, 23))  # type: ignore[arg-type]
+    await creg_ev.ensure_rates(hass, session, date(2026, 9, 23))  # type: ignore[arg-type]
     assert session.calls == after_first, "the backoff did not hold"
 
 
-async def test_a_good_file_is_fetched_once_a_quarter_and_kept() -> None:
+async def test_a_good_file_is_fetched_once_a_quarter_and_kept(
+    hass: HomeAssistant,
+) -> None:
     """The file gains a row four times a year; a download an hour buys nothing."""
     session = _Session(_FIXTURE.read_bytes())
-    assert await creg_ev.ensure_rates(session, date(2026, 9, 23)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 9, 23)) is True  # type: ignore[arg-type]
     assert session.calls == 1
-    assert await creg_ev.ensure_rates(session, date(2026, 9, 30)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 9, 30)) is True  # type: ignore[arg-type]
     assert session.calls == 1, "a cached quarter was fetched twice"
     # The next quarter asks again, once.
-    assert await creg_ev.ensure_rates(session, date(2026, 10, 1)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 10, 1)) is True  # type: ignore[arg-type]
     assert session.calls == 2
     assert creg_ev.rate_for(REGION_BRUSSELS, date(2026, 10, 1)) == pytest.approx(0.3688)
 
 
-async def test_a_failed_refetch_keeps_last_quarters_table() -> None:
+async def test_a_failed_refetch_keeps_last_quarters_table(hass: HomeAssistant) -> None:
     """A table that still answers is better than an empty one."""
     good = _Session(_FIXTURE.read_bytes())
-    await creg_ev.ensure_rates(good, date(2026, 9, 23))  # type: ignore[arg-type]
+    await creg_ev.ensure_rates(hass, good, date(2026, 9, 23))  # type: ignore[arg-type]
     bad = _Session(b"<html>down</html>")
-    assert await creg_ev.ensure_rates(bad, date(2026, 10, 1)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, bad, date(2026, 10, 1)) is True  # type: ignore[arg-type]
     assert creg_ev.rate_for(REGION_WALLONIA, date(2026, 10, 1)) == pytest.approx(0.3779)
     # And the table is asked for again once the backoff has passed, not before.
     assert creg_ev._failed_at is not None
     assert (dt_util.utcnow() - creg_ev._failed_at).total_seconds() < 5
 
 
-async def test_a_file_without_the_running_quarter_is_asked_again() -> None:
+async def test_a_file_without_the_running_quarter_is_asked_again(
+    hass: HomeAssistant,
+) -> None:
     """A file read before the CREG added the running quarter is not kept for
     the rest of it, or the sensor would stay unavailable for three months
     after the row appeared."""
     session = _Session(_FIXTURE.read_bytes())
-    assert await creg_ev.ensure_rates(session, date(2026, 12, 31)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 12, 31)) is True  # type: ignore[arg-type]
     # The first day of Q1/2027, before the CREG has added it: the table read
     # last quarter keeps answering for the quarters it holds.
-    assert await creg_ev.ensure_rates(session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
     assert session.calls == 2
     assert creg_ev.history(REGION_WALLONIA)[-1] == (date(2026, 10, 1), 0.3779)
     # Within the backoff, nothing more is asked.
-    assert await creg_ev.ensure_rates(session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2027, 1, 1)) is False  # type: ignore[arg-type]
     assert session.calls == 2
     # The CREG adds August to October 2026, and the backoff runs out.
     session._body += (
@@ -281,12 +287,65 @@ async def test_a_file_without_the_running_quarter_is_asked_again() -> None:
     )
     assert creg_ev._failed_at is not None
     creg_ev._failed_at -= timedelta(seconds=creg_ev._FAILURE_RETRY_S)
-    assert await creg_ev.ensure_rates(session, date(2027, 1, 2)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2027, 1, 2)) is True  # type: ignore[arg-type]
     assert session.calls == 3
     assert creg_ev.rate_for(REGION_WALLONIA, date(2027, 1, 2)) == pytest.approx(0.38)
     # And that file is kept for the rest of the quarter.
-    assert await creg_ev.ensure_rates(session, date(2027, 3, 31)) is True  # type: ignore[arg-type]
+    assert await creg_ev.ensure_rates(hass, session, date(2027, 3, 31)) is True  # type: ignore[arg-type]
     assert session.calls == 3
+
+
+def _restart() -> None:
+    """What a Home Assistant restart does to the module: the table is gone."""
+    creg_ev._table.clear()
+    creg_ev._fetched_quarter = None
+    creg_ev._failed_at = None
+    creg_ev._lock = None
+    creg_ev._loaded = False
+
+
+async def test_a_restart_reuses_the_quarter_already_read(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The table lived in memory only, so every restart or reload read the
+    file again, which is not "once a quarter" as the box says, and a restart
+    while creg.be was down left the sensor unavailable until it came back."""
+    good = _Session(_FIXTURE.read_bytes())
+    assert await creg_ev.ensure_rates(hass, good, date(2026, 9, 23)) is True  # type: ignore[arg-type]
+    _restart()
+    down = _Session(b"<html>down</html>", 503)
+    assert await creg_ev.ensure_rates(hass, down, date(2026, 9, 24)) is True  # type: ignore[arg-type]
+    assert down.calls == 0
+    assert creg_ev.rate_for(REGION_WALLONIA, date(2026, 9, 24)) == pytest.approx(0.3783)
+    # The next quarter is a new question, asked of the file once.
+    assert await creg_ev.ensure_rates(hass, good, date(2026, 10, 1)) is True  # type: ignore[arg-type]
+    assert good.calls == 2
+
+
+async def test_a_stored_table_without_the_quarter_it_names_is_ignored(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    hass_storage["be_electricity_prices_creg_ev"] = {
+        "version": 1,
+        "key": "be_electricity_prices_creg_ev",
+        "data": {"quarter": "2026-07-01", "rates": {"wallonia": {"x": "y"}}},
+    }
+    session = _Session(_FIXTURE.read_bytes())
+    assert await creg_ev.ensure_rates(hass, session, date(2026, 9, 23)) is True  # type: ignore[arg-type]
+    assert session.calls == 1
+
+
+async def test_the_stored_table_goes_with_the_last_entry(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    await creg_ev.ensure_rates(hass, _Session(_FIXTURE.read_bytes()), date(2026, 9, 23))  # type: ignore[arg-type]
+    await hass.async_block_till_done()
+    assert "be_electricity_prices_creg_ev" in hass_storage
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "be_electricity_prices_creg_ev" not in hass_storage
 
 
 def test_the_sensor_reads_the_rate_and_is_unavailable_without_one() -> None:
@@ -317,7 +376,7 @@ async def test_the_tick_fetches_and_records_the_rate_only_when_asked(
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
     downloads: list[date] = []
 
-    async def _download(_session: object, today: date) -> bool:
+    async def _download(_hass: object, _session: object, today: date) -> bool:
         downloads.append(today)
         creg_ev._table.update(creg_ev.parse(_csv()))
         return True
