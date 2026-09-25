@@ -525,24 +525,20 @@ class _PlaceholdersMixin(OptionsFlow):
             )
             return placeholders
 
-        # Year-to-date what-if. Two paths:
+        # Year-to-date what-if. The own row is always the household's actual
+        # year, priced by the coordinator's _compute_current_year_cost engine
+        # as the current_year_cost sensor prices it. The quoted side takes
+        # one of two paths:
         #   1. Archive-capable pairs, both suppliers keeping a month archive
-        #      (every scraped supplier but Ecofix and TotalEnergies today)
-        #      and neither side spot-priced: reuse the coordinator's
-        #      _compute_current_year_cost engine against each snapshot
-        #      chain, so per-month tariff transitions and the same proration
-        #      model the user's actual bill uses apply to both sides. Most
-        #      accurate.
+        #      (every scraped supplier but Ecofix and TotalEnergies today),
+        #      with a spot-priced side only once the entry's day-ahead cache
+        #      covers the window: the same engine against its snapshot chain,
+        #      so per-month tariff transitions and the proration model the
+        #      user's actual bill uses apply to both sides. Most accurate.
         #   2. Everything else (a side without an archive, the custom
-        #      supplier, a spot-priced side): fall back to the simple
-        #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
-        #      and same proration on both sides, so the delta still isolates
-        #      the supplier-driven difference.
-        from .contract_periods import (
-            current_period_start,
-            previous_periods,
-            with_previous_contracts,
-        )
+        #      supplier, a spot-priced side whose spots are missing): the
+        #      simple "current rate * ytd_kwh + pro-rated fees" model.
+        from .contract_periods import current_period_start, with_previous_contracts
         from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
@@ -709,59 +705,21 @@ class _PlaceholdersMixin(OptionsFlow):
             # the archive YTD path, both of which DO accrue the Flanders
             # capacity tariff, so it is kept here too and prorated the same
             # per-month way rather than by the uniform year fraction.
+            #
+            # The own row is the household's actual year, so it is priced the
+            # way the current_year_cost sensor prices it, on the coordinator's
+            # own spots, whichever model the quoted side needs. One rate times
+            # the window's kWh put it off the sensor beside it: 280 EUR under
+            # it on a year that left a fixed contract for a dynamic one in May,
+            # and 1920,87 against 1751,84 on a fixed card signed in a past
+            # month. Only the quoted side stays the what-if it was.
             current_ytd: float | None
-            if previous_periods(current, ytd_from, today_local):
-                # One rate times the window's kWh cannot say what two
-                # contracts cost, and billed the months before a recorded
-                # switch on the current card: 280 EUR under the sensor on a
-                # year that left a fixed contract for a dynamic one in May.
-                # The own row is the household's actual year, so it is
-                # priced the way the sensor prices it, on the coordinator's
-                # own spots, and the quoted side stays the what-if it was.
-                try:
-                    current_ytd = await _own_year(
-                        coord._historical_spots, coord._historical_spot_quarters
-                    )
-                except Exception:  # noqa: BLE001 - degrade to '-'
-                    current_ytd = None
-            else:
-                current_ytd = _annual_bill(
-                    current_snapshot,
-                    quote_entry,
-                    peak_kw,
-                    current_per_kwh,
-                    ytd_kwh,
-                    ytd_inj_kwh,
-                    current_inj_price,
-                    export_per_kwh=current_export_per_kwh,
-                    register_weights=hh.register_weights,
-                    fee_proration=fee_proration,
-                    prosumer_proration=month_proration,
-                    capacity_proration=month_proration,
-                    meter=current_meter,
-                    # Window-scoped, not the year-ahead figure the annual rows
-                    # carry: this is what these days have already accrued. The
-                    # engine path above credits it, so a row that fell back here
-                    # was the only one on the page priced without one.
-                    welcome_credit_eur=_ytd_welcome_credit(
-                        current_snapshot,
-                        hh.signing_snapshot,
-                        _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
-                        dt_util.as_local(now_utc),
-                        dso,
-                        region,
-                        await _spot_for(current_snapshot),
-                        current_meter,
-                        dso_mode,
-                        hour_weights,
-                        ytd_kwh,
-                        ytd_inj_kwh,
-                        annual_kwh=annual_kwh,
-                        regime=regime,
-                        window_start=ytd_from,
-                        fee_proration=fee_proration,
-                    ),
+            try:
+                current_ytd = await _own_year(
+                    coord._historical_spots, coord._historical_spot_quarters
                 )
+            except Exception:  # noqa: BLE001 - degrade to '-'
+                current_ytd = None
             compare_ytd = _annual_bill(
                 other_snap,
                 target_entry,

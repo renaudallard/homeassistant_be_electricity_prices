@@ -511,10 +511,11 @@ and the compare dialog only reads what that run left behind.
 The comparison pages price the household's own year the same way
 (`with_previous_contracts`): the day's pricing while they quote the household
 as it is, a fresh pricing under a what-if regime or DSO mode, which has to
-reach the earlier contracts too. That holds on the page's one-rate model as
-well (`compare_placeholders.py`): one rate times the window's kWh cannot say
-what two contracts cost, so after a switch the own row there is priced on the
-engine like the sensor, and only the quoted side stays on the one-rate model.
+reach the earlier contracts too. That holds whichever model prices the quoted
+side (`compare_placeholders.py`): the own row is always priced on the engine
+like the sensor, since one rate times the window's kWh cannot say what two
+contracts cost and put it off the sensor even with none, and only the quoted
+side ever falls back to the one-rate model.
 Both sides are measured from the first day the year was billed
 (`billed_from`, `contract_periods.py`): recording a switch unticks "bill from
 contract start" on the entry, whose window then opens on 1 January, while a
