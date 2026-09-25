@@ -502,9 +502,10 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         key="current_year_cost",
         translation_key="current_year_cost",
         # Running bill since Jan 1: this-year cons / inj kWh x rates +
-        # annual fees, with injection netted per regime. Always numeric;
-        # missing meter inputs collapse to the fees-only floor so the
-        # sensor never goes ``unknown``. ``TOTAL`` with ``last_reset``
+        # annual fees, with injection netted per regime. Missing meter
+        # inputs collapse to the fees-only floor rather than ``unknown``;
+        # the one unknown is a recorded supplier switch whose earlier
+        # contracts are not all priced yet. ``TOTAL`` with ``last_reset``
         # pinned to local midnight of the window start: Jan 1, or the
         # contract start date on an entry that bills from it: lets the
         # long-term-statistics engine
