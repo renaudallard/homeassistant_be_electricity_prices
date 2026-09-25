@@ -132,6 +132,12 @@ class RankedRow:
     # rather than no price, but a reading, and the row says so: a figure you
     # might switch supplier over must not hide where it came from.
     read_by_ocr: bool = False
+    # The card credits the household's feed-in and the figure leaves it out:
+    # a per-slot spot-indexed credit short of a full year of day-ahead and of
+    # the household's export, as the projection leaves it out. The figure is
+    # high by a year of that credit, and the row says so rather than ranking
+    # beside cards that are credited as though its feed-in paid nothing.
+    feed_in_uncredited: bool = False
 
 
 @dataclass(frozen=True)
@@ -186,6 +192,11 @@ class DailyCompare:
 def _eur(value: float) -> str:
     """A euro amount in the Belgian convention, comma for the decimal."""
     return f"{value:,.2f}".replace(",", " ").replace(".", ",")
+
+
+# The tag on a ranking row whose feed-in credit was left out, and the start
+# of the line under the table that says what it means.
+_NO_FEED_IN = "`NO FEED-IN`"
 
 
 def _ranking_table(
@@ -248,7 +259,16 @@ def _ranking_table(
             line += f" · YTD {_eur(row.ytd)}"
         if row.read_by_ocr:
             line += " `OCR`"
+        if row.feed_in_uncredited:
+            line += f" {_NO_FEED_IN}"
         out.append(line)
+    if any(row.feed_in_uncredited for row in priced):
+        out.append("")
+        out.append(
+            f"{_NO_FEED_IN} feed-in not credited: it follows the day-ahead "
+            "price per slot, and a year of day-ahead and of your export is "
+            "not held yet to price it, so that figure is high by a year of it."
+        )
 
     if unpriced:
         out.append("")

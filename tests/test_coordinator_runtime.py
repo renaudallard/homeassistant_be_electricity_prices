@@ -5945,7 +5945,9 @@ def _ranking(ran_at: datetime) -> Any:
     return DailyCompare(
         rows=(
             RankedRow(label="Mine", annual=1400.0, ytd=900.0, is_own=True),
-            RankedRow(label="Cheaper", annual=1150.0, ytd=740.0),
+            RankedRow(
+                label="Cheaper", annual=1150.0, ytd=740.0, feed_in_uncredited=True
+            ),
             RankedRow(label="Unpriced", annual=None, status="card unreadable"),
         ),
         own=1400.0,
@@ -5993,6 +5995,7 @@ async def test_potential_saving_survives_a_restart(
     assert [r.ytd for r in restored.rows] == [900.0, 740.0, None]
     assert [r.status for r in restored.rows] == ["", "", "card unreadable"]
     assert [r.is_own for r in restored.rows] == [True, False, False]
+    assert [r.feed_in_uncredited for r in restored.rows] == [False, True, False]
 
 
 async def test_a_ranking_for_a_different_contract_is_not_restored(

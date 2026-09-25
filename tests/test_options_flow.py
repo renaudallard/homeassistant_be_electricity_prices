@@ -7105,6 +7105,102 @@ async def test_sweep_and_one_to_one_agree_on_the_same_contract(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_marks_a_row_whose_feed_in_was_left_out(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Short of a full year of day-ahead and export, a per-slot spot-indexed
+    feed-in is left out of the annual figure (the projection leaves it out
+    too). The page says so in its solar note; the ranking said nothing, so
+    every Bolt card sat a year of feed-in above the cards credited beside it
+    with no word on the row. The row carries a tag and the table says what it
+    means. A card that prints a feed-in price is credited and untagged."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_entry, make_snapshot
+
+    def _card(sid: str, injection: Any) -> Any:
+        return make_snapshot(
+            supplier=sid,
+            contract="x",
+            energy=FixedRates(single=0.16, yearly_fixed_fee=60.0),
+            injection=injection,
+            source_url="test://stub",
+            publication_label="april 2026",
+        )
+
+    printed = InjectionRates(current=0.05)
+    per_slot = InjectionRates(current=0.05, factor=0.9, base=-0.01, slot_indexed=True)
+    entry = make_entry(
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, _card("eneco", printed))
+
+    async def _daily(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return _spread(4000.0, start, end)
+        if entity_id == "sensor.inj":
+            return _spread(3000.0, start, end)
+        return {}
+
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(
+                return_value=_card(sid, per_slot if sid == "bolt" else printed)
+            ),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    with (
+        patch.dict(EXTRACTORS, patched),
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_daily,
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        # Skipped, as a household without a token would: the credit is left
+        # out for want of a year, not for want of a key.
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {}
+        )
+        for _ in range(400):
+            if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+    ph = result["description_placeholders"]
+    assert ph is not None
+    lines = ph["ranking"].splitlines()
+    bolt = [line for line in lines if " - Bolt " in line]
+    others = [line for line in lines if line[:1].isdigit() and " - Bolt " not in line]
+    assert bolt and others, ph["ranking"]
+    assert all("`NO FEED-IN`" in line for line in bolt), bolt
+    assert not any("`NO FEED-IN`" in line for line in others), others
+    assert any(
+        line.startswith("`NO FEED-IN`") and "a year" in line for line in lines
+    ), ph["ranking"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_ytd_pass_walks_before_it_judges_coverage(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -52,6 +52,7 @@ from .const import (
     CONF_SUPPLIER,
     DOMAIN,
     METER_MONO,
+    SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
 from .energy_meters import memoise_meter_reads
@@ -524,6 +525,18 @@ class _SweepEngine(_HouseholdMixin):
             settlement_answer(current),
         )
         try:
+            credit = _compare_injection_credit(
+                hh.current_snapshot,
+                hh.quote_entry,
+                hh.spot_dict,
+                hh.avg_spot,
+                await hh.credit_month_spot_for(
+                    hh.current_snapshot, own=True, raw=hh.raw_snapshot
+                ),
+                hh.inj_hour_weights,
+                raw_snapshot=hh.raw_snapshot,
+                credit_year=hh.credit_year,
+            )
             annual = _annual_bill(
                 hh.current_snapshot,
                 hh.quote_entry,
@@ -531,18 +544,7 @@ class _SweepEngine(_HouseholdMixin):
                 hh.current_per_kwh,
                 hh.annual_kwh,
                 hh.rolling_inj_kwh,
-                _compare_injection_credit(
-                    hh.current_snapshot,
-                    hh.quote_entry,
-                    hh.spot_dict,
-                    hh.avg_spot,
-                    await hh.credit_month_spot_for(
-                        hh.current_snapshot, own=True, raw=hh.raw_snapshot
-                    ),
-                    hh.inj_hour_weights,
-                    raw_snapshot=hh.raw_snapshot,
-                    credit_year=hh.credit_year,
-                ),
+                credit,
                 export_per_kwh=hh.current_export_per_kwh,
                 register_weights=hh.register_weights,
                 meter=hh.current_meter,
@@ -550,7 +552,12 @@ class _SweepEngine(_HouseholdMixin):
             )
         except Exception:  # noqa: BLE001 - the alternatives are still useful
             return None
-        return RankedRow(label=label, annual=annual, is_own=True)
+        return RankedRow(
+            label=label,
+            annual=annual,
+            is_own=True,
+            feed_in_uncredited=_feed_in_left_out(hh.current_snapshot, credit, hh),
+        )
 
     async def _sweep_one(
         self,
@@ -659,6 +666,16 @@ class _SweepEngine(_HouseholdMixin):
             hh.rolling_inj_kwh,
             regime=hh.regime,
         )
+        credit = _compare_injection_credit(
+            resolved,
+            target_entry,
+            hh.spot_dict,
+            hh.avg_spot,
+            await hh.credit_month_spot_for(resolved, own=False),
+            hh.inj_hour_weights,
+            meter=meter,
+            credit_year=hh.credit_year,
+        )
         annual = _annual_bill(
             resolved,
             target_entry,
@@ -666,16 +683,7 @@ class _SweepEngine(_HouseholdMixin):
             per_kwh,
             hh.annual_kwh,
             hh.rolling_inj_kwh,
-            _compare_injection_credit(
-                resolved,
-                target_entry,
-                hh.spot_dict,
-                hh.avg_spot,
-                await hh.credit_month_spot_for(resolved, own=False),
-                hh.inj_hour_weights,
-                meter=meter,
-                credit_year=hh.credit_year,
-            ),
+            credit,
             # EXPORT RATE: under compensation the bill nets consumption
             # against injection, and each side has to be priced on its own
             # hour-of-day shape or the netting values exported kWh at the
@@ -686,7 +694,29 @@ class _SweepEngine(_HouseholdMixin):
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )
-        return RankedRow(label=label, annual=annual, read_by_ocr=read_by_ocr)
+        return RankedRow(
+            label=label,
+            annual=annual,
+            read_by_ocr=read_by_ocr,
+            feed_in_uncredited=_feed_in_left_out(resolved, credit, hh),
+        )
+
+
+def _feed_in_left_out(snapshot: Any, credit: float | None, hh: Any) -> bool:
+    """Whether a row's figure leaves out a feed-in credit its card grants.
+
+    ``_compare_injection_credit`` answers None for a card that pays nothing
+    for feed-in, which is the true bill with that supplier, and for a
+    spot-indexed credit it could not price, which is not. Only the second is
+    a figure short of a credit, and only a household that sells its export
+    and measured some has one to be short of.
+    """
+    return (
+        credit is None
+        and hh.regime == SOLAR_REGIME_INJECTION
+        and hh.rolling_inj_kwh > 0
+        and getattr(snapshot, "injection", None) is not None
+    )
 
 
 def _sweep_rows(

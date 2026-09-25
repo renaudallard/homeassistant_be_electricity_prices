@@ -1386,6 +1386,34 @@ def test_a_row_priced_from_a_reading_is_tagged_in_the_ranking() -> None:
     assert "`OCR`" not in mega
 
 
+def test_a_row_short_of_its_feed_in_credit_is_tagged_and_explained() -> None:
+    """Short of a full year a per-slot feed-in credit is left out of the
+    figure, which then sits a year of that credit above cards credited beside
+    it. The row says so inline, the table says once what the tag means, and
+    the sensor carries it for an automation. A table with no such row carries
+    no explanation."""
+    from custom_components.be_electricity_prices.compare_table import _ranking_table
+
+    rows = (
+        RankedRow(label="Eneco Zon & Wind Flex", annual=1200.0, is_own=True),
+        RankedRow(label="Bolt Fixe", annual=1366.0, feed_in_uncredited=True),
+        RankedRow(label="Mega Online Fixed", annual=1150.0),
+    )
+    lines = _ranking_table(rows, ran_at=None, deferred=0).splitlines()
+    bolt = next(line for line in lines if "Bolt" in line)
+    mega = next(line for line in lines if "Mega" in line)
+    assert bolt.endswith("`NO FEED-IN`")
+    assert "`NO FEED-IN`" not in mega
+    legend = [line for line in lines if line.startswith("`NO FEED-IN`")]
+    assert len(legend) == 1 and "a year of day-ahead" in legend[0]
+    assert "NO FEED-IN" not in _ranking_table(rows[::2], ran_at=None, deferred=0)
+
+    entry = make_entry(daily_compare=True)
+    sensor = PotentialSavingSensor(_coord(entry, _result(rows=rows)))  # type: ignore[arg-type]
+    ranking = sensor.extra_state_attributes["ranking"]
+    assert [r.get("feed_in_uncredited") for r in ranking] == [None, None, True]
+
+
 def test_every_annual_row_on_the_page_clamps_per_register() -> None:
     """The compare page prices each row through ``_annual_bill``.
 
