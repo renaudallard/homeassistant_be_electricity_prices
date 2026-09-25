@@ -451,8 +451,14 @@ def _needs_missing_spots(
 def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> bool:
     """Whether ``spots`` holds some hour of every local day from ``start`` to
     the day before ``today``: a cache kept for the window, not one that
-    happens to hold a few days of it. Today is still being filled in."""
+    happens to hold a few days of it. Today is still being filled in.
+
+    A window that is today alone (1 January, or a contract's first day) has
+    no closed day to check, and an empty cache passed it: it is covered only
+    by today's own hours."""
     held = {dt_util.as_local(when).date() for when in spots}
+    if start >= today:
+        return today in held
     day = start
     while day < today:
         if day not in held:

@@ -8670,6 +8670,40 @@ async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
     assert page["current_ytd"] == f"{own + 250.0:.2f}"
 
 
+def test_an_empty_spot_cache_covers_no_window() -> None:
+    """On 1 January, or on the first day of a contract billed from its start,
+    the window has no closed day yet, and an empty cache answered that it
+    covered it. A spot-priced side then took the archive engine with no
+    spots and dropped that day's energy. Today's own hours are what cover
+    such a window; a longer one needs every closed day."""
+    from custom_components.be_electricity_prices.compare_inputs import _spots_cover
+
+    def _day(d: date) -> dict[datetime, float]:
+        start = dt_util.start_of_local_day(d).astimezone(UTC)
+        return {start + timedelta(hours=h): 0.10 for h in range(24)}
+
+    new_year = date(2026, 1, 1)
+    assert not _spots_cover({}, new_year, new_year)
+    assert _spots_cover(_day(new_year), new_year, new_year)
+    signed = date(2026, 9, 15)
+    assert not _spots_cover({}, signed, signed)
+    assert not _spots_cover(_day(signed - timedelta(days=1)), signed, signed)
+    assert _spots_cover(_day(signed), signed, signed)
+    # A longer window: every closed day, today still filling in.
+    week = {}
+    for back in range(1, 8):
+        week.update(_day(signed - timedelta(days=back)))
+    assert _spots_cover(week, signed - timedelta(days=7), signed)
+    del week[next(iter(week))]
+    assert _spots_cover(week, signed - timedelta(days=7), signed)
+    gap = {
+        k: v
+        for k, v in week.items()
+        if dt_util.as_local(k).date() != signed - timedelta(days=3)
+    }
+    assert not _spots_cover(gap, signed - timedelta(days=7), signed)
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_measures_both_sides_from_where_the_year_was_billed(
     hass: HomeAssistant, freezer: Any
