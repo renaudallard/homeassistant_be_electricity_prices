@@ -52,6 +52,7 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .cohort import ytd_window_start
 from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
 from .cohort import _tariff_card_month
 from .const import (
@@ -199,7 +200,8 @@ def previous_periods(
     """The earlier contracts' days inside ``[window_start, today]``, oldest first.
 
     Each runs from the day the one before it ended, or the window's first day,
-    to the day before its successor started. A contract that ended before the
+    or its own start date when it billed the year from there, to the day before
+    its successor started. A contract that ended before the
     window opens has no days in it: last year's switches, and every switch on
     an entry billing the year from its current contract's start date, which is
     how that option keeps meaning "this contract only".
@@ -207,9 +209,16 @@ def previous_periods(
     periods: list[ContractPeriod] = []
     first = window_start
     for until, settings in recorded_contracts(data):
+        # A contract that billed its year from its own start date keeps doing
+        # so. Recording the switch unticks the box on the entry, which then
+        # describes the new contract, and the days before the first contract
+        # began belong to no contract at all.
+        begins = max(
+            first, ytd_window_start(cast(ConfigEntry, _QuoteEntry(settings)), today)
+        )
         last = min(until - timedelta(days=1), today)
-        if last >= first:
-            periods.append(ContractPeriod(first, last, settings))
+        if last >= begins:
+            periods.append(ContractPeriod(begins, last, settings))
         first = max(first, until)
     return periods
 

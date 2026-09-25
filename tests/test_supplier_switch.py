@@ -57,6 +57,7 @@ from custom_components.be_electricity_prices.coordinator import BePricesCoordina
 from custom_components.be_electricity_prices.flow_schemas import (
     _record_switch,
     _remove_last_switch,
+    _validate_contract_dates,
     _validate_switch_date,
 )
 from custom_components.be_electricity_prices.providers._rates import (
@@ -92,6 +93,26 @@ def test_each_earlier_contract_covers_the_days_before_its_successor() -> None:
         (date(2026, 3, 1), date(2026, 6, 30), "bolt"),
     ]
     assert current_period_start(data, date(2026, 1, 1)) == date(2026, 7, 1)
+
+
+def test_an_earlier_contract_billed_from_its_start_keeps_that_start() -> None:
+    """A household whose first contract began on 1 March ticked the box to bill
+    the year from then. Recording a switch unticks it on the entry, which is
+    about the new contract, and the copy of the contract left still says it
+    billed from 1 March: January and February belong to no contract."""
+    before = dict(
+        make_entry(contract_start_date="2026-03-01", ytd_from_contract_start=True).data
+    )
+    data = _record_switch(before, date(2026, 7, 1))
+    periods = previous_periods(data, date(2026, 1, 1), date(2026, 9, 24))
+    assert [(p.start, p.end) for p in periods] == [
+        (date(2026, 3, 1), date(2026, 6, 30))
+    ]
+    # Without the box, the same contract bills from the window's first day.
+    held = data[CONF_PREVIOUS_CONTRACTS][0]["data"]
+    held.pop(CONF_YTD_FROM_CONTRACT_START)
+    periods = previous_periods(data, date(2026, 1, 1), date(2026, 9, 24))
+    assert periods[0].start == date(2026, 1, 1)
 
 
 def test_a_switch_outside_the_window_prices_nothing() -> None:
@@ -338,6 +359,34 @@ def test_a_switch_date_prices_days_this_year_after_the_last_switch(
         data[CONF_CONTRACT_START_DATE] = "2026-07-10"
     errors = _validate_switch_date(data, {CONF_SWITCH_DATE: switch_date})
     assert errors == ({} if error is None else {CONF_SWITCH_DATE: error})
+
+
+@pytest.mark.parametrize(
+    ("start", "error"),
+    [
+        ("2026-06-01", "start_date_before_switch"),
+        ("2026-08-31", "start_date_before_switch"),
+        ("2026-09-01", None),
+        (None, None),
+    ],
+)
+def test_the_contract_cannot_start_before_the_last_switch(
+    freezer: Any, start: str | None, error: str | None
+) -> None:
+    """The entry's contract is the one supplying since the last switch, so
+    a start date before it would price the contract left only from that
+    date and look the new contract's signing card up a month too early."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    data: dict[str, Any] = {
+        CONF_PREVIOUS_CONTRACTS: [
+            {"until": "2026-09-01", "data": _held("engie", "engie_easy_fixed")}
+        ]
+    }
+    user_input = {} if start is None else {CONF_CONTRACT_START_DATE: start}
+    errors = _validate_contract_dates(user_input, data)
+    assert errors == ({} if error is None else {CONF_CONTRACT_START_DATE: error})
+    # Nothing to hold it to without a recorded switch.
+    assert _validate_contract_dates(user_input, {}) == {}
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -1106,3 +1155,49 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     # One running total: nothing falls back at the switch.
     assert all(later >= earlier for earlier, later in zip(sums, sums[1:], strict=False))
     assert rows[-1]["sum"] == pytest.approx(old_live + new_live, abs=1e-3)
+
+
+async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The first contract began on 1 March and billed its year from then. The
+    sensor bills January and February to nobody, so the cost series must not
+    put them on the entry's current contract either."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    before = dict(
+        make_entry(contract_start_date="2026-03-01", ytd_from_contract_start=True).data
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN, data=_record_switch(before, date(2026, 7, 1)), title="x"
+    )
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    hours = [start + timedelta(hours=h) for h in range(24 * 250)]
+    stand_in = make_entry(supplier="bolt", contract="bolt_variable")
+    card = make_snapshot()
+    with patch.object(
+        backfill_window,
+        "period_card",
+        AsyncMock(return_value=(stand_in, None, card, False)),
+    ):
+        billed = await backfill_window._contract_segments(
+            hass,
+            entry,
+            SimpleNamespace(_session=None),  # type: ignore[arg-type]
+            hours,
+            billed_only=True,
+        )
+        every = await backfill_window._contract_segments(
+            hass,
+            entry,
+            SimpleNamespace(_session=None),  # type: ignore[arg-type]
+            hours,
+        )
+
+    def _first_day(segment: Any) -> date:
+        return dt_util.as_local(segment[2][0]).date()
+
+    assert [_first_day(s) for s in billed] == [date(2026, 3, 1), date(2026, 7, 1)]
+    assert billed[0][1] is card and billed[1][1] is None
+    # The price rows still cover every hour.
+    assert _first_day(every[0]) == date(2026, 1, 1)
+    assert sum(len(s[2]) for s in every) == len(hours)

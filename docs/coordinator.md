@@ -444,7 +444,10 @@ options menu (see [config-flow.md](config-flow.md)), which keeps the settings
 it held as `{"until": <first day of the next contract>, "data": {...}}` in
 `CONF_PREVIOUS_CONTRACTS`. `previous_periods` (`contract_periods.py`) turns the
 records into the days each earlier contract covers inside the year-to-date
-window, and `current_period_start` into the first day of the entry's own. The
+window, and `current_period_start` into the first day of the entry's own. A
+contract left that billed its year from its own start date (its kept copy has
+`CONF_YTD_FROM_CONTRACT_START`) starts its days there rather than on the
+window's first day, and the days before it belong to no contract. The
 tick prices its own contract from that day (`window_start_override`) and adds
 the earlier contracts' share (`previous_costs`); `current_month_cost` does the
 same for the running month, which only an earlier contract that ended in it
@@ -512,7 +515,8 @@ engine like the sensor, and only the quoted side stays on the one-rate model.
 The backfill cuts its hours at each switch
 (`_contract_segments`, `backfill_window.py`), builds a context per contract
 and accrues the cost series across them as one running total
-(`_accrue_cost`, `backfill_cost.py`).
+(`_accrue_cost`, `backfill_cost.py`), leaving out of the cost series the days
+no contract supplied (`billed_only`) as the sensor does.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 

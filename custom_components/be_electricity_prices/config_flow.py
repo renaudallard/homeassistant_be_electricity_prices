@@ -231,7 +231,7 @@ class _WizardStepsMixin:
             return self.async_abort(reason="supplier_region_unavailable")
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _validate_contract_dates(user_input)
+            errors = _validate_contract_dates(user_input, self._data)
             if not errors:
                 # A cleared (blanked) optional date is absent from user_input;
                 # drop it so "leave blank" removes the date instead of keeping

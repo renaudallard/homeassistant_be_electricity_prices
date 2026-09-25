@@ -254,6 +254,7 @@
       "empty_api_key": "[%key:component::be_electricity_prices::config::error::empty_api_key%]",
       "cannot_connect": "[%key:component::be_electricity_prices::config::error::cannot_connect%]",
       "start_date_in_future": "[%key:component::be_electricity_prices::config::error::start_date_in_future%]",
+      "start_date_before_switch": "The contract start date cannot be before the last supplier switch recorded on this entry.",
       "card_date_in_future": "[%key:component::be_electricity_prices::config::error::card_date_in_future%]",
       "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",

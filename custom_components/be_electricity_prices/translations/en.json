@@ -254,6 +254,7 @@
       "empty_api_key": "Enter your ENTSO-E token. This contract is priced on the day-ahead market, so it cannot be set up without one. Get it at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
+      "start_date_before_switch": "The contract start date cannot be before the last supplier switch recorded on this entry.",
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",

@@ -36,7 +36,12 @@ from __future__ import annotations
 from .brugel import ensure_power_term
 from .cohort import _month_snapshot_cache, signing_month_snapshot, ytd_window_start
 from .compare_inputs import _coordinator_rlp_index_weights
-from .contract_periods import ContractPeriod, period_card, previous_periods
+from .contract_periods import (
+    ContractPeriod,
+    current_period_start,
+    period_card,
+    previous_periods,
+)
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -389,6 +394,8 @@ async def _contract_segments(
     entry: ConfigEntry,
     coordinator: BePricesCoordinator,
     hours: list[datetime],
+    *,
+    billed_only: bool = False,
 ) -> list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]]:
     """``hours`` cut at each recorded supplier switch, oldest first.
 
@@ -398,19 +405,28 @@ async def _contract_segments(
     recorded no switch gets one piece, which is what every run was before. An
     hour outside every earlier contract's days, including one in a previous
     year, stays on the entry's own contract, as it always was.
+
+    ``billed_only`` leaves out the days inside the window that no contract
+    supplied: before the first earlier contract when it billed the year from
+    its own start date, as ``current_year_cost`` leaves them out. The cost
+    series asks for it; a price row for such a day harms nothing.
     """
     if not hours:
         return []
     today = dt_util.now().date()
-    periods = previous_periods(entry.data, ytd_window_start(entry, today), today)
+    window_start = ytd_window_start(entry, today)
+    periods = previous_periods(entry.data, window_start, today)
     if not periods:
         return [(entry, None, hours)]
+    own_start = current_period_start(entry.data, window_start)
     segments: list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]] = []
     owner: int | None = None
     run: list[datetime] = []
     for hour in hours:
         day = dt_util.as_local(hour).date()
         index = next((i for i, p in enumerate(periods) if p.start <= day <= p.end), -1)
+        if billed_only and index < 0 and window_start <= day < own_start:
+            continue
         if index != owner and run:
             segments.append(
                 await _segment_for(hass, entry, coordinator, periods, owner, run)

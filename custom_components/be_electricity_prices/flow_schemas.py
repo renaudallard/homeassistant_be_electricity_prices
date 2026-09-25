@@ -255,8 +255,11 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
     ] = BooleanSelector()
 
 
-def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
-    """Reject a future start or card date, or an end date not after the start.
+def _validate_contract_dates(
+    user_input: dict[str, Any], data: Mapping[str, Any] | None = None
+) -> dict[str, str]:
+    """Reject a future start or card date, an end date not after the start, or
+    a start before the last recorded supplier switch.
 
     All three fields are independently optional: an end date without a start
     date is fine (a bare renewal reminder), so the ordering check only fires
@@ -266,16 +269,25 @@ def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     or before the start date, which looks like the obvious guard and is wrong:
     a renewal re-signs a supply that began years ago onto this month's card, so
     a card date after the start date is as ordinary as one before it.
+
+    ``data`` is the entry's settings, for its recorded switches. The contract
+    configured is the one supplying since the last of them, so it cannot have
+    started before it: the year would price the contract left only from that
+    start, and the cohort would look the signing card up a month too early.
     """
     from .cohort import _parse_iso_date
+    from .contract_periods import recorded_contracts
 
     errors: dict[str, str] = {}
     start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
     card = _parse_iso_date(user_input.get(CONF_TARIFF_CARD_DATE))
     end = _parse_iso_date(user_input.get(CONF_CONTRACT_END_DATE))
     today = dt_util.now().date()
+    records = recorded_contracts(data or {})
     if start is not None and start > today:
         errors[CONF_CONTRACT_START_DATE] = "start_date_in_future"
+    elif start is not None and records and start < records[-1][0]:
+        errors[CONF_CONTRACT_START_DATE] = "start_date_before_switch"
     if card is not None and card > today:
         errors[CONF_TARIFF_CARD_DATE] = "card_date_in_future"
     if start is not None and end is not None and end <= start:

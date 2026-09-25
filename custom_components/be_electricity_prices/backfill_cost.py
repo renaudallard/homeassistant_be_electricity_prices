@@ -238,7 +238,7 @@ async def _backfill_cost_sensor(
     # ran up: an entry that recorded no switch is one piece, as it always was.
     carried = 0.0
     for seg_entry, seg_snap, seg_hours in await _contract_segments(
-        hass, entry, coordinator, hours
+        hass, entry, coordinator, hours, billed_only=True
     ):
         carried = await _accrue_cost(
             hass,
