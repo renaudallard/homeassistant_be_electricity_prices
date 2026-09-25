@@ -814,6 +814,65 @@ async def test_the_pass_reads_the_meter_once_for_every_candidate(
     )
 
 
+async def test_the_pass_reads_the_live_day_once_for_every_candidate(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Today's kWh comes from a walk of every state the meter recorded since
+    midnight, which on a meter storing a row per Wh is tens of thousands of
+    rows by evening. The year-to-date pass asked it again for each hourly
+    billed candidate, so a late run read the same day a hundred times.
+
+    Inside one memo the day is read once per meter; a new memo, which the next
+    run opens, reads it afresh, so no tick is served a stale live figure.
+    """
+    from unittest.mock import MagicMock
+
+    from homeassistant.core import State
+
+    from custom_components.be_electricity_prices.energy_meters import (
+        _live_today_kwh,
+        memoise_meter_reads,
+    )
+
+    freezer.move_to("2026-07-16 18:00:00+02:00")
+    attrs = {
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+    }
+    hass.states.async_set("sensor.a", "150.0", attrs)
+    hass.states.async_set("sensor.b", "40.0", attrs)
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(
+        return_value={
+            "sensor.a": [State("sensor.a", "100.0")],
+            "sensor.b": [State("sensor.b", "30.0")],
+        }
+    )
+    today = date(2026, 7, 16)
+    target = "homeassistant.components.recorder.get_instance"
+
+    with patch(target, return_value=instance):
+        for _ in range(5):
+            assert await _live_today_kwh(hass, "sensor.a", today) == 50.0
+    assert instance.async_add_executor_job.await_count == 5
+
+    instance.async_add_executor_job.reset_mock()
+    with patch(target, return_value=instance), memoise_meter_reads({}):
+        for _ in range(5):
+            assert await _live_today_kwh(hass, "sensor.a", today) == 50.0
+        # Another meter is another question.
+        assert await _live_today_kwh(hass, "sensor.b", today) == 10.0
+    assert instance.async_add_executor_job.await_count == 2
+
+    # The next run opens its own memo and reads the meter again.
+    hass.states.async_set("sensor.a", "160.0", attrs)
+    instance.async_add_executor_job.reset_mock()
+    with patch(target, return_value=instance), memoise_meter_reads({}):
+        assert await _live_today_kwh(hass, "sensor.a", today) == 60.0
+    assert instance.async_add_executor_job.await_count == 1
+
+
 async def test_the_memo_key_separates_households_that_must_not_share(
     hass: HomeAssistant,
 ) -> None:

@@ -322,7 +322,26 @@ async def _live_today_kwh(
     restart looks exactly like one. A register netting export against
     consumption is therefore not supported, and today must not bill it signed
     only to have midnight take the figure back.
+
+    Served from the memo inside a ``memoise_meter_reads`` block, keyed on the
+    meter and the day: the walk reads every state since midnight, and the
+    comparison sweep asked it again for each candidate billed per hour.
     """
+    memo = _METER_MEMO.get()
+    key = ("live_today", entity_id, today)
+    if memo is not None and key in memo:
+        cached: float | None = memo[key]
+        return cached
+    kwh = await _read_live_today_kwh(hass, entity_id, today)
+    if memo is not None:
+        memo[key] = kwh
+    return kwh
+
+
+async def _read_live_today_kwh(
+    hass: HomeAssistant, entity_id: str, today: date
+) -> float | None:
+    """:func:`_live_today_kwh` without the memo."""
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
         return None
