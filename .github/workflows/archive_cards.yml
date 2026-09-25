@@ -326,9 +326,12 @@ jobs:
           git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
           # be_water_prices pushes to the same main, and the concurrency group
           # only queues runs of this repository, so its daily push can land
-          # between this job's clone and this push. The two trees never touch
-          # the same paths, so rebasing onto it is conflict-free: a rejected
-          # push fetches, rebases and tries again rather than losing the run.
+          # between this job's clone and this push. The two trees share one
+          # path, the root README.md, which each job rewrites with its own
+          # text. From any one base only the job whose text is not already
+          # there changes it, so at most one of the two commits touches it
+          # and rebasing onto the other is conflict-free: a rejected push
+          # fetches, rebases and tries again rather than losing the run.
           for attempt in 1 2 3 4 5; do
             git push -q origin HEAD:main && exit 0
             [ "$attempt" -lt 5 ] || break

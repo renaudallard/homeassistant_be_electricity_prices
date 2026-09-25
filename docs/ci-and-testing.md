@@ -1303,8 +1303,10 @@ by it and this repository's own token stays read-only. Concurrency is queued rat
 (`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
 same day twice and lose the second push as non-fast-forward. That group only queues runs of this
 repository, and be_water_prices pushes its own archive to the same `main`, usually minutes
-apart. The two trees never touch the same paths, so a rejected push fetches, rebases onto the
-water commit and tries again, up to five times, rather than losing everything the run wrote
+apart. The two trees share one path, the root `README.md`, which each job rewrites with its own
+text; from any one base only the job whose text is not already there changes it, so at most one
+of two racing commits touches it. A rejected push therefore fetches, rebases onto the water
+commit without a conflict and tries again, up to five times, rather than losing everything the run wrote
 (`test_the_archive_push_survives_the_water_archives_push`).
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
