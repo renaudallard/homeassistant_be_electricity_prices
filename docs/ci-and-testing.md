@@ -1291,7 +1291,11 @@ The archive lives in its own repository on purpose: three years of daily commits
 goes through the `BE_ELECTRICITY_CARDS` token to `be_price_cards`, so nothing here is started
 by it and this repository's own token stays read-only. Concurrency is queued rather than cancelled
 (`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
-same day twice and lose the second push as non-fast-forward.
+same day twice and lose the second push as non-fast-forward. That group only queues runs of this
+repository, and be_water_prices pushes its own archive to the same `main`, usually minutes
+apart. The two trees never touch the same paths, so a rejected push fetches, rebases onto the
+water commit and tries again, up to five times, rather than losing everything the run wrote
+(`test_the_archive_push_survives_the_water_archives_push`).
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network

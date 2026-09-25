@@ -2185,3 +2185,69 @@ async def test_the_next_months_text_never_shadows_a_rows_own_card(
     after = json.loads(august.read_text())
     assert after["energy"] == before["energy"], "August replayed as another month"
     assert after["publication_label"] == before["publication_label"]
+
+
+def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> None:
+    """be_water_prices pushes to the same main of the cards repository, and
+    the concurrency group only queues runs of this repository, so a water
+    push landing between this job's shallow clone and its push rejected the
+    push and lost everything the run had written. The step's own shell, run
+    against a local repository that moved under it, must rebase and land."""
+    import os
+    import subprocess
+
+    import yaml  # type: ignore[import-untyped]
+
+    def git(*args: str, cwd: Path) -> str:
+        return subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+
+    origin = tmp_path / "origin.git"
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    git("init", "-q", "-b", "main", cwd=seed)
+    (seed / "README.md").write_text("cards\n")
+    git("add", "README.md", cwd=seed)
+    git("commit", "-q", "-m", "start", cwd=seed)
+    git("clone", "-q", "--bare", str(seed), str(origin), cwd=tmp_path)
+
+    work = tmp_path / "work"
+    (work / "tmp").mkdir(parents=True)
+    git("clone", "-q", "--depth=1", f"file://{origin}", "tmp/cards", cwd=work)
+    water = tmp_path / "water"
+    git("clone", "-q", "--depth=1", f"file://{origin}", str(water), cwd=tmp_path)
+    (water / "water").mkdir()
+    (water / "water" / "listing.json").write_text("{}\n")
+    git("add", "-A", cwd=water)
+    git("commit", "-q", "-m", "Water listings", cwd=water)
+    git("push", "-q", "origin", "HEAD:main", cwd=water)
+
+    (work / "tmp" / "cards" / "electricity").mkdir()
+    (work / "tmp" / "cards" / "electricity" / "row.json").write_text("{}\n")
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
+        ).read_text()
+    )
+    steps = workflow["jobs"]["archive"]["steps"]
+    script = next(s["run"] for s in steps if s.get("id") == "push")
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    (stubs / "sleep").write_text("#!/bin/sh\nexit 0\n")
+    (stubs / "sleep").chmod(0o755)
+    env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"}
+    done = subprocess.run(
+        ["bash", "-e", "-c", script], cwd=work, env=env, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    log = git("log", "--format=%s", "main", cwd=origin)
+    assert log.splitlines()[:2] == [
+        f"Cards seen on {datetime.now(UTC).date().isoformat()}",
+        "Water listings",
+    ]

@@ -318,10 +318,21 @@ jobs:
             echo "no card changed today"
             exit 0
           fi
-          git -c user.name="github-actions[bot]" \
-              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
-          git push -q origin HEAD:main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
+          # be_water_prices pushes to the same main, and the concurrency group
+          # only queues runs of this repository, so its daily push can land
+          # between this job's clone and this push. The two trees never touch
+          # the same paths, so rebasing onto it is conflict-free: a rejected
+          # push fetches, rebases and tries again rather than losing the run.
+          for attempt in 1 2 3 4 5; do
+            git push -q origin HEAD:main && exit 0
+            [ "$attempt" -lt 5 ] || break
+            sleep $((attempt * 3))
+            git pull -q --rebase origin main
+          done
+          exit 1
 
       - name: File the failure as an issue
         # Nobody watches the Actions tab. A run that stored nothing, a push
