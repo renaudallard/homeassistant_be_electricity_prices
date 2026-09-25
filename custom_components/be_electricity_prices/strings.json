@@ -234,7 +234,7 @@
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
-      "compensation_kva_missing": "The compensation regime bills a prosumer fee per kVA of inverter: enter your inverter capacity in kVA.",
+      "compensation_kva_missing": "The Walloon prosumer tariff of the compensation regime is worked out from the inverter capacity: enter it in kVA.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
     }
   },
@@ -794,7 +794,7 @@
     },
     "compensation_kva_missing": {
       "title": "No inverter capacity on this compensation entry ({supplier}, {contract})",
-      "description": "This entry is on the Walloon compensation regime, which bills a prosumer tariff per kVA of inverter, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
+      "description": "This entry is on the Walloon compensation regime, whose prosumer tariff is worked out from the inverter capacity, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter. With a communicating meter the network may bill a proportional tariff instead, never above that amount; the integration bills the amount itself, as the upper bound.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
     },
     "register_pair_incomplete": {
       "title": "A day/night register of {supplier} ({contract}) stopped recording",

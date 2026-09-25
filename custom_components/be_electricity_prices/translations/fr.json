@@ -234,7 +234,7 @@
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutot le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le cout annuel ne peut pas repartir votre consommation et se limite aux frais fixes.",
-      "compensation_kva_missing": "Le régime de compensation facture un tarif prosumer par kVA d'onduleur : indiquez la puissance de votre onduleur en kVA.",
+      "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
     }
   },
@@ -258,7 +258,7 @@
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutot le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le cout annuel ne peut pas repartir votre consommation et se limite aux frais fixes.",
-      "compensation_kva_missing": "Le régime de compensation facture un tarif prosumer par kVA d'onduleur : indiquez la puissance de votre onduleur en kVA.",
+      "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
       "whatif_volumes_required": "Chiffrer un autre regime demande vos volumes annuels preleves et injectes en kWh: aucun compteur d'injection n'est associe a cette entree, ils ne peuvent donc pas etre lus.",
       "switch_date_outside_year": "La date du changement doit se situer entre le 2 janvier et aujourd'hui.",
@@ -794,7 +794,7 @@
     },
     "compensation_kva_missing": {
       "title": "Aucune puissance d'onduleur sur cette entrée en compensation ({supplier}, {contract})",
-      "description": "Cette entrée est en régime de compensation wallon, qui facture un tarif prosumer par kVA d'onduleur, mais sa puissance d'onduleur vaut 0. Le tarif prosumer est donc absent de tous les coûts que cette entrée calcule : environ 81 € à 99 € par kVA et par an selon le gestionnaire de réseau, soit à peu près 430 € par an pour un onduleur de 5 kVA.\n\nModifiez les options de l'entrée et indiquez la puissance de l'onduleur (kVA) à l'étape des panneaux solaires. Cet avis disparaît dès qu'elle est renseignée."
+      "description": "Cette entrée est en régime de compensation wallon, dont le tarif prosumer est calculé sur la puissance de l'onduleur, mais sa puissance d'onduleur vaut 0. Le tarif prosumer est donc absent de tous les coûts que cette entrée calcule : environ 81 € à 99 € par kVA et par an selon le gestionnaire de réseau, soit à peu près 430 € par an pour un onduleur de 5 kVA. Avec un compteur communicant, le réseau peut facturer à la place un tarif proportionnel, jamais au-dessus de ce montant ; l'intégration facture ce montant lui-même, comme plafond.\n\nModifiez les options de l'entrée et indiquez la puissance de l'onduleur (kVA) à l'étape des panneaux solaires. Cet avis disparaît dès qu'elle est renseignée."
     },
     "register_pair_incomplete": {
       "title": "Un registre jour/nuit de {supplier} ({contract}) n'enregistre plus",

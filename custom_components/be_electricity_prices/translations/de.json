@@ -234,7 +234,7 @@
       "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
-      "compensation_kva_missing": "Die Kompensationsregelung berechnet einen Prosumer-Tarif je kVA Wechselrichterleistung: Geben Sie die Leistung Ihres Wechselrichters in kVA an.",
+      "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region."
     }
   },
@@ -258,7 +258,7 @@
       "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
-      "compensation_kva_missing": "Die Kompensationsregelung berechnet einen Prosumer-Tarif je kVA Wechselrichterleistung: Geben Sie die Leistung Ihres Wechselrichters in kVA an.",
+      "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region.",
       "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden.",
       "switch_date_outside_year": "Das Wechseldatum muss zwischen dem 2. Januar und heute liegen.",
@@ -794,7 +794,7 @@
     },
     "compensation_kva_missing": {
       "title": "Keine Wechselrichterleistung bei diesem Eintrag mit Kompensation ({supplier}, {contract})",
-      "description": "Dieser Eintrag unterliegt der wallonischen Kompensationsregelung, die einen Prosumer-Tarif je kVA Wechselrichterleistung berechnet, aber seine Wechselrichterleistung ist 0. Der Prosumer-Tarif fehlt daher in allen Kosten, die dieser Eintrag berechnet: je nach Netzbetreiber etwa 81 € bis 99 € je kVA und Jahr, also rund 430 € im Jahr bei einem Wechselrichter mit 5 kVA.\n\nBearbeiten Sie die Optionen des Eintrags und geben Sie im Schritt Solaranlage die Wechselrichterleistung (kVA) an. Dieser Hinweis verschwindet, sobald sie eingetragen ist."
+      "description": "Dieser Eintrag unterliegt der wallonischen Kompensationsregelung, deren Prosumer-Tarif aus der Wechselrichterleistung berechnet wird, aber seine Wechselrichterleistung ist 0. Der Prosumer-Tarif fehlt daher in allen Kosten, die dieser Eintrag berechnet: je nach Netzbetreiber etwa 81 € bis 99 € je kVA und Jahr, also rund 430 € im Jahr bei einem Wechselrichter mit 5 kVA. Mit einem intelligenten Zähler kann der Netzbetreiber stattdessen einen proportionalen Tarif berechnen, nie über diesem Betrag; die Integration berechnet diesen Betrag selbst, als Obergrenze.\n\nBearbeiten Sie die Optionen des Eintrags und geben Sie im Schritt Solaranlage die Wechselrichterleistung (kVA) an. Dieser Hinweis verschwindet, sobald sie eingetragen ist."
     },
     "register_pair_incomplete": {
       "title": "Ein Tag/Nacht-Register von {supplier} ({contract}) zeichnet nicht mehr auf",

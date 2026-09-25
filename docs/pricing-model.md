@@ -1428,6 +1428,18 @@ fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
 `_ytd_prosumer` sums the monthly fee across the year using each month's archived
 overlay, gated the same Walloon-only way (`ytd_cost.py`).
 
+The flat per-kVA fee is one of the two ways CWaPE bills a compensation prosumer
+(*Note explicative tarif prosumer*, 23 June 2025, section 4). It applies to a
+household whose meter does not count draw and injection separately. With a
+double-flow or communicating meter, distribution and transport are billed
+proportionally on the GROSS draws instead, and article 81 of the 2025-2029 tariff
+methodology caps that at what the flat fee plus the net draws would cost. That
+proportional option is **not modelled**: every compensation entry is billed the
+flat fee on its net draws, which for a communicating-meter household is the
+ceiling of what it pays rather than the amount. The capacity is required all the
+same (`compensation_lacks_kva`, `fees.py`): at 0 neither option is billed, and
+the solar step refuses it.
+
 ## Brussels OSP tier
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
