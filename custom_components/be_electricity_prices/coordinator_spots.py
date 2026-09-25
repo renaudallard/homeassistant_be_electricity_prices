@@ -209,6 +209,7 @@ class _SpotsMixin(_ProfilesMixin):
     _rlp_blend: str
     _rlp_blend_weights: dict[str, RlpWeights]
     _complete_spot_days: set[date]
+    _spot_prune_holds: int
     _complete_spot_days_quarters: bool
     _quarter_grid_days: set[date]
     _unloaded: bool
@@ -772,8 +773,10 @@ class _SpotsMixin(_ProfilesMixin):
         BEFORE UTC Jan 1 00:00, so a UTC anchor would silently drop the first
         hour or two of YTD. Prior-year keys are pure dead weight: every
         consumer filters by the current (year, month) or an exact current-year
-        hour key, so removing them changes no result."""
-        if not self._historical_spots:
+        hour key, so removing them changes no result. The one exception is a
+        backfill over a past year, which reads this dict between turns of the
+        loop, so nothing is dropped while one runs (``_spot_prune_holds``)."""
+        if not self._historical_spots or self._spot_prune_holds:
             return
         today = dt_util.now().date()
         keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(UTC)

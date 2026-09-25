@@ -370,7 +370,25 @@ async def backfill_range(
         raise RuntimeError("entry has no live coordinator; reload the entry first")
     if coordinator._snapshot is None:
         raise RuntimeError("supplier snapshot not loaded; refresh the entry first")
+    # Both passes read the coordinator's own spot cache and yield to the loop
+    # once a day, and every tick prunes that cache to the current year. A
+    # window in a past year lost every hour the pass had not reached when a
+    # tick landed, so the prune waits until the backfill is done.
+    coordinator._spot_prune_holds += 1
+    try:
+        return await _backfill_range(hass, entry, coordinator, start, end, clear)
+    finally:
+        coordinator._spot_prune_holds -= 1
 
+
+async def _backfill_range(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    start: datetime | date | None,
+    end: datetime | date | None,
+    clear: bool,
+) -> dict[str, Any]:
     start_utc, end_utc = _normalize_window(start, end, ytd_window_reset(entry))
     if start_utc >= end_utc:
         return {"rows_written": 0, "sensors": {}, "range": [None, None]}

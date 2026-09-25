@@ -312,6 +312,10 @@ class BePricesCoordinator(
         # timezone conversion and 24 dict lookups for every settled day. Prior
         # year entries are dropped in _prune_historical_spots at the boundary.
         self._complete_spot_days: set[date] = set()
+        # Backfills running right now. The backfill reads _historical_spots
+        # itself, and a window in a past year needs exactly the hours the
+        # prune drops, so the prune waits while this is non-zero.
+        self._spot_prune_holds = 0
         # Which cache the days above were measured against: the hourly one or
         # the quarter one; the set is dropped when that flips.
         self._complete_spot_days_quarters = False

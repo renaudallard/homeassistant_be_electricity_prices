@@ -423,6 +423,7 @@ async def _make_coordinator(entry: MockConfigEntry) -> Any:
         _historical_spots={},
         _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
+        _spot_prune_holds=0,
     )
 
 
@@ -2329,3 +2330,77 @@ async def test_the_backfill_gives_the_event_loop_a_turn_every_day(
 
     # Ten days of hours in each pass, a turn between each two of them.
     assert during >= 2 * 9
+
+
+async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The backfill reads the coordinator's own spot cache, and every tick
+    prunes that cache down to the current year.
+
+    A window in the previous year is accepted (only its cost leg is skipped),
+    and both passes yield to the loop once a day, so a tick landing mid-run
+    deleted every hour the pass had not reached yet: 240 price rows came out
+    as 48, with nothing logged.
+    """
+    from custom_components.be_electricity_prices import backfill_window
+    from custom_components.be_electricity_prices.coordinator_spots import (
+        _SpotsMixin,
+    )
+
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
+    entry = make_entry(title="Eneco Fix", solar_regime="none")
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price"])
+    start = datetime(2025, 12, 1, tzinfo=BRUSSELS)
+    end = datetime(2025, 12, 11, tzinfo=BRUSSELS)
+    coord = SimpleNamespace(
+        hass=None,
+        entry=entry,
+        _snapshot=snap,
+        _session=None,
+        _spp_weights={},
+        _ensure_spp_weights=AsyncMock(),
+        _rlp_weights={},
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+        _historical_spots={hour: 0.08 for hour in bf._hour_iter(start, end)},
+        _historical_spot_quarters={},
+        _ensure_historical_spots=AsyncMock(),
+        _quarter_grid_days=set(),
+        _complete_spot_days=set(),
+        _spot_prune_holds=0,
+    )
+    entry.runtime_data = coord
+
+    async def _snap_for(_month_first: object) -> Any:
+        return snap
+
+    captured: dict[str, int] = {}
+    ticking = True
+
+    async def _ticks() -> None:
+        # What _save_persistent does on every tick, as often as the loop lets it.
+        while ticking:
+            await asyncio.sleep(0)
+            _SpotsMixin._prune_historical_spots(coord)  # type: ignore[arg-type]
+
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(
+            backfill_window, "_month_snapshot_cache", lambda *_a, **_k: _snap_for
+        ),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=lambda _h, meta, rows: captured.__setitem__(
+                meta["statistic_id"], len(list(rows))
+            ),
+        ),
+    ):
+        ticks = asyncio.create_task(_ticks())
+        await bf.backfill_range(hass, entry, start, end)
+        ticking = False
+        await ticks
+
+    assert captured[ids["current_price"]] == 240
