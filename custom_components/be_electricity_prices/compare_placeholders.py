@@ -33,6 +33,7 @@ anything, so it lives away from the steps that do.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from homeassistant.config_entries import OptionsFlow
 from .const import (
@@ -533,10 +534,63 @@ class _PlaceholdersMixin(OptionsFlow):
         #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
         #      and same proration on both sides, so the delta still isolates
         #      the supplier-driven difference.
-        from .contract_periods import current_period_start, with_previous_contracts
+        from .contract_periods import (
+            current_period_start,
+            previous_periods,
+            with_previous_contracts,
+        )
         from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
+        own_start = current_period_start(self.config_entry.data, ytd_from)
+
+        async def _own_year(
+            spots: dict[datetime, float], quarters: dict[datetime, list[float]]
+        ) -> float | None:
+            """The household's own year as the current_year_cost sensor prices
+            it: the entry's contract from the day it started, plus the
+            contracts it held before it in the window."""
+            own = await _compute_current_year_cost(
+                self.hass,
+                session,
+                current_extractor,
+                # The RAW card, which is what the coordinator hands the
+                # same function for the current_year_cost sensor. Handing
+                # it the cohort-spliced one instead is not idempotent, for
+                # all that it re-resolves the cohort itself: the splice has
+                # already turned a spot-monthly leg into a variable one, so
+                # the month-indexed re-price finds nothing to do and every
+                # past month falls back to the figure its card printed,
+                # which is the PREVIOUS month's index. The page's own row
+                # and the sensor beside it then answered differently on all
+                # 29 month-indexed contracts.
+                raw_snapshot,
+                quote_entry,
+                historical_spots=spots,
+                spot_quarters=quarters,
+                billed_peak_kw=peak_kw,
+                rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                rlp_index_weights=_coordinator_rlp_index_weights(
+                    self.config_entry, current_snapshot
+                ),
+                spp_weights=_coordinator_spp_weights(
+                    self.config_entry, current_snapshot, own=True
+                ),
+                # From the day the entry's contract started when it recorded
+                # a switch; the contracts before it are added below.
+                window_start_override=(own_start if own_start != ytd_from else None),
+            )
+            return await with_previous_contracts(
+                self.hass,
+                session,
+                coord,
+                self.config_entry,
+                quote_entry,
+                own,
+                window_start=ytd_from,
+                today=today_local,
+            )
+
         # Exclude spot-priced sides from the archive engine: it bills each
         # past hour at factor*spot+base (or the month's mean) and needs the
         # historical spot cache, which _compute_current_year_cost only
@@ -592,50 +646,8 @@ class _PlaceholdersMixin(OptionsFlow):
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)
-            own_start = current_period_start(self.config_entry.data, ytd_from)
             try:
-                current_ytd_val = await _compute_current_year_cost(
-                    self.hass,
-                    session,
-                    current_extractor,
-                    # The RAW card, which is what the coordinator hands the
-                    # same function for the current_year_cost sensor. Handing
-                    # it the cohort-spliced one instead is not idempotent, for
-                    # all that it re-resolves the cohort itself: the splice has
-                    # already turned a spot-monthly leg into a variable one, so
-                    # the month-indexed re-price finds nothing to do and every
-                    # past month falls back to the figure its card printed,
-                    # which is the PREVIOUS month's index. The page's own row
-                    # and the sensor beside it then answered differently on all
-                    # 29 month-indexed contracts.
-                    raw_snapshot,
-                    quote_entry,
-                    historical_spots=hist_spots,
-                    spot_quarters=hist_quarters,
-                    billed_peak_kw=peak_kw,
-                    rlp_weights=_coordinator_rlp_weights(self.config_entry),
-                    rlp_index_weights=_coordinator_rlp_index_weights(
-                        self.config_entry, current_snapshot
-                    ),
-                    spp_weights=_coordinator_spp_weights(
-                        self.config_entry, current_snapshot, own=True
-                    ),
-                    # From the day the entry's contract started when it recorded
-                    # a switch; the contracts before it are added below.
-                    window_start_override=(
-                        own_start if own_start != ytd_from else None
-                    ),
-                )
-                current_ytd_val = await with_previous_contracts(
-                    self.hass,
-                    session,
-                    coord,
-                    self.config_entry,
-                    quote_entry,
-                    current_ytd_val,
-                    window_start=ytd_from,
-                    today=today_local,
-                )
+                current_ytd_val = await _own_year(hist_spots, hist_quarters)
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
                     session,
@@ -688,43 +700,59 @@ class _PlaceholdersMixin(OptionsFlow):
             # the archive YTD path, both of which DO accrue the Flanders
             # capacity tariff, so it is kept here too and prorated the same
             # per-month way rather than by the uniform year fraction.
-            current_ytd = _annual_bill(
-                current_snapshot,
-                quote_entry,
-                peak_kw,
-                current_per_kwh,
-                ytd_kwh,
-                ytd_inj_kwh,
-                current_inj_price,
-                export_per_kwh=current_export_per_kwh,
-                register_weights=hh.register_weights,
-                fee_proration=fee_proration,
-                prosumer_proration=month_proration,
-                capacity_proration=month_proration,
-                meter=current_meter,
-                # Window-scoped, not the year-ahead figure the annual rows
-                # carry: this is what these days have already accrued. The
-                # engine path above credits it, so a row that fell back here
-                # was the only one on the page priced without one.
-                welcome_credit_eur=_ytd_welcome_credit(
+            current_ytd: float | None
+            if previous_periods(current, ytd_from, today_local):
+                # One rate times the window's kWh cannot say what two
+                # contracts cost, and billed the months before a recorded
+                # switch on the current card: 280 EUR under the sensor on a
+                # year that left a fixed contract for a dynamic one in May.
+                # The own row is the household's actual year, so it is
+                # priced the way the sensor prices it, on the coordinator's
+                # own spots, and the quoted side stays the what-if it was.
+                try:
+                    current_ytd = await _own_year(
+                        coord._historical_spots, coord._historical_spot_quarters
+                    )
+                except Exception:  # noqa: BLE001 - degrade to '-'
+                    current_ytd = None
+            else:
+                current_ytd = _annual_bill(
                     current_snapshot,
-                    hh.signing_snapshot,
-                    _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
-                    dt_util.as_local(now_utc),
-                    dso,
-                    region,
-                    await _spot_for(current_snapshot),
-                    current_meter,
-                    dso_mode,
-                    hour_weights,
+                    quote_entry,
+                    peak_kw,
+                    current_per_kwh,
                     ytd_kwh,
                     ytd_inj_kwh,
-                    annual_kwh=annual_kwh,
-                    regime=regime,
-                    window_start=ytd_from,
+                    current_inj_price,
+                    export_per_kwh=current_export_per_kwh,
+                    register_weights=hh.register_weights,
                     fee_proration=fee_proration,
-                ),
-            )
+                    prosumer_proration=month_proration,
+                    capacity_proration=month_proration,
+                    meter=current_meter,
+                    # Window-scoped, not the year-ahead figure the annual rows
+                    # carry: this is what these days have already accrued. The
+                    # engine path above credits it, so a row that fell back here
+                    # was the only one on the page priced without one.
+                    welcome_credit_eur=_ytd_welcome_credit(
+                        current_snapshot,
+                        hh.signing_snapshot,
+                        _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
+                        dt_util.as_local(now_utc),
+                        dso,
+                        region,
+                        await _spot_for(current_snapshot),
+                        current_meter,
+                        dso_mode,
+                        hour_weights,
+                        ytd_kwh,
+                        ytd_inj_kwh,
+                        annual_kwh=annual_kwh,
+                        regime=regime,
+                        window_start=ytd_from,
+                        fee_proration=fee_proration,
+                    ),
+                )
             compare_ytd = _annual_bill(
                 other_snap,
                 target_entry,
@@ -760,12 +788,13 @@ class _PlaceholdersMixin(OptionsFlow):
                     fee_proration=fee_proration,
                 ),
             )
-            placeholders["current_ytd"] = f"{current_ytd:.2f}"
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
-            ytd_delta = compare_ytd - current_ytd
-            placeholders["delta_ytd"] = (
-                f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
-            )
+            if current_ytd is not None:
+                placeholders["current_ytd"] = f"{current_ytd:.2f}"
+                ytd_delta = compare_ytd - current_ytd
+                placeholders["delta_ytd"] = (
+                    f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
+                )
         _populate_charts(
             placeholders,
             current_label=_chart_labels(current, self._compare)[0],

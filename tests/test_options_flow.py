@@ -8373,3 +8373,101 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
     own2, other2 = await _quote(own_credited, other_credited, None)
     assert own2 == pytest.approx(own0, abs=0.01)
     assert other0 - other2 == pytest.approx(200.0, abs=0.01)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A target with no month archive sends the page's year-to-date to the
+    one-rate model, which priced the whole window on the current contract
+    and dropped what the household paid before a recorded switch. The own
+    row has to read what current_year_cost reads: the entry's contract from
+    the switch on, plus the earlier contract's priced days."""
+    from custom_components.be_electricity_prices.contract_periods import (
+        PricedPeriod,
+        PricedPeriods,
+        periods_key,
+        previous_periods,
+    )
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.ytd_cost import (
+        _compute_current_year_cost,
+    )
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = {
+        "supplier": "engie",
+        "contract": "engie_easy_fixed",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "consumption_kwh": "sensor.cons",
+        "solar_regime": "none",
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **held,
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "contract_start_date": "2026-06-15",
+            "previous_contracts": [{"until": "2026-06-15", "data": held}],
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.20))
+    entry.runtime_data = coord
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    coord._previous_priced = PricedPeriods(
+        key=periods_key(periods),
+        day=date(2026, 9, 24),
+        month=date(2026, 9, 1),
+        rows=(
+            PricedPeriod(
+                start=date(2026, 1, 1),
+                end=date(2026, 6, 14),
+                supplier="engie",
+                contract="engie_easy_fixed",
+                cost=250.0,
+                month_cost=None,
+                stand_in=False,
+            ),
+        ),
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        return _spread(2400.0, start, end) if entity_id == "sensor.cons" else {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        page = await _drive_compare(
+            hass,
+            entry,
+            other_snap=_stub_snapshot(
+                "totalenergies", "totalenergies_electricite_fixe", 0.22
+            ),
+            other_supplier="totalenergies",
+            other_contract="totalenergies_electricite_fixe",
+        )
+        own = await _compute_current_year_cost(
+            hass,
+            async_get_clientsession(hass),
+            get("eneco"),
+            coord._snapshot,
+            entry,
+            historical_spots={},
+            spot_quarters={},
+            billed_peak_kw=coord._peak_kw,
+            window_start_override=date(2026, 6, 15),
+        )
+    assert own is not None
+    assert page["compare_ytd"] != "-"
+    assert page["current_ytd"] == f"{own + 250.0:.2f}"
