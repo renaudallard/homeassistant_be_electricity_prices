@@ -31,7 +31,7 @@ cheapest_window:
   fields:
     duration_hours:
       name: Duration
-      description: Window length in whole hours. On a 15-minute (Engie Dynamic) contract the window can start on any quarter-hour boundary.
+      description: Window length in whole hours. On a 15-minute contract the window may start on any quarter-hour boundary.
       required: true
       example: 3
       selector:
@@ -138,7 +138,7 @@ most_expensive_window:
   fields:
     duration_hours:
       name: Duration
-      description: Window length in whole hours. On a 15-minute (Engie Dynamic) contract the window can start on any quarter-hour boundary.
+      description: Window length in whole hours. On a 15-minute contract the window may start on any quarter-hour boundary.
       required: true
       example: 3
       selector:
