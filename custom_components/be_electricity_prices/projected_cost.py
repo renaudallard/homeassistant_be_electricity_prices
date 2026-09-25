@@ -73,6 +73,7 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_REGIME,
+    CONF_TARIFF_CARD_DATE,
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
     METER_MONO,
@@ -104,8 +105,8 @@ _NO_INJECTION_RATE = (
 )
 _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
 _COHORT_SPOT_BASIS = (
-    "not projected: the contract start date re-prices this card to its signing "
-    "cohort, which settles on a monthly Belpex index that does not exist yet"
+    "not projected: the {setting} re-prices this card to its signing cohort, "
+    "which settles on a monthly Belpex index that does not exist yet"
 )
 _KEYED_SPOT_BASIS = (
     "not projected: with an ENTSO-E key this card is re-priced on each month's "
@@ -219,14 +220,24 @@ async def _compute_projected_year_cost(
         spliced = isinstance(priced.energy, SpotMonthlyRates) and not isinstance(
             snapshot.energy, SpotMonthlyRates
         )
-        # Two things splice that leg on: a start date locking a signing
-        # cohort's formula, and on its own an ENTSO-E key on a month-indexed
-        # card, which re-prices each month on its index. Naming the start date
-        # to an entry that set none sent the user looking for the wrong box.
+        # Two things splice that leg on: the signing month locking a cohort's
+        # formula, and on its own an ENTSO-E key on a month-indexed card, which
+        # re-prices each month on its index. The signing month is the tariff
+        # card month, else the start date (cohort._tariff_card_month), and the
+        # basis names whichever chose it: naming a start date to an entry that
+        # set none sent the user looking for the wrong box.
+        from .cohort import _parse_iso_date, _tariff_card_month
+
         if not spliced:
             basis = _SPOT_BASIS
-        elif entry.data.get(CONF_CONTRACT_START_DATE):
-            basis = _COHORT_SPOT_BASIS
+        elif _tariff_card_month(entry) is not None:
+            basis = _COHORT_SPOT_BASIS.format(
+                setting=(
+                    "tariff card month"
+                    if _parse_iso_date(entry.data.get(CONF_TARIFF_CARD_DATE))
+                    else "contract start date"
+                )
+            )
         else:
             basis = _KEYED_SPOT_BASIS
         breakdown["energy_basis"] = basis

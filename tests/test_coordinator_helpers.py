@@ -6051,6 +6051,30 @@ async def test_projection_names_the_month_re_price_without_a_start_date(
     assert "ENTSO-E key" in diag["energy_basis"]
 
 
+async def test_projection_names_the_signing_cohort_for_a_tariff_card_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The signing cohort is keyed on the tariff card month first and the
+    start date only as its fallback, so an entry that set the card month and
+    no start date is re-priced by its cohort. It was told the key alone did
+    it, which is true of every splice but does not name the setting that
+    chose the card."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+    spliced = replace(_yearly_snapshot(), energy=SpotMonthlyRates(factor=1.0, base=0.0))
+    got, diag = await _project(
+        hass,
+        _projection_entry(api_key="KEY", tariff_card_date="2026-03-01"),
+        _daily(10.0),
+        snapshot=card,
+        priced=spliced,
+    )
+    assert got is None
+    assert "signing cohort" in diag["energy_basis"]
+    assert "tariff card month" in diag["energy_basis"]
+
+
 async def test_projection_prices_a_resolved_monthly_indexed_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:
