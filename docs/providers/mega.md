@@ -470,6 +470,14 @@ same convention as Engie / Luminus Flanders. Compensation-regime Flanders cards 
 carry a Fluvius `Tarif Prosumer` (EUR/kW/an) table, scoped to its own block to avoid
 picking up a distribution rate; dynamic cards omit it.
 
+That table's Halle-Vilvoorde row disagrees with every other supplier's card: 58,43 on
+the residential cards where the rest print 62,66, and 55,12 ex VAT on the professional
+ones where the rest print 59,11. The parser reads the card correctly and the entry is
+billed the figure Mega prints, as for every other card figure. The live check's
+cross-supplier network comparison lists both as known disagreements
+(`_KNOWN_NETWORK_FIGURES`, `scripts/live_check.py`) until 2027-01-01, when the DSOs
+publish the next year's tariffs, so a new disagreement still files and these two do not.
+
 Wallonia (`_extract_wallonia_dsos`, `_mega_overlays.py`, `_WALLONIA_LABELS` `_mega_overlays.py`)
 maps AIEG, AIESH, ORES (Brabant wallon), RESA, and Régie de Wavre (`DSO_REW`). Each
 row is a 9-number vertical block: mono, jour, nuit, excl_nuit, terme_fixe (€/an),
