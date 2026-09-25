@@ -385,7 +385,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # their title names: the JN card for September 2026 names August in its
 # validity sentence, so a cached v70 snapshot of it ended on 31 August and
 # kept tomorrow_prices_available off until the October card.
-_SNAPSHOT_SCHEMA_VERSION = 71
+# v72: Mega's September 2026 Cosy Flex card in Flanders prints its off-peak
+# formula in "€/kWh" where the three around it say "c€/kWh". A v71 row holds
+# the peak formula and no off-peak one, and a bi-hourly entry with a key was
+# billed the mono pair every hour.
+_SNAPSHOT_SCHEMA_VERSION = 72
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

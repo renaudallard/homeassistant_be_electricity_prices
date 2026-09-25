@@ -2068,6 +2068,15 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(variable, formula_base=None))
     ) == ["variable month coefficient pair is complete"]
+    # Mega's September 2026 Cosy Flex card in Flanders: the off-peak formula
+    # went unread and the peak one alone sent a bi-hourly meter back to mono.
+    assert _failures(
+        lambda: lc._validate_energy(
+            "x",
+            "c",
+            replace(variable, formula_factor_offpeak=None, formula_base_offpeak=None),
+        )
+    ) == ["variable peak and off-peak month formulas come together"]
     assert _failures(
         lambda: lc._validate_energy("x", "c", replace(tou, formula_factor_peak=15.0))
     ) == ["TOU peak month factor in [0.25, 4]"]

@@ -600,6 +600,13 @@ The land mines a future maintainer must know, drawn from the module comments:
   split affects `Fluvius` label matching (matched via `re.IGNORECASE` and `\s`).
 - **`Redevance fixe` heading splits differently on dynamic vs fixed cards**; accept
   both the joined and the split layout (`_mega_cards.py`).
+- **A variable formula can drop the c of its unit.** The September 2026 Cosy Flex
+  card in Flanders prints "heures creuses : Epex * 0,999 + 3,35 €/kWh" between
+  three formulas in `c€/kWh`. The mono, peak and off-peak patterns take `c?€/kWh`
+  and read the base in cents, since 3,35 EUR/kWh is no tariff; the `€/kWh` stays
+  mandatory because it is what stops the match wandering. The live check fails a
+  row that has one of the peak and off-peak formulas without the other
+  (`test_a_band_formula_missing_its_cent_sign_is_still_read`).
 - **Off-peak Impact cards lack the `Compteur mono-horaire` anchor** and use a bare
   `PIC` (not `Tarif PIC`) on the last row; the tier regex is permissive on the
   prefix (`_mega_cards.py`).

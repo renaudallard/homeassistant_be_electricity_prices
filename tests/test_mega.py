@@ -607,6 +607,33 @@ def test_the_night_circuit_gets_its_fourth_formula() -> None:
     assert energy.formula_factor_exclusive_night == pytest.approx(0.94 * 1.06)
 
 
+def test_a_band_formula_missing_its_cent_sign_is_still_read() -> None:
+    """The September 2026 Cosy Flex Flanders card prints its off-peak formula
+    as "Epex * 0,999 + 3,35 €/kWh", the c dropped, while the three formulas
+    around it keep "c€/kWh". The band pattern required the c, so the row held
+    a peak formula and no off-peak one, and a bi-hourly entry was billed the
+    mono pair every hour for the two years the formula is guaranteed."""
+    from custom_components.be_electricity_prices.providers._mega_cards import (
+        _variable_band_coefficients,
+    )
+
+    # The sentence as the card's text layer gives it, line break included.
+    text = (
+        "- Selon le type de compteur, la formule tarifaire est la suivante "
+        "(HTVA); Compteur mono-horaire : Epex * 1,113 + 3,35 c€/kWh; "
+        "Compteur bi-horaire\nheures pleines : Epex * 1,2455 + 3,35 c€/kWh; "
+        "Compteur bi-horaire heures creuses : Epex * 0,999 + 3,35 €/kWh; "
+        "Compteur exclusif nuit : Epex * 0,999 +\n3,35 c€/kWh. Cette formule "
+        "tarifaire est garantie 2 ans. (TVA 6% incluse)"
+    )
+    bands = _variable_band_coefficients(text)
+    assert bands["offpeak"][0] == pytest.approx(0.999 * 1.06)
+    # A base of 3,35 EUR/kWh is no tariff: the figure is in cents like its
+    # neighbours.
+    assert bands["offpeak"][1] == pytest.approx(3.35 * 1.06 / 100)
+    assert bands["peak"][0] == pytest.approx(1.2455 * 1.06)
+
+
 def test_variable_and_impact_injection_carry_the_spp_formula() -> None:
     """Both card kinds state "le prix de rachat de votre energie injectee est
     indexe mensuellement ... pondere par le SPP (publie par Synergrid), sur le

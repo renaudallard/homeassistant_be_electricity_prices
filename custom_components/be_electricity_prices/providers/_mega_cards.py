@@ -92,9 +92,15 @@ def _parse_formula(match: re.Match[str] | None) -> tuple[float, float] | None:
 # formula this is ex-VAT, so it is grossed by the card's VAT below. Epex is in
 # c€/kWh (same as the dynamic formula) so the factor maps directly to spot in
 # EUR/kWh with no /MWh unit conversion.
+#
+# The c of the unit is optional on the formulas of this sentence. The
+# September 2026 Cosy Flex Flanders card prints its off-peak one as
+# "Epex * 0,999 + 3,35 €/kWh" between three that say c€/kWh, and a base of
+# 3,35 EUR/kWh is no tariff, so the figure is read in cents like the rest.
+# The €/kWh itself stays mandatory: it is what stops the match wandering.
 _VARIABLE_MONO_FORMULA_RE = re.compile(
     rf"Compteur mono-horaire\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-    rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+    rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
     re.IGNORECASE,
 )
 # The same sentence continues with the bi-hourly bands, which carry their own
@@ -103,12 +109,12 @@ _VARIABLE_MONO_FORMULA_RE = re.compile(
 _VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
     "peak": re.compile(
         rf"heures pleines\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
         re.IGNORECASE,
     ),
     "offpeak": re.compile(
         rf"heures creuses\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
         re.IGNORECASE,
     ),
     # And the dedicated night circuit, a FOURTH formula in the same sentence:
@@ -120,8 +126,8 @@ _VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
     # The trailing unit is optional HERE ONLY. This formula is last in the
     # sentence and pypdf splices the page footer in right after "+ 3,6", so a
     # mandatory "c€/kWh" matches nothing at all. The other three end in a real
-    # unit, and that mandatory anchor is what stops them wandering, so it is
-    # not relaxed on them.
+    # unit, and that mandatory €/kWh is what stops them wandering, so it is
+    # not relaxed on them beyond the c.
     "exclusive_night": re.compile(
         rf"exclusif\s+nuit\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
         rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*(?:c€/kWh)?",

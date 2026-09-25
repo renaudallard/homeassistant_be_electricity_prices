@@ -4222,6 +4222,21 @@ def _validate_energy(
                 getattr(energy, f"formula_factor_{band}", None),
                 getattr(energy, f"formula_base_{band}", None),
             )
+        # The two registers of a bi-hourly meter are read from one sentence
+        # and billed as a pair: pricing splits the bands only when both are
+        # there, so one without the other sends that meter back to the mono
+        # formula every hour. Mega's September 2026 Cosy Flex card in Flanders
+        # printed its off-peak unit as "€/kWh" and lost it that way.
+        _expect(
+            f"{prefix}: variable peak and off-peak month formulas come together",
+            (getattr(energy, "formula_factor_peak", None) is None)
+            == (getattr(energy, "formula_factor_offpeak", None) is None),
+            detail=(
+                f"formula_factor_peak={getattr(energy, 'formula_factor_peak', None)}, "
+                f"formula_factor_offpeak="
+                f"{getattr(energy, 'formula_factor_offpeak', None)}"
+            ),
+        )
         for band in ("pic", "medium", "eco"):
             _expect_rate(
                 prefix,
