@@ -6565,9 +6565,9 @@ async def test_sweep_ranks_every_alternative_in_the_cell(
     # Numbered, cheapest first, and the household's own contract is not a row.
     assert ranking.lstrip().startswith("1.")
     assert "power_fix" not in ranking
-    # Every priced row is a real candidate of the household's own group.
-    assert ph["group"] == "static"
-    assert ph["region"] == "wallonia"
+    # The table is the only token: region and group are internal slugs and
+    # read as prose in every language.
+    assert set(ph) == {"ranking"}
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -6670,7 +6670,7 @@ def test_every_sweep_string_exists_in_all_five_files() -> None:
             )
             if f
         }
-        assert tokens == {"region", "group", "ranking"}, (name, tokens)
+        assert tokens == {"ranking"}, (name, tokens)
         prog = {
             f
             for _l, f, _s, _c in string.Formatter().parse(

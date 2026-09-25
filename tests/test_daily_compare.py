@@ -825,6 +825,9 @@ async def test_dialog_shows_the_stored_ranking_without_sweeping(
     assert "Ranked " in ranking
     # A stored ranking priced the whole cell, so nothing is reported pending.
     assert "not priced yet" not in ranking
+    # The page names no region or group: those are English slugs
+    # ("wallonia", "static") that read as prose in every translation.
+    assert set(result["description_placeholders"]) == {"ranking"}
 
 
 async def test_refresh_box_reprices_instead_of_serving_the_stored_rows(

@@ -537,7 +537,7 @@
       },
       "compare_all_result": {
         "title": "Gerangschikte alternatieven",
-        "description": "Alle {group}-contracten die in {region} beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract draagt de badge YOUR CONTRACT; elke andere regel eindigt met het verschil ten opzichte daarvan, waarbij een minteken een besparing is.\n\n{ranking}\n\nSchattingen, geen offertes. Elke regel berekent een volledig jaar van uw gemeten volumes tegen één gepubliceerde tariefkaart: het zegt wat een jaar tegen die prijzen zou kosten, niet wat u gefactureerd krijgt. Er wordt niets opgeslagen; bevestig om te sluiten.",
+        "description": "Alle contracten uit dezelfde familie als het uwe (vast of variabel, spotgeïndexeerd, of met tijdsblokken) die in uw regio beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract draagt de badge YOUR CONTRACT; elke andere regel eindigt met het verschil ten opzichte daarvan, waarbij een minteken een besparing is.\n\n{ranking}\n\nSchattingen, geen offertes. Elke regel berekent een volledig jaar van uw gemeten volumes tegen één gepubliceerde tariefkaart: het zegt wat een jaar tegen die prijzen zou kosten, niet wat u gefactureerd krijgt. Er wordt niets opgeslagen; bevestig om te sluiten.",
         "data": {
           "with_ytd": "Ook het jaartotaal berekenen (trager: haalt de kaart van elke voorbije maand op)",
           "refresh": "Nu opnieuw berekenen (duurt ongeveer twee minuten)"

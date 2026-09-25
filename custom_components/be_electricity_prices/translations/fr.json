@@ -537,7 +537,7 @@
       },
       "compare_all_result": {
         "title": "Alternatives classees",
-        "description": "Tous les contrats {group} disponibles en {region}, calcules avec vos propres parametres. Votre contrat actuel porte le badge YOUR CONTRACT ; chaque autre ligne se termine par l'ecart avec lui, un signe moins etant une economie.\n\n{ranking}\n\nDes estimations, pas des offres. Chaque ligne calcule une année complète de vos volumes mesurés sur une seule carte tarifaire publiée : elle dit ce que coûterait une année à ces prix, pas ce qui vous sera facturé. Rien n'est enregistré ; validez pour fermer.",
+        "description": "Tous les contrats de la même famille que le vôtre (fixe ou variable, indexé sur le spot, ou à plages horaires) disponibles dans votre région, calcules avec vos propres parametres. Votre contrat actuel porte le badge YOUR CONTRACT ; chaque autre ligne se termine par l'ecart avec lui, un signe moins etant une economie.\n\n{ranking}\n\nDes estimations, pas des offres. Chaque ligne calcule une année complète de vos volumes mesurés sur une seule carte tarifaire publiée : elle dit ce que coûterait une année à ces prix, pas ce qui vous sera facturé. Rien n'est enregistré ; validez pour fermer.",
         "data": {
           "with_ytd": "Calculer aussi le cumul depuis janvier (plus lent : recupere la fiche de chaque mois passe)",
           "refresh": "Recalculer maintenant (environ deux minutes)"

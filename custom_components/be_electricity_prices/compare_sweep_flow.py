@@ -372,9 +372,9 @@ class _SweepStepsMixin(_CompareStepsMixin):
         return self.async_show_form(
             step_id="compare_all_result",
             data_schema=vol.Schema(schema),
+            # No region or group placeholder: both are English slugs
+            # ("wallonia", "static") that read as prose in every translation.
             description_placeholders={
-                "region": sweep["region"],
-                "group": sweep["group"],
                 "ranking": _ranking_table(
                     sweep["rows"],
                     # A stored ranking priced the whole cell, so nothing is
