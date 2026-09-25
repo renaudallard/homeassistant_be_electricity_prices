@@ -512,6 +512,13 @@ reach the earlier contracts too. That holds on the page's one-rate model as
 well (`compare_placeholders.py`): one rate times the window's kWh cannot say
 what two contracts cost, so after a switch the own row there is priced on the
 engine like the sensor, and only the quoted side stays on the one-rate model.
+Both sides are measured from the first day the year was billed
+(`billed_from`, `contract_periods.py`): recording a switch unticks "bill from
+contract start" on the entry, whose window then opens on 1 January, while a
+first contract that billed from its own start date keeps its days starting
+there. The quoted side, the kWh read, the "since" date and every ranking
+candidate take that day too, or the months before it were priced on the
+quoted side against nothing on the own row.
 The backfill cuts its hours at each switch
 (`_contract_segments`, `backfill_window.py`), builds a context per contract
 and accrues the cost series across them as one running total

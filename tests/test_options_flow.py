@@ -8575,6 +8575,109 @@ async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_measures_both_sides_from_where_the_year_was_billed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A first contract that billed its year from its own start date keeps
+    doing so after a switch, but recording the switch unticks the box on the
+    entry, whose window then opens on 1 January. The own row began on the old
+    contract's start date while the quoted side, the kWh read and the "since"
+    date began in January: a Wallonia household with a March start read 671
+    EUR of phantom saving. Both sides cover the days the year was billed."""
+    from custom_components.be_electricity_prices.contract_periods import (
+        PricedPeriod,
+        PricedPeriods,
+        periods_key,
+        previous_periods,
+    )
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = {
+        "supplier": "engie",
+        "contract": "engie_easy_fixed",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "consumption_kwh": "sensor.cons",
+        "solar_regime": "none",
+        "contract_start_date": "2026-03-15",
+        "ytd_from_contract_start": True,
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **held,
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "contract_start_date": "2026-06-15",
+            "ytd_from_contract_start": False,
+            "previous_contracts": [{"until": "2026-06-15", "data": held}],
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.20))
+    entry.runtime_data = coord
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    assert periods[0].start == date(2026, 3, 15)
+    coord._previous_priced = PricedPeriods(
+        key=periods_key(periods),
+        day=date(2026, 9, 24),
+        month=date(2026, 9, 1),
+        rows=(
+            PricedPeriod(
+                start=date(2026, 3, 15),
+                end=date(2026, 6, 14),
+                supplier="engie",
+                contract="engie_easy_fixed",
+                cost=250.0,
+                month_cost=None,
+                stand_in=False,
+            ),
+        ),
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        # Ten kWh every day of the year, so the window's kWh says which days
+        # were read.
+        if entity_id != "sensor.cons":
+            return {}
+        return {start + timedelta(days=i): 10.0 for i in range((end - start).days + 1)}
+
+    from custom_components.be_electricity_prices import ytd_cost
+
+    real_walk = ytd_cost._compute_current_year_cost
+    quoted_from: list[date | None] = []
+
+    async def _walk(*args: Any, **kw: Any) -> Any:
+        if kw.get("contract_override"):
+            quoted_from.append(kw.get("window_start_override"))
+        return await real_walk(*args, **kw)
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_fake_recorder_daily_kwh,
+        ),
+        patch.object(ytd_cost, "_compute_current_year_cost", _walk),
+    ):
+        page = await _drive_compare(
+            hass,
+            entry,
+            other_snap=_stub_snapshot("engie", "engie_easy_fixed", 0.22),
+            other_supplier="engie",
+            other_contract="engie_easy_fixed",
+        )
+    assert page["ytd_from"] == "15/03/2026"
+    # 15 March to 24 September inclusive: 194 days.
+    assert page["ytd_kwh"] == "1940"
+    # The quoted card is walked over the same days.
+    assert quoted_from == [date(2026, 3, 15)]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
     hass: HomeAssistant, freezer: Any
 ) -> None:

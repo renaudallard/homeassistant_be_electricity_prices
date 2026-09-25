@@ -229,6 +229,20 @@ def current_period_start(data: Mapping[str, Any], window_start: date) -> date:
     return max(window_start, records[-1][0]) if records else window_start
 
 
+def billed_from(data: Mapping[str, Any], window_start: date, today: date) -> date:
+    """The first day any contract bills inside ``[window_start, today]``.
+
+    ``window_start`` itself, unless the first earlier contract billed its year
+    from its own start date: recording the switch unticks that box on the
+    entry, whose window then opens on 1 January, while the old contract's days
+    still begin on its start date. A comparison measured from 1 January against
+    a year billed from March set the quoted side's months before March against
+    nothing.
+    """
+    periods = previous_periods(data, window_start, today)
+    return periods[0].start if periods else current_period_start(data, window_start)
+
+
 def periods_key(periods: list[ContractPeriod]) -> str:
     """What a priced result was priced for: every period's days and settings.
 

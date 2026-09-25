@@ -564,12 +564,14 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     entry.add_to_hass(hass)
     engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     cache: dict[str, set[date]] = {}
+    walked_from: dict[str, date | None] = {}
 
     async def _walk(
         hass_: Any, session: Any, ext: Any, snap: Any, e: Any, **kw: Any
     ) -> float:
         # As the real walk does: from the override when one is given.
         contract = kw.get("contract_override") or e.data["contract"]
+        walked_from[contract] = kw.get("window_start_override")
         start = kw.get("window_start_override") or ytd_window_start(e, today)
         cache.setdefault(contract, set()).update(
             date(today.year, m, 1) for m in range(start.month, today.month + 1)
@@ -646,6 +648,9 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     ):
         rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
         assert [r.ytd for r in rows] == [1250.0, 1000.0]
+        # A candidate covers the own row's days, which after a switch the
+        # entry's settings no longer give it.
+        assert walked_from["engie_easy_fixed"] == household.ytd_from
         # A candidate missing a month before the switch is still refused.
         cache.clear()
         cache["engie_easy_fixed"] = {date(2026, m, 1) for m in range(1, 10) if m != 3}

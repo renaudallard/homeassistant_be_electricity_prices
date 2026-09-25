@@ -346,6 +346,9 @@ class _SweepEngine(_HouseholdMixin):
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, snap, own=False
                     ),
+                    # The own row's days, which after a recorded switch the
+                    # entry's settings no longer give.
+                    window_start_override=hh.ytd_from,
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)

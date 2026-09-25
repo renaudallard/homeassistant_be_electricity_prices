@@ -77,6 +77,7 @@ from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
 from .energy_meters import _measured_hour_weights, _measured_kwh
 from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
+from .contract_periods import billed_from
 from .compare_table import _solar_note
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from datetime import date, datetime, timedelta
@@ -220,8 +221,13 @@ class _HouseholdMixin:
         # below runs _compute_current_year_cost, which resolves this itself off
         # entry.data, so reading it here is what keeps the simple model, and
         # the kWh figure printed beside both: telling the same story as the
-        # sensor on the page rather than a January one.
-        ytd_from = ytd_window_start(self.config_entry, today_local)
+        # sensor on the page rather than a January one. After a recorded switch
+        # it opens where the earliest contract began billing, which the entry's
+        # own settings no longer say, so the quoted side, the kWh read and every
+        # ranking candidate cover the same days as the own row.
+        ytd_from = billed_from(
+            current, ytd_window_start(self.config_entry, today_local), today_local
+        )
         # 364, not 365: energy_meters._recorder_rows anchors end_dt on the next
         # local midnight, so the window is end-inclusive and today counts. The
         # old arithmetic read 366 buckets under a "365 days" label.

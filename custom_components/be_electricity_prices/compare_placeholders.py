@@ -673,6 +673,9 @@ class _PlaceholdersMixin(OptionsFlow):
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, other_snap, own=False
                     ),
+                    # Over the days the own row covers, which after a
+                    # recorded switch the entry's settings no longer give.
+                    window_start_override=ytd_from,
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None
