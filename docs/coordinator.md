@@ -474,7 +474,10 @@ its own archived card through the walk. A supplier that no longer publishes one
 falls back to the newest card an archive kept inside the period, found by
 asking `_snapshot_for_month` for each month with the entry's card as the
 fallback and watching for a different object, and one with neither to the
-entry's current card, flagged `stand_in`.
+entry's current card, flagged `stand_in`. A stand-in carries no welcome credit
+(`without_welcome_credit`): it is walked with the old contract's start date,
+so the ristourne or first-year bonus the current card offers a new customer
+was credited to a contract that never signed it.
 
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,

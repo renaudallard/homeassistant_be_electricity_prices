@@ -694,8 +694,9 @@ one, starting from what you have now. From then on:
   switch, the comparison pages price *your contract* the same way, and the
   statistics backfill prices each hour on the contract that supplied it.
 - A supplier that can no longer be reached, and whose cards no archive kept,
-  has its days priced on your current card, and the contract's row in
-  `previous_contracts` says so (`priced_on_current_card`).
+  has its days priced on your current card, without the welcome credit that
+  card offers new customers, and the contract's row in `previous_contracts`
+  says so (`priced_on_current_card`).
 
 Record a switch as soon as you can. Until then the new contract's days are
 priced as the old contract's, and recording it later corrects the figure,

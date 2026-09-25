@@ -936,6 +936,77 @@ async def test_pricing_closes_each_window_on_the_day_before_the_switch(
     assert all(c["card"] is own_card for c in calls)
 
 
+async def test_a_stand_in_card_grants_the_old_contract_no_welcome_credit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The entry's own card stands in for a supplier with no card and no
+    archive (DATS 24 today), and it was walked with the OLD contract's start
+    date, so the old contract was credited whatever the current card grants a
+    new customer: 259 EUR of Mega ristourne on a DATS 24 year, plus the
+    first-year feed-in bonus. The stand-in prices the days, not the offer."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    own = make_entry(
+        consumption_kwh="sensor.cons",
+        contract_start_date="2026-09-01",
+        previous_contracts=[
+            {
+                "until": "2026-09-01",
+                "data": _held(
+                    "dats24",
+                    "dats24_groen_variabel",
+                    consumption_kwh="sensor.cons",
+                    contract_start_date="2025-04-01",
+                ),
+            }
+        ],
+    )
+    periods = previous_periods(own.data, date(2026, 1, 1), date(2026, 9, 24))
+
+    async def _daily(_h: Any, eid: str, start: date, end: date) -> dict[date, float]:
+        if eid != "sensor.cons":
+            return {}
+        return {start + timedelta(days=i): 10.0 for i in range((end - start).days + 1)}
+
+    async def _priced_on(card: Any) -> float | None:
+        coordinator = SimpleNamespace(
+            _snapshot=card,
+            entry=own,
+            _historical_spots={},
+            _historical_spot_quarters={},
+            _spp_weights={},
+            _rlp_weights={},
+            _billed_peak_kw=lambda: 0.0,
+        )
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+            patch.object(
+                contract_periods, "_current_card", AsyncMock(return_value=None)
+            ),
+            patch.object(
+                contract_periods, "_latest_archived_card", AsyncMock(return_value=None)
+            ),
+        ):
+            rows = await contract_periods.price_previous_periods(
+                hass,
+                None,  # type: ignore[arg-type]
+                coordinator,
+                periods,
+                month_start=date(2026, 9, 1),
+            )
+        assert rows[0].stand_in
+        return rows[0].cost
+
+    plain = make_snapshot(energy=FixedRates(single=0.30))
+    offered = make_snapshot(
+        energy=FixedRates(single=0.30),
+        welcome_credit_eur=200.0,
+        welcome_credit_after_months=12,
+    )
+    without = await _priced_on(plain)
+    assert without is not None
+    assert await _priced_on(offered) == pytest.approx(without)
+
+
 async def test_the_compare_page_adds_the_earlier_contracts_under_its_what_if(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -71,6 +71,7 @@ from .const import (
 )
 from .flow_contracts import _contract_is_month_indexed
 from .providers import effective_kind, get as get_extractor, settlement_answer
+from .providers._resolve import without_welcome_credit
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import _snapshot_for_month
@@ -458,6 +459,11 @@ async def period_card(
     period, and one with neither to the entry's current card, which the last
     element flags. ``None`` only when the entry has no card of its own either.
 
+    A stand-in prices the days and nothing the card offers a new customer: it
+    is walked with the old contract's start date, so a welcome credit left on
+    it was credited to a contract that never signed that card, 259 EUR of Mega
+    ristourne on a DATS 24 year.
+
     Raises ``ExtractorError`` for a supplier the registry no longer knows.
     """
     proxy = cast(
@@ -474,7 +480,8 @@ async def period_card(
             hass, session, extractor, proxy, period, fallback
         )
     if card is None:
-        return proxy, extractor, fallback, True
+        stand_in = None if fallback is None else without_welcome_credit(fallback)
+        return proxy, extractor, stand_in, True
     return proxy, extractor, card, False
 
 
