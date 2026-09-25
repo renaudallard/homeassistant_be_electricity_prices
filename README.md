@@ -661,9 +661,13 @@ one, starting from what you have now. From then on:
   CD-14d03, section 5.1.2): a surplus banked before the switch does not offset
   consumption after it.
 - The earlier contracts are priced once a day in the background, because that
-  means fetching the old supplier's cards. In the minutes after you record a
-  switch, until the first pricing lands, `current_year_cost` reads unknown
-  rather than a year missing a whole contract.
+  means fetching the old supplier's cards. After you record a switch,
+  `current_year_cost` reads unknown until that pricing lands, usually within
+  minutes, rather than a year missing a whole contract. It stays unknown while
+  an earlier contract cannot be priced, and is tried again every hour: a
+  contract the integration can never price (a supplier it no longer knows, or
+  a card that does not cover your network operator) keeps it unknown, and the
+  log names the contract.
 - `current_month_cost` includes the old contract's days in the month of the
   switch, the comparison pages price *your contract* the same way, and the
   statistics backfill prices each hour on the contract that supplied it.

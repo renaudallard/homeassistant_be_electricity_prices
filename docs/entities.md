@@ -301,10 +301,16 @@ statistics setup, documented in its source comment:
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is numeric in every case but one: missing meter inputs collapse to
-the fees-only floor, and the one `unknown` is the few minutes after a supplier
-switch is recorded, until the contract held before it has been priced, since a
-year missing a whole contract would reach the recorder as a large negative
-change and then the same positive one. `last_reset` stays on 1 January across
+the fees-only floor, and the one `unknown` is an entry with a recorded supplier
+switch whose earlier contracts have not all been priced, since a year missing a
+whole contract would reach the recorder as a large negative change and then the
+same positive one. That is usually the minutes after the switch is recorded,
+until the background pricing lands. A pricing that could not price one of the
+contracts is tried again at the next hourly tick, not sooner (the pricing asks
+for a refresh when it lands, and that refresh would otherwise ask for it again
+within seconds), so a contract that can never be priced, a supplier the
+registry no longer knows or a card that does not cover the DSO, keeps the year
+unknown and logs a warning naming it each hour. `last_reset` stays on 1 January across
 a switch, so the year remains one statistics cycle.
 
 ### `current_month_cost`: the same bill over a shorter window
