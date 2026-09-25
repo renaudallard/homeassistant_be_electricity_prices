@@ -454,8 +454,11 @@ formula** supplier, which has no card and asks for the whole set.
    feeds the `current_year_cost` sensor. Whichever way you wire it, every
    field wants a **cumulative** kWh reading, one that only ever climbs.
    A sensor that resets, such as a "this year" or "this month" total,
-   will not work: the integration bills the day-to-day *change* in the
-   reading, and a reset reads as a large negative day. A net register that
+   is read right only when its reset can be told from a fall: a
+   `total_increasing` sensor, whose drop below 90% of the reading before
+   it is a new cycle as Home Assistant's statistics count one, or a sensor
+   that publishes `last_reset`. Any other fall reads as zero, so a
+   climbing reading is the safe choice. A net register that
    counts down while you export (a `utility_meter` with `net_consumption`,
    a bidirectional meter) is not supported either: a fall reads as zero,
    so wire consumption and injection as two separate climbing sensors.
