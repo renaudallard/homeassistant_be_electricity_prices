@@ -541,6 +541,7 @@ class _SweepEngine(_HouseholdMixin):
                     ),
                     hh.inj_hour_weights,
                     raw_snapshot=hh.raw_snapshot,
+                    credit_spots=hh.credit_spots,
                 ),
                 export_per_kwh=hh.current_export_per_kwh,
                 register_weights=hh.register_weights,
@@ -673,6 +674,7 @@ class _SweepEngine(_HouseholdMixin):
                 await hh.credit_month_spot_for(resolved, own=False),
                 hh.inj_hour_weights,
                 meter=meter,
+                credit_spots=hh.credit_spots,
             ),
             # EXPORT RATE: under compensation the bill nets consumption
             # against injection, and each side has to be priced on its own

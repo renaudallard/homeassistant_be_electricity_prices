@@ -6236,14 +6236,25 @@ async def test_projection_says_when_a_measured_year_earns_no_credit(
     assert "not credited" in diag["injection_basis"]
 
 
-async def test_projection_credits_a_spot_indexed_feed_in_on_the_day_ahead(
+def _closed_days(first: date, last: date, price: float) -> dict[datetime, float]:
+    """Hourly day-ahead at one price for every local day from first to last."""
+    out: dict[datetime, float] = {}
+    day = first
+    while day <= last:
+        start = dt_util.start_of_local_day(day).astimezone(UTC)
+        out.update({start + timedelta(hours=h): price for h in range(24)})
+        day += timedelta(days=1)
+    return out
+
+
+async def test_projection_credits_a_spot_indexed_feed_in_on_the_year_held(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The compare page's annual row credits a spot-indexed feed-in at the
-    day-ahead prices the coordinator holds, weighted by when the panels
-    export, and the projection left it out: on Bolt Fix in Wallonia the two
-    year-ahead figures for the same contract stood 231 EUR apart. Both now
-    read the same prices through the same helper."""
+    """A spot-indexed feed-in is credited on the closed days of day-ahead the
+    coordinator holds for the year, not on the day or two the live table
+    reads. Priced on today's curve, the projection of a Bolt Fix prosumer in
+    Wallonia moved by a median 76 EUR from one day to the next and jumped
+    again at 11:00 when tomorrow's curve arrived."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
     snap = replace(
@@ -6251,23 +6262,68 @@ async def test_projection_credits_a_spot_indexed_feed_in_on_the_day_ahead(
         injection=InjectionRates(current=None, factor=1.0, base=-0.02),
     )
     entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
-    day = dt_util.start_of_local_day(dt_util.now().date()).astimezone(UTC)
-    spots = {day + timedelta(hours=h): 0.10 for h in range(24)}
-    without, _ = await _project(
-        hass, entry, _daily(10.0, inj_per_day=8.0), snapshot=snap, priced=snap
-    )
+    today = dt_util.now().date()
+    held = _closed_days(date(2026, 1, 1), today - timedelta(days=1), 0.10)
+    live = _closed_days(today, today + timedelta(days=1), 0.90)
+    swung = _closed_days(today, today + timedelta(days=1), -0.30)
+    fake = _daily(10.0, inj_per_day=8.0)
+    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
     got, diag = await _project(
-        hass,
-        entry,
-        _daily(10.0, inj_per_day=8.0),
-        snapshot=snap,
-        priced=snap,
-        spots=spots,
+        hass, entry, fake, snapshot=snap, priced=snap, spots={**held, **live}
+    )
+    other, _ = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots={**held, **swung}
     )
     assert without is not None and got is not None
-    # A flat day-ahead, so the export weighting cannot move it: 0,10 - 0,02.
+    # Today's and tomorrow's curves move nothing: only closed days count.
+    assert other == pytest.approx(got)
+    # A flat history, so the export weighting cannot move it: 0,10 - 0,02.
     assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
     assert "day-ahead" in diag["injection_basis"]
+
+    # One more closed day moves the credit by that day's share of the window
+    # and no more: 90 days at 0,10 and one at 1,00, all after the spring
+    # clock change so every hour of the clock holds all 91 days.
+    shorter = _closed_days(date(2026, 4, 1), today - timedelta(days=2), 0.10)
+    last = _closed_days(today - timedelta(days=1), today - timedelta(days=1), 1.00)
+    before, _ = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots=shorter
+    )
+    after, diag = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots={**shorter, **last}
+    )
+    assert before is not None and after is not None
+    assert before - after == pytest.approx(0.90 / 91 * diag["annual_injection_kwh"])
+
+
+async def test_projection_leaves_the_credit_out_on_too_short_a_history(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Below a month of closed days the mean is a few weeks' weather, so the
+    credit is left out and the basis says why, as it was before the history
+    was read at all."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    snap = replace(
+        _yearly_snapshot(),
+        injection=InjectionRates(current=None, factor=1.0, base=-0.02),
+    )
+    entry = _projection_entry(solar_regime="injection", injection_kwh="sensor.inj")
+    today = dt_util.now().date()
+    fake = _daily(10.0, inj_per_day=8.0)
+    without, _ = await _project(hass, entry, fake, snapshot=snap, priced=snap)
+    short = _closed_days(today - timedelta(days=29), today - timedelta(days=1), 0.10)
+    got, diag = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots=short
+    )
+    assert got == pytest.approx(without)
+    assert "not credited" in diag["injection_basis"]
+    enough = _closed_days(today - timedelta(days=30), today - timedelta(days=1), 0.10)
+    got, diag = await _project(
+        hass, entry, fake, snapshot=snap, priced=snap, spots=enough
+    )
+    assert got is not None and without is not None
+    assert without - got == pytest.approx(0.08 * diag["annual_injection_kwh"])
 
 
 async def test_projection_discloses_a_contract_ending_inside_the_year(

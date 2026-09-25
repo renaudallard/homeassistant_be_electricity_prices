@@ -88,6 +88,7 @@ from .compare_inputs import (
     _HouseholdQuote,
     _borrowed_spot_cache,
     _credit_index_for,
+    _credit_spots,
     _effective_regime,
     _label_for_contract,
     _label_for_supplier,
@@ -746,6 +747,9 @@ class _HouseholdMixin:
             spot_for=_spot_for,
             credit_month_spot_for=_credit_month_spot_for,
             export_rate_for=_export_rate_for,
+            credit_spots=_credit_spots(
+                getattr(coord, "_historical_spots", None) or {}, today_local
+            ),
         )
 
     async def _ocr_fallback(

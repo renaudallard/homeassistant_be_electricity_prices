@@ -342,6 +342,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     ),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
+                    credit_spots=hh.credit_spots,
                 )
                 if current_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -359,6 +360,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     await _credit_month_spot_for(other_snap, own=False),
                     inj_hour_weights,
                     meter=meter,
+                    credit_spots=hh.credit_spots,
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -413,6 +415,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     ),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
+                    credit_spots=hh.credit_spots,
                 )
                 if stored_regime == SOLAR_REGIME_INJECTION
                 else None

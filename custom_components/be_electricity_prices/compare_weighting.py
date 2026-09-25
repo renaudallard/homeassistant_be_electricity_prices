@@ -302,6 +302,7 @@ def _compare_injection_credit(
     inj_hour_weights: dict[int, float] | None = None,
     raw_snapshot: Any = None,
     meter: str | None = None,
+    credit_spots: dict[datetime, float] | None = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
@@ -327,6 +328,13 @@ def _compare_injection_credit(
     dynamic-energy contract, a card that prints no indicative at all (Cociter
     Variable), and a card that prints one but settles per slot anyway, which
     is every Bolt fixed and variable card.
+
+    ``credit_spots`` is the closed days of day-ahead held for the year
+    (``compare_inputs._credit_spots``). A static card's spot-indexed credit is
+    priced on it when given, since the one rate multiplies a whole year of
+    export; ``spot_dict`` is the day or two the page fetched, which moved a
+    recorded projection by tens of euro a day. A dynamic card keeps
+    ``spot_dict``, the window its energy leg is priced on.
 
     A MONTH-INDEXED credit resolves against ``month_spot``, the delivery
     month's mean: the solar-weighted one for a card that names Belpex_SPP
@@ -437,6 +445,9 @@ def _compare_injection_credit(
             or inj.slot_indexed
         )
     ):
+        if credit_spots and not isinstance(energy, DynamicRates):
+            spot_dict = credit_spots
+            avg_spot = sum(credit_spots.values()) / len(credit_spots)
         if avg_spot is None:
             return None
         # Asked of the RAW, pre-splice snapshot when the caller has one. The

@@ -1909,6 +1909,102 @@ async def test_compare_compensation_regime_nets_consumption(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A static card whose feed-in follows the spot price per slot is quoted on
+    the closed days of day-ahead the coordinator holds, the window the
+    projection credits the same contract on, so the page's annual row no
+    longer moves with the day the dialog is opened. With less than a month
+    held it keeps the day-ahead in front of it."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "api_key": "valid-token",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    stub = _stub_snapshot("eneco", "power_fix", 0.18)
+    own = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.18, yearly_fixed_fee=60.0),
+        dsos=stub.dsos,
+        taxes=stub.taxes,
+        injection=InjectionRates(
+            current=0.053, factor=0.9, base=-0.01, slot_indexed=True
+        ),
+        source_url="test://stub",
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, own)
+    coord = entry.runtime_data
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos=stub.dsos,
+        taxes=stub.taxes,
+        injection=InjectionRates(current=0.10),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    today = dt_util.now().date()
+    today_start = dt_util.start_of_local_day().astimezone(UTC)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return _spread(4000.0, start, end)
+        if entity_id == "sensor.inj":
+            return _spread(3000.0, start, end)
+        return {}
+
+    async def _quote(live: float, held_days: int) -> str:
+        held: dict[datetime, float] = {}
+        for back in range(1, held_days + 1):
+            day = dt_util.start_of_local_day(today - timedelta(days=back))
+            start = day.astimezone(UTC)
+            held.update({start + timedelta(hours=h): 0.10 for h in range(24)})
+        coord._historical_spots = held
+        coord._spot_cache = {today_start + timedelta(hours=h): live for h in range(24)}
+        with patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_fake_recorder_daily_kwh,
+        ):
+            ph = await _drive_compare(
+                hass,
+                entry,
+                other_snap=other_snap,
+                other_supplier="mega",
+                other_contract="mega_online_fixed",
+            )
+        return ph["current_annual"]
+
+    # Two very different days in front of the dialog, the same year held.
+    assert await _quote(0.90, 60) == await _quote(-0.30, 60)
+    # Too little held: the day-ahead in front of it still prices the credit.
+    assert await _quote(0.90, 10) != await _quote(-0.30, 10)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_injection_regime_credits_injection_price(
     hass: HomeAssistant,
 ) -> None:

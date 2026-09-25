@@ -100,7 +100,7 @@ _UNNETTABLE = (
 )
 _NO_INJECTION_RATE = (
     "measured, but not credited: this card indexes its feed-in on the spot "
-    "price, and no day-ahead prices are on hand yet"
+    "price, and fewer than 30 days of day-ahead prices are held yet"
 )
 _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
 _COHORT_SPOT_BASIS = (
@@ -184,11 +184,13 @@ async def _compute_projected_year_cost(
     of the figure the card prints for the PREVIOUS month. Defaults to
     ``priced``, which is what a card with no month index carries anyway.
 
-    ``spots`` is the day-ahead the coordinator holds, read and never written.
-    A static card whose feed-in follows the spot price per slot (every Bolt
-    fixed and variable card) is credited on it, weighted by when the panels
-    export, which is what the compare page's annual row credits the same
-    contract at. Without it such a credit is left out and the basis says so.
+    ``spots`` is the day-ahead history the coordinator holds, read and never
+    written. A static card whose feed-in follows the spot price per slot
+    (every Bolt fixed and variable card) is credited on its closed days of
+    the past year (``compare_inputs._credit_spots``), weighted by when the
+    panels export, which is what the compare page's annual row credits the
+    same contract at. Below a month of them the credit is left out and the
+    basis says so.
 
     Returns ``None`` when the contract cannot be projected or the rate cannot
     be resolved. It never raises: the caller runs inside the coordinator tick,
@@ -200,6 +202,7 @@ async def _compute_projected_year_cost(
         _annual_volume,
         _covers_a_year,
     )
+    from .compare_inputs import _credit_spots
     from .compare_weighting import (
         _compare_injection_credit,
         _tou_weighted_per_kwh,
@@ -236,8 +239,8 @@ async def _compute_projected_year_cost(
 
     # Fixed, Variable, TOU and Impact all ignore the spot argument, so the
     # energy leg needs no spot data. Only a per-slot feed-in reads the
-    # day-ahead below, on a copy, so the projection cannot perturb the live
-    # price table or the spot cache.
+    # day-ahead history below, into a new dict, so the projection cannot
+    # perturb the live price table or the spot cache.
     trailing_start = today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
     # Weighted by the household's own hour-of-day shape rather than by clock
     # hours, so a time-of-use card is projected on the kWh it actually bills.
@@ -285,23 +288,26 @@ async def _compute_projected_year_cost(
             inj_hour_weights,
         )
         # A feed-in that follows the spot price per slot has no rate without
-        # one. The compare page credits it on the day-ahead the coordinator
-        # holds, through this same helper with the same weights, so the
+        # one. The compare page credits it on the day-ahead held for the past
+        # year, through this same helper with the same weights, so the
         # projection does too rather than quoting the same contract's year
         # without its feed-in: on Bolt Fix in Wallonia the two stood 231 EUR
-        # apart. Asked only where the no-spot answer is empty, so every card
-        # that already had a credit keeps exactly the one it had.
+        # apart. Closed days only, not the live table's day or two, which
+        # moved this recorded figure by tens of euro a day. Asked only where
+        # the no-spot answer is empty, so every card that already had a
+        # credit keeps exactly the one it had.
         spot_credited = False
-        if inj_rate is None and spots:
-            day_ahead = dict(spots)
+        window = _credit_spots(spots, today) if spots else None
+        if inj_rate is None and window:
             inj_rate = _compare_injection_credit(
                 credited if credited is not None else priced,
                 entry,
-                day_ahead,
-                sum(day_ahead.values()) / len(day_ahead),
+                {},
+                None,
                 None,
                 inj_hour_weights,
                 raw_snapshot=snapshot,
+                credit_spots=window,
             )
             spot_credited = inj_rate is not None
         if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:
@@ -314,7 +320,7 @@ async def _compute_projected_year_cost(
             )
             injection_basis = f"measured ({measured_inj.days_with_data} days)"
             if spot_credited:
-                injection_basis += ", credited at the day-ahead prices on hand"
+                injection_basis += ", credited on the past year's day-ahead prices"
             if regime == SOLAR_REGIME_INJECTION and inj_rate is None:
                 # _annual_bill's injection branch needs a rate; without one it
                 # bills gross. Say that, rather than claiming a credit that

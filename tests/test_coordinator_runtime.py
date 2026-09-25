@@ -2376,12 +2376,13 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots.assert_awaited()
 
 
-async def test_the_projection_is_handed_the_ticks_day_ahead(
+async def test_the_projection_is_handed_the_day_ahead_history(
     hass: HomeAssistant,
 ) -> None:
     """A static card whose feed-in follows the spot price per slot is
-    projected with the day-ahead the tick fetched for it, the prices the
-    compare page credits the same contract's year at."""
+    projected on the year of day-ahead the coordinator holds, not on the day
+    or two the live price table reads, which moved the figure by tens of euro
+    from one day to the next."""
     from custom_components.be_electricity_prices import coordinator_tick
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
@@ -2428,7 +2429,7 @@ async def test_the_projection_is_handed_the_ticks_day_ahead(
         await coord._async_update_data()
 
     assert projection.await_args is not None
-    assert projection.await_args.kwargs["spots"] == curve
+    assert projection.await_args.kwargs["spots"] is coord._historical_spots
 
 
 async def test_successful_tick_clears_stuck_extractor_failed_issue(

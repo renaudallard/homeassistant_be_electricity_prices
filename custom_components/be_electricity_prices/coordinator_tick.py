@@ -739,9 +739,11 @@ class _TickMixin:
             # rate the injection_price sensor shows rather than at the card's
             # printed figure, which is that formula on the previous month.
             credited=injection_snapshot,
-            # The day-ahead the live price table reads, for a feed-in credit
-            # that follows the spot price per slot, as the compare page does.
-            spots=spot_prices,
+            # The day-ahead history, for a feed-in credit that follows the
+            # spot price per slot, on the year the compare page credits it
+            # on. Not the live table's day or two, which moved this recorded
+            # figure by tens of euro a day.
+            spots=self._historical_spots,
             # The card the welcome credit is read off, the same row the
             # year-to-date walk just resolved, so a cache hit.
             signing=await signing_month_snapshot(

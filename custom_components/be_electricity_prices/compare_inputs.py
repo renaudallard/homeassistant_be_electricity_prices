@@ -43,6 +43,7 @@ from .const import (
     CONF_SOLAR_REGIME,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
+    MEASURED_FULL_YEAR_DAYS,
     METER_MONO,
     SOLAR_REGIME_NONE,
 )
@@ -460,6 +461,36 @@ def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> b
     return True
 
 
+# The fewest closed days of day-ahead a year's spot-indexed feed-in credit is
+# priced on. Below it the mean is a few weeks' weather, and the coordinator
+# holds its day-ahead from 1 January only, so early in a year there is little.
+_CREDIT_SPOT_MIN_DAYS = 30
+
+
+def _credit_spots(
+    history: Mapping[datetime, float], today: date
+) -> dict[datetime, float] | None:
+    """The day-ahead a whole year's spot-indexed feed-in credit is priced on.
+
+    Every hour of the closed days in the year before ``today``, or ``None``
+    when fewer than ``_CREDIT_SPOT_MIN_DAYS`` of them are held. A credit that
+    multiplies a year of export was priced on the day or two of day-ahead the
+    live table reads, so a recorded figure moved by tens of euro from one day
+    to the next and again when tomorrow's curve arrived. On closed days only,
+    a new day moves it by that day's share of the window and nothing moves it
+    during the day.
+    """
+    first = today - timedelta(days=MEASURED_FULL_YEAR_DAYS)
+    window: dict[datetime, float] = {}
+    days: set[date] = set()
+    for when, price in history.items():
+        day = dt_util.as_local(when).date()
+        if first <= day < today:
+            window[when] = price
+            days.add(day)
+    return window if len(days) >= _CREDIT_SPOT_MIN_DAYS else None
+
+
 def _kva(data: Mapping[str, Any]) -> float:
     """Configured inverter capacity, 0.0 when unset or unparseable."""
     try:
@@ -526,6 +557,10 @@ class _HouseholdQuote:
     spot_for: Any
     credit_month_spot_for: Any
     export_rate_for: Any
+    # The closed days of day-ahead held for the past year, on which a static
+    # card's spot-indexed feed-in credit is quoted (_credit_spots); None
+    # below a month of them, where the day-ahead window above prices it.
+    credit_spots: dict[datetime, float] | None = None
 
 
 @contextmanager
