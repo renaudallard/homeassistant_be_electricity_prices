@@ -2033,6 +2033,35 @@ async def test_compare_credits_a_per_slot_feed_in_on_the_year_held(
     assert float(short_high) > float(year_high)
 
 
+def test_uncredited_note_names_the_rule_that_left_the_credit_out() -> None:
+    """The year rule is only a static card's. A dynamic card's credit is
+    priced on the window its energy is, so it is left out when there is no
+    window, and saying it wanted a year of day-ahead would be false."""
+    from custom_components.be_electricity_prices.compare_table import (
+        _uncredited_note,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        DynamicRates,
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    formula = InjectionRates(current=None, factor=0.9, base=-0.01)
+    static = make_snapshot(
+        energy=FixedRates(single=0.18), injection=formula, source_url="test://"
+    )
+    dynamic = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02),
+        injection=formula,
+        source_url="test://",
+    )
+    assert "a year of it and of your export" in _uncredited_note(static, "Bolt")
+    note = _uncredited_note(dynamic, "Engie")
+    assert "no day-ahead price was available" in note
+    assert "year" not in note
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_injection_regime_credits_injection_price(
     hass: HomeAssistant,

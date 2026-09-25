@@ -445,13 +445,24 @@ def _uncredited_note(snapshot: Any, label: str) -> str:
     fall through to the no-credit branch of ``_annual_bill``, so without a
     note on the page the two are indistinguishable from a supplier that
     genuinely pays nothing.
+
+    The year is named only on a card whose energy is not dynamic, the one the
+    rule applies to. A dynamic card's credit rides the window its energy is
+    priced on, so it is left out only when there is none.
     """
+    from .providers._rates import DynamicRates
+
     if getattr(snapshot, "injection", None) is None:
         return f"{label} publishes no injection tariff, so nothing is credited there"
+    if isinstance(getattr(snapshot, "energy", None), DynamicRates):
+        return (
+            f"{label}'s injection is spot-indexed and no day-ahead price was "
+            "available, so nothing is credited there"
+        )
     return (
         f"{label}'s injection is spot-indexed and not enough day-ahead is held "
-        "to price it (a year of it and of your export, on a card whose energy "
-        "is not dynamic), so nothing is credited there"
+        "to price it (a year of it and of your export), so nothing is "
+        "credited there"
     )
 
 
