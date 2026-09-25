@@ -276,6 +276,27 @@ def _reset_since(state: State, midnight: datetime) -> bool:
     return parsed >= midnight
 
 
+def _cycled_total(readings: list[float]) -> float:
+    """What a ``total_increasing`` meter counted over ``readings``, in order.
+
+    Home Assistant's statistics walk the states one by one: a reading below
+    0.9 x the one before it starts a new cycle counted from zero, and the
+    cycle it ends keeps what it counted up to its last reading. A smaller fall
+    is a dip and nets against the cycle it happens in. A negative reading is
+    skipped, as the statistics skip it. The first reading is the opening one.
+    """
+    start = prev = readings[0]
+    total = 0.0
+    for value in readings[1:]:
+        if value < 0.0:
+            continue
+        if value < _RESET_BELOW * prev:
+            total += prev - start
+            start = 0.0
+        prev = value
+    return total + prev - start
+
+
 async def _live_today_kwh(
     hass: HomeAssistant, entity_id: str, today: date
 ) -> float | None:
@@ -291,14 +312,16 @@ async def _live_today_kwh(
     unit that can't be converted to kWh; the caller then keeps the daily
     statistic as a fallback rather than risk a wrong figure.
 
-    A reading below the midnight one is a counter reset when the meter says
-    so (``last_reset``) or its class promises it cannot fall
-    (``total_increasing``) and it fell below 0.9 x the midnight reading, Home
-    Assistant's own reset line. Any other fall reads as zero, the same answer the
-    past days get: :func:`_recorder_deltas` drops a negative ``change``,
-    because a sum-chain restart looks exactly like one. A register netting
-    export against consumption is therefore not supported, and today must
-    not bill it signed only to have midnight take the figure back.
+    A ``total_increasing`` meter is walked through today's states the way
+    Home Assistant's statistics walk them (:func:`_cycled_total`): a reading
+    below 0.9 x the one before it is a reset, a smaller fall a dip. Any other
+    meter reads ``current - midnight``, and a fall below the midnight reading
+    is a reset only when the meter says so (``last_reset``). A day that nets
+    below zero reads as zero, the same answer the past days get:
+    :func:`_recorder_deltas` drops a negative ``change``, because a sum-chain
+    restart looks exactly like one. A register netting export against
+    consumption is therefore not supported, and today must not bill it signed
+    only to have midnight take the figure back.
     """
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
@@ -320,16 +343,20 @@ async def _live_today_kwh(
         )
     except ImportError:
         return None
+    # The whole day, not only the midnight reading: a reset is judged against
+    # the reading before it, so it can only be found by walking the states.
+    # The minimal response keeps the rows after the first one light.
     try:
         history = await get_instance(hass).async_add_executor_job(
             partial(
                 get_significant_states,
                 hass,
                 midnight,
-                midnight + timedelta(seconds=1),
+                None,
                 [entity_id],
                 include_start_time_state=True,
                 significant_changes_only=False,
+                minimal_response=True,
                 no_attributes=True,
             )
         )
@@ -343,7 +370,31 @@ async def _live_today_kwh(
     except (TypeError, ValueError):
         return None
     delta = current - opening
-    if delta < 0.0 and _reset_since(state, midnight):
+    if state_class == SensorStateClass.TOTAL_INCREASING:
+        # Walked state by state as the statistics walk it, so a reset that
+        # climbed back to within 10% of the midnight reading, or past it, reads
+        # today what it reads after midnight. Comparing the current reading
+        # with the midnight one alone read the first as a dip and the second
+        # as the difference. The class promises the meter cannot fall, so only
+        # this class is walked for resets.
+        #
+        # A ``total`` register that nets injection against consumption (a
+        # utility_meter with net_consumption, a bidirectional meter) can be
+        # wired, since the picker accepts any device_class=energy sensor, and
+        # it falls whenever the site exports more than it draws. Walking it for
+        # resets would bill its whole lifetime total as one day.
+        readings = [opening]
+        for row in rows[1:]:
+            raw = row.state if isinstance(row, State) else row.get("state")
+            try:
+                readings.append(float(str(raw)))
+            except ValueError:
+                continue
+        readings.append(current)
+        # A day that nets below zero reads as zero, as the past days drop a
+        # negative change.
+        delta = max(_cycled_total(readings), 0.0)
+    elif delta < 0.0 and _reset_since(state, midnight):
         # The meter published a ``last_reset`` later than local midnight, so
         # it started a new cycle today and everything it has counted since is
         # today's consumption. This is the signal that actually generalises:
@@ -355,26 +406,6 @@ async def _live_today_kwh(
         # stand below zero after a day of export, and that reads as zero like
         # any other fall.
         delta = max(current, 0.0)
-    elif (
-        delta < 0.0
-        and state_class == SensorStateClass.TOTAL_INCREASING
-        and current < _RESET_BELOW * opening
-    ):
-        # A ``total_increasing`` meter that reset since midnight without
-        # publishing ``last_reset``: the class promises it cannot fall, so a
-        # fall is a reset, but only a large one. Home Assistant draws the line
-        # at 0.9 x the previous reading and logs anything smaller as a dip,
-        # which its statistics carry as a negative change the past days drop.
-        # Taking every fall as a reset billed a 0,01 kWh dip of a 12345,60
-        # register as 12345,59 kWh for the day.
-        #
-        # Gated on the state class on purpose. The picker accepts any
-        # device_class=energy sensor, so a ``total`` register that nets
-        # injection against consumption (a utility_meter with
-        # net_consumption, a bidirectional meter) can be wired, and it falls
-        # whenever the site exports more than it draws. Reading that as a
-        # reset would bill its whole lifetime total as one day.
-        delta = current
     elif delta < 0.0:
         # Any other fall, a dip included, is what the past days drop, so today
         # drops it too.
