@@ -2741,7 +2741,7 @@ async def test_a_month_whose_card_read_just_failed_waits_for_the_next_run(
     assert days() == {date(2026, 6, 1)}
     assert ids["current_year_cost"] in captured
     assert any("2026-05" in why for why in result["retry"])
-    assert "left_out" not in result
+    assert "stand_in" not in result
     assert snapshot_months.month_card_failed(
         hass, "eneco", "power_fix", "wallonia", date(2026, 5, 1)
     )
@@ -2752,14 +2752,14 @@ async def test_a_month_whose_card_read_just_failed_waits_for_the_next_run(
     assert any(
         "2026-05" in why and "call the service again" in why for why in result["retry"]
     )
-    assert "left_out" not in result
+    assert "stand_in" not in result
 
     # The archive answers again once the marker is waited out: May is priced
     # on its own card, and a month no archive holds is not a failed one.
     up = True
     freezer.tick(timedelta(minutes=31))
     result = await run()
-    assert "left_out" not in result
+    assert "stand_in" not in result
     assert "retry" not in result
     means = {
         dt_util.as_local(r["start"]).date(): r["mean"]

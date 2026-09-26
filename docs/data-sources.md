@@ -553,7 +553,7 @@ cost. Two rules enforce this:
   month no archive holds, since `_snapshot_for_month` hands back the current
   card for both). An earlier contract no archive kept is priced on the
   stand-in the live walk uses, imported at once so the anchor probe finds its
-  row on the next restart; the response lists it under `left_out` and a
+  row on the next restart; the response lists it under `stand_in` and a
   warning names it. A read that failed just now is a retry, not a stand-in:
   the live sensor bills those days on their own cards again once they can be
   read, and keeps an earlier contract's last pricing on its own cards

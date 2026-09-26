@@ -1069,7 +1069,7 @@ backfill again once the prices are cached.
 The backfill ends up with what the live sensor shows. The days of an earlier
 contract (after a recorded supplier switch) whose cards no archive kept are
 billed on today's card, as the live sensor bills them; the response lists them
-under `left_out` and the log names them in a warning. A card read that failed
+under `stand_in` and the log names them in a warning. A card read that failed
 just then (a timeout, or GitHub briefly down) is different: the live sensor
 bills those days on their own card again as soon as it can be read, so the
 backfill leaves them out of the price sensors rather than write a stand-in,

@@ -548,7 +548,12 @@ present only when not zero) when the cost pass met metered hours it could not
 price: an energy term with no cached spot or no DSO row, or a spot-indexed
 feed-in credit with no cached spot (`_backfill_cost_sensor`,
 `backfill_cost.py`). It logs the same counts at WARNING, since the automatic
-backfill has no caller to read them and imported rows do not heal.
+backfill has no caller to read them and imported rows do not heal. Two lists
+of `"<first day>..<last day>: <why>"` strings, present only when not empty,
+name days no card of their own priced: `retry`, the days left out of the price
+series because a card read failed just now (a service call is to be repeated
+once the card can be read), and `stand_in`, the days of an earlier contract no
+archive kept a card for, imported on today's card (`backfill.py`).
 
 `end` defaults to the current hour so the in-progress hour the live coordinator
 is about to write itself stays untouched. Re-runs are safe: rows are upserted on

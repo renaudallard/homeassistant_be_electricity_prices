@@ -556,7 +556,7 @@ and accrues the cost series across them as one running total
 no contract supplied (`billed_only`) as the sensor does. An earlier
 contract none of whose cards any archive kept bills on the stand-in the live
 sensor bills it on: `_stand_in_spans` names those days before either pass
-runs, and the response lists them under `left_out`. Days whose read failed
+runs, and the response lists them under `stand_in`. Days whose read failed
 just now are left out of the price series on every run, under `retry`, since
 the live sensor keeps an earlier contract's last pricing on its own cards
 meanwhile (`keep_settled`) and prices the rest on theirs once read;

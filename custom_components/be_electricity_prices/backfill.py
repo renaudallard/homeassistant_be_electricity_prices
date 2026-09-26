@@ -605,7 +605,7 @@ async def _backfill_range(
         )
     stand_ins = [span for span in spans if not span[3]]
     if stand_ins:
-        result["left_out"] = [
+        result["stand_in"] = [
             f"{first}..{last}: {why}, billed on today's card"
             for first, last, why, _failed in stand_ins
         ]
@@ -613,7 +613,7 @@ async def _backfill_range(
             "backfill for %s billed on today's card the days no archive kept a"
             " card of their own for: %s",
             entry.entry_id,
-            "; ".join(result["left_out"]),
+            "; ".join(result["stand_in"]),
         )
     return result
 

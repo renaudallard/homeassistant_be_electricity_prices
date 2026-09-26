@@ -1318,7 +1318,7 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
         result = await run(False, retry_later)
         assert days() == {date(2026, 4, 30), date(2026, 5, 1)}
         assert captured[ids["current_year_cost"]]
-        assert "totalenergies" in result["left_out"][0]
+        assert "totalenergies" in result["stand_in"][0]
         assert "retry" not in result
         assert "skipped" not in result
     # A read that failed just now waits for a later run on either path, and a
@@ -1329,7 +1329,7 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
         assert captured[ids["current_year_cost"]]
         assert "totalenergies" in result["retry"][0]
         assert ("call the service again" in result["retry"][0]) is not retry_later
-        assert "left_out" not in result
+        assert "stand_in" not in result
 
 
 async def test_the_automatic_backfill_imports_the_year_once(
@@ -1436,7 +1436,7 @@ async def test_the_automatic_backfill_imports_the_year_once(
     assert runs.await_count == 2
     assert result is not None
     assert "retry" not in result
-    assert "totalenergies" in " ".join(result["left_out"])
+    assert "totalenergies" in " ".join(result["stand_in"])
     days = {dt_util.as_local(r["start"]).date() for r in store[ids["current_price"]]}
     assert min(days) == date(2026, 1, 1)
     assert len(days) == (date(2026, 9, 26) - date(2026, 1, 1)).days + 1
