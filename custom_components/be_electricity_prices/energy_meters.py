@@ -1251,8 +1251,10 @@ def _silent_periods(
     alone. A wired consumption
     meter that reported nothing at all is silent for the whole window: a live
     meter writes a row every hour, moved or not, so no row is missing data
-    rather than a household that used nothing. Nothing is named while
-    neither side reported anything, since nothing carries on under it.
+    rather than a household that used nothing. Nothing is compared while
+    neither side reported anything: on the first day of the window (1 January,
+    or the day a recorded switch started the current contract) the days before
+    today are none, and cutting today left the day billed on its fees alone.
 
     A period injection did not report while consumption did is still billed
     on its consumption, with the feed-in left out. Cutting it from both sides
@@ -1261,11 +1263,11 @@ def _silent_periods(
     window, is named as silent, since the bill now reads high; one that starts
     later, because the panels came later, is not, and cuts nothing.
     """
-    if cons is None or inj is None:
+    if cons is None or inj is None or not (cons or inj):
         return None, set(), set()
     periods = set(periods)
     if not cons:
-        return "consumption" if inj else None, periods, set()
+        return "consumption", periods, set()
     last = max(cons)
     both = {p for p in periods if p < last and p not in cons}
     if not inj:

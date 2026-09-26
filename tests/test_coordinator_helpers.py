@@ -3856,6 +3856,19 @@ async def test_a_silent_feed_in_bills_the_consumption_without_it(
     assert not sides.injection.today_ok
 
 
+async def test_the_first_day_of_the_window_is_billed_on_its_live_reading(
+    freezer: Any,
+) -> None:
+    """On 1 January neither meter has a day before today, and the rule that
+    leaves out what consumption did not report cut today too: a solar entry
+    billed its fees alone all day. Nothing is compared until one side has."""
+    freezer.move_to("2026-01-01 18:00:00+01:00")
+    daily, _sides = await _both_sides(
+        [], [], {"sensor.cons": 5.0, "sensor.inj": 3.0}, date(2026, 1, 1)
+    )
+    assert daily == {date(2026, 1, 1): (5.0, 0.0, 3.0, 0.0)}
+
+
 async def test_feed_in_before_the_consumption_meter_started_is_left_out(
     freezer: Any,
 ) -> None:
