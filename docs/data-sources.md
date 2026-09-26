@@ -874,7 +874,8 @@ read for are kept in one installation-wide store (`{DOMAIN}_creg_ev`), read
 once per process before anything is fetched, so a restart or reload inside a
 quarter reuses it rather than reading creg.be again, and a sensor whose quarter
 was already read stays available after a restart while creg.be is down. A
-stored table that does not hold the quarter it names is ignored. Removing the
+stored table that does not price the quarter it names in every region is
+ignored. Removing the
 last entry deletes the store. `rate_for` and `history` read
 the table synchronously, for the tick's record and the sensor's attributes. A
 failure logs, records a six-hour backoff and keeps the previous table, so a
@@ -882,4 +883,7 @@ quarter already fetched keeps answering while the CREG is down; a first fetch
 that fails leaves the sensor unavailable. A file that answers but does not
 price the running quarter yet counts as a failure too: kept for the quarter,
 it would leave the sensor unavailable for three months after the CREG added
-the row. Nothing here raises, for the reason `brugel.py` gives.
+the row. So does one that prices it in some regions only, an empty or odd
+cell in the new month: its table is kept, so the regions it prices answer at
+once, and the file is read again after the backoff until every region is
+priced. Nothing here raises, for the reason `brugel.py` gives.

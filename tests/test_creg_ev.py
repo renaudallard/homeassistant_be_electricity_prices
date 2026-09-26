@@ -295,6 +295,36 @@ async def test_a_file_without_the_running_quarter_is_asked_again(
     assert session.calls == 3
 
 
+async def test_a_quarter_one_region_does_not_price_yet_is_asked_again(
+    hass: HomeAssistant,
+) -> None:
+    """A quarter was settled as soon as any region priced it, so a region
+    whose cell was still empty read as unavailable until the next quarter.
+    The regions the file prices answer at once, and it is read again after
+    the backoff until the last one does."""
+    rows = (
+        b"2026;10;31,00;;36,00;;{}\r\n"
+        b"2026;9;32,00;;37,00;;38,00;\r\n"
+        b"2026;8;33,00;;38,00;;39,00;\r\n"
+    )
+    session = _Session(_FIXTURE.read_bytes() + rows.replace(b"{}", b";"))
+    assert await creg_ev.ensure_rates(hass, session, date(2027, 1, 2)) is True  # type: ignore[arg-type]
+    assert creg_ev.rate_for(REGION_FLANDERS, date(2027, 1, 2)) == pytest.approx(0.32)
+    assert creg_ev.rate_for(REGION_WALLONIA, date(2027, 1, 2)) is None
+    assert creg_ev._fetched_quarter != date(2027, 1, 1)
+    # Within the backoff, nothing more is asked.
+    await creg_ev.ensure_rates(hass, session, date(2027, 1, 2))  # type: ignore[arg-type]
+    assert session.calls == 1
+    # The CREG fills the cell in, and the backoff runs out.
+    session._body = _FIXTURE.read_bytes() + rows.replace(b"{}", b"37,00;")
+    assert creg_ev._failed_at is not None
+    creg_ev._failed_at -= timedelta(seconds=creg_ev._FAILURE_RETRY_S)
+    await creg_ev.ensure_rates(hass, session, date(2027, 1, 3))  # type: ignore[arg-type]
+    assert session.calls == 2
+    assert creg_ev.rate_for(REGION_WALLONIA, date(2027, 1, 3)) == pytest.approx(0.38)
+    assert creg_ev._fetched_quarter == date(2027, 1, 1)
+
+
 def _restart() -> None:
     """What a Home Assistant restart does to the module: the table is gone."""
     creg_ev._table.clear()

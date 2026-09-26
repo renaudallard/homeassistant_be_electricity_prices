@@ -144,9 +144,11 @@ async def ensure_rates(
 ) -> bool:
     """Fetch the CSV once per quarter; return whether ``today`` has a rate.
 
-    A quarter counts as fetched only once the file prices it. A failed
-    download, or a file that does not price the quarter yet, leaves the
-    previous table, which may still answer, and is retried after the backoff.
+    A quarter counts as fetched only once the file prices it in every region.
+    A failed download, or a file that does not price the quarter yet, leaves
+    the previous table, which may still answer, and is retried after the
+    backoff; so is a file that prices it in some regions only, whose table is
+    kept meanwhile.
     The stored table is read first, once per process, so a restart does not
     count as a new quarter.
     """
@@ -201,7 +203,7 @@ async def _load(hass: HomeAssistant) -> None:
                 )
     except (KeyError, TypeError, ValueError, AttributeError):
         return
-    if not _has(table, quarter):
+    if not _settled(table, quarter):
         return
     _table.update(table)
     _fetched_quarter = quarter
@@ -219,6 +221,12 @@ def _to_store() -> dict[str, Any]:
 
 def _has(table: dict[str, dict[date, float]], quarter: date) -> bool:
     return any(quarter in rows for rows in table.values())
+
+
+def _settled(table: dict[str, dict[date, float]], quarter: date) -> bool:
+    """Whether ``table`` prices ``quarter`` in every region, so the file need
+    not be read again before the next one."""
+    return all(quarter in table.get(region, {}) for region in _PRICE_COLUMN)
 
 
 async def _fetch(session: aiohttp.ClientSession, quarter: date) -> None:
@@ -246,6 +254,14 @@ async def _fetch(session: aiohttp.ClientSession, quarter: date) -> None:
         return
     _table.clear()
     _table.update(table)
+    if not _settled(table, quarter):
+        # One region's cell was empty or odd when the file was read. Settling
+        # on it would leave that region unavailable until the next quarter,
+        # so the regions it prices answer and the file is read again after
+        # the backoff.
+        _LOGGER.debug("CREG home charging rates: %s not in every region yet", quarter)
+        _failed_at = dt_util.utcnow()
+        return
     _fetched_quarter = quarter
     _LOGGER.debug(
         "CREG home charging rates: %s",
