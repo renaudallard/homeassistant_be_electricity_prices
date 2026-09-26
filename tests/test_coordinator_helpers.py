@@ -2917,6 +2917,53 @@ async def test_a_register_with_only_a_live_reading_is_a_dead_half(
     assert measured == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
 
 
+@pytest.mark.parametrize(
+    ("data", "named"),
+    [
+        pytest.param(
+            {"consumption_kwh": "sensor.total"}, "sensor.total", id="lone-total"
+        ),
+        pytest.param(
+            {
+                "day_consumption_kwh": "sensor.day",
+                "night_consumption_kwh": "sensor.night",
+            },
+            "sensor.day, sensor.night",
+            id="both-halves",
+        ),
+    ],
+)
+async def test_a_meter_with_only_a_live_reading_is_named(
+    hass: HomeAssistant, freezer: Any, data: dict[str, str], named: str
+) -> None:
+    """A consumption meter compiling no statistics still reads live, so the
+    year to date was billed on today alone, and with no solar regime nothing
+    named it. It is named for the Repairs card now, and not on a window that
+    opens today, where no meter has a day before it."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    entry = SimpleNamespace(data=data)
+    rows, live = _pair_through_the_recorder(
+        {"sensor.total": [], "sensor.day": [], "sensor.night": []},
+        {"sensor.total": 7.0, "sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        year = await energy_meters._measured_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+        opening = await energy_meters._measured_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            today,
+            today,
+        )
+    assert year == energy_meters.MeasuredKwh(7.0, 1, pair_fault=named)
+    assert opening == energy_meters.MeasuredKwh(7.0, 1)
+
+
 async def test_a_register_that_stopped_is_named_though_it_reads_live_today(
     hass: HomeAssistant, freezer: Any
 ) -> None:

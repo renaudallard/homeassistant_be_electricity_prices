@@ -258,7 +258,10 @@ class _SnapshotMixin:
             )
             if sides is not None:
                 faults.extend(sides.silent)
-        self._register_pair_fault = ", ".join(f for f in faults if f)
+        # Once each: a consumption meter with no statistics is both a volume
+        # read on today alone and the silent side under a working feed-in.
+        names = (name for fault in faults for name in fault.split(", ") if name)
+        self._register_pair_fault = ", ".join(dict.fromkeys(names))
 
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.

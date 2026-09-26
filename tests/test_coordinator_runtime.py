@@ -2880,6 +2880,63 @@ async def test_a_silent_meter_side_is_named_in_repairs(
     assert coord._register_pair_fault == "sensor.cons"
 
 
+@pytest.mark.parametrize("regime", ["none", "injection"])
+async def test_a_consumption_meter_with_no_statistics_is_named_once(
+    hass: HomeAssistant, freezer: Any, regime: str
+) -> None:
+    """A lone consumption sensor compiling no statistics bills the year on
+    today's live reading alone. Without a solar regime nothing named it, and
+    beside a working feed-in meter it was named twice, once as the volume
+    read and once as the silent side."""
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": regime,
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    first = dt_util.start_of_local_day(date(2025, 9, 1)).astimezone(UTC)
+
+    async def _rows(
+        _hass: object,
+        entity_id: str,
+        _start: date,
+        _end: date,
+        period: str,
+        _fields: object = None,
+    ) -> list[dict[str, float]]:
+        if entity_id != "sensor.inj":
+            return []
+        step = timedelta(days=1) if period == "day" else timedelta(hours=1)
+        count = 384 if period == "day" else 384 * 24
+        return [
+            {"start": (first + i * step).timestamp(), "change": 0.1}
+            for i in range(count)
+        ]
+
+    async def _live(_hass: object, entity_id: str, _today: date) -> float | None:
+        return 7.0 if entity_id == "sensor.cons" else 1.0
+
+    with (
+        patch.object(energy_meters, "_recorder_rows", new=_rows),
+        patch.object(energy_meters, "_live_today_kwh", new=_live),
+    ):
+        await coord._ensure_annual_volume()
+    assert coord._register_pair_fault == "sensor.cons"
+
+
 async def test_a_year_of_sold_export_is_measured_for_the_feed_in_bonus(
     hass: HomeAssistant, freezer: Any
 ) -> None:

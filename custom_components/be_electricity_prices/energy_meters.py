@@ -1014,11 +1014,12 @@ class MeasuredKwh:
     kwh: float
     days_with_data: int
     # The register(s) of a day/night pair that record nothing, or stopped
-    # while the other half carries on, comma-separated; empty when the pair is
-    # whole or none is wired. What the Repairs card names, since the figure
-    # itself only says that less was billed, not which sensor to look at. A
-    # register that merely STARTED late is not named: after a rename the user
-    # fixed, the new entity reports to date and the pair is whole again.
+    # while the other half carries on, and a meter that reads live today with
+    # no statistics before it, comma-separated; empty when the side is whole
+    # or none is wired. What the Repairs card names, since the figure itself
+    # only says that less was billed, not which sensor to look at. A register
+    # that merely STARTED late is not named: after a rename the user fixed,
+    # the new entity reports to date and the pair is whole again.
     pair_fault: str = ""
 
 
@@ -1293,8 +1294,16 @@ async def _measured_kwh(
             return MeasuredKwh(0.0, 0, pair_fault=night_id if d else day_id)
         if not d:
             # Neither half has recorded anything in the window yet, today
-            # aside.
-            return MeasuredKwh(today_kwh, today_days)
+            # aside. A half that reads live today all the same compiles no
+            # statistics, and the year is billed on today's reading alone.
+            live_only = [
+                entity_id
+                for entity_id, live in ((day_id, day_today), (night_id, night_today))
+                if live is not None and start < end
+            ]
+            if total_id and _live_only(total, start, end):
+                live_only.append(total_id)
+            return MeasuredKwh(today_kwh, today_days, pair_fault=", ".join(live_only))
         return MeasuredKwh(
             sum(d[x] + n[x] for x in days) + today_kwh,
             len(days) + today_days,
@@ -1336,9 +1345,26 @@ def _broken_registers(
 async def _measured_total(
     hass: HomeAssistant, total_id: str, start: date, end: date
 ) -> MeasuredKwh:
-    """A totals sensor's kWh over ``[start, end]`` and the days it covers."""
+    """A totals sensor's kWh over ``[start, end]`` and the days it covers,
+    naming it when it has only today's live reading (:func:`_live_only`)."""
     d = await _recorder_daily_kwh(hass, total_id, start, end)
-    return MeasuredKwh(sum(d.values()), len(d))
+    return MeasuredKwh(
+        sum(d.values()),
+        len(d),
+        pair_fault=total_id if _live_only(d, start, end) else "",
+    )
+
+
+def _live_only(readings: Mapping[date, float], start: date, end: date) -> bool:
+    """Whether a meter read over ``[start, end]`` has today's live reading
+    and no statistic before it.
+
+    That is a sensor compiling no statistics at all (no ``state_class``, or
+    ``measurement``) whose state still reads: the year to date is then billed
+    on today alone, and nothing else says so, whatever the solar regime. Not
+    for a window that opens today, where no meter has a day before it.
+    """
+    return start < end and end in readings and not _without_today(readings, end)
 
 
 async def _measured_hour_weights(

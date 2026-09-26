@@ -899,7 +899,9 @@ successful refresh:
   than as a household that used nothing while its feed-in was credited, so
   the cost reads low; the days an injection meter misses are billed on their
   consumption without the feed-in, so it reads high. An injection meter that
-  recorded nothing at all is named too.
+  recorded nothing at all is named too, and so is a consumption meter that
+  compiles no statistics while its state still reads, whatever the solar
+  regime: the year is then billed on today's reading alone.
 
   The first four of those eight are not failures either: each clears when the
   supplier prints the missing row again, the kVA one as soon as the inverter
@@ -1053,7 +1055,10 @@ searching for:
   cost falls to the fixed fees, unless a totals sensor is wired on the same
   side, which is then billed instead. A sensor with `device_class: energy` but
   no `state_class` compiles no long-term statistics at all, and neither does
-  `state_class: measurement`; both look perfectly normal in the UI.
+  `state_class: measurement`; both look perfectly normal in the UI. A lone
+  consumption sensor of that kind, or a pair whose registers both are, bills
+  the year on today's live reading alone, and the register Repairs card
+  names it.
 - **"has diverged"** — both halves of the pair report, but not on the same
   days: one stopped (a rename, an integration swap, a meter replacement) or
   started late. Only the days both report are billed, feed-in included, and
