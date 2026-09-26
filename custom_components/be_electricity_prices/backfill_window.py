@@ -62,7 +62,7 @@ from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
-from .providers.base import SupplierSnapshot
+from .providers.base import ExtractorError, SupplierSnapshot
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
@@ -410,6 +410,11 @@ async def _contract_segments(
     hour outside every earlier contract's days, including one in a previous
     year, stays on the entry's own contract, as it always was.
 
+    ``hours`` holds no day ``_unpriceable_spans`` left out, so an earlier
+    contract that comes back priced on the entry's current card lost its own
+    card during the run, and raises rather than import another supplier's
+    prices for its days.
+
     ``billed_only`` leaves out the days inside the window that no contract
     supplied: before the first earlier contract when it billed the year from
     its own start date, as ``current_year_cost`` leaves them out. The cost
@@ -455,10 +460,53 @@ async def _segment_for(
 ) -> tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]:
     if index is None or index < 0:
         return entry, None, hours
-    proxy, _extractor, card, _stand_in = await period_card(
-        hass, coordinator._session, coordinator, periods[index]
+    period = periods[index]
+    proxy, _extractor, card, stand_in, _read_by_ocr = await period_card(
+        hass, coordinator._session, coordinator, period
     )
+    if stand_in:
+        raise ExtractorError(
+            f"the cards of the {period.data.get(CONF_SUPPLIER)} contract held"
+            f" from {period.start} to {period.end} could not be read during"
+            " the backfill"
+        )
     return proxy, card, hours
+
+
+async def _unpriceable_spans(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    first: date,
+    last: date,
+) -> list[tuple[date, date, str]]:
+    """The days in ``[first, last]`` the backfill cannot price on their own
+    cards, as ``(first day, last day, why)``.
+
+    An earlier contract whose supplier's cards could not be had right now
+    (``period_card`` hands back the entry's current card in their place). The
+    live sensor bills such days on that stand-in as a last resort and prices
+    them again an hour later, but a statistic imported off it stays in the
+    recorder for good, so the backfill leaves those days out and says so.
+    """
+    today = dt_util.now().date()
+    spans: list[tuple[date, date, str]] = []
+    for period in previous_periods(entry.data, ytd_window_start(entry, today), today):
+        if period.end < first or period.start > last:
+            continue
+        _proxy, _extractor, _card, stand_in, _read_by_ocr = await period_card(
+            hass, coordinator._session, coordinator, period
+        )
+        if stand_in:
+            spans.append(
+                (
+                    period.start,
+                    period.end,
+                    f"no card of the {period.data.get(CONF_SUPPLIER)} contract"
+                    " held then could be read",
+                )
+            )
+    return spans
 
 
 _COST_SENSOR_KEY = "current_year_cost"

@@ -543,6 +543,12 @@ cost. Two rules enforce this:
   carries a `skipped` note saying why (`backfill.py`). Representing a past
   year would mean abandoning the per-year restart and importing a
   lifetime-cumulative sum instead, which is a different design.
+- A run that has to leave days out, because no card of their own can be had
+  for them right now (an earlier contract whose supplier's cards cannot be
+  read, `_unpriceable_spans` in `backfill_window.py`), skips the cost leg
+  whole: a running total missing those days would carry every later hour
+  short, and an imported statistic stays. The price sensors are rebuilt around
+  them and the response lists them under `left_out`.
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the

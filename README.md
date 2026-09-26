@@ -730,10 +730,16 @@ one, starting from what you have now. From then on:
 - `current_month_cost` includes the old contract's days in the month of the
   switch, the comparison pages price *your contract* the same way, and the
   statistics backfill prices each hour on the contract that supplied it.
-- A supplier that can no longer be reached, and whose cards no archive kept,
-  has its days priced on your current card, without the welcome credit that
-  card offers new customers, and the contract's row in `previous_contracts`
-  says so (`priced_on_current_card`).
+- A supplier that publishes its card as page images (Ecofix since August
+  2026) has its days priced on the card archive's reading of that card, as
+  your own contract would be, and the row says so (`card_read_by_ocr`). When
+  the old supplier's card cannot be had for the day, the last pricing on its
+  own cards is kept. A supplier that can no longer be reached, and whose cards
+  no archive kept, has its days priced on your current card, without the
+  welcome credit that card offers new customers: the contract's row in
+  `previous_contracts` says so (`priced_on_current_card`), it is tried again
+  every hour, and the statistics backfill leaves those days out rather than
+  import another supplier's prices for them.
 
 Record a switch as soon as you can. Until then the new contract's days are
 priced as the old contract's, and recording it later corrects the figure,
@@ -1027,6 +1033,14 @@ land. The backfill lets Home Assistant carry on between each day of
 hours, so the rest of the system stays responsive while it runs.
 Response is a `{rows_written, sensors, range}` object you can
 inspect from Developer Tools → Services.
+
+Days whose own card cannot be had when the backfill runs are left out rather
+than imported on a stand-in, since an imported statistic stays: the days of
+an earlier contract (after a recorded supplier switch) whose supplier's cards
+cannot be read. The response lists them under `left_out`, with a `skipped` note for
+`current_year_cost`, whose running bill cannot be imported with days missing
+from it. Run the service again once those cards can be read. With `clear` on,
+such a run is refused, since the wipe would take rows it cannot write back.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

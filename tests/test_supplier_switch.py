@@ -6,6 +6,7 @@ backfill that splits at it."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
@@ -25,6 +26,7 @@ from custom_components.be_electricity_prices import (
     contract_periods,
     energy_meters,
     ytd_cost,
+    snapshot_months,
     ytd_energy,
 )
 from custom_components.be_electricity_prices import backfill as bf
@@ -49,6 +51,7 @@ from custom_components.be_electricity_prices.contract_periods import (
     periods_key,
     previous_costs,
     previous_periods,
+    previous_rows,
     priced_from_dict,
     priced_to_dict,
     with_previous_contracts,
@@ -61,11 +64,16 @@ from custom_components.be_electricity_prices.flow_schemas import (
     _validate_contract_dates,
     _validate_switch_date,
 )
+from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     InjectionRates,
 )
+from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
+)
+from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from tests import make_entry, make_snapshot, make_stub_extractor
 
 _TICK = "custom_components.be_electricity_prices.coordinator_tick"
@@ -882,7 +890,7 @@ async def test_an_old_feed_in_settled_on_the_solar_profile_loads_it_before_prici
         hass_: Any, session: Any, coordinator: Any, period: Any, overrides: Any = None
     ) -> Any:
         proxy = _QuoteEntry(data=dict(period.data), runtime_data=coordinator)
-        return proxy, make_stub_extractor(), card, False
+        return proxy, make_stub_extractor(), card, False, False
 
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
     with (
@@ -934,7 +942,9 @@ async def test_pricing_closes_each_window_on_the_day_before_the_switch(
         return 10.0
 
     with (
-        patch.object(contract_periods, "_current_card", AsyncMock(return_value=None)),
+        patch.object(
+            contract_periods, "_current_card", AsyncMock(return_value=(None, False))
+        ),
         patch.object(
             contract_periods, "_latest_archived_card", AsyncMock(return_value=None)
         ),
@@ -1005,7 +1015,9 @@ async def test_a_stand_in_card_grants_the_old_contract_no_welcome_credit(
         with (
             patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
             patch.object(
-                contract_periods, "_current_card", AsyncMock(return_value=None)
+                contract_periods,
+                "_current_card",
+                AsyncMock(return_value=(None, False)),
             ),
             patch.object(
                 contract_periods, "_latest_archived_card", AsyncMock(return_value=None)
@@ -1030,6 +1042,193 @@ async def test_a_stand_in_card_grants_the_old_contract_no_welcome_credit(
     without = await _priced_on(plain)
     assert without is not None
     assert await _priced_on(offered) == pytest.approx(without)
+
+
+async def test_an_old_card_published_as_page_images_prices_on_the_archive_reading(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Ecofix publishes its cards as page images, so every fetch of an earlier
+    Ecofix contract's card raised and the period was priced on the NEW
+    supplier's card, every day. The live tick and the compare page price such
+    a card on the archive's OCR reading, and so does an earlier contract."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    ocr_card = make_snapshot(
+        supplier="ecofix", contract="ecofix_flexy", energy=FixedRates(single=0.15)
+    )
+    coordinator = SimpleNamespace(
+        _snapshot=make_snapshot(energy=FixedRates(single=0.25)),
+        entry=make_entry(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    period = ContractPeriod(
+        date(2026, 1, 1), date(2026, 7, 31), _held("ecofix", "ecofix_flexy")
+    )
+
+    async def images(*_a: Any) -> Any:
+        raise CardNotReadableError("Ecofix card has no text layer")
+
+    asked: list[date] = []
+
+    async def archive(*args: Any) -> ArchivedCard:
+        asked.append(args[4])
+        return ArchivedCard(snapshot=ocr_card, read_by_ocr=True)
+
+    async def cost(*args: Any, **_k: Any) -> float:
+        return round(args[3].energy.single * 2000, 2)
+
+    ecofix = dataclasses.replace(EXTRACTORS["ecofix"], fetch=images)
+    with (
+        patch.object(contract_periods, "get_extractor", lambda _id: ecofix),
+        patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+        patch.object(contract_periods, "_compute_current_year_cost", new=cost),
+    ):
+        rows = await contract_periods.price_previous_periods(
+            hass,
+            None,  # type: ignore[arg-type]
+            coordinator,
+            [period],
+            month_start=date(2026, 9, 1),
+        )
+    assert asked == [date(2026, 9, 1)]
+    assert (rows[0].cost, rows[0].stand_in, rows[0].read_by_ocr) == (300.0, False, True)
+    priced = PricedPeriods(
+        key=periods_key([period]),
+        day=date(2026, 9, 24),
+        month=date(2026, 9, 1),
+        rows=(rows[0],),
+    )
+    assert previous_rows(priced, [period])[0]["card_read_by_ocr"] is True
+    assert priced_from_dict(priced_to_dict(priced)) == priced
+
+
+async def test_a_stand_in_keeps_the_pricing_on_its_own_cards_and_is_asked_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """One timeout on the old supplier's site priced the period on the new
+    supplier's card, and that was kept for the whole day and written over
+    yesterday's pricing on its own cards in the store."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(
+        previous_contracts=[
+            {
+                "until": "2026-08-01",
+                "data": _held("totalenergies", "totalenergies_electricite_fixe"),
+            }
+        ]
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.25))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    today = date(2026, 9, 24)
+    periods = previous_periods(entry.data, date(2026, 1, 1), today)
+    own = PricedPeriod(
+        start=date(2026, 1, 1),
+        end=date(2026, 7, 31),
+        supplier="totalenergies",
+        contract="totalenergies_electricite_fixe",
+        cost=300.0,
+        month_cost=None,
+        stand_in=False,
+    )
+    stand_in = PricedPeriod(**{**own.__dict__, "cost": 500.0, "stand_in": True})
+    # Yesterday's pricing, as the store restores it after a restart.
+    coord._previous_priced = PricedPeriods(
+        key=periods_key(periods),
+        day=date(2026, 9, 23),
+        month=date(2026, 9, 1),
+        rows=(own,),
+    )
+    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[stand_in])):
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+    assert coord._previous_priced.rows == (own,)
+    assert coord._previous_priced.day == today
+    # With nothing better to keep, the stand-in is served, and asked again on
+    # the next hourly tick rather than kept for the day.
+    coord._previous_priced = PricedPeriods(
+        key=periods_key(periods), day=today, month=date(2026, 9, 1), rows=(stand_in,)
+    )
+    coord._previous_pricing = None
+    coord._previous_tried = None
+    priced_again = AsyncMock()
+    coord._price_previous = priced_again  # type: ignore[method-assign]
+    coord._schedule_previous_pricing(periods, today)
+    assert coord._previous_pricing is not None
+    await coord._previous_pricing
+    priced_again.assert_awaited_once()
+
+
+async def test_the_backfill_imports_no_hour_priced_on_a_stand_in(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The live sensor prices a stand-in again an hour later; a statistic
+    imported off one stays in the recorder for good. The earlier contract's
+    days are left out, the running bill with them, and the response says so."""
+    freezer.move_to("2026-05-02 12:00:00+02:00")
+    held = _held("totalenergies", "totalenergies_electricite_fixe", solar_regime="none")
+    entry = make_entry(
+        solar_regime="none", previous_contracts=[{"until": "2026-05-01", "data": held}]
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    ids = {
+        key: registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{entry.entry_id}_{key}",
+            suggested_object_id=f"switch_{key}",
+            config_entry=entry,
+        ).entity_id
+        for key in ("current_price", "current_year_cost")
+    }
+    card = make_snapshot(energy=FixedRates(single=0.25))
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _snapshot=card,
+        _session=None,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _ensure_historical_spots=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+        _spot_prune_holds=0,
+    )
+    entry.runtime_data = coordinator
+    proxy = _QuoteEntry(data=held, runtime_data=coordinator)
+    captured: dict[str, list[Any]] = {}
+
+    def fake_import(_h: Any, metadata: Any, stats: Any) -> None:
+        captured[metadata["statistic_id"]] = list(stats)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(
+            backfill_window,
+            "period_card",
+            AsyncMock(return_value=(proxy, make_stub_extractor(), card, True, False)),
+        ),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_range(
+            hass,
+            entry,
+            datetime(2026, 4, 30, tzinfo=dt_util.get_default_time_zone()),
+            datetime(2026, 5, 2, tzinfo=dt_util.get_default_time_zone()),
+        )
+    rows = captured[ids["current_price"]]
+    assert len(rows) == 24
+    assert all(dt_util.as_local(r["start"]).date() == date(2026, 5, 1) for r in rows)
+    assert ids["current_year_cost"] not in captured
+    assert "totalenergies" in result["left_out"][0]
+    assert "cost" in result["skipped"]
 
 
 async def test_the_compare_page_adds_the_earlier_contracts_under_its_what_if(
@@ -1201,7 +1400,9 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
         patch.object(
             backfill_window,
             "period_card",
-            AsyncMock(return_value=(old_entry, make_stub_extractor(), old_card, False)),
+            AsyncMock(
+                return_value=(old_entry, make_stub_extractor(), old_card, False, False)
+            ),
         ),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
@@ -1273,7 +1474,7 @@ async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(
     with patch.object(
         backfill_window,
         "period_card",
-        AsyncMock(return_value=(stand_in, None, card, False)),
+        AsyncMock(return_value=(stand_in, None, card, False, False)),
     ):
         billed = await backfill_window._contract_segments(
             hass,

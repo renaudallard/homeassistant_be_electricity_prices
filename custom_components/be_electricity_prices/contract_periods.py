@@ -51,6 +51,7 @@ from typing import Any, cast
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .cohort import ytd_window_start
 from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
@@ -72,9 +73,14 @@ from .const import (
 from .flow_contracts import _contract_is_month_indexed
 from .providers import effective_kind, get as get_extractor, settlement_answer
 from .providers._resolve import without_welcome_credit
-from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
+from .providers.base import (
+    CardNotReadableError,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+)
 from .providers.custom import build_snapshot as build_custom_snapshot
-from .snapshot_months import _snapshot_for_month
+from .snapshot_months import _snapshot_for_month, card_for_unreadable_month
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
 from .snapshot_store import fetch_shared
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled
@@ -101,6 +107,8 @@ class PricedPeriod:
     says the supplier could not be reached and no archive held any of its cards,
     so the period was priced on the entry's current card instead, which is what
     the whole year was priced on before switches could be recorded.
+    ``read_by_ocr`` says the old supplier's card carries no text layer and the
+    period was priced on the archive's reading of its pixels.
     """
 
     start: date
@@ -110,6 +118,12 @@ class PricedPeriod:
     cost: float | None
     month_cost: float | None
     stand_in: bool
+    read_by_ocr: bool = False
+
+    @property
+    def settled(self) -> bool:
+        """Whether the period priced on its own supplier's cards."""
+        return self.cost is not None and not self.stand_in
 
 
 @dataclass(frozen=True)
@@ -142,6 +156,7 @@ def priced_to_dict(priced: PricedPeriods) -> dict[str, Any]:
                 "cost": row.cost,
                 "month_cost": row.month_cost,
                 "stand_in": row.stand_in,
+                "read_by_ocr": row.read_by_ocr,
             }
             for row in priced.rows
         ],
@@ -162,6 +177,7 @@ def priced_from_dict(blob: Mapping[str, Any]) -> PricedPeriods | None:
                     None if row["month_cost"] is None else float(row["month_cost"])
                 ),
                 stand_in=bool(row["stand_in"]),
+                read_by_ocr=bool(row.get("read_by_ocr", False)),
             )
             for row in blob["rows"]
         )
@@ -306,8 +322,30 @@ def previous_rows(
             # Priced on the entry's current card: the old supplier could not be
             # reached and no archive held any of its cards for those days.
             "priced_on_current_card": row.stand_in,
+            # Priced on the archive's OCR reading of a card published as
+            # page images, which no parser here can read.
+            "card_read_by_ocr": row.read_by_ocr,
         }
         for row in priced.rows
+    )
+
+
+def keep_settled(
+    previous: PricedPeriods | None, key: str, rows: list[PricedPeriod]
+) -> tuple[PricedPeriod, ...]:
+    """``rows``, keeping the last pricing's row for a period this one could
+    not price on its own supplier's cards.
+
+    A timeout on the old supplier's site priced the period on another
+    supplier's card, and that replaced the pricing on its own cards for the
+    day and in the store. The window is closed, so the last pricing on its
+    own cards is the better figure whatever its age.
+    """
+    if previous is None or previous.key != key or len(previous.rows) != len(rows):
+        return tuple(rows)
+    return tuple(
+        old if old.settled and not new.settled else new
+        for old, new in zip(previous.rows, rows, strict=True)
     )
 
 
@@ -381,11 +419,20 @@ async def _current_card(
     session: aiohttp.ClientSession,
     extractor: SupplierExtractor,
     proxy: ConfigEntry,
-) -> SupplierSnapshot | None:
+) -> tuple[SupplierSnapshot | None, bool]:
     """The old contract's card as its supplier publishes it today, resolved for
-    this household, or ``None`` when the supplier cannot be reached."""
+    this household, or ``None`` when the supplier cannot be reached, and
+    whether it was read off the archive's OCR reading.
+
+    A card published as page images downloads fine and no parser here can read
+    it: Ecofix's, every day since August 2026. The repository's archive reads
+    those off their pixels, and the live tick and the compare page price such
+    a card on that row (``card_for_unreadable_month``), so an earlier contract
+    on one is priced on it too rather than on another supplier's card."""
     data = proxy.data
     region = data.get(CONF_REGION, "")
+    contract = data.get(CONF_CONTRACT, "")
+    read_by_ocr = False
     if extractor.id == SUPPLIER_CUSTOM:
         raw: SupplierSnapshot | None = build_custom_snapshot(
             data, region, data.get(CONF_DSO, "")
@@ -395,15 +442,33 @@ async def _current_card(
             hass,
             session,
             extractor,
-            data.get(CONF_CONTRACT, ""),
+            contract,
             region,
             supplier=extractor.id,
             record_failure=False,
         )
         raw = fetched.row.snapshot if fetched.row is not None else None
+        if raw is None and isinstance(fetched.error, CardNotReadableError):
+            try:
+                archived = await card_for_unreadable_month(
+                    session, extractor.id, contract, region, dt_util.now().date(), proxy
+                )
+            except Exception as err:  # noqa: BLE001 - a blip on the archive is not this period's problem
+                _LOGGER.debug(
+                    "card archive read failed for %s/%s: %s",
+                    extractor.id,
+                    contract,
+                    err,
+                )
+                archived = None
+            if archived is not None:
+                raw = archived.snapshot
+                read_by_ocr = archived.read_by_ocr
     if raw is None:
-        return None
-    return _resolve_snapshot(proxy, raw, annual_kwh=entry_annual_kwh(proxy))
+        return None, False
+    return _resolve_snapshot(
+        proxy, raw, annual_kwh=entry_annual_kwh(proxy)
+    ), read_by_ocr
 
 
 async def _latest_archived_card(
@@ -448,16 +513,19 @@ async def period_card(
     coordinator: Any,
     period: ContractPeriod,
     overrides: Mapping[str, Any] | None = None,
-) -> tuple[ConfigEntry, SupplierExtractor, SupplierSnapshot | None, bool]:
-    """The stand-in entry, extractor and card an earlier contract is priced on.
+) -> tuple[ConfigEntry, SupplierExtractor, SupplierSnapshot | None, bool, bool]:
+    """The stand-in entry, extractor and card an earlier contract is priced on,
+    whether that card is the entry's own standing in, and whether it was read
+    off the archive's OCR reading.
 
     The card is the one its supplier publishes today, resolved for this
     household, and each month still bills on its own archived card through the
     walk: this one only stands in for a month no archive holds, exactly as the
-    entry's current card does for its own contract. A supplier that no longer
-    publishes one falls back to the newest card an archive kept inside the
-    period, and one with neither to the entry's current card, which the last
-    element flags. ``None`` only when the entry has no card of its own either.
+    entry's current card does for its own contract. A card published as page
+    images is the archive's reading of it (``_current_card``). A supplier that
+    no longer publishes one falls back to the newest card an archive kept
+    inside the period, and one with neither to the entry's current card, the
+    last resort. ``None`` only when the entry has no card of its own either.
 
     A stand-in prices the days and nothing the card offers a new customer: it
     is walked with the old contract's start date, so a welcome credit left on
@@ -474,15 +542,15 @@ async def period_card(
     )
     extractor = get_extractor(str(period.data.get(CONF_SUPPLIER, "")))
     fallback = getattr(coordinator, "_snapshot", None)
-    card = await _current_card(hass, session, extractor, proxy)
+    card, read_by_ocr = await _current_card(hass, session, extractor, proxy)
     if card is None and fallback is not None:
         card = await _latest_archived_card(
             hass, session, extractor, proxy, period, fallback
         )
     if card is None:
         stand_in = None if fallback is None else without_welcome_credit(fallback)
-        return proxy, extractor, stand_in, True
-    return proxy, extractor, card, False
+        return proxy, extractor, stand_in, True, False
+    return proxy, extractor, card, False, read_by_ocr
 
 
 async def price_previous_periods(
@@ -523,8 +591,9 @@ async def price_previous_periods(
         cost: float | None = None
         month_cost: float | None = None
         stand_in = False
+        read_by_ocr = False
         try:
-            proxy, extractor, card, stand_in = await period_card(
+            proxy, extractor, card, stand_in, read_by_ocr = await period_card(
                 hass, session, coordinator, period, overrides
             )
             if card is not None:
@@ -601,6 +670,7 @@ async def price_previous_periods(
                 cost=cost,
                 month_cost=month_cost,
                 stand_in=stand_in,
+                read_by_ocr=read_by_ocr,
             )
         )
     return out

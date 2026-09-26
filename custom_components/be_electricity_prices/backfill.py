@@ -96,6 +96,7 @@ from .backfill_window import (
     _normalize_window,
     _recorder_models,
     _stat_id,
+    _unpriceable_spans,
 )
 from .backfill_cost import (
     _backfill_cost_sensor,
@@ -442,6 +443,28 @@ async def _backfill_range(
             end_utc.isoformat(),
             this_year_anchor_utc.isoformat(),
         )
+    # Days no card of their own can price right now are left out rather than
+    # imported off a stand-in, which would stay in the recorder for good. The
+    # cost series is one running total, so a day missing from it would carry
+    # every later hour short: it is left out whole.
+    spans = await _unpriceable_spans(
+        hass,
+        entry,
+        coordinator,
+        dt_util.as_local(min(start_utc, cost_anchor_utc)).date(),
+        dt_util.as_local(end_utc - timedelta(hours=1)).date(),
+    )
+    cost_first = dt_util.as_local(cost_anchor_utc).date()
+    cost_left_out = not skip_cost and any(
+        last >= cost_first for _first, last, _why in spans
+    )
+    if clear and spans:
+        # The wipe is series-wide and the left-out days would not come back.
+        raise ServiceValidationError(
+            "clear=True would delete statistics this run cannot write back: "
+            + "; ".join(f"{first}..{last}: {why}" for first, last, why in spans)
+            + ". Re-run once those cards can be read, or leave clear off."
+        )
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
         # series-scoped), but a sub-year window only repopulates
@@ -471,7 +494,14 @@ async def _backfill_range(
     spots, quarters = await _ensure_dynamic_spots(
         coordinator, entry, min(start_utc, cost_anchor_utc), end_utc
     )
-    hours = _hour_iter(start_utc, end_utc)
+    hours = [
+        hour
+        for hour in _hour_iter(start_utc, end_utc)
+        if not any(
+            first <= dt_util.as_local(hour).date() <= last
+            for first, last, _why in spans
+        )
+    ]
     cost_hours = _hour_iter(cost_anchor_utc, end_utc)
     cost_emit_from = max(start_utc, cost_anchor_utc)
 
@@ -502,7 +532,7 @@ async def _backfill_range(
     counts = await _backfill_price_sensors(
         hass, entry, coordinator, hours, spots, quarters
     )
-    if not skip_cost:
+    if not skip_cost and not cost_left_out:
         counts.update(
             await _backfill_cost_sensor(
                 hass,
@@ -532,6 +562,17 @@ async def _backfill_range(
             "cost: a window ending on or before 1 January of the current year "
             "would paint a large negative cost at the year boundary, because "
             "the recorder ignores last_reset on imported statistics"
+        )
+    if spans:
+        result["left_out"] = [f"{first}..{last}: {why}" for first, last, why in spans]
+        _LOGGER.warning(
+            "backfill for %s left out %s; run it again once those cards can be read",
+            entry.entry_id,
+            "; ".join(result["left_out"]),
+        )
+    if cost_left_out:
+        result["skipped"] = (
+            "cost: the running bill cannot be imported with days left out of it"
         )
     return result
 

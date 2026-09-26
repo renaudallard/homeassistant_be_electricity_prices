@@ -472,10 +472,13 @@ its own injection (CWaPE CD-14d03, section 5.1.2).
 
 The card each earlier contract stands on (`period_card`) is the one its
 supplier publishes today, through `fetch_shared`; each month still bills on
-its own archived card through the walk. A supplier that no longer publishes one
-falls back to the newest card an archive kept inside the period, found by
-asking `_snapshot_for_month` for each month with the entry's card as the
-fallback and watching for a different object, and one with neither to the
+its own archived card through the walk. A card that downloads with no text
+layer (`CardNotReadableError`, Ecofix's every day) is the archive's OCR row for
+the running month (`card_for_unreadable_month`), as for the live tick and the
+compare page, and the row carries `read_by_ocr`. A supplier that no longer
+publishes one falls back to the newest card an archive kept inside the period,
+found by asking `_snapshot_for_month` for each month with the entry's card as
+the fallback and watching for a different object, and one with neither to the
 entry's current card, flagged `stand_in`. A stand-in carries no welcome credit
 (`without_welcome_credit`): it is walked with the old contract's start date,
 so the ristourne or first-year bonus the current card offers a new customer
@@ -484,13 +487,17 @@ was credited to a contract that never signed it.
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,
 `_price_previous`), or on the next hourly tick while a contract could not be
-priced (`_PREVIOUS_RETRY`: not on the tick its own refresh asks for, which
-would price it again every few seconds),
+priced on its own cards (`PricedPeriod.settled`; `_PREVIOUS_RETRY`: not on the
+tick its own refresh asks for, which would price it again every few seconds),
 after filling the year's day-ahead when an earlier contract settles on it, with
 the ENTSO-E key the old contract's settings kept when the entry holds none, and
 asks for a refresh when it lands. The result is kept as
 `PricedPeriods` with `periods_key`, the days and settings it was priced for,
-and served only for those. Until one lands, usually the minutes after a switch
+and served only for those. A row that did not price on its own cards (a
+stand-in, or none at all) gives way to the last pricing's row for the same
+periods that did (`keep_settled`), so one timeout on the old supplier's site
+neither replaces its own figure with another supplier's for the day nor writes
+that over it in the store. Until one lands, usually the minutes after a switch
 is recorded, and while any contract fails to price, the year reads unknown rather than short by a whole contract,
 which on the recorder would read as a large negative change and then the same
 positive one. The spot and load-profile gates ask `periods_need_spots` and
@@ -529,7 +536,13 @@ The backfill cuts its hours at each switch
 (`_contract_segments`, `backfill_window.py`), builds a context per contract
 and accrues the cost series across them as one running total
 (`_accrue_cost`, `backfill_cost.py`), leaving out of the cost series the days
-no contract supplied (`billed_only`) as the sensor does.
+no contract supplied (`billed_only`) as the sensor does. It imports nothing
+off a stand-in: `_unpriceable_spans` names the earlier contracts whose own
+cards cannot be had before either pass runs, their hours are left out of the
+price series and the cost series is skipped whole, since a running total
+missing days carries every later hour short. The response lists them under
+`left_out`. A contract that loses its card during the run raises in
+`_segment_for` rather than price on the stand-in.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 

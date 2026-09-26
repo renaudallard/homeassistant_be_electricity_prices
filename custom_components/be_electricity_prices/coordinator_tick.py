@@ -103,6 +103,7 @@ from .contract_periods import (
     ContractPeriod,
     PricedPeriods,
     current_period_start,
+    keep_settled,
     periods_key,
     periods_need_rlp,
     periods_need_spots,
@@ -990,12 +991,13 @@ class _TickMixin:
         tick nor config-entry setup should wait on. Stale pricing for the same
         periods keeps being served until the new one lands.
 
-        A pricing that could not price one of the periods is not kept for the
-        day: the year reads unknown while it stands, so the next hourly tick
-        asks again rather than tomorrow's. Not sooner: the pricing asks for a
-        refresh when it lands, and that refresh is a tick, so without the wait
-        a period that cannot be priced was fetched and walked again every few
-        seconds.
+        A pricing that could not price one of the periods on its own
+        supplier's cards is not kept for the day: the year reads unknown, or
+        bills those days on the entry's current card, while it stands, so the
+        next hourly tick asks again rather than tomorrow's. Not sooner: the
+        pricing asks for a refresh when it lands, and that refresh is a tick,
+        so without the wait a period that cannot be priced was fetched and
+        walked again every few seconds.
         """
         key = periods_key(periods)
         priced = self._previous_priced
@@ -1003,7 +1005,7 @@ class _TickMixin:
             priced is not None
             and priced.key == key
             and priced.day == today
-            and all(row.cost is not None for row in priced.rows)
+            and all(row.settled for row in priced.rows)
         ):
             return
         if self._previous_pricing is not None and not self._previous_pricing.done():
@@ -1075,8 +1077,12 @@ class _TickMixin:
             return
         if self._unloaded:
             return
+        key = periods_key(periods)
         self._previous_priced = PricedPeriods(
-            key=periods_key(periods), day=today, month=month_start, rows=tuple(rows)
+            key=key,
+            day=today,
+            month=month_start,
+            rows=keep_settled(self._previous_priced, key, rows),
         )
         await self.async_request_refresh()
 
