@@ -34,7 +34,12 @@ backfill are built on this, and neither of them owns it.
 from __future__ import annotations
 
 from .brugel import ensure_power_term
-from .cohort import _month_snapshot_cache, signing_month_snapshot, ytd_window_start
+from .cohort import (
+    _month_snapshot_cache,
+    _tariff_card_month,
+    signing_month_snapshot,
+    ytd_window_start,
+)
 from .compare_inputs import _coordinator_rlp_index_weights
 from .contract_periods import (
     ContractPeriod,
@@ -63,6 +68,7 @@ from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import ExtractorError, SupplierSnapshot
+from .snapshot_months import _snapshot_for_month, month_card_failed
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
@@ -75,6 +81,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from typing import Any
+import aiohttp
 import asyncio
 
 
@@ -483,21 +490,35 @@ async def _unpriceable_spans(
     """The days in ``[first, last]`` the backfill cannot price on their own
     cards, as ``(first day, last day, why)``.
 
-    An earlier contract whose supplier's cards could not be had right now
-    (``period_card`` hands back the entry's current card in their place). The
-    live sensor bills such days on that stand-in as a last resort and prices
-    them again an hour later, but a statistic imported off it stays in the
-    recorder for good, so the backfill leaves those days out and says so.
+    Two ways. An earlier contract whose supplier's cards could not be had
+    right now (``period_card`` hands back the entry's current card in their
+    place), and a closed month whose own card could not be read just now
+    (``_months_not_read``). The live sensor bills such days on the current
+    card and prices them again an hour later, but a statistic imported off it
+    stays in the recorder for good, so the backfill leaves those days out and
+    says so. Asking here also fills the month cache both passes then read.
     """
     today = dt_util.now().date()
     spans: list[tuple[date, date, str]] = []
-    for period in previous_periods(entry.data, ytd_window_start(entry, today), today):
+    periods = previous_periods(entry.data, ytd_window_start(entry, today), today)
+    # The entry's own contract holds every day no earlier one does.
+    own = [(first, last)]
+    for period in periods:
+        own = [
+            piece
+            for begin, end in own
+            for piece in (
+                (begin, min(end, period.start - timedelta(days=1))),
+                (max(begin, period.end + timedelta(days=1)), end),
+            )
+            if piece[0] <= piece[1]
+        ]
         if period.end < first or period.start > last:
             continue
-        _proxy, _extractor, _card, stand_in, _read_by_ocr = await period_card(
+        proxy, _extractor, card, stand_in, _read_by_ocr = await period_card(
             hass, coordinator._session, coordinator, period
         )
-        if stand_in:
+        if stand_in or card is None:
             spans.append(
                 (
                     period.start,
@@ -506,6 +527,73 @@ async def _unpriceable_spans(
                     " held then could be read",
                 )
             )
+            continue
+        spans += await _months_not_read(
+            hass,
+            coordinator._session,
+            proxy,
+            card,
+            max(first, period.start),
+            min(last, period.end),
+        )
+    assert coordinator._snapshot is not None
+    for begin, end in own:
+        spans += await _months_not_read(
+            hass, coordinator._session, entry, coordinator._snapshot, begin, end
+        )
+    return spans
+
+
+async def _months_not_read(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    entry: ConfigEntry,
+    card: SupplierSnapshot,
+    first: date,
+    last: date,
+) -> list[tuple[date, date, str]]:
+    """The closed months in ``[first, last]`` whose own card could not be read
+    just now (``month_card_failed``), for one contract.
+
+    All of them when the contract's signing month is one: its card is what
+    every month's energy is re-priced from (``_cohort_legs``) and the welcome
+    credit read off. The running month is never one, since the current card
+    is that month's card.
+    """
+    extractor = get_extractor(entry.data[CONF_SUPPLIER])
+    contract = entry.data[CONF_CONTRACT]
+    region = entry.data.get(CONF_REGION, "")
+    this_month = dt_util.now().date().replace(day=1)
+
+    async def failed(month: date) -> bool:
+        await _snapshot_for_month(
+            hass, session, extractor, contract, region, month, card, entry
+        )
+        return month_card_failed(hass, extractor.id, contract, region, month)
+
+    signing = _tariff_card_month(entry)
+    if signing is not None and signing < this_month and await failed(signing):
+        return [
+            (
+                first,
+                last,
+                f"the {extractor.id} card of {signing:%Y-%m}, the month the"
+                " contract was signed, could not be read",
+            )
+        ]
+    spans: list[tuple[date, date, str]] = []
+    month = first.replace(day=1)
+    while month <= last and month < this_month:
+        following = (month + timedelta(days=31)).replace(day=1)
+        if await failed(month):
+            spans.append(
+                (
+                    max(first, month),
+                    min(last, following - timedelta(days=1)),
+                    f"the {extractor.id} card of {month:%Y-%m} could not be read",
+                )
+            )
+        month = following
     return spans
 
 

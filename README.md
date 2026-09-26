@@ -1035,12 +1035,16 @@ Response is a `{rows_written, sensors, range}` object you can
 inspect from Developer Tools → Services.
 
 Days whose own card cannot be had when the backfill runs are left out rather
-than imported on a stand-in, since an imported statistic stays: the days of
-an earlier contract (after a recorded supplier switch) whose supplier's cards
-cannot be read. The response lists them under `left_out`, with a `skipped` note for
-`current_year_cost`, whose running bill cannot be imported with days missing
-from it. Run the service again once those cards can be read. With `clear` on,
-such a run is refused, since the wipe would take rows it cannot write back.
+than imported on today's card, since an imported statistic stays: a past
+month whose card the archive could not serve just then (a timeout, or GitHub
+briefly down), every month of a contract whose signing-month card could not
+be read, and the days of an earlier contract (after a recorded supplier
+switch) whose supplier's cards cannot be read. The response lists them under
+`left_out`, with a `skipped` note for `current_year_cost`, whose running bill
+cannot be imported with days missing from it. The automatic backfill runs
+once more an hour later; after a service call, run it again once those cards
+can be read. With `clear` on, such a run is refused, since the wipe would take
+rows it cannot write back.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

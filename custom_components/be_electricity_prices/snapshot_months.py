@@ -407,6 +407,27 @@ def _month_card_retrievable(
     )
 
 
+def month_card_failed(
+    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+) -> bool:
+    """Whether ``_snapshot_for_month`` last handed back the current card for
+    this month because reading the month's own card failed.
+
+    It hands back the very same object when no archive holds the month, which
+    is a fact about the month, and while a failed read waits out its marker,
+    which is not: the archive may well hold it half an hour later. The live
+    walk heals on its own next tick; a caller that keeps what it priced (the
+    backfill) must tell the two apart, and only the caches can. A cached row,
+    a card or ``None``, is an answer; a fresh failure marker with no row is a
+    failed read.
+    """
+    key = (supplier, contract, region, f"{year_month.year:04d}-{year_month.month:02d}")
+    if key in _monthly_snapshots(hass):
+        return False
+    failed_at = _monthly_failed_fetches(hass).get(key)
+    return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
+
+
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -434,7 +455,8 @@ async def _snapshot_for_month(
     by definition, so that month never reaches the repository.
     A blip reading the archive is not "no card": the supplier is still
     asked, and a month neither could give is retried on the failure marker
-    rather than cached.
+    rather than cached. Both hand back the current snapshot itself, so a
+    caller that keeps what it priced asks ``month_card_failed`` which it got.
 
     Caches the result per (supplier, contract, region, YYYY-MM): a hit
     skips the network round-trip on subsequent refreshes. ``None`` is

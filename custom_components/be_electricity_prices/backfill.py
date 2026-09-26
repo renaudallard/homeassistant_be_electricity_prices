@@ -48,6 +48,7 @@ Two entry points:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -119,6 +120,11 @@ _PRICE_SENSOR_KEYS: tuple[str, ...] = (
     "taxes_component",
 )
 _INJECTION_PRICE_SENSOR_KEY = "injection_price"
+
+# How long the automatic backfill waits before running once more when it had
+# to leave days out: past the half hour a failed month read waits before it is
+# asked again (``_MONTHLY_FAILURE_TTL``).
+_RETRY_AFTER = timedelta(hours=1)
 
 
 async def _ensure_dynamic_spots(
@@ -636,4 +642,15 @@ async def backfill_if_missing(
             sid,
         )
         return None
-    return await backfill_range(hass, entry, anchor_local, now_local)
+    result = await backfill_range(hass, entry, anchor_local, now_local)
+    if "left_out" not in result:
+        return result
+    # Nobody reads this run's response, and the probe above now finds the
+    # rows it did write, so the days it left out would stay out until someone
+    # calls the service. One more run an hour later heals a blip on the card
+    # archive or on the old supplier's site; the log names what is still out.
+    await asyncio.sleep(_RETRY_AFTER.total_seconds())
+    runtime = getattr(entry, "runtime_data", None)
+    if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
+        return result
+    return await backfill_range(hass, entry, anchor_local, dt_util.now())

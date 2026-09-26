@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -50,12 +51,17 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
+from custom_components.be_electricity_prices import backfill_window, snapshot_months
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import get as get_extractor
 from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
 )
+from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from custom_components.be_electricity_prices.spot_stats import _bucket_by_local_month
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -69,6 +75,29 @@ from tests import make_entry, make_snapshot, make_stub_extractor
 # clear at the assertion site rather than implicit through the
 # DEFAULT_TIME_ZONE indirection.
 BRUSSELS = ZoneInfo("Europe/Brussels")
+
+
+@pytest.fixture(autouse=True)
+def _no_card_archive() -> Iterator[None]:
+    """Every past month answers as one no archive holds, billed on the current
+    card as its proxy. With no session a read raises, and the backfill leaves
+    a month whose read failed out of the statistics rather than import it on
+    the current card."""
+
+    async def nothing(*_a: Any) -> None:
+        return None
+
+    def extractor(supplier: str) -> Any:
+        registered = get_extractor(supplier)
+        if registered.fetch_for_month is None:
+            return registered
+        return dataclasses.replace(registered, fetch_for_month=nothing)
+
+    with (
+        patch.object(snapshot_months, "_archived_card_from_github", new=nothing),
+        patch.object(backfill_window, "get_extractor", extractor),
+    ):
+        yield
 
 
 # ---- pure helpers -------------------------------------------------------------
@@ -2523,3 +2552,145 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
         await ticks
 
     assert captured[ids["current_price"]] == 240
+
+
+async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A brief archive failure handed back today's card for the closed months,
+    the very object a month no archive holds gets, and the backfill imported
+    those months at today's rates for good. The live sensor heals on its next
+    tick; the imported rows never did."""
+    freezer.move_to("2026-06-02 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+    own_month = dataclasses.replace(
+        _fixed_snapshot(), energy=FixedRates(single=0.12, yearly_fixed_fee=72.0)
+    )
+    up = False
+
+    async def archive(*_a: Any) -> ArchivedCard:
+        if not up:
+            raise ExtractorError("HTTP 503 from raw.githubusercontent.com")
+        return ArchivedCard(snapshot=own_month, read_by_ocr=False)
+
+    async def supplier_archive(*_a: Any) -> SupplierSnapshot:
+        raise ExtractorError("network error fetching the supplier archive: timeout")
+
+    eneco = dataclasses.replace(EXTRACTORS["eneco"], fetch_for_month=supplier_archive)
+    captured: dict[str, list[Any]] = {}
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured[metadata["statistic_id"]] = list(statistics)
+
+    async def run() -> dict[str, Any]:
+        captured.clear()
+        instance = MagicMock()
+        instance.async_add_executor_job = AsyncMock(return_value={})
+        with (
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch.object(backfill_window, "get_extractor", lambda _id: eneco),
+            patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=_fake_import,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance", return_value=instance
+            ),
+        ):
+            return await bf.backfill_range(
+                hass,
+                entry,
+                datetime(2026, 5, 31, tzinfo=BRUSSELS),
+                datetime(2026, 6, 2, tzinfo=BRUSSELS),
+            )
+
+    result = await run()
+    rows = captured[ids["current_price"]]
+    assert {dt_util.as_local(r["start"]).date() for r in rows} == {date(2026, 6, 1)}
+    assert ids["current_year_cost"] not in captured
+    assert any("2026-05" in why for why in result["left_out"])
+    assert "cost" in result["skipped"]
+    assert snapshot_months.month_card_failed(
+        hass, "eneco", "power_fix", "wallonia", date(2026, 5, 1)
+    )
+
+    # The archive answers again once the marker is waited out: May is priced
+    # on its own card, and a month no archive holds is not a failed one.
+    up = True
+    freezer.tick(timedelta(minutes=31))
+    result = await run()
+    assert "left_out" not in result
+    means = {
+        dt_util.as_local(r["start"]).date(): r["mean"]
+        for r in captured[ids["current_price"]]
+    }
+    assert means[date(2026, 5, 31)] < means[date(2026, 6, 1)]
+    assert ids["current_year_cost"] in captured
+    assert not snapshot_months.month_card_failed(
+        hass, "eneco", "power_fix", "wallonia", date(2026, 5, 1)
+    )
+
+
+async def test_the_automatic_backfill_runs_once_more_when_it_left_days_out(
+    hass: HomeAssistant,
+) -> None:
+    """Its probe finds the rows the first run wrote, so without a second run
+    the days it left out stayed out until someone called the service."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_price"])
+    entry.runtime_data = await _make_coordinator(entry)
+    runs = AsyncMock(side_effect=[{"left_out": ["2026-05-01..2026-05-31"]}, {}])
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "backfill_range", runs),
+        patch.object(bf, "_RETRY_AFTER", timedelta(0)),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        assert await bf.backfill_if_missing(hass, entry) == {}
+        runs.reset_mock(side_effect=True)
+        runs.return_value = {"rows_written": 3}
+        assert await bf.backfill_if_missing(hass, entry) == {"rows_written": 3}
+    assert runs.await_count == 1
+
+
+async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Every month's energy is re-priced off the signing month's card, and a
+    failed read of it handed ``_cohort_legs`` today's card in its place."""
+    freezer.move_to("2026-06-02 12:00:00+02:00")
+    entry = make_entry(contract_start_date="2026-03-15")
+    card = _fixed_snapshot()
+
+    async def archive(*args: Any) -> ArchivedCard:
+        if args[4] == date(2026, 3, 1):
+            raise ExtractorError("HTTP 503 from raw.githubusercontent.com")
+        return ArchivedCard(snapshot=card, read_by_ocr=False)
+
+    async def supplier_archive(*_a: Any) -> None:
+        return None
+
+    eneco = dataclasses.replace(EXTRACTORS["eneco"], fetch_for_month=supplier_archive)
+    with (
+        patch.object(backfill_window, "get_extractor", lambda _id: eneco),
+        patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+    ):
+        spans = await backfill_window._months_not_read(
+            hass,
+            None,  # type: ignore[arg-type]
+            entry,
+            card,
+            date(2026, 4, 1),
+            date(2026, 6, 1),
+        )
+    assert [(first, last) for first, last, _why in spans] == [
+        (date(2026, 4, 1), date(2026, 6, 1))
+    ]
+    assert "2026-03" in spans[0][2]
