@@ -586,16 +586,20 @@ async def _ytd_spot_injection_credit(
         # a card printing an indicative every month otherwise paid on every
         # tick for a credit that is always zero.
         return 0.0
-    # Through the rule that compares the two sides, as the per-day walk this
-    # credit is added to reads them: a feed-in meter gone silent under the
-    # consumption has its later hours left out there and no today_ok, where
-    # reading it alone credited its live feed-in today and took it back at
-    # midnight.
+    # Leaves out what the per-day walk this credit is added to leaves out,
+    # and nothing more. That walk compares the two sides day by day, so the
+    # feed-in is read as its meters reported it and kept to the days it billed
+    # (billed_days below): the hourly rule also dropped the hours consumption
+    # missed within a billed day, 144 kWh short over a month missing six
+    # midday hours a day. A feed-in meter gone silent has no hours after it
+    # stopped, and today is topped up only where the two sides' rule lets the
+    # feed-in bill today, or its live reading was credited through the day and
+    # taken back at midnight.
     sides = await _metered_sides(hass, entry, window_start, today)
     if sides is None:
         return 0.0
     metered = sides.injection
-    per_hour = metered.kwh
+    per_hour = sides.injection_as_read.kwh
     # Topped up from the live meter, exactly as both sibling paths do: the
     # daily branch through _recorder_daily_kwh and the hourly branch through
     # its own two _top_up_today_hourly calls. Without it the consumption leg

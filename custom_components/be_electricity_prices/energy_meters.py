@@ -37,7 +37,7 @@ import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from homeassistant.components.sensor import (
@@ -641,11 +641,19 @@ class MeteredSides:
     injection did not report stays billed on consumption without its feed-in.
     ``silent`` names the sensors of the side that went silent, for the
     Repairs card.
+
+    ``injection_as_read`` is the injection side before the comparison, for
+    the feed-in credit added to the per-day walk, which compares the two
+    sides day by day: a day it bills keeps its whole feed-in, the hours
+    consumption did not report included.
     """
 
     consumption: MeteredHours
     injection: MeteredHours
     silent: tuple[str, ...] = ()
+    injection_as_read: MeteredHours = field(
+        default_factory=lambda: MeteredHours({}, ())
+    )
 
 
 async def _metered_sides(
@@ -693,6 +701,7 @@ async def _metered_sides(
             today_ok=inj.today_ok and cons_today and side != "injection",
         ),
         (cons if side == "consumption" else inj).sensors if side else (),
+        inj,
     )
 
 

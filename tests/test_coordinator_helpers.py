@@ -1435,6 +1435,56 @@ async def test_ytd_spot_injection_credit_leaves_a_silent_feed_in_out_today(
     live.assert_not_awaited()
 
 
+async def test_ytd_spot_injection_credit_keeps_the_feed_in_of_a_billed_day(
+    freezer: Any,
+) -> None:
+    """A consumption meter missing six midday hours a day through June, which
+    the day rows still cover: the per-day walk bills those days in full with
+    their feed-in, and the credit added to it dropped the feed-in of every
+    hour consumption missed, 180 kWh here. It credits what the walk bills."""
+    freezer.move_to("2026-09-26 15:30:00+02:00")
+    today = date(2026, 9, 26)
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=1.0, base=0.0, current=None),
+    )
+    now = dt_util.utcnow()
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 269)
+    ]
+    hours = [h for h in hours if h < now.replace(minute=0)]
+
+    def _gap(hour: datetime) -> bool:
+        local = dt_util.as_local(hour)
+        return local.month == 6 and 9 <= local.hour < 15
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj":
+            return dict.fromkeys(hours, 1.0)
+        return {h: 0.5 for h in hours if not _gap(h)}
+
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
+    ):
+        credit = await _ytd_spot_injection_credit(
+            None,  # type: ignore[arg-type]
+            snap,
+            _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
+            today,
+            dict.fromkeys(hours, 0.1),
+            window_start=date(2026, 1, 1),
+            billed_days={dt_util.as_local(h).date() for h in hours},
+        )
+    assert credit == pytest.approx(0.1 * len(hours))
+
+
 async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     hass: HomeAssistant, freezer: Any
 ) -> None:
