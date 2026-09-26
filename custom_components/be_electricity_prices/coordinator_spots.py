@@ -692,6 +692,21 @@ class _SpotsMixin(_ProfilesMixin):
                 previous_source,
                 self._spot_source,
             )
+        # Merged into what the cache already holds for the window rather than
+        # replacing it: the keyless fallback can answer for a few hours only,
+        # and replacing a cache that held all of today with its six hours left
+        # the rest of the day unpriced until the 11:00 refetch. The answer
+        # wins for every hour it covers, the cache keeps no day outside the
+        # window, as before, and the slots stay in time order.
+        covered = {slot.replace(minute=0) for slot in prices}
+        window = {local_today + timedelta(days=n) for n in range(days)}
+        merged = {
+            slot: value
+            for slot, value in _spots_for_local_days(self._spot_cache, window).items()
+            if slot.replace(minute=0) not in covered
+        }
+        merged.update(prices)
+        prices = dict(sorted(merged.items()))
         self._spot_cache = prices
         self._spot_cache_day = local_today
         # Flag what the response actually carries, not what we asked

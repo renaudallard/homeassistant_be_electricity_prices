@@ -363,7 +363,9 @@ constructs a fresh `EntsoeClient` per call (`api.py`,
   separate `_spot_cache_includes_tomorrow` flag set from what the response
   actually carries, not what was requested, so a pre-publication tick that came
   back with today only will retry tomorrow on the next hourly tick
-  (`coordinator_spots.py`). `quarter_hourly` is derived from
+  (`coordinator_spots.py`). An answer is merged into what the cache holds for
+  the requested days, winning for the hours it covers, so a fallback that
+  answers for six hours does not empty the rest of a day already cached. `quarter_hourly` is derived from
   the energy leg the tick prices on (`_billing_snapshot`, `coordinator_spots.py`):
   the cohort-spliced one once a tick has built it, since a cohort can put a
   quarter-hourly leg on a card of another kind, and the loaded snapshot's before. The curve is

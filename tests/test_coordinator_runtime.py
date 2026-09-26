@@ -893,6 +893,51 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
     assert result == today_plus_tomorrow
 
 
+async def test_a_partial_day_ahead_answer_does_not_empty_the_cache(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Yesterday's fetch left all of today in the cache as tomorrow. With
+    ENTSO-E down just after midnight the keyless fallback answered for six
+    hours only, and replacing the cache with that left the rest of the day
+    unpriced until the 11:00 refetch. The answer now wins for the hours it
+    covers and the cache keeps the rest of the window, but not yesterday."""
+    freezer.move_to("2026-09-26 00:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # 2026-09-26 00:00 CEST == 2026-09-25 22:00 UTC.
+    today = datetime(2026, 9, 25, 22, 0, tzinfo=UTC)
+    coord._spot_cache = {today + timedelta(hours=h): 0.10 for h in range(-24, 24)}
+    coord._spot_cache_day = date(2026, 9, 25)
+    coord._spot_cache_includes_tomorrow = True
+    partial = {today + timedelta(hours=h): 0.20 for h in range(6)}
+
+    async def _fake(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return partial
+
+    with _patch_spot_fetch(_fake):
+        result = await coord._fetch_spot_prices()
+
+    assert list(result) == [today + timedelta(hours=h) for h in range(24)]
+    assert result == {
+        **partial,
+        **{today + timedelta(hours=h): 0.10 for h in range(6, 24)},
+    }
+    assert coord._spot_cache == result
+
+
 async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
     hass: HomeAssistant, freezer: Any
 ) -> None:
