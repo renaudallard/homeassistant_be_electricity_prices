@@ -892,8 +892,11 @@ successful refresh:
   rewired; the card names the sensor. A register that merely started late
   is not reported, since it records to date. The same card names a
   consumption or injection meter that stopped while the other side carries
-  on: the days after it stopped are billed on neither side, rather than as
-  a household that used nothing while its feed-in was credited.
+  on. The days a consumption meter misses are billed on neither side, rather
+  than as a household that used nothing while its feed-in was credited, so
+  the cost reads low; the days an injection meter misses are billed on their
+  consumption without the feed-in, so it reads high. An injection meter that
+  recorded nothing at all is named too.
 
   The first four of those eight are not failures either: each clears when the
   supplier prints the missing row again, the kVA one as soon as the inverter
@@ -1066,13 +1069,18 @@ searching for:
 
 If the consumption meter stops (renamed, replaced, or a sensor with no
 `state_class`) while the injection meter carries on, the days after it
-stopped are left out of both sides and the Repairs card above names it. A
-wired consumption meter that has never recorded anything bills nothing at
-all. An injection meter that starts later, because the panels came later in
-the year, is expected and cuts nothing. Without a solar regime the injection
-meters are not read at all, so one that is broken or stopped changes nothing
-and raises no Repairs card: wiring them only for the Energy dashboard is
-fine.
+stopped are left out of both sides and the Repairs card above names it. So
+are the days before its first reading, when it was renamed or replaced during
+the year: their feed-in is not credited against no consumption. A wired
+consumption meter that has never recorded anything bills nothing at all. If
+the injection meter stops instead, or records nothing at all, the
+consumption is still billed and only the feed-in is left out, which makes
+the year read high rather than low; the card names that meter too. An
+injection meter that starts later, because the panels came later in the
+year, is expected, cuts nothing and is not named. Without a solar regime the
+injection meters are not read at all, so one that is broken or stopped
+changes nothing and raises no Repairs card: wiring them only for the Energy
+dashboard is fine.
 
 If none of those appear, check the coverage pair on the sensor's
 attributes: `hours_seen` against `hours_elapsed` on an hourly-billed

@@ -601,12 +601,14 @@ async def _metered_hourly_kwh(
 
 @dataclass(frozen=True)
 class MeteredSides:
-    """Both sides' hourly kWh, with the hours neither can be billed on taken
-    out of both.
+    """Both sides' hourly kWh, after the rule that compares them.
 
-    Those are the hours one half of a register pair did not report, and the
-    hours after one side went silent under the other (:func:`_silent_periods`).
-    ``silent`` names the sensors of that side, for the Repairs card.
+    An hour consumption did not report is taken out of both sides: the hours
+    one half of its register pair did not report, those before its first
+    reading and those after it went silent (:func:`_silent_periods`). An hour
+    injection did not report stays billed on consumption without its feed-in.
+    ``silent`` names the sensors of the side that went silent, for the
+    Repairs card.
     """
 
     consumption: MeteredHours
@@ -621,10 +623,10 @@ async def _metered_sides(
     either cannot be billed (:func:`_metered_hourly_kwh`).
 
     The one place the hourly walks, the backfill and the diagnostics read the
-    two sides, so the hours left out of one are left out of the other the
-    same way everywhere. Neither side keeps ``today_ok`` once a side went
-    silent: today is after the silence, and topping the other side up live
-    would bill it against nothing.
+    two sides, so the hours left out are left out the same way everywhere.
+    Today follows the same rule: consumption keeps ``today_ok`` unless it went
+    silent, and injection only where consumption keeps it and injection did
+    not go silent, since today is after the silence.
     """
     cons = await _metered_hourly_kwh(hass, entry, "consumption", start, end)
     inj = (
@@ -634,24 +636,30 @@ async def _metered_sides(
     )
     if cons is None or inj is None:
         return None
-    side, after = _silent_periods(
+    side, both, feed_in = _silent_periods(
         cons.kwh if cons.sensors else None,
         inj.kwh if inj.sensors else None,
         cons.kwh.keys() | inj.kwh.keys(),
     )
-    unknown = cons.unknown | inj.unknown | after
-
-    def _billable(metered: MeteredHours) -> MeteredHours:
-        return replace(
-            metered,
-            kwh={h: kwh for h, kwh in metered.kwh.items() if h not in unknown},
-            unknown=unknown,
-            today_ok=metered.today_ok and side is None,
-        )
-
+    unknown = cons.unknown | both
+    cons_today = cons.today_ok and side != "consumption"
     return MeteredSides(
-        _billable(cons),
-        _billable(inj),
+        replace(
+            cons,
+            kwh={h: kwh for h, kwh in cons.kwh.items() if h not in unknown},
+            unknown=unknown,
+            today_ok=cons_today,
+        ),
+        replace(
+            inj,
+            kwh={
+                h: kwh
+                for h, kwh in inj.kwh.items()
+                if h not in unknown and h not in feed_in
+            },
+            unknown=unknown,
+            today_ok=inj.today_ok and cons_today and side != "injection",
+        ),
         (cons if side == "consumption" else inj).sensors if side else (),
     )
 
@@ -831,10 +839,12 @@ async def _resolve_daily_kwh(
         cached = memo[key]
         return None if cached is None else dict(cached)
     out: dict[date, list[float]] = {}
-    # The days only one half of a register pair reported, on either side.
-    # They leave both sides: a day whose consumption is unknown must not be
-    # credited its feed-in, or counted in days_seen as billed.
-    unknown: set[date] = set()
+    # The days only one half of a register pair reported, keyed by the side's
+    # day slot. On the consumption side they leave both sides: a day whose
+    # consumption is unknown must not be credited its feed-in, or counted in
+    # days_seen as billed. On the injection side the pair already leaves them
+    # out, and the day is billed on its consumption (_silent_periods).
+    pair_gaps: dict[int, set[date]] = {}
     # The days each wired side reported before today, keyed by its day slot,
     # for the check that one side did not go silent under the other.
     reported: dict[int, set[date]] = {}
@@ -883,7 +893,7 @@ async def _resolve_daily_kwh(
                     row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                     row[slot_day] += d[day]
                     row[slot_night] += n[day]
-                unknown.update(set(d) ^ set(n))
+                gaps = pair_gaps[slot_day] = set(d) ^ set(n)
                 reported[slot_day] = days
                 if (
                     day_today is not None
@@ -897,7 +907,7 @@ async def _resolve_daily_kwh(
                     # Read, but not billable as a pair: today goes the way of
                     # any day one half did not report, or it would be billed
                     # now and taken back at midnight.
-                    unknown.add(today)
+                    gaps.add(today)
                 return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
@@ -933,9 +943,14 @@ async def _resolve_daily_kwh(
         slot_day=2,
         slot_night=3,
     )
-    _silent, after = _silent_periods(reported.get(0), reported.get(2), out.keys())
-    for day in unknown | after:
+    _silent, both, feed_in = _silent_periods(
+        reported.get(0), reported.get(2), out.keys()
+    )
+    for day in pair_gaps.get(0, set()) | both:
         out.pop(day, None)
+    for day in feed_in:
+        if day in out:
+            out[day][2] = out[day][3] = 0.0
     if not (cons_ok and inj_ok):
         resolved = None
     elif not out:
@@ -1015,9 +1030,9 @@ class MeteredHours:
     kwh: dict[datetime, float]
     sensors: tuple[str, ...]
     # The hours only one half of a register pair reported. The side's own
-    # figure already leaves them out; a walk that bills both sides must leave
-    # them out of the other side too, or it credits the feed-in of an hour
-    # whose consumption it did not bill.
+    # figure already leaves them out; on the consumption side a walk that
+    # bills both sides must leave them out of the feed-in too, or it credits
+    # the feed-in of an hour whose consumption it did not bill.
     unknown: frozenset[datetime] = frozenset()
     # False when one half of the pair stopped: today cannot be billed then,
     # since the day drops out at midnight with the hours the stopped half
@@ -1082,36 +1097,50 @@ def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] 
 
 def _silent_periods(
     cons: Collection[_P] | None, inj: Collection[_P] | None, periods: Iterable[_P]
-) -> tuple[str | None, set[_P]]:
-    """The side that went silent while the other carried on, and which of
-    ``periods`` to leave out of both sides for it.
+) -> tuple[str | None, set[_P], set[_P]]:
+    """Which of ``periods`` the two sides cannot both be billed on.
 
+    Returns the side that went silent under the other, if any, the periods to
+    leave out of both sides, and the periods to bill without their feed-in.
     ``cons`` and ``inj`` are the days (or hours) each side reported, ``None``
-    for a side with nothing wired. The register pair check compares the two
-    halves of one side; nothing compared the sides, so a consumption meter
-    renamed away in June billed every later day at zero consumption against
-    the full feed-in credit, with every day counted as seen. A side stopped
-    when its last period trails the other's by more than
-    ``_REGISTER_STOPPED_AFTER_DAYS`` (:func:`_stopped`), and everything after
-    it is unknown on both sides, as a day one half of a pair missed is.
+    for a side with nothing wired, and nothing is compared unless both are.
 
-    Consumption that recorded nothing at all while feed-in did is silent for
-    the whole window: a live meter writes a row every hour, moved or not, so
-    no row is missing data rather than a household that used nothing. Feed-in
-    that recorded nothing is not: panels installed later in the year, or a
-    window that closed before they were, is the common case. For the same
-    reason nothing is cut BEFORE a side's first period.
+    A period consumption did not report is unknown, and leaves both sides:
+    crediting its feed-in against no consumption drove the year down on days
+    nothing was charged. That is every period before consumption's first one,
+    since a consumption meter renamed in April credited the feed-in of January
+    to March against nothing, and every period after it stopped, which is when
+    its last period trails injection's by more than
+    ``_REGISTER_STOPPED_AFTER_DAYS`` (:func:`_stopped`). A wired consumption
+    meter that reported nothing at all is silent for the whole window: a live
+    meter writes a row every hour, moved or not, so no row is missing data
+    rather than a household that used nothing. Nothing is named while
+    neither side reported anything, since nothing carries on under it.
+
+    A period injection did not report while consumption did is still billed
+    on its consumption, with the feed-in left out. Cutting it from both sides
+    threw away a year of real consumption behind a dead feed-in meter. An
+    injection meter that stopped, or that reported nothing at all in the
+    window, is named as silent, since the bill now reads high; one that starts
+    later, because the panels came later, is not, and cuts nothing.
     """
-    if cons is None or inj is None or not inj:
-        return None, set()
+    if cons is None or inj is None:
+        return None, set(), set()
+    periods = set(periods)
     if not cons:
-        return "consumption", set(periods)
+        return "consumption" if inj else None, periods, set()
+    first = min(cons)
+    both = {p for p in periods if p < first}
+    if not inj:
+        return "injection", both, periods - both
     stopped = _stopped((("consumption", cons), ("injection", inj)))
-    if not stopped:
-        return None, set()
-    side = stopped[0]
-    last = max(cons if side == "consumption" else inj)
-    return side, {p for p in periods if p > last}
+    if stopped == ["consumption"]:
+        last = max(cons)
+        return "consumption", both | {p for p in periods if p > last}, set()
+    if stopped == ["injection"]:
+        last = max(inj)
+        return "injection", both, {p for p in periods if p > last}
+    return None, both, set()
 
 
 def _total_stands_in(total: Collection[_K], paired: Collection[_K] | None) -> bool:

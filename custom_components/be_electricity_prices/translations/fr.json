@@ -798,7 +798,7 @@
     },
     "register_pair_incomplete": {
       "title": "Un compteur de {supplier} ({contract}) n'enregistre plus",
-      "description": "{entities} n'enregistre rien, ou a cessé d'enregistrer alors que l'autre registre de sa paire jour/nuit, ou le compteur de l'autre sens (consommation ou injection), continue. Seuls les jours où tous rapportent sont facturés, et aucun tant que l'un n'enregistre rien : le coût cumulé de cette entrée est donc trop bas, sans autre message d'erreur.\n\nVérifiez que le capteur existe toujours et qu'il a un state_class total_increasing ; s'il a été renommé ou remplacé, indiquez le nouveau à l'étape Compteurs. Cet avis disparaîtra automatiquement dès que tous les compteurs rapporteront à nouveau."
+      "description": "{entities} n'enregistre rien, ou a cessé d'enregistrer alors que l'autre registre de sa paire jour/nuit, ou le compteur de l'autre sens (consommation ou injection), continue. Un jour que les compteurs de consommation ne rapportent pas tous n'est facturé d'aucun côté : le coût cumulé de cette entrée est donc trop bas ; un jour que seul un compteur d'injection manque est facturé sans son injection : le coût est alors trop haut. Aucun autre message d'erreur ne le signale.\n\nVérifiez que le capteur existe toujours et qu'il a un state_class total_increasing ; s'il a été renommé ou remplacé, indiquez le nouveau à l'étape Compteurs. Cet avis disparaîtra automatiquement dès que tous les compteurs rapporteront à nouveau."
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) tarifie la domiciliation et cette entrée n'a pas été interrogée",

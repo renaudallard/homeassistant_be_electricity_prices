@@ -798,7 +798,7 @@
     },
     "register_pair_incomplete": {
       "title": "A meter of {supplier} ({contract}) stopped recording",
-      "description": "{entities} records nothing, or stopped recording while the other register of its day/night pair, or the meter on the other side (consumption or injection), carries on. Only the days they all report are billed, and none while one records nothing, so the running cost of this entry reads low without any other error.\n\nCheck that the sensor still exists and has a state_class of total_increasing; if it was renamed or replaced, point the Energy meters step at the new one. This notice clears automatically once every meter reports again."
+      "description": "{entities} records nothing, or stopped recording while the other register of its day/night pair, or the meter on the other side (consumption or injection), carries on. A day the consumption meters do not all report is billed on neither side, so the running cost of this entry reads low; a day only an injection meter misses is billed without its feed-in, so the cost reads high. No other error says so.\n\nCheck that the sensor still exists and has a state_class of total_increasing; if it was renamed or replaced, point the Energy meters step at the new one. This notice clears automatically once every meter reports again."
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) prices direct debit and this entry has not been asked",

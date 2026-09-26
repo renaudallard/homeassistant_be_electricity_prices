@@ -3236,15 +3236,109 @@ async def test_feed_in_that_starts_late_cuts_nothing(freezer: Any) -> None:
     freezer.move_to("2026-09-23 15:00:00+02:00")
     today = date(2026, 9, 23)
     year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
-    for inj in (year[150:], []):
-        daily, sides = await _both_sides(
-            year, inj, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    daily, sides = await _both_sides(
+        year, year[150:], {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    )
+    assert daily is not None
+    assert len(daily) == 266
+    assert sides is not None
+    assert sides.silent == ()
+    assert len(sides.consumption.kwh) == 265
+
+
+@pytest.mark.parametrize("recorded", [150, 0], ids=["stopped", "nothing"])
+async def test_a_silent_feed_in_bills_the_consumption_without_it(
+    freezer: Any, recorded: int
+) -> None:
+    """A feed-in meter that stopped in June took every later day out of both
+    sides, so a dead injection meter threw away the rest of the year's
+    consumption (870 kWh on the audit's harness). Those days are billed on
+    their consumption now, with the feed-in left out, today's live feed-in
+    included, and the injection meter is named, since the bill reads high.
+    One that recorded nothing in the window is named the same way."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, sides = await _both_sides(
+        year, year[:recorded], {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    )
+    assert daily is not None
+    assert len(daily) == 266
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(265.0 + 5.0)
+    assert sum(r[2] + r[3] for r in daily.values()) == pytest.approx(recorded)
+    assert sides is not None
+    assert sides.silent == ("sensor.inj",)
+    assert len(sides.consumption.kwh) == 265
+    assert len(sides.injection.kwh) == recorded
+    assert not sides.injection.today_ok
+
+
+async def test_feed_in_before_the_consumption_meter_started_is_left_out(
+    freezer: Any,
+) -> None:
+    """A consumption meter renamed in April: the feed-in of January to March
+    was credited against no consumption at all. Those days leave both sides,
+    and a meter that merely started late is not named."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, sides = await _both_sides(
+        year[90:], year, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    )
+    assert daily is not None
+    assert min(daily) == year[90]
+    assert len(daily) == 176
+    assert sum(r[2] + r[3] for r in daily.values()) == pytest.approx(175.0 + 3.0)
+    assert sides is not None
+    assert sides.silent == ()
+    assert min(sides.injection.kwh) == min(sides.consumption.kwh)
+    assert len(sides.injection.kwh) == 175
+
+
+async def test_an_injection_register_gap_keeps_the_consumption(
+    freezer: Any,
+) -> None:
+    """A day one half of the INJECTION pair did not report is billed on its
+    consumption with the feed-in left out, where it used to leave both
+    sides."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    entry = SimpleNamespace(
+        data={
+            "consumption_kwh": "sensor.cons",
+            "day_injection_kwh": "sensor.inj_day",
+            "night_injection_kwh": "sensor.inj_night",
+            "solar_regime": "injection",
+        }
+    )
+    rows, live_patch = _pair_through_the_recorder(
+        {
+            "sensor.cons": year,
+            "sensor.inj_day": year,
+            "sensor.inj_night": year[:100] + year[101:],
+        },
+        {"sensor.cons": 5.0},
+    )
+    with rows, live_patch:
+        daily = await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
         )
-        assert daily is not None
-        assert len(daily) == 266
-        assert sides is not None
-        assert sides.silent == ()
-        assert len(sides.consumption.kwh) == 265
+        sides = await energy_meters._metered_sides(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert daily is not None
+    assert len(daily) == 266
+    assert daily[year[100]] == (1.0, 0.0, 0.0, 0.0)
+    assert sides is not None
+    assert len(sides.consumption.kwh) == 265
+    assert len(sides.injection.kwh) == 264
 
 
 async def test_measured_kwh_counts_days_across_a_register_pair(

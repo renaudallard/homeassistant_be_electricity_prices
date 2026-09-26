@@ -459,8 +459,8 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     side is billed off, the kWh taken from them, and which side went silent.
 
     Here the pair diverged by one hour, so the totals sensor stands in, and
-    the feed-in stopped after three days, so only those three are billed on
-    either side."""
+    the feed-in stopped after three days, so only those three are credited
+    while the consumption is billed throughout."""
     from unittest.mock import patch
 
     from custom_components.be_electricity_prices import energy_meters
@@ -512,7 +512,7 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
         dump = await async_get_config_entry_diagnostics(hass, entry)
 
     assert dump["consumption"]["billed_from"] == ["sensor.total"]
-    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(72.0)
+    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(240.0)
     assert dump["injection"]["billed_from"] == ["sensor.inj"]
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
     assert dump["silent_meter"] == ["sensor.inj"]

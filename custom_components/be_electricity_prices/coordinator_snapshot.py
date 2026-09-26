@@ -246,8 +246,9 @@ class _SnapshotMixin:
                         injected.kwh * MEASURED_FULL_YEAR_DAYS / injected.days_with_data
                     )
         # And a side that went silent under the other, which the pair check
-        # cannot see: the walks leave its days out of both sides, so the
-        # running cost reads low with nothing else to say why.
+        # cannot see: the walks leave a silent consumption meter's days out of
+        # both sides and a silent injection meter's feed-in out, so the running
+        # cost reads low or high with nothing else to say why.
         with contextlib.suppress(Exception):
             sides = await _metered_sides(
                 self.hass,

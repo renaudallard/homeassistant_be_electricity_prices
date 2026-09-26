@@ -798,7 +798,7 @@
     },
     "register_pair_incomplete": {
       "title": "Een meter van {supplier} ({contract}) registreert niet meer",
-      "description": "{entities} registreert niets, of is gestopt terwijl het andere register van zijn dag/nachtpaar, of de meter van de andere richting (verbruik of injectie), verder registreert. Enkel de dagen waarop ze allemaal rapporteren worden aangerekend, en geen enkele zolang er één niets registreert, zodat de lopende kost van deze vermelding te laag uitvalt zonder enige andere foutmelding.\n\nControleer of de sensor nog bestaat en een state_class total_increasing heeft; werd hij hernoemd of vervangen, verwijs dan in de stap Energiemeters naar de nieuwe. Deze melding verdwijnt automatisch zodra alle meters opnieuw rapporteren."
+      "description": "{entities} registreert niets, of is gestopt terwijl het andere register van zijn dag/nachtpaar, of de meter van de andere richting (verbruik of injectie), verder registreert. Een dag die niet alle verbruiksmeters rapporteren wordt aan geen enkele kant aangerekend, zodat de lopende kost van deze vermelding te laag uitvalt; een dag die enkel een injectiemeter mist wordt zonder zijn injectie aangerekend, zodat de kost te hoog uitvalt. Geen andere foutmelding wijst daarop.\n\nControleer of de sensor nog bestaat en een state_class total_increasing heeft; werd hij hernoemd of vervangen, verwijs dan in de stap Energiemeters naar de nieuwe. Deze melding verdwijnt automatisch zodra alle meters opnieuw rapporteren."
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) rekent domiciliëring anders aan en deze ingave is niets gevraagd",
