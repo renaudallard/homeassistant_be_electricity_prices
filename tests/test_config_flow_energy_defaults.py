@@ -534,14 +534,18 @@ def test_half_wired_register_pair_is_rejected() -> None:
     assert _incomplete_register_pairs({const.CONF_DAY_CONSUMPTION_KWH: "sensor.d"}) == {
         const.CONF_NIGHT_CONSUMPTION_KWH: "register_pair_incomplete"
     }
-    assert _incomplete_register_pairs({const.CONF_NIGHT_INJECTION_KWH: "sensor.n"}) == {
-        const.CONF_NIGHT_INJECTION_KWH: "register_pair_incomplete"
-    }
+    assert _incomplete_register_pairs(
+        {
+            const.CONF_SOLAR_REGIME: "injection",
+            const.CONF_NIGHT_INJECTION_KWH: "sensor.n",
+        }
+    ) == {const.CONF_NIGHT_INJECTION_KWH: "register_pair_incomplete"}
     # Both sides half-wired reports both.
     assert (
         len(
             _incomplete_register_pairs(
                 {
+                    const.CONF_SOLAR_REGIME: "compensation",
                     const.CONF_DAY_CONSUMPTION_KWH: "sensor.d",
                     const.CONF_DAY_INJECTION_KWH: "sensor.di",
                 }
@@ -549,6 +553,26 @@ def test_half_wired_register_pair_is_rejected() -> None:
         )
         == 2
     )
+
+
+def test_a_half_wired_injection_pair_passes_without_a_solar_regime() -> None:
+    """Nothing reads the injection meters without a solar regime, so a pair
+    wired there for the Energy dashboard cannot break the bill. Refusing it
+    kept a household with no panels out of its own meters form over a field
+    the coordinator ignores."""
+    from custom_components.be_electricity_prices.config_flow import (
+        _incomplete_register_pairs,
+    )
+
+    data = {
+        const.CONF_CONSUMPTION_KWH: "sensor.total",
+        const.CONF_DAY_INJECTION_KWH: "sensor.di",
+    }
+    assert _incomplete_register_pairs(data) == {}
+    assert _incomplete_register_pairs({**data, const.CONF_SOLAR_REGIME: "none"}) == {}
+    assert _incomplete_register_pairs(
+        {**data, const.CONF_SOLAR_REGIME: "injection"}
+    ) == {const.CONF_NIGHT_INJECTION_KWH: "register_pair_incomplete"}
 
 
 def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
@@ -584,11 +608,15 @@ def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
             const.CONF_NIGHT_CONSUMPTION_KWH: "sensor.n",
         },
         {
+            const.CONF_SOLAR_REGIME: "injection",
             const.CONF_INJECTION_KWH: "sensor.it",
             const.CONF_DAY_INJECTION_KWH: "sensor.di",
         },
         {const.CONF_DAY_CONSUMPTION_KWH: "sensor.d"},
-        {const.CONF_NIGHT_INJECTION_KWH: "sensor.ni"},
+        {
+            const.CONF_SOLAR_REGIME: "injection",
+            const.CONF_NIGHT_INJECTION_KWH: "sensor.ni",
+        },
     ]
     for data in cases:
         entry = SimpleNamespace(data=data)

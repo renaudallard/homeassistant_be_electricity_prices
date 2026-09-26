@@ -505,7 +505,8 @@ formula** supplier, which has no card and asks for the whole set.
      and a single total for injection, or vice-versa. A half-wired
      register pair is rejected unless a totals sensor covers that side,
      in which case the odd register is ignored, so a missing band can't
-     silently undercount.
+     silently undercount. Without a solar regime the injection meters are
+     not read at all, so a half-wired injection pair is let through.
    - When both wirings are filled for the same side the day/night
      registers win, with the exception above. Missing inputs collapse to
      the fees-only floor, so the sensor is unknown only while a recorded

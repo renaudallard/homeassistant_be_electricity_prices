@@ -824,13 +824,22 @@ def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
     that never affected its bill, so this mirrors the coordinator's rule
     exactly rather than tightening it.
 
+    The injection side is read only with a solar regime
+    (``energy_meters._bills_injection``), so without one a half-wired
+    injection pair, wired for the Energy dashboard, never reaches the bill and
+    is not refused either.
+
     Keyed on the NIGHT field of each side, which is where the message renders.
     """
     errors: dict[str, str] = {}
-    for day_key, night_key, total_key in (
-        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH, CONF_CONSUMPTION_KWH),
-        (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH, CONF_INJECTION_KWH),
-    ):
+    sides = [
+        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH, CONF_CONSUMPTION_KWH)
+    ]
+    if data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE) != SOLAR_REGIME_NONE:
+        sides.append(
+            (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH, CONF_INJECTION_KWH)
+        )
+    for day_key, night_key, total_key in sides:
         if bool(data.get(day_key)) != bool(data.get(night_key)) and not data.get(
             total_key
         ):
