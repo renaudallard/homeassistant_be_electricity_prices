@@ -20,7 +20,8 @@
 # ~/be_gate/.venv, refreshed here with uv whenever requirements-dev.txt moves,
 # and GNU date first in its PATH for the CI issue script's tests. A remote
 # that cannot be reached, or drops mid-run, costs a local pytest, never a
-# gate result.
+# gate result; on a Mac the suite runs under caffeinate so the machine does
+# not sleep under it.
 #
 # Usage: scripts/gate.sh [pytest args...]
 #   scripts/gate.sh                     the whole suite, as test.yml runs it
@@ -40,7 +41,11 @@ WORKTREE="$ROOT/tmp/gate/$SHA.$$"
 LOGS="$ROOT/tmp/gate/$SHA.$$.logs"
 REMOTE=${GATE_REMOTE-maci7}
 REMOTE_DIR="be_gate/gate-$SHA.$$"
-SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5)
+# The keepalive notices a remote that went away without closing the
+# connection, a Mac put to sleep for one, within a minute; without it ssh
+# waits on the dead peer and the local fallback never starts.
+SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15
+  -o ServerAliveCountMax=4)
 shipped=""
 
 [ -x "$PYTHON" ] || { echo "no interpreter at $PYTHON" >&2; exit 1; }
@@ -90,8 +95,11 @@ start() {
 PYTEST_ARGS=("${@:-tests/}")
 if remote_ready; then
   where="$REMOTE"
+  remote_pytest="../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")-q -n auto --dist loadfile"
+  # caffeinate -i keeps a Mac from idle sleep for as long as the suite runs;
+  # a remote without it runs the suite plainly.
   start "pytest (on $REMOTE)" "${SSH[@]}" -n "$REMOTE" \
-    "cd $REMOTE_DIR && ../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}") -q -n auto --dist loadfile"
+    "cd $REMOTE_DIR && { command -v caffeinate >/dev/null && exec caffeinate -i $remote_pytest; exec $remote_pytest; }"
 else
   where=local
   start "pytest" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto --dist loadfile
