@@ -15,7 +15,7 @@
 # run on one core each, and one after the other they left three of a Pi's
 # four idle for four minutes. When the GATE_REMOTE host (maci7 by default)
 # answers, pytest runs there instead, on the same snapshot shipped with git
-# archive, while the rest runs here: about 6 minutes against 15 on a Pi alone.
+# archive, while the rest runs here: about 6 minutes against 13 on a Pi alone.
 # Set GATE_REMOTE= to keep everything local. The remote needs a venv at
 # ~/be_gate/.venv, refreshed here with uv whenever requirements-dev.txt moves,
 # and GNU date first in its PATH for the CI issue script's tests. A remote
