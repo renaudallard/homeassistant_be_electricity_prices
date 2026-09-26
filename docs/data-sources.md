@@ -565,7 +565,10 @@ cost. Two rules enforce this:
   coordinator's store while a retry is pending, so a restart during the wait
   carries on at the next setup. A service call's response says to call it
   again. The cost leg is written whole on every run: a running total missing
-  days would carry every later hour short.
+  days would carry every later hour short. The automatic retry writes it from
+  the cost anchor rather than from the day it starts at, since the walk
+  re-prices the months before that day on today's card and settings, and rows
+  written only from there would step by whatever changed since the first run.
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the

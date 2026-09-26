@@ -2832,7 +2832,9 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
     first run wrote. The months it left out stayed out of the price series for
     good. Kept in the store, the next setup runs it from the first of them.
     That run cleared it before writing a row, so a tick's save followed by a
-    stop mid-run lost it again: it is cleared once the rows are imported."""
+    stop mid-run lost it again: it is cleared once the rows are imported. It
+    also wrote the running cost only from that day, so a card changed since
+    the first run stepped the total there by everything the change moved."""
     freezer.move_to("2026-11-20 12:00:00+01:00")
     entry = make_entry(
         supplier="totalenergies", contract="totalenergies_pixel", solar_regime="none"
@@ -2853,16 +2855,20 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
         _save_persistent=AsyncMock(),
     )
     entry.runtime_data = coordinator
-    store: dict[str, list[Any]] = {}
+    # Keyed on the hour, as the recorder upserts on it.
+    store: dict[str, dict[datetime, Any]] = {}
 
     def fake_import(_h: Any, metadata: Any, stats: Any) -> None:
-        store.setdefault(metadata["statistic_id"], []).extend(stats)
+        store.setdefault(metadata["statistic_id"], {}).update(
+            {row["start"]: row for row in stats}
+        )
 
     async def executor(
         _fn: Any, _h: Any, start: Any, end: Any, sids: Any, *_r: Any
     ) -> Any:
         sid = next(iter(sids))
-        return {sid: [r for r in store.get(sid, []) if start <= r["start"] < end]}
+        rows = store.get(sid, {})
+        return {sid: [row for hour, row in rows.items() if start <= hour < end]}
 
     # The archive fails for this month and every later one.
     down_from: date | None = date(2026, 1, 1)
@@ -2919,13 +2925,24 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
             await bf.backfill_if_missing(hass, entry)
         assert coordinator._backfill_retry_from == date(2026, 8, 1)
         down_from = None
+        # Today's card changed since the first run.
+        coordinator._snapshot = make_snapshot(
+            energy=FixedRates(single=0.25, yearly_fixed_fee=120.0)
+        )
         freezer.tick(timedelta(hours=2))
         await bf.backfill_if_missing(hass, entry)
         assert coordinator._backfill_retry_from is None
         # Done: the next restart finds nothing to do.
         assert await bf.backfill_if_missing(hass, entry) is None
-    days = {dt_util.as_local(r["start"]).date() for r in store[ids["current_price"]]}
+    days = {dt_util.as_local(hour).date() for hour in store[ids["current_price"]]}
     assert len(days) == (date(2026, 11, 20) - date(2026, 1, 1)).days + 1
+    cost = store[ids["current_year_cost"]]
+    aug = dt_util.start_of_local_day(date(2026, 8, 1)).astimezone(UTC)
+    hour = timedelta(hours=1)
+    # The retry rewrote the running total from 1 January on the new card, so
+    # the day it started from carries no step for the months before it.
+    step = cost[aug]["sum"] - cost[aug - hour]["sum"]
+    assert step == pytest.approx(cost[aug + hour]["sum"] - cost[aug]["sum"])
 
 
 async def test_a_pending_backfill_retry_survives_a_restart(

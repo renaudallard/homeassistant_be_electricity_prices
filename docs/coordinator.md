@@ -563,7 +563,9 @@ meanwhile (`keep_settled`) and prices the rest on theirs once read;
 the automatic backfill runs again until they are written, and the next setup
 carries on when Home Assistant stops during a wait (`_backfill_retry_from`,
 persisted). The cost series is written whole on every run, since a running
-total missing days carries every later hour short.
+total missing days carries every later hour short, and the automatic retry
+writes it from the anchor rather than from its first day, so what changed
+since the first run does not land as a step on that day.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 

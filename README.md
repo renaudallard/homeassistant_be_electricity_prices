@@ -1080,7 +1080,9 @@ whose supplier's site did not answer. The automatic backfill runs again an
 hour later, then less often, up to once a day, until those days are written,
 and a restart does not lose it: the next start carries on. After a service
 call, call it again once those cards can be read. The running cost is written
-whole on every run and rewritten by the run that fills those days in.
+whole on every run, and the automatic run that fills those days in rewrites it
+from the start of the year, so a card or setting changed in between moves the
+whole total rather than one hour of it.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

@@ -528,7 +528,11 @@ async def _backfill_range(
         )
     ]
     cost_hours = _hour_iter(cost_anchor_utc, end_utc)
-    cost_emit_from = max(start_utc, cost_anchor_utc)
+    # The automatic backfill starts a retry at the first day left out, but the
+    # cost walk is priced on today's card and settings from the anchor again.
+    # Rows written only from that day put whatever changed since the earlier
+    # run into one hour's step there, so it writes the whole running total.
+    cost_emit_from = cost_anchor_utc if retry_later else max(start_utc, cost_anchor_utc)
 
     if clear:
         ids: list[str] = []
