@@ -153,12 +153,16 @@ class _PeakMixin:
 
         mode = self.entry.data.get(CONF_CAPACITY_MODE)
         if mode == CAPACITY_MODE_FIXED:
-            # Use the configured value directly; rolling-max would
-            # ignore a mid-month decrease the user just made via
-            # OptionsFlow until next month rollover.
-            self._peak_kw = float(
-                self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
-            )
+            # Nothing is measured, and _billed_peak_kw reads the configured
+            # value directly. Writing it here banked it into every closed
+            # month as if measured, and after a switch to the peak sensor the
+            # running maximum could not come down below it for the rest of
+            # the month, nor the mean for a year. The window goes too, as it
+            # does outside Flanders: fixed mode does not read it, and one
+            # stored before this rule cannot tell the configured kW from a
+            # measured peak.
+            self._peak_kw = 0.0
+            self._peak_history.clear()
         elif mode == CAPACITY_MODE_SENSOR:
             entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
             state: State | None = self.hass.states.get(entity_id) if entity_id else None
@@ -241,10 +245,12 @@ class _PeakMixin:
         inserting a set's own mean into it leaves the mean unchanged, so
         simply leaving the gap out lands on the same number. Fixed mode
         bypasses the window entirely: the user is stating a peak, not
-        measuring one.
+        measuring one, so it is read off the entry, which also makes a change
+        to it count from the next tick.
         """
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
-            return max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
+            fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
+            return max(float(fixed), VREG_CAPACITY_FLOOR_KW)
         peaks = self._peak_terms()
         if not peaks:
             # A brand-new entry in the first hours of its first month has
