@@ -1018,8 +1018,8 @@ class MeasuredKwh:
     # no statistics before it, comma-separated; empty when the side is whole
     # or none is wired. What the Repairs card names, since the figure itself
     # only says that less was billed, not which sensor to look at. A register
-    # that merely STARTED late is not named: after a rename the user fixed,
-    # the new entity reports to date and the pair is whole again.
+    # that STARTED late is named only while the pair covers clearly less of
+    # the window than its twin (:func:`_started_late`).
     pair_fault: str = ""
 
 
@@ -1090,6 +1090,34 @@ def _stopped(halves: Iterable[tuple[str, Collection[_P]]]) -> list[str]:
     latest = max(when for _entity_id, when in last)
     limit = latest - timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
     return [entity_id for entity_id, when in last if when < limit]
+
+
+def _started_late(
+    day_id: str, day: Collection[date], night_id: str, night: Collection[date]
+) -> list[str]:
+    """The half of a reporting pair that started more than
+    ``_REGISTER_STOPPED_AFTER_DAYS`` after its twin, while the days both
+    report are under ``_SHORT_BELOW`` of the days its twin does.
+
+    A register rewired after a replacement, as the Repairs card advises,
+    reports from the day it was wired, so the pair bills only since then: a
+    year to date of 917 EUR fell to 23,56 over 7 of 269 days, and the card
+    cleared, since :func:`_stopped` rightly ignores a register that started
+    late. It stays named until the pair covers most of the window again. A
+    half that started a day or two late, as a meter added to Home Assistant
+    one register at a time does, is not.
+    """
+    if not day or not night:
+        return []
+    paired = len(set(day) & set(night))
+    if paired >= _SHORT_BELOW * max(len(day), len(night)):
+        return []
+    limit = min(min(day), min(night)) + timedelta(days=_REGISTER_STOPPED_AFTER_DAYS)
+    return [
+        entity_id
+        for entity_id, readings in ((day_id, day), (night_id, night))
+        if min(readings) > limit
+    ]
 
 
 def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] | None:
@@ -1232,7 +1260,7 @@ async def _measured_kwh(
             await _recorder_daily_kwh(hass, night_id, start, end),
             end,
         )
-        stopped = ", ".join(_stopped(((day_id, d), (night_id, n))))
+        stopped = _stopped(((day_id, d), (night_id, n)))
         today_kwh, today_days = (
             (day_today + night_today, 1)
             if day_today is not None and night_today is not None and not stopped
@@ -1307,7 +1335,7 @@ async def _measured_kwh(
         return MeasuredKwh(
             sum(d[x] + n[x] for x in days) + today_kwh,
             len(days) + today_days,
-            pair_fault=stopped,
+            pair_fault=", ".join(stopped + _started_late(day_id, d, night_id, n)),
         )
     if total_id:
         return await _measured_total(hass, total_id, start, end)

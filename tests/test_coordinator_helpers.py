@@ -2809,9 +2809,10 @@ async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
 ) -> None:
     """The Repairs card names the sensor to look at: one that records nothing,
     or stopped while its twin carries on. A register that only STARTED late
-    reports to date, which is where a fixed rename leaves the pair, so it is
-    not named: a card raised for a year over a problem already fixed would be
-    one users learn to ignore."""
+    reports to date, which is where a fixed rename leaves the pair, but the
+    pair still bills only since then, so it is named while that is clearly
+    less of the window than its twin covers; the card is read over the window
+    the bill reads, so it does not outlive the year."""
     entry = SimpleNamespace(
         data={
             "day_consumption_kwh": "sensor.day",
@@ -2836,7 +2837,8 @@ async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
     assert await _fault(range(60), range(60)) == ""
     assert await _fault(range(60), range(0)) == "sensor.night"
     assert await _fault(range(60), range(10)) == "sensor.night"
-    assert await _fault(range(60), range(30, 60)) == ""
+    assert await _fault(range(60), range(30, 60)) == "sensor.night"
+    assert await _fault(range(60), range(4, 60)) == ""
     # A day behind is statistics catching up, not a stopped register.
     assert await _fault(range(60), range(59)) == ""
 
@@ -2985,6 +2987,40 @@ async def test_a_register_that_stopped_is_named_though_it_reads_live_today(
             today,
         )
     assert measured.pair_fault == "sensor.night"
+
+
+@pytest.mark.parametrize(
+    ("first", "named"),
+    [
+        pytest.param(258, "sensor.night", id="rewired-last-week"),
+        pytest.param(2, "", id="a-day-or-two-late"),
+        pytest.param(20, "", id="most-of-the-window"),
+    ],
+)
+async def test_a_register_rewired_late_stays_named(
+    hass: HomeAssistant, freezer: Any, first: int, named: str
+) -> None:
+    """The user rewires a replaced night register, as the Repairs card
+    advises. The pair then bills only the days both report, 7 of 269 on the
+    audit's harness, and the card cleared because a register that started
+    late was never named. It stays named until the pair covers most of the
+    window; one that started a day or two after its twin is not."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.day": year, "sensor.night": year[first:]},
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert measured.days_with_data == 265 - first + 1
+    assert measured.pair_fault == named
 
 
 async def test_a_healthy_pair_still_bills_today_off_the_live_meter(

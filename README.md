@@ -892,8 +892,11 @@ successful refresh:
   records nothing, or stopped while its twin carries on (a rename, an
   integration swap, a meter replacement). The pair is billed only on the
   days both registers report, so the running cost reads low until it is
-  rewired; the card names the sensor. A register that merely started late
-  is not reported, since it records to date. The same card names a
+  rewired; the card names the sensor. A register that started long after
+  its twin, as one rewired after a replacement does, is named too: the pair
+  bills only from its first day, so the card stays until the pair covers
+  most of the year, or a totals sensor wired on that side bills it. The
+  card is read over the same window as the bill. The same card names a
   consumption or injection meter that stopped while the other side carries
   on. The days a consumption meter misses are billed on neither side, rather
   than as a household that used nothing while its feed-in was credited, so

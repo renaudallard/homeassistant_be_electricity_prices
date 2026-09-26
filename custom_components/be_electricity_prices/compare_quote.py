@@ -38,7 +38,7 @@ invert the dependency direction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, datetime
 
 from typing import Any
@@ -474,10 +474,6 @@ class _AnnualVolume:
     # whether it has a volume worth pricing the tranche and the network
     # ceiling against.
     measured: bool = False
-    # The day/night register the figure is short of, when the pair could only
-    # be measured in part (``MeasuredKwh.pair_fault``); what the coordinator
-    # raises a Repairs card over.
-    pair_fault: str = ""
 
 
 async def _annual_volume(
@@ -521,8 +517,7 @@ async def _annual_volume(
     Reads only ``entry.data``, so it stays usable with the compare flow's
     ``_QuoteEntry`` proxy.
     """
-    measured = await _measured_kwh(hass, entry, start, end)
-    return replace(_volume_of(measured, entry), pair_fault=measured.pair_fault)
+    return _volume_of(await _measured_kwh(hass, entry, start, end), entry)
 
 
 def _volume_of(measured: MeasuredKwh, entry: ConfigEntry) -> _AnnualVolume:

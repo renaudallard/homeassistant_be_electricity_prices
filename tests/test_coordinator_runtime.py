@@ -2753,19 +2753,32 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     )
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    volume = compare_quote._AnnualVolume(
-        3500.0, 365, "measured", measured=True, pair_fault="sensor.night_cons"
-    )
+    volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+    broken = {
+        "consumption": MeasuredKwh(3500.0, 262, "sensor.night_cons"),
+        "injection": MeasuredKwh(900.0, 262, "sensor.night_inj"),
+    }
+    windows: list[date] = []
+
+    async def _measured(
+        _hass: object,
+        _entry: object,
+        start: date,
+        _end: date,
+        *,
+        side: str = "consumption",
+    ) -> MeasuredKwh:
+        windows.append(start)
+        return broken[side]
+
     with (
         patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
-        patch.object(
-            coordinator_snapshot,
-            "_measured_kwh",
-            AsyncMock(return_value=MeasuredKwh(900.0, 300, "sensor.night_inj")),
-        ),
+        patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
     ):
         await coord._ensure_annual_volume()
     assert coord._register_pair_fault == "sensor.night_cons, sensor.night_inj"
+    # Read over the window the bill reads, whatever the volume's window.
+    assert date(2026, 1, 1) in windows
 
     issue_id = f"register_pair_incomplete_{entry.entry_id}"
     registry = ir.async_get(hass)
@@ -2780,13 +2793,12 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     # The sensor is fixed: the next day's read finds both pairs whole, and
     # the card goes through the same recompute that raised it.
     freezer.move_to("2026-09-21 12:00:00+02:00")
-    healthy = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
     with (
-        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=healthy)),
+        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
         patch.object(
             coordinator_snapshot,
             "_measured_kwh",
-            AsyncMock(return_value=MeasuredKwh(900.0, 300)),
+            AsyncMock(return_value=MeasuredKwh(900.0, 263)),
         ),
     ):
         await coord._ensure_annual_volume()
@@ -2825,13 +2837,25 @@ async def test_no_injection_repairs_card_without_a_solar_regime(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
-    injected = AsyncMock(return_value=MeasuredKwh(0.0, 0, "sensor.night_inj"))
+    sides: list[str] = []
+
+    async def _measured(
+        _hass: object,
+        _entry: object,
+        _start: date,
+        _end: date,
+        *,
+        side: str = "consumption",
+    ) -> MeasuredKwh:
+        sides.append(side)
+        return MeasuredKwh(0.0, 0, "sensor.night_inj" if side == "injection" else "")
+
     with (
         patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
-        patch.object(coordinator_snapshot, "_measured_kwh", injected),
+        patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
     ):
         await coord._ensure_annual_volume()
-    injected.assert_not_called()
+    assert "injection" not in sides
     assert coord._register_pair_fault == ""
 
 

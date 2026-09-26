@@ -61,6 +61,7 @@ from .energy_meters import (
     _measured_kwh,
     _metered_sides,
 )
+from .cohort import ytd_window_start
 from .snapshot_months import card_for_unreadable_month
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -216,18 +217,11 @@ class _SnapshotMixin:
         self._annual_kwh_full_year = volume.measured and _covers_a_year(
             volume.days_with_data
         )
-        # The same trailing year read for the injection side, where an
-        # injection register PAIR is wired (the one wiring whose half can go
-        # silent) and where the export is SOLD, which is what a first-year
-        # feed-in bonus multiplies (entry_annual_injection_kwh). Every other
-        # entry pays nothing for it.
-        faults = [volume.pair_fault]
-        day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
-        sells = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        # The same trailing year read for the injection side where the export
+        # is SOLD, which is what a first-year feed-in bonus multiplies
+        # (entry_annual_injection_kwh). Every other entry pays nothing for it.
         self._annual_injection_kwh = None
-        # Not without a solar regime: the bill does not read those meters,
-        # so a broken one leaves nothing short to raise a card over.
-        if _bills_injection(self.entry) and ((day_id and night_id) or sells):
+        if self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
             with contextlib.suppress(Exception):
                 injected = await _measured_kwh(
                     self.hass,
@@ -236,26 +230,40 @@ class _SnapshotMixin:
                     today,
                     side="injection",
                 )
-                faults.append(injected.pair_fault)
-                if (
-                    sells
-                    and injected.kwh > 0
-                    and _covers_a_year(injected.days_with_data)
-                ):
+                if injected.kwh > 0 and _covers_a_year(injected.days_with_data):
                     self._annual_injection_kwh = (
                         injected.kwh * MEASURED_FULL_YEAR_DAYS / injected.days_with_data
                     )
-        # And a side that went silent under the other, which the pair check
-        # cannot see: the walks leave a silent consumption meter's days out of
-        # both sides and a silent injection meter's feed-in out, so the running
-        # cost reads low or high with nothing else to say why.
+        await self._find_meter_faults(today)
+
+    async def _find_meter_faults(self, today: date) -> None:
+        """Name the meters the bill is short of, for the Repairs card.
+
+        Read over the window the bill reads, not the trailing year of the
+        volume: a register rewired last autumn short-changes this year to date
+        only until 1 January, and a card read off the trailing year stayed up
+        for months after the bill had recovered. Once a day, with the volume.
+        """
+        start = ytd_window_start(self.entry, today)
+        faults: list[str] = []
         with contextlib.suppress(Exception):
-            sides = await _metered_sides(
-                self.hass,
-                self.entry,
-                today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
-                today,
-            )
+            measured = await _measured_kwh(self.hass, self.entry, start, today)
+            faults.append(measured.pair_fault)
+            # The injection pair too, the one injection wiring whose half can
+            # go silent. Not without a solar regime: the bill does not read
+            # those meters, so a broken one leaves nothing short.
+            day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
+            if _bills_injection(self.entry) and day_id and night_id:
+                injected = await _measured_kwh(
+                    self.hass, self.entry, start, today, side="injection"
+                )
+                faults.append(injected.pair_fault)
+            # And a side that went silent under the other, which the pair
+            # check cannot see: the walks leave a silent consumption meter's
+            # days out of both sides and a silent injection meter's feed-in
+            # out, so the running cost reads low or high with nothing else to
+            # say why.
+            sides = await _metered_sides(self.hass, self.entry, start, today)
             if sides is not None:
                 faults.extend(sides.silent)
         # Once each: a consumption meter with no statistics is both a volume
