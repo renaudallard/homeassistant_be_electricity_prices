@@ -472,9 +472,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             )
         )
 
-    # One-shot backfill: only fires when the recorder has no
+    # Automatic backfill: only fires when the recorder has no
     # statistics for current_price at the Jan 1 anchor, so a normal
-    # restart adds zero work. Runs in a background task because the
+    # restart adds zero work, and runs once more an hour later when a
+    # card read failed. Runs in a background task because the
     # ENTSO-E historical fetch can take tens of seconds for a fresh
     # install on a dynamic supplier and must not block setup.
     entry.async_create_background_task(

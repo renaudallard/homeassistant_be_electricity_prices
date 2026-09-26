@@ -991,13 +991,16 @@ class _TickMixin:
         tick nor config-entry setup should wait on. Stale pricing for the same
         periods keeps being served until the new one lands.
 
-        A pricing that could not price one of the periods on its own
-        supplier's cards is not kept for the day: the year reads unknown, or
-        bills those days on the entry's current card, while it stands, so the
-        next hourly tick asks again rather than tomorrow's. Not sooner: the
-        pricing asks for a refresh when it lands, and that refresh is a tick,
-        so without the wait a period that cannot be priced was fetched and
-        walked again every few seconds.
+        A pricing that could not price one of the periods at all, or priced
+        it on the entry's current card because a read failed just now, is not
+        kept for the day: the year reads unknown, or bills those days on
+        another supplier's card, while it stands, so the next hourly tick asks
+        again rather than tomorrow's. A period no archive kept any card of is
+        settled on that stand-in and asked again the next day, as its cards
+        will not turn up within the hour. Not sooner: the pricing asks for a
+        refresh when it lands, and that refresh is a tick, so without the wait
+        a period that cannot be priced was fetched and walked again every few
+        seconds.
         """
         key = periods_key(periods)
         priced = self._previous_priced

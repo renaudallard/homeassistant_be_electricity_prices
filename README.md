@@ -723,10 +723,11 @@ one, starting from what you have now. From then on:
   means fetching the old supplier's cards. After you record a switch,
   `current_year_cost` reads unknown until that pricing lands, usually within
   minutes, rather than a year missing a whole contract. It stays unknown while
-  an earlier contract cannot be priced, and is tried again every hour: a
-  contract the integration can never price (a supplier it no longer knows, or
-  a card that does not cover your network operator) keeps it unknown, and the
-  log names the contract.
+  an earlier contract cannot be priced at all, and is tried again every hour:
+  a contract the integration can never price (a supplier it no longer knows,
+  or a card that does not cover your network operator) keeps it unknown, and
+  the log names the contract. A contract whose own cards cannot be had is
+  priced on your current card instead, as the next point says.
 - `current_month_cost` includes the old contract's days in the month of the
   switch, the comparison pages price *your contract* the same way, and the
   statistics backfill prices each hour on the contract that supplied it.
@@ -737,9 +738,10 @@ one, starting from what you have now. From then on:
   own cards is kept. A supplier that can no longer be reached, and whose cards
   no archive kept, has its days priced on your current card, without the
   welcome credit that card offers new customers: the contract's row in
-  `previous_contracts` says so (`priced_on_current_card`), it is tried again
-  every hour, and the statistics backfill leaves those days out rather than
-  import another supplier's prices for them.
+  `previous_contracts` says so (`priced_on_current_card`), and the statistics
+  backfill imports those days the same way and says so. It is tried again
+  every hour while the old supplier's site or the card archive does not
+  answer, and once a day when no archive kept its cards.
 
 Record a switch as soon as you can. Until then the new contract's days are
 priced as the old contract's, and recording it later corrects the figure,
@@ -1032,11 +1034,12 @@ predates the entry's first live update tick. On an entry that recorded
 a supplier switch, each hour is priced on the contract that supplied it,
 and the running bill carries on across the switch.
 
-The integration auto-triggers a one-shot backfill on first install
+The integration runs the backfill by itself on first install
 (or after a database reset) covering the year-to-date window (Jan 1 of
 the current local year, or your contract start date if the entry bills
-from there) through "now"; the service is for re-runs after fixing a tariff card
-or to redo a narrower window:
+from there) through "now", and leaves it alone on later restarts; the
+service is for re-runs after fixing a tariff card or to redo a narrower
+window:
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -1060,17 +1063,16 @@ feed-in credit had no price), and the same is logged as a warning. Unlike
 the live sensor, the imported rows keep that gap until you run the
 backfill again once the prices are cached.
 
-Days whose own card cannot be had when the backfill runs are left out rather
-than imported on today's card, since an imported statistic stays: a past
-month whose card the archive could not serve just then (a timeout, or GitHub
-briefly down), every month of a contract whose signing-month card could not
-be read, and the days of an earlier contract (after a recorded supplier
+The backfill ends up with what the live sensor shows. Days whose own card
+cannot be had are billed on today's card, as the live sensor bills them: a
+past month whose card the archive could not serve just then (a timeout, or
+GitHub briefly down), every month of a contract whose signing-month card could
+not be read, and the days of an earlier contract (after a recorded supplier
 switch) whose supplier's cards cannot be read. The response lists them under
-`left_out`, with a `skipped` note for `current_year_cost`, whose running bill
-cannot be imported with days missing from it. The automatic backfill runs
-once more an hour later; after a service call, run it again once those cards
-can be read. With `clear` on, such a run is refused, since the wipe would take
-rows it cannot write back.
+`left_out` and the log names them in a warning. When a card read failed just
+then, the automatic backfill leaves those days out of the price sensors and
+runs once more an hour later, which imports whatever it still cannot read the
+same way; after a service call, run it again once those cards can be read.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

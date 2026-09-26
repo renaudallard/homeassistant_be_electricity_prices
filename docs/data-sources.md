@@ -421,12 +421,12 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists, once more an hour later when a card read failed. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py`). Backfill is reached either automatically
 at setup or through the `backfill_statistics` service, wired in `__init__.py`
-(service handler `_async_backfill_service` at `__init__.py`, one-shot
+(service handler `_async_backfill_service` at `__init__.py`, automatic
 scheduling at `__init__.py`). The service handler validates that a snapshot
 is loaded and raises a localized `ServiceValidationError` otherwise, matching the
 window services (`__init__.py`).
@@ -543,19 +543,22 @@ cost. Two rules enforce this:
   carries a `skipped` note saying why (`backfill.py`). Representing a past
   year would mean abandoning the per-year restart and importing a
   lifetime-cumulative sum instead, which is a different design.
-- A run that has to leave days out, because no card of their own can be had
-  for them right now, skips the cost leg whole: a running total missing those
-  days would carry every later hour short, and an imported statistic stays.
-  `_unpriceable_spans` (`backfill_window.py`) names them before either pass
-  runs: an earlier contract whose supplier's cards cannot be read, a closed
-  month whose card read failed and is waiting out its marker, and every month
-  of a contract whose signing month is one (`month_card_failed`,
+- The backfill ends up with what the live sensor bills. Days no card of
+  their own can be had for are priced on the stand-in the live walk uses, and
+  `_stand_in_spans` (`backfill_window.py`) names them before either pass runs:
+  an earlier contract whose supplier's cards cannot be read, a closed month
+  whose card read failed and is waiting out its marker, and every month of a
+  contract whose signing month is one (`month_card_failed`,
   `snapshot_months.py`, which tells a failed read from a month no archive
   holds, since `_snapshot_for_month` hands back the current card for both).
-  The price sensors are rebuilt around them and the response lists them under
-  `left_out`. `backfill_if_missing` runs once more after `_RETRY_AFTER` (an
-  hour) when its first run left days out, because nothing else would: its
-  probe finds the rows that run did write.
+  The response lists them under `left_out` and a warning names them. A read
+  that failed just now may work an hour later, so the automatic backfill's
+  first run (`retry_later`) leaves those days out of the price series, lists
+  them under `retry` and runs once more after `_RETRY_AFTER` (an hour), which
+  imports what it still cannot read and schedules nothing further. The cost
+  leg is written whole on every run: a running total missing days would carry
+  every later hour short. A period that can never be priced on its own cards
+  is imported at once, so the anchor probe finds its row on the next restart.
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the
@@ -655,7 +658,7 @@ matter to this module:
   `statistics_during_period` for the missing-probe (`backfill_window.py`),
   `clear_statistics` for the destructive path (`_clear_all`, `backfill_window.py`),
   and the hourly-kWh reconstruction that reads past consumption. Loading after
-  the recorder ensures its statistics tables are ready when the one-shot
+  the recorder ensures its statistics tables are ready when the automatic
   backfill task fires at setup. None of them is imported at module scope, so
   the integration loads on an installation without the recorder; the probe and
   the wipe are wrapped in `try/except ImportError` (`backfill_window.py`) so a

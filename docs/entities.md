@@ -349,7 +349,10 @@ contracts is tried again at the next hourly tick, not sooner (the pricing asks
 for a refresh when it lands, and that refresh would otherwise ask for it again
 within seconds), so a contract that can never be priced, a supplier the
 registry no longer knows or a card that does not cover the DSO, keeps the year
-unknown and logs a warning naming it each hour. `last_reset` stays on 1 January across
+unknown and logs a warning naming it each hour. A contract priced on the
+entry's current card because no archive kept its cards is settled for the day;
+only one priced so because a read failed just now is asked again the next
+hour. `last_reset` stays on 1 January across
 a switch, so the year remains one statistics cycle.
 
 ### `current_month_cost`: the same bill over a shorter window

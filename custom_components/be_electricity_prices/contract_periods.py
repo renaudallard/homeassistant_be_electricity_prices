@@ -89,8 +89,13 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
+from .providers._pdf import is_transient_fetch_error
 from .providers.custom import build_snapshot as build_custom_snapshot
-from .snapshot_months import _snapshot_for_month, card_for_unreadable_month
+from .snapshot_months import (
+    _snapshot_for_month,
+    card_for_unreadable_month,
+    month_card_failed,
+)
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
 from .snapshot_store import fetch_shared
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled
@@ -117,8 +122,11 @@ class PricedPeriod:
     says the supplier could not be reached and no archive held any of its cards,
     so the period was priced on the entry's current card instead, which is what
     the whole year was priced on before switches could be recorded.
-    ``read_by_ocr`` says the old supplier's card carries no text layer and the
-    period was priced on the archive's reading of its pixels.
+    ``read_failed`` says that stand-in is there because a read failed just now,
+    the old supplier's site or an archive not answering, rather than because no
+    archive kept its cards: only such a row may price on its own cards later
+    in the day. ``read_by_ocr`` says the old supplier's card carries no text
+    layer and the period was priced on the archive's reading of its pixels.
     """
 
     start: date
@@ -128,12 +136,14 @@ class PricedPeriod:
     cost: float | None
     month_cost: float | None
     stand_in: bool
+    read_failed: bool = False
     read_by_ocr: bool = False
 
     @property
     def settled(self) -> bool:
-        """Whether the period priced on its own supplier's cards."""
-        return self.cost is not None and not self.stand_in
+        """Whether the pricing stands for the day: on the period's own cards,
+        or on the stand-in a period no archive kept is billed on for good."""
+        return self.cost is not None and not self.read_failed
 
 
 @dataclass(frozen=True)
@@ -166,6 +176,7 @@ def priced_to_dict(priced: PricedPeriods) -> dict[str, Any]:
                 "cost": row.cost,
                 "month_cost": row.month_cost,
                 "stand_in": row.stand_in,
+                "read_failed": row.read_failed,
                 "read_by_ocr": row.read_by_ocr,
             }
             for row in priced.rows
@@ -187,6 +198,7 @@ def priced_from_dict(blob: Mapping[str, Any]) -> PricedPeriods | None:
                     None if row["month_cost"] is None else float(row["month_cost"])
                 ),
                 stand_in=bool(row["stand_in"]),
+                read_failed=bool(row.get("read_failed", False)),
                 read_by_ocr=bool(row.get("read_by_ocr", False)),
             )
             for row in blob["rows"]
@@ -374,12 +386,15 @@ def keep_settled(
     A timeout on the old supplier's site priced the period on another
     supplier's card, and that replaced the pricing on its own cards for the
     day and in the store. The window is closed, so the last pricing on its
-    own cards is the better figure whatever its age.
+    own cards is the better figure whatever its age, and a settled stand-in
+    beats a read that failed.
     """
     if previous is None or previous.key != key or len(previous.rows) != len(rows):
         return tuple(rows)
     return tuple(
-        old if old.settled and not new.settled else new
+        old
+        if old.settled and (not new.settled or (new.stand_in and not old.stand_in))
+        else new
         for old, new in zip(previous.rows, rows, strict=True)
     )
 
@@ -510,10 +525,11 @@ async def _current_card(
     session: aiohttp.ClientSession,
     extractor: SupplierExtractor,
     proxy: ConfigEntry,
-) -> tuple[SupplierSnapshot | None, bool]:
+) -> tuple[SupplierSnapshot | None, bool, bool]:
     """The old contract's card as its supplier publishes it today, resolved for
-    this household, or ``None`` when the supplier cannot be reached, and
-    whether it was read off the archive's OCR reading.
+    this household, or ``None`` when the supplier cannot be reached, whether it
+    was read off the archive's OCR reading, and whether a ``None`` is a read
+    that failed just now (a timeout, a 5xx) rather than a card that is gone.
 
     A card published as page images downloads fine and no parser here can read
     it: Ecofix's, every day since August 2026. The repository's archive reads
@@ -524,6 +540,7 @@ async def _current_card(
     region = data.get(CONF_REGION, "")
     contract = data.get(CONF_CONTRACT, "")
     read_by_ocr = False
+    read_failed = False
     if extractor.id == SUPPLIER_CUSTOM:
         raw: SupplierSnapshot | None = build_custom_snapshot(
             data, region, data.get(CONF_DSO, "")
@@ -539,6 +556,10 @@ async def _current_card(
             record_failure=False,
         )
         raw = fetched.row.snapshot if fetched.row is not None else None
+        # Classified as the coordinator classifies its own card's fetch.
+        read_failed = isinstance(
+            fetched.error, TimeoutError
+        ) or is_transient_fetch_error(fetched.error_message)
         if raw is None and isinstance(fetched.error, CardNotReadableError):
             try:
                 archived = await card_for_unreadable_month(
@@ -552,14 +573,17 @@ async def _current_card(
                     err,
                 )
                 archived = None
+                read_failed = True
             if archived is not None:
                 raw = archived.snapshot
                 read_by_ocr = archived.read_by_ocr
     if raw is None:
-        return None, False
-    return _resolve_snapshot(
-        proxy, raw, annual_kwh=entry_annual_kwh(proxy)
-    ), read_by_ocr
+        return None, False, read_failed
+    return (
+        _resolve_snapshot(proxy, raw, annual_kwh=entry_annual_kwh(proxy)),
+        read_by_ocr,
+        False,
+    )
 
 
 async def _latest_archived_card(
@@ -569,33 +593,34 @@ async def _latest_archived_card(
     proxy: ConfigEntry,
     period: ContractPeriod,
     fallback: SupplierSnapshot,
-) -> SupplierSnapshot | None:
-    """The newest card an archive holds for the old contract inside its days.
+) -> tuple[SupplierSnapshot | None, bool]:
+    """The newest card an archive holds for the old contract inside its days,
+    and, when there is none, whether a month's read failed just now.
 
     For a supplier that has left the market and no longer publishes one: DATS
     24's cards answer 404 since September 2026, and the project's archive keeps
     the months it captured. ``_snapshot_for_month`` hands back the fallback it
     is given, the very object, for a month no archive holds, which is how a
-    real card is told from none.
+    real card is told from none, and for a month whose read failed, which
+    ``month_card_failed`` tells apart.
     """
     data = proxy.data
+    contract = data.get(CONF_CONTRACT, "")
+    region = data.get(CONF_REGION, "")
     month = date(period.end.year, period.end.month, 1)
     first = date(period.start.year, period.start.month, 1)
+    failed = False
     while month >= first:
         card = await _snapshot_for_month(
-            hass,
-            session,
-            extractor,
-            data.get(CONF_CONTRACT, ""),
-            data.get(CONF_REGION, ""),
-            month,
-            fallback,
-            proxy,
+            hass, session, extractor, contract, region, month, fallback, proxy
         )
         if card is not fallback:
-            return card
+            return card, False
+        failed = failed or month_card_failed(
+            hass, extractor.id, contract, region, month
+        )
         month = (month - timedelta(days=1)).replace(day=1)
-    return None
+    return None, failed
 
 
 async def period_card(
@@ -604,10 +629,11 @@ async def period_card(
     coordinator: Any,
     period: ContractPeriod,
     overrides: Mapping[str, Any] | None = None,
-) -> tuple[ConfigEntry, SupplierExtractor, SupplierSnapshot | None, bool, bool]:
+) -> tuple[ConfigEntry, SupplierExtractor, SupplierSnapshot | None, bool, bool, bool]:
     """The stand-in entry, extractor and card an earlier contract is priced on,
-    whether that card is the entry's own standing in, and whether it was read
-    off the archive's OCR reading.
+    whether that card is the entry's own standing in, whether it stands in
+    because a read failed just now (``PricedPeriod.read_failed``), and whether
+    it was read off the archive's OCR reading.
 
     The card is the one its supplier publishes today, resolved for this
     household, and each month still bills on its own archived card through the
@@ -633,15 +659,18 @@ async def period_card(
     )
     extractor = get_extractor(str(period.data.get(CONF_SUPPLIER, "")))
     fallback = getattr(coordinator, "_snapshot", None)
-    card, read_by_ocr = await _current_card(hass, session, extractor, proxy)
+    card, read_by_ocr, read_failed = await _current_card(
+        hass, session, extractor, proxy
+    )
     if card is None and fallback is not None:
-        card = await _latest_archived_card(
+        card, archive_failed = await _latest_archived_card(
             hass, session, extractor, proxy, period, fallback
         )
+        read_failed = read_failed or archive_failed
     if card is None:
         stand_in = None if fallback is None else without_welcome_credit(fallback)
-        return proxy, extractor, stand_in, True, False
-    return proxy, extractor, card, False, read_by_ocr
+        return proxy, extractor, stand_in, True, read_failed, False
+    return proxy, extractor, card, False, False, read_by_ocr
 
 
 async def price_previous_periods(
@@ -682,11 +711,17 @@ async def price_previous_periods(
         cost: float | None = None
         month_cost: float | None = None
         stand_in = False
+        read_failed = False
         read_by_ocr = False
         try:
-            proxy, extractor, card, stand_in, read_by_ocr = await period_card(
-                hass, session, coordinator, period, overrides
-            )
+            (
+                proxy,
+                extractor,
+                card,
+                stand_in,
+                read_failed,
+                read_by_ocr,
+            ) = await period_card(hass, session, coordinator, period, overrides)
             if card is not None:
                 regime = proxy.data.get(CONF_SOLAR_REGIME, "none")
                 allocating = regime == SOLAR_REGIME_COMPENSATION
@@ -761,6 +796,7 @@ async def price_previous_periods(
                 cost=cost,
                 month_cost=month_cost,
                 stand_in=stand_in,
+                read_failed=read_failed,
                 read_by_ocr=read_by_ocr,
             )
         )

@@ -498,17 +498,23 @@ was credited to a contract that never signed it.
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,
 `_price_previous`), or on the next hourly tick while a contract could not be
-priced on its own cards (`PricedPeriod.settled`; `_PREVIOUS_RETRY`: not on the
-tick its own refresh asks for, which would price it again every few seconds),
+priced at all or stands in because a read failed just now (`PricedPeriod.settled`,
+`read_failed`; `_PREVIOUS_RETRY`: not on the tick its own refresh asks for,
+which would price it again every few seconds),
 after filling the year's day-ahead when an earlier contract settles on it, with
 the ENTSO-E key the old contract's settings kept when the entry holds none, and
 asks for a refresh when it lands. The result is kept as
 `PricedPeriods` with `periods_key`, the days and settings it was priced for,
-and served only for those. A row that did not price on its own cards (a
-stand-in, or none at all) gives way to the last pricing's row for the same
-periods that did (`keep_settled`), so one timeout on the old supplier's site
-neither replaces its own figure with another supplier's for the day nor writes
-that over it in the store. Until one lands, usually the minutes after a switch
+and served only for those. A stand-in caused by the old supplier's site or an
+archive not answering (`period_card` tells it from cards no archive kept: a
+transient fetch error on the current card, or a month `month_card_failed`
+names) is `read_failed`; a stand-in for cards nobody kept is settled for the
+day, since they will not turn up within the hour. A row that did not price on
+its own cards (a stand-in, or none at all) gives way to the last pricing's row
+for the same periods that did (`keep_settled`), and a failed read to a settled
+stand-in, so one timeout on the old supplier's site neither replaces its own
+figure with another supplier's for the day nor writes that over it in the
+store. Until one lands, usually the minutes after a switch
 is recorded, and while any contract fails to price, the year reads unknown rather than short by a whole contract,
 which on the recorder would read as a large negative change and then the same
 positive one. The spot and load-profile gates ask `periods_need_spots` and
@@ -547,13 +553,14 @@ The backfill cuts its hours at each switch
 (`_contract_segments`, `backfill_window.py`), builds a context per contract
 and accrues the cost series across them as one running total
 (`_accrue_cost`, `backfill_cost.py`), leaving out of the cost series the days
-no contract supplied (`billed_only`) as the sensor does. It imports nothing
-off a stand-in: `_unpriceable_spans` names the earlier contracts whose own
-cards cannot be had before either pass runs, their hours are left out of the
-price series and the cost series is skipped whole, since a running total
-missing days carries every later hour short. The response lists them under
-`left_out`. A contract that loses its card during the run raises in
-`_segment_for` rather than price on the stand-in.
+no contract supplied (`billed_only`) as the sensor does. Days no card of
+their own can price bill on the stand-in the live sensor bills them on:
+`_stand_in_spans` names them before either pass runs, and the response lists
+them under `left_out`. Only the automatic backfill's first run
+(`retry_later`) leaves out of the price series the days whose read failed just
+now, under `retry`, for the run an hour later to write; the cost series is
+written whole on every run, since a running total missing days carries every
+later hour short.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 

@@ -40,10 +40,11 @@ Two entry points:
 * :func:`backfill_range`: service-call path. Always runs over the
   requested range; with ``clear=True`` deletes the range first so a
   user who fixed their tariff card can redo a window.
-* :func:`backfill_if_missing`: automatic one-shot called from
+* :func:`backfill_if_missing`: automatic run called from
   ``async_setup_entry``. Probes the recorder for statistics at the Jan
   1 anchor and only runs when none exist, so we don't redo the work on
-  every HA restart.
+  every HA restart, and runs once more an hour later when a card read
+  failed.
 """
 
 from __future__ import annotations
@@ -96,8 +97,8 @@ from .backfill_window import (
     _in_turns,
     _normalize_window,
     _recorder_models,
+    _stand_in_spans,
     _stat_id,
-    _unpriceable_spans,
 )
 from .backfill_cost import (
     _backfill_cost_sensor,
@@ -121,9 +122,9 @@ _PRICE_SENSOR_KEYS: tuple[str, ...] = (
 )
 _INJECTION_PRICE_SENSOR_KEY = "injection_price"
 
-# How long the automatic backfill waits before running once more when it had
-# to leave days out: past the half hour a failed month read waits before it is
-# asked again (``_MONTHLY_FAILURE_TTL``).
+# How long the automatic backfill waits before running once more when a card
+# read failed: past the half hour a failed month read waits before it is asked
+# again (``_MONTHLY_FAILURE_TTL``).
 _RETRY_AFTER = timedelta(hours=1)
 
 
@@ -363,6 +364,7 @@ async def backfill_range(
     end: datetime | date | None = None,
     *,
     clear: bool = False,
+    retry_later: bool = False,
 ) -> dict[str, Any]:
     """Backfill long-term statistics for ``entry`` over ``[start, end)``.
 
@@ -371,6 +373,10 @@ async def backfill_range(
     re-run just overwrites. Pass ``clear=True`` to delete the existing
     series first when the underlying tariff or formula changed enough
     that the old rows would mislead.
+
+    ``retry_later`` is a run another will follow: the days whose card read
+    failed just now are left out of the price series for that run to write,
+    and listed under ``retry``.
     """
     coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
@@ -383,7 +389,9 @@ async def backfill_range(
     # tick landed, so the prune waits until the backfill is done.
     coordinator._spot_prune_holds += 1
     try:
-        return await _backfill_range(hass, entry, coordinator, start, end, clear)
+        return await _backfill_range(
+            hass, entry, coordinator, start, end, clear, retry_later
+        )
     finally:
         coordinator._spot_prune_holds -= 1
 
@@ -395,6 +403,7 @@ async def _backfill_range(
     start: datetime | date | None,
     end: datetime | date | None,
     clear: bool,
+    retry_later: bool,
 ) -> dict[str, Any]:
     start_utc, end_utc = _normalize_window(start, end, ytd_window_reset(entry))
     if start_utc >= end_utc:
@@ -449,28 +458,20 @@ async def _backfill_range(
             end_utc.isoformat(),
             this_year_anchor_utc.isoformat(),
         )
-    # Days no card of their own can price right now are left out rather than
-    # imported off a stand-in, which would stay in the recorder for good. The
-    # cost series is one running total, so a day missing from it would carry
-    # every later hour short: it is left out whole.
-    spans = await _unpriceable_spans(
+    # Days no card of their own can price are imported on the stand-in the
+    # live sensor bills them on, and named in the response. A read that failed
+    # just now is the exception on a run another will follow: its days are
+    # left out of the price series for that run. The cost series is one
+    # running total, and a day missing from it would carry every later hour
+    # short, so it is written whole and the next run writes it again.
+    spans = await _stand_in_spans(
         hass,
         entry,
         coordinator,
         dt_util.as_local(min(start_utc, cost_anchor_utc)).date(),
         dt_util.as_local(end_utc - timedelta(hours=1)).date(),
     )
-    cost_first = dt_util.as_local(cost_anchor_utc).date()
-    cost_left_out = not skip_cost and any(
-        last >= cost_first for _first, last, _why in spans
-    )
-    if clear and spans:
-        # The wipe is series-wide and the left-out days would not come back.
-        raise ServiceValidationError(
-            "clear=True would delete statistics this run cannot write back: "
-            + "; ".join(f"{first}..{last}: {why}" for first, last, why in spans)
-            + ". Re-run once those cards can be read, or leave clear off."
-        )
+    retry = [span for span in spans if retry_later and span[3]]
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
         # series-scoped), but a sub-year window only repopulates
@@ -505,7 +506,7 @@ async def _backfill_range(
         for hour in _hour_iter(start_utc, end_utc)
         if not any(
             first <= dt_util.as_local(hour).date() <= last
-            for first, last, _why in spans
+            for first, last, _why, _failed in retry
         )
     ]
     cost_hours = _hour_iter(cost_anchor_utc, end_utc)
@@ -539,7 +540,7 @@ async def _backfill_range(
         hass, entry, coordinator, hours, spots, quarters
     )
     gaps: dict[str, int] = {}
-    if not skip_cost and not cost_left_out:
+    if not skip_cost:
         counts.update(
             await _backfill_cost_sensor(
                 hass,
@@ -573,16 +574,24 @@ async def _backfill_range(
             "would paint a large negative cost at the year boundary, because "
             "the recorder ignores last_reset on imported statistics"
         )
-    if spans:
-        result["left_out"] = [f"{first}..{last}: {why}" for first, last, why in spans]
+    if retry:
+        result["retry"] = [f"{first}..{last}: {why}" for first, last, why, _ in retry]
+        _LOGGER.info(
+            "backfill for %s left out %s until it runs again",
+            entry.entry_id,
+            "; ".join(result["retry"]),
+        )
+    stand_ins = [span for span in spans if span not in retry]
+    if stand_ins:
+        result["left_out"] = [
+            f"{first}..{last}: {why}, billed on today's card"
+            for first, last, why, _failed in stand_ins
+        ]
         _LOGGER.warning(
-            "backfill for %s left out %s; run it again once those cards can be read",
+            "backfill for %s billed on today's card, as the live sensor does,"
+            " the days whose own card could not be had: %s",
             entry.entry_id,
             "; ".join(result["left_out"]),
-        )
-    if cost_left_out:
-        result["skipped"] = (
-            "cost: the running bill cannot be imported with days left out of it"
         )
     return result
 
@@ -646,13 +655,16 @@ async def backfill_if_missing(
             sid,
         )
         return None
-    result = await backfill_range(hass, entry, anchor_local, now_local)
-    if "left_out" not in result:
+    result = await backfill_range(
+        hass, entry, anchor_local, now_local, retry_later=True
+    )
+    if "retry" not in result:
         return result
-    # Nobody reads this run's response, and the probe above now finds the
-    # rows it did write, so the days it left out would stay out until someone
-    # calls the service. One more run an hour later heals a blip on the card
-    # archive or on the old supplier's site; the log names what is still out.
+    # A card read failed, and a blip on the card archive or on the old
+    # supplier's site is usually over within the hour. The probe above may
+    # find the rows this run did write, so nothing else would run it again.
+    # Once more, and that run imports what it still cannot read on the
+    # current card, as the live sensor bills it, and says so in the log.
     await asyncio.sleep(_RETRY_AFTER.total_seconds())
     runtime = getattr(entry, "runtime_data", None)
     if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:

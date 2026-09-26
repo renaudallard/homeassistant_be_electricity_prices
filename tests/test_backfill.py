@@ -2673,13 +2673,14 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
     assert captured[ids["current_price"]] == 240
 
 
-async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
+async def test_a_month_whose_card_read_just_failed_waits_for_the_next_run(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A brief archive failure handed back today's card for the closed months,
     the very object a month no archive holds gets, and the backfill imported
     those months at today's rates for good. The live sensor heals on its next
-    tick; the imported rows never did."""
+    tick; the imported rows never did. A run another follows leaves the month
+    out, the last one bills it as the live sensor does and says so."""
     freezer.move_to("2026-06-02 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
@@ -2704,7 +2705,7 @@ async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
     def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
         captured[metadata["statistic_id"]] = list(statistics)
 
-    async def run() -> dict[str, Any]:
+    async def run(retry_later: bool = False) -> dict[str, Any]:
         captured.clear()
         instance = MagicMock()
         instance.async_add_executor_job = AsyncMock(return_value={})
@@ -2725,17 +2726,26 @@ async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
                 entry,
                 datetime(2026, 5, 31, tzinfo=BRUSSELS),
                 datetime(2026, 6, 2, tzinfo=BRUSSELS),
+                retry_later=retry_later,
             )
 
-    result = await run()
-    rows = captured[ids["current_price"]]
-    assert {dt_util.as_local(r["start"]).date() for r in rows} == {date(2026, 6, 1)}
-    assert ids["current_year_cost"] not in captured
-    assert any("2026-05" in why for why in result["left_out"])
-    assert "cost" in result["skipped"]
+    def days() -> set[date]:
+        return {
+            dt_util.as_local(r["start"]).date() for r in captured[ids["current_price"]]
+        }
+
+    result = await run(retry_later=True)
+    assert days() == {date(2026, 6, 1)}
+    assert ids["current_year_cost"] in captured
+    assert any("2026-05" in why for why in result["retry"])
+    assert "left_out" not in result
     assert snapshot_months.month_card_failed(
         hass, "eneco", "power_fix", "wallonia", date(2026, 5, 1)
     )
+    result = await run()
+    assert days() == {date(2026, 5, 31), date(2026, 6, 1)}
+    assert any("2026-05" in why for why in result["left_out"])
+    assert "retry" not in result
 
     # The archive answers again once the marker is waited out: May is priced
     # on its own card, and a month no archive holds is not a failed one.
@@ -2743,6 +2753,7 @@ async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
     freezer.tick(timedelta(minutes=31))
     result = await run()
     assert "left_out" not in result
+    assert "retry" not in result
     means = {
         dt_util.as_local(r["start"]).date(): r["mean"]
         for r in captured[ids["current_price"]]
@@ -2754,16 +2765,17 @@ async def test_the_backfill_imports_no_month_whose_card_read_just_failed(
     )
 
 
-async def test_the_automatic_backfill_runs_once_more_when_it_left_days_out(
+async def test_the_automatic_backfill_runs_once_more_when_a_read_failed(
     hass: HomeAssistant,
 ) -> None:
     """Its probe finds the rows the first run wrote, so without a second run
-    the days it left out stayed out until someone called the service."""
+    the days it left out stayed out until someone called the service. That run
+    is the last one: it bills what it still cannot read."""
     entry = _entry()
     entry.add_to_hass(hass)
     _register_sensors(hass, entry, ["current_price"])
     entry.runtime_data = await _make_coordinator(entry)
-    runs = AsyncMock(side_effect=[{"left_out": ["2026-05-01..2026-05-31"]}, {}])
+    runs = AsyncMock(side_effect=[{"retry": ["2026-05-01..2026-05-31"]}, {}])
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(return_value={})
     with (
@@ -2773,6 +2785,10 @@ async def test_the_automatic_backfill_runs_once_more_when_it_left_days_out(
         patch("homeassistant.components.recorder.get_instance", return_value=instance),
     ):
         assert await bf.backfill_if_missing(hass, entry) == {}
+        assert [call.kwargs.get("retry_later") for call in runs.await_args_list] == [
+            True,
+            None,
+        ]
         runs.reset_mock(side_effect=True)
         runs.return_value = {"rows_written": 3}
         assert await bf.backfill_if_missing(hass, entry) == {"rows_written": 3}
@@ -2809,7 +2825,7 @@ async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
             date(2026, 4, 1),
             date(2026, 6, 1),
         )
-    assert [(first, last) for first, last, _why in spans] == [
-        (date(2026, 4, 1), date(2026, 6, 1))
+    assert [(first, last, failed) for first, last, _why, failed in spans] == [
+        (date(2026, 4, 1), date(2026, 6, 1), True)
     ]
     assert "2026-03" in spans[0][2]

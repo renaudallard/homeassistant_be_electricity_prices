@@ -67,7 +67,7 @@ from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
-from .providers.base import ExtractorError, SupplierSnapshot
+from .providers.base import SupplierSnapshot
 from .snapshot_months import _snapshot_for_month, month_card_failed
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
@@ -417,10 +417,9 @@ async def _contract_segments(
     hour outside every earlier contract's days, including one in a previous
     year, stays on the entry's own contract, as it always was.
 
-    ``hours`` holds no day ``_unpriceable_spans`` left out, so an earlier
-    contract that comes back priced on the entry's current card lost its own
-    card during the run, and raises rather than import another supplier's
-    prices for its days.
+    An earlier contract none of whose cards can be had is priced on the stand-in
+    ``period_card`` hands back, as the live sensor bills it;
+    ``_stand_in_spans`` has already named its days for the response.
 
     ``billed_only`` leaves out the days inside the window that no contract
     supplied: before the first earlier contract when it billed the year from
@@ -467,39 +466,33 @@ async def _segment_for(
 ) -> tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]:
     if index is None or index < 0:
         return entry, None, hours
-    period = periods[index]
-    proxy, _extractor, card, stand_in, _read_by_ocr = await period_card(
-        hass, coordinator._session, coordinator, period
+    proxy, _extractor, card, _stand_in, _failed, _read_by_ocr = await period_card(
+        hass, coordinator._session, coordinator, periods[index]
     )
-    if stand_in:
-        raise ExtractorError(
-            f"the cards of the {period.data.get(CONF_SUPPLIER)} contract held"
-            f" from {period.start} to {period.end} could not be read during"
-            " the backfill"
-        )
     return proxy, card, hours
 
 
-async def _unpriceable_spans(
+async def _stand_in_spans(
     hass: HomeAssistant,
     entry: ConfigEntry,
     coordinator: BePricesCoordinator,
     first: date,
     last: date,
-) -> list[tuple[date, date, str]]:
-    """The days in ``[first, last]`` the backfill cannot price on their own
-    cards, as ``(first day, last day, why)``.
+) -> list[tuple[date, date, str, bool]]:
+    """The days in ``[first, last]`` the backfill prices on a stand-in rather
+    than on their own cards, as ``(first day, last day, why, read failed)``.
 
     Two ways. An earlier contract whose supplier's cards could not be had
-    right now (``period_card`` hands back the entry's current card in their
-    place), and a closed month whose own card could not be read just now
-    (``_months_not_read``). The live sensor bills such days on the current
-    card and prices them again an hour later, but a statistic imported off it
-    stays in the recorder for good, so the backfill leaves those days out and
-    says so. Asking here also fills the month cache both passes then read.
+    (``period_card`` hands back the entry's current card in their place), and
+    a closed month whose own card could not be read just now
+    (``_months_not_read``), which the walk bills on the current card. The live
+    sensor bills both the same way. The last element says a read failed just
+    now and may work an hour later, which a first automatic run waits for;
+    otherwise no archive kept the cards and nothing will change. Asking here
+    also fills the month cache both passes then read.
     """
     today = dt_util.now().date()
-    spans: list[tuple[date, date, str]] = []
+    spans: list[tuple[date, date, str, bool]] = []
     periods = previous_periods(entry.data, ytd_window_start(entry, today), today)
     # The entry's own contract holds every day no earlier one does.
     own = [(first, last)]
@@ -515,7 +508,7 @@ async def _unpriceable_spans(
         ]
         if period.end < first or period.start > last:
             continue
-        proxy, _extractor, card, stand_in, _read_by_ocr = await period_card(
+        proxy, _extractor, card, stand_in, failed, _ocr = await period_card(
             hass, coordinator._session, coordinator, period
         )
         if stand_in or card is None:
@@ -525,6 +518,7 @@ async def _unpriceable_spans(
                     period.end,
                     f"no card of the {period.data.get(CONF_SUPPLIER)} contract"
                     " held then could be read",
+                    failed,
                 )
             )
             continue
@@ -551,9 +545,10 @@ async def _months_not_read(
     card: SupplierSnapshot,
     first: date,
     last: date,
-) -> list[tuple[date, date, str]]:
+) -> list[tuple[date, date, str, bool]]:
     """The closed months in ``[first, last]`` whose own card could not be read
-    just now (``month_card_failed``), for one contract.
+    just now (``month_card_failed``), for one contract, as
+    ``_stand_in_spans`` lists them.
 
     All of them when the contract's signing month is one: its card is what
     every month's energy is re-priced from (``_cohort_legs``) and the welcome
@@ -579,9 +574,10 @@ async def _months_not_read(
                 last,
                 f"the {extractor.id} card of {signing:%Y-%m}, the month the"
                 " contract was signed, could not be read",
+                True,
             )
         ]
-    spans: list[tuple[date, date, str]] = []
+    spans: list[tuple[date, date, str, bool]] = []
     month = first.replace(day=1)
     while month <= last and month < this_month:
         following = (month + timedelta(days=31)).replace(day=1)
@@ -591,6 +587,7 @@ async def _months_not_read(
                     max(first, month),
                     min(last, following - timedelta(days=1)),
                     f"the {extractor.id} card of {month:%Y-%m} could not be read",
+                    True,
                 )
             )
         month = following
