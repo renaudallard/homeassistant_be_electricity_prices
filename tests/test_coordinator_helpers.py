@@ -3020,6 +3020,54 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
     assert measured == energy_meters.MeasuredKwh(265.0 + 7.0, 266, pair_fault=fault)
 
 
+@pytest.mark.parametrize("recorded", [0, 100], ids=["no-statistics", "late-start"])
+async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
+    hass: HomeAssistant, freezer: Any, recorded: int
+) -> None:
+    """Discussion #66: the registers disagreed on one day, a negative bucket
+    skipped on one half, and the wired total was a "current year" sensor with
+    no statistics. Switching to it billed the year at nothing and left the
+    fees. A total counting fewer days than the pair can bill keeps the pair."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {
+            "sensor.day": year[:100] + year[101:],
+            "sensor.night": year,
+            "sensor.total": year[len(year) - recorded :],
+        },
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        hourly = await energy_meters._metered_hourly_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            "consumption",
+            date(2026, 1, 1),
+            today,
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert daily is not None
+    assert len(daily) == 265
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(264 * 2.0 + 7.0)
+    assert hourly is not None
+    assert hourly.sensors == ("sensor.day", "sensor.night")
+    assert len(hourly.kwh) == 264
+    assert measured == energy_meters.MeasuredKwh(264 * 2.0 + 7.0, 265)
+
+
 async def test_measured_kwh_counts_days_across_a_register_pair(
     hass: HomeAssistant,
 ) -> None:

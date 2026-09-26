@@ -1014,7 +1014,9 @@ searching for:
   `days_seen` (or `hours_seen`) says how many, rather than the surviving band
   being billed alone as though the other used nothing. A totals sensor wired
   on the same side is billed instead, since it covers both bands on every
-  day.
+  day, but only when it has recorded at least as many days as the pair
+  still bills: one that records less, or nothing at all, would bill the year
+  short. The warning names the totals sensor when it is the one billed.
 - **"accumulated before the window"** — the first hour of the year carried
   energy from before 1 January, which happens when the run-up to New Year
   is missing from the recorder. That one over-bills rather than under-bills.
