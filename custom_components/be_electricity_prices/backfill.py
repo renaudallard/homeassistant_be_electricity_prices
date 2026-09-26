@@ -480,9 +480,15 @@ async def _backfill_range(
         dt_util.as_local(end_utc - timedelta(hours=1)).date(),
     )
     retry = [span for span in spans if span[3]]
-    if retry_later:
-        coordinator._backfill_retry_from = min(
-            (first for first, _last, _why, _failed in retry), default=None
+    retry_from = min((first for first, _last, _why, _failed in retry), default=None)
+    if retry_later and retry_from is not None:
+        # Kept before anything is written, since a tick stores it with the
+        # rest of the coordinator's state and Home Assistant can stop mid-run.
+        # Until the rows below are imported it never moves past a day an
+        # earlier run left out, which a stop before then leaves unwritten.
+        pending = coordinator._backfill_retry_from
+        coordinator._backfill_retry_from = (
+            retry_from if pending is None else min(pending, retry_from)
         )
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
@@ -565,6 +571,8 @@ async def _backfill_range(
                 gaps=gaps,
             )
         )
+    if retry_later:
+        coordinator._backfill_retry_from = retry_from
     total = sum(counts.values())
     _LOGGER.info(
         "backfill wrote %d statistic rows for %s over %s..%s",

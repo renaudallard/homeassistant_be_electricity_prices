@@ -2830,7 +2830,9 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
     """The retry lived only in the task sleeping for it, which a restart or a
     reload cancels, and the next setup's probe found the 1 January row the
     first run wrote. The months it left out stayed out of the price series for
-    good. Kept in the store, the next setup runs it from the first of them."""
+    good. Kept in the store, the next setup runs it from the first of them.
+    That run cleared it before writing a row, so a tick's save followed by a
+    stop mid-run lost it again: it is cleared once the rows are imported."""
     freezer.move_to("2026-11-20 12:00:00+01:00")
     entry = make_entry(
         supplier="totalenergies", contract="totalenergies_pixel", solar_regime="none"
@@ -2862,10 +2864,11 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
         sid = next(iter(sids))
         return {sid: [r for r in store.get(sid, []) if start <= r["start"] < end]}
 
-    up = False
+    # The archive fails for this month and every later one.
+    down_from: date | None = date(2026, 1, 1)
 
-    async def archive(*_a: Any) -> ArchivedCard:
-        if not up:
+    async def archive(*args: Any) -> ArchivedCard:
+        if down_from is not None and args[4] >= down_from:
             raise ExtractorError("HTTP 503 from raw.githubusercontent.com")
         return ArchivedCard(
             snapshot=make_snapshot(energy=FixedRates(single=0.2)), read_by_ocr=False
@@ -2901,7 +2904,21 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
             await bf.backfill_if_missing(hass, entry)
         assert coordinator._backfill_retry_from == date(2026, 8, 1)
         coordinator._save_persistent.assert_awaited()
-        up = True
+        # August reads again, September still fails, and Home Assistant stops
+        # before the retry imports its rows: August is still to be written.
+        down_from = date(2026, 9, 1)
+        freezer.tick(timedelta(hours=2))
+        with (
+            patch.object(
+                bf,
+                "_backfill_price_sensors",
+                AsyncMock(side_effect=asyncio.CancelledError),
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await bf.backfill_if_missing(hass, entry)
+        assert coordinator._backfill_retry_from == date(2026, 8, 1)
+        down_from = None
         freezer.tick(timedelta(hours=2))
         await bf.backfill_if_missing(hass, entry)
         assert coordinator._backfill_retry_from is None
