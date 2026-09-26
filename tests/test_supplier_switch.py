@@ -1927,7 +1927,9 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
     register beside it. A meter whose statistics begin after the earlier
     contract ended, one added to Home Assistant since, was named too, though
     no sensor holds those days and no rewiring clears the card, and beside a
-    feed-in meter the comparison of the two sides named it again."""
+    feed-in meter the comparison of the two sides named it again. A feed-in
+    meter added since, because the panels came later, was named as the
+    silent side; one that never recorded still is."""
     freezer.move_to("2026-09-24 12:00:00+02:00")
     yesterday = date(2026, 9, 23)
     pair = make_entry(
@@ -1969,12 +1971,30 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
             {"until": "2026-06-01", "data": _held("engie", "engie_easy_fixed", **solar)}
         ],
     )
+
+    def _feed_in(injection: str) -> Any:
+        wiring: dict[str, Any] = {
+            "consumption_kwh": "sensor.t1",
+            "injection_kwh": injection,
+            "solar_regime": "injection",
+        }
+        return make_entry(
+            **wiring,
+            previous_contracts=[
+                {
+                    "until": "2026-06-01",
+                    "data": _held("engie", "engie_easy_fixed", **wiring),
+                }
+            ],
+        )
+
     with _spans(
         {
             "sensor.t1": (date(2025, 1, 1), yesterday),
             "sensor.t2": (date(2026, 6, 1), yesterday),
             "sensor.total": (date(2026, 6, 5), yesterday),
             "sensor.inj": (date(2025, 1, 1), yesterday),
+            "sensor.inj_new": (date(2026, 6, 5), yesterday),
         }
     ):
         assert await contract_periods.previous_meter_faults(
@@ -1992,6 +2012,15 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
             )
             == []
         )
+        assert (
+            await contract_periods.previous_meter_faults(
+                hass, _feed_in("sensor.inj_new"), date(2026, 9, 24)
+            )
+            == []
+        )
+        assert await contract_periods.previous_meter_faults(
+            hass, _feed_in("sensor.inj_dead"), date(2026, 9, 24)
+        ) == ["sensor.inj_dead (engie, 2026-01-01 to 2026-05-31)"]
 
 
 async def test_an_earlier_contracts_dead_meters_raise_the_register_card(

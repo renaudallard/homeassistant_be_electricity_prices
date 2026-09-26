@@ -412,7 +412,8 @@ async def previous_meter_faults(
     on the entry's wiring only. The same ones run here over each contract's
     own days. A consumption meter that recorded nothing over a whole closed
     window is named too, where on the running contract that may only be a
-    meter wired today, unless its statistics begin after that window closed.
+    meter wired today, unless its statistics begin after that window closed,
+    and so is a feed-in meter, as the silent side, on the same condition.
     """
     faults: list[str] = []
     for period in previous_periods(entry.data, ytd_window_start(entry, today), today):
@@ -421,35 +422,33 @@ async def previous_meter_faults(
         # A fault a totals sensor covers leaves that contract's bill whole.
         used = await _measured_kwh(hass, proxy, period.start, period.end)
         found.append(None if used.covered else used.pair_fault)
-        day_id, night_id, total_id = _kwh_sensor_ids(proxy, "consumption")
         younger: set[str] = set()
         if not used.days_with_data and not used.pair_fault:
             # Every consumption sensor recorded nothing over the contract's
             # days; a pair with one dead half is already named by its fault
-            # alone. Not a sensor whose statistics begin after the contract
-            # ended: a meter added to Home Assistant since holds no history of
-            # those days, and no rewiring the card advises can bill them.
-            after = period.end + timedelta(days=1)
-            for entity_id in (day_id, night_id) if day_id and night_id else (total_id,):
-                if not entity_id:
-                    continue
-                if _without_today(
-                    await _recorder_daily_kwh(hass, entity_id, after, today), today
-                ):
-                    younger.add(entity_id)
-                else:
-                    found.append(entity_id)
-        day_id, night_id, _total = _kwh_sensor_ids(proxy, "injection")
-        if _bills_injection(proxy) and day_id and night_id:
+            # alone.
+            silent, added = await _added_since(
+                hass, proxy, "consumption", period, today
+            )
+            found += silent
+            younger |= added
+        if _bills_injection(proxy):
             injected = await _measured_kwh(
                 hass, proxy, period.start, period.end, side="injection"
             )
             found.append(None if injected.covered else injected.pair_fault)
+            if not injected.days_with_data and not injected.pair_fault:
+                # A feed-in meter that recorded nothing is named as the silent
+                # side below, unless the panels came after the contract ended.
+                _silent, added = await _added_since(
+                    hass, proxy, "injection", period, today
+                )
+                younger |= added
         sides = await _metered_sides(hass, proxy, period.start, period.end)
         if sides is not None:
-            # The comparison names that same younger meter as the silent side
-            # beside a feed-in meter, and the card then stayed up until the
-            # earlier contract left the year.
+            # The comparison names that same younger meter as the silent side,
+            # and the card then stayed up until the earlier contract left the
+            # year.
             found += (name for name in sides.silent if name not in younger)
         # Named once each: a pair fault lists its sensors comma-separated.
         names = dict.fromkeys(
@@ -461,6 +460,36 @@ async def previous_meter_faults(
                 f" {period.start} to {period.end})"
             )
     return faults
+
+
+async def _added_since(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    side: str,
+    period: ContractPeriod,
+    today: date,
+) -> tuple[list[str], set[str]]:
+    """The sensors ``side`` is billed off that recorded nothing over
+    ``period``, split into those with no statistics since either and those
+    whose statistics begin after the period ended.
+
+    A meter added to Home Assistant since holds no history of those days, and
+    no rewiring the card advises can bill them.
+    """
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    after = period.end + timedelta(days=1)
+    silent: list[str] = []
+    added: set[str] = set()
+    for entity_id in (day_id, night_id) if day_id and night_id else (total_id,):
+        if not entity_id:
+            continue
+        if _without_today(
+            await _recorder_daily_kwh(hass, entity_id, after, today), today
+        ):
+            added.add(entity_id)
+        else:
+            silent.append(entity_id)
+    return silent, added
 
 
 def _kind(period: ContractPeriod) -> str:
