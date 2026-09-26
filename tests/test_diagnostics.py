@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -456,7 +457,8 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     """The raw sums add up every wired sensor, which is not what the bill
     reads: in discussion #66 they showed the right kWh while the year was
     billed off an empty totals sensor. The dump now says which sensors each
-    side is billed off, the kWh taken from them, and which side went silent.
+    side is billed off, the kWh the last bill priced, and which side went
+    silent.
 
     Here the pair diverged by one hour, so the totals sensor stands in, and
     the feed-in stopped after three days, so only those three are credited
@@ -469,7 +471,16 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     entry = _entry_with_data()
     entry.add_to_hass(hass)
     entry.runtime_data = SimpleNamespace(
-        _historical_spots={}, _historical_spot_quarters={}, data=_coordinator_data()
+        _historical_spots={},
+        _historical_spot_quarters={},
+        data=replace(
+            _coordinator_data(),
+            ytd_diagnostics={
+                "hours_seen": 240.0,
+                "consumption_ytd_kwh": 480.0,
+                "injection_ytd_kwh": 36.0,
+            },
+        ),
     )
     hass.config_entries.async_update_entry(
         entry,
@@ -519,17 +530,83 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     assert dump["consumption"]["read_once_a_day"] is False
 
 
+async def test_diagnostics_billed_kwh_leave_out_a_month_the_bill_dropped(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month whose card has no row for the entry's DSO is left out of the
+    per-day bill whole, and the dump summed every day it read all the same:
+    310 kWh more than the year to date priced. It gives the kWh the bill
+    priced now, beside the sensors it read them off."""
+    from unittest.mock import patch
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import energy_meters
+    from custom_components.be_electricity_prices.pricing import FixedRates
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_fetched_at,
+        _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.ytd_cost import (
+        _compute_current_year_cost,
+    )
+    from tests import make_snapshot, make_stub_extractor
+
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    today = date(2026, 9, 26)
+    entry = make_entry(meter="mono", consumption_kwh="sensor.cons")
+    entry.add_to_hass(hass)
+    ores = make_snapshot().dsos["ores"]
+    energy = FixedRates(single=0.20, peak=0.22, offpeak=0.16)
+    snap = make_snapshot(energy=energy, dsos={"ores": ores})
+    key = ("test", "power_fix", "wallonia", "2026-03")
+    _monthly_snapshots(hass)[key] = make_snapshot(energy=energy, dsos={"x": ores})
+    _monthly_fetched_at(hass)[key] = dt_util.utcnow()
+
+    async def _daily(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        days = (end - start).days + 1
+        return {start + timedelta(days=i): 10.0 for i in range(days)}
+
+    breakdown: dict[str, float] = {}
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch(
+            "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+            new=_daily,
+        ),
+    ):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            breakdown=breakdown,
+        )
+        entry.runtime_data = SimpleNamespace(
+            _historical_spots={},
+            _historical_spot_quarters={},
+            data=replace(_coordinator_data(), ytd_diagnostics=dict(breakdown)),
+        )
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+    days = (today - date(2026, 1, 1)).days + 1
+    assert breakdown["days_priced"] == days - 31
+    assert dump["consumption"]["billed_from"] == ["sensor.cons"]
+    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(10.0 * (days - 31))
+
+
 async def test_diagnostics_names_the_sensors_a_per_day_bill_reads(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A fixed or variable contract is billed day by day, and the per-day walk
     decides the pair against the totals sensor on days, not hours. One hour the
     night register missed put the hourly reader on the totals sensor while the
-    bill read the pair, so the dump named a sensor the bill never read and a
-    tenth fewer kWh than it billed. The feed-in stops after three days: the
-    consumption is still billed on every day, the feed-in only on those three,
-    and the feed-in meter is named as silent."""
-    from dataclasses import replace
+    bill read the pair, so the dump named a sensor the bill never read. The
+    feed-in stops after three days: the consumption is still billed on every
+    day, the feed-in only on those three, and the feed-in meter is named as
+    silent."""
     from unittest.mock import patch
 
     from custom_components.be_electricity_prices import energy_meters
@@ -542,7 +619,12 @@ async def test_diagnostics_names_the_sensors_a_per_day_bill_reads(
         _historical_spot_quarters={},
         data=replace(
             _coordinator_data(),
-            ytd_diagnostics={"days_seen": 10.0, "days_elapsed": 11.0},
+            ytd_diagnostics={
+                "days_seen": 10.0,
+                "days_elapsed": 11.0,
+                "consumption_ytd_kwh": 100.0,
+                "injection_ytd_kwh": 1.5,
+            },
         ),
     )
     hass.config_entries.async_update_entry(

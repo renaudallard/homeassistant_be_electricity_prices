@@ -42,6 +42,7 @@ from .const import (
     CONF_SUPPLIER,
 )
 from .cohort import ytd_window_start
+from .contract_periods import current_period_start
 from .coordinator import (
     BePricesCoordinator,
 )
@@ -141,36 +142,35 @@ async def async_get_config_entry_diagnostics(
     inj_year = await _kwh_window(hass, entry, 365, side="injection")
     inj_ytd = await _kwh_window(hass, entry, ytd_days, side="injection")
     # And what the bill actually reads beside them: the sensors each side is
-    # billed off and the kWh left once a broken pair, a totals sensor standing
-    # in for one and a silent side have been accounted for. The raw sums alone
-    # hid a year billed off an empty totals sensor behind the right kWh
-    # (discussion #66). Read the way the last bill was: the per-day walk
-    # leaves days_seen in its breakdown and decides the pair against the
-    # totals sensor day by day, so an hour one register missed can put the
-    # hourly reader on the totals sensor while the bill read the pair.
+    # billed off, once a broken pair, a totals sensor standing in for one and
+    # a silent side have been accounted for. The raw sums alone hid a year
+    # billed off an empty totals sensor behind the right kWh (discussion
+    # #66). Read the way the last bill was, over the days the entry's own
+    # contract bills: the per-day walk leaves days_seen in its breakdown and
+    # decides the pair against the totals sensor day by day, so an hour one
+    # register missed can put the hourly reader on the totals sensor while the
+    # bill read the pair. The kWh are the ones that bill priced, from its
+    # breakdown: a month it left out whole (days_priced or hours_priced under
+    # the days or hours seen) is not in them, where a sum of this read was.
     # ``None`` on a side that cannot be billed at all.
-    billed_kwh: dict[str, float] | None = None
+    ytd = data.ytd_diagnostics or {}
+    own_start = current_period_start(entry.data, ytd_start)
+    billable = False
     billed_from: dict[str, tuple[str, ...]] = {}
     # Only the hourly reader spreads a meter read once a day over its hours;
     # a per-day bill has no hours to spread, so the flag reads None there.
     read_daily: dict[str, bool] = {}
-    if "days_seen" in (data.ytd_diagnostics or {}):
-        daily = await _resolve_daily_kwh(
-            hass, entry, today, start=ytd_start, billed=billed_from
+    if "days_seen" in ytd:
+        billable = (
+            await _resolve_daily_kwh(
+                hass, entry, today, start=own_start, billed=billed_from
+            )
+            is not None
         )
-        if daily is not None:
-            billed_kwh = {
-                "consumption": sum(r[0] + r[1] for r in daily.values()),
-                "injection": sum(r[2] + r[3] for r in daily.values()),
-            }
     else:
-        # Hourly statistics, so today's live reading is not in it.
-        sides = await _metered_sides(hass, entry, ytd_start, today)
+        sides = await _metered_sides(hass, entry, own_start, today)
         if sides is not None:
-            billed_kwh = {
-                "consumption": sum(sides.consumption.kwh.values()),
-                "injection": sum(sides.injection.kwh.values()),
-            }
+            billable = True
             billed_from = {
                 "consumption": sides.consumption.sensors,
                 "injection": sides.injection.sensors,
@@ -182,15 +182,16 @@ async def async_get_config_entry_diagnostics(
             }
 
     def _billed(side: str) -> dict[str, Any]:
-        if billed_kwh is None:
+        if not billable:
             return {
                 "billed_from": None,
                 "billed_ytd_kwh": None,
                 "read_once_a_day": None,
             }
+        kwh = ytd.get(f"{side}_ytd_kwh")
         return {
             "billed_from": list(billed_from.get(side, ())),
-            "billed_ytd_kwh": round(billed_kwh[side], 3),
+            "billed_ytd_kwh": None if kwh is None else round(kwh, 3),
             "read_once_a_day": read_daily.get(side),
         }
 
@@ -324,9 +325,7 @@ async def async_get_config_entry_diagnostics(
         # The sensors of a meter side that went silent while the other carried
         # on: a consumption side whose days the bill leaves out of both sides,
         # or an injection side whose feed-in it leaves out.
-        "silent_meter": list(billed_from.get("silent", ()))
-        if billed_kwh is not None
-        else [],
+        "silent_meter": list(billed_from.get("silent", ())) if billable else [],
         "monthly_snapshot_labels": monthly_labels,
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average
         # is the cache, not the card.
