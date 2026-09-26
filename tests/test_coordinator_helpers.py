@@ -38,6 +38,7 @@ from custom_components.be_electricity_prices import ytd_cost, ytd_energy
 from custom_components.be_electricity_prices import energy_meters
 
 import calendar
+from collections.abc import Mapping
 import json
 from datetime import UTC, date, datetime, timedelta
 from dataclasses import replace
@@ -2841,10 +2842,11 @@ async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
 
 
 def _pair_through_the_recorder(
-    stats: dict[str, list[date]], live: dict[str, float]
+    stats: Mapping[str, list[date] | dict[date, float]], live: dict[str, float]
 ) -> Any:
     """Patch the two readers under _recorder_daily_kwh rather than the helper
     itself: daily statistics rows per register, and today's live reading.
+    A register's rows change by 1 kWh a day, or by what its dict says.
 
     A register with no state_class compiles no statistics but still has a
     state history, and the live reading comes off that history, so the real
@@ -2861,7 +2863,11 @@ def _pair_through_the_recorder(
         _period: str,
         _fields: object = None,
     ) -> list[dict[str, float]]:
-        return [_stat_row(d.year, d.month, d.day, 1.0) for d in stats[entity_id]]
+        readings = stats[entity_id]
+        values = (
+            readings if isinstance(readings, dict) else dict.fromkeys(readings, 1.0)
+        )
+        return [_stat_row(d.year, d.month, d.day, kwh) for d, kwh in values.items()]
 
     async def _live(_hass: object, entity_id: str, _today: date) -> float | None:
         return live.get(entity_id)
@@ -2993,7 +2999,11 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
     today = date(2026, 9, 23)
     year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
     rows, live = _pair_through_the_recorder(
-        {"sensor.day": year, "sensor.night": year[:night], "sensor.total": year},
+        {
+            "sensor.day": year,
+            "sensor.night": year[:night],
+            "sensor.total": dict.fromkeys(year, 2.0),
+        },
         {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.total": 7.0},
     )
     with rows, live:
@@ -3018,11 +3028,11 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
         )
     assert daily is not None
     assert len(daily) == 266
-    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(265.0 + 7.0)
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
     assert len(hourly.kwh) == 265
-    assert measured == energy_meters.MeasuredKwh(265.0 + 7.0, 266, pair_fault=fault)
+    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266, pair_fault=fault)
 
 
 @pytest.mark.parametrize("recorded", [0, 100], ids=["no-statistics", "late-start"])
@@ -3040,7 +3050,7 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
         {
             "sensor.day": year[:100] + year[101:],
             "sensor.night": year,
-            "sensor.total": year[len(year) - recorded :],
+            "sensor.total": dict.fromkeys(year[len(year) - recorded :], 2.0),
         },
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
@@ -3071,6 +3081,183 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
     assert hourly.sensors == ("sensor.day", "sensor.night")
     assert len(hourly.kwh) == 264
     assert measured == energy_meters.MeasuredKwh(264 * 2.0 + 7.0, 265)
+
+
+async def _pair_and_total(
+    hass: HomeAssistant, stats: Mapping[str, dict[date, float]], today: date
+) -> tuple[Any, Any, Any]:
+    """The per-day walk, the hourly walk and the yearly volume of the pair and
+    total in ``stats``, with the live readings of a healthy meter today."""
+    rows, live = _pair_through_the_recorder(
+        stats, {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.total": 7.0}
+    )
+    with rows, live:
+        daily = await energy_meters._resolve_daily_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        hourly = await energy_meters._metered_hourly_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            "consumption",
+            date(2026, 1, 1),
+            today,
+        )
+        measured = await energy_meters._measured_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    return daily, hourly, measured
+
+
+async def test_a_frozen_total_does_not_stand_in(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A totals sensor frozen at its last reading writes a row of zero every
+    day, so it counted as many days as the pair and billed a pair that
+    disagreed on one day at nothing. One stuck since June billed half the
+    year. The energy over the days the pair bills decides now."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    for frozen_from in (0, 181):
+        daily, hourly, measured = await _pair_and_total(
+            hass,
+            {
+                "sensor.day": dict.fromkeys(year[:100] + year[101:], 1.2),
+                "sensor.night": dict.fromkeys(year, 0.8),
+                "sensor.total": {
+                    d: 2.0 if i < frozen_from else 0.0 for i, d in enumerate(year)
+                },
+            },
+            today,
+        )
+        assert daily is not None
+        assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(
+            264 * 2.0 + 7.0
+        )
+        assert hourly is not None
+        assert hourly.sensors == ("sensor.day", "sensor.night")
+        assert measured.kwh == pytest.approx(264 * 2.0 + 7.0)
+
+
+@pytest.mark.parametrize(
+    ("day", "night", "fault"),
+    [
+        pytest.param(
+            {"to": 265, "kwh": 1.2},
+            {"to": 150, "kwh": 0.8, "then": 0.0},
+            "sensor.day, sensor.night",
+            id="frozen-half",
+        ),
+        pytest.param(
+            {"to": 0, "kwh": 1.2},
+            {"to": 0, "kwh": 0.8},
+            "sensor.day, sensor.night",
+            id="both-empty",
+        ),
+        pytest.param(
+            {"to": 150, "kwh": 1.2},
+            {"to": 150, "kwh": 0.8},
+            "sensor.day, sensor.night",
+            id="both-stopped",
+        ),
+    ],
+)
+async def test_a_total_stands_in_for_a_pair_short_of_it(
+    hass: HomeAssistant,
+    freezer: Any,
+    day: dict[str, float],
+    night: dict[str, float],
+    fault: str,
+) -> None:
+    """The total was asked only when the halves disagreed. A night register
+    frozen at its last reading keeps writing rows of zero, so the pair looked
+    whole and billed the rest of the year without its night band; two halves
+    that both recorded nothing, or both stopped, agree with each other too.
+    Each time the total held every kWh. It bills the side now, and the
+    registers are named."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+
+    def _half(spec: dict[str, float]) -> dict[date, float]:
+        cut = int(spec["to"])
+        if "then" in spec:
+            return {
+                d: spec["kwh"] if i < cut else spec["then"] for i, d in enumerate(year)
+            }
+        return dict.fromkeys(year[:cut], spec["kwh"])
+
+    daily, hourly, measured = await _pair_and_total(
+        hass,
+        {
+            "sensor.day": _half(day),
+            "sensor.night": _half(night),
+            "sensor.total": dict.fromkeys(year, 2.0),
+        },
+        today,
+    )
+    assert daily is not None
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
+    assert hourly is not None
+    assert hourly.sensors == ("sensor.total",)
+    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266, pair_fault=fault)
+
+
+async def test_a_late_total_stands_in_for_a_pair_that_stopped_earlier(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A totals sensor that started in February against a night register that
+    stopped in July: it covers more of the window than the pair can bill, and
+    over the days both report it records as much, so it bills the side."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, hourly, measured = await _pair_and_total(
+        hass,
+        {
+            "sensor.day": dict.fromkeys(year, 1.2),
+            "sensor.night": dict.fromkeys(year[:181], 0.8),
+            "sensor.total": dict.fromkeys(year[31:], 2.0),
+        },
+        today,
+    )
+    assert daily is not None
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(468.0 + 7.0)
+    assert hourly is not None
+    assert hourly.sensors == ("sensor.total",)
+    assert measured == energy_meters.MeasuredKwh(
+        468.0 + 7.0, 235, pair_fault="sensor.night"
+    )
+
+
+async def test_a_healthy_pair_keeps_billing_beside_a_healthy_total(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The control: a pair and a total that agree within the margin keep the
+    pair, so a user with both wired is not moved to the total."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, hourly, measured = await _pair_and_total(
+        hass,
+        {
+            "sensor.day": dict.fromkeys(year, 1.2),
+            "sensor.night": dict.fromkeys(year, 0.8),
+            "sensor.total": dict.fromkeys(year, 2.1),
+        },
+        today,
+    )
+    assert daily is not None
+    assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
+    assert hourly is not None
+    assert hourly.sensors == ("sensor.day", "sensor.night")
+    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266)
 
 
 _TOTALS_BOTH_SIDES = SimpleNamespace(

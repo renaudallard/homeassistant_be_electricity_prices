@@ -477,8 +477,11 @@ formula** supplier, which has no card and asks for the whole set.
    a bidirectional meter) is not supported either: a fall reads as zero,
    so wire consumption and injection as two separate climbing sensors.
    If you fill both wirings for the same side, the day/night registers
-   win; the totals field is billed instead only when a register misses days
-   and the total has recorded at least as many as the pair still bills.
+   win; the totals field is billed instead only when the pair cannot bill
+   the whole window (a register records nothing, stopped or started late)
+   or records clearly less than the total (a register frozen at its last
+   reading), and never when the total itself records clearly less than the
+   pair.
    Without a solar regime the injection fields are not read at all, so
    wiring them only for the Energy dashboard changes nothing. Two ways to
    wire it:
@@ -1055,9 +1058,13 @@ searching for:
   `days_seen` (or `hours_seen`) says how many, rather than the surviving band
   being billed alone as though the other used nothing. A totals sensor wired
   on the same side is billed instead, since it covers both bands on every
-  day, but only when it has recorded at least as many days as the pair
-  still bills: one that records less, or nothing at all, would bill the year
-  short. This warning comes from the yearly volume read, over the last
+  day, but only when it reports at least as many days as the pair still
+  bills and its kWh over the days both report are at least 90% of the
+  pair's: one that records fewer days, nothing at all, or rows of zero
+  because it is frozen at its last reading, would bill the year short.
+  The same totals sensor also takes over from a pair that reports every day
+  but bills under 90% of it, which is a register frozen at its last
+  reading. This warning comes from the yearly volume read, over the last
   365 days, so it can name a different sensor than the year-to-date bill
   uses when the two windows differ.
 

@@ -494,7 +494,7 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     async def _hourly(
         _hass: HomeAssistant, entity_id: str, _start: date, _end: date
     ) -> dict[datetime, float]:
-        kwh = 0.5 if entity_id == "sensor.inj" else 1.0
+        kwh = {"sensor.inj": 0.5, "sensor.total": 2.0}.get(entity_id, 1.0)
         return dict.fromkeys(series.get(entity_id, []), kwh)
 
     async def _daily(
@@ -512,7 +512,7 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
         dump = await async_get_config_entry_diagnostics(hass, entry)
 
     assert dump["consumption"]["billed_from"] == ["sensor.total"]
-    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(240.0)
+    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(480.0)
     assert dump["injection"]["billed_from"] == ["sensor.inj"]
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
     assert dump["silent_meter"] == ["sensor.inj"]

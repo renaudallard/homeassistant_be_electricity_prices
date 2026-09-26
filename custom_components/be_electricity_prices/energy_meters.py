@@ -94,6 +94,11 @@ _REGISTER_STOPPED_AFTER_DAYS = 2
 # (sensor/recorder.py, reset_detected).
 _RESET_BELOW = 0.9
 
+# A register pair billing less than this share of its totals sensor over the
+# same periods, or a totals sensor recording less than this share of the pair,
+# is short rather than rounded: one of the two is frozen or stuck.
+_SHORT_BELOW = 0.9
+
 
 async def _recorder_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
@@ -570,11 +575,11 @@ async def _metered_hourly_kwh(
     ``None`` for a half-wired day/night pair with no totals sensor, and for a
     wired pair one half of which produced nothing at all. A pair otherwise
     counts the hours both halves report (:func:`_paired_keys`), which is the
-    rule the per-day walk and the yearly volume follow too. A pair that does
-    not report the same hours is billed off the side's totals sensor instead
-    when one is wired and reports at least the hours the pair can bill
-    (:func:`_total_stands_in`), since the total covers both bands on every
-    hour. An empty map when nothing is wired on this side.
+    rule the per-day walk and the yearly volume follow too. The side's totals
+    sensor, when one is wired beside the pair, bills it instead where the pair
+    cannot be billed whole or falls short of it (:func:`_total_stands_in`),
+    since the total covers both bands on every hour. An empty map when
+    nothing is wired on this side.
     """
     if _partial_register_pair(entry, side):
         return None
@@ -585,9 +590,9 @@ async def _metered_hourly_kwh(
     night = await _sum_hourly_kwh(hass, ids[1:], start, end)
     hours = _paired_keys(day, night)
     total_id = _kwh_sensor_ids(entry, side)[2]
-    if total_id and (hours is None or set(day) != set(night)):
+    if total_id:
         total = await _sum_hourly_kwh(hass, [total_id], start, end)
-        if _total_stands_in(total, hours):
+        if _total_stands_in(total, day, night):
             return MeteredHours(total, (total_id,))
     if hours is None:
         return None
@@ -872,15 +877,14 @@ async def _resolve_daily_kwh(
                 today,
             )
             days = _paired_keys(d, n)
-            # A pair that does not report the same days is billed off the
-            # totals sensor when one is wired and reports at least the days
-            # the pair can bill: the total covers both bands on every day,
-            # where the pair can only bill the days both halves report, or
-            # none at all. Today is left out of the count, as it is of the
-            # pair's.
-            if total_id and (days is None or set(d) != set(n)):
+            # The totals sensor bills the side instead where the pair cannot
+            # be billed whole or falls short of it (_total_stands_in): the
+            # total covers both bands on every day, where the pair can only
+            # bill the days both halves report, or none at all. Today is left
+            # out of the comparison, as it is of the pair's.
+            if total_id:
                 read = await _recorder_daily_kwh(hass, total_id, window_start, today)
-                if _total_stands_in(read.keys() - {today}, days):
+                if _total_stands_in(_without_today(read, today), d, n):
                     per_day = read
             if per_day is None:
                 if days is None:
@@ -1058,10 +1062,18 @@ def _split_today(
     if end != dt_util.now().date():
         return dict(day), dict(night), (None, None)
     return (
-        {when: kwh for when, kwh in day.items() if when != end},
-        {when: kwh for when, kwh in night.items() if when != end},
+        _without_today(day, end),
+        _without_today(night, end),
         (day.get(end), night.get(end)),
     )
+
+
+def _without_today(readings: Mapping[date, float], end: date) -> dict[date, float]:
+    """``readings`` with ``end`` taken out when it is today, whose value is
+    a live reading rather than a statistic (:func:`_split_today`)."""
+    if end != dt_util.now().date():
+        return dict(readings)
+    return {when: kwh for when, kwh in readings.items() if when != end}
 
 
 def _stopped(halves: Iterable[tuple[str, Collection[_P]]]) -> list[str]:
@@ -1143,17 +1155,39 @@ def _silent_periods(
     return None, both, set()
 
 
-def _total_stands_in(total: Collection[_K], paired: Collection[_K] | None) -> bool:
+def _total_stands_in(
+    total: Mapping[_K, float], day: Mapping[_K, float], night: Mapping[_K, float]
+) -> bool:
     """Whether a wired totals sensor bills a side instead of its register pair.
 
-    Asked only of a pair that cannot be billed whole: one half dead
-    (``paired`` is ``None``) or the halves reporting different periods. The
-    total covers both bands, so it wins when it reports at least the periods
-    the pair can still bill. One that records less loses: a totals sensor with
-    no statistics took a whole year to the fees floor on a pair whose registers
-    disagreed on a single hour (discussion #66).
+    The total covers both bands, so it wins where the pair cannot be billed
+    whole: a dead half, halves reporting different periods, or both halves
+    empty, stopped or started late, which all leave periods the total reports
+    and the pair cannot bill. It also wins over a pair reporting the same
+    periods but billing less than ``_SHORT_BELOW`` of it, which is a half
+    frozen at its last reading: the rows keep coming with a change of zero,
+    so the pair looks whole. A healthy pair beside a healthy total keeps the
+    pair.
+
+    It never wins when it records less than ``_SHORT_BELOW`` of the pair over
+    the periods both report: one frozen at its last reading writes a row of
+    zero every period, so counting its periods let it bill the year at
+    nothing. Nor, where the pair cannot be billed whole, when it reports
+    fewer periods than the pair can still bill: a totals sensor with no
+    statistics took a whole year to the fees floor on a pair whose registers
+    disagreed on a single hour (discussion #66), and one that started late
+    bills less of the window than the pair. One that started late but still
+    covers more of it than a pair that stopped does win.
     """
-    return paired is None or len(total) >= len(paired)
+    paired = _paired_keys(day, night) or set()
+    shared = paired & total.keys()
+    pair_kwh = sum(day[k] + night[k] for k in shared)
+    total_kwh = sum(total[k] for k in shared)
+    if total_kwh < _SHORT_BELOW * pair_kwh:
+        return False
+    if day.keys() != night.keys() or total.keys() - paired:
+        return bool(total) and len(total) >= len(paired)
+    return pair_kwh < _SHORT_BELOW * total_kwh
 
 
 async def _measured_kwh(
@@ -1202,9 +1236,15 @@ async def _measured_kwh(
             else (0.0, 0)
         )
         days = _paired_keys(d, n)
-        # A wired totals sensor measures what the pair cannot, and the pair
-        # is still named, so the Repairs card gets the register fixed.
-        instead = "; its totals sensor is read instead" if total_id else ""
+        # A wired totals sensor measures what the pair cannot, on the rule
+        # every billing path follows, and the broken registers are still
+        # named, so the Repairs card gets them fixed.
+        total = (
+            await _recorder_daily_kwh(hass, total_id, start, end) if total_id else {}
+        )
+        past_total = _without_today(total, end)
+        use_total = bool(total_id) and _total_stands_in(past_total, d, n)
+        instead = f"; its totals sensor {total_id} is read instead" if use_total else ""
         if days is None:
             # One half of the pair is wired but produced nothing whatsoever.
             # That is a broken pair rather than a band that used no energy, and
@@ -1222,29 +1262,11 @@ async def _measured_kwh(
                 side,
                 instead,
             )
-            if total_id:
-                measured = await _measured_total(hass, total_id, start, end)
-                return replace(measured, pair_fault=dead)
-            return MeasuredKwh(0.0, 0, pair_fault=dead)
-        if not d:
-            # Neither half has recorded anything in the window yet, today
-            # aside.
-            return MeasuredKwh(today_kwh, today_days)
-        if set(d) != set(n):
+        elif set(d) != set(n):
             # Both halves report, but not on the same days: one stopped, or
             # started late. The figure over the days both cover is then short
             # enough to be labelled scaled rather than measured, which is
-            # disclosed to the user instead of silent. A wired totals sensor
-            # is read instead only when it reports at least those days, today
-            # counted out as it is of the pair.
-            total = (
-                await _recorder_daily_kwh(hass, total_id, start, end)
-                if total_id
-                else None
-            )
-            use_total = total is not None and _total_stands_in(
-                total.keys() - {dt_util.now().date()}, days
-            )
+            # disclosed to the user instead of silent.
             _LOGGER.warning(
                 "%s covers %d days between %s and %s while %s covers %d, so "
                 "the %s pair has diverged; only the %d days both report are "
@@ -1257,10 +1279,20 @@ async def _measured_kwh(
                 len(n),
                 side,
                 len(days),
-                f"; its totals sensor {total_id} is read instead" if use_total else "",
+                instead,
             )
-            if total is not None and use_total:
-                return MeasuredKwh(sum(total.values()), len(total), pair_fault=stopped)
+        if use_total:
+            return MeasuredKwh(
+                sum(total.values()),
+                len(total),
+                pair_fault=_broken_registers(day_id, d, night_id, n, past_total),
+            )
+        if days is None:
+            return MeasuredKwh(0.0, 0, pair_fault=night_id if d else day_id)
+        if not d:
+            # Neither half has recorded anything in the window yet, today
+            # aside.
+            return MeasuredKwh(today_kwh, today_days)
         return MeasuredKwh(
             sum(d[x] + n[x] for x in days) + today_kwh,
             len(days) + today_days,
@@ -1269,6 +1301,34 @@ async def _measured_kwh(
     if total_id:
         return await _measured_total(hass, total_id, start, end)
     return MeasuredKwh(0.0, 0)
+
+
+def _broken_registers(
+    day_id: str,
+    day: Mapping[date, float],
+    night_id: str,
+    night: Mapping[date, float],
+    total: Mapping[date, float],
+) -> str:
+    """The registers of a pair its totals sensor stands in for that are
+    broken, comma-separated, for the Repairs card.
+
+    A half that recorded nothing, and a half that stopped while its twin or
+    the total carries on. Both halves when they report the same days as the
+    total and still fell short of it (:func:`_total_stands_in`): one of them
+    is frozen, and the rows alone cannot say which. Halves that merely
+    started late, or disagree on a day, are not named.
+    """
+    halves = ((day_id, day), (night_id, night))
+    broken = [entity_id for entity_id, readings in halves if not readings]
+    broken += [
+        entity_id
+        for entity_id in _stopped((*halves, ("total", total)))
+        if entity_id != "total"
+    ]
+    if not broken and day.keys() == night.keys() and total.keys() <= day.keys():
+        broken = [day_id, night_id]
+    return ", ".join(broken)
 
 
 async def _measured_total(
