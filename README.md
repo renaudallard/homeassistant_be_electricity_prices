@@ -1078,9 +1078,12 @@ searching for:
   because it is frozen at its last reading, would bill the year short.
   The same totals sensor also takes over from a pair that reports every day
   but bills under 90% of it, which is a register frozen at its last
-  reading. This warning comes from the yearly volume read, over the last
-  365 days, so it can name a different sensor than the year-to-date bill
-  uses when the two windows differ.
+  reading.
+
+  Both warnings are logged once a day, over the same window as the
+  year-to-date bill (1 January, or your contract start date, to today), and
+  say what that bill does: the days both registers report, or the totals
+  sensor it reads instead.
 
 - **"accumulated before the window"** — the first hour or day of the window
   carried energy from before it, which happens when the run-up to 1 January

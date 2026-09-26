@@ -2392,6 +2392,7 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
             entry,  # type: ignore[arg-type]
             d0,
             d0 + timedelta(days=59),
+            warn=True,
         )
     # Refused outright rather than billed at half, and said out loud.
     assert got == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
@@ -2432,6 +2433,7 @@ async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
             entry,  # type: ignore[arg-type]
             d0,
             d0 + timedelta(days=59),
+            warn=True,
         )
     # The union would have said 60 days and called a partial total measured.
     assert got.days_with_data == 10

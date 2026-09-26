@@ -1231,6 +1231,7 @@ async def _measured_kwh(
     end: date,
     *,
     side: str = "consumption",
+    warn: bool = False,
 ) -> MeasuredKwh:
     """Metered kWh for ``side`` over ``[start, end]``, with its coverage.
 
@@ -1253,6 +1254,12 @@ async def _measured_kwh(
     A register can be wired, valid, and silent: device_class=energy with no
     state_class compiles no long-term statistics at all, and neither does
     state_class=measurement. Nothing upstream of here rejects either.
+
+    ``warn`` logs what a broken pair did to the figure. Only the daily meter
+    check passes it, which reads the window the bill reads: the warnings came
+    from the yearly volume, over the trailing year, and named a window, and at
+    times a sensor, that the year to date did not bill; the compare page and
+    the projections logged them again on every read.
     """
     if _partial_register_pair(entry, side):
         return MeasuredKwh(0.0, 0)
@@ -1278,8 +1285,7 @@ async def _measured_kwh(
         )
         past_total = _without_today(total, end)
         use_total = bool(total_id) and _total_stands_in(past_total, d, n)
-        instead = f"; its totals sensor {total_id} is read instead" if use_total else ""
-        if days is None:
+        if warn and days is None:
             # One half of the pair is wired but produced nothing whatsoever.
             # That is a broken pair rather than a band that used no energy, and
             # billing the surviving half alone is a wrong bill, not a partial
@@ -1294,17 +1300,18 @@ async def _measured_kwh(
                 end,
                 alive,
                 side,
-                instead,
+                f"; its totals sensor {total_id} is billed instead"
+                if use_total
+                else "",
             )
-        elif set(d) != set(n):
+        elif warn and days is not None and set(d) != set(n):
             # Both halves report, but not on the same days: one stopped, or
             # started late. The figure over the days both cover is then short
             # enough to be labelled scaled rather than measured, which is
             # disclosed to the user instead of silent.
             _LOGGER.warning(
                 "%s covers %d days between %s and %s while %s covers %d, so "
-                "the %s pair has diverged; only the %d days both report are "
-                "billed%s",
+                "the %s pair has diverged; %s",
                 day_id,
                 len(d),
                 start,
@@ -1312,8 +1319,9 @@ async def _measured_kwh(
                 night_id,
                 len(n),
                 side,
-                len(days),
-                instead,
+                f"its totals sensor {total_id} is billed instead"
+                if use_total
+                else f"only the {len(days)} days both report are billed",
             )
         if use_total:
             return MeasuredKwh(

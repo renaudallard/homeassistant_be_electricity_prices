@@ -2767,6 +2767,7 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
         _end: date,
         *,
         side: str = "consumption",
+        warn: bool = False,
     ) -> MeasuredKwh:
         windows.append(start)
         return broken[side]
@@ -2877,6 +2878,61 @@ async def test_a_register_a_total_bills_for_has_its_own_wording(
     assert await _card(("sensor.inj",)) == ("sensor.inj", "register_pair_incomplete")
 
 
+async def test_a_diverged_pair_is_logged_as_the_bill_reads_it(
+    hass: HomeAssistant, freezer: Any, caplog: Any
+) -> None:
+    """The divergence warning came from the yearly volume read, over the
+    trailing year, where the night register's 277 days outnumber a totals
+    sensor that started in February, so it said only the days both registers
+    report are billed. The year to date bills that totals sensor. The warning
+    is logged once a day now, over the window the bill reads, and names the
+    sensor the bill reads."""
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "consumption_kwh": "sensor.total",
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    spans = {
+        "sensor.day": (date(2025, 1, 1), date(2026, 9, 25), 6.0),
+        "sensor.night": (date(2025, 1, 1), date(2026, 6, 30), 4.0),
+        "sensor.total": (date(2026, 2, 1), date(2026, 9, 25), 10.0),
+    }
+
+    async def _daily(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        first, last, kwh = spans[entity_id]
+        days = (min(end, last) - max(start, first)).days + 1
+        return {max(start, first) + timedelta(days=i): kwh for i in range(days)}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch.object(energy_meters, "_sum_hourly_kwh", AsyncMock(return_value={})),
+        caplog.at_level("WARNING"),
+    ):
+        await coord._ensure_annual_volume()
+    logged = [r.getMessage() for r in caplog.records if "diverged" in r.getMessage()]
+    assert logged == [
+        "sensor.day covers 268 days between 2026-01-01 and 2026-09-26 while "
+        "sensor.night covers 181, so the consumption pair has diverged; its "
+        "totals sensor sensor.total is billed instead"
+    ]
+
+
 async def test_no_injection_repairs_card_without_a_solar_regime(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2916,6 +2972,7 @@ async def test_no_injection_repairs_card_without_a_solar_regime(
         _end: date,
         *,
         side: str = "consumption",
+        warn: bool = False,
     ) -> MeasuredKwh:
         sides.append(side)
         return MeasuredKwh(0.0, 0, "sensor.night_inj" if side == "injection" else "")

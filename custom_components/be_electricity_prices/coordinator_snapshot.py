@@ -243,7 +243,8 @@ class _SnapshotMixin:
         Read over the window the bill reads, not the trailing year of the
         volume: a register rewired last autumn short-changes this year to date
         only until 1 January, and a card read off the trailing year stayed up
-        for months after the bill had recovered. Once a day, with the volume.
+        for months after the bill had recovered. Once a day, with the volume,
+        and the one read that logs what a broken pair did to the bill.
         """
         start = ytd_window_start(self.entry, today)
         faults: list[str] = []
@@ -251,7 +252,9 @@ class _SnapshotMixin:
         # on their own wording, since the cost does not move.
         covered: list[str] = []
         with contextlib.suppress(Exception):
-            measured = await _measured_kwh(self.hass, self.entry, start, today)
+            measured = await _measured_kwh(
+                self.hass, self.entry, start, today, warn=True
+            )
             (covered if measured.covered else faults).append(measured.pair_fault)
             # The injection pair too, the one injection wiring whose half can
             # go silent. Not without a solar regime: the bill does not read
@@ -259,7 +262,7 @@ class _SnapshotMixin:
             day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
             if _bills_injection(self.entry) and day_id and night_id:
                 injected = await _measured_kwh(
-                    self.hass, self.entry, start, today, side="injection"
+                    self.hass, self.entry, start, today, side="injection", warn=True
                 )
                 (covered if injected.covered else faults).append(injected.pair_fault)
             # And a side that went silent under the other, which the pair
