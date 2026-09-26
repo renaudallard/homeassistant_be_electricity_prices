@@ -584,8 +584,10 @@ Top-level dump keys:
 | `entry.title` | entry title |
 | `entry.data` / `entry.options` | config, with `CONF_API_KEY` redacted via `async_redact_data(..., TO_REDACT)` |
 | `coordinator` | live snapshot metadata and the full hourly price table (see below) |
-| `consumption.rolling_year_kwh` / `.ytd_kwh` | recorder-summed consumption over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
+| `consumption.rolling_year_kwh` / `.ytd_kwh` | raw recorder-summed consumption of every wired sensor over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
+| `consumption.billed_from` / `.billed_ytd_kwh` and the same under `injection` | the sensors the bill reads each side off and the year-to-date kWh taken from them after the register pair, totals and silent-side rules (`_metered_sides`, hourly statistics, so today's live reading is not in it); `null` on a side that cannot be billed. `rolling_year_kwh` and `ytd_kwh` beside them are the raw sums of every wired sensor, and the two disagreeing is the tell |
+| `silent_meter` | the sensors of a side that stopped recording while the other carried on, whose days the bill leaves out of both sides; empty otherwise |
 | `consumption.projected_year_kwh` / `.projection` and the same under `injection` | the calendar-year projection and its basis (`volume_basis`, `ytd_kwh`, `remaining_kwh`); `ytd_kwh` there counts from 1 January to yesterday whatever the billing window |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `spot_cache_by_month` | `{ "YYYY-MM": {hours, mean, min, max} }` over the day-ahead prices `current_year_cost` is replayed from, in EUR/kWh: a month whose mean sits far off the Belgian day-ahead average is the cache, not the card |

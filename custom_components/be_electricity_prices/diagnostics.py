@@ -48,6 +48,7 @@ from .coordinator import (
 from .snapshot_resolve import entry_annual_kwh
 from .energy_meters import (
     _kwh_sensor_ids,
+    _metered_sides,
     _recorder_daily_kwh,
 )
 from .snapshot_store import (
@@ -129,14 +130,31 @@ async def async_get_config_entry_diagnostics(
 
     # Recorder-backed consumption + injection roll-ups so the bug
     # reporter can see at a glance whether their kWh sensors are wired
-    # up and feeding the recorder; mirrors what current_year_cost reads,
-    # from the day it reads from.
+    # up and feeding the recorder: the raw sums of the wired sensors, from
+    # the day current_year_cost reads from.
     today = dt_util.now().date()
-    ytd_days = (today - ytd_window_start(entry, today)).days
+    ytd_start = ytd_window_start(entry, today)
+    ytd_days = (today - ytd_start).days
     cons_year = await _kwh_window(hass, entry, 365, side="consumption")
     cons_ytd = await _kwh_window(hass, entry, ytd_days, side="consumption")
     inj_year = await _kwh_window(hass, entry, 365, side="injection")
     inj_ytd = await _kwh_window(hass, entry, ytd_days, side="injection")
+    # And what the bill actually reads beside them: the sensors each side is
+    # billed off and the kWh left once a broken pair, a totals sensor standing
+    # in for one and a silent side have been accounted for. The raw sums alone
+    # hid a year billed off an empty totals sensor behind the right kWh
+    # (discussion #66). Hourly statistics, so today's live reading is not in
+    # it; ``None`` on a side that cannot be billed at all.
+    billed = await _metered_sides(hass, entry, ytd_start, today)
+
+    def _billed(side: str) -> dict[str, Any]:
+        if billed is None:
+            return {"billed_from": None, "billed_ytd_kwh": None}
+        metered = billed.consumption if side == "consumption" else billed.injection
+        return {
+            "billed_from": list(metered.sensors),
+            "billed_ytd_kwh": round(sum(metered.kwh.values()), 3),
+        }
 
     # Per-month archived snapshot publication labels: the YTD path
     # caches one snapshot per (supplier, contract, region, YYYY-MM).
@@ -256,13 +274,18 @@ async def async_get_config_entry_diagnostics(
             "ytd_kwh": cons_ytd,
             "projected_year_kwh": data.projected_year_consumption_kwh,
             "projection": volume.get("consumption"),
+            **_billed("consumption"),
         },
         "injection": {
             "rolling_year_kwh": inj_year,
             "ytd_kwh": inj_ytd,
             "projected_year_kwh": data.projected_year_injection_kwh,
             "projection": volume.get("injection"),
+            **_billed("injection"),
         },
+        # The sensors of a meter side that went silent while the other carried
+        # on, whose days the bill leaves out of both sides.
+        "silent_meter": list(billed.silent) if billed else [],
         "monthly_snapshot_labels": monthly_labels,
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average
         # is the cache, not the card.

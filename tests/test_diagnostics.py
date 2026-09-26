@@ -448,3 +448,70 @@ async def test_diagnostics_returns_placeholder_when_there_is_no_snapshot(
         "status": "no_snapshot",
         "last_error": "card has no text layer: 348 characters across 5 page(s)",
     }
+
+
+async def test_diagnostics_names_the_sensors_the_bill_reads(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The raw sums add up every wired sensor, which is not what the bill
+    reads: in discussion #66 they showed the right kWh while the year was
+    billed off an empty totals sensor. The dump now says which sensors each
+    side is billed off, the kWh taken from them, and which side went silent.
+
+    Here the pair diverged by one hour, so the totals sensor stands in, and
+    the feed-in stopped after three days, so only those three are billed on
+    either side."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-01-11 12:00:00+01:00")
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={}, _historical_spot_quarters={}, data=_coordinator_data()
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "consumption_kwh": "sensor.total",
+            "injection_kwh": "sensor.inj",
+        },
+    )
+    first = datetime(2025, 12, 31, 23, tzinfo=UTC)
+    hours = [first + timedelta(hours=i) for i in range(240)]
+    series = {
+        "sensor.day": hours[:5] + hours[6:],
+        "sensor.night": hours,
+        "sensor.total": hours,
+        "sensor.inj": hours[:72],
+    }
+
+    async def _hourly(
+        _hass: HomeAssistant, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        kwh = 0.5 if entity_id == "sensor.inj" else 1.0
+        return dict.fromkeys(series.get(entity_id, []), kwh)
+
+    async def _daily(
+        _hass: HomeAssistant, _entity_id: str, _start: object, _end: object
+    ) -> dict[object, float]:
+        return {}
+
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch(
+            "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+            new=_daily,
+        ),
+    ):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert dump["consumption"]["billed_from"] == ["sensor.total"]
+    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(72.0)
+    assert dump["injection"]["billed_from"] == ["sensor.inj"]
+    assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
+    assert dump["silent_meter"] == ["sensor.inj"]

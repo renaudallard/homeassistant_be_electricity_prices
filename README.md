@@ -986,9 +986,13 @@ API key redacted), the snapshot metadata, and the full hourly breakdown
 for today + tomorrow. It also summarises the replayed day-ahead cache per delivery month (hour
 count, mean, min and max), the archived card labels used for past months,
 and the shared-fetch failure marker when the integration has been backing
-off. The year-to-date cost split into its capacity, prosumer and
-standing-charge legs is not in the dump: it lives on the
-`current_year_cost` sensor's own attributes.
+off. For each side it gives both the raw kWh of every wired meter sensor
+and what the bill actually reads: the sensors it is billed off
+(`billed_from`, which shows a totals sensor standing in for a day/night
+pair) and the kWh taken from them (`billed_ytd_kwh`), plus `silent_meter`
+when one side stopped recording under the other. The year-to-date cost
+split into its capacity, prosumer and standing-charge legs is not in the
+dump: it lives on the `current_year_cost` sensor's own attributes.
 Attach it when reporting an issue.
 
 ### When the year-to-date looks too low

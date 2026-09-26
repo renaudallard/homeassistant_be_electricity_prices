@@ -603,9 +603,9 @@ async def _metered_sides(
     """Both sides of the entry's metering hour by hour, or ``None`` when
     either cannot be billed (:func:`_metered_hourly_kwh`).
 
-    The one place the hourly walks and the backfill read the two sides, so
-    the hours left out of one are left out of the other the same way
-    everywhere. Neither side keeps ``today_ok`` once a side went
+    The one place the hourly walks, the backfill and the diagnostics read the
+    two sides, so the hours left out of one are left out of the other the
+    same way everywhere. Neither side keeps ``today_ok`` once a side went
     silent: today is after the silence, and topping the other side up live
     would bill it against nothing.
     """
