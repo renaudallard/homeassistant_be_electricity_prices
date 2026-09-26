@@ -517,3 +517,82 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
     assert dump["silent_meter"] == ["sensor.inj"]
     assert dump["consumption"]["read_once_a_day"] is False
+
+
+async def test_diagnostics_names_the_sensors_a_per_day_bill_reads(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A fixed or variable contract is billed day by day, and the per-day walk
+    decides the pair against the totals sensor on days, not hours. One hour the
+    night register missed put the hourly reader on the totals sensor while the
+    bill read the pair, so the dump named a sensor the bill never read and a
+    tenth fewer kWh than it billed. The feed-in stops after three days: the
+    consumption is still billed on every day, the feed-in only on those three,
+    and the feed-in meter is named as silent."""
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-01-11 12:00:00+01:00")
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={},
+        _historical_spot_quarters={},
+        data=replace(
+            _coordinator_data(),
+            ytd_diagnostics={"days_seen": 10.0, "days_elapsed": 11.0},
+        ),
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "contract": "power_fixed",
+            "meter": "mono",
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "consumption_kwh": "sensor.total",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
+        },
+    )
+    days = [date(2026, 1, 1) + timedelta(days=i) for i in range(10)]
+    first = datetime(2025, 12, 31, 23, tzinfo=UTC)
+    hours = [first + timedelta(hours=i) for i in range(240)]
+    per_day = {
+        "sensor.day": 6.0,
+        "sensor.night": 4.0,
+        "sensor.total": 9.0,
+        "sensor.inj": 0.5,
+    }
+
+    async def _hourly(
+        _hass: HomeAssistant, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        seen = hours[:3] + hours[4:] if entity_id == "sensor.night" else hours
+        return dict.fromkeys(seen, per_day[entity_id] / 24)
+
+    async def _daily(
+        _hass: HomeAssistant, entity_id: str, _start: object, _end: object
+    ) -> dict[date, float]:
+        seen = days[:3] if entity_id == "sensor.inj" else days
+        return dict.fromkeys(seen, per_day[entity_id])
+
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch(
+            "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+            new=_daily,
+        ),
+    ):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert dump["consumption"]["billed_from"] == ["sensor.day", "sensor.night"]
+    assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(100.0)
+    assert dump["consumption"]["read_once_a_day"] is None
+    assert dump["injection"]["billed_from"] == ["sensor.inj"]
+    assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(1.5)
+    assert dump["silent_meter"] == ["sensor.inj"]

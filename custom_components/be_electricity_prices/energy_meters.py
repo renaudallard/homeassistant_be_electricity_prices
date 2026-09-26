@@ -846,6 +846,7 @@ async def _resolve_daily_kwh(
     start: date | None = None,
     *,
     meter: MeterType | None = None,
+    billed: dict[str, tuple[str, ...]] | None = None,
 ) -> dict[date, tuple[float, float, float, float]] | None:
     """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
 
@@ -889,6 +890,12 @@ async def _resolve_daily_kwh(
     the side bills off the total, which is the rule the meters form
     enforces too (``flow_schemas._incomplete_register_pairs``).
 
+    ``billed``, when given, is filled with the sensors each side was billed
+    off, under ``consumption`` and ``injection``, and those of a side that
+    went silent under the other under ``silent``: what the diagnostics name
+    beside a per-day bill. Such a call reads the recorder rather than the
+    memo, which keeps only the kWh.
+
     Returns ``None`` when neither side has any meter inputs at all
     or when either side has an uncovered partial register wiring.
     """
@@ -912,7 +919,7 @@ async def _resolve_daily_kwh(
         window_start,
         today,
     )
-    if memo is not None and key in memo:
+    if memo is not None and key in memo and billed is None:
         cached = memo[key]
         return None if cached is None else dict(cached)
     out: dict[date, list[float]] = {}
@@ -941,6 +948,7 @@ async def _resolve_daily_kwh(
         """
         if bool(day_id) ^ bool(night_id) and not total_id:
             return False
+        side = "consumption" if slot_day == 0 else "injection"
         per_day: dict[date, float] | None = None
         if day_id and night_id:
             d, n, (day_today, night_today) = _split_today(
@@ -984,9 +992,13 @@ async def _resolve_daily_kwh(
                     # any day one half did not report, or it would be billed
                     # now and taken back at midnight.
                     gaps.add(today)
+                if billed is not None:
+                    billed[side] = (day_id, night_id)
                 return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
+        if billed is not None:
+            billed[side] = (total_id,)
         if per_day is None:
             per_day = await _recorder_daily_kwh(hass, total_id, window_start, today)
         reported[slot_day] = set(per_day) - {today}
@@ -1019,9 +1031,11 @@ async def _resolve_daily_kwh(
         slot_day=2,
         slot_night=3,
     )
-    _silent, both, feed_in = _silent_periods(
+    silent, both, feed_in = _silent_periods(
         reported.get(0), reported.get(2), out.keys()
     )
+    if billed is not None and silent is not None:
+        billed["silent"] = billed.get(silent, ())
     for day in pair_gaps.get(0, set()) | both:
         out.pop(day, None)
     for day in feed_in:
