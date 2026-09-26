@@ -558,9 +558,10 @@ their own can price bill on the stand-in the live sensor bills them on:
 `_stand_in_spans` names them before either pass runs, and the response lists
 them under `left_out`. Only the automatic backfill's first run
 (`retry_later`) leaves out of the price series the days whose read failed just
-now, under `retry`, for the run an hour later to write; the cost series is
-written whole on every run, since a running total missing days carries every
-later hour short.
+now, under `retry`, for the run an hour later to write, or the next setup's
+when Home Assistant stops before then (`_backfill_retry_from`, persisted); the
+cost series is written whole on every run, since a running total missing days
+carries every later hour short.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 
@@ -653,7 +654,7 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py`, de
 
 ## 10. Persistence
 
-`_save_persistent` (`coordinator_persist.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, `historical_spots` pruned to the trailing year, and `previous_contracts`, the day's pricing of the contracts held earlier in the year (section 7.4), which is restored outside the tuple gate because it names the periods it was priced for. Two guards prevent a slow tick from clobbering a reloaded entry's state:
+`_save_persistent` (`coordinator_persist.py`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, the settled archived month cards, `historical_spots` pruned to the trailing year, `previous_contracts`, the day's pricing of the contracts held earlier in the year (section 7.4), which is restored outside the tuple gate because it names the periods it was priced for, and `backfill_retry_from`, the first day a pending automatic backfill retry is to write, restored outside the gate as well since it names days missing from the recorder. Two guards prevent a slow tick from clobbering a reloaded entry's state:
 
 - **Identity guard** (`coordinator_persist.py`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator_persist.py`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).

@@ -454,6 +454,8 @@ async def _make_coordinator(entry: MockConfigEntry) -> Any:
         _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
         _spot_prune_holds=0,
+        _backfill_retry_from=None,
+        _save_persistent=AsyncMock(),
     )
 
 
@@ -2775,7 +2777,14 @@ async def test_the_automatic_backfill_runs_once_more_when_a_read_failed(
     entry.add_to_hass(hass)
     _register_sensors(hass, entry, ["current_price"])
     entry.runtime_data = await _make_coordinator(entry)
-    runs = AsyncMock(side_effect=[{"retry": ["2026-05-01..2026-05-31"]}, {}])
+
+    async def left_may_out(*_a: Any, **kwargs: Any) -> dict[str, Any]:
+        if kwargs.get("retry_later"):
+            entry.runtime_data._backfill_retry_from = date(2026, 5, 1)
+            return {"retry": ["2026-05-01..2026-05-31"]}
+        return {}
+
+    runs = AsyncMock(side_effect=left_may_out)
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(return_value={})
     with (
@@ -2789,10 +2798,122 @@ async def test_the_automatic_backfill_runs_once_more_when_a_read_failed(
             True,
             None,
         ]
+        # The second run starts from the first day the first one left out.
+        assert runs.await_args_list[1].args[2] == date(2026, 5, 1)
+        assert entry.runtime_data._backfill_retry_from is None
         runs.reset_mock(side_effect=True)
         runs.return_value = {"rows_written": 3}
         assert await bf.backfill_if_missing(hass, entry) == {"rows_written": 3}
     assert runs.await_count == 1
+
+
+async def test_a_restart_during_the_wait_still_runs_the_retry(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The retry lived only in the task sleeping for it, which a restart or a
+    reload cancels, and the next setup's probe found the 1 January row the
+    first run wrote. The months it left out stayed out of the price series for
+    good. Kept in the store, the next setup runs it from the first of them."""
+    freezer.move_to("2026-11-20 12:00:00+01:00")
+    entry = make_entry(
+        supplier="totalenergies", contract="totalenergies_pixel", solar_regime="none"
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _snapshot=make_snapshot(energy=FixedRates(single=0.25)),
+        _session=None,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _ensure_historical_spots=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+        _spot_prune_holds=0,
+        _backfill_retry_from=None,
+        _save_persistent=AsyncMock(),
+    )
+    entry.runtime_data = coordinator
+    store: dict[str, list[Any]] = {}
+
+    def fake_import(_h: Any, metadata: Any, stats: Any) -> None:
+        store.setdefault(metadata["statistic_id"], []).extend(stats)
+
+    async def executor(
+        _fn: Any, _h: Any, start: Any, end: Any, sids: Any, *_r: Any
+    ) -> Any:
+        sid = next(iter(sids))
+        return {sid: [r for r in store.get(sid, []) if start <= r["start"] < end]}
+
+    up = False
+
+    async def archive(*_a: Any) -> ArchivedCard:
+        if not up:
+            raise ExtractorError("HTTP 503 from raw.githubusercontent.com")
+        return ArchivedCard(
+            snapshot=make_snapshot(energy=FixedRates(single=0.2)), read_by_ocr=False
+        )
+
+    real_sleep = asyncio.sleep
+
+    async def stopped(delay: float, *args: Any) -> None:
+        # Home Assistant stops during the retry's wait; the day-by-day turns
+        # the passes hand the loop still pass.
+        if delay >= 60:
+            raise asyncio.CancelledError
+        await real_sleep(delay, *args)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(
+            backfill_window,
+            "get_extractor",
+            lambda _id: EXTRACTORS["totalenergies"],
+        ),
+        patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+        patch.object(bf.asyncio, "sleep", stopped),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await bf.backfill_if_missing(hass, entry)
+        assert coordinator._backfill_retry_from == date(2026, 8, 1)
+        coordinator._save_persistent.assert_awaited()
+        up = True
+        freezer.tick(timedelta(hours=2))
+        await bf.backfill_if_missing(hass, entry)
+        assert coordinator._backfill_retry_from is None
+        # Done: the next restart finds nothing to do.
+        assert await bf.backfill_if_missing(hass, entry) is None
+    days = {dt_util.as_local(r["start"]).date() for r in store[ids["current_price"]]}
+    assert len(days) == (date(2026, 11, 20) - date(2026, 1, 1)).days + 1
+
+
+async def test_a_pending_backfill_retry_survives_a_restart(
+    hass: HomeAssistant,
+) -> None:
+    """What the coordinator stores is what the next setup reads."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coordinator
+    coordinator._backfill_retry_from = date(2026, 8, 1)
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coordinator._store, "async_save", new=_fake_save):
+        await coordinator._save_persistent()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    assert fresh._backfill_retry_from == date(2026, 8, 1)
 
 
 async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(

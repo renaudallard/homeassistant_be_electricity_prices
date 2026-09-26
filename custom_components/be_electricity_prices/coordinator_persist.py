@@ -65,6 +65,7 @@ class _PersistMixin:
     # State the concrete class owns, declared as BARE annotations with no
     # value: a valued class attribute would change hasattr() and instance-dict
     # behaviour. __init__ over there is what actually creates these.
+    _backfill_retry_from: date | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
     _peak_history: dict[str, float]
@@ -318,6 +319,15 @@ class _PersistMixin:
         stored_previous = stored.get("previous_contracts")
         if isinstance(stored_previous, dict):
             self._previous_priced = priced_from_dict(stored_previous)
+        # The automatic backfill's pending retry, outside the tuple gate too:
+        # it names days missing from the recorder, whatever card they are
+        # then priced on.
+        retry_from = stored.get("backfill_retry_from")
+        if isinstance(retry_from, str):
+            try:
+                self._backfill_retry_from = date.fromisoformat(retry_from)
+            except ValueError:
+                self._backfill_retry_from = None
         # A blob written before the profiles moved to the shared store carries
         # them still, and adopting those is what keeps an upgrade from
         # downloading again what this entry already had. Irrespective of the
@@ -482,6 +492,8 @@ class _PersistMixin:
             payload["daily_compare"] = _daily_compare_to_dict(self.daily_compare)
         if self._previous_priced is not None:
             payload["previous_contracts"] = priced_to_dict(self._previous_priced)
+        if self._backfill_retry_from is not None:
+            payload["backfill_retry_from"] = self._backfill_retry_from.isoformat()
         # Nothing to write when nothing moved. The blob is rebuilt whole on
         # every tick and is mostly slow-changing: the card, the peak history,
         # the spot cache and the compare rows are identical on 23 ticks out of

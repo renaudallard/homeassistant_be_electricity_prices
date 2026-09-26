@@ -422,7 +422,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists, once more an hour later when a card read failed. |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists, once more an hour later when a card read failed, or on the next setup when Home Assistant stopped during that wait (`_backfill_retry_from`, kept in the coordinator's store). |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py`). Backfill is reached either automatically
@@ -555,8 +555,10 @@ cost. Two rules enforce this:
   The response lists them under `left_out` and a warning names them. A read
   that failed just now may work an hour later, so the automatic backfill's
   first run (`retry_later`) leaves those days out of the price series, lists
-  them under `retry` and runs once more after `_RETRY_AFTER` (an hour), which
-  imports what it still cannot read and schedules nothing further. The cost
+  them under `retry` and runs once more after `_RETRY_AFTER` (an hour), from
+  the first of them, which imports what it still cannot read and schedules
+  nothing further. That day is kept in the coordinator's store while the run
+  is pending, so a restart during the wait runs it on the next setup. The cost
   leg is written whole on every run: a running total missing days would carry
   every later hour short. A period that can never be priced on its own cards
   is imported at once, so the anchor probe finds its row on the next restart.
@@ -621,7 +623,12 @@ the Jan 1 anchor: a single-hour probe could read empty when a dynamic contract
 genuinely lacks the Jan 1 00:00 spot and would then re-run the whole-year
 backfill on every restart, whereas a short window still reads empty after a real
 DB reset (self-healing preserved) but tolerates a legitimately-absent leading
-hour.
+hour. The one thing the probe cannot see is a run that left days out for want
+of a card read and wrote the rest, 1 January included, so the first of those
+days is kept in the coordinator's store (`_backfill_retry_from`,
+`coordinator_persist.py`) until the run that follows has written them: a
+restart or a reload during its wait cancels the task, and the next setup runs
+it from that day whatever the probe finds.
 
 ### `clear=True` is series-scoped and guarded
 

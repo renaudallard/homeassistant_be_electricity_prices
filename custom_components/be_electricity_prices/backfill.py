@@ -44,7 +44,7 @@ Two entry points:
   ``async_setup_entry``. Probes the recorder for statistics at the Jan
   1 anchor and only runs when none exist, so we don't redo the work on
   every HA restart, and runs once more an hour later when a card read
-  failed.
+  failed, or on the next setup when Home Assistant stopped before then.
 """
 
 from __future__ import annotations
@@ -376,7 +376,8 @@ async def backfill_range(
 
     ``retry_later`` is a run another will follow: the days whose card read
     failed just now are left out of the price series for that run to write,
-    and listed under ``retry``.
+    listed under ``retry``, and the first of them is kept on the coordinator
+    (``_backfill_retry_from``) for the run that follows to start from.
     """
     coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
@@ -472,6 +473,10 @@ async def _backfill_range(
         dt_util.as_local(end_utc - timedelta(hours=1)).date(),
     )
     retry = [span for span in spans if retry_later and span[3]]
+    if retry_later:
+        coordinator._backfill_retry_from = min(
+            (first for first, _last, _why, _failed in retry), default=None
+        )
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
         # series-scoped), but a sub-year window only repopulates
@@ -599,12 +604,16 @@ async def _backfill_range(
 async def backfill_if_missing(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any] | None:
-    """Run :func:`backfill_range` only when no statistics exist at Jan 1.
+    """Run :func:`backfill_range` only when no statistics exist at Jan 1, or
+    when a run that left days out is still to be retried.
 
     Probe is intentionally narrow (one hour at the year anchor) so a
     user who deletes their HA database mid-year still triggers a
     fresh backfill on next restart, while the steady-state restart
-    path adds zero work.
+    path adds zero work. The probe finds the rows a run that left days out
+    did write, so that run's retry is kept in the coordinator's store
+    (``_backfill_retry_from``) rather than only in the task waiting for it,
+    which a restart or a reload cancels.
 
     Tolerates entry removal mid-flight: this runs as a fire-and-forget
     background task, and the user can delete the entry between scheduling
@@ -649,24 +658,40 @@ async def backfill_if_missing(
     anchor_local = ytd_window_reset(entry, now_local)
     anchor_utc = anchor_local.astimezone(UTC)
     if await _existing_stat_window(hass, sid, anchor_utc):
-        _LOGGER.debug(
-            "backfill skipped: statistics already present at %s for %s",
-            anchor_utc.isoformat(),
-            sid,
-        )
-        return None
+        if runtime._backfill_retry_from is None:
+            _LOGGER.debug(
+                "backfill skipped: statistics already present at %s for %s",
+                anchor_utc.isoformat(),
+                sid,
+            )
+            return None
+        return await _last_run(hass, entry, runtime)
     result = await backfill_range(
         hass, entry, anchor_local, now_local, retry_later=True
     )
-    if "retry" not in result:
+    if runtime._backfill_retry_from is None:
         return result
     # A card read failed, and a blip on the card archive or on the old
-    # supplier's site is usually over within the hour. The probe above may
-    # find the rows this run did write, so nothing else would run it again.
-    # Once more, and that run imports what it still cannot read on the
-    # current card, as the live sensor bills it, and says so in the log.
+    # supplier's site is usually over within the hour. Stored before the
+    # wait, so a restart or a reload during it still runs the retry.
+    await runtime._save_persistent()
     await asyncio.sleep(_RETRY_AFTER.total_seconds())
     runtime = getattr(entry, "runtime_data", None)
     if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
         return result
-    return await backfill_range(hass, entry, anchor_local, dt_util.now())
+    return await _last_run(hass, entry, runtime)
+
+
+async def _last_run(
+    hass: HomeAssistant, entry: ConfigEntry, runtime: BePricesCoordinator
+) -> dict[str, Any]:
+    """The run after one that left days out, from the first of them: it
+    imports what it still cannot read on the current card, as the live
+    sensor bills it, and says so in the log."""
+    assert runtime._backfill_retry_from is not None
+    result = await backfill_range(
+        hass, entry, runtime._backfill_retry_from, dt_util.now()
+    )
+    runtime._backfill_retry_from = None
+    await runtime._save_persistent()
+    return result

@@ -1368,6 +1368,8 @@ async def test_the_automatic_backfill_imports_the_year_once(
         _ensure_historical_spots=AsyncMock(),
         _billed_peak_kw=lambda: 0.0,
         _spot_prune_holds=0,
+        _backfill_retry_from=None,
+        _save_persistent=AsyncMock(),
     )
 
     async def gone(*_a: Any) -> Any:

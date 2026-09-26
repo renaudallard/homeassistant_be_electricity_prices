@@ -1073,7 +1073,8 @@ switch) whose supplier's cards cannot be read. The response lists them under
 `left_out` and the log names them in a warning. When a card read failed just
 then, the automatic backfill leaves those days out of the price sensors and
 runs once more an hour later, which imports whatever it still cannot read the
-same way; after a service call, run it again once those cards can be read.
+same way. A restart during that hour does not lose it: the next start runs it.
+After a service call, run it again once those cards can be read.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

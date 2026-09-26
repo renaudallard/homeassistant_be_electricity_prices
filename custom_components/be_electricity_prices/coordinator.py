@@ -323,6 +323,10 @@ class BePricesCoordinator(
         # itself, and a window older than the trailing year needs exactly the
         # hours the prune drops, so the prune waits while this is non-zero.
         self._spot_prune_holds = 0
+        # The first day the automatic backfill left out of the price series
+        # for want of a card read that failed, while its retry is pending.
+        # Persisted, so a restart during the wait still runs it.
+        self._backfill_retry_from: date | None = None
         # The unique_ids each platform's setup is about to add, by platform,
         # recorded before it adds them. What the settings create, as opposed
         # to what got added: Home Assistant swallows a platform that fails to
