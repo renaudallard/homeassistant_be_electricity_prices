@@ -113,6 +113,7 @@ class _SnapshotMixin:
     _annual_kwh_day: date | None
     _annual_injection_kwh: float | None
     _register_pair_fault: str
+    _register_pair_covered: bool
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_fetched_at: datetime | None
@@ -246,9 +247,12 @@ class _SnapshotMixin:
         """
         start = ytd_window_start(self.entry, today)
         faults: list[str] = []
+        # Registers whose side the totals sensor bills in full: named, but
+        # on their own wording, since the cost does not move.
+        covered: list[str] = []
         with contextlib.suppress(Exception):
             measured = await _measured_kwh(self.hass, self.entry, start, today)
-            faults.append(measured.pair_fault)
+            (covered if measured.covered else faults).append(measured.pair_fault)
             # The injection pair too, the one injection wiring whose half can
             # go silent. Not without a solar regime: the bill does not read
             # those meters, so a broken one leaves nothing short.
@@ -257,7 +261,7 @@ class _SnapshotMixin:
                 injected = await _measured_kwh(
                     self.hass, self.entry, start, today, side="injection"
                 )
-                faults.append(injected.pair_fault)
+                (covered if injected.covered else faults).append(injected.pair_fault)
             # And a side that went silent under the other, which the pair
             # check cannot see: the walks leave a silent consumption meter's
             # days out of both sides and a silent injection meter's feed-in
@@ -266,10 +270,17 @@ class _SnapshotMixin:
             sides = await _metered_sides(self.hass, self.entry, start, today)
             if sides is not None:
                 faults.extend(sides.silent)
+
         # Once each: a consumption meter with no statistics is both a volume
         # read on today alone and the silent side under a working feed-in.
-        names = (name for fault in faults for name in fault.split(", ") if name)
-        self._register_pair_fault = ", ".join(dict.fromkeys(names))
+        # The covered registers are named only while nothing moves the cost,
+        # so the card's wording is true of every sensor it names.
+        def _names(found: list[str]) -> list[str]:
+            return [name for fault in found for name in fault.split(", ") if name]
+
+        names = _names(faults)
+        self._register_pair_covered = not names
+        self._register_pair_fault = ", ".join(dict.fromkeys(names or _names(covered)))
 
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.

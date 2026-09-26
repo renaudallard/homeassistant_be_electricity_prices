@@ -2807,6 +2807,76 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_register_a_total_bills_for_has_its_own_wording(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A broken register whose side the totals sensor bills in full raised
+    the card saying the running cost reads low, which was false. It is still
+    named, under the same issue id, on a wording that says the cost is
+    unaffected; beside a fault that does move the cost, the card names that
+    one on the usual wording."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.energy_meters import (
+        MeasuredKwh,
+        MeteredHours,
+        MeteredSides,
+    )
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+    covered = MeasuredKwh(2600.0, 263, "sensor.night_cons", covered=True)
+    registry = ir.async_get(hass)
+    issue_id = f"register_pair_incomplete_{entry.entry_id}"
+
+    async def _card(silent: tuple[str, ...]) -> tuple[str, str | None]:
+        coord = BePricesCoordinator(hass, entry)
+        sides = MeteredSides(
+            MeteredHours({}, ("sensor.cons",)),
+            MeteredHours({}, ("sensor.inj",)),
+            silent,
+        )
+        with (
+            patch.object(
+                compare_quote, "_annual_volume", AsyncMock(return_value=volume)
+            ),
+            patch.object(
+                coordinator_snapshot, "_measured_kwh", AsyncMock(return_value=covered)
+            ),
+            patch.object(
+                coordinator_snapshot, "_metered_sides", AsyncMock(return_value=sides)
+            ),
+        ):
+            await coord._ensure_annual_volume()
+        coord._sync_register_pair_issue()
+        issue = registry.async_get_issue(DOMAIN, issue_id)
+        assert issue is not None
+        assert issue.translation_placeholders is not None
+        return issue.translation_placeholders["entities"], issue.translation_key
+
+    assert await _card(()) == ("sensor.night_cons", "register_pair_covered")
+    assert await _card(("sensor.inj",)) == ("sensor.inj", "register_pair_incomplete")
+
+
 async def test_no_injection_repairs_card_without_a_solar_regime(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -3032,11 +3102,13 @@ def test_repair_issue_kinds_match_the_declared_strings() -> None:
         ).read_text(encoding="utf-8")
     )
     # The three supplier_deprecated variants share ONE issue id and differ
-    # only in translation_key, so only the base name is a removable kind.
+    # only in translation_key, so only the base name is a removable kind, and
+    # register_pair_covered is register_pair_incomplete's second wording.
     declared = set(strings["issues"]) - {
         "supplier_deprecated_no_successor",
         "supplier_deprecated_ended",
         "supplier_deprecated_ended_no_successor",
+        "register_pair_covered",
     }
     assert declared == set(_REPAIR_ISSUE_KINDS)
 

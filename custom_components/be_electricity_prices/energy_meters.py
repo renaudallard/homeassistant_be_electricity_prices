@@ -1021,6 +1021,9 @@ class MeasuredKwh:
     # that STARTED late is named only while the pair covers clearly less of
     # the window than its twin (:func:`_started_late`).
     pair_fault: str = ""
+    # Whether the side's totals sensor bills it in full instead of the pair,
+    # so the registers named above leave the cost as it is.
+    covered: bool = False
 
 
 @dataclass(frozen=True)
@@ -1317,6 +1320,7 @@ async def _measured_kwh(
                 sum(total.values()),
                 len(total),
                 pair_fault=_broken_registers(day_id, d, night_id, n, past_total),
+                covered=True,
             )
         if days is None:
             return MeasuredKwh(0.0, 0, pair_fault=night_id if d else day_id)

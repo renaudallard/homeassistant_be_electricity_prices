@@ -209,6 +209,9 @@ class BePricesCoordinator(
         # stopped, which the Repairs card names; empty while every pair is
         # whole.
         self._register_pair_fault: str = ""
+        # True when every register named there sits on a side its totals
+        # sensor bills in full, so the card says the cost is unaffected.
+        self._register_pair_covered = False
         self._snapshot_annual_kwh: float | None = None
         # The last blob written to the Store, so a tick that changed nothing
         # writes nothing. Not loaded from disk on startup: the first tick

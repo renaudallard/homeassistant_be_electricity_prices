@@ -113,6 +113,7 @@ class _IssuesMixin:
     _last_error: str | None
     _supplier_tuple: tuple[str, str, str]
     _register_pair_fault: str
+    _register_pair_covered: bool
 
     if TYPE_CHECKING:
         # Provided by DataUpdateCoordinator and the sibling mixins. Declared
@@ -129,6 +130,7 @@ class _IssuesMixin:
         *,
         extra: dict[str, str] | None = None,
         severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
+        translation_key: str | None = None,
     ) -> None:
         """Raise or clear one Repairs issue for this entry.
 
@@ -139,7 +141,9 @@ class _IssuesMixin:
 
         The id shape is load-bearing and must stay byte-identical: Repairs
         persists it, so a changed id leaves an already-raised issue orphaned
-        with no way for the user to clear it.
+        with no way for the user to clear it. A card whose wording depends on
+        the case passes its own ``translation_key`` and keeps ``key`` for the
+        id.
         """
         if self._unloaded:
             return
@@ -158,7 +162,7 @@ class _IssuesMixin:
             issue_id,
             is_fixable=False,
             severity=severity,
-            translation_key=key,
+            translation_key=translation_key or key,
             translation_placeholders=placeholders,
         )
 
@@ -273,11 +277,17 @@ class _IssuesMixin:
         coverage attributes are the only other trace. The log says which
         sensor, once a day, where few look; this says it where Home Assistant
         collects what needs fixing, and clears the moment the pair is whole.
+
+        Worded apart when a totals sensor bills the side in full: the register
+        is still broken, but saying the running cost reads low was false.
         """
         self._sync_issue(
             "register_pair_incomplete",
             bool(self._register_pair_fault),
             extra={"entities": self._register_pair_fault},
+            translation_key=(
+                "register_pair_covered" if self._register_pair_covered else None
+            ),
         )
 
     def _sync_prosumer_gap_issue(self) -> None:

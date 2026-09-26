@@ -3115,7 +3115,9 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
     assert len(hourly.kwh) == 265
-    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266, pair_fault=fault)
+    assert measured == energy_meters.MeasuredKwh(
+        530.0 + 7.0, 266, pair_fault=fault, covered=True
+    )
 
 
 @pytest.mark.parametrize("recorded", [0, 100], ids=["no-statistics", "late-start"])
@@ -3289,7 +3291,9 @@ async def test_a_total_stands_in_for_a_pair_short_of_it(
     assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
-    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266, pair_fault=fault)
+    assert measured == energy_meters.MeasuredKwh(
+        530.0 + 7.0, 266, pair_fault=fault, covered=True
+    )
 
 
 async def test_a_late_total_stands_in_for_a_pair_that_stopped_earlier(
@@ -3315,7 +3319,7 @@ async def test_a_late_total_stands_in_for_a_pair_that_stopped_earlier(
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
     assert measured == energy_meters.MeasuredKwh(
-        468.0 + 7.0, 235, pair_fault="sensor.night"
+        468.0 + 7.0, 235, pair_fault="sensor.night", covered=True
     )
 
 
