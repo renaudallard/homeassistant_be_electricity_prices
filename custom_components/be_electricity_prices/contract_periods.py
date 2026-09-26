@@ -422,6 +422,7 @@ async def previous_meter_faults(
         used = await _measured_kwh(hass, proxy, period.start, period.end)
         found.append(None if used.covered else used.pair_fault)
         day_id, night_id, total_id = _kwh_sensor_ids(proxy, "consumption")
+        younger: set[str] = set()
         if not used.days_with_data and not used.pair_fault:
             # Every consumption sensor recorded nothing over the contract's
             # days; a pair with one dead half is already named by its fault
@@ -430,9 +431,13 @@ async def previous_meter_faults(
             # those days, and no rewiring the card advises can bill them.
             after = period.end + timedelta(days=1)
             for entity_id in (day_id, night_id) if day_id and night_id else (total_id,):
-                if entity_id and not _without_today(
+                if not entity_id:
+                    continue
+                if _without_today(
                     await _recorder_daily_kwh(hass, entity_id, after, today), today
                 ):
+                    younger.add(entity_id)
+                else:
                     found.append(entity_id)
         day_id, night_id, _total = _kwh_sensor_ids(proxy, "injection")
         if _bills_injection(proxy) and day_id and night_id:
@@ -442,7 +447,10 @@ async def previous_meter_faults(
             found.append(None if injected.covered else injected.pair_fault)
         sides = await _metered_sides(hass, proxy, period.start, period.end)
         if sides is not None:
-            found += sides.silent
+            # The comparison names that same younger meter as the silent side
+            # beside a feed-in meter, and the card then stayed up until the
+            # earlier contract left the year.
+            found += (name for name in sides.silent if name not in younger)
         # Named once each: a pair fault lists its sensors comma-separated.
         names = dict.fromkeys(
             name for fault in found if fault for name in fault.split(", ")

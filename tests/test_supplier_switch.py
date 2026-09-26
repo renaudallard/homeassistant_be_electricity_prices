@@ -1907,7 +1907,8 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
     and the check for a meter that recorded nothing named its healthy day
     register beside it. A meter whose statistics begin after the earlier
     contract ended, one added to Home Assistant since, was named too, though
-    no sensor holds those days and no rewiring clears the card."""
+    no sensor holds those days and no rewiring clears the card, and beside a
+    feed-in meter the comparison of the two sides named it again."""
     freezer.move_to("2026-09-24 12:00:00+02:00")
     yesterday = date(2026, 9, 23)
     pair = make_entry(
@@ -1938,11 +1939,23 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
             }
         ],
     )
+    solar: dict[str, Any] = {
+        "consumption_kwh": "sensor.total",
+        "injection_kwh": "sensor.inj",
+        "solar_regime": "injection",
+    }
+    younger_solar = make_entry(
+        **solar,
+        previous_contracts=[
+            {"until": "2026-06-01", "data": _held("engie", "engie_easy_fixed", **solar)}
+        ],
+    )
     with _spans(
         {
             "sensor.t1": (date(2025, 1, 1), yesterday),
             "sensor.t2": (date(2026, 6, 1), yesterday),
             "sensor.total": (date(2026, 6, 5), yesterday),
+            "sensor.inj": (date(2025, 1, 1), yesterday),
         }
     ):
         assert await contract_periods.previous_meter_faults(
@@ -1951,6 +1964,12 @@ async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
         assert (
             await contract_periods.previous_meter_faults(
                 hass, younger, date(2026, 9, 24)
+            )
+            == []
+        )
+        assert (
+            await contract_periods.previous_meter_faults(
+                hass, younger_solar, date(2026, 9, 24)
             )
             == []
         )
