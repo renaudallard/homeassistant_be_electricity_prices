@@ -516,3 +516,4 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     assert dump["injection"]["billed_from"] == ["sensor.inj"]
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
     assert dump["silent_meter"] == ["sensor.inj"]
+    assert dump["consumption"]["read_once_a_day"] is False

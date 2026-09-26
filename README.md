@@ -483,7 +483,11 @@ formula** supplier, which has no card and asks for the whole set.
    reading), and never when the total itself records clearly less than the
    pair.
    Without a solar regime the injection fields are not read at all, so
-   wiring them only for the Energy dashboard changes nothing. Two ways to
+   wiring them only for the Energy dashboard changes nothing. A sensor that
+   only updates once a day, such as a supplier portal poller, is detected
+   and each day is spread evenly over its hours, so a contract priced by the
+   hour bills it at the day's average rather than at the hour the reading
+   arrived; the log says so once and the diagnostics flag it. Two ways to
    wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
      kWh registers from your meter. The integration reads each day's
@@ -1034,8 +1038,9 @@ and the shared-fetch failure marker when the integration has been backing
 off. For each side it gives both the raw kWh of every wired meter sensor
 and what the bill actually reads: the sensors it is billed off
 (`billed_from`, which shows a totals sensor standing in for a day/night
-pair) and the kWh taken from them (`billed_ytd_kwh`), plus `silent_meter`
-when one side stopped recording under the other. The year-to-date cost
+pair), the kWh taken from them (`billed_ytd_kwh`) and whether that side
+reports once a day and was spread over the hours (`read_once_a_day`), plus
+`silent_meter` when one side stopped recording under the other. The year-to-date cost
 split into its capacity, prosumer and standing-charge legs is not in the
 dump: it lives on the `current_year_cost` sensor's own attributes.
 Attach it when reporting an issue.

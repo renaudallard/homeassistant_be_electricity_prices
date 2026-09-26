@@ -99,6 +99,10 @@ _RESET_BELOW = 0.9
 # is short rather than rounded: one of the two is frozen or stuck.
 _SHORT_BELOW = 0.9
 
+# The sensors already said to report once a day, so the warning is logged
+# once per run rather than on every hourly walk.
+_READ_DAILY_LOGGED: set[tuple[str, ...]] = set()
+
 
 async def _recorder_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
@@ -580,7 +584,30 @@ async def _metered_hourly_kwh(
     cannot be billed whole or falls short of it (:func:`_total_stands_in`),
     since the total covers both bands on every hour. An empty map when
     nothing is wired on this side.
+
+    A side read once a day has each day spread over its hours
+    (:func:`_spread_daily_readings`), which is said once in the log and
+    carried as ``read_daily``.
     """
+    metered = await _side_hourly_kwh(hass, entry, side, start, end)
+    if metered is None or not _spread_daily_readings(metered.kwh):
+        return metered
+    if metered.sensors not in _READ_DAILY_LOGGED:
+        _READ_DAILY_LOGGED.add(metered.sensors)
+        _LOGGER.warning(
+            "%s reports its kWh once a day rather than hour by hour, so each "
+            "day is spread evenly over its hours: a contract priced by the "
+            "hour bills it at the day's average rather than at the hour the "
+            "reading arrived",
+            ", ".join(metered.sensors),
+        )
+    return replace(metered, read_daily=True)
+
+
+async def _side_hourly_kwh(
+    hass: HomeAssistant, entry: ConfigEntry, side: str, start: date, end: date
+) -> MeteredHours | None:
+    """:func:`_metered_hourly_kwh` before a once-a-day meter is spread."""
     if _partial_register_pair(entry, side):
         return None
     ids = _hourly_kwh_sensors(entry, side)
@@ -717,6 +744,51 @@ async def _top_up_today_hourly(
         return
     current_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
     per_hour[current_hour] = per_hour.get(current_hour, 0.0) + missing
+
+
+def _spread_daily_readings(kwh: dict[datetime, float]) -> bool:
+    """Spread, in place, the days a meter read once a day over their hours.
+
+    A sensor fed by a supplier portal or a nightly fetch moves once a day,
+    and Home Assistant still writes a row every hour: 23 of change zero and
+    one holding the whole day. Every path that prices by the hour (dynamic
+    energy, a per-slot feed-in credit, time of use, Impact) then billed the
+    day at the hour the reading arrived; a feed-in read at midnight was
+    credited about 11 times what it earned. :func:`_recorder_daily_band_ratio`
+    already refuses that shape for the band split.
+
+    A day has that shape when it holds a row for every one of its hours and
+    moved in exactly one, and the side counts as read once a day when at
+    least ``_SHORT_BELOW`` of the past days it moved on have it, so a real
+    meter that moved in one hour on a dull day is left alone. Each such day's
+    kWh is spread evenly over its hours, the neutral guess without a
+    profile, 23 or 25 on a DST seam day. Today is left as it is: it is not
+    over. Returns whether the side was read once a day.
+    """
+    today = dt_util.now().date()
+    rows: dict[date, int] = {}
+    moving: dict[date, list[datetime]] = {}
+    for hour, value in kwh.items():
+        day = dt_util.as_local(hour).date()
+        if day >= today:
+            continue
+        rows[day] = rows.get(day, 0) + 1
+        if value > 0.0:
+            moving.setdefault(day, []).append(hour)
+    polled: dict[date, tuple[datetime, int]] = {}
+    for day, hours in moving.items():
+        first = dt_util.start_of_local_day(day).astimezone(UTC)
+        after = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
+        count = round((after - first) / timedelta(hours=1))
+        if len(hours) == 1 and rows[day] == count:
+            polled[day] = (first, count)
+    if not polled or len(polled) < _SHORT_BELOW * len(moving):
+        return False
+    for day, (first, count) in polled.items():
+        whole = kwh[moving[day][0]]
+        for i in range(count):
+            kwh[first + timedelta(hours=i)] = whole / count
+    return True
 
 
 async def _recorder_daily_band_ratio(
@@ -1042,6 +1114,9 @@ class MeteredHours:
     # bills both sides must leave them out of the feed-in too, or it credits
     # the feed-in of an hour whose consumption it did not bill.
     unknown: frozenset[datetime] = frozenset()
+    # True when the side reports once a day and each day was spread over its
+    # hours (:func:`_spread_daily_readings`).
+    read_daily: bool = False
     # False when one half of the pair stopped: today cannot be billed then,
     # since the day drops out at midnight with the hours the stopped half
     # never reports, so a live top-up billed today would be taken back

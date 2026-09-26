@@ -3349,6 +3349,133 @@ async def test_a_healthy_pair_keeps_billing_beside_a_healthy_total(
     assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266)
 
 
+def _polled_once_a_day(days: list[date], kwh: float) -> dict[datetime, float]:
+    """A totals sensor a portal poller updates at local 07:00: a row every
+    hour, and the whole day's kWh in one of them."""
+    out: dict[datetime, float] = {}
+    for day in days:
+        first = dt_util.start_of_local_day(day).astimezone(UTC)
+        last = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
+        hour = first
+        while hour < last:
+            out[hour] = kwh if dt_util.as_local(hour).hour == 7 else 0.0
+            hour += timedelta(hours=1)
+    return out
+
+
+async def test_a_meter_read_once_a_day_is_spread_over_its_hours(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A meter polled once a day writes 23 rows of zero and one holding the
+    day, so every walk priced by the hour billed the day at the poll hour.
+    The days are spread evenly over their hours now, 23 on the spring DST
+    day, today is left alone, and the side says it was read once a day."""
+    freezer.move_to("2026-03-31 12:00:00+02:00")
+    days = [date(2026, 3, 21) + timedelta(days=i) for i in range(11)]
+    per_hour = _polled_once_a_day(days, 12.0)
+    entry = _entry(consumption_kwh="sensor.cons", meter="mono")
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_hour)
+
+    energy_meters._READ_DAILY_LOGGED.clear()
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass, entry, "consumption", days[0], days[-1]
+        )
+    assert metered is not None
+    assert metered.read_daily
+    by_day: dict[date, list[float]] = {}
+    for hour, kwh in metered.kwh.items():
+        by_day.setdefault(dt_util.as_local(hour).date(), []).append(kwh)
+    assert by_day[date(2026, 3, 28)] == [0.5] * 24
+    assert by_day[date(2026, 3, 29)] == pytest.approx([12.0 / 23] * 23)
+    assert sorted(by_day[date(2026, 3, 31)]) == [0.0] * 23 + [12.0]
+
+
+async def test_a_dynamic_contract_bills_a_daily_poll_at_the_day_average(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """End to end: the same ten days of 10 kWh, metered evenly or polled once
+    a day at 07:00, cost the same on a dynamic contract. The poll billed every
+    day at its 07:00 price."""
+    freezer.move_to("2026-06-11 12:00:00+02:00")
+    days = [date(2026, 6, 1) + timedelta(days=i) for i in range(10)]
+    hours = list(_polled_once_a_day(days, 0.0))
+    spots = {h: 0.30 if dt_util.as_local(h).hour == 7 else 0.08 for h in hours}
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.01),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        consumption_kwh="sensor.cons",
+        meter="mono",
+        solar_regime="none",
+    )
+
+    async def _cost(per_hour: dict[datetime, float]) -> float:
+        async def _fake_hourly(
+            _hass: object, _entity_id: str, _start: date, _end: date
+        ) -> dict[datetime, float]:
+            return dict(per_hour)
+
+        with (
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+            patch.object(
+                energy_meters, "_live_today_kwh", AsyncMock(return_value=None)
+            ),
+        ):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                historical_spots=spots,
+            )
+        assert cost is not None
+        return cost
+
+    even = await _cost(dict.fromkeys(hours, 10.0 / 24))
+    polled = await _cost(_polled_once_a_day(days, 10.0))
+    assert polled == pytest.approx(even)
+
+
+async def test_a_meter_that_moved_in_one_hour_on_a_dull_day_is_left_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The control: a real feed-in meter moves in many hours a day, and one
+    dull day in which it moved in a single hour is not a daily poll."""
+    freezer.move_to("2026-03-31 12:00:00+02:00")
+    days = [date(2026, 3, 1) + timedelta(days=i) for i in range(20)]
+    per_hour = {
+        hour: (0.5 if 10 <= dt_util.as_local(hour).hour <= 15 else 0.0)
+        for hour in _polled_once_a_day(days, 0.0)
+    }
+    dull = dt_util.start_of_local_day(days[4]).astimezone(UTC) + timedelta(hours=11)
+    for hour in list(per_hour):
+        if dt_util.as_local(hour).date() == days[4]:
+            per_hour[hour] = 0.2 if hour == dull else 0.0
+    entry = _entry(consumption_kwh="sensor.cons", meter="mono")
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_hour)
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass, entry, "consumption", days[0], days[-1]
+        )
+    assert metered is not None
+    assert not metered.read_daily
+    assert metered.kwh == per_hour
+
+
 _TOTALS_BOTH_SIDES = SimpleNamespace(
     data={
         "consumption_kwh": "sensor.cons",

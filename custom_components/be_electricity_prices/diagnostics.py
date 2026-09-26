@@ -149,11 +149,16 @@ async def async_get_config_entry_diagnostics(
 
     def _billed(side: str) -> dict[str, Any]:
         if billed is None:
-            return {"billed_from": None, "billed_ytd_kwh": None}
+            return {
+                "billed_from": None,
+                "billed_ytd_kwh": None,
+                "read_once_a_day": None,
+            }
         metered = billed.consumption if side == "consumption" else billed.injection
         return {
             "billed_from": list(metered.sensors),
             "billed_ytd_kwh": round(sum(metered.kwh.values()), 3),
+            "read_once_a_day": metered.read_daily,
         }
 
     # Per-month archived snapshot publication labels: the YTD path
