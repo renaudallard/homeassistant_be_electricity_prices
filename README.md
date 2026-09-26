@@ -773,10 +773,11 @@ and on the entry's sensors from the switch on, so a register rewired at the
 switch is not named for the months before it. A sensor of an earlier contract
 that recorded nothing, or stopped while its pair or the other side carried
 on, is named on the "stopped recording" Repairs card with the supplier and
-dates of the contract it belongs to. Renaming a sensor moves its history to
-the new name and leaves the old one empty. To point an earlier contract at
-another sensor, remove the switch, correct the **Energy meters**
-step and record the switch again.
+dates of the contract it belongs to; one whose history in Home Assistant
+only begins after that contract ended is not, since no sensor holds those
+days. Renaming a sensor moves its history to the new name and leaves the old
+one empty. To point an earlier contract at another sensor, remove the switch,
+correct the **Energy meters** step and record the switch again.
 
 A switch recorded with the wrong date, or by mistake, is undone with
 **Configure → Remove the last supplier switch**, which puts the entry back as

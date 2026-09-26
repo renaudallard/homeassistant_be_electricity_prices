@@ -77,6 +77,8 @@ from .energy_meters import (
     _kwh_sensor_ids,
     _measured_kwh,
     _metered_sides,
+    _recorder_daily_kwh,
+    _without_today,
 )
 from .flow_contracts import _contract_is_month_indexed
 from .providers import effective_kind, get as get_extractor, settlement_answer
@@ -395,7 +397,7 @@ async def previous_meter_faults(
     on the entry's wiring only. The same ones run here over each contract's
     own days. A consumption meter that recorded nothing over a whole closed
     window is named too, where on the running contract that may only be a
-    meter wired today.
+    meter wired today, unless its statistics begin after that window closed.
     """
     faults: list[str] = []
     for period in previous_periods(entry.data, ytd_window_start(entry, today), today):
@@ -405,8 +407,18 @@ async def previous_meter_faults(
         used = await _measured_kwh(hass, proxy, period.start, period.end)
         found.append(None if used.covered else used.pair_fault)
         day_id, night_id, total_id = _kwh_sensor_ids(proxy, "consumption")
-        if not used.days_with_data:
-            found += (day_id, night_id) if day_id and night_id else (total_id,)
+        if not used.days_with_data and not used.pair_fault:
+            # Every consumption sensor recorded nothing over the contract's
+            # days; a pair with one dead half is already named by its fault
+            # alone. Not a sensor whose statistics begin after the contract
+            # ended: a meter added to Home Assistant since holds no history of
+            # those days, and no rewiring the card advises can bill them.
+            after = period.end + timedelta(days=1)
+            for entity_id in (day_id, night_id) if day_id and night_id else (total_id,):
+                if entity_id and not _without_today(
+                    await _recorder_daily_kwh(hass, entity_id, after, today), today
+                ):
+                    found.append(entity_id)
         day_id, night_id, _total = _kwh_sensor_ids(proxy, "injection")
         if _bills_injection(proxy) and day_id and night_id:
             injected = await _measured_kwh(

@@ -6,7 +6,9 @@ backfill that splits at it."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
@@ -1606,7 +1608,8 @@ async def test_an_earlier_mono_contract_stays_mono_after_the_entry_moves_to_bi(
     assert bi == pytest.approx(mono)
 
 
-def _spans(spans: dict[str, tuple[date, date]]) -> Any:
+@contextlib.contextmanager
+def _spans(spans: dict[str, tuple[date, date]]) -> Iterator[None]:
     """Patch the daily and hourly readers with 5 kWh a day per sensor over
     its (first, last) days, nothing outside them."""
 
@@ -1625,10 +1628,12 @@ def _spans(spans: dict[str, tuple[date, date]]) -> Any:
             for day in (await daily(_h, entity_id, start, end))
         }
 
-    return (
+    with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+        patch.object(contract_periods, "_recorder_daily_kwh", new=daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=hourly),
-    )
+    ):
+        yield
 
 
 async def test_the_register_card_reads_the_entry_from_its_own_contract(
@@ -1654,17 +1659,72 @@ async def test_the_register_card_reads_the_entry_from_its_own_contract(
         previous_contracts=[{"until": "2026-06-01", "data": held}],
     )
     yesterday = date(2026, 9, 23)
-    daily, hourly = _spans(
+    coord = BePricesCoordinator(hass, entry)
+    with _spans(
         {
             "sensor.t1": (date(2025, 1, 1), yesterday),
             "sensor.t2_old": (date(2025, 1, 1), date(2026, 5, 31)),
             "sensor.t2": (date(2026, 6, 1), yesterday),
         }
-    )
-    coord = BePricesCoordinator(hass, entry)
-    with daily, hourly:
+    ):
         await coord._find_meter_faults(date(2026, 9, 24))
     assert coord._register_pair_fault == ""
+
+
+async def test_an_earlier_contract_names_only_the_meters_it_can_fix(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A dead night register made the earlier contract's pair record nothing,
+    and the check for a meter that recorded nothing named its healthy day
+    register beside it. A meter whose statistics begin after the earlier
+    contract ended, one added to Home Assistant since, was named too, though
+    no sensor holds those days and no rewiring clears the card."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    yesterday = date(2026, 9, 23)
+    pair = make_entry(
+        meter="bi",
+        day_consumption_kwh="sensor.t1",
+        night_consumption_kwh="sensor.t2",
+        previous_contracts=[
+            {
+                "until": "2026-06-01",
+                "data": _held(
+                    "engie",
+                    "engie_easy_fixed",
+                    meter="bi",
+                    day_consumption_kwh="sensor.t1",
+                    night_consumption_kwh="sensor.t2_old",
+                ),
+            }
+        ],
+    )
+    younger = make_entry(
+        consumption_kwh="sensor.total",
+        previous_contracts=[
+            {
+                "until": "2026-06-01",
+                "data": _held(
+                    "engie", "engie_easy_fixed", consumption_kwh="sensor.total"
+                ),
+            }
+        ],
+    )
+    with _spans(
+        {
+            "sensor.t1": (date(2025, 1, 1), yesterday),
+            "sensor.t2": (date(2026, 6, 1), yesterday),
+            "sensor.total": (date(2026, 6, 5), yesterday),
+        }
+    ):
+        assert await contract_periods.previous_meter_faults(
+            hass, pair, date(2026, 9, 24)
+        ) == ["sensor.t2_old (engie, 2026-01-01 to 2026-05-31)"]
+        assert (
+            await contract_periods.previous_meter_faults(
+                hass, younger, date(2026, 9, 24)
+            )
+            == []
+        )
 
 
 async def test_an_earlier_contracts_dead_meters_raise_the_register_card(
