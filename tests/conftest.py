@@ -95,6 +95,16 @@ def _clear_energy_charts_cooldown() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _forget_read_daily_shapes() -> None:
+    """Start every test with no meter judged read once a day. What the days
+    before a window showed is kept for the day, keyed on the sensor names,
+    and tests reuse the names and the frozen dates with other readings."""
+    from custom_components.be_electricity_prices import energy_meters
+
+    energy_meters._READ_DAILY_BEFORE.clear()
+
+
+@pytest.fixture(autouse=True)
 def _card_archive_holds_nothing() -> Iterator[None]:
     """The month cache asks the repository's card archive first for every
     closed month, over the network. Tests that are not about that tier get a

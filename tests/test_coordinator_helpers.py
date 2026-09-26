@@ -3818,6 +3818,57 @@ async def test_a_meter_that_moved_in_one_hour_on_a_dull_day_is_left_alone(
     assert metered.kwh == per_hour
 
 
+async def test_a_meter_read_once_a_day_is_judged_on_the_days_before_the_window(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Judged on the window alone, a meter read once a day was priced at its
+    reading hour for the first six days of every year, and of every contract
+    after a switch, then spread on the seventh, which moved a cost already
+    shown, and a closed contract shorter than a week was never spread. The
+    days before the window say what it is from the first day, read once."""
+    freezer.move_to("2026-01-02 15:30:00+01:00")
+    days = [date(2025, 11, 1) + timedelta(days=i) for i in range(63)]
+    per_hour = _polled_once_a_day(days, 12.0)
+    entry = _entry(consumption_kwh="sensor.cons", meter="mono")
+    reads: list[date] = []
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        reads.append(start)
+        return {
+            hour: kwh
+            for hour, kwh in per_hour.items()
+            if start <= dt_util.as_local(hour).date() <= end
+        }
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        for start, end in (
+            (date(2026, 1, 1), date(2026, 1, 2)),
+            (date(2026, 1, 1), date(2026, 1, 2)),
+            (date(2025, 12, 1), date(2025, 12, 5)),
+        ):
+            metered = await energy_meters._metered_hourly_kwh(
+                hass, entry, "consumption", start, end
+            )
+            assert metered is not None
+            assert metered.read_daily
+            spread = [
+                kwh
+                for hour, kwh in metered.kwh.items()
+                if dt_util.as_local(hour).date() == start
+            ]
+            assert spread == [0.5] * 24
+    # The window twice, and the days before each window once.
+    assert sorted(reads) == [
+        date(2025, 11, 3),
+        date(2025, 12, 1),
+        date(2025, 12, 4),
+        date(2026, 1, 1),
+        date(2026, 1, 1),
+    ]
+
+
 async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
     hass: HomeAssistant, freezer: Any, caplog: Any
 ) -> None:

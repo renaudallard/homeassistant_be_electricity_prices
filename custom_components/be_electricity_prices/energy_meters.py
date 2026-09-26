@@ -107,6 +107,14 @@ _SHORT_BELOW = 0.9
 # a row for every hour, is a poller rather than the weather.
 _READ_DAILY_MIN_DAYS = 7
 
+# The days before the window that are judged with it, so the shape does not
+# hang on how long the window is (_read_daily_before).
+_READ_DAILY_SPAN_DAYS = 28
+
+# What _read_daily_before found, for the day: those days are past and do not
+# change, and every walk of every tick asks again.
+_READ_DAILY_BEFORE: dict[tuple[Any, ...], tuple[int, int]] = {}
+
 # The sensors already said to report once a day, so the warning is logged
 # once per run rather than on every hourly walk.
 _READ_DAILY_LOGGED: set[tuple[str, ...]] = set()
@@ -598,10 +606,21 @@ async def _metered_hourly_kwh(
     carried as ``read_daily``.
     """
     metered = await _side_hourly_kwh(hass, entry, side, start, end)
-    if metered is None or not _spread_daily_readings(metered.kwh):
+    if metered is None:
+        return None
+    today = dt_util.now().date()
+    moving, polled = _polled_days(metered.kwh, today)
+    if not polled:
         return metered
+    moved_before, polled_before = await _read_daily_before(hass, entry, side, start)
+    moving += moved_before
+    if moving < _READ_DAILY_MIN_DAYS or (
+        len(polled) + polled_before < _SHORT_BELOW * moving
+    ):
+        return metered
+    _spread_daily_readings(metered.kwh, polled)
     if metered.as_read is not None:
-        _spread_daily_readings(metered.as_read)
+        _spread_daily_readings(metered.as_read, _polled_days(metered.as_read, today)[1])
     if metered.sensors not in _READ_DAILY_LOGGED:
         _READ_DAILY_LOGGED.add(metered.sensors)
         _LOGGER.warning(
@@ -777,33 +796,23 @@ async def _top_up_today_hourly(
     per_hour[current_hour] = per_hour.get(current_hour, 0.0) + missing
 
 
-def _spread_daily_readings(kwh: dict[datetime, float]) -> bool:
-    """Spread, in place, the days a meter read once a day over their hours.
+def _polled_days(
+    kwh: Mapping[datetime, float], until: date
+) -> tuple[int, dict[date, tuple[datetime, int]]]:
+    """How many days before ``until`` a side moved on, and those of them it
+    moved in a single hour, with the first hour of each and its hour count.
 
     A sensor fed by a supplier portal or a nightly fetch moves once a day,
     and Home Assistant still writes a row every hour: 23 of change zero and
-    one holding the whole day. Every path that prices by the hour (dynamic
-    energy, a per-slot feed-in credit, time of use, Impact) then billed the
-    day at the hour the reading arrived; a feed-in read at midnight was
-    credited about 11 times what it earned. :func:`_recorder_daily_band_ratio`
-    already refuses that shape for the band split.
-
-    A day has that shape when it holds a row for every one of its hours and
-    moved in exactly one, and the side counts as read once a day when at
-    least ``_SHORT_BELOW`` of the past days it moved on have it, so a real
-    meter that moved in one hour on a dull day is left alone, and it moved on
-    at least ``_READ_DAILY_MIN_DAYS`` of them, so a window holding a day or
-    two says nothing yet. Each such day's kWh is spread evenly over its
-    hours, the neutral guess without a profile, 23 or 25 on a DST seam day.
-    Today is left as it is: it is not over. Returns whether the side was read
-    once a day.
+    one holding the whole day. A day has that shape when it holds a row for
+    every one of its hours, 23 or 25 on a DST seam day, and moved in exactly
+    one.
     """
-    today = dt_util.now().date()
     rows: dict[date, int] = {}
     moving: dict[date, list[datetime]] = {}
     for hour, value in kwh.items():
         day = dt_util.as_local(hour).date()
-        if day >= today:
+        if day >= until:
             continue
         rows[day] = rows.get(day, 0) + 1
         if value > 0.0:
@@ -815,13 +824,65 @@ def _spread_daily_readings(kwh: dict[datetime, float]) -> bool:
         count = round((after - first) / timedelta(hours=1))
         if len(hours) == 1 and rows[day] == count:
             polled[day] = (first, count)
-    if len(moving) < _READ_DAILY_MIN_DAYS or len(polled) < _SHORT_BELOW * len(moving):
-        return False
-    for day, (first, count) in polled.items():
-        whole = kwh[moving[day][0]]
+    return len(moving), polled
+
+
+async def _read_daily_before(
+    hass: HomeAssistant, entry: ConfigEntry, side: str, start: date
+) -> tuple[int, int]:
+    """How many of the ``_READ_DAILY_SPAN_DAYS`` days before ``start`` the
+    side moved on, and on how many of them in a single hour
+    (:func:`_polled_days`).
+
+    Judged on the window alone, a meter read once a day was priced at the
+    hour its reading arrived for the first six days of every year and of
+    every contract after a switch, then spread after the fact on the
+    seventh, which moved a cost already shown, and a closed contract shorter
+    than a week was never spread at all. The same sensor's days before the
+    window say what it is from the window's first day. Kept for the day.
+    """
+    today = dt_util.now().date()
+    key = (today, side, _kwh_sensor_ids(entry, side), start)
+    if key not in _READ_DAILY_BEFORE:
+        if _READ_DAILY_BEFORE and next(iter(_READ_DAILY_BEFORE))[0] != today:
+            _READ_DAILY_BEFORE.clear()
+        metered = await _side_hourly_kwh(
+            hass,
+            entry,
+            side,
+            start - timedelta(days=_READ_DAILY_SPAN_DAYS),
+            start - timedelta(days=1),
+        )
+        moving, polled = _polled_days(metered.kwh if metered else {}, start)
+        _READ_DAILY_BEFORE[key] = (moving, len(polled))
+    return _READ_DAILY_BEFORE[key]
+
+
+def _spread_daily_readings(
+    kwh: dict[datetime, float], polled: Mapping[date, tuple[datetime, int]]
+) -> None:
+    """Spread, in place, the ``polled`` days of a side read once a day over
+    their hours (:func:`_polled_days`).
+
+    Every path that prices by the hour (dynamic energy, a per-slot feed-in
+    credit, time of use, Impact) otherwise billed the day at the hour the
+    reading arrived; a feed-in read at midnight was credited about 11 times
+    what it earned. :func:`_recorder_daily_band_ratio` already refuses that
+    shape for the band split.
+
+    The side counts as read once a day (:func:`_metered_hourly_kwh`) when at
+    least ``_SHORT_BELOW`` of the past days it moved on have that shape, so a
+    real meter that moved in one hour on a dull day is left alone, and it
+    moved on at least ``_READ_DAILY_MIN_DAYS`` of them, so a day or two says
+    nothing yet. Those days are the window's and the
+    ``_READ_DAILY_SPAN_DAYS`` before it (:func:`_read_daily_before`). Each
+    such day's kWh is spread evenly over its hours, the neutral guess without
+    a profile. Today is left as it is: it is not over.
+    """
+    for first, count in polled.values():
+        whole = sum(kwh[first + timedelta(hours=i)] for i in range(count))
         for i in range(count):
             kwh[first + timedelta(hours=i)] = whole / count
-    return True
 
 
 async def _recorder_daily_band_ratio(
