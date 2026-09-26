@@ -1498,3 +1498,173 @@ async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(
     # The price rows still cover every hour.
     assert _first_day(every[0]) == date(2026, 1, 1)
     assert sum(len(s[2]) for s in every) == len(hours)
+
+
+def test_an_earlier_contract_takes_only_the_household_facts_it_left_blank() -> None:
+    """The inverter's kVA entered when the Repairs card asked for it, after
+    the switch was recorded, never reached the contract held before it, which
+    billed no prosumer fee; nor did a day-ahead key taken out for the new
+    contract. A value the earlier contract kept is its own, and so are the
+    meter and direct debit, which a switch is often when they change."""
+    held = _held(
+        "mega",
+        "mega_online_flex",
+        solar_regime="compensation",
+        solar_kva=0.0,
+        direct_debit=False,
+    )
+    entry = make_entry(
+        supplier="engie",
+        contract="engie_dynamic",
+        meter="bi",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        api_key="LIVEKEY",
+        connection_kva_tier="le9_6",
+        direct_debit=True,
+        previous_contracts=[{"until": "2026-06-15", "data": held}],
+    )
+    [period] = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    assert period.data["solar_kva"] == 5.0
+    assert period.data["api_key"] == "LIVEKEY"
+    assert period.data["connection_kva_tier"] == "le9_6"
+    assert period.data["direct_debit"] is False
+    assert period.data["meter"] == "mono"
+    # With the key the walk re-prices the old flex card on its month's mean,
+    # so the old contract's spots are fetched.
+    assert contract_periods.periods_need_spots([period])
+    kept = {**held, "solar_kva": 3.0, "api_key": "OLDKEY"}
+    entry = make_entry(
+        solar_kva=5.0,
+        api_key="LIVEKEY",
+        previous_contracts=[{"until": "2026-06-15", "data": kept}],
+    )
+    [period] = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    assert (period.data["solar_kva"], period.data["api_key"]) == (3.0, "OLDKEY")
+
+
+async def test_an_earlier_mono_contract_stays_mono_after_the_entry_moves_to_bi(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The meter is the contract's own: moving to a day/night meter with the
+    new supplier must not re-bill the months before it on two registers."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = _held("eneco", "power_fix", consumption_kwh="sensor.total")
+    card = make_snapshot(energy=FixedRates(single=0.25, peak=0.40, offpeak=0.10))
+
+    async def daily(_h: Any, entity_id: str, start: date, end: date) -> Any:
+        out: dict[date, float] = {}
+        day = start
+        while day <= end and day < date(2026, 9, 24):
+            out[day] = 10.0
+            day += timedelta(days=1)
+        return out
+
+    async def cost_with(entry_meter: dict[str, Any]) -> float | None:
+        entry = make_entry(
+            previous_contracts=[{"until": "2026-06-15", "data": held}], **entry_meter
+        )
+        coordinator = SimpleNamespace(
+            _snapshot=card,
+            entry=entry,
+            _historical_spots=None,
+            _rlp_weights=None,
+            _spp_weights=None,
+            _billed_peak_kw=lambda: 0.0,
+        )
+        periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+        assert periods[0].data["meter"] == "mono"
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+            patch.object(
+                contract_periods,
+                "_current_card",
+                AsyncMock(return_value=(card, False)),
+            ),
+            patch.object(
+                contract_periods, "get_extractor", lambda _s: make_stub_extractor()
+            ),
+        ):
+            rows = await contract_periods.price_previous_periods(
+                hass,
+                None,  # type: ignore[arg-type]
+                coordinator,
+                periods,
+                month_start=date(2026, 9, 1),
+            )
+        return rows[0].cost
+
+    mono = await cost_with({"consumption_kwh": "sensor.total"})
+    bi = await cost_with(
+        {
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.p1_t1",
+            "night_consumption_kwh": "sensor.p1_t2",
+        }
+    )
+    assert mono is not None and mono > 0
+    assert bi == pytest.approx(mono)
+
+
+async def test_an_earlier_contracts_dead_meters_raise_the_register_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A rename moves the statistics to the new sensor, so the earlier
+    contract's own sensors record nothing and it was billed its fees alone,
+    with no card: the register checks read the entry's wiring only."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    new = ("sensor.p1_t1", "sensor.p1_t2")
+    old = ("sensor.old_t1", "sensor.old_t2")
+    held = _held(
+        "engie",
+        "engie_easy_fixed",
+        meter="bi",
+        day_consumption_kwh=old[0],
+        night_consumption_kwh=old[1],
+    )
+    entry = make_entry(
+        meter="bi",
+        day_consumption_kwh=new[0],
+        night_consumption_kwh=new[1],
+        previous_contracts=[{"until": "2026-06-15", "data": held}],
+    )
+    live = set(new)
+
+    async def daily(_h: Any, entity_id: str, start: date, end: date) -> Any:
+        if entity_id not in live:
+            return {}
+        out: dict[date, float] = {}
+        day = start
+        while day <= end and day < date(2026, 9, 24):
+            out[day] = 5.0
+            day += timedelta(days=1)
+        return out
+
+    async def hourly(_h: Any, entity_id: str, start: date, end: date) -> Any:
+        if entity_id not in live:
+            return {}
+        return {
+            datetime.combine(day, datetime.min.time(), UTC): 5.0
+            for day in (await daily(_h, entity_id, start, end))
+        }
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=hourly),
+    ):
+        faults = await contract_periods.previous_meter_faults(
+            hass, entry, date(2026, 9, 24)
+        )
+        assert faults == [
+            "sensor.old_t1, sensor.old_t2 (engie, 2026-01-01 to 2026-06-14)"
+        ]
+        # The period keeps its own sensors; they only need to report.
+        live |= set(old)
+        assert (
+            await contract_periods.previous_meter_faults(hass, entry, date(2026, 9, 24))
+            == []
+        )
+        coord = BePricesCoordinator(hass, entry)
+        live -= set(old)
+        await coord._ensure_annual_volume()
+    assert "sensor.old_t1" in coord._register_pair_fault

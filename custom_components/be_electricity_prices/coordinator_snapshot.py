@@ -246,6 +246,8 @@ class _SnapshotMixin:
         for months after the bill had recovered. Once a day, with the volume,
         and the one read that logs what a broken pair did to the bill.
         """
+        from .contract_periods import previous_meter_faults
+
         start = ytd_window_start(self.entry, today)
         faults: list[str] = []
         # Registers whose side the totals sensor bills in full: named, but
@@ -281,7 +283,12 @@ class _SnapshotMixin:
         def _names(found: list[str]) -> list[str]:
             return [name for fault in found for name in fault.split(", ") if name]
 
-        names = _names(faults)
+        # And the meters each contract held earlier in the year kept, each
+        # entry already naming its contract, so it is not split like the rest.
+        previous: list[str] = []
+        with contextlib.suppress(Exception):
+            previous = await previous_meter_faults(self.hass, self.entry, today)
+        names = _names(faults) + previous
         self._register_pair_covered = not names
         self._register_pair_fault = ", ".join(dict.fromkeys(names or _names(covered)))
 

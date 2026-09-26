@@ -58,10 +58,12 @@ from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
 from .cohort import _tariff_card_month
 from .const import (
     CONF_API_KEY,
+    CONF_CONNECTION_KVA_TIER,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_PREVIOUS_CONTRACTS,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     REGION_FLANDERS,
@@ -69,6 +71,12 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
+)
+from .energy_meters import (
+    _bills_injection,
+    _kwh_sensor_ids,
+    _measured_kwh,
+    _metered_sides,
 )
 from .flow_contracts import _contract_is_month_indexed
 from .providers import effective_kind, get as get_extractor, settlement_answer
@@ -211,6 +219,28 @@ def recorded_contracts(data: Mapping[str, Any]) -> list[tuple[date, Mapping[str,
     return out
 
 
+# Facts about the house rather than the contract that a household may only
+# have entered after recording a switch: the inverter's capacity, once the
+# Repairs card asked for it, a day-ahead key taken out for the new contract,
+# the connection's kVA tier. An earlier contract whose copy has none takes the
+# entry's. One it holds is kept, since a switch is often when the house
+# changes too; the meter, its wiring and direct debit are the contract's own.
+_HOUSEHOLD_BLANKS = (CONF_SOLAR_KVA, CONF_API_KEY, CONF_CONNECTION_KVA_TIER)
+
+
+def _with_household_facts(
+    settings: Mapping[str, Any], data: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """``settings`` with each of ``_HOUSEHOLD_BLANKS`` it left blank filled
+    from the entry's ``data``."""
+    filled = {
+        key: data[key]
+        for key in _HOUSEHOLD_BLANKS
+        if not settings.get(key) and data.get(key)
+    }
+    return {**settings, **filled} if filled else settings
+
+
 def previous_periods(
     data: Mapping[str, Any], window_start: date, today: date
 ) -> list[ContractPeriod]:
@@ -218,7 +248,8 @@ def previous_periods(
 
     Each runs from the day the one before it ended, or the window's first day,
     or its own start date when it billed the year from there, to the day before
-    its successor started. A contract that ended before the
+    its successor started, and carries the settings kept with it, blanks in
+    the household's facts filled from the entry (``_HOUSEHOLD_BLANKS``). A contract that ended before the
     window opens has no days in it: last year's switches, and every switch on
     an entry billing the year from its current contract's start date, which is
     how that option keeps meaning "this contract only".
@@ -235,7 +266,9 @@ def previous_periods(
         )
         last = min(until - timedelta(days=1), today)
         if last >= begins:
-            periods.append(ContractPeriod(begins, last, settings))
+            periods.append(
+                ContractPeriod(begins, last, _with_household_facts(settings, data))
+            )
         first = max(first, until)
     return periods
 
@@ -347,6 +380,52 @@ def keep_settled(
         old if old.settled and not new.settled else new
         for old, new in zip(previous.rows, rows, strict=True)
     )
+
+
+async def previous_meter_faults(
+    hass: HomeAssistant, entry: ConfigEntry, today: date
+) -> list[str]:
+    """The meters of the earlier contracts that do not report over their own
+    days, for the register Repairs card, one entry per contract.
+
+    Each earlier contract keeps the wiring it had, because after an
+    integration swap the old sensors hold the old contract's history. A
+    rename moves that history to the new sensor instead, and the old contract
+    was then billed its fees alone with nothing raised, since the checks ran
+    on the entry's wiring only. The same ones run here over each contract's
+    own days. A consumption meter that recorded nothing over a whole closed
+    window is named too, where on the running contract that may only be a
+    meter wired today.
+    """
+    faults: list[str] = []
+    for period in previous_periods(entry.data, ytd_window_start(entry, today), today):
+        proxy = cast(ConfigEntry, _QuoteEntry(data=dict(period.data)))
+        found: list[str | None] = []
+        # A fault a totals sensor covers leaves that contract's bill whole.
+        used = await _measured_kwh(hass, proxy, period.start, period.end)
+        found.append(None if used.covered else used.pair_fault)
+        day_id, night_id, total_id = _kwh_sensor_ids(proxy, "consumption")
+        if not used.days_with_data:
+            found += (day_id, night_id) if day_id and night_id else (total_id,)
+        day_id, night_id, _total = _kwh_sensor_ids(proxy, "injection")
+        if _bills_injection(proxy) and day_id and night_id:
+            injected = await _measured_kwh(
+                hass, proxy, period.start, period.end, side="injection"
+            )
+            found.append(None if injected.covered else injected.pair_fault)
+        sides = await _metered_sides(hass, proxy, period.start, period.end)
+        if sides is not None:
+            found += sides.silent
+        # Named once each: a pair fault lists its sensors comma-separated.
+        names = dict.fromkeys(
+            name for fault in found if fault for name in fault.split(", ")
+        )
+        if names:
+            faults.append(
+                f"{', '.join(names)} ({period.data.get(CONF_SUPPLIER)},"
+                f" {period.start} to {period.end})"
+            )
+    return faults
 
 
 def _kind(period: ContractPeriod) -> str:

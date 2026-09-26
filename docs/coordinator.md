@@ -455,6 +455,17 @@ the earlier contracts' share (`previous_costs`); `current_month_cost` does the
 same for the running month, which only an earlier contract that ended in it
 reaches into.
 
+Each `ContractPeriod` carries the settings recorded with the contract,
+with three household facts filled from the entry where the copy left them
+blank (`_HOUSEHOLD_BLANKS` in `contract_periods.py`: the inverter kVA, the
+ENTSO-E key and the connection kVA tier), since those are often entered only
+after the switch. A value the copy holds is kept, and the meter, its wiring,
+the DSO mode, the regime and direct debit are always the contract's own.
+`_ensure_annual_volume` adds `previous_meter_faults` to the register card:
+the same pair and silent-side checks over each earlier contract's own sensors
+and days, plus a consumption meter that recorded nothing over the whole
+closed window, each named with the contract it belongs to.
+
 An earlier contract is priced with the same engine closed on the day before
 the switch: `_compute_current_year_cost(..., window_start_override=start,
 window_end=end)`, handed a `_QuoteEntry` holding its settings and the
@@ -601,7 +612,7 @@ Repairs issues, all keyed by `entry_id`:
 | `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row |
 | `prosumer_tariff_missing` | `_sync_prosumer_gap_issue` | the entry is a Walloon compensation install (`_compensation_kva` above zero) and its DSO overlay carries no `prosumer_eur_per_kva_year`, i.e. a card that omits the "Tarif prosumer" column |
 | `compensation_kva_missing` | `_sync_compensation_kva_issue` | the entry is on the Walloon compensation regime with no inverter capacity above zero (`compensation_lacks_kva`, `fees.py`), so no prosumer fee is billed on any path. The solar step refuses that combination; this names an entry saved before it did, and clears once a capacity is entered |
-| `register_pair_incomplete` | `_sync_register_pair_issue` | the daily meter check (`_find_meter_faults`, `coordinator_snapshot.py`, run with the volume read but over the window the bill reads, `ytd_window_start`) found a day/night register that records nothing or stopped while its twin carries on (`MeasuredKwh.pair_fault`), on the consumption pair or on a wired injection pair, a meter that reads live today with no statistics before it (`_live_only`), whatever the solar regime, or a side that went silent under the other (`MeteredSides.silent`); each sensor is named once. A register that started more than `_REGISTER_STOPPED_AFTER_DAYS` after its twin is named while the days both report are under 90% of its twin's (`_started_late`): after a rewire the pair bills only since then. Registers whose side the totals sensor bills in full (`MeasuredKwh.covered`) are named on a second wording under the same issue id, which says the cost is unaffected, and only while nothing else the card would name moves the cost (`_sync_issue`'s `translation_key`). The same check is the one read that logs the "returned no statistics" and "has diverged" warnings (`_measured_kwh` with `warn`), so they describe the window and the sensor the bill reads, once a day |
+| `register_pair_incomplete` | `_sync_register_pair_issue` | the daily meter check (`_find_meter_faults`, `coordinator_snapshot.py`, run with the volume read but over the window the bill reads, `ytd_window_start`) found a day/night register that records nothing or stopped while its twin carries on (`MeasuredKwh.pair_fault`), on the consumption pair or on a wired injection pair, a meter that reads live today with no statistics before it (`_live_only`), whatever the solar regime, or a side that went silent under the other (`MeteredSides.silent`); each sensor is named once. A register that started more than `_REGISTER_STOPPED_AFTER_DAYS` after its twin is named while the days both report are under 90% of its twin's (`_started_late`): after a rewire the pair bills only since then. Registers whose side the totals sensor bills in full (`MeasuredKwh.covered`) are named on a second wording under the same issue id, which says the cost is unaffected, and only while nothing else the card would name moves the cost (`_sync_issue`'s `translation_key`). The same check is the one read that logs the "returned no statistics" and "has diverged" warnings (`_measured_kwh` with `warn`), so they describe the window and the sensor the bill reads, once a day. Also each earlier contract's own sensors over its own days (`previous_meter_faults`, `contract_periods.py`), named with its supplier and dates, leaving out a fault a totals sensor covers |
 
 The first four are failure states and clear on a successful refresh, as do
 `connection_fee_missing` and `prosumer_tariff_missing` once the supplier prints

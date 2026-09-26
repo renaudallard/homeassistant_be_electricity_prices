@@ -759,6 +759,23 @@ in this order: **Edit settings** back to the contract you left, then
 **Record a supplier switch** with the first day of the new one, and pick the
 new contract again in the steps that follow.
 
+Each earlier contract keeps the settings it had when the switch was recorded,
+the meter type, DSO billing mode, solar regime, direct debit answer and meter
+sensors included, since a switch is often when those change too. Three facts
+about the house are taken from the entry where the earlier contract's copy has
+none: the inverter's capacity in kVA (a copy holding 0 counts as none), the
+ENTSO-E API key and the connection's kVA tier. One you enter after recording
+the switch, for instance when a Repairs card asks for it, then reaches the
+months before it as well; one the earlier contract already held is kept.
+
+The meter checks run on each earlier contract's own sensors over its own days.
+A sensor there that recorded nothing, or stopped while its pair or the other
+side carried on, is named on the "stopped recording" Repairs card with the
+supplier and dates of the contract it belongs to. Renaming a sensor moves its
+history to the new name and leaves the old one empty. To point an earlier
+contract at another sensor, remove the switch, correct the **Energy meters**
+step and record the switch again.
+
 A switch recorded with the wrong date, or by mistake, is undone with
 **Configure → Remove the last supplier switch**, which puts the entry back as
 it stood before that switch was recorded: the contract you left becomes the
