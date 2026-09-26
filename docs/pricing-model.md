@@ -1309,11 +1309,11 @@ context):
   from `_historical_injection_rate` (`injection.py`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`ytd_cost.py`) that replays the hour's own spot for a static-energy
+(`ytd_energy.py`) that replays the hour's own spot for a static-energy
 contract whose injection prices off BELPEX; it is a no-op unless the month's
 own card is that shape (the current card decides only when no per-month
 resolver is handed in) and an injection sensor is wired, and it skips hours
-with no cached spot (`ytd_cost.py`). It belongs to the per-day walk alone: that
+with no cached spot (`ytd_energy.py`). It belongs to the per-day walk alone: that
 is the only branch with no per-hour spot of its own, and the hourly branches
 credit the same formula inside the walk.
 

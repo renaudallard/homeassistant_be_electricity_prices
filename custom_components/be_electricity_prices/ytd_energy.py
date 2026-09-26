@@ -52,7 +52,6 @@ from .const import (
 )
 from .energy_meters import (
     _hourly_injection_sensors,
-    _metered_hourly_kwh,
     _metered_sides,
     _top_up_today_hourly,
 )
@@ -587,9 +586,15 @@ async def _ytd_spot_injection_credit(
         # a card printing an indicative every month otherwise paid on every
         # tick for a credit that is always zero.
         return 0.0
-    metered = await _metered_hourly_kwh(hass, entry, "injection", window_start, today)
-    if metered is None:
+    # Through the rule that compares the two sides, as the per-day walk this
+    # credit is added to reads them: a feed-in meter gone silent under the
+    # consumption has its later hours left out there and no today_ok, where
+    # reading it alone credited its live feed-in today and took it back at
+    # midnight.
+    sides = await _metered_sides(hass, entry, window_start, today)
+    if sides is None:
         return 0.0
+    metered = sides.injection
     per_hour = metered.kwh
     # Topped up from the live meter, exactly as both sibling paths do: the
     # daily branch through _recorder_daily_kwh and the hourly branch through

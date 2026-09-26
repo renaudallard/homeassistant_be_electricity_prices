@@ -1387,6 +1387,54 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_ytd_spot_injection_credit_leaves_a_silent_feed_in_out_today(
+    freezer: Any,
+) -> None:
+    """A feed-in meter whose statistics stopped in August while its state
+    still reads: the per-day walk leaves today's feed-in out, since the meter
+    went silent under the consumption, but the spot credit read the feed-in
+    on its own and credited today's live reading until midnight took it
+    back. It follows the same rule now."""
+    freezer.move_to("2026-09-26 15:30:00+02:00")
+    today = date(2026, 9, 26)
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=1.0, base=0.0, current=None),
+    )
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 269)
+    ]
+    now = dt_util.utcnow()
+    stopped = datetime(2026, 8, 1, tzinfo=UTC)
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj":
+            return {h: 1.0 for h in hours if h < stopped}
+        return {h: 0.5 for h in hours if h < now}
+
+    live = AsyncMock(return_value=5.0)
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(energy_meters, "_live_today_kwh", new=live),
+    ):
+        credit = await _ytd_spot_injection_credit(
+            None,  # type: ignore[arg-type]
+            snap,
+            _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
+            today,
+            dict.fromkeys(hours, 0.1),
+            window_start=date(2026, 1, 1),
+        )
+    assert credit == pytest.approx(0.1 * sum(1 for h in hours if h < stopped))
+    live.assert_not_awaited()
+
+
 async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     hass: HomeAssistant, freezer: Any
 ) -> None:
