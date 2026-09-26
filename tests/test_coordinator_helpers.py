@@ -3912,6 +3912,44 @@ async def test_a_meter_turned_poller_before_the_window_is_judged_on_the_window(
     assert spread == [0.5] * 24
 
 
+async def test_a_poller_turned_hourly_is_not_spread_on_its_old_shape(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Read once a day through December and hour by hour from 1 January, with
+    one dull 2 January that exported in a single hour. The polled weeks
+    before the window called that day a poll and spread it over the night;
+    the window's own days now have to look polled first."""
+    freezer.move_to("2026-01-03 15:30:00+01:00")
+    per_hour = _polled_once_a_day(
+        [date(2025, 12, 4) + timedelta(days=i) for i in range(28)], 12.0
+    )
+    for day, moving in ((date(2026, 1, 1), range(9, 17)), (date(2026, 1, 2), (12,))):
+        hour = dt_util.start_of_local_day(day).astimezone(UTC)
+        last = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
+        while hour < last:
+            per_hour[hour] = 0.3 if dt_util.as_local(hour).hour in moving else 0.0
+            hour += timedelta(hours=1)
+    entry = _entry(consumption_kwh="sensor.cons", meter="mono")
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        return {
+            hour: kwh
+            for hour, kwh in per_hour.items()
+            if start <= dt_util.as_local(hour).date() <= end
+        }
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass, entry, "consumption", date(2026, 1, 1), date(2026, 1, 3)
+        )
+    assert metered is not None
+    assert not metered.read_daily
+    noon = dt_util.start_of_local_day(date(2026, 1, 2)) + timedelta(hours=12)
+    assert metered.kwh[noon.astimezone(UTC)] == pytest.approx(0.3)
+
+
 async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
     hass: HomeAssistant, freezer: Any, caplog: Any
 ) -> None:

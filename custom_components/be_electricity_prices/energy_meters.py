@@ -617,7 +617,14 @@ async def _metered_hourly_kwh(
         # Too few days of its own yet: the days before the window make up the
         # minimum. Only then, or a meter that turned into a poller in the
         # weeks before 1 January or a switch was outvoted by its earlier
-        # hourly days for most of a year.
+        # hourly days for most of a year. And only when its own days look
+        # polled too: a meter that is hourly since the window opened, with
+        # one dull single-hour day, was spread on the strength of the poller
+        # it used to be, then put back on the seventh day. A dull first day
+        # still is: one single-hour day is all a real poller shows on
+        # 2 January too, and that one has to be spread.
+        if polled_count < _SHORT_BELOW * moving:
+            return metered
         moved_before, polled_before = await _read_daily_before(hass, entry, side, start)
         moving += moved_before
         polled_count += polled_before
