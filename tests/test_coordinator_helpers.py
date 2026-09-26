@@ -3270,7 +3270,10 @@ _TOTALS_BOTH_SIDES = SimpleNamespace(
 
 
 async def _both_sides(
-    cons: list[date], inj: list[date], live: dict[str, float], today: date
+    cons: list[date] | dict[date, float],
+    inj: list[date],
+    live: dict[str, float],
+    today: date,
 ) -> tuple[Any, Any]:
     rows, live_patch = _pair_through_the_recorder(
         {"sensor.cons": cons, "sensor.inj": inj}, live
@@ -3480,6 +3483,27 @@ async def test_feed_in_before_the_consumption_meter_started_is_left_out(
     assert sides.silent == ()
     assert min(sides.injection.kwh) == min(sides.consumption.kwh)
     assert len(sides.injection.kwh) == 175
+
+
+async def test_a_dropped_consumption_bucket_leaves_the_feed_in_too(
+    freezer: Any,
+) -> None:
+    """A sum chain restart lands as a negative bucket, which is dropped. On a
+    register pair that day already left both sides; on a consumption totals
+    sensor its feed-in was still credited against no consumption."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    cons = {d: -50.0 if i == 100 else 1.0 for i, d in enumerate(year)}
+    daily, sides = await _both_sides(
+        cons, year, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    )
+    assert daily is not None
+    assert year[100] not in daily
+    assert len(daily) == 265
+    assert sides is not None
+    assert sides.silent == ()
+    assert len(sides.consumption.kwh) == len(sides.injection.kwh) == 264
 
 
 async def test_an_injection_register_gap_keeps_the_consumption(

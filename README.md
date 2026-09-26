@@ -1042,10 +1042,12 @@ searching for:
   a sensor after an outage longer than `purge_keep_days`, and the restart
   lands as one large negative hour. Adding that up cancels real energy
   elsewhere in the year: a meter that moved 4687 kWh was billed for 942.
-  Those hours are now ignored and the sensor is named. The rest of the
-  year corrects itself on the next refresh, since the year is recomputed
-  from scratch each time, but the period around the restart still reads
-  low until its statistics are rebuilt.
+  Those hours are now ignored and the sensor is named; on a consumption
+  sensor the feed-in of that hour or day is left out too, rather than
+  credited against no consumption. The rest of the year corrects itself on
+  the next refresh, since the year is recomputed from scratch each time, but
+  the period around the restart still reads low until its statistics are
+  rebuilt.
 - **"returned no statistics"** — one half of a day/night register pair is
   wired but produces nothing, so the pair cannot be billed and the running
   cost falls to the fixed fees, unless a totals sensor is wired on the same

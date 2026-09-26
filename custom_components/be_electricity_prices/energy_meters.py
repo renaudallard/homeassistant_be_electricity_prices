@@ -1121,9 +1121,13 @@ def _silent_periods(
     crediting its feed-in against no consumption drove the year down on days
     nothing was charged. That is every period before consumption's first one,
     since a consumption meter renamed in April credited the feed-in of January
-    to March against nothing, and every period after it stopped, which is when
-    its last period trails injection's by more than
-    ``_REGISTER_STOPPED_AFTER_DAYS`` (:func:`_stopped`). A wired consumption
+    to March against nothing, every gap between its first and last period,
+    which is where a negative bucket was dropped (:func:`_recorder_deltas`),
+    and every period after it stopped, which is when its last period trails
+    injection's by more than ``_REGISTER_STOPPED_AFTER_DAYS``
+    (:func:`_stopped`). A register pair already leaves such a period out of
+    both sides; a consumption totals sensor left it billed on its feed-in
+    alone. A wired consumption
     meter that reported nothing at all is silent for the whole window: a live
     meter writes a row every hour, moved or not, so no row is missing data
     rather than a household that used nothing. Nothing is named while
@@ -1141,17 +1145,15 @@ def _silent_periods(
     periods = set(periods)
     if not cons:
         return "consumption" if inj else None, periods, set()
-    first = min(cons)
-    both = {p for p in periods if p < first}
+    last = max(cons)
+    both = {p for p in periods if p < last and p not in cons}
     if not inj:
         return "injection", both, periods - both
     stopped = _stopped((("consumption", cons), ("injection", inj)))
     if stopped == ["consumption"]:
-        last = max(cons)
         return "consumption", both | {p for p in periods if p > last}, set()
     if stopped == ["injection"]:
-        last = max(inj)
-        return "injection", both, {p for p in periods if p > last}
+        return "injection", both, {p for p in periods if p > max(inj)}
     return None, both, set()
 
 
