@@ -3751,6 +3751,36 @@ async def test_a_meter_that_moved_in_one_hour_on_a_dull_day_is_left_alone(
     assert metered.kwh == per_hour
 
 
+async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
+    hass: HomeAssistant, freezer: Any, caplog: Any
+) -> None:
+    """On 2 January the window holds one past day, and a real hourly feed-in
+    meter that exported in a single hour on it was called read once a day:
+    its export was spread over the night and the warning logged. It takes a
+    week of such days now."""
+    freezer.move_to("2026-01-02 15:30:00+01:00")
+    days = [date(2026, 1, 1), date(2026, 1, 2)]
+    per_hour = _polled_once_a_day(days, 0.0)
+    noon = dt_util.start_of_local_day(days[0]).astimezone(UTC) + timedelta(hours=12)
+    per_hour[noon] = 1.0
+    entry = _entry(injection_kwh="sensor.inj", meter="mono")
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_hour)
+
+    energy_meters._READ_DAILY_LOGGED.clear()
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass, entry, "injection", days[0], days[-1]
+        )
+    assert metered is not None
+    assert not metered.read_daily
+    assert metered.kwh == per_hour
+    assert "once a day" not in caplog.text
+
+
 _TOTALS_BOTH_SIDES = SimpleNamespace(
     data={
         "consumption_kwh": "sensor.cons",

@@ -485,10 +485,10 @@ formula** supplier, which has no card and asks for the whole set.
    Without a solar regime the injection fields are not read at all, so
    wiring them only for the Energy dashboard changes nothing. A sensor that
    only updates once a day, such as a supplier portal poller, is detected
-   and each day is spread evenly over its hours, so a contract priced by the
-   hour bills it at the day's average rather than at the hour the reading
-   arrived; the log says so once and the diagnostics flag it. Two ways to
-   wire it:
+   once it has a week of such days and each day is spread evenly over its
+   hours, so a contract priced by the hour bills it at the day's average
+   rather than at the hour the reading arrived; the log says so once and the
+   diagnostics flag it. Two ways to wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
      kWh registers from your meter. The integration reads each day's
      delta from HA's long-term statistics, so the sensor reflects

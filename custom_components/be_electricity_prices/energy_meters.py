@@ -99,6 +99,14 @@ _RESET_BELOW = 0.9
 # is short rather than rounded: one of the two is frozen or stuck.
 _SHORT_BELOW = 0.9
 
+# The fewest past days a side must have moved on before it can count as read
+# once a day. A real hourly feed-in meter moves in a single hour on a dull
+# winter day, and on 2 January, or the day after a recorded switch, the window
+# holds one past day: that one day called the meter read once a day, spread its
+# export over the night and logged the warning. A week of such days, each with
+# a row for every hour, is a poller rather than the weather.
+_READ_DAILY_MIN_DAYS = 7
+
 # The sensors already said to report once a day, so the warning is logged
 # once per run rather than on every hourly walk.
 _READ_DAILY_LOGGED: set[tuple[str, ...]] = set()
@@ -769,10 +777,12 @@ def _spread_daily_readings(kwh: dict[datetime, float]) -> bool:
     A day has that shape when it holds a row for every one of its hours and
     moved in exactly one, and the side counts as read once a day when at
     least ``_SHORT_BELOW`` of the past days it moved on have it, so a real
-    meter that moved in one hour on a dull day is left alone. Each such day's
-    kWh is spread evenly over its hours, the neutral guess without a
-    profile, 23 or 25 on a DST seam day. Today is left as it is: it is not
-    over. Returns whether the side was read once a day.
+    meter that moved in one hour on a dull day is left alone, and it moved on
+    at least ``_READ_DAILY_MIN_DAYS`` of them, so a window holding a day or
+    two says nothing yet. Each such day's kWh is spread evenly over its
+    hours, the neutral guess without a profile, 23 or 25 on a DST seam day.
+    Today is left as it is: it is not over. Returns whether the side was read
+    once a day.
     """
     today = dt_util.now().date()
     rows: dict[date, int] = {}
@@ -791,7 +801,7 @@ def _spread_daily_readings(kwh: dict[datetime, float]) -> bool:
         count = round((after - first) / timedelta(hours=1))
         if len(hours) == 1 and rows[day] == count:
             polled[day] = (first, count)
-    if not polled or len(polled) < _SHORT_BELOW * len(moving):
+    if len(moving) < _READ_DAILY_MIN_DAYS or len(polled) < _SHORT_BELOW * len(moving):
         return False
     for day, (first, count) in polled.items():
         whole = kwh[moving[day][0]]
