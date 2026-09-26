@@ -42,6 +42,7 @@ from .providers._resolve import omits_brussels_power_term
 
 from .const import (
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
     REGION_BRUSSELS,
@@ -53,9 +54,11 @@ from .const import (
     DSO_MODE_IMPACT,
     METER_EXCLUSIVE_NIGHT,
 )
+from .cohort import _parse_iso_date, ytd_window_start
 from .fees import (
     _compensation_kva,
     compensation_lacks_kva,
+    last_credited_day,
 )
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
@@ -426,15 +429,34 @@ class _IssuesMixin:
         the four exclusive ones: on the fourteen that state a supplement the
         missing answer costs a payer that supplement rather than the whole
         credit, which is smaller and still wrong.
+
+        But only while an answer can still move the bill. A welcome credit is
+        placed in the first year from the contract start date, so an entry
+        with no start date, or whose credit was paid out before this year's
+        window opened, bills the same whichever way it answers, and the card
+        promised money that no answer brings. A card whose reduction comes off
+        the standing charge instead moves the bill every year. Nothing is
+        billed before the card is read, so nothing is raised either. The
+        question stays in the options whatever this decides, and the
+        comparison page reads it.
         """
-        self._sync_issue(
-            "direct_debit_unanswered",
-            offers_direct_debit(
+        card = self._snapshot_raw
+        raise_it = False
+        if (
+            card is not None
+            and offers_direct_debit(
                 str(self.entry.data.get(CONF_SUPPLIER, "")),
                 str(self.entry.data.get(CONF_CONTRACT, "")),
             )
-            and CONF_DIRECT_DEBIT not in self.entry.data,
-        )
+            and CONF_DIRECT_DEBIT not in self.entry.data
+        ):
+            start = _parse_iso_date(self.entry.data.get(CONF_CONTRACT_START_DATE))
+            raise_it = card.direct_debit_discount_eur is not None or (
+                start is not None
+                and last_credited_day(card, start)
+                >= ytd_window_start(self.entry, dt_util.now().date())
+            )
+        self._sync_issue("direct_debit_unanswered", raise_it)
 
     def _sync_extractor_issue(
         self,

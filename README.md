@@ -887,7 +887,11 @@ successful refresh:
 - **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
   payer differently and this entry has no stored answer, which an entry
   created before the question existed does not. The credit is left out
-  rather than guessed, so answer it in the options to have it billed.
+  rather than guessed, so answer it in the options to have it billed. On a
+  card whose direct-debit part is a welcome credit it is raised only while
+  that credit can still reach this year's bill: it needs the contract start
+  date, and it stays quiet once the first year's credit was paid out before
+  1 January (or before the day the year is billed from).
 - **`brussels_power_term_missing_<entry>`** — the card prints only the
   metering half of Sibelga's fixed charge and Brugel's sheet, which supplies
   the power half, could not be read. About 50 EUR a year is left out rather

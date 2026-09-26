@@ -503,6 +503,18 @@ def in_first_contract_year(start: date | None, day: date) -> bool:
     return start <= day < start + timedelta(days=_WELCOME_YEAR_DAYS)
 
 
+def last_credited_day(snapshot: SupplierSnapshot, start: date) -> date:
+    """The last day a welcome credit signed on ``start`` reaches.
+
+    The day the wait the card states completes for a card that pays a lump at
+    the anniversary, which is the one day it is credited on, and the last day
+    of the first year for one that accrues pro rata over it.
+    """
+    if snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
+        return _months_after(start, snapshot.welcome_credit_after_months)
+    return start + timedelta(days=_WELCOME_YEAR_DAYS - 1)
+
+
 def grants_a_welcome_credit(snapshot: SupplierSnapshot) -> bool:
     """Whether the card grants a welcome credit at all, in ANY of its shapes.
 
@@ -665,16 +677,14 @@ def _welcome_credit_eur(
     if start is None:
         return 0.0
     if snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
-        # The day the wait the card states completes. Credited in whichever
-        # window contains it and in no other, which is what stops a figure
-        # that resets every 1 January from granting the same lump a second
-        # time.
-        anniversary = _months_after(start, snapshot.welcome_credit_after_months)
-        if window_start <= anniversary <= today:
+        # Credited in whichever window contains the anniversary and in no
+        # other, which is what stops a figure that resets every 1 January from
+        # granting the same lump a second time.
+        if window_start <= last_credited_day(snapshot, start) <= today:
             return amount
         return 0.0
     first = max(start, window_start)
-    last = min(today, start + timedelta(days=_WELCOME_YEAR_DAYS - 1))
+    last = min(today, last_credited_day(snapshot, start))
     days = (last - first).days + 1
     if days <= 0:
         return 0.0

@@ -50,7 +50,10 @@ from custom_components.be_electricity_prices.api import (
     EntsoeAuthError,
     EntsoeError,
 )
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.const import (
+    DOMAIN,
+    WELCOME_CREDIT_ANNIVERSARY,
+)
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
 )
@@ -5099,8 +5102,17 @@ async def test_a_tick_that_changed_nothing_writes_nothing(
     assert saved.await_count == 4
 
 
+def _mega_ristourne_card() -> SupplierSnapshot:
+    return make_snapshot(
+        supplier="mega",
+        contract="mega_cosy_flex",
+        welcome_credit_eur=150.0,
+        welcome_credit_requires_direct_debit=True,
+    )
+
+
 async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """Mega's Cosy Flex grants the whole ristourne to a direct-debit payer, and
     resolve_direct_debit clears the base, the per-kWh leg and the cap when the
@@ -5110,16 +5122,19 @@ async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
     in silence."""
     from homeassistant.helpers import issue_registry as ir
 
+    freezer.move_to("2026-09-24 12:00:00+02:00")
     data = {
         "supplier": "mega",
         "contract": "mega_cosy_flex",
         "region": "wallonia",
         "dso": "ores",
         "meter": "dynamic",
+        "contract_start_date": "2026-02-01",
     }
     entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
+    coord._snapshot_raw = _mega_ristourne_card()
     issue_id = f"direct_debit_unanswered_{entry.entry_id}"
     registry = ir.async_get(hass)
 
@@ -5135,6 +5150,84 @@ async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
     hass.config_entries.async_update_entry(entry, data={**data, "direct_debit": True})
     coord._sync_direct_debit_unanswered_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        None,
+        "2024-11-01",
+    ],
+)
+async def test_direct_debit_question_is_silent_when_no_answer_moves_the_bill(
+    hass: HomeAssistant, freezer: Any, start: str | None
+) -> None:
+    """The ristourne is a welcome credit placed in the first year from the
+    contract start date, so without a start date, or with a first year that
+    ended before this year's window opened, both answers bill the same. The
+    card promised up to 522 EUR a year that no answer brought."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    data = {
+        "supplier": "mega",
+        "contract": "mega_cosy_flex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+    }
+    if start is not None:
+        data["contract_start_date"] = start
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot_raw = _mega_ristourne_card()
+    issue_id = f"direct_debit_unanswered_{entry.entry_id}"
+
+    coord._sync_direct_debit_unanswered_issue()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+    # A first year that ran into January still credits this year's window,
+    # and so does an anniversary lump paid out this year.
+    hass.config_entries.async_update_entry(
+        entry, data={**data, "contract_start_date": "2025-01-15"}
+    )
+    coord._sync_direct_debit_unanswered_issue()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+    hass.config_entries.async_update_entry(
+        entry, data={**data, "contract_start_date": "2024-12-01"}
+    )
+    coord._snapshot_raw = replace(
+        _mega_ristourne_card(),
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=14,
+    )
+    coord._sync_direct_debit_unanswered_issue()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
+async def test_direct_debit_on_the_standing_charge_raises_without_a_start_date(
+    hass: HomeAssistant,
+) -> None:
+    """Brusol's reduction comes off the standing charge every year, so the
+    answer moves the bill whatever the start date."""
+    data = {
+        "supplier": "energyvision",
+        "contract": "energyvision_groene_stroom",
+        "region": "brussels",
+        "dso": "sibelga",
+        "meter": "mono",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Brusol Groene stroom")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"direct_debit_unanswered_{entry.entry_id}"
+
+    # Nothing is billed before the card is read.
+    coord._sync_direct_debit_unanswered_issue()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+    coord._snapshot_raw = replace(make_snapshot(), direct_debit_discount_eur=20.0)
+    coord._sync_direct_debit_unanswered_issue()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
 
 async def test_direct_debit_question_is_silent_where_no_card_prices_it(
