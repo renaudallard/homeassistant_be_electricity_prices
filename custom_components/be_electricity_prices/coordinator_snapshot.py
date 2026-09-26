@@ -245,10 +245,18 @@ class _SnapshotMixin:
         only until 1 January, and a card read off the trailing year stayed up
         for months after the bill had recovered. Once a day, with the volume,
         and the one read that logs what a broken pair did to the bill.
-        """
-        from .contract_periods import previous_meter_faults
 
-        start = ytd_window_start(self.entry, today)
+        The entry's own wiring is read from the day its contract started:
+        once a switch is recorded the window opens on 1 January, and the
+        days before the switch were billed on the earlier contract's wiring,
+        which ``previous_meter_faults`` checks. Reading the current sensors
+        over them named a register rewired at the switch.
+        """
+        from .contract_periods import current_period_start, previous_meter_faults
+
+        start = current_period_start(
+            self.entry.data, ytd_window_start(self.entry, today)
+        )
         faults: list[str] = []
         # Registers whose side the totals sensor bills in full: named, but
         # on their own wording, since the cost does not move.

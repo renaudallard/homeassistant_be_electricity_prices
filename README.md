@@ -768,12 +768,14 @@ ENTSO-E API key and the connection's kVA tier. One you enter after recording
 the switch, for instance when a Repairs card asks for it, then reaches the
 months before it as well; one the earlier contract already held is kept.
 
-The meter checks run on each earlier contract's own sensors over its own days.
-A sensor there that recorded nothing, or stopped while its pair or the other
-side carried on, is named on the "stopped recording" Repairs card with the
-supplier and dates of the contract it belongs to. Renaming a sensor moves its
-history to the new name and leaves the old one empty. To point an earlier
-contract at another sensor, remove the switch, correct the **Energy meters**
+The meter checks run on each earlier contract's own sensors over its own days,
+and on the entry's sensors from the switch on, so a register rewired at the
+switch is not named for the months before it. A sensor of an earlier contract
+that recorded nothing, or stopped while its pair or the other side carried
+on, is named on the "stopped recording" Repairs card with the supplier and
+dates of the contract it belongs to. Renaming a sensor moves its history to
+the new name and leaves the old one empty. To point an earlier contract at
+another sensor, remove the switch, correct the **Energy meters**
 step and record the switch again.
 
 A switch recorded with the wrong date, or by mistake, is undone with
