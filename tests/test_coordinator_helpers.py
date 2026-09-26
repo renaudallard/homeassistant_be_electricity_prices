@@ -4032,6 +4032,29 @@ async def test_the_first_day_reads_the_silent_side_off_todays_hours(
     assert daily is None
 
 
+async def test_a_meter_whose_statistics_start_today_is_read_off_todays_hours(
+    freezer: Any,
+) -> None:
+    """Today's compiled hours were read only when neither side had a day
+    before today. A feed-in meter whose statistics start today beside a
+    consumption meter with a past was called silent by the per-day walk,
+    and a consumption meter starting today took the day to the fees floor,
+    while the hourly walks billed both."""
+    freezer.move_to("2026-09-16 15:30:00+02:00")
+    today = date(2026, 9, 16)
+    past = [date(2026, 9, 1) + timedelta(days=i) for i in range(15)]
+    live = {"sensor.cons": 5.0, "sensor.inj": 3.0}
+    daily, sides = await _both_sides([*past, today], [today], live, today)
+    assert daily is not None
+    assert daily[today] == (5.0, 0.0, 3.0, 0.0)
+    assert sides is not None
+    assert sides.silent == ()
+    daily, sides = await _both_sides([today], [*past, today], live, today)
+    assert daily == {today: (5.0, 0.0, 3.0, 0.0)}
+    assert sides is not None
+    assert sides.silent == ()
+
+
 async def test_feed_in_before_the_consumption_meter_started_is_left_out(
     freezer: Any,
 ) -> None:

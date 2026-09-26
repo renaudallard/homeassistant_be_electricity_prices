@@ -1171,7 +1171,8 @@ the injection meter stops instead, or records nothing at all, the
 consumption is still billed and only the feed-in is left out, which makes
 the year read high rather than low; the card names that meter too. An
 injection meter that starts later, because the panels came later in the
-year, is expected, cuts nothing and is not named. Without a solar regime the
+year, is expected, cuts nothing and is not named, and its feed-in is
+credited from the day its statistics start. Without a solar regime the
 injection meters are not read at all, so one that is broken or stopped
 changes nothing and raises no Repairs card: wiring them only for the Energy
 dashboard is fine.
