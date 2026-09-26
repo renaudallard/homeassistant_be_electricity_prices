@@ -714,6 +714,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "hours_seen",
             "hours_priced",
             "hours_elapsed",
+            "injection_hours_uncredited",
             "days_seen",
             "days_elapsed",
             "energy_component_ytd_eur",
@@ -857,7 +858,9 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             # consumption_today_kwh that never grows points at a stalled meter
             # input. On the hourly path hours_priced below
             # hours_seen means the spot cache could not price part of the
-            # window, so the bill is missing those hours' energy term.
+            # window, so the bill is missing those hours' energy term, and
+            # injection_hours_uncredited counts the exported hours whose
+            # feed-in credit follows the spot and had none to follow.
             diag = data.ytd_diagnostics
             attrs: dict[str, Any] = (
                 {k: round(v, 4) for k, v in diag.items()} if diag else {}

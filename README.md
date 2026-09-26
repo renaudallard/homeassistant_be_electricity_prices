@@ -304,7 +304,7 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month, as the card prints it for your contract (€0 outside Flanders, €0 for a domiciled residential customer in Flanders, and the non-residential figure on a professional contract). |
-| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Changed supplier during the year? Record the switch and each contract is billed on its own supplier's cards for its own days, listed in the `previous_contracts` attribute: see [Switching supplier during the year](#switching-supplier-during-the-year). Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_elapsed`, `days_seen` / `days_elapsed`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
+| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Changed supplier during the year? Record the switch and each contract is billed on its own supplier's cards for its own days, listed in the `previous_contracts` attribute: see [Switching supplier during the year](#switching-supplier-during-the-year). Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_elapsed`, `days_seen` / `days_elapsed`, `injection_hours_uncredited`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
 | `current_month_cost` | The same bill as `current_year_cost` over the running month, which is the period a household budgets in and the one an invoice covers. Priced as its own window rather than sliced off the year, so under the Walloon compensation regime it nets **that month's** registers and twelve of these do not add up to the yearly figure; on every other regime they do. Resets on the 1st. See [docs/entities.md](./docs/entities.md). |
 | `tomorrow_prices_available` | Binary sensor. ON when the price table covers at least one hour with tomorrow's local date **and** the supplier's published validity still covers tomorrow. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET). For fixed/variable contracts it is ON throughout the month, but flips OFF on the last day of a month whose card stops at month-end, since next month's rates are not published yet. |
 | `projected_year_consumption` | kWh your meter will have recorded by 31 December: what it recorded from 1 January to yesterday, plus what it recorded over the same remaining days last year, so the rest of the year follows your own season rather than an average day. Without last year's history, an entry that already loads Synergrid's residential load profile (an RLP-indexed card, or the compensation regime) extrapolates this year's days on that profile once 90 of them are recorded; the profile is never downloaded just for this. Otherwise unknown. Moves once a day. The `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes say which method was used and how the figure splits. |
@@ -1049,7 +1049,13 @@ backfill on a fresh install can take tens of seconds while the spots
 land. The backfill lets Home Assistant carry on between each day of
 hours, so the rest of the system stays responsive while it runs.
 Response is a `{rows_written, sensors, range}` object you can
-inspect from Developer Tools → Services.
+inspect from Developer Tools → Services. When the cost series could not
+price every hour it also carries `energy_hours_unpriced` (hours whose
+energy had no day-ahead price, or no network row on that month's card)
+and `injection_hours_uncredited` (exported hours whose spot-indexed
+feed-in credit had no price), and the same is logged as a warning. Unlike
+the live sensor, the imported rows keep that gap until you run the
+backfill again once the prices are cached.
 
 Days whose own card cannot be had when the backfill runs are left out rather
 than imported on today's card, since an imported statistic stays: a past
@@ -1156,6 +1162,14 @@ attributes: `hours_seen` against `hours_elapsed` on an hourly-billed
 contract (TOU, dynamic, monthly-indexed, Impact DSO mode or an
 exclusive-night meter), or `days_seen` against `days_elapsed` on a fixed
 or variable one.
+
+On the injection regime, a feed-in credit that follows the hour's spot
+price (Bolt fixed and variable, Cociter Variable and trihoraire) cannot be
+credited for an hour the day-ahead cache holds no price for. Those hours
+are credited nothing rather than a guess, and `injection_hours_uncredited`
+appears and counts them, so the bill reads high by their feed-in. Past
+hours are only fetched with an ENTSO-E API key, which is what these
+contracts need.
 
 ## Dashboard cards
 

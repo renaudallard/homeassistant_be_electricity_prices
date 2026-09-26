@@ -268,6 +268,11 @@ async def _ytd_hourly_energy(
     # correct, so report the coverage instead of leaving the user to guess.
     hours_seen = 0
     hours_priced = 0
+    # And how much of the feed-in went uncredited: an hour whose credit follows
+    # the spot (Bolt fixed and variable, Cociter Variable) has no rate without
+    # one, and its energy side can still be fully priced, so hours_priced says
+    # nothing about it.
+    injection_uncredited = 0
     netting = _NetAllocation()
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
@@ -408,6 +413,8 @@ async def _ytd_hourly_energy(
             )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
+            elif kwh_inj > 0.0 and snap_h.injection is not None:
+                injection_uncredited += 1
         else:
             d_cost = kwh_cons * bd.all_in
         energy_cost += d_cost
@@ -420,6 +427,8 @@ async def _ytd_hourly_energy(
     if breakdown is not None:
         breakdown["hours_seen"] = float(hours_seen)
         breakdown["hours_priced"] = float(hours_priced)
+        if injection_uncredited:
+            breakdown["injection_hours_uncredited"] = float(injection_uncredited)
         # And what the window SHOULD hold. hours_seen counts only the buckets
         # the recorder returned, so it shrinks with a gap and hours_priced
         # shrinks with it: the pair reads a confident 100% while hundreds of
@@ -475,6 +484,7 @@ async def _ytd_spot_injection_credit(
     window_start: date,
     billed_days: Collection[date] | None = None,
     top_up: bool = True,
+    breakdown: dict[str, float] | None = None,
 ) -> float:
     """YTD solar-injection credit (EUR) for a contract whose injection is
     a per-hour spot formula with no monthly indicative.
@@ -488,8 +498,10 @@ async def _ytd_spot_injection_credit(
     dynamic energy path does, and the caller subtracts it from the bill.
 
     Returns 0.0 (a no-op) unless the injection is one of the two shapes
-    ``_injection_replays_hourly_spot`` names, spots are cached, and an
-    injection sensor is wired. Hours with no cached spot are skipped.
+    ``_injection_replays_hourly_spot`` names and an injection sensor is
+    wired. An hour with no cached spot has no rate to credit, so it credits
+    nothing and is counted into ``breakdown["injection_hours_uncredited"]``
+    instead: the credit is not guessed, but the bill says it is short.
 
     The second of those shapes is the card that prints an indicative and
     calls it an illustration (every Bolt fixed and variable card). It used to
@@ -511,8 +523,6 @@ async def _ytd_spot_injection_credit(
     closed before today, whose hours the live meter reading is not one of.
     """
     inj = snapshot.injection
-    if not historical_spots:
-        return 0.0
     if snap_for is None and (inj is None or not _injection_replays_hourly_spot(inj)):
         # With no resolver every hour takes the current card, so its shape
         # decides. With one, each month's own card decides below: judging the
@@ -544,7 +554,9 @@ async def _ytd_spot_injection_credit(
     # did not heal at all while compilation was stalled.
     if top_up and metered.today_ok:
         await _top_up_today_hourly(hass, metered.sensors, per_hour, today)
+    spots = historical_spots or {}
     credit = 0.0
+    uncredited = 0
     for utc_hour, kwh in per_hour.items():
         # Only the days the per-day walk this credit is added to billed: a day
         # it left out because one half of a register pair did not report it
@@ -554,9 +566,6 @@ async def _ytd_spot_injection_credit(
             billed_days
         ):
             continue
-        spot = historical_spots.get(utc_hour)
-        if spot is None:
-            continue
         inj_h: InjectionRates | None = inj
         if snap_for is not None:
             local = dt_util.as_local(utc_hour)
@@ -565,6 +574,11 @@ async def _ytd_spot_injection_credit(
                 # That month is not this shape, so its own card was already
                 # credited by the walk this term is added to.
                 continue
+        spot = spots.get(utc_hour)
+        if spot is None:
+            if kwh > 0.0:
+                uncredited += 1
+            continue
         # Route through the shared helper so the floor_at_zero clamp the live
         # scalar and array apply is honoured here too, rather than summing the
         # raw factor*spot+base and diverging on a negative-spot hour.
@@ -573,4 +587,6 @@ async def _ytd_spot_injection_credit(
         # ENERGY leg is static, and only DynamicRates carries quarter_hourly,
         # so the hour's spot IS the hour's price.
         credit += kwh * (_historical_injection_rate(inj_h, spot) or 0.0)
+    if breakdown is not None and uncredited:
+        breakdown["injection_hours_uncredited"] = float(uncredited)
     return credit

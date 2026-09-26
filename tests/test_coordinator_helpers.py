@@ -1463,6 +1463,80 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     assert cost == pytest.approx(-30.0 * live)
 
 
+@pytest.mark.parametrize("dso_mode", ["bi_horaire", "impact"])
+async def test_year_cost_counts_the_feed_in_hours_it_could_not_credit(
+    hass: HomeAssistant, freezer: Any, dso_mode: str
+) -> None:
+    """A per-slot feed-in credit with no cached spot for an hour credits
+    nothing for it, and the year-to-date says how many hours that was.
+
+    Bolt's fixed and variable cards and Cociter's price the feed-in off the
+    hour's spot while their energy is a fixed rate, so the energy side is
+    fully priced whatever the cache holds and hours_priced read full coverage
+    with part of the credit missing. The per-day walk (bi-horaire) and the
+    hourly one (Tarif Impact) are both asked, with the cache holding one day
+    of three and then nothing at all.
+    """
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.18),
+        injection=InjectionRates(
+            current=0.0531, factor=0.94, base=-0.01133, slot_indexed=True
+        ),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="mono",
+        dso_tariff_mode=dso_mode,
+        consumption_kwh="sensor.cons_total",
+        injection_kwh="sensor.inj_total",
+    )
+    hours = [
+        dt_util.start_of_local_day(datetime(2026, 1, day)).astimezone(UTC)
+        + timedelta(hours=11)
+        for day in (1, 2, 3)
+    ]
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        kwh = 10.0 if entity_id == "sensor.inj_total" else 0.0
+        return {date(2026, 1, day): kwh for day in (1, 2, 3)}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        kwh = 10.0 if entity_id == "sensor.inj_total" else 0.0
+        return dict.fromkeys(hours, kwh)
+
+    for spots, uncredited in (
+        ({hour: 0.08 for hour in hours}, None),
+        ({hours[0]: 0.08}, 2.0),
+        (None, 3.0),
+    ):
+        breakdown: dict[str, float] = {}
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        ):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                historical_spots=spots,
+                breakdown=breakdown,
+            )
+        credited = 3.0 - (uncredited or 0.0)
+        assert cost == pytest.approx(-10.0 * credited * (0.94 * 0.08 - 0.01133))
+        assert breakdown.get("injection_hours_uncredited") == uncredited
+
+
 async def test_no_december_hour_reaches_a_january_bill(
     hass: HomeAssistant, freezer: Any
 ) -> None:

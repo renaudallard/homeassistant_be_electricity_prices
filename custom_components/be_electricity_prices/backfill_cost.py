@@ -191,6 +191,7 @@ async def _backfill_cost_sensor(
     spots: dict[datetime, float],
     quarters: dict[datetime, list[float]],
     emit_from: datetime | None = None,
+    gaps: dict[str, int] | None = None,
 ) -> dict[str, int]:
     """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
 
@@ -223,6 +224,14 @@ async def _backfill_cost_sensor(
     Returns a per-statistic-id row count (one entry max). Skips
     silently when the sensor isn't registered (auto path firing
     before platform setup completes).
+
+    ``gaps``, when given, receives what the rows leave out:
+    ``energy_hours_unpriced`` counts metered hours whose energy term had no
+    price (no cached spot, or no DSO row on that month's card), and
+    ``injection_hours_uncredited`` exported hours whose feed-in credit had no
+    rate. A key is set only when its count is not zero. Unlike the live
+    sensor, which recomputes the year on every tick, an imported row keeps
+    what it was written with, so a gap left here stays until the next backfill.
     """
     sid = _stat_id(hass, entry, _COST_SENSOR_KEY)
     if sid is None:
@@ -235,6 +244,7 @@ async def _backfill_cost_sensor(
         async_import_statistics,
     ) = _recorder_models()
     rows: list[Any] = []
+    missing: dict[str, int] = {}
     # One contract at a time, each carrying on from the bill the ones before it
     # ran up: an entry that recorded no switch is one piece, as it always was.
     carried = 0.0
@@ -253,7 +263,19 @@ async def _backfill_cost_sensor(
             emit_from=emit_from,
             rows=rows,
             make_row=StatisticData,
+            gaps=missing,
         )
+    if missing:
+        _LOGGER.warning(
+            "backfill of %s left %d hours of energy unpriced and %d hours of "
+            "feed-in uncredited, for want of a cached spot or a DSO row; the "
+            "imported cost keeps that gap until the next backfill",
+            sid,
+            missing.get("energy_hours_unpriced", 0),
+            missing.get("injection_hours_uncredited", 0),
+        )
+        if gaps is not None:
+            gaps.update(missing)
 
     if not rows:
         return {sid: 0}
@@ -285,6 +307,7 @@ async def _accrue_cost(
     emit_from: datetime | None,
     rows: list[Any],
     make_row: Any,
+    gaps: dict[str, int],
 ) -> float:
     """One contract's hours onto the running year-to-date bill.
 
@@ -294,7 +317,8 @@ async def _accrue_cost(
     series stays one running total across a switch; the return is the bill at
     the last hour, for the next contract to carry on from. Each contract nets
     its own compensation, prorates its own fees and credits its own welcome
-    offer over its own days, which is how the live walk prices it.
+    offer over its own days, which is how the live walk prices it. The hours
+    it could not price are added into ``gaps`` (see _backfill_cost_sensor).
     """
     if not hours:
         return carried
@@ -419,9 +443,12 @@ async def _accrue_cost(
             )
         except (KeyError, ValueError):
             bd = None
+        cons = cons_per_hour.get(utc_hour, 0.0)
+        inj = inj_per_hour.get(utc_hour, 0.0)
+        if cons > 0.0 and (bd is None or no_spot):
+            gaps["energy_hours_unpriced"] = gaps.get("energy_hours_unpriced", 0) + 1
+        inj_rate: float | None = None
         if bd is not None:
-            cons = cons_per_hour.get(utc_hour, 0.0)
-            inj = inj_per_hour.get(utc_hour, 0.0)
             # An unpriced hour has a zero energy component, as in the live
             # walk: nothing was charged, so nothing can be credited against.
             running_energy_component += cons * bd.energy
@@ -459,6 +486,15 @@ async def _accrue_cost(
                     running_energy -= inj * inj_rate
             else:
                 running_energy += cons * bd.all_in
+        if (
+            regime == SOLAR_REGIME_INJECTION
+            and inj > 0.0
+            and inj_rate is None
+            and snap_h.injection is not None
+        ):
+            gaps["injection_hours_uncredited"] = (
+                gaps.get("injection_hours_uncredited", 0) + 1
+            )
 
         # Fee accrual: spread each local day's annual/days_in_year share
         # evenly over that day's actual UTC hours, so the YTD line grows

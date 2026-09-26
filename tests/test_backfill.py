@@ -979,7 +979,8 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
         ),
     ):
         # Empty spot cache: the energy leg is the only unknown part.
-        await bf._backfill_cost_sensor(hass, entry, coord, [hour], {}, {})  # type: ignore[arg-type]
+        gaps: dict[str, int] = {}
+        await bf._backfill_cost_sensor(hass, entry, coord, [hour], {}, {}, gaps=gaps)  # type: ignore[arg-type]
 
     cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
     # 10 kWh under the ORES overlay make_snapshot builds: distribution 0.10 +
@@ -987,6 +988,124 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     # 1.665 EUR of grid and tax that the old behaviour dropped on the floor.
     # This snapshot carries no yearly fee, so that leg is the whole row.
     assert cost_rows[-1]["state"] == pytest.approx(1.665, abs=1e-6)
+    # And the commodity it could not price is reported, not left to be
+    # guessed from the row count.
+    assert gaps == {"energy_hours_unpriced": 1}
+
+
+async def test_cost_backfill_reports_the_feed_in_it_could_not_credit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A per-slot feed-in credit with no cached spot for an hour is written
+    into the recorder without it, and the backfill says how many hours.
+
+    Bolt's fixed and variable cards price the feed-in off the hour's spot
+    while the energy is a fixed rate, so every row is written and the row
+    count alone read as a complete year. An imported row does not heal on the
+    next tick the way the live sensor does.
+    """
+    from custom_components.be_electricity_prices import backfill_window
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    freezer.move_to("2026-06-20 12:00:00+02:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18),
+        injection=InjectionRates(
+            current=0.034, factor=0.94, base=-0.01133, slot_indexed=True
+        ),
+    )
+    entry = make_entry(
+        region=const.REGION_WALLONIA,
+        dso=const.DSO_ORES,
+        meter=const.METER_MONO,
+        solar_regime=const.SOLAR_REGIME_INJECTION,
+        injection_kwh="sensor.inj_total",
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+    hours = [datetime(2026, 6, day, 11, tzinfo=UTC) for day in (1, 2, 3)]
+
+    async def _snap_for(_month_first: object) -> Any:
+        return snap
+
+    def _fake_cache(*_a: object, **_k: object) -> Any:
+        return _snap_for
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict.fromkeys(hours, 10.0) if entity_id == "sensor.inj_total" else {}
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    coord = SimpleNamespace(hass=None, _snapshot=snap, _session=None, _spp_weights=None)
+
+    async def _ensure() -> None:
+        return None
+
+    coord._ensure_spp_weights = _ensure
+    gaps: dict[str, int] = {}
+    with (
+        patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coord,  # type: ignore[arg-type]
+            hours,
+            {hours[0]: 0.08},
+            {},
+            gaps=gaps,
+        )
+
+    cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
+    # Three rows, one credited: the other two hours carry no feed-in at all.
+    assert len(cost_rows) == 3
+    assert cost_rows[-1]["state"] == pytest.approx(
+        -10.0 * (0.94 * 0.08 - 0.01133), abs=1e-4
+    )
+    assert gaps == {"injection_hours_uncredited": 2}
+
+
+async def test_backfill_range_returns_the_hours_the_cost_left_out(
+    hass: HomeAssistant,
+) -> None:
+    """What the cost pass could not price reaches the service response
+    beside the row count, and nothing is added when it priced everything."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = await _make_coordinator(entry)
+    start = datetime(2026, 5, 1, 0, 0, tzinfo=BRUSSELS)
+    end = datetime(2026, 5, 1, 3, 0, tzinfo=BRUSSELS)
+
+    for missing in ({"injection_hours_uncredited": 2}, {}):
+
+        async def _fake_cost(
+            *_a: object, gaps: dict[str, int], **_k: object
+        ) -> dict[str, int]:
+            gaps.update(missing)
+            return {"sensor.cost": 3}
+
+        with (
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch.object(bf, "_backfill_price_sensors", AsyncMock(return_value={})),
+            patch.object(bf, "_backfill_cost_sensor", new=_fake_cost),
+        ):
+            result = await bf.backfill_range(hass, entry, start, end)
+        assert result["rows_written"] == 3
+        assert ("injection_hours_uncredited" in result) == bool(missing)
+        assert {k: result[k] for k in missing} == missing
 
 
 async def test_backfill_range_without_runtime_data_raises(

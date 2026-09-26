@@ -818,6 +818,7 @@ async def _compute_current_year_cost(
             window_start=window_start,
             billed_days=daily_kwh.keys(),
             top_up=window_end is None,
+            breakdown=stats,
         )
         # This regime has no compensation clamp, so the billed energy is
         # already the raw energy term.

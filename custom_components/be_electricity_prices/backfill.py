@@ -538,6 +538,7 @@ async def _backfill_range(
     counts = await _backfill_price_sensors(
         hass, entry, coordinator, hours, spots, quarters
     )
+    gaps: dict[str, int] = {}
     if not skip_cost and not cost_left_out:
         counts.update(
             await _backfill_cost_sensor(
@@ -548,6 +549,7 @@ async def _backfill_range(
                 spots,
                 quarters,
                 emit_from=cost_emit_from,
+                gaps=gaps,
             )
         )
     total = sum(counts.values())
@@ -562,6 +564,8 @@ async def _backfill_range(
         "rows_written": total,
         "sensors": counts,
         "range": [start_utc.isoformat(), end_utc.isoformat()],
+        # The hours the cost series could not price, when there were any.
+        **gaps,
     }
     if skip_cost:
         result["skipped"] = (
