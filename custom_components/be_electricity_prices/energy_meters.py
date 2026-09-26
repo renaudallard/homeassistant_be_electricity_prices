@@ -600,6 +600,8 @@ async def _metered_hourly_kwh(
     metered = await _side_hourly_kwh(hass, entry, side, start, end)
     if metered is None or not _spread_daily_readings(metered.kwh):
         return metered
+    if metered.as_read is not None:
+        _spread_daily_readings(metered.as_read)
     if metered.sensors not in _READ_DAILY_LOGGED:
         _READ_DAILY_LOGGED.add(metered.sensors)
         _LOGGER.warning(
@@ -631,11 +633,21 @@ async def _side_hourly_kwh(
             return MeteredHours(total, (total_id,))
     if hours is None:
         return None
+    # Each half over its own hours, on the days both report: what the per-day
+    # walk bills for the pair (MeteredHours.as_read).
+    days = {dt_util.as_local(hour).date() for hour in day}
+    days &= {dt_util.as_local(hour).date() for hour in night}
+    as_read: dict[datetime, float] = {}
+    for half in (day, night):
+        for hour, kwh in half.items():
+            if dt_util.as_local(hour).date() in days:
+                as_read[hour] = as_read.get(hour, 0.0) + kwh
     return MeteredHours(
         {hour: day[hour] + night[hour] for hour in hours},
         tuple(ids),
         frozenset(set(day) ^ set(night)),
         today_ok=not _stopped(((ids[0], day), (ids[1], night))),
+        as_read=as_read,
     )
 
 
@@ -650,10 +662,12 @@ class MeteredSides:
     ``silent`` names the sensors of the side that went silent, for the
     Repairs card.
 
-    ``injection_as_read`` is the injection side before the comparison, for
-    the feed-in credit added to the per-day walk, which compares the two
-    sides day by day: a day it bills keeps its whole feed-in, the hours
-    consumption did not report included.
+    ``injection_as_read`` is the injection side before the comparison and
+    as the per-day walk counts it (``MeteredHours.as_read``), for the feed-in
+    credit added to that walk, which compares the two sides day by day: a
+    day it bills keeps its whole feed-in, the hours consumption did not
+    report included, and so do the hours only one half of an injection
+    register pair reported.
     """
 
     consumption: MeteredHours
@@ -709,7 +723,7 @@ async def _metered_sides(
             today_ok=inj.today_ok and cons_today and side != "injection",
         ),
         (cons if side == "consumption" else inj).sensors if side else (),
-        inj,
+        inj if inj.as_read is None else replace(inj, kwh=inj.as_read),
     )
 
 
@@ -1177,6 +1191,13 @@ class MeteredHours:
     # never reports, so a live top-up billed today would be taken back
     # tomorrow.
     today_ok: bool = True
+    # The side hour by hour as the per-day walk counts it, where that differs
+    # from ``kwh``: each half of a register pair over its own hours, on the
+    # days both halves report. A half that missed an hour carries its energy
+    # to its next row, so the hours both report left out what the other half
+    # booked in the missed ones, while the day's total holds all of it. None
+    # where it is ``kwh``.
+    as_read: dict[datetime, float] | None = None
 
 
 def _split_today(

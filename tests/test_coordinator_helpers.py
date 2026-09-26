@@ -1485,6 +1485,73 @@ async def test_ytd_spot_injection_credit_keeps_the_feed_in_of_a_billed_day(
     assert credit == pytest.approx(0.1 * len(hours))
 
 
+async def test_ytd_spot_injection_credit_keeps_what_one_register_booked_alone(
+    freezer: Any,
+) -> None:
+    """An injection register pair whose day half missed six midday rows a day
+    through June, booking their energy on its next row. The day rows hold all
+    of it and the per-day walk bills it, but the credit read only the hours
+    both halves reported and dropped the night half's energy of the missed
+    hours, 90 kWh here. It now reads each half over its own hours."""
+    freezer.move_to("2026-09-26 15:30:00+02:00")
+    today = date(2026, 9, 26)
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=1.0, base=0.0, current=None),
+    )
+    entry = SimpleNamespace(
+        data={
+            "consumption_kwh": "sensor.cons",
+            "day_injection_kwh": "sensor.inj_day",
+            "night_injection_kwh": "sensor.inj_night",
+            "solar_regime": "injection",
+        }
+    )
+    now = dt_util.utcnow()
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 269)
+    ]
+    hours = [h for h in hours if h < now.replace(minute=0)]
+
+    def _missed(hour: datetime) -> bool:
+        local = dt_util.as_local(hour)
+        return local.month == 6 and 9 <= local.hour < 15
+
+    day_half = {h: 1.0 for h in hours if not _missed(h)}
+    for hour in hours:
+        if _missed(hour) and dt_util.as_local(hour).hour == 14:
+            day_half[hour + timedelta(hours=1)] += 6.0
+    per_sensor = {
+        "sensor.cons": dict.fromkeys(hours, 0.5),
+        "sensor.inj_day": day_half,
+        "sensor.inj_night": dict.fromkeys(hours, 0.5),
+    }
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_sensor[entity_id])
+
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
+    ):
+        credit = await _ytd_spot_injection_credit(
+            None,  # type: ignore[arg-type]
+            snap,
+            entry,  # type: ignore[arg-type]
+            today,
+            dict.fromkeys(hours, 0.1),
+            window_start=date(2026, 1, 1),
+            billed_days={dt_util.as_local(h).date() for h in hours},
+        )
+    assert credit == pytest.approx(0.1 * 1.5 * len(hours))
+
+
 async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     hass: HomeAssistant, freezer: Any
 ) -> None:

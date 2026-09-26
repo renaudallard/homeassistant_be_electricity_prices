@@ -591,10 +591,11 @@ async def _ytd_spot_injection_credit(
     # feed-in is read as its meters reported it and kept to the days it billed
     # (billed_days below): the hourly rule also dropped the hours consumption
     # missed within a billed day, 144 kWh short over a month missing six
-    # midday hours a day. A feed-in meter gone silent has no hours after it
-    # stopped, and today is topped up only where the two sides' rule lets the
-    # feed-in bill today, or its live reading was credited through the day and
-    # taken back at midnight.
+    # midday hours a day, and a register pair's rule the hours only one half
+    # reported (MeteredHours.as_read). A feed-in meter gone silent has no
+    # hours after it stopped, and today is topped up only where the two sides'
+    # rule lets the feed-in bill today, or its live reading was credited
+    # through the day and taken back at midnight.
     sides = await _metered_sides(hass, entry, window_start, today)
     if sides is None:
         return 0.0
