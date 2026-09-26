@@ -1371,6 +1371,8 @@ Two modes (`const.py`):
 - `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly, bypassing the
   window (the user is stating a peak, not measuring one) and applying only the
   floor. A rolling max would ignore a mid-month decrease the user just made.
+  Nothing is banked into the monthly history while it lasts, and the months
+  measured before are kept for a return to the sensor.
 - `CAPACITY_MODE_SENSOR`: rolling max of a power sensor, scaled by its unit (W/VA
   scaled by 0.001 to kW; issue #19 was a 1000x inflation when W was stored as kW).
   Prefer the meter's own monthly-peak entity here: a DSMR 5B meter publishes the

@@ -129,8 +129,8 @@ pulls (all fields defined at `coordinator_data.py`).
 | Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
 | Projected year consumption | `projected_year_consumption` | - | MEASUREMENT | kWh | `projected_year_consumption_kwh` (`projected_volume.py`); `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes from `volume_projection_diagnostics["consumption"]` |
 | Projected year injection | `projected_year_injection` | - | MEASUREMENT | kWh | `projected_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
-| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
-| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only); 0 in fixed capacity mode, which measures nothing |
+| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
+| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only); 0 in fixed capacity mode, which measures nothing and banks no month, while keeping the months measured before |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
 | Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
 | Peak price | `price_peak` | - | MEASUREMENT | EUR/kWh | `static_peak_price.all_in`, the contract's CONSTANT all-in day rate rather than the price now (created only on a bi-hourly meter, `CONF_METER == METER_BI`). Unavailable where no such constant exists (`unavailable_when_none`; it used to read unknown): a dynamic or time-of-use contract, the Walloon Impact tariff, or a DSO the snapshot does not carry |

@@ -4687,6 +4687,50 @@ async def test_a_fixed_peak_is_not_billed_after_a_switch_to_the_sensor(
     assert coord._billed_peak_kw() == 3.2
 
 
+async def test_a_tick_in_fixed_mode_keeps_the_measured_months(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Entering fixed mode cleared the measured history, so one tick in it,
+    a broken peak sensor worked around for an hour, lost a year of peaks for
+    good: back on the sensor the mean restarted on the running month alone."""
+    sensor = "sensor.maximum_demand_current_month"
+    data = {
+        "supplier": "eneco",
+        "contract": "power_fix",
+        "region": "flanders",
+        "dso": "fluvius_antwerpen",
+        "meter": "mono",
+        "capacity_mode": "sensor",
+        "capacity_peak_sensor": sensor,
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Eneco (Flanders)")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    measured = {f"2026-{m:02d}-01": (6.0 if m <= 3 else 4.0) for m in range(1, 9)}
+    coord._peak_history = dict(measured)
+    freezer.move_to("2026-09-10 12:00:00+02:00")
+    hass.states.async_set(sensor, "4.0", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+    assert len(coord._peak_terms()) == 9
+
+    hass.config_entries.async_update_entry(
+        entry, data={**data, "capacity_mode": "fixed", "capacity_fixed_kw": 5.0}
+    )
+    freezer.move_to("2026-10-11 12:00:00+02:00")
+    await coord._track_monthly_peak()
+    assert coord._billed_peak_kw() == 5.0
+    assert coord._peak_terms() == []
+    assert coord._peak_kw == 0.0
+
+    hass.config_entries.async_update_entry(entry, data=data)
+    freezer.move_to("2026-10-12 12:00:00+02:00")
+    hass.states.async_set(sensor, "2.6", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+    # September was banked on the rollover, and fixed mode banked nothing.
+    assert coord._peak_history == {**measured, "2026-09-01": 4.0}
+    assert coord._billed_peak_kw() == pytest.approx((3 * 6.0 + 6 * 4.0 + 2.6) / 10)
+
+
 async def test_reset_monthly_peak_also_clears_the_history(
     hass: HomeAssistant, freezer: Any
 ) -> None:

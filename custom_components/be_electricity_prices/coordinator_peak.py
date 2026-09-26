@@ -157,12 +157,11 @@ class _PeakMixin:
             # value directly. Writing it here banked it into every closed
             # month as if measured, and after a switch to the peak sensor the
             # running maximum could not come down below it for the rest of
-            # the month, nor the mean for a year. The window goes too, as it
-            # does outside Flanders: fixed mode does not read it, and one
-            # stored before this rule cannot tell the configured kW from a
-            # measured peak.
+            # the month, nor the mean for a year. With the running month at
+            # zero nothing is banked. The measured months stay: fixed mode
+            # does not bill on them, and clearing them lost a year of peaks
+            # to a single tick in fixed mode.
             self._peak_kw = 0.0
-            self._peak_history.clear()
         elif mode == CAPACITY_MODE_SENSOR:
             entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
             state: State | None = self.hass.states.get(entity_id) if entity_id else None
@@ -219,8 +218,12 @@ class _PeakMixin:
         The count is published as ``capacity_peak_months``, so it has to come
         from here rather than be recomputed at the call site: reporting
         ``len(self._peak_history) + 1`` claimed a month the mean had not taken
-        for as long as the in-progress one stayed unmeasured.
+        for as long as the in-progress one stayed unmeasured. None in fixed
+        mode, which bills the configured kW and takes no mean, whatever
+        measured months it keeps for a return to the sensor.
         """
+        if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
+            return []
         peaks = list(self._peak_history.values())
         if self._peak_kw > 0.0:
             peaks.append(self._peak_kw)
