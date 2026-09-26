@@ -1030,7 +1030,10 @@ If the consumption meter stops (renamed, replaced, or a sensor with no
 stopped are left out of both sides and the Repairs card above names it. A
 wired consumption meter that has never recorded anything bills nothing at
 all. An injection meter that starts later, because the panels came later in
-the year, is expected and cuts nothing.
+the year, is expected and cuts nothing. Without a solar regime the injection
+meters are not read at all, so one that is broken or stopped changes nothing
+and raises no Repairs card: wiring them only for the Energy dashboard is
+fine.
 - **"accumulated before the window"** — the first hour of the year carried
   energy from before 1 January, which happens when the run-up to New Year
   is missing from the recorder. That one over-bills rather than under-bills.

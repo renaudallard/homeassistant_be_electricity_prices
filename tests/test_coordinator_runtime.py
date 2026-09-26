@@ -2747,6 +2747,7 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
             "night_consumption_kwh": "sensor.night_cons",
             "day_injection_kwh": "sensor.day_inj",
             "night_injection_kwh": "sensor.night_inj",
+            "solar_regime": "injection",
         },
         title="Eneco (Flanders)",
     )
@@ -2792,6 +2793,46 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     assert coord._register_pair_fault == ""
     coord._sync_register_pair_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_no_injection_repairs_card_without_a_solar_regime(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Without a solar regime the bill does not read the injection meters, so
+    a broken injection register leaves nothing short, and the card that says
+    the running cost reads low would be wrong. They are not read at all."""
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "day_injection_kwh": "sensor.day_inj",
+            "night_injection_kwh": "sensor.night_inj",
+            "solar_regime": "none",
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+    injected = AsyncMock(return_value=MeasuredKwh(0.0, 0, "sensor.night_inj"))
+    with (
+        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
+        patch.object(coordinator_snapshot, "_measured_kwh", injected),
+    ):
+        await coord._ensure_annual_volume()
+    injected.assert_not_called()
+    assert coord._register_pair_fault == ""
 
 
 async def test_a_silent_meter_side_is_named_in_repairs(

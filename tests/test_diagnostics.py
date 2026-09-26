@@ -479,6 +479,7 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
             "night_consumption_kwh": "sensor.night",
             "consumption_kwh": "sensor.total",
             "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
         },
     )
     first = datetime(2025, 12, 31, 23, tzinfo=UTC)

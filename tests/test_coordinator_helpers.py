@@ -1568,6 +1568,7 @@ async def test_a_day_one_register_did_not_report_is_billed_on_neither_side(
             "day_consumption_kwh": "sensor.day",
             "night_consumption_kwh": "sensor.night",
             "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
         }
     )
     rows, live = _pair_through_the_recorder(
@@ -3073,7 +3074,11 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
 
 
 _TOTALS_BOTH_SIDES = SimpleNamespace(
-    data={"consumption_kwh": "sensor.cons", "injection_kwh": "sensor.inj"}
+    data={
+        "consumption_kwh": "sensor.cons",
+        "injection_kwh": "sensor.inj",
+        "solar_regime": "injection",
+    }
 )
 
 
@@ -3137,6 +3142,92 @@ async def test_a_consumption_meter_that_never_recorded_bills_nothing(
     assert sides.silent == ("sensor.cons",)
     assert not sides.consumption.kwh
     assert not sides.injection.kwh
+
+
+def _no_solar(**extra: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        data={
+            "consumption_kwh": "sensor.cons",
+            "day_injection_kwh": "sensor.inj_day",
+            "night_injection_kwh": "sensor.inj_night",
+            "solar_regime": "none",
+            **extra,
+        }
+    )
+
+
+async def _read(entry: SimpleNamespace, today: date) -> tuple[Any, Any]:
+    daily = await energy_meters._resolve_daily_kwh(
+        None,  # type: ignore[arg-type]
+        entry,  # type: ignore[arg-type]
+        today,
+        date(2026, 1, 1),
+    )
+    sides = await energy_meters._metered_sides(
+        None,  # type: ignore[arg-type]
+        entry,  # type: ignore[arg-type]
+        date(2026, 1, 1),
+        today,
+    )
+    return daily, sides
+
+
+async def test_without_a_solar_regime_the_injection_meters_are_not_read(
+    freezer: Any,
+) -> None:
+    """Discussion #66: a household with no panels had its P1 injection pair
+    wired, one register of it compiling no statistics. A pair with a silent
+    half refuses its side, and that refused the whole year, so the bill fell
+    to the fees though injection is never billed without a regime. A stopped
+    injection meter must not cut consumption days either. With a regime the
+    pair is still refused, as it was."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    for inj_day in (year, year[:100]):
+        rows, live = _pair_through_the_recorder(
+            {"sensor.cons": year, "sensor.inj_day": inj_day, "sensor.inj_night": []},
+            {"sensor.cons": 5.0},
+        )
+        with rows, live:
+            daily, sides = await _read(_no_solar(), today)
+            billed = await _read(_no_solar(solar_regime="injection"), today)
+        assert daily is not None
+        assert len(daily) == 266
+        assert sum(r[2] + r[3] for r in daily.values()) == 0.0
+        assert sides is not None
+        assert sides.injection.sensors == ()
+        assert sides.silent == ()
+        assert len(sides.consumption.kwh) == 265
+        assert billed == (None, None)
+
+
+async def test_the_daily_memo_keeps_the_regimes_apart(freezer: Any) -> None:
+    """A compare what-if quoting a regime shares the household's meter keys,
+    so a memo keyed on them alone served the household's refusal to the
+    what-if row, or the other way round."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    rows, live = _pair_through_the_recorder(
+        {"sensor.cons": year, "sensor.inj_day": year, "sensor.inj_night": []},
+        {"sensor.cons": 5.0},
+    )
+    with rows, live, energy_meters.memoise_meter_reads({}):
+        own = await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            _no_solar(),  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        what_if = await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            _no_solar(solar_regime="injection"),  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+    assert own is not None
+    assert what_if is None
 
 
 async def test_feed_in_that_starts_late_cuts_nothing(freezer: Any) -> None:

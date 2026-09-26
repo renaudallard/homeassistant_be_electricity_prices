@@ -68,7 +68,9 @@ from .const import (
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
     CONF_REGION,
+    CONF_SOLAR_REGIME,
     METER_MONO,
+    SOLAR_REGIME_NONE,
 )
 from .pricing import (
     MeterType,
@@ -486,6 +488,21 @@ _MEMO_METER_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
 _METER_MEMO: ContextVar[dict[Any, Any] | None] = ContextVar("_METER_MEMO", default=None)
 
 
+def _bills_injection(entry: ConfigEntry) -> bool:
+    """Whether the bill reads the injection meters at all.
+
+    Not without a solar regime: nothing is credited or netted then, so an
+    injection pair wired for the Energy dashboard must not be able to refuse
+    or shorten the year. One of them compiling no statistics took a
+    household with no panels to the fees floor (discussion #66). Read off
+    ``entry.data``, so a compare what-if quoting a regime reads them for its
+    own row.
+    """
+    return bool(
+        entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE) != SOLAR_REGIME_NONE
+    )
+
+
 @contextmanager
 def memoise_meter_reads(store: dict[Any, Any]) -> Iterator[None]:
     """Serve repeat reads of one meter window from ``store`` inside this block.
@@ -610,7 +627,11 @@ async def _metered_sides(
     would bill it against nothing.
     """
     cons = await _metered_hourly_kwh(hass, entry, "consumption", start, end)
-    inj = await _metered_hourly_kwh(hass, entry, "injection", start, end)
+    inj = (
+        await _metered_hourly_kwh(hass, entry, "injection", start, end)
+        if _bills_injection(entry)
+        else MeteredHours({}, ())
+    )
     if cons is None or inj is None:
         return None
     side, after = _silent_periods(
@@ -771,7 +792,9 @@ async def _resolve_daily_kwh(
         and lets the math sum it; bi/dynamic recovers the per-day
         band ratio from hourly statistics binned on ``is_offpeak``).
 
-      * **Nothing**: that side contributes zero.
+      * **Nothing**: that side contributes zero. So does the injection side
+        of an entry with no solar regime, whatever is wired there
+        (:func:`_bills_injection`).
 
     A side that has only one half of its register pair (e.g.
     ``CONF_DAY_CONSUMPTION_KWH`` set, ``CONF_NIGHT_CONSUMPTION_KWH``
@@ -798,6 +821,9 @@ async def _resolve_daily_kwh(
         meter,
         region,
         tuple(entry.data.get(k) for k in _MEMO_METER_KEYS),
+        # The regime decides whether the injection side is read, and a
+        # what-if row quoting one shares the household's meter keys.
+        _bills_injection(entry),
         window_start,
         today,
     )
@@ -900,7 +926,7 @@ async def _resolve_daily_kwh(
         slot_day=0,
         slot_night=1,
     )
-    inj_ok = await _side(
+    inj_ok = not _bills_injection(entry) or await _side(
         entry.data.get(CONF_DAY_INJECTION_KWH),
         entry.data.get(CONF_NIGHT_INJECTION_KWH),
         entry.data.get(CONF_INJECTION_KWH),

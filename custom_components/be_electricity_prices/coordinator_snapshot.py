@@ -55,7 +55,12 @@ from .snapshot_store import (
     _shared_failed_fetches,
     fetch_shared,
 )
-from .energy_meters import _kwh_sensor_ids, _measured_kwh, _metered_sides
+from .energy_meters import (
+    _bills_injection,
+    _kwh_sensor_ids,
+    _measured_kwh,
+    _metered_sides,
+)
 from .snapshot_months import card_for_unreadable_month
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -220,7 +225,9 @@ class _SnapshotMixin:
         day_id, night_id, _total = _kwh_sensor_ids(self.entry, "injection")
         sells = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
         self._annual_injection_kwh = None
-        if (day_id and night_id) or sells:
+        # Not without a solar regime: the bill does not read those meters,
+        # so a broken one leaves nothing short to raise a card over.
+        if _bills_injection(self.entry) and ((day_id and night_id) or sells):
             with contextlib.suppress(Exception):
                 injected = await _measured_kwh(
                     self.hass,
