@@ -52,7 +52,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .energy_meters import _metered_hourly_kwh
+from .energy_meters import _metered_sides
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -325,26 +325,15 @@ async def _accrue_cost(
     if hours:
         start_d = dt_util.as_local(hours[0]).date()
         end_d = dt_util.as_local(hours[-1]).date()
-        metered_cons = await _metered_hourly_kwh(
-            hass, entry, "consumption", start_d, end_d
-        )
-        metered_inj = await _metered_hourly_kwh(
-            hass, entry, "injection", start_d, end_d
-        )
+        sides = await _metered_sides(hass, entry, start_d, end_d)
         # Mirror the live paths: a pair that cannot be billed (half-wired, or
         # one half recording nothing) accrues fees only rather than bill the
         # wired half and credit injection against a consumption side that
-        # silently resolved to nothing.
-        if metered_cons is not None and metered_inj is not None:
-            # An hour one half of a pair did not report leaves both sides, as
-            # on the live walks.
-            unknown = metered_cons.unknown | metered_inj.unknown
-            cons_per_hour = {
-                h: kwh for h, kwh in metered_cons.kwh.items() if h not in unknown
-            }
-            inj_per_hour = {
-                h: kwh for h, kwh in metered_inj.kwh.items() if h not in unknown
-            }
+        # silently resolved to nothing. The hours one side cannot be billed on
+        # have left both, as on the live walks.
+        if sides is not None:
+            cons_per_hour = sides.consumption.kwh
+            inj_per_hour = sides.injection.kwh
 
     _snap_for = ctx.snap_for
     spp_weights = ctx.spp_weights

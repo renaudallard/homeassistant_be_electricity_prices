@@ -51,6 +51,7 @@ from .const import (
 from .energy_meters import (
     _hourly_injection_sensors,
     _metered_hourly_kwh,
+    _metered_sides,
     _top_up_today_hourly,
 )
 from .fees import in_first_contract_year
@@ -166,21 +167,21 @@ async def _ytd_hourly_energy(
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
     end = today if window_end is None else window_end
 
-    cons = await _metered_hourly_kwh(hass, entry, "consumption", window_start, end)
-    inj = await _metered_hourly_kwh(hass, entry, "injection", window_start, end)
-    if cons is None or inj is None:
+    sides = await _metered_sides(hass, entry, window_start, end)
+    if sides is None:
         # Same rule the static per-day path applies: a half-wired pair, or one
         # whose other half records nothing, means the missing band's kWh are
         # unavailable, so bill nothing rather than bill the wired half.
         # Without this the empty side vanished silently and any wired
         # injection was credited against zero consumption.
         return None
+    cons, inj = sides.consumption, sides.injection
     if not cons.sensors and not inj.sensors:
         return None
-    # An hour one half of a pair did not report leaves both sides.
-    unknown = cons.unknown | inj.unknown
-    cons_per_hour = {h: kwh for h, kwh in cons.kwh.items() if h not in unknown}
-    inj_per_hour = {h: kwh for h, kwh in inj.kwh.items() if h not in unknown}
+    # An hour one half of a pair did not report, or after one side went
+    # silent, has already left both sides.
+    cons_per_hour = cons.kwh
+    inj_per_hour = inj.kwh
     # Statistics only carry the last COMPILED hour, so top today up from the
     # live meters the way the per-day branch has since 0.11.9. Without this
     # every hourly-billed contract stepped once an hour at best and froze

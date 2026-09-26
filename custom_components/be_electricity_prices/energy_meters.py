@@ -582,6 +582,59 @@ async def _metered_hourly_kwh(
     )
 
 
+@dataclass(frozen=True)
+class MeteredSides:
+    """Both sides' hourly kWh, with the hours neither can be billed on taken
+    out of both.
+
+    Those are the hours one half of a register pair did not report, and the
+    hours after one side went silent under the other (:func:`_silent_periods`).
+    ``silent`` names the sensors of that side, for the Repairs card.
+    """
+
+    consumption: MeteredHours
+    injection: MeteredHours
+    silent: tuple[str, ...] = ()
+
+
+async def _metered_sides(
+    hass: HomeAssistant, entry: ConfigEntry, start: date, end: date
+) -> MeteredSides | None:
+    """Both sides of the entry's metering hour by hour, or ``None`` when
+    either cannot be billed (:func:`_metered_hourly_kwh`).
+
+    The one place the hourly walks and the backfill read the two sides, so
+    the hours left out of one are left out of the other the same way
+    everywhere. Neither side keeps ``today_ok`` once a side went
+    silent: today is after the silence, and topping the other side up live
+    would bill it against nothing.
+    """
+    cons = await _metered_hourly_kwh(hass, entry, "consumption", start, end)
+    inj = await _metered_hourly_kwh(hass, entry, "injection", start, end)
+    if cons is None or inj is None:
+        return None
+    side, after = _silent_periods(
+        cons.kwh if cons.sensors else None,
+        inj.kwh if inj.sensors else None,
+        cons.kwh.keys() | inj.kwh.keys(),
+    )
+    unknown = cons.unknown | inj.unknown | after
+
+    def _billable(metered: MeteredHours) -> MeteredHours:
+        return replace(
+            metered,
+            kwh={h: kwh for h, kwh in metered.kwh.items() if h not in unknown},
+            unknown=unknown,
+            today_ok=metered.today_ok and side is None,
+        )
+
+    return MeteredSides(
+        _billable(cons),
+        _billable(inj),
+        (cons if side == "consumption" else inj).sensors if side else (),
+    )
+
+
 async def _top_up_today_hourly(
     hass: HomeAssistant,
     entity_ids: Iterable[str],
@@ -756,6 +809,9 @@ async def _resolve_daily_kwh(
     # They leave both sides: a day whose consumption is unknown must not be
     # credited its feed-in, or counted in days_seen as billed.
     unknown: set[date] = set()
+    # The days each wired side reported before today, keyed by its day slot,
+    # for the check that one side did not go silent under the other.
+    reported: dict[int, set[date]] = {}
 
     async def _side(
         day_id: str | None,
@@ -802,6 +858,7 @@ async def _resolve_daily_kwh(
                     row[slot_day] += d[day]
                     row[slot_night] += n[day]
                 unknown.update(set(d) ^ set(n))
+                reported[slot_day] = days
                 if (
                     day_today is not None
                     and night_today is not None
@@ -820,6 +877,7 @@ async def _resolve_daily_kwh(
             return True  # nothing wired on this side; contributes zero
         if per_day is None:
             per_day = await _recorder_daily_kwh(hass, total_id, window_start, today)
+        reported[slot_day] = set(per_day) - {today}
         if meter in ("bi", "dynamic"):
             ratios = await _recorder_daily_band_ratio(
                 hass, total_id, window_start, today, region
@@ -849,7 +907,8 @@ async def _resolve_daily_kwh(
         slot_day=2,
         slot_night=3,
     )
-    for day in unknown:
+    _silent, after = _silent_periods(reported.get(0), reported.get(2), out.keys())
+    for day in unknown | after:
         out.pop(day, None)
     if not (cons_ok and inj_ok):
         resolved = None
@@ -964,7 +1023,7 @@ def _split_today(
     )
 
 
-def _stopped(halves: Iterable[tuple[str, Mapping[_P, float]]]) -> list[str]:
+def _stopped(halves: Iterable[tuple[str, Collection[_P]]]) -> list[str]:
     """The halves of a reporting pair whose latest day (or hour) trails the
     other's by more than ``_REGISTER_STOPPED_AFTER_DAYS``.
 
@@ -993,6 +1052,40 @@ def _paired_keys(day: Mapping[_K, float], night: Mapping[_K, float]) -> set[_K] 
     if bool(day) != bool(night):
         return None
     return set(day) & set(night)
+
+
+def _silent_periods(
+    cons: Collection[_P] | None, inj: Collection[_P] | None, periods: Iterable[_P]
+) -> tuple[str | None, set[_P]]:
+    """The side that went silent while the other carried on, and which of
+    ``periods`` to leave out of both sides for it.
+
+    ``cons`` and ``inj`` are the days (or hours) each side reported, ``None``
+    for a side with nothing wired. The register pair check compares the two
+    halves of one side; nothing compared the sides, so a consumption meter
+    renamed away in June billed every later day at zero consumption against
+    the full feed-in credit, with every day counted as seen. A side stopped
+    when its last period trails the other's by more than
+    ``_REGISTER_STOPPED_AFTER_DAYS`` (:func:`_stopped`), and everything after
+    it is unknown on both sides, as a day one half of a pair missed is.
+
+    Consumption that recorded nothing at all while feed-in did is silent for
+    the whole window: a live meter writes a row every hour, moved or not, so
+    no row is missing data rather than a household that used nothing. Feed-in
+    that recorded nothing is not: panels installed later in the year, or a
+    window that closed before they were, is the common case. For the same
+    reason nothing is cut BEFORE a side's first period.
+    """
+    if cons is None or inj is None or not inj:
+        return None, set()
+    if not cons:
+        return "consumption", set(periods)
+    stopped = _stopped((("consumption", cons), ("injection", inj)))
+    if not stopped:
+        return None, set()
+    side = stopped[0]
+    last = max(cons if side == "consumption" else inj)
+    return side, {p for p in periods if p > last}
 
 
 def _total_stands_in(total: Collection[_K], paired: Collection[_K] | None) -> bool:

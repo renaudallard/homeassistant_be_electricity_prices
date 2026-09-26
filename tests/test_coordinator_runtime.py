@@ -2794,6 +2794,51 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_silent_meter_side_is_named_in_repairs(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A consumption meter that stopped while feed-in carries on is left out
+    of both sides by the walks, which reads low with nothing else to say why.
+    The daily volume read names it on the same card as a stopped register."""
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.energy_meters import (
+        MeteredHours,
+        MeteredSides,
+    )
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    volume = compare_quote._AnnualVolume(3500.0, 365, "measured", measured=True)
+    silent = MeteredSides(
+        MeteredHours({}, ("sensor.cons",)),
+        MeteredHours({}, ("sensor.inj",)),
+        ("sensor.cons",),
+    )
+    with (
+        patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
+        patch.object(
+            coordinator_snapshot, "_metered_sides", AsyncMock(return_value=silent)
+        ),
+    ):
+        await coord._ensure_annual_volume()
+    assert coord._register_pair_fault == "sensor.cons"
+
+
 async def test_a_year_of_sold_export_is_measured_for_the_feed_in_bonus(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -1433,14 +1433,14 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     ) -> dict[date, float]:
         if entity_id == "sensor.inj_total":
             return {date(2026, 1, day): 10.0 for day in (1, 2, 3)}
-        return {}
+        return {date(2026, 1, day): 0.0 for day in (1, 2, 3)}
 
     async def _fake_hourly(
         _hass: object, entity_id: str, _start: date, _end: date
     ) -> dict[datetime, float]:
         if entity_id == "sensor.inj_total":
             return {hour: 10.0 for hour in hours}
-        return {}
+        return dict.fromkeys(hours, 0.0)
 
     with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
@@ -1967,7 +1967,9 @@ async def test_ytd_credits_a_register_pair_per_register(
             return {day: 6.0 for day in days}
         if entity_id == "sensor.inj_night":
             return {day: 4.0 for day in days}
-        return {}
+        # A consumption meter that recorded and did not move: one with no
+        # rows at all is silent, and the year would not be billed.
+        return {day: 0.0 for day in days}
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
         cost = await _compute_current_year_cost(
@@ -2014,7 +2016,9 @@ async def test_ytd_credit_is_unchanged_for_a_card_with_no_register_pair(
             return {day: 6.0 for day in days}
         if entity_id == "sensor.inj_night":
             return {day: 4.0 for day in days}
-        return {}
+        # A consumption meter that recorded and did not move: one with no
+        # rows at all is silent, and the year would not be billed.
+        return {day: 0.0 for day in days}
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
         cost = await _compute_current_year_cost(
@@ -3066,6 +3070,90 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
     assert hourly.sensors == ("sensor.day", "sensor.night")
     assert len(hourly.kwh) == 264
     assert measured == energy_meters.MeasuredKwh(264 * 2.0 + 7.0, 265)
+
+
+_TOTALS_BOTH_SIDES = SimpleNamespace(
+    data={"consumption_kwh": "sensor.cons", "injection_kwh": "sensor.inj"}
+)
+
+
+async def _both_sides(
+    cons: list[date], inj: list[date], live: dict[str, float], today: date
+) -> tuple[Any, Any]:
+    rows, live_patch = _pair_through_the_recorder(
+        {"sensor.cons": cons, "sensor.inj": inj}, live
+    )
+    with rows, live_patch:
+        daily = await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+        )
+        sides = await energy_meters._metered_sides(
+            None,  # type: ignore[arg-type]
+            _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    return daily, sides
+
+
+async def test_a_consumption_meter_that_stopped_leaves_both_sides(
+    freezer: Any,
+) -> None:
+    """Nothing compared consumption with injection, so a consumption meter
+    renamed away in June billed every later day at zero consumption against
+    the full feed-in credit, with every day counted as seen. The days after
+    it stopped now leave both sides, today included, and the sensor is named."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, sides = await _both_sides(year[:150], year, {"sensor.inj": 3.0}, today)
+    assert daily is not None
+    assert sorted(daily) == year[:150]
+    assert sum(r[2] + r[3] for r in daily.values()) == pytest.approx(150.0)
+    assert sides is not None
+    assert sides.silent == ("sensor.cons",)
+    assert len(sides.consumption.kwh) == len(sides.injection.kwh) == 150
+    assert not sides.injection.today_ok
+
+
+async def test_a_consumption_meter_that_never_recorded_bills_nothing(
+    freezer: Any,
+) -> None:
+    """A wired consumption sensor with no statistics read as a household that
+    used nothing all year while its feed-in was credited. A live meter writes
+    a row every hour, so no rows at all is missing data. Its live reading of
+    today does not make it look alive."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    daily, sides = await _both_sides(
+        [], year, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+    )
+    assert daily is None
+    assert sides is not None
+    assert sides.silent == ("sensor.cons",)
+    assert not sides.consumption.kwh
+    assert not sides.injection.kwh
+
+
+async def test_feed_in_that_starts_late_cuts_nothing(freezer: Any) -> None:
+    """Panels installed in June: consumption before them is real and billed,
+    and a feed-in meter that has not recorded yet is not a silent one."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    for inj in (year[150:], []):
+        daily, sides = await _both_sides(
+            year, inj, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+        )
+        assert daily is not None
+        assert len(daily) == 266
+        assert sides is not None
+        assert sides.silent == ()
+        assert len(sides.consumption.kwh) == 265
 
 
 async def test_measured_kwh_counts_days_across_a_register_pair(
@@ -10052,12 +10140,18 @@ async def test_impact_comptage_credits_the_delivery_month_index(
     async def _fake_hourly(
         _hass: object, entity_id: str, _start: date, _end: date
     ) -> dict[datetime, float]:
-        return dict(per_hour) if entity_id == "sensor.inj" else {}
+        return (
+            dict(per_hour)
+            if entity_id == "sensor.inj"
+            else dict.fromkeys(per_hour, 0.0)
+        )
 
     async def _fake_daily(
         _hass: object, entity_id: str, _start: date, _end: date
     ) -> dict[date, float]:
-        return dict(per_day) if entity_id == "sensor.inj" else {}
+        return (
+            dict(per_day) if entity_id == "sensor.inj" else dict.fromkeys(per_day, 0.0)
+        )
 
     async def _credit(mode: str) -> float:
         entry = _yearly_entry(
@@ -10118,7 +10212,11 @@ async def test_tou_energy_credits_the_month_index_not_the_printed_figure(
     async def _fake_hourly(
         _hass: object, entity_id: str, _start: date, _end: date
     ) -> dict[datetime, float]:
-        return dict(per_hour) if entity_id == "sensor.inj" else {}
+        return (
+            dict(per_hour)
+            if entity_id == "sensor.inj"
+            else dict.fromkeys(per_hour, 0.0)
+        )
 
     entry = _yearly_entry(
         meter="mono",
@@ -10486,7 +10584,9 @@ async def test_a_plain_month_index_ignores_a_solar_profile_it_was_handed(
     async def _fake_daily(
         _hass: object, entity_id: str, _s: date, _e: date
     ) -> dict[date, float]:
-        return dict(per_day) if entity_id == "sensor.inj" else {}
+        return (
+            dict(per_day) if entity_id == "sensor.inj" else dict.fromkeys(per_day, 0.0)
+        )
 
     entry = _yearly_entry(
         meter="mono",

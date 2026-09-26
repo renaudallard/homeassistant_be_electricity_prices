@@ -862,7 +862,10 @@ successful refresh:
   integration swap, a meter replacement). The pair is billed only on the
   days both registers report, so the running cost reads low until it is
   rewired; the card names the sensor. A register that merely started late
-  is not reported, since it records to date.
+  is not reported, since it records to date. The same card names a
+  consumption or injection meter that stopped while the other side carries
+  on: the days after it stopped are billed on neither side, rather than as
+  a household that used nothing while its feed-in was credited.
 
   The first five of those eight are not failures either: each clears when the
   supplier prints the missing row again, the direct-debit one clears as soon
@@ -1017,6 +1020,13 @@ searching for:
   day, but only when it has recorded at least as many days as the pair
   still bills: one that records less, or nothing at all, would bill the year
   short. The warning names the totals sensor when it is the one billed.
+
+If the consumption meter stops (renamed, replaced, or a sensor with no
+`state_class`) while the injection meter carries on, the days after it
+stopped are left out of both sides and the Repairs card above names it. A
+wired consumption meter that has never recorded anything bills nothing at
+all. An injection meter that starts later, because the panels came later in
+the year, is expected and cuts nothing.
 - **"accumulated before the window"** — the first hour of the year carried
   energy from before 1 January, which happens when the run-up to New Year
   is missing from the recorder. That one over-bills rather than under-bills.

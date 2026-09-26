@@ -55,7 +55,7 @@ from .snapshot_store import (
     _shared_failed_fetches,
     fetch_shared,
 )
-from .energy_meters import _kwh_sensor_ids, _measured_kwh
+from .energy_meters import _kwh_sensor_ids, _measured_kwh, _metered_sides
 from .snapshot_months import card_for_unreadable_month
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -238,6 +238,18 @@ class _SnapshotMixin:
                     self._annual_injection_kwh = (
                         injected.kwh * MEASURED_FULL_YEAR_DAYS / injected.days_with_data
                     )
+        # And a side that went silent under the other, which the pair check
+        # cannot see: the walks leave its days out of both sides, so the
+        # running cost reads low with nothing else to say why.
+        with contextlib.suppress(Exception):
+            sides = await _metered_sides(
+                self.hass,
+                self.entry,
+                today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
+                today,
+            )
+            if sides is not None:
+                faults.extend(sides.silent)
         self._register_pair_fault = ", ".join(f for f in faults if f)
 
     def _reresolve_snapshot(self) -> None:
