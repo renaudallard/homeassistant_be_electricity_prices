@@ -42,10 +42,11 @@ LOGS="$ROOT/tmp/gate/$SHA.$$.logs"
 REMOTE=${GATE_REMOTE-maci7}
 REMOTE_DIR="be_gate/gate-$SHA.$$"
 # The keepalive notices a remote that went away without closing the
-# connection, a Mac put to sleep for one, within a minute; without it ssh
-# waits on the dead peer and the local fallback never starts.
-SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15
-  -o ServerAliveCountMax=4)
+# connection, a Mac put to sleep for one, within about 15 s; without it ssh
+# waits on the dead peer and the local fallback never starts. Kept short
+# because every second of it comes off what the remote saves.
+SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5
+  -o ServerAliveCountMax=3)
 shipped=""
 
 [ -x "$PYTHON" ] || { echo "no interpreter at $PYTHON" >&2; exit 1; }
