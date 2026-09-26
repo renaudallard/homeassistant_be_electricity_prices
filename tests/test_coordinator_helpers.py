@@ -3917,6 +3917,41 @@ async def test_the_first_day_of_the_window_is_billed_on_its_live_reading(
     assert daily == {date(2026, 1, 1): (5.0, 0.0, 3.0, 0.0)}
 
 
+async def test_the_first_day_reads_the_silent_side_off_todays_hours(
+    freezer: Any,
+) -> None:
+    """On the first day of the window a meter compiling no statistics still
+    reads live, so with no day before today to compare the per-day walk
+    credited a dead feed-in meter all day, or billed a dead consumption
+    meter, while the hourly walks already knew from today's compiled hours,
+    and midnight took it back. Both walks now read the same hours."""
+    freezer.move_to("2026-01-01 18:00:00+01:00")
+    today = date(2026, 1, 1)
+    live = {"sensor.cons": 5.0, "sensor.inj": 3.0}
+    daily, sides = await _both_sides([today], [], live, today)
+    assert daily == {today: (5.0, 0.0, 0.0, 0.0)}
+    assert sides is not None
+    assert sides.silent == ("sensor.inj",)
+    daily, sides = await _both_sides([], [today], live, today)
+    assert daily is None
+    assert sides is not None
+    assert sides.silent == ("sensor.cons",)
+    # A register pair one half of which compiles no statistics is refused
+    # from the first day, as it is on every later one.
+    rows, live_patch = _pair_through_the_recorder(
+        {"sensor.day": [today], "sensor.night": []},
+        {"sensor.day": 5.0, "sensor.night": 2.0},
+    )
+    with rows, live_patch:
+        daily = await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            _PAIR_ENTRY,  # type: ignore[arg-type]
+            today,
+            today,
+        )
+    assert daily is None
+
+
 async def test_feed_in_before_the_consumption_meter_started_is_left_out(
     freezer: Any,
 ) -> None:

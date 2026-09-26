@@ -1031,6 +1031,22 @@ async def _resolve_daily_kwh(
         slot_day=2,
         slot_night=3,
     )
+    if today in out and today == dt_util.now().date() and not any(reported.values()):
+        # The first day of the window has no day before today to compare, and
+        # today's live reading comes off the state history, which a meter
+        # compiling no statistics still has. Today's compiled hours say which
+        # side records, as they do for the hourly walks (_metered_sides):
+        # comparing nothing credited such a feed-in meter all day, or billed
+        # such a consumption meter, and midnight took it back.
+        for slot in reported:
+            side = "consumption" if slot == 0 else "injection"
+            hours = await _metered_hourly_kwh(hass, entry, side, today, today)
+            if hours is None:
+                # One half of a pair compiled hours today and the other none:
+                # the dead half every later day refuses, so today does too.
+                out.clear()
+            elif hours.kwh:
+                reported[slot] = {today}
     silent, both, feed_in = _silent_periods(
         reported.get(0), reported.get(2), out.keys()
     )
@@ -1255,6 +1271,8 @@ def _silent_periods(
     neither side reported anything: on the first day of the window (1 January,
     or the day a recorded switch started the current contract) the days before
     today are none, and cutting today left the day billed on its fees alone.
+    The per-day walk compares today's compiled hours then instead, which is
+    what the hourly walks see (:func:`_resolve_daily_kwh`).
 
     A period injection did not report while consumption did is still billed
     on its consumption, with the feed-in left out. Cutting it from both sides
