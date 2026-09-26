@@ -209,13 +209,18 @@ async def _ytd_hourly_energy(
     # outright whenever compilation lagged or stalled. Off the sensors each
     # side was actually read from, which is the total when it stood in for a
     # broken pair.
-    # Neither side is topped up while a pair on either cannot bill today: its
-    # hours drop out at midnight, and the other side's live reading would be
-    # billed against nothing in the meantime. Nor for a window that closed
-    # before today: the live reading is not one of its hours.
-    if window_end is None and cons.today_ok and inj.today_ok:
-        await _top_up_today_hourly(hass, cons.sensors, cons_per_hour, today)
-        await _top_up_today_hourly(hass, inj.sensors, inj_per_hour, today)
+    # Each side is topped up on its own today_ok (_metered_sides). Consumption
+    # is billed on every day its meter reports, silent feed-in or not, so
+    # gating it on the feed-in froze it whenever the feed-in meter was silent
+    # and statistics stalled. Feed-in is not topped up once either side went
+    # silent or a pair on either cannot bill today: its hours drop out at
+    # midnight and would be credited only until then. Neither is for a window
+    # that closed before today: the live reading is not one of its hours.
+    if window_end is None:
+        if cons.today_ok:
+            await _top_up_today_hourly(hass, cons.sensors, cons_per_hour, today)
+        if inj.today_ok:
+            await _top_up_today_hourly(hass, inj.sensors, inj_per_hour, today)
 
     _snap_for = _month_snapshot_cache(
         hass,

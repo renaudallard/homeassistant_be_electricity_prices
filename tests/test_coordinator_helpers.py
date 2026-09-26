@@ -4336,6 +4336,59 @@ async def test_top_up_today_hourly_without_a_live_reading_is_a_no_op(
     assert per_hour == {midnight: pytest.approx(12.0)}
 
 
+@pytest.mark.parametrize("feed_in", [True, False], ids=["recording", "silent"])
+async def test_hourly_walk_tops_consumption_up_past_a_silent_feed_in(
+    freezer: Any, feed_in: bool
+) -> None:
+    """The hourly walk topped today up only when both sides could bill it,
+    so a feed-in meter compiling no statistics froze the consumption it no
+    longer takes out of the bill whenever compilation stalled. Consumption
+    is topped up on its own now, and the silent feed-in still is not."""
+    freezer.move_to("2026-09-26 15:30:00+02:00")
+    today = date(2026, 9, 26)
+    stall = datetime(2026, 9, 26, 6, 0, tzinfo=UTC)
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 268)
+    ]
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj" and not feed_in:
+            return {}
+        return {h: 0.5 for h in hours if h < stall}
+
+    class _Stop(Exception):
+        pass
+
+    def _stop(*_a: object, **_k: object) -> Any:
+        raise _Stop
+
+    top_up = AsyncMock()
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(ytd_energy, "_top_up_today_hourly", new=top_up),
+        patch.object(ytd_energy, "_month_snapshot_cache", new=_stop),
+        pytest.raises(_Stop),
+    ):
+        await ytd_energy._ytd_hourly_energy(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
+            today,
+            window_start=date(2026, 1, 1),
+            contract="c",
+        )
+    topped = [call.args[1] for call in top_up.await_args_list]
+    assert topped == (
+        [("sensor.cons",), ("sensor.inj",)] if feed_in else [("sensor.cons",)]
+    )
+
+
 async def test_live_today_kwh_none_when_unavailable(
     hass: HomeAssistant, freezer: Any
 ) -> None:
