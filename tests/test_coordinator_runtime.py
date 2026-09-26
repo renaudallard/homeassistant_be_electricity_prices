@@ -5223,21 +5223,21 @@ async def test_an_unanswered_direct_debit_question_raises_and_clears_a_repair(
     entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._snapshot_raw = _mega_ristourne_card()
+    card = coord._snapshot_raw = _mega_ristourne_card()
     issue_id = f"direct_debit_unanswered_{entry.entry_id}"
     registry = ir.async_get(hass)
 
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
     # Answering NO is still an answer: the credit is correctly withheld and the
     # household has said so, so there is nothing left to disclose.
     hass.config_entries.async_update_entry(entry, data={**data, "direct_debit": False})
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
     hass.config_entries.async_update_entry(entry, data={**data, "direct_debit": True})
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
@@ -5268,10 +5268,10 @@ async def test_direct_debit_question_is_silent_when_no_answer_moves_the_bill(
     entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._snapshot_raw = _mega_ristourne_card()
+    card = coord._snapshot_raw = _mega_ristourne_card()
     issue_id = f"direct_debit_unanswered_{entry.entry_id}"
 
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
     # A first year that ran into January still credits this year's window,
@@ -5279,18 +5279,52 @@ async def test_direct_debit_question_is_silent_when_no_answer_moves_the_bill(
     hass.config_entries.async_update_entry(
         entry, data={**data, "contract_start_date": "2025-01-15"}
     )
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
     hass.config_entries.async_update_entry(
         entry, data={**data, "contract_start_date": "2024-12-01"}
     )
-    coord._snapshot_raw = replace(
+    card = coord._snapshot_raw = replace(
         _mega_ristourne_card(),
         welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
         welcome_credit_after_months=14,
     )
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(card)
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
+async def test_direct_debit_question_waits_on_the_signing_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The credit is read off the card of the month the contract was signed,
+    and the notice judged its window on today's card. Signed 2024-12-01 on a
+    card whose lump lands after 14 months, 1 February 2026, inside this year's
+    window: today's card waits 12, which put the lump in December 2025 and kept
+    the notice down while the answer still moved the bill."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    data = {
+        "supplier": "mega",
+        "contract": "mega_cosy_flex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+        "contract_start_date": "2024-12-01",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    lump = replace(
+        _mega_ristourne_card(), welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+    )
+    coord._snapshot_raw = replace(lump, welcome_credit_after_months=12)
+    issue_id = f"direct_debit_unanswered_{entry.entry_id}"
+
+    coord._sync_direct_debit_unanswered_issue(
+        replace(lump, welcome_credit_after_months=14)
+    )
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+    coord._sync_direct_debit_unanswered_issue(coord._snapshot_raw)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 async def test_direct_debit_on_the_standing_charge_raises_without_a_start_date(
@@ -5311,11 +5345,13 @@ async def test_direct_debit_on_the_standing_charge_raises_without_a_start_date(
     issue_id = f"direct_debit_unanswered_{entry.entry_id}"
 
     # Nothing is billed before the card is read.
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(make_snapshot())
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
-    coord._snapshot_raw = replace(make_snapshot(), direct_debit_discount_eur=20.0)
-    coord._sync_direct_debit_unanswered_issue()
+    card = coord._snapshot_raw = replace(
+        make_snapshot(), direct_debit_discount_eur=20.0
+    )
+    coord._sync_direct_debit_unanswered_issue(card)
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
 
@@ -5340,7 +5376,7 @@ async def test_direct_debit_question_is_silent_where_no_card_prices_it(
     )
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._sync_direct_debit_unanswered_issue()
+    coord._sync_direct_debit_unanswered_issue(make_snapshot())
     assert (
         ir.async_get(hass).async_get_issue(
             DOMAIN, f"direct_debit_unanswered_{entry.entry_id}"

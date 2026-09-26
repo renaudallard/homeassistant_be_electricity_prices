@@ -214,7 +214,9 @@ class _TickMixin:
         def _sync_brussels_power_term_issue(self) -> None: ...
         def _sync_connection_fee_issue(self) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
-        def _sync_direct_debit_unanswered_issue(self) -> None: ...
+        def _sync_direct_debit_unanswered_issue(
+            self, signing: SupplierSnapshot
+        ) -> None: ...
         def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None: ...
         def _sync_exclusive_night_gap_issue(self) -> None: ...
         def _sync_extractor_issue(
@@ -732,6 +734,18 @@ class _TickMixin:
                 f"{DOMAIN}_month_cards_{self.entry.entry_id}",
             )
         projection_breakdown: dict[str, Any] = {}
+        # The card the welcome credit is read off, the same row the
+        # year-to-date walk just resolved, so a cache hit.
+        signing = await signing_month_snapshot(
+            self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data.get(CONF_REGION, ""),
+            self.entry,
+            self._snapshot,
+            cached_only=cached_months_only,
+        )
         projected_year_cost = await _compute_projected_year_cost(
             self.hass,
             self.entry,
@@ -748,18 +762,7 @@ class _TickMixin:
             # on. Not the live table's day or two, which moved this recorded
             # figure by tens of euro a day.
             spots=self._historical_spots,
-            # The card the welcome credit is read off, the same row the
-            # year-to-date walk just resolved, so a cache hit.
-            signing=await signing_month_snapshot(
-                self.hass,
-                self._session,
-                get_extractor(self.entry.data[CONF_SUPPLIER]),
-                self.entry.data[CONF_CONTRACT],
-                self.entry.data.get(CONF_REGION, ""),
-                self.entry,
-                self._snapshot,
-                cached_only=cached_months_only,
-            ),
+            signing=signing,
             breakdown=projection_breakdown,
         )
         # The calendar year's metered volume on each side. A profile is used
@@ -807,7 +810,7 @@ class _TickMixin:
         self._sync_prosumer_gap_issue()
         self._sync_compensation_kva_issue()
         self._sync_register_pair_issue()
-        self._sync_direct_debit_unanswered_issue()
+        self._sync_direct_debit_unanswered_issue(signing)
         self._sync_brussels_power_term_issue()
 
         # Compute static peak/offpeak breakdowns for the Energy Dashboard.

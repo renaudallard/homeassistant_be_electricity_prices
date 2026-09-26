@@ -405,7 +405,7 @@ class _IssuesMixin:
             and omits_brussels_power_term(self._snapshot, terms=terms),
         )
 
-    def _sync_direct_debit_unanswered_issue(self) -> None:
+    def _sync_direct_debit_unanswered_issue(self, signing: SupplierSnapshot) -> None:
         """Flag an entry on a card that prices direct debit but was never asked.
 
         Four Mega cards grant the WHOLE ristourne only to a direct-debit
@@ -439,6 +439,11 @@ class _IssuesMixin:
         billed before the card is read, so nothing is raised either. The
         question stays in the options whatever this decides, and the
         comparison page reads it.
+
+        ``signing`` is the card the welcome credit is read off
+        (``signing_month_snapshot``), so its wait decides when the credit was
+        paid out: today's card may state another, and the notice then came
+        and went on a date the bill does not credit on.
         """
         card = self._snapshot_raw
         raise_it = False
@@ -453,7 +458,7 @@ class _IssuesMixin:
             start = _parse_iso_date(self.entry.data.get(CONF_CONTRACT_START_DATE))
             raise_it = card.direct_debit_discount_eur is not None or (
                 start is not None
-                and last_credited_day(card, start)
+                and last_credited_day(signing, start)
                 >= ytd_window_start(self.entry, dt_util.now().date())
             )
         self._sync_issue("direct_debit_unanswered", raise_it)
