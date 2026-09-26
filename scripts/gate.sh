@@ -97,10 +97,13 @@ PYTEST_ARGS=("${@:-tests/}")
 if remote_ready; then
   where="$REMOTE"
   remote_pytest="../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")-q -n auto --dist loadfile"
-  # caffeinate -i keeps a Mac from idle sleep for as long as the suite runs;
+  # caffeinate keeps a Mac awake for as long as the suite runs. -i alone is
+  # not enough: with its screen off the Mac only half-wakes for the ssh
+  # connection, and from there it went back to sleep 45 s later with pytest
+  # running. -s holds even that on mains power, -i covers the battery;
   # a remote without it runs the suite plainly.
   start "pytest (on $REMOTE)" "${SSH[@]}" -n "$REMOTE" \
-    "cd $REMOTE_DIR && { command -v caffeinate >/dev/null && exec caffeinate -i $remote_pytest; exec $remote_pytest; }"
+    "cd $REMOTE_DIR && { command -v caffeinate >/dev/null && exec caffeinate -s -i $remote_pytest; exec $remote_pytest; }"
 else
   where=local
   start "pytest" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto --dist loadfile

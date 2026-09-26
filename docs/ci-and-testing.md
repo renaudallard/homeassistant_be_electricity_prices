@@ -1409,7 +1409,8 @@ gate refreshes with uv whenever `requirements-dev.txt` changes, and GNU `date` f
 `PATH` for the tests of `scripts/file_ci_issue.sh`. A remote that cannot be reached, or drops
 mid-run, costs a local pytest, never a gate result. An ssh keepalive notices a remote that went
 away without closing the connection, a Mac put to sleep for one, within about 15 s, and on a Mac
-the suite runs under `caffeinate -i` so the machine does not idle to sleep under it.
+the suite runs under `caffeinate -s -i` so the machine does not sleep under it: with the screen off
+the Mac only half-wakes for the connection, and `-i` alone let it go back to sleep mid-run.
 
 The individual invocations, derived from `.github/workflows/test.yml`, if you would rather run
 one by hand:
