@@ -268,10 +268,12 @@ class _PersistMixin:
         # it never holds tomorrow, and it is bucketed to the hour, so it cannot
         # give a quarter-hourly contract its own slots back.
         #
-        # Restored as a FALLBACK only: _spot_cache_day deliberately stays
-        # None, so the first tick still fetches from ENTSO-E as it always did
-        # and this is consulted only when that fetch fails. That also avoids
-        # adopting a partially-written curve as authoritative for the day.
+        # Restored with _spot_cache_day deliberately left None, so the first
+        # tick still fetches from ENTSO-E as it always did and a partially
+        # written curve is never taken as the day's answer on its own. That
+        # fetch's answer wins for every hour it covers and this fills the
+        # rest when it is on the same grid (_fetch_spot_prices); served whole
+        # only when the fetch fails.
         cached_curve = stored.get("spot_cache")
         if isinstance(cached_curve, dict) and not tuple_mismatch:
             for k, v in cached_curve.items():

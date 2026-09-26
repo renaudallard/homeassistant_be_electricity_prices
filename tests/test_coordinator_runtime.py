@@ -938,6 +938,59 @@ async def test_a_partial_day_ahead_answer_does_not_empty_the_cache(
     assert coord._spot_cache == result
 
 
+async def test_a_day_ahead_answer_merges_no_slot_of_the_other_grid(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A cache kept from before a settlement-grid change, the curve restored
+    from the store after a restart for one, is hourly, and a quarter-hour
+    answer for six hours was merged over it: one day then carried quarter-hour
+    slots for six hours and hourly means for the rest, two products priced as
+    one curve. Only a cache on the answer's grid fills the hours it leaves."""
+    freezer.move_to("2026-09-26 07:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    today = datetime(2026, 9, 25, 22, 0, tzinfo=UTC)
+    # As _load_persistent leaves it: today's curve restored, no cache day.
+    coord._spot_cache = {today + timedelta(hours=h): 0.50 for h in range(24)}
+    quarters = {today + timedelta(minutes=15 * q): 0.10 for q in range(24)}
+
+    async def _fake(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return quarters
+
+    with _patch_spot_fetch(_fake):
+        assert await coord._fetch_spot_prices() == quarters
+
+    # On the same grid the restored curve fills the hours the answer leaves.
+    coord._spot_cache = {today + timedelta(hours=h): 0.50 for h in range(24)}
+    coord._spot_cache_day = None
+    hours = {today + timedelta(hours=h): 0.10 for h in range(6)}
+
+    async def _hourly(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return hours
+
+    with _patch_spot_fetch(_hourly):
+        result = await coord._fetch_spot_prices()
+    assert result == {
+        **hours,
+        **{today + timedelta(hours=h): 0.50 for h in range(6, 24)},
+    }
+
+
 async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
     hass: HomeAssistant, freezer: Any
 ) -> None:

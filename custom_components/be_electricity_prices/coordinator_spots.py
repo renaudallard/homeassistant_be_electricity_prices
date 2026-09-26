@@ -697,12 +697,18 @@ class _SpotsMixin(_ProfilesMixin):
         # and replacing a cache that held all of today with its six hours left
         # the rest of the day unpriced until the 11:00 refetch. The answer
         # wins for every hour it covers, the cache keeps no day outside the
-        # window, as before, and the slots stay in time order.
+        # window, as before, and the slots stay in time order. That holds for
+        # the curve restored from the store too. Only a cache on the answer's
+        # grid is merged: one kept from before a settlement-grid change would
+        # put hourly means beside quarter-hour slots in one day.
         covered = {slot.replace(minute=0) for slot in prices}
         window = {local_today + timedelta(days=n) for n in range(days)}
+        cached = _spots_for_local_days(self._spot_cache, window)
+        if any(slot.minute for slot in cached) != any(slot.minute for slot in prices):
+            cached = {}
         merged = {
             slot: value
-            for slot, value in _spots_for_local_days(self._spot_cache, window).items()
+            for slot, value in cached.items()
             if slot.replace(minute=0) not in covered
         }
         merged.update(prices)

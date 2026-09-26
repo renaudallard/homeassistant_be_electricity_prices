@@ -365,14 +365,15 @@ constructs a fresh `EntsoeClient` per call (`api.py`,
   back with today only will retry tomorrow on the next hourly tick
   (`coordinator_spots.py`). An answer is merged into what the cache holds for
   the requested days, winning for the hours it covers, so a fallback that
-  answers for six hours does not empty the rest of a day already cached. `quarter_hourly` is derived from
+  answers for six hours does not empty the rest of a day already cached; a
+  cache on the other grid (hourly against quarter-hour) is dropped instead. `quarter_hourly` is derived from
   the energy leg the tick prices on (`_billing_snapshot`, `coordinator_spots.py`):
   the cohort-spliced one once a tick has built it, since a cohort can put a
   quarter-hourly leg on a card of another kind, and the loaded snapshot's before. The curve is
-  persisted under the `spot_cache` payload key, but restored as a fallback only:
-  `_spot_cache_day` stays `None` across a restart, so the first tick still
-  fetches, and slots that no longer cover today or tomorrow are dropped on load.
-  `_fallback_spots` is what reads it when a fetch fails.
+  persisted under the `spot_cache` payload key and restored with
+  `_spot_cache_day` left `None`, so the first tick still fetches and merges its
+  answer over it as above, and slots that no longer cover today or tomorrow are
+  dropped on load. `_fallback_spots` serves it whole when a fetch fails.
 - Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
