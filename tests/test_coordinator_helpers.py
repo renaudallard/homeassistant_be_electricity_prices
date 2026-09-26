@@ -3869,6 +3869,49 @@ async def test_a_meter_read_once_a_day_is_judged_on_the_days_before_the_window(
     ]
 
 
+async def test_a_meter_turned_poller_before_the_window_is_judged_on_the_window(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A meter read hour by hour until 31 December and once a day from
+    1 January. Its hourly weeks before the window counted beside the window's
+    own days, and outvoted a whole month of polled ones, so January was
+    priced at the reading hour. Once the window has a week of its own days,
+    they decide."""
+    freezer.move_to("2026-01-31 15:30:00+01:00")
+    hourly_days = [date(2025, 12, 4) + timedelta(days=i) for i in range(28)]
+    polled_days = [date(2026, 1, 1) + timedelta(days=i) for i in range(30)]
+    per_hour = _polled_once_a_day(polled_days, 12.0)
+    for day in hourly_days:
+        hour = dt_util.start_of_local_day(day).astimezone(UTC)
+        last = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
+        while hour < last:
+            per_hour[hour] = 0.5
+            hour += timedelta(hours=1)
+    entry = _entry(consumption_kwh="sensor.cons", meter="mono")
+
+    async def _fake_hourly(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        return {
+            hour: kwh
+            for hour, kwh in per_hour.items()
+            if start <= dt_util.as_local(hour).date() <= end
+        }
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass, entry, "consumption", date(2026, 1, 1), date(2026, 1, 31)
+        )
+    assert metered is not None
+    assert metered.read_daily
+    spread = [
+        kwh
+        for hour, kwh in metered.kwh.items()
+        if dt_util.as_local(hour).date() == date(2026, 1, 15)
+    ]
+    assert spread == [0.5] * 24
+
+
 async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
     hass: HomeAssistant, freezer: Any, caplog: Any
 ) -> None:

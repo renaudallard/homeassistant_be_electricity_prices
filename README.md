@@ -486,7 +486,8 @@ formula** supplier, which has no card and asks for the whole set.
    wiring them only for the Energy dashboard changes nothing. A sensor that
    only updates once a day, such as a supplier portal poller, is detected
    once it has a week of such days, counting the four weeks before 1 January
-   or a supplier switch, and each day is spread evenly over its hours, so a
+   or a supplier switch only while the year or the contract holds fewer than
+   seven days of its own, and each day is spread evenly over its hours, so a
    contract priced by the hour bills it at the day's average rather than at
    the hour the reading arrived; the log says so once and the diagnostics
    flag it. Two ways to wire it:

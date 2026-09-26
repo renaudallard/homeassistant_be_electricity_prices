@@ -107,8 +107,8 @@ _SHORT_BELOW = 0.9
 # a row for every hour, is a poller rather than the weather.
 _READ_DAILY_MIN_DAYS = 7
 
-# The days before the window that are judged with it, so the shape does not
-# hang on how long the window is (_read_daily_before).
+# The days before the window that make up _READ_DAILY_MIN_DAYS while the window
+# holds fewer of its own (_read_daily_before).
 _READ_DAILY_SPAN_DAYS = 28
 
 # What _read_daily_before found, for the day: those days are past and do not
@@ -612,11 +612,16 @@ async def _metered_hourly_kwh(
     moving, polled = _polled_days(metered.kwh, today)
     if not polled:
         return metered
-    moved_before, polled_before = await _read_daily_before(hass, entry, side, start)
-    moving += moved_before
-    if moving < _READ_DAILY_MIN_DAYS or (
-        len(polled) + polled_before < _SHORT_BELOW * moving
-    ):
+    polled_count = len(polled)
+    if moving < _READ_DAILY_MIN_DAYS:
+        # Too few days of its own yet: the days before the window make up the
+        # minimum. Only then, or a meter that turned into a poller in the
+        # weeks before 1 January or a switch was outvoted by its earlier
+        # hourly days for most of a year.
+        moved_before, polled_before = await _read_daily_before(hass, entry, side, start)
+        moving += moved_before
+        polled_count += polled_before
+    if moving < _READ_DAILY_MIN_DAYS or polled_count < _SHORT_BELOW * moving:
         return metered
     _spread_daily_readings(metered.kwh, polled)
     if metered.as_read is not None:
@@ -874,8 +879,9 @@ def _spread_daily_readings(
     least ``_SHORT_BELOW`` of the past days it moved on have that shape, so a
     real meter that moved in one hour on a dull day is left alone, and it
     moved on at least ``_READ_DAILY_MIN_DAYS`` of them, so a day or two says
-    nothing yet. Those days are the window's and the
-    ``_READ_DAILY_SPAN_DAYS`` before it (:func:`_read_daily_before`). Each
+    nothing yet. Those days are the window's, and while it holds fewer than
+    ``_READ_DAILY_MIN_DAYS`` of its own also the ``_READ_DAILY_SPAN_DAYS``
+    before it (:func:`_read_daily_before`). Each
     such day's kWh is spread evenly over its hours, the neutral guess without
     a profile. Today is left as it is: it is not over.
     """
