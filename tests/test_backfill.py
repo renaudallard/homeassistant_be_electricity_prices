@@ -2681,8 +2681,9 @@ async def test_a_month_whose_card_read_just_failed_waits_for_the_next_run(
     """A brief archive failure handed back today's card for the closed months,
     the very object a month no archive holds gets, and the backfill imported
     those months at today's rates for good. The live sensor heals on its next
-    tick; the imported rows never did. A run another follows leaves the month
-    out, the last one bills it as the live sensor does and says so."""
+    tick; the imported rows never did. Every run leaves the month out: the
+    automatic one runs again by itself, a service call says to call it again,
+    and neither bills it on today's card."""
     freezer.move_to("2026-06-02 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
@@ -2744,10 +2745,14 @@ async def test_a_month_whose_card_read_just_failed_waits_for_the_next_run(
     assert snapshot_months.month_card_failed(
         hass, "eneco", "power_fix", "wallonia", date(2026, 5, 1)
     )
+    # Every closed month failed, and the cost series runs from 1 January.
+    assert entry.runtime_data._backfill_retry_from == date(2026, 1, 1)
     result = await run()
-    assert days() == {date(2026, 5, 31), date(2026, 6, 1)}
-    assert any("2026-05" in why for why in result["left_out"])
-    assert "retry" not in result
+    assert days() == {date(2026, 6, 1)}
+    assert any(
+        "2026-05" in why and "call the service again" in why for why in result["retry"]
+    )
+    assert "left_out" not in result
 
     # The archive answers again once the marker is waited out: May is priced
     # on its own card, and a month no archive holds is not a failed one.
@@ -2771,18 +2776,28 @@ async def test_the_automatic_backfill_runs_once_more_when_a_read_failed(
     hass: HomeAssistant,
 ) -> None:
     """Its probe finds the rows the first run wrote, so without a second run
-    the days it left out stayed out until someone called the service. That run
-    is the last one: it bills what it still cannot read."""
+    the days it left out stayed out until someone called the service. It runs
+    again until they are written, each wait twice the last."""
     entry = _entry()
     entry.add_to_hass(hass)
     _register_sensors(hass, entry, ["current_price"])
     entry.runtime_data = await _make_coordinator(entry)
 
-    async def left_may_out(*_a: Any, **kwargs: Any) -> dict[str, Any]:
-        if kwargs.get("retry_later"):
+    failures = 2
+
+    async def left_may_out(*_a: Any, **_kw: Any) -> dict[str, Any]:
+        nonlocal failures
+        if failures:
+            failures -= 1
             entry.runtime_data._backfill_retry_from = date(2026, 5, 1)
             return {"retry": ["2026-05-01..2026-05-31"]}
+        entry.runtime_data._backfill_retry_from = None
         return {}
+
+    waits: list[float] = []
+
+    async def wait(delay: float) -> None:
+        waits.append(delay)
 
     runs = AsyncMock(side_effect=left_may_out)
     instance = MagicMock()
@@ -2790,16 +2805,18 @@ async def test_the_automatic_backfill_runs_once_more_when_a_read_failed(
     with (
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch.object(bf, "backfill_range", runs),
-        patch.object(bf, "_RETRY_AFTER", timedelta(0)),
+        patch.object(bf.asyncio, "sleep", wait),
         patch("homeassistant.components.recorder.get_instance", return_value=instance),
     ):
         assert await bf.backfill_if_missing(hass, entry) == {}
-        assert [call.kwargs.get("retry_later") for call in runs.await_args_list] == [
-            True,
-            None,
+        assert runs.await_count == 3
+        assert all(call.kwargs["retry_later"] for call in runs.await_args_list)
+        # Each run after the first starts from the first day left out.
+        assert [call.args[2] for call in runs.await_args_list[1:]] == [
+            date(2026, 5, 1),
+            date(2026, 5, 1),
         ]
-        # The second run starts from the first day the first one left out.
-        assert runs.await_args_list[1].args[2] == date(2026, 5, 1)
+        assert waits == [3600, 7200]
         assert entry.runtime_data._backfill_retry_from is None
         runs.reset_mock(side_effect=True)
         runs.return_value = {"rows_written": 3}

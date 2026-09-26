@@ -553,15 +553,17 @@ The backfill cuts its hours at each switch
 (`_contract_segments`, `backfill_window.py`), builds a context per contract
 and accrues the cost series across them as one running total
 (`_accrue_cost`, `backfill_cost.py`), leaving out of the cost series the days
-no contract supplied (`billed_only`) as the sensor does. Days no card of
-their own can price bill on the stand-in the live sensor bills them on:
-`_stand_in_spans` names them before either pass runs, and the response lists
-them under `left_out`. Only the automatic backfill's first run
-(`retry_later`) leaves out of the price series the days whose read failed just
-now, under `retry`, for the run an hour later to write, or the next setup's
-when Home Assistant stops before then (`_backfill_retry_from`, persisted); the
-cost series is written whole on every run, since a running total missing days
-carries every later hour short.
+no contract supplied (`billed_only`) as the sensor does. An earlier
+contract none of whose cards any archive kept bills on the stand-in the live
+sensor bills it on: `_stand_in_spans` names those days before either pass
+runs, and the response lists them under `left_out`. Days whose read failed
+just now are left out of the price series on every run, under `retry`, since
+the live sensor keeps an earlier contract's last pricing on its own cards
+meanwhile (`keep_settled`) and prices the rest on theirs once read;
+the automatic backfill runs again until they are written, and the next setup
+carries on when Home Assistant stops during a wait (`_backfill_retry_from`,
+persisted). The cost series is written whole on every run, since a running
+total missing days carries every later hour short.
 
 ## 8. Injection taxonomy and the spot-gating invariant
 

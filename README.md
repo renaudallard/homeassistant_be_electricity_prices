@@ -1064,17 +1064,20 @@ feed-in credit had no price), and the same is logged as a warning. Unlike
 the live sensor, the imported rows keep that gap until you run the
 backfill again once the prices are cached.
 
-The backfill ends up with what the live sensor shows. Days whose own card
-cannot be had are billed on today's card, as the live sensor bills them: a
-past month whose card the archive could not serve just then (a timeout, or
-GitHub briefly down), every month of a contract whose signing-month card could
-not be read, and the days of an earlier contract (after a recorded supplier
-switch) whose supplier's cards cannot be read. The response lists them under
-`left_out` and the log names them in a warning. When a card read failed just
-then, the automatic backfill leaves those days out of the price sensors and
-runs once more an hour later, which imports whatever it still cannot read the
-same way. A restart during that hour does not lose it: the next start runs it.
-After a service call, run it again once those cards can be read.
+The backfill ends up with what the live sensor shows. The days of an earlier
+contract (after a recorded supplier switch) whose cards no archive kept are
+billed on today's card, as the live sensor bills them; the response lists them
+under `left_out` and the log names them in a warning. A card read that failed
+just then (a timeout, or GitHub briefly down) is different: the live sensor
+bills those days on their own card again as soon as it can be read, so the
+backfill leaves them out of the price sensors rather than write a stand-in,
+and lists them under `retry`. That covers a past month the archive could not serve, every month of
+a contract whose signing-month card could not be read, and an earlier contract
+whose supplier's site did not answer. The automatic backfill runs again an
+hour later, then less often, up to once a day, until those days are written,
+and a restart does not lose it: the next start carries on. After a service
+call, call it again once those cards can be read. The running cost is written
+whole on every run and rewritten by the run that fills those days in.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

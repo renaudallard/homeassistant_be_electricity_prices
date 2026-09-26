@@ -419,7 +419,9 @@ async def _contract_segments(
 
     An earlier contract none of whose cards can be had is priced on the stand-in
     ``period_card`` hands back, as the live sensor bills it;
-    ``_stand_in_spans`` has already named its days for the response.
+    ``_stand_in_spans`` has already named its days for the response. One whose
+    read just failed only gets here for the cost series, which is one running
+    total: its price hours were left out before the pass began.
 
     ``billed_only`` leaves out the days inside the window that no contract
     supplied: before the first earlier contract when it billed the year from
@@ -486,10 +488,13 @@ async def _stand_in_spans(
     (``period_card`` hands back the entry's current card in their place), and
     a closed month whose own card could not be read just now
     (``_months_not_read``), which the walk bills on the current card. The live
-    sensor bills both the same way. The last element says a read failed just
-    now and may work an hour later, which a first automatic run waits for;
-    otherwise no archive kept the cards and nothing will change. Asking here
-    also fills the month cache both passes then read.
+    sensor bills both on that card too, except that it keeps an earlier
+    contract's last pricing on its own cards through a failed read
+    (``keep_settled``). The last element says a read failed just
+    now and may work an hour later, so the price series leaves those days out
+    for a later run to write; otherwise no archive kept the cards and nothing
+    will change. Asking here also fills the month cache both passes then
+    read.
     """
     today = dt_util.now().date()
     spans: list[tuple[date, date, str, bool]] = []

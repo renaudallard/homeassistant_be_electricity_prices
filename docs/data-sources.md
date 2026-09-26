@@ -422,7 +422,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists, once more an hour later when a card read failed, or on the next setup when Home Assistant stopped during that wait (`_backfill_retry_from`, kept in the coordinator's store). |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py`). Backfill is reached either automatically
@@ -544,24 +544,28 @@ cost. Two rules enforce this:
   carries a `skipped` note saying why (`backfill.py`). Representing a past
   year would mean abandoning the per-year restart and importing a
   lifetime-cumulative sum instead, which is a different design.
-- The backfill ends up with what the live sensor bills. Days no card of
-  their own can be had for are priced on the stand-in the live walk uses, and
-  `_stand_in_spans` (`backfill_window.py`) names them before either pass runs:
-  an earlier contract whose supplier's cards cannot be read, a closed month
-  whose card read failed and is waiting out its marker, and every month of a
-  contract whose signing month is one (`month_card_failed`,
-  `snapshot_months.py`, which tells a failed read from a month no archive
-  holds, since `_snapshot_for_month` hands back the current card for both).
-  The response lists them under `left_out` and a warning names them. A read
-  that failed just now may work an hour later, so the automatic backfill's
-  first run (`retry_later`) leaves those days out of the price series, lists
-  them under `retry` and runs once more after `_RETRY_AFTER` (an hour), from
-  the first of them, which imports what it still cannot read and schedules
-  nothing further. That day is kept in the coordinator's store while the run
-  is pending, so a restart during the wait runs it on the next setup. The cost
-  leg is written whole on every run: a running total missing days would carry
-  every later hour short. A period that can never be priced on its own cards
-  is imported at once, so the anchor probe finds its row on the next restart.
+- The backfill ends up with what the live sensor bills. `_stand_in_spans`
+  (`backfill_window.py`) names, before either pass runs, the days no card of
+  their own can be had for: an earlier contract whose supplier's cards cannot
+  be read, a closed month whose card read failed and is waiting out its
+  marker, and every month of a contract whose signing month is one
+  (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
+  month no archive holds, since `_snapshot_for_month` hands back the current
+  card for both). An earlier contract no archive kept is priced on the
+  stand-in the live walk uses, imported at once so the anchor probe finds its
+  row on the next restart; the response lists it under `left_out` and a
+  warning names it. A read that failed just now is a retry, not a stand-in:
+  the live sensor bills those days on their own cards again once they can be
+  read, and keeps an earlier contract's last pricing on its own cards
+  meanwhile (`keep_settled`, `contract_periods.py`), so every run leaves those
+  days out of the price series and lists them under `retry`. The automatic backfill
+  (`retry_later`) keeps the first of them on the coordinator and runs again
+  from it after `_RETRY_AFTER` (an hour), each wait twice the last up to
+  `_RETRY_AT_MOST` (a day), until none is left; that day is in the
+  coordinator's store while a retry is pending, so a restart during the wait
+  carries on at the next setup. A service call's response says to call it
+  again. The cost leg is written whole on every run: a running total missing
+  days would carry every later hour short.
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the
@@ -626,9 +630,9 @@ DB reset (self-healing preserved) but tolerates a legitimately-absent leading
 hour. The one thing the probe cannot see is a run that left days out for want
 of a card read and wrote the rest, 1 January included, so the first of those
 days is kept in the coordinator's store (`_backfill_retry_from`,
-`coordinator_persist.py`) until the run that follows has written them: a
-restart or a reload during its wait cancels the task, and the next setup runs
-it from that day whatever the probe finds.
+`coordinator_persist.py`) until a run has written them: a restart or a reload
+during a wait cancels the task, and the next setup runs it from that day
+whatever the probe finds.
 
 ### `clear=True` is series-scoped and guarded
 

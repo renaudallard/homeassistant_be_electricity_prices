@@ -1232,8 +1232,9 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
     probe never found its row, so each restart ran the whole year again, and
     the cost series was never imported. Its days bill on the stand-in the live
     sensor shows, and the response says so. A read that failed just now is
-    left out of a run another will follow, and the running bill is imported
-    whole all the same."""
+    not a stand-in: the live sensor keeps what it last priced on the period's
+    own cards, so those days are left out of every run, a service call's too,
+    and the running bill is imported whole all the same."""
     freezer.move_to("2026-05-02 12:00:00+02:00")
     held = _held("totalenergies", "totalenergies_electricite_fixe", solar_regime="none")
     entry = make_entry(
@@ -1312,24 +1313,23 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
             dt_util.as_local(r["start"]).date() for r in captured[ids["current_price"]]
         }
 
-    for read_failed in (False, True):
-        result = await run(read_failed, retry_later=False)
+    # A lasting stand-in is imported at once, on either path.
+    for retry_later in (False, True):
+        result = await run(False, retry_later)
         assert days() == {date(2026, 4, 30), date(2026, 5, 1)}
         assert captured[ids["current_year_cost"]]
         assert "totalenergies" in result["left_out"][0]
         assert "retry" not in result
         assert "skipped" not in result
-
-    # A lasting stand-in is imported at once even on a first run.
-    result = await run(False, retry_later=True)
-    assert days() == {date(2026, 4, 30), date(2026, 5, 1)}
-    assert "retry" not in result
-    # A read that failed just now waits for the run that follows.
-    result = await run(True, retry_later=True)
-    assert days() == {date(2026, 5, 1)}
-    assert captured[ids["current_year_cost"]]
-    assert "totalenergies" in result["retry"][0]
-    assert "left_out" not in result
+    # A read that failed just now waits for a later run on either path, and a
+    # service call is told to call again.
+    for retry_later in (False, True):
+        result = await run(True, retry_later)
+        assert days() == {date(2026, 5, 1)}
+        assert captured[ids["current_year_cost"]]
+        assert "totalenergies" in result["retry"][0]
+        assert ("call the service again" in result["retry"][0]) is not retry_later
+        assert "left_out" not in result
 
 
 async def test_the_automatic_backfill_imports_the_year_once(
@@ -1337,10 +1337,10 @@ async def test_the_automatic_backfill_imports_the_year_once(
 ) -> None:
     """An earlier contract whose product is gone and whose cards no archive
     kept, and closed months the card archive cannot serve (GitHub unreachable
-    from the house). The cost series was never imported, and since the price
-    series had no row at 1 January either, every restart ran the whole year
-    twice. One run, a second an hour later for the failed reads, and the year
-    is in, as the live sensor bills it."""
+    from the house for a while). The cost series was never imported, and
+    since the price series had no row at 1 January either, every restart ran
+    the whole year twice. One run, a second once the archive answers again
+    for the failed reads, and the year is in, as the live sensor bills it."""
     freezer.move_to("2026-09-26 12:00:00+02:00")
     held = _held("totalenergies", "totalenergies_pixel", solar_regime="none")
     entry = make_entry(
@@ -1375,8 +1375,26 @@ async def test_the_automatic_backfill_imports_the_year_once(
     async def gone(*_a: Any) -> Any:
         raise ExtractorError("HTTP 404 fetching the totalenergies card")
 
+    up = False
+
     async def blocked(*_a: Any) -> Any:
-        raise aiohttp.ClientConnectionError("Cannot connect to host")
+        if not up:
+            raise aiohttp.ClientConnectionError("Cannot connect to host")
+        return ArchivedCard(
+            snapshot=make_snapshot(energy=FixedRates(single=0.2)), read_by_ocr=False
+        )
+
+    real_sleep = asyncio.sleep
+
+    async def answers_again(delay: float, *args: Any) -> None:
+        # The retry's wait, past the half hour a failed month read is kept;
+        # the day-by-day turns the passes hand the loop still pass.
+        nonlocal up
+        if delay < 60:
+            await real_sleep(delay, *args)
+            return
+        up = True
+        freezer.tick(timedelta(hours=1))
 
     extractors = {
         "totalenergies": dataclasses.replace(EXTRACTORS["totalenergies"], fetch=gone),
@@ -1403,7 +1421,7 @@ async def test_the_automatic_backfill_imports_the_year_once(
         patch.object(contract_periods, "get_extractor", extractors.__getitem__),
         patch.object(backfill_window, "get_extractor", extractors.__getitem__),
         patch.object(snapshot_months, "_archived_card_from_github", new=blocked),
-        patch.object(bf, "_RETRY_AFTER", timedelta(0)),
+        patch.object(bf.asyncio, "sleep", answers_again),
         patch.object(bf, "backfill_range", runs),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -1417,9 +1435,8 @@ async def test_the_automatic_backfill_imports_the_year_once(
             assert await bf.backfill_if_missing(hass, entry) is None
     assert runs.await_count == 2
     assert result is not None
-    notes = " ".join(result["left_out"])
-    assert "totalenergies" in notes
-    assert "eneco card of 2026-08" in notes
+    assert "retry" not in result
+    assert "totalenergies" in " ".join(result["left_out"])
     days = {dt_util.as_local(r["start"]).date() for r in store[ids["current_price"]]}
     assert min(days) == date(2026, 1, 1)
     assert len(days) == (date(2026, 9, 26) - date(2026, 1, 1)).days + 1

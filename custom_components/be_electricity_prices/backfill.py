@@ -43,8 +43,9 @@ Two entry points:
 * :func:`backfill_if_missing`: automatic run called from
   ``async_setup_entry``. Probes the recorder for statistics at the Jan
   1 anchor and only runs when none exist, so we don't redo the work on
-  every HA restart, and runs once more an hour later when a card read
-  failed, or on the next setup when Home Assistant stopped before then.
+  every HA restart. When a card read failed it runs again an hour later,
+  then less often, until those days are written, carrying on at the next
+  setup when Home Assistant stopped before then.
 """
 
 from __future__ import annotations
@@ -122,10 +123,13 @@ _PRICE_SENSOR_KEYS: tuple[str, ...] = (
 )
 _INJECTION_PRICE_SENSOR_KEY = "injection_price"
 
-# How long the automatic backfill waits before running once more when a card
-# read failed: past the half hour a failed month read waits before it is asked
-# again (``_MONTHLY_FAILURE_TTL``).
+# How long the automatic backfill waits before running again when a card read
+# failed: past the half hour a failed month read waits before it is asked
+# again (``_MONTHLY_FAILURE_TTL``). Each wait doubles up to a day, so a house
+# that cannot reach the card archive at all does not rewrite months of rows
+# every hour.
 _RETRY_AFTER = timedelta(hours=1)
+_RETRY_AT_MOST = timedelta(days=1)
 
 
 async def _ensure_dynamic_spots(
@@ -374,10 +378,11 @@ async def backfill_range(
     series first when the underlying tariff or formula changed enough
     that the old rows would mislead.
 
-    ``retry_later`` is a run another will follow: the days whose card read
-    failed just now are left out of the price series for that run to write,
-    listed under ``retry``, and the first of them is kept on the coordinator
-    (``_backfill_retry_from``) for the run that follows to start from.
+    The days whose card read failed just now are left out of the price
+    series and listed under ``retry``, for a later run to write. ``retry_later``
+    is the automatic backfill, which runs again by itself: the first of those
+    days is kept on the coordinator (``_backfill_retry_from``) for that run to
+    start from. A service call says to call it again instead.
     """
     coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
@@ -459,12 +464,14 @@ async def _backfill_range(
             end_utc.isoformat(),
             this_year_anchor_utc.isoformat(),
         )
-    # Days no card of their own can price are imported on the stand-in the
-    # live sensor bills them on, and named in the response. A read that failed
-    # just now is the exception on a run another will follow: its days are
-    # left out of the price series for that run. The cost series is one
-    # running total, and a day missing from it would carry every later hour
-    # short, so it is written whole and the next run writes it again.
+    # Days no archive kept a card of their own for are imported on the
+    # stand-in the live sensor bills them on, and named in the response. A
+    # read that failed just now is not a stand-in but a retry: the live sensor
+    # prices those days on their own cards again once they can be read, and
+    # keeps an earlier contract's last such pricing meanwhile, so they are
+    # left out of the price series for a later run to write. The cost series
+    # is one running total, and a day missing from it would carry every later
+    # hour short, so it is written whole and the next run writes it again.
     spans = await _stand_in_spans(
         hass,
         entry,
@@ -472,7 +479,7 @@ async def _backfill_range(
         dt_util.as_local(min(start_utc, cost_anchor_utc)).date(),
         dt_util.as_local(end_utc - timedelta(hours=1)).date(),
     )
-    retry = [span for span in spans if retry_later and span[3]]
+    retry = [span for span in spans if span[3]]
     if retry_later:
         coordinator._backfill_retry_from = min(
             (first for first, _last, _why, _failed in retry), default=None
@@ -579,22 +586,32 @@ async def _backfill_range(
             "would paint a large negative cost at the year boundary, because "
             "the recorder ignores last_reset on imported statistics"
         )
-    if retry:
+    if retry and retry_later:
         result["retry"] = [f"{first}..{last}: {why}" for first, last, why, _ in retry]
         _LOGGER.info(
             "backfill for %s left out %s until it runs again",
             entry.entry_id,
             "; ".join(result["retry"]),
         )
-    stand_ins = [span for span in spans if span not in retry]
+    elif retry:
+        result["retry"] = [
+            f"{first}..{last}: {why}, call the service again once it can be read"
+            for first, last, why, _ in retry
+        ]
+        _LOGGER.warning(
+            "backfill for %s left out %s",
+            entry.entry_id,
+            "; ".join(result["retry"]),
+        )
+    stand_ins = [span for span in spans if not span[3]]
     if stand_ins:
         result["left_out"] = [
             f"{first}..{last}: {why}, billed on today's card"
             for first, last, why, _failed in stand_ins
         ]
         _LOGGER.warning(
-            "backfill for %s billed on today's card, as the live sensor does,"
-            " the days whose own card could not be had: %s",
+            "backfill for %s billed on today's card the days no archive kept a"
+            " card of their own for: %s",
             entry.entry_id,
             "; ".join(result["left_out"]),
         )
@@ -611,9 +628,11 @@ async def backfill_if_missing(
     user who deletes their HA database mid-year still triggers a
     fresh backfill on next restart, while the steady-state restart
     path adds zero work. The probe finds the rows a run that left days out
-    did write, so that run's retry is kept in the coordinator's store
+    did write, so the retry is kept in the coordinator's store
     (``_backfill_retry_from``) rather than only in the task waiting for it,
-    which a restart or a reload cancels.
+    which a restart or a reload cancels. It runs until those days are
+    written: the live sensor prices them on their own cards again once those
+    can be read, and a stand-in written here would stay in the recorder.
 
     Tolerates entry removal mid-flight: this runs as a fire-and-forget
     background task, and the user can delete the entry between scheduling
@@ -657,6 +676,7 @@ async def backfill_if_missing(
     now_local = dt_util.now()
     anchor_local = ytd_window_reset(entry, now_local)
     anchor_utc = anchor_local.astimezone(UTC)
+    start: date | datetime = anchor_local
     if await _existing_stat_window(hass, sid, anchor_utc):
         if runtime._backfill_retry_from is None:
             _LOGGER.debug(
@@ -665,33 +685,24 @@ async def backfill_if_missing(
                 sid,
             )
             return None
-        return await _last_run(hass, entry, runtime)
-    result = await backfill_range(
-        hass, entry, anchor_local, now_local, retry_later=True
-    )
-    if runtime._backfill_retry_from is None:
-        return result
-    # A card read failed, and a blip on the card archive or on the old
-    # supplier's site is usually over within the hour. Stored before the
-    # wait, so a restart or a reload during it still runs the retry.
-    await runtime._save_persistent()
-    await asyncio.sleep(_RETRY_AFTER.total_seconds())
-    runtime = getattr(entry, "runtime_data", None)
-    if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
-        return result
-    return await _last_run(hass, entry, runtime)
-
-
-async def _last_run(
-    hass: HomeAssistant, entry: ConfigEntry, runtime: BePricesCoordinator
-) -> dict[str, Any]:
-    """The run after one that left days out, from the first of them: it
-    imports what it still cannot read on the current card, as the live
-    sensor bills it, and says so in the log."""
-    assert runtime._backfill_retry_from is not None
-    result = await backfill_range(
-        hass, entry, runtime._backfill_retry_from, dt_util.now()
-    )
-    runtime._backfill_retry_from = None
-    await runtime._save_persistent()
-    return result
+        start = runtime._backfill_retry_from
+    wait = _RETRY_AFTER
+    while True:
+        pending = runtime._backfill_retry_from
+        result = await backfill_range(
+            hass, entry, start, dt_util.now(), retry_later=True
+        )
+        # Stored before the wait, so a restart or a reload during it still
+        # runs the retry, and cleared once nothing is left out.
+        if runtime._backfill_retry_from != pending:
+            await runtime._save_persistent()
+        if runtime._backfill_retry_from is None:
+            return result
+        start = runtime._backfill_retry_from
+        # A blip on the card archive or on the old supplier's site is usually
+        # over within the hour.
+        await asyncio.sleep(wait.total_seconds())
+        wait = min(wait * 2, _RETRY_AT_MOST)
+        runtime = getattr(entry, "runtime_data", None)
+        if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
+            return result
