@@ -5380,6 +5380,84 @@ async def test_direct_debit_question_waits_on_the_signing_card(
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_direct_debit_question_is_silent_when_the_signing_card_asks_nothing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Signed in March on a card granting no welcome credit, the entry bills
+    the same whichever way it pays, whatever ristourne today's card offers a
+    new customer. The notice came up all the same. A supplement the signing
+    card grants a direct-debit payer still raises it."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    data = {
+        "supplier": "mega",
+        "contract": "mega_cosy_flex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+        "contract_start_date": "2026-03-01",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot_raw = _mega_ristourne_card()
+    issue_id = f"direct_debit_unanswered_{entry.entry_id}"
+
+    coord._sync_direct_debit_unanswered_issue(
+        make_snapshot(supplier="mega", contract="mega_cosy_flex")
+    )
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+    # Nor while the signing card is not in.
+    coord._sync_direct_debit_unanswered_issue(None)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+    coord._sync_direct_debit_unanswered_issue(
+        make_snapshot(
+            supplier="mega",
+            contract="mega_cosy_flex",
+            welcome_credit_eur=37.1,
+            welcome_credit_direct_debit_eur=5.3,
+        )
+    )
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
+async def test_the_tick_asks_about_direct_debit_off_the_signing_card_as_parsed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Resolving the signing card settles the unanswered question as no, which
+    clears a credit granted only to a direct-debit payer, so the notice has to
+    read the card as parsed: here the month's archived row, while today's card
+    grants nothing."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    data = {
+        "supplier": "mega",
+        "contract": "mega_cosy_flex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+        "contract_start_date": "2026-02-01",
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Mega Cosy Flex")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot(supplier="mega", contract="mega_cosy_flex"))
+    _monthly_snapshots(hass).clear()
+    _monthly_snapshots(hass)[("mega", "mega_cosy_flex", "wallonia", "2026-02")] = (
+        _mega_ristourne_card()
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+
+    await coord._async_update_data()
+
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, f"direct_debit_unanswered_{entry.entry_id}"
+        )
+        is not None
+    )
+
+
 async def test_direct_debit_on_the_standing_charge_raises_without_a_start_date(
     hass: HomeAssistant,
 ) -> None:

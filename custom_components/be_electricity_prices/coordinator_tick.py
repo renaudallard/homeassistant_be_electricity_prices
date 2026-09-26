@@ -78,7 +78,7 @@ from .pricing import (
     static_breakdown,
     yearly_fixed_fee_for_meter,
 )
-from .snapshot_store import SNAPSHOT_STALE_DAYS
+from .snapshot_store import SNAPSHOT_STALE_DAYS, cached_month_card
 from datetime import UTC, date, datetime, timedelta
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
@@ -94,6 +94,7 @@ from .injection import (
 from .cohort import (
     _cohort_legs,
     _effective_snapshot_for_month,
+    _tariff_card_month,
     signing_month_snapshot,
     ytd_window_start,
 )
@@ -161,6 +162,7 @@ class _TickMixin:
     _rlp_weights_year: int | None
     _session: aiohttp.ClientSession
     _snapshot: SupplierSnapshot | None
+    _snapshot_raw: SupplierSnapshot | None
     _spot_source: str
     _spp_fetched_at: datetime | None
     _spp_weights: SppWeights
@@ -215,7 +217,7 @@ class _TickMixin:
         def _sync_connection_fee_issue(self) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
         def _sync_direct_debit_unanswered_issue(
-            self, signing: SupplierSnapshot
+            self, signing: SupplierSnapshot | None
         ) -> None: ...
         def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None: ...
         def _sync_exclusive_night_gap_issue(self) -> None: ...
@@ -810,7 +812,21 @@ class _TickMixin:
         self._sync_prosumer_gap_issue()
         self._sync_compensation_kva_issue()
         self._sync_register_pair_issue()
-        self._sync_direct_debit_unanswered_issue(signing)
+        # The signing card as parsed: the resolved one has the unanswered
+        # question settled as no, which clears a credit granted only to a
+        # direct-debit payer. None while the month's card is not in yet, when
+        # the credit is withheld anyway.
+        signed_on = self._snapshot_raw
+        month = _tariff_card_month(self.entry)
+        if signing is not self._snapshot and month is not None:
+            signed_on = cached_month_card(
+                self.hass,
+                self.entry.data[CONF_SUPPLIER],
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data.get(CONF_REGION, ""),
+                month,
+            )
+        self._sync_direct_debit_unanswered_issue(signed_on)
         self._sync_brussels_power_term_issue()
 
         # Compute static peak/offpeak breakdowns for the Energy Dashboard.

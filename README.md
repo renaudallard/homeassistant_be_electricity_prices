@@ -919,9 +919,11 @@ successful refresh:
   rather than guessed, so answer it in the options to have it billed. On a
   card whose direct-debit part is a welcome credit it is raised only while
   that credit can still reach this year's bill: it needs the contract start
-  date, and it stays quiet once the first year's credit was paid out before
-  1 January (or before the day the year is billed from), on the wait the card
-  of the month you signed states, as the bill credits it.
+  date and a card of the month you signed whose credit depends on direct
+  debit, since that card's credit is the one billed, and it stays quiet once
+  the first year's credit was paid out before 1 January (or before the day
+  the year is billed from), on the wait that card states. A reduction off the
+  standing charge raises it every year.
 - **`brussels_power_term_missing_<entry>`** — the card prints only the
   metering half of Sibelga's fixed charge and Brugel's sheet, which supplies
   the power half, could not be read. About 50 EUR a year is left out rather
