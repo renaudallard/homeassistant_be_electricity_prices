@@ -34,6 +34,8 @@ arithmetic on a count of days.
 
 from __future__ import annotations
 
+import logging
+
 from .cohort import _month_snapshot_cache, _parse_iso_date
 from .const import (
     CONF_CONTRACT,
@@ -87,6 +89,25 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _warn_month_dropped(snap: SupplierSnapshot, month_first: date, why: str) -> None:
+    """Say that a month left the year-to-date bill, and why.
+
+    At WARNING, not DEBUG: the month is dropped whole, network leg and taxes
+    included. Measured on a Flemish entry that lost one month's row, 2622,54
+    EUR against 1854,40, and nothing on screen said so. Nobody reads a debug
+    log to find out why a year-to-date figure is a third light.
+    """
+    _LOGGER.warning(
+        "the %s/%s card for %s %s; that month is dropped from the year-to-date figure",
+        snap.supplier,
+        snap.contract,
+        month_first,
+        why,
+    )
 
 
 async def _ytd_hourly_energy(
@@ -273,6 +294,12 @@ async def _ytd_hourly_energy(
     # one, and its energy side can still be fully priced, so hours_priced says
     # nothing about it.
     injection_uncredited = 0
+    # The months whose card could not bill an hour at all, warned about once
+    # each, and what was metered in them: those kWh are not on the bill, so
+    # they are kept out of the volumes published beside it too.
+    dropped_months: set[date] = set()
+    dropped_cons = 0.0
+    dropped_inj = 0.0
     netting = _NetAllocation()
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
@@ -320,8 +347,22 @@ async def _ytd_hourly_energy(
                     snap_h, dso, region, local, spot, meter, dso_mode
                 )
                 hours_priced += 1
-        except (KeyError, ValueError):
-            # Missing DSO row or non-static rate kind: skip this hour.
+        except (KeyError, ValueError) as err:
+            # The month's card lacks the entry's DSO row (a supplier renamed
+            # it, or a regex missed it that month): the hour cannot be billed
+            # at all, and stays out of hours_priced like one with no spot.
+            month_first = date(local.year, local.month, 1)
+            if month_first not in dropped_months:
+                dropped_months.add(month_first)
+                _warn_month_dropped(
+                    snap_h,
+                    month_first,
+                    f"has no row for DSO {dso}"
+                    if isinstance(err, KeyError)
+                    else f"cannot price it: {err}",
+                )
+            dropped_cons += cons_per_hour.get(utc_hour, 0.0)
+            dropped_inj += inj_per_hour.get(utc_hour, 0.0)
             continue
         kwh_cons = cons_per_hour.get(utc_hour, 0.0)
         kwh_inj = inj_per_hour.get(utc_hour, 0.0)
@@ -448,8 +489,8 @@ async def _ytd_hourly_energy(
         )
         elapsed = until - dt_util.start_of_local_day(window_start)
         breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
-        breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
-        breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
+        breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values()) - dropped_cons
+        breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values()) - dropped_inj
         breakdown["energy_component_ytd_eur"] = energy_component
         breakdown["green_component_ytd_eur"] = green_component
         breakdown["credit_energy_component_eur"] = credit_component

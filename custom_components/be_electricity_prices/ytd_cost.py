@@ -36,8 +36,6 @@ shows up as a seam, not an exception."""
 
 from __future__ import annotations
 
-import logging
-
 from datetime import date, datetime, time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -111,6 +109,7 @@ from .synergrid import (
     SppWeights,
 )
 from .ytd_energy import (
+    _warn_month_dropped,
     _ytd_hourly_energy,
     _ytd_spot_injection_credit,
 )
@@ -120,9 +119,6 @@ from .ytd_legs import (
     _ytd_prosumer,
     _ytd_static_fees,
 )
-
-
-_LOGGER = logging.getLogger(__name__)
 
 
 # Which hour stands for each meter register when a card prints one feed-in rate
@@ -635,27 +631,20 @@ async def _compute_current_year_cost(
         except KeyError:
             # An archived snapshot can lose the user's DSO key when the
             # supplier renames a row or a regex misses for that month.
-            # Treating the month as "no rate to apply" matches dynamic
-            # / TOU behaviour and keeps the YTD loop running instead of
-            # tearing the whole tick down with UpdateFailed.
-            #
-            # At WARNING, not DEBUG: the month is dropped from the year
-            # whole, network leg and taxes included, and the fees beside it
-            # bill zero for it. Measured on a Flemish entry that lost one
-            # month's row, 2622,54 EUR against 1854,40, and nothing on
-            # screen said so. Nobody reads a debug log to find out why a
-            # year-to-date figure is a third light.
-            _LOGGER.warning(
-                "static_breakdown missing DSO %s for %s/%s/%s; that month is "
-                "dropped from the year-to-date figure",
-                dso,
-                snap_m.supplier,
-                snap_m.contract,
-                month_first,
-            )
+            # Treating the month as "no rate to apply" keeps the YTD loop
+            # running instead of tearing the whole tick down with
+            # UpdateFailed.
+            _warn_month_dropped(snap_m, month_first, f"has no row for DSO {dso}")
             month_breakdowns[month_first] = None
             return None
         if single_bd is None or peak_bd is None or offpeak_bd is None:
+            # An archived month on a dynamic or time-of-use card under a
+            # current card with a flat rate: no one rate prices its days.
+            _warn_month_dropped(
+                snap_m,
+                month_first,
+                "has no flat rate a whole day can be billed at",
+            )
             month_breakdowns[month_first] = None
             return None
         bundle = (single_bd, peak_bd, offpeak_bd, snap_m)
@@ -680,13 +669,19 @@ async def _compute_current_year_cost(
     # shared helper fall back to the card's indicative when it is missing.
     day_spp: dict[tuple[int, int, bool], float | None] = {}
     day_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
+    # The metered days the walk actually billed. A day of a month dropped
+    # above is on no bill, so its kWh stay out of the volumes published beside
+    # it and out of the feed-in credit below, and days_priced falls short of
+    # days_seen instead of both reading a full year over a bill a month light.
+    billed_kwh: dict[date, tuple[float, float, float, float]] = {}
     for day in _days_through(window_start, end):
         bundle = await _resolve_month(date(day.year, day.month, 1))
         if bundle is None:
-            # Dynamic / TOU month: no stable rate to apply for any of
-            # its days.
+            # Warned about once for the month by _resolve_month.
             continue
         single_bd, peak_bd, offpeak_bd, snap_d = bundle
+        if day in daily_kwh:
+            billed_kwh[day] = daily_kwh[day]
 
         d_cons, n_cons, d_inj, n_inj = daily_kwh.get(day, (0.0, 0.0, 0.0, 0.0))
         total_cons = d_cons + n_cons
@@ -816,7 +811,7 @@ async def _compute_current_year_cost(
                 cached_only=cached_only,
             ),
             window_start=window_start,
-            billed_days=daily_kwh.keys(),
+            billed_days=billed_kwh.keys(),
             top_up=window_end is None,
             breakdown=stats,
         )
@@ -824,25 +819,25 @@ async def _compute_current_year_cost(
         # already the raw energy term.
         energy_ytd_raw = energy_cost
 
-    stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
+    stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in billed_kwh.values())
     # Unconditionally, like the consumption beside it: the welcome credit's
     # per-kWh term is measured on NET consumption, so this is read on every
     # path and not only on the ones a caller is diagnosing.
-    stats["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
+    stats["injection_ytd_kwh"] = sum(r[2] + r[3] for r in billed_kwh.values())
     stats["energy_component_ytd_eur"] = energy_component
     stats["green_component_ytd_eur"] = green_component
     stats["credit_energy_component_eur"] = credit_component
     stats["credit_consumption_kwh"] = credit_kwh
     if breakdown is not None:
-        # The per-day counterpart of hours_seen / hours_elapsed above: the
-        # static branch reported no coverage at all, so a gap here was
-        # invisible even in principle.
+        # The per-day counterpart of hours_seen / hours_priced /
+        # hours_elapsed above: the static branch reported no coverage at all,
+        # so a gap here was invisible even in principle.
         breakdown["days_seen"] = float(len(daily_kwh))
+        breakdown["days_priced"] = float(len(billed_kwh))
         # Both sides of the pair span the window the walk covered. Counting
         # elapsed from 1 January against days the meter read from the contract
         # start is a coverage gap that is not there.
         breakdown["days_elapsed"] = float((end - window_start).days + 1)
-        breakdown["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
         today_kwh = daily_kwh.get(today, (0.0, 0.0, 0.0, 0.0))
         breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]
         breakdown["injection_today_kwh"] = today_kwh[2] + today_kwh[3]

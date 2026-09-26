@@ -716,6 +716,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "hours_elapsed",
             "injection_hours_uncredited",
             "days_seen",
+            "days_priced",
             "days_elapsed",
             "energy_component_ytd_eur",
             "green_component_ytd_eur",
@@ -856,9 +857,12 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             # one on the compensation regime) means the compensation zero-floor
             # is hiding banked injection (working as designed), and a
             # consumption_today_kwh that never grows points at a stalled meter
-            # input. On the hourly path hours_priced below
-            # hours_seen means the spot cache could not price part of the
-            # window, so the bill is missing those hours' energy term, and
+            # input. hours_priced below hours_seen (days_priced below
+            # days_seen per day) means part of what the meter recorded is not
+            # fully on the bill: an hour the spot cache could not price bills
+            # without its energy term, and a month whose card lacks the
+            # entry's DSO row, or has no flat rate for the per-day walk, is
+            # left out whole with a warning in the log. And
             # injection_hours_uncredited counts the exported hours whose
             # feed-in credit follows the spot and had none to follow.
             diag = data.ytd_diagnostics

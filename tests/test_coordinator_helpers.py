@@ -1463,6 +1463,109 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     assert cost == pytest.approx(-30.0 * live)
 
 
+@pytest.mark.parametrize(
+    ("dso_mode", "february"),
+    [
+        ("bi_horaire", "no_dso_row"),
+        ("bi_horaire", "dynamic"),
+        ("impact", "no_dso_row"),
+    ],
+)
+async def test_a_month_left_off_the_bill_is_left_off_its_coverage(
+    hass: HomeAssistant, freezer: Any, caplog: Any, dso_mode: str, february: str
+) -> None:
+    """A month whose card cannot bill the entry is dropped from the year, and
+    the coverage attributes and volumes beside the bill say so.
+
+    An archived card that lost the entry's DSO row, or one on a dynamic rate
+    under a flat current card, drops that month whole: the bill fell by a
+    third while days_seen, hours_seen and consumption_ytd_kwh read a full
+    quarter, the dynamic case logged nothing, and the hourly walk's shortfall
+    in hours_priced was described as a thin spot cache. Now the month is
+    warned about once, days_priced (hours_priced) falls short of days_seen
+    (hours_seen) by its days, and its kWh leave the published volumes.
+    """
+    freezer.move_to("2026-03-31 20:00:00+02:00")
+    good = make_snapshot(energy=FixedRates(single=0.18))
+    lost = (
+        make_snapshot(
+            energy=FixedRates(single=0.18),
+            dsos={"resa": good.dsos["ores"]},
+        )
+        if february == "no_dso_row"
+        else make_snapshot(energy=DynamicRates(factor=1.0, base=0.0))
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="none",
+        meter="mono",
+        dso_tariff_mode=dso_mode,
+        consumption_kwh="sensor.cons",
+    )
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 89)
+    ]
+
+    def _for(month: date) -> SupplierSnapshot:
+        return lost if month == date(2026, 2, 1) else good
+
+    async def _month(*args: Any, **_k: Any) -> SupplierSnapshot:
+        return _for(args[5])
+
+    def _cache(*_a: object, **_k: object) -> Any:
+        async def _resolve(month: date) -> SupplierSnapshot:
+            return _for(month)
+
+        return _resolve
+
+    async def _daily(
+        _hass: object, _entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        return {start + timedelta(days=i): 10.0 for i in range((end - start).days)}
+
+    async def _hourly(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict.fromkeys(hours, 0.5)
+
+    breakdown: dict[str, float] = {}
+    with (
+        caplog.at_level("WARNING"),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        patch.object(
+            energy_meters, "_live_today_kwh", new=AsyncMock(return_value=None)
+        ),
+        patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
+        patch.object(ytd_cost, "_effective_snapshot_for_month", new=_month),
+        patch.object(ytd_energy, "_month_snapshot_cache", new=_cache),
+    ):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            good,
+            entry,
+            breakdown=breakdown,
+        )
+    dropped = [r for r in caplog.records if "2026-02-01" in r.getMessage()]
+    assert len(dropped) == 1, caplog.text
+    assert "dropped from the year-to-date figure" in dropped[0].getMessage()
+    if dso_mode == "impact":
+        assert breakdown["hours_seen"] == len(hours)
+        assert breakdown["hours_priced"] == len(hours) - 28 * 24
+        assert breakdown["consumption_ytd_kwh"] == pytest.approx(
+            0.5 * (len(hours) - 28 * 24)
+        )
+    else:
+        assert breakdown["days_seen"] == 89
+        assert breakdown["days_priced"] == 89 - 28
+        assert breakdown["consumption_ytd_kwh"] == pytest.approx(10.0 * (89 - 28))
+
+
 @pytest.mark.parametrize("dso_mode", ["bi_horaire", "impact"])
 async def test_year_cost_counts_the_feed_in_hours_it_could_not_credit(
     hass: HomeAssistant, freezer: Any, dso_mode: str
