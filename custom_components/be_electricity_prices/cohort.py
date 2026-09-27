@@ -62,6 +62,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .providers import takes_signing_rate
+from .year_ahead import YEAR_AHEAD
 from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
@@ -876,7 +877,14 @@ async def _effective_snapshot_for_month(
     (see :func:`_snapshot_for_month`). The cohort leg below is NOT gated by
     it: the signing month is what the live price table is already built from
     on the same tick, so its row is in the cache by the time this runs.
+
+    A month after the running one, read ahead for the year-end cost
+    (:mod:`year_ahead`), has no card anywhere yet and bills on the card as it
+    prices today, which nothing is fetched for.
     """
+    ahead = YEAR_AHEAD.get()
+    if ahead is not None and year_month > ahead.pivot.replace(day=1):
+        return ahead.card
     snap_m = await _snapshot_for_month(
         hass,
         session,

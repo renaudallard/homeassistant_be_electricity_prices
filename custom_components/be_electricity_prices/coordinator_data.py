@@ -200,6 +200,12 @@ class CoordinatorData:
     rolling_year_consumption_kwh: float | None = None
     rolling_year_injection_kwh: float | None = None
     rolling_volume_diagnostics: dict[str, dict[str, Any]] | None = None
+    # What the calendar year's bill will stand at on 31 December: the year to
+    # date walked on to the year's end over last year's same days, priced on
+    # today's card (year_end_cost.py). None where the rest of the year has no
+    # rate or no history; the basis says which.
+    year_end_cost_eur: float | None = None
+    year_end_diagnostics: dict[str, Any] | None = None
 
 
 def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:

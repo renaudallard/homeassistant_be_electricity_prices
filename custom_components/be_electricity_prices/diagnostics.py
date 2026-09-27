@@ -299,6 +299,8 @@ async def async_get_config_entry_diagnostics(
             "injection_price_current_slot": _current_injection(data),
             "current_year_cost_eur": data.current_year_cost_eur,
             "projected_year_cost_eur": data.projected_year_cost_eur,
+            "year_end_cost_eur": data.year_end_cost_eur,
+            "year_end": data.year_end_diagnostics,
             # The yearly volume the excise band, the network ceiling and a
             # volume tranche were all resolved against, which is otherwise
             # invisible: a tiered card publishes one blended rate and nothing

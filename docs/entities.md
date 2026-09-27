@@ -129,6 +129,7 @@ pulls (all fields defined at `coordinator_data.py`).
 | Rolling year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur`, the last 365 days' volume priced at today's tariffs; the key predates the display name and stays for the `unique_id` |
 | Projected year consumption | `projected_year_consumption` | - | MEASUREMENT | kWh | `projected_year_consumption_kwh` (`projected_volume.py`); `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes from `volume_projection_diagnostics["consumption"]` |
 | Projected year injection | `projected_year_injection` | - | MEASUREMENT | kWh | `projected_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
+| Projected year-end cost | `projected_year_end_cost` | - | MEASUREMENT | EUR | `year_end_cost_eur` (`year_end_cost.py`); `energy_basis`, `volume_basis`, `contract_basis`, `consumption_kwh`, `injection_kwh`, `fees_eur`, `welcome_credit_eur` and, when they apply, `previous_contracts_eur` and `injection_hours_uncredited` attributes from `year_end_diagnostics` |
 | Rolling year consumption | `rolling_year_consumption` | - | MEASUREMENT | kWh | `rolling_year_consumption_kwh` (`projected_volume.py`), the volume `projected_year_cost` prices; `volume_basis` attribute from `rolling_volume_diagnostics["consumption"]` |
 | Rolling year injection | `rolling_year_injection` | - | MEASUREMENT | kWh | `rolling_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
@@ -329,6 +330,37 @@ profile is never fetched for this. Otherwise the value is unknown and
 Its `key` is permanent from first release: `unique_id` is
 `f"{entry.entry_id}_{description.key}"`, so renaming it later orphans the
 entity, drops its recorded history and breaks dashboard references.
+
+### `projected_year_end_cost`
+
+What the calendar year's bill will stand at on 31 December
+(`year_end_cost.py`). It is `_compute_current_year_cost` with `window_end` on
+31 December, run inside `reading_year_ahead` (`energy_meters.py`): the
+recorder read (`_recorder_deltas`) serves the days from today onwards off last
+year's same days, each slot at its local wall time on the day it lands on
+(29 February reads the 28th, and a repeated autumn hour is summed), and
+`_effective_snapshot_for_month` (`cohort.py`) bills every month after the
+running one on the card the live price is built from, fetching nothing. One
+walk of the whole year rather than the running bill plus a remainder, because
+under compensation the year nets once per register and floors once: a floored
+year to date plus the rest would bill the winter on top of a forfeited summer
+surplus. Every rule of the walk (register pairs, silent sides, fees prorated
+to 31 December, the welcome credit) applies to the rest of the year unchanged,
+and on a year with no autumn clock change ahead the result is exactly the walk
+over a recorder already holding those days.
+
+A month-indexed energy leg holds the running month's index to 31 December, set
+as the leg's `index_realised`, the way the rolling year cost holds a variable
+card's printed rate. Unknown (`energy_basis` says why) on a dynamic contract,
+on a feed-in credit that follows the spot price per slot on the injection
+regime, while the running month has no index yet, and while the feed-in credit
+has no rate yet (a month-indexed credit printing no figure, before the month's
+index is out, which the live `injection_price` has none of either); unknown
+(`volume_basis`) when the recorder does not cover last year's remaining days
+on a side the bill reads, or no consumption meter is wired. An entry billing
+from its contract start covers that window, as `current_year_cost` does, and
+earlier contracts after a recorded switch are added as priced for
+`current_year_cost`, the figure unknown while they are still being priced.
 
 ### `rolling_year_consumption` and `rolling_year_injection`
 

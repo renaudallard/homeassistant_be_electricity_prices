@@ -115,6 +115,7 @@ from .contract_periods import (
 )
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
+from .year_end_cost import _compute_year_end_cost
 from .spot_stats import (
     _energy_is_quarter_hourly,
     _energy_is_rlp_indexed,
@@ -816,6 +817,38 @@ class _TickMixin:
                 breakdown=volume_breakdown["injection"],
             )
 
+        # And what the calendar year's bill will stand at on 31 December.
+        year_end_breakdown: dict[str, Any] = {}
+        year_end_cost = None
+        if prev_year is None:
+            year_end_breakdown["energy_basis"] = (
+                "not projected: the earlier contracts this year are still being priced"
+            )
+        else:
+            year_end_cost = await _compute_year_end_cost(
+                self.hass,
+                self._session,
+                get_extractor(self.entry.data[CONF_SUPPLIER]),
+                self._snapshot,
+                self.entry,
+                injection_snapshot,
+                today,
+                energy_index=energy_mean,
+                previous_eur=prev_year,
+                breakdown=year_end_breakdown,
+                historical_spots=self._historical_spots,
+                spot_quarters=self._historical_spot_quarters,
+                spp_weights=self._spp_weights if spp_weighted else None,
+                rlp_weights=(
+                    (self._rlp_weights or None)
+                    if (rlp_weighted or allocating)
+                    else None
+                ),
+                billed_peak_kw=billed_peak,
+                cached_only=cached_months_only,
+                window_start_override=own_start if own_start != ytd_start else None,
+            )
+
         await self._save_persistent()
 
         age = self._snapshot_age_hours()
@@ -915,6 +948,8 @@ class _TickMixin:
             rolling_year_consumption_kwh=rolling_consumption,
             rolling_year_injection_kwh=rolling_injection,
             rolling_volume_diagnostics=rolling_breakdown,
+            year_end_cost_eur=year_end_cost,
+            year_end_diagnostics=year_end_breakdown,
             static_peak_price=static_peak,
             static_offpeak_price=static_offpeak,
             static_injection_peak=static_inj_peak,

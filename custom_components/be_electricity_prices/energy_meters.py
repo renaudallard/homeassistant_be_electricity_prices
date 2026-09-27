@@ -76,6 +76,7 @@ from .pricing import (
     MeterType,
     is_offpeak,
 )
+from .year_ahead import YEAR_AHEAD, YearAhead, last_year
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,7 +121,48 @@ _READ_DAILY_BEFORE: dict[tuple[Any, ...], tuple[int, int]] = {}
 _READ_DAILY_LOGGED: set[tuple[str, ...]] = set()
 
 
+def _read_ahead(day: date) -> bool:
+    """Whether ``day`` is read off last year (:mod:`year_ahead`)."""
+    ahead = YEAR_AHEAD.get()
+    return ahead is not None and day >= ahead.pivot
+
+
 async def _recorder_deltas(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+) -> list[tuple[datetime, float]]:
+    """:func:`_read_deltas`, with the days from the year-ahead pivot on read
+    off last year's same days (:mod:`year_ahead`).
+
+    Each slot keeps its local wall time on the day it lands on. A slot that
+    lands twice, the repeated hour of an autumn change or 28 February read
+    for a 29th, is summed rather than dropped, so a day keeps its energy.
+    """
+    ahead = YEAR_AHEAD.get()
+    if ahead is None or not _read_ahead(end):
+        return await _read_deltas(hass, entity_id, start, end, period)
+    first = max(start, ahead.pivot)
+    rows = (
+        await _read_deltas(hass, entity_id, start, first - timedelta(days=1), period)
+        if start < first
+        else []
+    )
+    by_day: dict[date, list[date]] = {}
+    day = first
+    while day <= end:
+        by_day.setdefault(last_year(day), []).append(day)
+        day += timedelta(days=1)
+    moved: dict[datetime, float] = {}
+    for when, delta in await _read_deltas(
+        hass, entity_id, last_year(first), last_year(end), period
+    ):
+        local = dt_util.as_local(when)
+        for target in by_day.get(local.date(), ()):
+            slot = datetime.combine(target, local.timetz()).astimezone(UTC)
+            moved[slot] = moved.get(slot, 0.0) + delta
+    return rows + sorted(moved.items())
+
+
+async def _read_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[tuple[datetime, float]]:
     """Recorder rows as (UTC slot start, delta) pairs, skipping unusable ones.
@@ -480,7 +522,8 @@ async def _recorder_daily_kwh(
     out: dict[date, float] = {}
     for when, delta in await _recorder_deltas(hass, entity_id, start, end, "day"):
         out[dt_util.as_local(when).date()] = delta
-    if end == dt_util.now().date():
+    # Not on a 31 December read ahead, whose day is last year's like the rest.
+    if end == dt_util.now().date() and not _read_ahead(end):
         live_today = await _live_today_kwh(hass, entity_id, end)
         if live_today is not None:
             out[end] = live_today
@@ -549,6 +592,22 @@ def memoise_meter_reads(store: dict[Any, Any]) -> Iterator[None]:
         yield
     finally:
         _METER_MEMO.reset(token)
+
+
+@contextmanager
+def reading_year_ahead(ahead: YearAhead) -> Iterator[None]:
+    """Read the days from ``ahead.pivot`` off last year inside this block.
+
+    Outside any memo: the memo keys on the window, which a read ahead
+    answers differently.
+    """
+    ahead_token = YEAR_AHEAD.set(ahead)
+    memo_token = _METER_MEMO.set(None)
+    try:
+        yield
+    finally:
+        _METER_MEMO.reset(memo_token)
+        YEAR_AHEAD.reset(ahead_token)
 
 
 async def _sum_hourly_kwh(

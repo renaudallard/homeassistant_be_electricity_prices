@@ -890,6 +890,9 @@
       "projected_year_cost": {
         "name": "Voortschrijdende jaarkost"
       },
+      "projected_year_end_cost": {
+        "name": "Verwachte kost op 31 december"
+      },
       "projected_year_consumption": {
         "name": "Verwacht jaarverbruik"
       },

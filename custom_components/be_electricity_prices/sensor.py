@@ -559,6 +559,17 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         suggested_display_precision=2,
         value_fn=lambda d: d.projected_year_cost_eur,
     ),
+    BePriceSensorDescription(
+        key="projected_year_end_cost",
+        translation_key="projected_year_end_cost",
+        # The calendar year's bill as it will stand on 31 December. No device
+        # class for the reason projected_year_cost carries none: it is revised
+        # both ways as the year runs.
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.year_end_cost_eur,
+    ),
 )
 
 
@@ -755,6 +766,9 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "contract_basis",
             "ytd_kwh",
             "remaining_kwh",
+            "consumption_kwh",
+            "injection_kwh",
+            "fees_eur",
         }
     )
     entity_description: BePriceSensorDescription
@@ -898,6 +912,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         key = self.entity_description.key
         if key == "projected_year_cost":
             proj = data.projection_diagnostics
+        elif key == "projected_year_end_cost":
+            proj = data.year_end_diagnostics
         elif key in ("projected_year_consumption", "projected_year_injection"):
             side = key.removeprefix("projected_year_")
             proj = (data.volume_projection_diagnostics or {}).get(side)

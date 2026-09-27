@@ -48,7 +48,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import MEASURED_FULL_YEAR_DAYS, MEASURED_MIN_DAYS, MEASURED_YEAR_GAP_DAYS
-from .energy_meters import _kwh_sensor_ids, _measured_kwh
+from .energy_meters import MeasuredKwh, _kwh_sensor_ids, _measured_kwh
+from .year_ahead import last_year
 
 _PROFILE_NAME = {
     "consumption": "residential load",
@@ -84,6 +85,23 @@ def _elapsed_share(
         return 0.0
     key = (cut.month, cut.day, cut.hour)
     return sum(w for k, w in weights.items() if k < key) / total
+
+
+def _last_year_window(today: date) -> tuple[date, date]:
+    """Last year's same days from ``today`` to 31 December."""
+    return last_year(today), date(today.year - 1, 12, 31)
+
+
+async def _same_days_last_year(
+    hass: HomeAssistant, entry: ConfigEntry, today: date, *, side: str
+) -> MeasuredKwh | None:
+    """What ``side`` metered over :func:`_last_year_window`, or ``None``
+    when the recorder does not cover it."""
+    start, end = _last_year_window(today)
+    last = await _measured_kwh(hass, entry, start, end, side=side)
+    if not _covers(last.days_with_data, (end - start).days + 1):
+        return None
+    return last
 
 
 async def _compute_rolling_year_kwh(
@@ -153,17 +171,11 @@ async def _compute_projected_year_kwh(
         ytd_kwh = ytd.kwh * elapsed / ytd.days_with_data
 
     remaining = (date(today.year, 12, 31) - today).days + 1
-    # 29 February has no counterpart, so the 28th stands in. The two windows
-    # differ by a day whenever either holds a leap day, and the scaling below
-    # absorbs it.
-    last_start = (
-        date(today.year - 1, 2, 28)
-        if (today.month, today.day) == (2, 29)
-        else today.replace(year=today.year - 1)
-    )
-    last_end = date(today.year - 1, 12, 31)
-    last = await _measured_kwh(hass, entry, last_start, last_end, side=side)
-    if _covers(last.days_with_data, (last_end - last_start).days + 1):
+    # The two windows differ by a day whenever either holds a leap day, and
+    # the scaling below absorbs it.
+    last_start, last_end = _last_year_window(today)
+    last = await _same_days_last_year(hass, entry, today, side=side)
+    if last is not None:
         rest = last.kwh * remaining / last.days_with_data
         basis = (
             f"measured: {elapsed} days this year, and the same "

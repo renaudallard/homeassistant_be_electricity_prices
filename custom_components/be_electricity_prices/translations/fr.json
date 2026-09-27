@@ -890,6 +890,9 @@
       "projected_year_cost": {
         "name": "Cout annuel glissant"
       },
+      "projected_year_end_cost": {
+        "name": "Cout projete au 31 decembre"
+      },
       "projected_year_consumption": {
         "name": "Consommation annuelle projetee"
       },

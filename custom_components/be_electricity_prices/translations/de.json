@@ -890,6 +890,9 @@
       "projected_year_cost": {
         "name": "Rollierende Jahreskosten"
       },
+      "projected_year_end_cost": {
+        "name": "Voraussichtliche Kosten zum 31. Dezember"
+      },
       "projected_year_consumption": {
         "name": "Voraussichtlicher Jahresverbrauch"
       },

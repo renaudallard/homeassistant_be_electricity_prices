@@ -890,6 +890,9 @@
       "projected_year_cost": {
         "name": "Rolling year cost"
       },
+      "projected_year_end_cost": {
+        "name": "Projected year-end cost"
+      },
       "projected_year_consumption": {
         "name": "Projected year consumption"
       },

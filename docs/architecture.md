@@ -88,6 +88,8 @@ relative to that package directory.
 | `ytd_energy.py` | The two legs that have to replay the year hour by hour: the energy a spot-priced contract is billed at, and the feed-in credit settled the same way. |
 | `ytd_legs.py` | The legs charged per day rather than per kWh: the standing charges, the Walloon prosumer fee and the Flemish capacity term, each pro-rated over the days the contract covered. |
 | `projected_cost.py` | The rolling-year cost behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered volume of the last 365 days, plus the basis strings that say what was measured and what was assumed. |
+| `year_ahead.py` | The switch the year-end cost sets around its one walk: the first day read off last year and the card billing the months after it, read by the recorder read and the month card lookup. |
+| `year_end_cost.py` | `projected_year_end_cost`: the year-to-date walk run to 31 December under `year_ahead`, and when the rest of the year has no rate to price it on. |
 | `projected_volume.py` | The rolling-year consumption and injection (the last 365 days, the volume `projected_year_cost` prices) and the calendar-year projections: this year's closed days plus last year's same remaining days, with a Synergrid profile fallback only where the entry already holds one. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
