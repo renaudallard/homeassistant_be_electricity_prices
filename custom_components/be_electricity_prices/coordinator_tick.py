@@ -114,7 +114,7 @@ from .contract_periods import (
     price_previous_periods,
 )
 from .projected_cost import _compute_projected_year_cost
-from .projected_volume import _compute_projected_year_kwh
+from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .spot_stats import (
     _energy_is_quarter_hourly,
     _energy_is_rlp_indexed,
@@ -780,11 +780,29 @@ class _TickMixin:
             profile=self._rlp_weights if self._rlp_weights_year == today.year else None,
             breakdown=volume_breakdown["consumption"],
         )
+        # And what each side metered over the last 365 days.
+        rolling_breakdown: dict[str, dict[str, Any]] = {"consumption": {}}
+        rolling_consumption = await _compute_rolling_year_kwh(
+            self.hass,
+            self.entry,
+            today,
+            side="consumption",
+            breakdown=rolling_breakdown["consumption"],
+        )
         projected_injection = None
+        rolling_injection = None
         if self.entry.data.get(CONF_SOLAR_REGIME) in (
             SOLAR_REGIME_COMPENSATION,
             SOLAR_REGIME_INJECTION,
         ):
+            rolling_breakdown["injection"] = {}
+            rolling_injection = await _compute_rolling_year_kwh(
+                self.hass,
+                self.entry,
+                today,
+                side="injection",
+                breakdown=rolling_breakdown["injection"],
+            )
             volume_breakdown["injection"] = {}
             projected_injection = await _compute_projected_year_kwh(
                 self.hass,
@@ -894,6 +912,9 @@ class _TickMixin:
             projected_year_consumption_kwh=projected_consumption,
             projected_year_injection_kwh=projected_injection,
             volume_projection_diagnostics=volume_breakdown,
+            rolling_year_consumption_kwh=rolling_consumption,
+            rolling_year_injection_kwh=rolling_injection,
+            rolling_volume_diagnostics=rolling_breakdown,
             static_peak_price=static_peak,
             static_offpeak_price=static_offpeak,
             static_injection_peak=static_inj_peak,

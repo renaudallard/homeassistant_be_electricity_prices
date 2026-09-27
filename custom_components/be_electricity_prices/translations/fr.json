@@ -22,7 +22,7 @@
         "data_description": {
           "contract_start_date": "La date à laquelle votre fourniture sous ce contrat a commencé. Votre tarif est alors lu sur la carte tarifaire de ce mois-là au lieu de la grille actuelle, chez tout fournisseur qui archive ses anciennes cartes, aussi bien pour les contrats fixes que dynamiques ou indexés mensuellement. Si la carte tarifaire que vous avez signée porte un autre mois, indiquez ce mois dans le champ ci-dessous. L'attribut signing_card du capteur current_price indique la carte sur laquelle l'entrée a abouti. Laissez vide pour toujours utiliser la carte actuelle.",
           "tariff_card_date": "Une date quelconque dans le mois de la carte tarifaire sur laquelle porte votre contrat. Un contrat fixe ou dynamique est tarifé sur la carte en vigueur à la signature, et un changement de fournisseur prend environ un mois, si bien que cette carte porte souvent le mois précédant le début de votre fourniture. energie.be l'inscrit dans le nom du produit (Elektriciteit dynamisch particulier online 06/26). Laissez vide pour utiliser le mois du début de la fourniture, ce qui est correct si vous avez signé et démarré le même mois. Seule la recherche de la carte lit cette date : votre coût cumulé et vos frais continuent de compter depuis la date de début ci-dessus.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel glissant pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
           "ytd_from_contract_start": "Par défaut le coût cumulé de l'année compte à partir du 1er janvier, quel qu'ait été votre fournisseur à ce moment. Cochez cette case pour le faire démarrer à la date de début du contrat ci-dessus, afin que le montant ne couvre que ce contrat. Les frais sont calculés au prorata sur la même période, et la valeur baisse la première fois que cela s'applique. N'a d'effet que sur la première année civile du contrat ; à partir du 1er janvier suivant, les deux sont identiques."
         }
       },
@@ -352,7 +352,7 @@
         "data_description": {
           "contract_start_date": "La date à laquelle votre fourniture sous ce contrat a commencé. Votre tarif est alors lu sur la carte tarifaire de ce mois-là au lieu de la grille actuelle, chez tout fournisseur qui archive ses anciennes cartes, aussi bien pour les contrats fixes que dynamiques ou indexés mensuellement. Si la carte tarifaire que vous avez signée porte un autre mois, indiquez ce mois dans le champ ci-dessous. L'attribut signing_card du capteur current_price indique la carte sur laquelle l'entrée a abouti. Laissez vide pour toujours utiliser la carte actuelle.",
           "tariff_card_date": "Une date quelconque dans le mois de la carte tarifaire sur laquelle porte votre contrat. Un contrat fixe ou dynamique est tarifé sur la carte en vigueur à la signature, et un changement de fournisseur prend environ un mois, si bien que cette carte porte souvent le mois précédant le début de votre fourniture. energie.be l'inscrit dans le nom du produit (Elektriciteit dynamisch particulier online 06/26). Laissez vide pour utiliser le mois du début de la fourniture, ce qui est correct si vous avez signé et démarré le même mois. Seule la recherche de la carte lit cette date : votre coût cumulé et vos frais continuent de compter depuis la date de début ci-dessus.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel glissant pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
           "ytd_from_contract_start": "Par défaut le coût cumulé de l'année compte à partir du 1er janvier, quel qu'ait été votre fournisseur à ce moment. Cochez cette case pour le faire démarrer à la date de début du contrat ci-dessus, afin que le montant ne couvre que ce contrat. Les frais sont calculés au prorata sur la même période, et la valeur baisse la première fois que cela s'applique. N'a d'effet que sur la première année civile du contrat ; à partir du 1er janvier suivant, les deux sont identiques."
         }
       },
@@ -888,13 +888,19 @@
         "name": "Cout du mois"
       },
       "projected_year_cost": {
-        "name": "Cout annuel projete"
+        "name": "Cout annuel glissant"
       },
       "projected_year_consumption": {
         "name": "Consommation annuelle projetee"
       },
       "projected_year_injection": {
         "name": "Injection annuelle projetee"
+      },
+      "rolling_year_consumption": {
+        "name": "Consommation annuelle glissante"
+      },
+      "rolling_year_injection": {
+        "name": "Injection annuelle glissante"
       },
       "contract_end_date": {
         "name": "Date de fin du contrat"

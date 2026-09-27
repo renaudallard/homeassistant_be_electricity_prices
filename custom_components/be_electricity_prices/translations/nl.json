@@ -22,7 +22,7 @@
         "data_description": {
           "contract_start_date": "De datum waarop uw levering onder dit contract is gestart. Uw tarief wordt dan gelezen van de tariefkaart van die maand in plaats van de huidige, bij elke leverancier die zijn oude kaarten archiveert, en zowel voor vaste, dynamische als maandelijks geïndexeerde contracten. Draagt de tariefkaart die u tekende een andere maand, vul die dan hieronder in. Het attribuut signing_card van de sensor current_price noemt de kaart waarop deze invoer is uitgekomen. Laat leeg om altijd de huidige kaart te gebruiken.",
           "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw jaartotaal en vaste kosten blijven tellen vanaf de startdatum hierboven.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de voortschrijdende jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
           "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
@@ -352,7 +352,7 @@
         "data_description": {
           "contract_start_date": "De datum waarop uw levering onder dit contract is gestart. Uw tarief wordt dan gelezen van de tariefkaart van die maand in plaats van de huidige, bij elke leverancier die zijn oude kaarten archiveert, en zowel voor vaste, dynamische als maandelijks geïndexeerde contracten. Draagt de tariefkaart die u tekende een andere maand, vul die dan hieronder in. Het attribuut signing_card van de sensor current_price noemt de kaart waarop deze invoer is uitgekomen. Laat leeg om altijd de huidige kaart te gebruiken.",
           "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw jaartotaal en vaste kosten blijven tellen vanaf de startdatum hierboven.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de voortschrijdende jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
           "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
@@ -888,13 +888,19 @@
         "name": "Kost deze maand"
       },
       "projected_year_cost": {
-        "name": "Verwachte jaarkost"
+        "name": "Voortschrijdende jaarkost"
       },
       "projected_year_consumption": {
         "name": "Verwacht jaarverbruik"
       },
       "projected_year_injection": {
         "name": "Verwachte jaarinjectie"
+      },
+      "rolling_year_consumption": {
+        "name": "Voortschrijdend jaarverbruik"
+      },
+      "rolling_year_injection": {
+        "name": "Voortschrijdende jaarinjectie"
       },
       "contract_end_date": {
         "name": "Einddatum van het contract"

@@ -22,7 +22,7 @@
         "data_description": {
           "contract_start_date": "The date your supply under this contract started. Your rate is then read off the card of that month instead of today's, for every supplier that archives its past cards, and on fixed, dynamic and monthly-indexed contracts alike. If the tariff card you signed is named for a different month, give that month in the field below. The signing_card attribute on the current_price sensor names the card the entry ended up on. Leave blank to always use the current card.",
           "tariff_card_date": "Any date in the month of the tariff card your contract is on. A fixed or dynamic contract is priced at the card in force when you signed, and switching supplier takes about a month, so that card is often named for the month before your supply started. energie.be prints it in the product name (Elektriciteit dynamisch particulier online 06/26). Leave blank and the month your supply started is used, which is right when you signed and started in the same month. Only the card lookup reads this: your year-to-date window and fees keep counting from the contract start date above.",
-          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate.",
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the rolling year cost to say how much of the year is still under this contract. It changes no billed rate.",
           "ytd_from_contract_start": "By default the year-to-date cost counts from 1 January, whoever supplied you then. Tick this to start it at the contract start date above instead, so the figure covers only this contract. Fees are pro-rated over the same window, and the value drops the first time it applies. Only affects the contract's first calendar year; from the next 1 January the two are the same."
         }
       },
@@ -888,13 +888,19 @@
         "name": "Current month cost"
       },
       "projected_year_cost": {
-        "name": "Projected year cost"
+        "name": "Rolling year cost"
       },
       "projected_year_consumption": {
         "name": "Projected year consumption"
       },
       "projected_year_injection": {
         "name": "Projected year injection"
+      },
+      "rolling_year_consumption": {
+        "name": "Rolling year consumption"
+      },
+      "rolling_year_injection": {
+        "name": "Rolling year injection"
       },
       "contract_end_date": {
         "name": "Contract end date"

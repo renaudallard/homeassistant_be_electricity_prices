@@ -582,6 +582,24 @@ _PROJECTED_INJECTION = BePriceSensorDescription(
     suggested_display_precision=0,
     value_fn=lambda d: d.projected_year_injection_kwh,
 )
+# What the meter recorded over the last 365 days, the volume projected_year_cost
+# prices. MEASUREMENT for the same reason: a window sum falls as well as rises.
+_ROLLING_CONSUMPTION = BePriceSensorDescription(
+    key="rolling_year_consumption",
+    translation_key="rolling_year_consumption",
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement="kWh",
+    suggested_display_precision=0,
+    value_fn=lambda d: d.rolling_year_consumption_kwh,
+)
+_ROLLING_INJECTION = BePriceSensorDescription(
+    key="rolling_year_injection",
+    translation_key="rolling_year_injection",
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement="kWh",
+    suggested_display_precision=0,
+    value_fn=lambda d: d.rolling_year_injection_kwh,
+)
 
 
 CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
@@ -628,7 +646,7 @@ async def async_setup_entry(
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     descriptions.extend(FEE_SENSORS)
-    descriptions.append(_PROJECTED_CONSUMPTION)
+    descriptions.extend((_PROJECTED_CONSUMPTION, _ROLLING_CONSUMPTION))
     # Only for a household that asked for it: a company car charged at home.
     if entry.data.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE):
         descriptions.extend(EV_RATE_SENSORS)
@@ -648,7 +666,7 @@ async def async_setup_entry(
     if solar_kva > 0.0 and regime == SOLAR_REGIME_COMPENSATION:
         descriptions.extend(PROSUMER_SENSORS)
     if regime in (SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION):
-        descriptions.append(_PROJECTED_INJECTION)
+        descriptions.extend((_PROJECTED_INJECTION, _ROLLING_INJECTION))
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
         # The engine credits a register pair on both two-register meters, the
@@ -883,6 +901,9 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         elif key in ("projected_year_consumption", "projected_year_injection"):
             side = key.removeprefix("projected_year_")
             proj = (data.volume_projection_diagnostics or {}).get(side)
+        elif key in ("rolling_year_consumption", "rolling_year_injection"):
+            side = key.removeprefix("rolling_year_")
+            proj = (data.rolling_volume_diagnostics or {}).get(side)
         else:
             return {}
         # Its own branch rather than sharing the one above: these attributes

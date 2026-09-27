@@ -260,6 +260,7 @@ async def async_get_config_entry_diagnostics(
         quarter_hours[month_key] = quarter_hours.get(month_key, 0) + 1
 
     volume = data.volume_projection_diagnostics or {}
+    rolling = data.rolling_volume_diagnostics or {}
     return {
         "entry": {
             "title": entry.title,
@@ -308,8 +309,13 @@ async def async_get_config_entry_diagnostics(
             "annual_kwh_priced": round(entry_annual_kwh(entry), 1),
             "hourly": [breakdown_row(dt_util.as_local(h), bd) for h, bd in hourly],
         },
+        # rolling_year_kwh is the raw sum of the wired sensors;
+        # rolling_year_sensor_kwh is what the sensor shows, read the way the
+        # bill reads a register pair and scaled across missing days.
         "consumption": {
             "rolling_year_kwh": cons_year,
+            "rolling_year_sensor_kwh": data.rolling_year_consumption_kwh,
+            "rolling": rolling.get("consumption"),
             "ytd_kwh": cons_ytd,
             "projected_year_kwh": data.projected_year_consumption_kwh,
             "projection": volume.get("consumption"),
@@ -317,6 +323,8 @@ async def async_get_config_entry_diagnostics(
         },
         "injection": {
             "rolling_year_kwh": inj_year,
+            "rolling_year_sensor_kwh": data.rolling_year_injection_kwh,
+            "rolling": rolling.get("injection"),
             "ytd_kwh": inj_ytd,
             "projected_year_kwh": data.projected_year_injection_kwh,
             "projection": volume.get("injection"),

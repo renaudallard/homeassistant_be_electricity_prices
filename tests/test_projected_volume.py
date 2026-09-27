@@ -1,4 +1,4 @@
-"""Projected calendar-year consumption and injection."""
+"""Rolling-year and projected calendar-year consumption and injection."""
 
 from __future__ import annotations
 
@@ -14,8 +14,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import energy_meters
 from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.compare_quote import _annual_volume
 from custom_components.be_electricity_prices.projected_volume import (
     _compute_projected_year_kwh,
+    _compute_rolling_year_kwh,
     _elapsed_share,
 )
 from tests import make_entry
@@ -233,8 +235,94 @@ def test_the_solar_profile_is_cut_on_its_own_clock(freezer: Any) -> None:
 
 
 def test_the_injection_projection_follows_the_solar_regime() -> None:
-    assert "projected_year_consumption" in _added(make_entry())
-    assert "projected_year_injection" not in _added(make_entry())
+    keys = _added(make_entry())
+    assert {"projected_year_consumption", "rolling_year_consumption"} <= keys
+    assert not {"projected_year_injection", "rolling_year_injection"} & keys
     for regime in ("injection", "compensation"):
         keys = _added(make_entry(solar_regime=regime, solar_kva=5.0))
-        assert "projected_year_injection" in keys
+        assert {"projected_year_injection", "rolling_year_injection"} <= keys
+
+
+async def _rolling(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    per_day: Callable[[str, date], float | None],
+    *,
+    side: str = "consumption",
+) -> tuple[float | None, dict[str, Any]]:
+    diag: dict[str, Any] = {}
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_recorder(per_day)):
+        got = await _compute_rolling_year_kwh(
+            hass, entry, dt_util.now().date(), side=side, breakdown=diag
+        )
+    return got, diag
+
+
+async def test_the_rolling_year_is_the_last_365_days(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """27 September 2025 to today, today's live reading included."""
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    got, diag = await _rolling(
+        hass,
+        _entry(),
+        lambda _e, day: 10.0 if day >= date(2025, 9, 27) else 99.0,
+    )
+    assert got == pytest.approx(3650.0)
+    assert diag == {"volume_basis": "measured (365 days)"}
+
+
+async def test_the_rolling_year_is_the_volume_the_cost_prices(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Same window, same scaling across missing days as projected_year_cost."""
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+
+    def per_day(_e: str, day: date) -> float | None:
+        if date(2026, 3, 1) <= day <= date(2026, 3, 3):
+            return None
+        return 12.0 if day.month in (12, 1, 2) else 8.0
+
+    got, diag = await _rolling(hass, _entry(), per_day)
+    today = dt_util.now().date()
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_recorder(per_day)):
+        priced = await _annual_volume(
+            hass, _entry(), today - timedelta(days=364), today
+        )
+    assert got == pytest.approx(priced.kwh)
+    assert diag["volume_basis"] == priced.source == "measured (362 days)"
+
+
+async def test_a_short_history_has_no_rolling_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The cost falls back on a typed or default volume here; the sensor
+    does not, since that is no meter reading."""
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    got, diag = await _rolling(
+        hass,
+        _entry(annual_consumption_kwh=3500),
+        lambda _e, day: 10.0 if day >= date(2026, 6, 1) else None,
+    )
+    assert got is None
+    assert diag["volume_basis"] == (
+        "not measured: the consumption meter recorded 118 of the last 365 days"
+    )
+
+
+async def test_the_rolling_year_reads_each_side_on_its_own_meter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    got, _diag = await _rolling(
+        hass,
+        _entry(),
+        lambda entity, _day: {"sensor.cons": 10.0, "sensor.inj": 4.0}[entity],
+        side="injection",
+    )
+    assert got == pytest.approx(1460.0)
+    got, diag = await _rolling(
+        hass, MockConfigEntry(domain=DOMAIN, data={}), lambda _e, _d: 1.0
+    )
+    assert got is None
+    assert diag["volume_basis"] == "not measured: no consumption meter is wired"

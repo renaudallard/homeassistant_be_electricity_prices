@@ -126,9 +126,11 @@ pulls (all fields defined at `coordinator_data.py`).
 | EV home charging rate (CREG) | `ev_home_charging_rate` | - | MEASUREMENT | EUR/kWh | `ev_home_charging_rate_eur_per_kwh`, the SPF's flat-rate ceiling for reimbursing home charging of a company car, for the entry's region this quarter, computed from the CREG's monthly prices (`creg_ev.py`); created only when `CONF_EV_HOME_CHARGING_RATE` is on, and unavailable until the regulator's file has been read. Carries `quarter_start`, `region`, `source` and an unrecorded `history` of every quarter the file covers |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur`; after a recorded supplier switch the contracts held earlier in the year are included, listed in `previous_contracts` with their total in `previous_contracts_eur` ([coordinator.md](coordinator.md), section 7.4) |
 | Current month cost | `current_month_cost` | MONETARY | TOTAL | EUR | `current_month_cost_eur`, the same bill over the running month |
-| Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
+| Rolling year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur`, the last 365 days' volume priced at today's tariffs; the key predates the display name and stays for the `unique_id` |
 | Projected year consumption | `projected_year_consumption` | - | MEASUREMENT | kWh | `projected_year_consumption_kwh` (`projected_volume.py`); `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes from `volume_projection_diagnostics["consumption"]` |
 | Projected year injection | `projected_year_injection` | - | MEASUREMENT | kWh | `projected_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
+| Rolling year consumption | `rolling_year_consumption` | - | MEASUREMENT | kWh | `rolling_year_consumption_kwh` (`projected_volume.py`), the volume `projected_year_cost` prices; `volume_basis` attribute from `rolling_volume_diagnostics["consumption"]` |
+| Rolling year injection | `rolling_year_injection` | - | MEASUREMENT | kWh | `rolling_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only); 0 in fixed capacity mode, which measures nothing and banks no month, while keeping the months measured before |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
@@ -303,7 +305,9 @@ is the correct outcome for a figure that is explicitly not a forecast.
 `projected_year_consumption` and `projected_year_injection` make the same call
 for the same reason: `ENERGY` admits only `TOTAL` and `TOTAL_INCREASING`
 (`DEVICE_CLASS_STATE_CLASSES[ENERGY]`), and a projection revised both ways is
-neither.
+neither. So do `rolling_year_consumption` and `rolling_year_injection`: a
+365-day window sum falls whenever the day leaving it outweighs the day
+entering it.
 
 ### `projected_year_consumption` and `projected_year_injection`
 
@@ -325,6 +329,22 @@ profile is never fetched for this. Otherwise the value is unknown and
 Its `key` is permanent from first release: `unique_id` is
 `f"{entry.entry_id}_{description.key}"`, so renaming it later orphans the
 entity, drops its recorded history and breaks dashboard references.
+
+### `rolling_year_consumption` and `rolling_year_injection`
+
+What the meter recorded over the last 365 days, today's live reading included
+(`_compute_rolling_year_kwh` in `projected_volume.py`). The window, the reader
+(`_measured_kwh`) and the scaling across up to `MEASURED_YEAR_GAP_DAYS`
+missing days are those of the volume `projected_year_cost` prices, so on a
+measured year the two agree to the kWh. Short of that coverage the sensor is
+unknown, where the cost falls back on the typed yearly volume or the household
+default: neither is a meter reading. `volume_basis` gives the days measured,
+or what is missing.
+
+`projected_year_cost` is shown as *Rolling year cost* for the same reason:
+its volume is this rolling year, not the calendar year the `projected_year_*`
+kWh sensors and `current_year_cost` cover. Only the display name changed; the
+key stays for the `unique_id`.
 
 ### `current_year_cost`: state class and last_reset
 
@@ -603,6 +623,7 @@ Top-level dump keys:
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
 | `consumption.billed_from` / `.billed_ytd_kwh` / `.read_once_a_day` and the same under `injection` | the sensors the bill reads each side off and whether the side reports once a day and had each day spread over its hours (`_spread_daily_readings`) after the register pair, totals and silent-side rules, read the way the last bill was, over the days the entry's own contract bills (from the switch, when one is recorded): per day (`_resolve_daily_kwh`) when that bill left `days_seen` in its breakdown, as a fixed or variable contract's does, since the per-day walk decides the pair against the totals sensor on days rather than hours, and otherwise hourly (`_metered_sides`, the only reader with hours to spread, so `read_once_a_day` is `null` on a per-day bill). `billed_ytd_kwh` is the year-to-date kWh that last bill priced, from its breakdown (`consumption_ytd_kwh` / `injection_ytd_kwh`, today's live reading included), so a month it left out whole, which shows as `days_priced` or `hours_priced` under the days or hours seen on the `current_year_cost` attributes, is not in it; `null` when that bill left none. All three are `null` on a side that cannot be billed, an empty list on the injection side of an entry with no solar regime, which does not read it. `rolling_year_kwh` and `ytd_kwh` beside them are the raw sums of every wired sensor, and the two disagreeing is the tell |
 | `silent_meter` | the sensors of a side that stopped recording while the other carried on: a consumption side whose later days the bill leaves out of both sides, or an injection side whose feed-in it leaves out while billing the consumption, which includes one that recorded nothing in the window; empty otherwise |
+| `consumption.rolling_year_sensor_kwh` / `.rolling` and the same under `injection` | what the rolling-year sensor shows and its `volume_basis`: the bill's reading of the side over the last 365 days, scaled across missing days, where `rolling_year_kwh` is the raw sum |
 | `consumption.projected_year_kwh` / `.projection` and the same under `injection` | the calendar-year projection and its basis (`volume_basis`, `ytd_kwh`, `remaining_kwh`); `ytd_kwh` there counts from 1 January to yesterday whatever the billing window |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `spot_cache_by_month` | `{ "YYYY-MM": {hours, mean, min, max} }` over the day-ahead prices `current_year_cost` is replayed from, in EUR/kWh: a month whose mean sits far off the Belgian day-ahead average is the cache, not the card |

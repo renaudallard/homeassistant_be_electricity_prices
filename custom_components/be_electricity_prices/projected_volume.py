@@ -11,12 +11,17 @@
 # WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-"""Projected calendar-year consumption and injection.
+"""Rolling-year and projected calendar-year consumption and injection.
 
-What this calendar year will have metered by 31 December: the closed days
-since 1 January as measured, plus the rest of the year taken from the same
-calendar days of last year. Today counts as part of the rest, so the figure
-moves once a day rather than with every live meter reading.
+The rolling year is what the meter recorded over the last 365 days, today
+included, on the window and the coverage rule ``projected_year_cost`` prices
+its volume on, so the two read the same year.
+
+The projected year is what this calendar year will have metered by 31
+December: the closed days since 1 January as measured, plus the rest of the
+year taken from the same calendar days of last year. Today counts as part of
+the rest, so the figure moves once a day rather than with every live meter
+reading.
 
 The rest is never a day count applied to a yearly total. Load is seasonal: on
 Synergrid's 2026 residential profile the last 97 days of the year carry 30% of
@@ -79,6 +84,37 @@ def _elapsed_share(
         return 0.0
     key = (cut.month, cut.day, cut.hour)
     return sum(w for k, w in weights.items() if k < key) / total
+
+
+async def _compute_rolling_year_kwh(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    today: date,
+    *,
+    side: str,
+    breakdown: dict[str, Any],
+) -> float | None:
+    """kWh ``side`` metered over the 365 days to ``today``, or ``None``.
+
+    Scaled across the few days the recorder may miss, as the cost projection
+    scales its volume. Short of that the value is unknown: the cost falls
+    back on a typed or default volume there, which is no meter reading.
+    ``breakdown`` receives the basis.
+    """
+    if not any(_kwh_sensor_ids(entry, side)):
+        breakdown["volume_basis"] = f"not measured: no {side} meter is wired"
+        return None
+    start = today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
+    measured = await _measured_kwh(hass, entry, start, today, side=side)
+    days = measured.days_with_data
+    if not _covers(days, MEASURED_FULL_YEAR_DAYS):
+        breakdown["volume_basis"] = (
+            f"not measured: the {side} meter recorded {days} of the last "
+            f"{MEASURED_FULL_YEAR_DAYS} days"
+        )
+        return None
+    breakdown["volume_basis"] = f"measured ({days} days)"
+    return measured.kwh * MEASURED_FULL_YEAR_DAYS / days
 
 
 async def _compute_projected_year_kwh(

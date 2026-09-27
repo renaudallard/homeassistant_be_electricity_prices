@@ -22,7 +22,7 @@
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
           "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihre Jahreskosten und Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
           "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
@@ -352,7 +352,7 @@
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
           "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihre Jahreskosten und Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
           "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
@@ -888,13 +888,19 @@
         "name": "Kosten diesen Monat"
       },
       "projected_year_cost": {
-        "name": "Voraussichtliche Jahreskosten"
+        "name": "Rollierende Jahreskosten"
       },
       "projected_year_consumption": {
         "name": "Voraussichtlicher Jahresverbrauch"
       },
       "projected_year_injection": {
         "name": "Voraussichtliche Jahreseinspeisung"
+      },
+      "rolling_year_consumption": {
+        "name": "Rollierender Jahresverbrauch"
+      },
+      "rolling_year_injection": {
+        "name": "Rollierende Jahreseinspeisung"
       },
       "contract_end_date": {
         "name": "Vertragsende"

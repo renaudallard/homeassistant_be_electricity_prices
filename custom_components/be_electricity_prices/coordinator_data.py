@@ -194,6 +194,12 @@ class CoordinatorData:
     projected_year_consumption_kwh: float | None = None
     projected_year_injection_kwh: float | None = None
     volume_projection_diagnostics: dict[str, dict[str, Any]] | None = None
+    # What each side metered over the last 365 days, the volume
+    # projected_year_cost prices, and the basis behind it keyed by side.
+    # None short of a year of readings.
+    rolling_year_consumption_kwh: float | None = None
+    rolling_year_injection_kwh: float | None = None
+    rolling_volume_diagnostics: dict[str, dict[str, Any]] | None = None
 
 
 def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:
