@@ -1552,6 +1552,83 @@ async def test_ytd_spot_injection_credit_keeps_what_one_register_booked_alone(
     assert credit == pytest.approx(0.1 * 1.5 * len(hours))
 
 
+@pytest.mark.parametrize(
+    ("pair", "other"),
+    [
+        pytest.param(
+            ("day_consumption_kwh", "night_consumption_kwh"),
+            "injection_kwh",
+            id="consumption",
+        ),
+        pytest.param(
+            ("day_injection_kwh", "night_injection_kwh"),
+            "consumption_kwh",
+            id="injection",
+        ),
+    ],
+)
+async def test_the_hourly_walks_bill_each_register_over_its_own_hours(
+    freezer: Any, pair: tuple[str, str], other: str
+) -> None:
+    """A register pair whose day half missed six midday rows a day through
+    June, booking their energy on its next row. The per-day walk bills the
+    whole day rows, but every hourly-billed contract and the backfill billed
+    only the hours both halves reported, which dropped what the night half
+    booked in the missed hours. Each half is now billed over its own hours,
+    each priced at its own hour, on the days both report."""
+    freezer.move_to("2026-09-26 15:30:00+02:00")
+    now = dt_util.utcnow()
+    hours = [
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+        + timedelta(hours=h)
+        for h in range(24 * 269)
+    ]
+    hours = [h for h in hours if h < now.replace(minute=0)]
+
+    def _missed(hour: datetime) -> bool:
+        local = dt_util.as_local(hour)
+        return local.month == 6 and 9 <= local.hour < 15
+
+    day_half = {h: 1.0 for h in hours if not _missed(h)}
+    for hour in hours:
+        if _missed(hour) and dt_util.as_local(hour).hour == 14:
+            day_half[hour + timedelta(hours=1)] += 6.0
+    per_sensor = {
+        "sensor.day": day_half,
+        "sensor.night": dict.fromkeys(hours, 0.5),
+        "sensor.other": dict.fromkeys(hours, 0.25),
+    }
+    entry = SimpleNamespace(
+        data={
+            pair[0]: "sensor.day",
+            pair[1]: "sensor.night",
+            other: "sensor.other",
+            "solar_regime": "injection",
+        }
+    )
+
+    async def _hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_sensor[entity_id])
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly):
+        sides = await energy_meters._metered_sides(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            date(2026, 9, 26),
+        )
+    assert sides is not None
+    metered = (
+        sides.consumption if pair[0].endswith("consumption_kwh") else sides.injection
+    )
+    assert metered.kwh == {h: day_half.get(h, 0.0) + 0.5 for h in hours}
+    assert sum(metered.kwh.values()) == pytest.approx(1.5 * len(hours))
+    assert not metered.unknown
+    assert sides.silent == ()
+
+
 async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -10811,8 +10888,8 @@ async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -
     """A night register that stopped after a rename left the day band billing
     alone for the rest of the year: 289 EUR under by late September on a
     register stopped at the end of February, reported as full coverage. The
-    walks now bill the days (and hours) both halves report, which is what the
-    coverage attributes then say."""
+    walks now bill the days both halves report, the hourly one hour by hour,
+    which is what the coverage attributes then say."""
     entry = SimpleNamespace(
         data={
             "supplier": "test",
@@ -10840,8 +10917,8 @@ async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -
         _h: object, entity_id: str, _s: date, _e: date
     ) -> dict[datetime, float]:
         if entity_id == "sensor.day_cons":
-            return {h0 + timedelta(hours=i): 0.4 for i in range(10)}
-        return {h0 + timedelta(hours=i): 0.1 for i in range(3)}
+            return {h0 + timedelta(days=i): 0.4 for i in range(10)}
+        return {h0 + timedelta(days=i): 0.1 for i in range(3)}
 
     with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
@@ -10857,7 +10934,7 @@ async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -
         )
     assert daily == {d0 + timedelta(days=i): (4.0, 1.0, 0.0, 0.0) for i in range(3)}
     assert hourly is not None
-    assert hourly.kwh == {h0 + timedelta(hours=i): pytest.approx(0.5) for i in range(3)}
+    assert hourly.kwh == {h0 + timedelta(days=i): pytest.approx(0.5) for i in range(3)}
 
 
 async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:

@@ -594,12 +594,15 @@ async def _metered_hourly_kwh(
 
     ``None`` for a half-wired day/night pair with no totals sensor, and for a
     wired pair one half of which produced nothing at all. A pair otherwise
-    counts the hours both halves report (:func:`_paired_keys`), which is the
-    rule the per-day walk and the yearly volume follow too. The side's totals
-    sensor, when one is wired beside the pair, bills it instead where the pair
-    cannot be billed whole or falls short of it (:func:`_total_stands_in`),
-    since the total covers both bands on every hour. An empty map when
-    nothing is wired on this side.
+    counts each half over its own hours on the days both halves report
+    (:func:`_paired_keys`), the days the per-day walk and the yearly volume
+    bill. A half that misses an hour books its energy on its next row, so the
+    hours both halves report dropped what the other half booked in the missed
+    ones, while the day rows the per-day walk bills hold all of it. The side's
+    totals sensor, when one is wired beside the pair, bills it instead where
+    the pair cannot be billed whole or falls short of it
+    (:func:`_total_stands_in`), since the total covers both bands on every
+    hour. An empty map when nothing is wired on this side.
 
     A side read once a day has each day spread over its hours
     (:func:`_spread_daily_readings`), which is said once in the log and
@@ -631,8 +634,6 @@ async def _metered_hourly_kwh(
     if moving < _READ_DAILY_MIN_DAYS or polled_count < _SHORT_BELOW * moving:
         return metered
     _spread_daily_readings(metered.kwh, polled)
-    if metered.as_read is not None:
-        _spread_daily_readings(metered.as_read, _polled_days(metered.as_read, today)[1])
     if metered.sensors not in _READ_DAILY_LOGGED:
         _READ_DAILY_LOGGED.add(metered.sensors)
         _LOGGER.warning(
@@ -656,30 +657,26 @@ async def _side_hourly_kwh(
         return MeteredHours(await _sum_hourly_kwh(hass, ids, start, end), tuple(ids))
     day = await _sum_hourly_kwh(hass, ids[:1], start, end)
     night = await _sum_hourly_kwh(hass, ids[1:], start, end)
-    hours = _paired_keys(day, night)
     total_id = _kwh_sensor_ids(entry, side)[2]
     if total_id:
         total = await _sum_hourly_kwh(hass, [total_id], start, end)
         if _total_stands_in(total, day, night):
             return MeteredHours(total, (total_id,))
-    if hours is None:
+    if _paired_keys(day, night) is None:
         return None
-    # Each half over its own hours, on the days both report: what the per-day
-    # walk bills for the pair (MeteredHours.as_read).
     days = {dt_util.as_local(hour).date() for hour in day}
     days &= {dt_util.as_local(hour).date() for hour in night}
-    as_read: dict[datetime, float] = {}
+    kwh: dict[datetime, float] = {}
     for half in (day, night):
-        for hour, kwh in half.items():
+        for hour, reading in half.items():
             if dt_util.as_local(hour).date() in days:
-                as_read[hour] = as_read.get(hour, 0.0) + kwh
+                kwh[hour] = kwh.get(hour, 0.0) + reading
     return MeteredHours(
-        {hour: day[hour] + night[hour] for hour in hours},
+        kwh,
         tuple(ids),
-        frozenset(set(day) ^ set(night)),
+        frozenset((day.keys() | night.keys()) - kwh.keys()),
         today_ok=not _stopped(((ids[0], day), (ids[1], night))),
         last=((ids[0], max(day)), (ids[1], max(night))) if day else (),
-        as_read=as_read,
     )
 
 
@@ -687,20 +684,18 @@ async def _side_hourly_kwh(
 class MeteredSides:
     """Both sides' hourly kWh, after the rule that compares them.
 
-    An hour consumption did not report is taken out of both sides: the hours
-    one half of its register pair did not report, those before its first
+    An hour consumption did not report is taken out of both sides: the days
+    one half of its register pair did not report, the hours before its first
     reading and those after it went silent (:func:`_silent_periods`). An hour
     injection did not report stays billed on consumption without its feed-in.
     ``silent`` names the sensors of the side that went silent, for the
     Repairs card: of a register pair, the halves that did
     (:func:`_silent_sensors`).
 
-    ``injection_as_read`` is the injection side before the comparison and
-    as the per-day walk counts it (``MeteredHours.as_read``), for the feed-in
-    credit added to that walk, which compares the two sides day by day: a
-    day it bills keeps its whole feed-in, the hours consumption did not
-    report included, and so do the hours only one half of an injection
-    register pair reported.
+    ``injection_as_read`` is the injection side before the comparison, for
+    the feed-in credit added to the per-day walk, which compares the two
+    sides day by day: a day it bills keeps its whole feed-in, the hours
+    consumption did not report included.
     """
 
     consumption: MeteredHours
@@ -761,7 +756,7 @@ async def _metered_sides(
             today_ok=inj.today_ok and cons_today and side != "injection",
         ),
         silent,
-        inj if inj.as_read is None else replace(inj, kwh=inj.as_read),
+        inj,
     )
 
 
@@ -1267,10 +1262,10 @@ class MeteredHours:
 
     kwh: dict[datetime, float]
     sensors: tuple[str, ...]
-    # The hours only one half of a register pair reported. The side's own
-    # figure already leaves them out; on the consumption side a walk that
-    # bills both sides must leave them out of the feed-in too, or it credits
-    # the feed-in of an hour whose consumption it did not bill.
+    # The hours of the days only one half of a register pair reported. The
+    # side's own figure already leaves them out; on the consumption side a
+    # walk that bills both sides must leave them out of the feed-in too, or it
+    # credits the feed-in of an hour whose consumption it did not bill.
     unknown: frozenset[datetime] = frozenset()
     # True when the side reports once a day and each day was spread over its
     # hours (:func:`_spread_daily_readings`).
@@ -1284,13 +1279,6 @@ class MeteredHours:
     # went silent when the side did (:func:`_silent_sensors`). Empty for a
     # side read off one sensor.
     last: tuple[tuple[str, datetime], ...] = ()
-    # The side hour by hour as the per-day walk counts it, where that differs
-    # from ``kwh``: each half of a register pair over its own hours, on the
-    # days both halves report. A half that missed an hour carries its energy
-    # to its next row, so the hours both report left out what the other half
-    # booked in the missed ones, while the day's total holds all of it. None
-    # where it is ``kwh``.
-    as_read: dict[datetime, float] | None = None
 
 
 def _split_today(

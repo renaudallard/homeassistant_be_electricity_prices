@@ -1292,9 +1292,10 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
     hass: HomeAssistant,
 ) -> None:
-    """The backfill bills a register pair on the hours both halves report, as
-    the live walks do, and has to leave those hours out of the feed-in side
-    too: an hour whose consumption it does not bill cannot be credited."""
+    """The backfill bills a register pair on the days both halves report, as
+    the live walks do, and has to leave the hours of the other days out of
+    the feed-in side too: an hour whose consumption it does not bill cannot
+    be credited."""
     from custom_components.be_electricity_prices import ytd_energy
     from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
     from custom_components.be_electricity_prices.providers._rates import (
