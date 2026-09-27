@@ -4784,6 +4784,106 @@ async def test_a_tick_in_fixed_mode_keeps_the_measured_months(
     assert coord._billed_peak_kw() == pytest.approx((3 * 6.0 + 6 * 4.0 + 2.6) / 10)
 
 
+def _peak_blob_from_0_28_5() -> dict[str, object]:
+    """A peak as 0.28.5 stored it after six months in fixed mode at 6 kW."""
+    history = {f"2025-{m:02d}-01": 6.0 for m in range(10, 13)}
+    history.update({f"2026-{m:02d}-01": 6.0 for m in range(1, 4)})
+    history.update({"2026-04-01": 3.2, "2026-05-01": 3.4, "2026-06-01": 2.9})
+    history.update({"2026-07-01": 3.1, "2026-08-01": 3.6})
+    return {"peak": {"kw": 6.0, "month": "2026-09-01", "history": history}}
+
+
+async def test_a_fixed_peak_banked_by_an_older_release_is_dropped_once(
+    hass: HomeAssistant,
+) -> None:
+    """0.28.5 banked the fixed kW into every month spent in fixed mode, and
+    after a switch to the peak sensor the twelve-month mean went on billing
+    them as measured: 4,85 kW here against 3,24 measured. The first load by
+    this release drops them, the running month too, and keeps the measured
+    ones. The blob it saves says so, so a month measured later at exactly the
+    same figure stays."""
+    data = {
+        "supplier": "eneco",
+        "contract": "power_fix",
+        "region": "flanders",
+        "dso": "fluvius_antwerpen",
+        "meter": "mono",
+        "capacity_mode": "sensor",
+        "capacity_peak_sensor": "sensor.maximum_demand_current_month",
+        "capacity_fixed_kw": 6.0,
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Eneco (Flanders)")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    with patch.object(
+        coord._store, "async_load", AsyncMock(return_value=_peak_blob_from_0_28_5())
+    ):
+        await coord.async_load_persistent()
+
+    assert coord._peak_history == {
+        "2026-04-01": 3.2,
+        "2026-05-01": 3.4,
+        "2026-06-01": 2.9,
+        "2026-07-01": 3.1,
+        "2026-08-01": 3.6,
+    }
+    assert coord._peak_kw == 0.0
+    assert len(coord._peak_terms()) == 5
+    assert coord._billed_peak_kw() == pytest.approx(3.24)
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert saved["peak"]["measured_only"] is True
+
+    saved["peak"]["kw"] = 6.0
+    saved["peak"]["history"]["2026-09-01"] = 6.0
+    restored = BePricesCoordinator(hass, entry)
+    with patch.object(restored._store, "async_load", AsyncMock(return_value=saved)):
+        await restored.async_load_persistent()
+    assert restored._peak_history["2026-09-01"] == 6.0
+    assert restored._peak_kw == 6.0
+
+
+@pytest.mark.parametrize(
+    ("mode", "fixed_kw", "kept"),
+    [
+        # No fixed kW was ever stored, so nothing is told apart.
+        ("sensor", None, 11),
+        # Fixed mode bills the entry's figure, but the measured months stay
+        # for a return to the sensor.
+        ("fixed", 6.0, 5),
+    ],
+)
+async def test_dropping_a_banked_fixed_peak_leaves_measured_months(
+    hass: HomeAssistant, mode: str, fixed_kw: float | None, kept: int
+) -> None:
+    """Only a month holding exactly the configured kW goes."""
+    data: dict[str, Any] = {
+        "supplier": "eneco",
+        "contract": "power_fix",
+        "region": "flanders",
+        "dso": "fluvius_antwerpen",
+        "meter": "mono",
+        "capacity_mode": mode,
+    }
+    if fixed_kw is not None:
+        data["capacity_fixed_kw"] = fixed_kw
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="Eneco (Flanders)")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    blob = _peak_blob_from_0_28_5()
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+        await coord.async_load_persistent()
+
+    assert len(coord._peak_history) == kept
+    assert coord._peak_history["2026-08-01"] == 3.6
+
+
 async def test_reset_monthly_peak_also_clears_the_history(
     hass: HomeAssistant, freezer: Any
 ) -> None:

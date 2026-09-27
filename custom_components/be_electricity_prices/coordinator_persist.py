@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .const import CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
+from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
 from datetime import UTC, date, datetime, timedelta
 from .coordinator_profiles import (
     _load_profile_cache,
@@ -183,6 +183,32 @@ class _PersistMixin:
                     for key, kw in history.items()
                     if isinstance(key, str) and isinstance(kw, (int, float))
                 }
+            # 0.28.5 and earlier wrote the fixed kW into the running month on
+            # every tick in fixed mode and banked it at each rollover, so an
+            # entry that has since moved to the peak sensor is still billed on
+            # it as if measured. Those months, the running one included, are
+            # dropped once, from a blob written before this rule; every blob
+            # written since says so with measured_only. An entry still in
+            # fixed mode is cleaned up too, for its return to the sensor.
+            #
+            # They are told by value: exactly the configured kW, which is what
+            # that code stored, and JSON gives a float back unchanged. A
+            # measured month landing on it exactly is rare, as a meter reads to
+            # the watt, and dropping one costs little: the gap counts as the
+            # mean of the other months, as Fluvius estimates a month it could
+            # not read, and it would age out within a year anyway. A fixed kW
+            # changed since leaves the older value behind, which the Reset
+            # monthly peak button clears.
+            fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW)
+            if peak.get("measured_only") is not True and isinstance(
+                fixed, (int, float)
+            ):
+                fixed_kw = float(fixed)
+                self._peak_history = {
+                    key: kw for key, kw in self._peak_history.items() if kw != fixed_kw
+                }
+                if self._peak_kw == fixed_kw:
+                    self._peak_kw = 0.0
         # The archived per-month cards, behind the same tuple gate as the
         # snapshot: they are one contract's published rates, and serving them
         # for another one would bill the year-to-date off a card the household
@@ -442,6 +468,7 @@ class _PersistMixin:
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",
                 "history": dict(self._peak_history),
+                "measured_only": True,
             },
         }
         if self._snapshot_raw is not None and self._snapshot_fetched_at is not None:
