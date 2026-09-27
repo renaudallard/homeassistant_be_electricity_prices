@@ -4027,6 +4027,51 @@ async def test_a_poller_turned_hourly_is_not_spread_on_its_old_shape(
     assert metered.kwh[noon.astimezone(UTC)] == pytest.approx(0.3)
 
 
+async def test_an_hourly_pair_missing_rows_keeps_billing_over_a_late_total(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The day register misses its 09:00 to 14:00 rows for twelve days while
+    the night register reports every hour, and the totals sensor started on
+    3 January. Counted on the hours both registers report, the total had
+    more of them and billed the side, losing two days the pair bills in full.
+    Judged on local days, as the per-day walk judges it, the pair keeps it."""
+    freezer.move_to("2026-02-01 12:00:00+01:00")
+    first = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    hours = [first + timedelta(hours=i) for i in range(31 * 24)]
+
+    def _gap(hour: datetime) -> bool:
+        local = dt_util.as_local(hour)
+        return local.day >= 20 and 9 <= local.hour < 15
+
+    series = {
+        "sensor.day": {h: 0.4 for h in hours if not _gap(h)},
+        "sensor.night": dict.fromkeys(hours, 0.3),
+        "sensor.total": {
+            h: 0.7 for h in hours if dt_util.as_local(h).date() >= date(2026, 1, 3)
+        },
+    }
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[datetime, float]:
+        return {
+            h: kwh
+            for h, kwh in series[entity_id].items()
+            if start <= dt_util.as_local(h).date() <= end
+        }
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await energy_meters._metered_hourly_kwh(
+            hass,
+            _PAIR_AND_TOTAL,  # type: ignore[arg-type]
+            "consumption",
+            date(2026, 1, 1),
+            date(2026, 1, 31),
+        )
+    assert metered is not None
+    assert metered.sensors == ("sensor.day", "sensor.night")
+
+
 async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
     hass: HomeAssistant, freezer: Any, caplog: Any
 ) -> None:

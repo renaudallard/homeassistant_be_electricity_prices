@@ -646,6 +646,15 @@ async def _metered_hourly_kwh(
     return replace(metered, read_daily=True)
 
 
+def _per_local_day(hourly: Mapping[datetime, float]) -> dict[date, float]:
+    """An hourly map summed into local days."""
+    out: dict[date, float] = {}
+    for hour, kwh in hourly.items():
+        day = dt_util.as_local(hour).date()
+        out[day] = out.get(day, 0.0) + kwh
+    return out
+
+
 async def _side_hourly_kwh(
     hass: HomeAssistant, entry: ConfigEntry, side: str, start: date, end: date
 ) -> MeteredHours | None:
@@ -660,7 +669,13 @@ async def _side_hourly_kwh(
     total_id = _kwh_sensor_ids(entry, side)[2]
     if total_id:
         total = await _sum_hourly_kwh(hass, [total_id], start, end)
-        if _total_stands_in(total, day, night):
+        # Judged on local days, as the per-day walk judges it: the pair bills
+        # each register over its own hours, so counting only the hours both
+        # report let a totals sensor that started a few days late outnumber
+        # a pair missing a few rows, and lose those days.
+        if _total_stands_in(
+            _per_local_day(total), _per_local_day(day), _per_local_day(night)
+        ):
             return MeteredHours(total, (total_id,))
     if _paired_keys(day, night) is None:
         return None
