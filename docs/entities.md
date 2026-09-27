@@ -362,6 +362,12 @@ from its contract start covers that window, as `current_year_cost` does, and
 earlier contracts after a recorded switch are added as priced for
 `current_year_cost`, the figure unknown while they are still being priced.
 
+The walk covers the whole year, hour by hour on an hourly-billed contract, so
+the tick (`coordinator_tick.py`) reuses the last result while every input it
+reads holds: the day, once more from 01:00 when yesterday's last hour has
+compiled, the card and the month cards held, this month's index, the day-ahead
+and profiles held, the billed peak, the window and the earlier contracts.
+
 ### `rolling_year_consumption` and `rolling_year_injection`
 
 What the meter recorded over the last 365 days, today's live reading included

@@ -78,7 +78,7 @@ from .pricing import (
     static_breakdown,
     yearly_fixed_fee_for_meter,
 )
-from .snapshot_store import SNAPSHOT_STALE_DAYS, cached_month_card
+from .snapshot_store import SNAPSHOT_STALE_DAYS, _monthly_snapshots, cached_month_card
 from datetime import UTC, date, datetime, timedelta
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
@@ -156,6 +156,7 @@ class _TickMixin:
     _previous_priced: PricedPeriods | None
     _previous_pricing: asyncio.Task[None] | None
     _previous_tried: tuple[str, datetime] | None
+    _year_end_memo: tuple[tuple[Any, ...], float | None, dict[str, Any]] | None
     _priced: SupplierSnapshot | None
     _rlp_blend: str
     _rlp_fetched_at: datetime | None
@@ -820,10 +821,39 @@ class _TickMixin:
                 breakdown=volume_breakdown["injection"],
             )
 
-        # And what the calendar year's bill will stand at on 31 December.
+        # And what the calendar year's bill will stand at on 31 December. It
+        # walks the whole year, hour by hour on an hourly-billed contract, and
+        # moves only with its inputs, so the last result is reused while none
+        # of them changed: the day, once more from 01:00 when yesterday's last
+        # hour has compiled, the cards and the month cards held, this month's
+        # index, the day-ahead held, the profiles, the billed peak, the window
+        # and the earlier contracts. A handful of walks a day instead of 24.
+        year_end_key = (
+            today,
+            window_now.hour >= 1,
+            self._snapshot,
+            injection_snapshot,
+            energy_mean,
+            prev_year,
+            billed_peak,
+            own_start,
+            cached_months_only,
+            len(self._historical_spots),
+            len(self._historical_spot_quarters),
+            (self._rlp_weights_year, self._rlp_blend, self._rlp_fetched_at),
+            (self._spp_weights_year, self._spp_fetched_at),
+            sorted(
+                (key[3], card)
+                for key, card in _monthly_snapshots(self.hass).items()
+                if key[:3] == self._supplier_tuple
+            ),
+        )
         year_end_breakdown: dict[str, Any] = {}
         year_end_cost = None
-        if prev_year is None:
+        memo = self._year_end_memo
+        if memo is not None and memo[0] == year_end_key:
+            year_end_cost, year_end_breakdown = memo[1], dict(memo[2])
+        elif prev_year is None:
             year_end_breakdown["energy_basis"] = (
                 "not projected: the earlier contracts this year are still being priced"
             )
@@ -851,6 +881,7 @@ class _TickMixin:
                 cached_only=cached_months_only,
                 window_start_override=own_start if own_start != ytd_start else None,
             )
+        self._year_end_memo = (year_end_key, year_end_cost, dict(year_end_breakdown))
 
         await self._save_persistent()
 

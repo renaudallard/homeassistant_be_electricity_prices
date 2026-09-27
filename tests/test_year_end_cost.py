@@ -486,3 +486,60 @@ def test_the_year_end_cost_is_always_created() -> None:
     from tests.test_bi_hourly_sensors import _added
 
     assert "projected_year_end_cost" in _added(make_entry())
+
+
+async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Reused while nothing it reads changed; a new card, a new day and the
+    first tick after 01:00, when yesterday's last hour has compiled, each
+    walk again. The first tick after a start prices on the month cards
+    already held, and the second walks again once they may have filled."""
+    from custom_components.be_electricity_prices import coordinator_tick
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    freezer.move_to("2026-09-26 12:30:00+02:00")
+    entry = make_entry(consumption_kwh="sensor.cons")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(supplier="eneco", contract="power_fix")
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    walk = AsyncMock(return_value=812.5)
+
+    async def tick() -> float | None:
+        data = await coord._async_update_data()
+        return data.year_end_cost_eur
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coordinator_tick, "_compute_year_end_cost", walk),
+    ):
+        await tick()
+        freezer.tick(timedelta(minutes=5))
+        assert await tick() == 812.5
+        assert walk.await_count == 2
+        freezer.tick(timedelta(hours=1))
+        assert await tick() == 812.5
+        assert walk.await_count == 2
+        coord._snapshot = make_snapshot(
+            supplier="eneco", contract="power_fix", energy=FixedRates(single=0.31)
+        )
+        await tick()
+        assert walk.await_count == 3
+        freezer.move_to("2026-09-27 00:20:00+02:00")
+        await tick()
+        assert walk.await_count == 4
+        freezer.move_to("2026-09-27 01:20:00+02:00")
+        await tick()
+        freezer.move_to("2026-09-27 02:20:00+02:00")
+        assert await tick() == 812.5
+        assert walk.await_count == 5
