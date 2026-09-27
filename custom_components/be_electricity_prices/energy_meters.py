@@ -678,6 +678,7 @@ async def _side_hourly_kwh(
         tuple(ids),
         frozenset(set(day) ^ set(night)),
         today_ok=not _stopped(((ids[0], day), (ids[1], night))),
+        last=((ids[0], max(day)), (ids[1], max(night))) if day else (),
         as_read=as_read,
     )
 
@@ -691,7 +692,8 @@ class MeteredSides:
     reading and those after it went silent (:func:`_silent_periods`). An hour
     injection did not report stays billed on consumption without its feed-in.
     ``silent`` names the sensors of the side that went silent, for the
-    Repairs card.
+    Repairs card: of a register pair, the halves that did
+    (:func:`_silent_sensors`).
 
     ``injection_as_read`` is the injection side before the comparison and
     as the per-day walk counts it (``MeteredHours.as_read``), for the feed-in
@@ -736,6 +738,11 @@ async def _metered_sides(
     )
     unknown = cons.unknown | both
     cons_today = cons.today_ok and side != "consumption"
+    silent: tuple[str, ...] = ()
+    if side == "consumption":
+        silent = _silent_sensors(cons.sensors, cons.last, inj.kwh.keys())
+    elif side == "injection":
+        silent = _silent_sensors(inj.sensors, inj.last, cons.kwh.keys())
     return MeteredSides(
         replace(
             cons,
@@ -753,7 +760,7 @@ async def _metered_sides(
             unknown=unknown,
             today_ok=inj.today_ok and cons_today and side != "injection",
         ),
-        (cons if side == "consumption" else inj).sensors if side else (),
+        silent,
         inj if inj.as_read is None else replace(inj, kwh=inj.as_read),
     )
 
@@ -999,8 +1006,9 @@ async def _resolve_daily_kwh(
 
     ``billed``, when given, is filled with the sensors each side was billed
     off, under ``consumption`` and ``injection``, and those of a side that
-    went silent under the other under ``silent``: what the diagnostics name
-    beside a per-day bill. Such a call reads the recorder rather than the
+    went silent under the other under ``silent``, of a pair the registers
+    that did (:func:`_silent_sensors`): what the diagnostics name beside a
+    per-day bill. Such a call reads the recorder rather than the
     memo, which keeps only the kWh.
 
     Returns ``None`` when neither side has any meter inputs at all
@@ -1037,8 +1045,10 @@ async def _resolve_daily_kwh(
     # out, and the day is billed on its consumption (_silent_periods).
     pair_gaps: dict[int, set[date]] = {}
     # The days each wired side reported before today, keyed by its day slot,
-    # for the check that one side did not go silent under the other.
+    # for the check that one side did not go silent under the other, and the
+    # last day each register of a pair reported, to name the one that did.
     reported: dict[int, set[date]] = {}
+    last: dict[int, tuple[tuple[str, date], ...]] = {}
 
     async def _side(
         day_id: str | None,
@@ -1086,6 +1096,8 @@ async def _resolve_daily_kwh(
                     row[slot_night] += n[day]
                 gaps = pair_gaps[slot_day] = set(d) ^ set(n)
                 reported[slot_day] = days
+                if d:
+                    last[slot_day] = ((day_id, max(d)), (night_id, max(n)))
                 if (
                     day_today is not None
                     and night_today is not None
@@ -1164,7 +1176,10 @@ async def _resolve_daily_kwh(
         reported.get(0), reported.get(2), out.keys()
     )
     if billed is not None and silent is not None:
-        billed["silent"] = billed.get(silent, ())
+        slot, other = (0, 2) if silent == "consumption" else (2, 0)
+        billed["silent"] = _silent_sensors(
+            billed.get(silent, ()), last.get(slot, ()), reported.get(other, set())
+        )
     for day in pair_gaps.get(0, set()) | both:
         out.pop(day, None)
     for day in feed_in:
@@ -1265,6 +1280,10 @@ class MeteredHours:
     # never reports, so a live top-up billed today would be taken back
     # tomorrow.
     today_ok: bool = True
+    # The last hour each register of a pair reported, for naming the one that
+    # went silent when the side did (:func:`_silent_sensors`). Empty for a
+    # side read off one sensor.
+    last: tuple[tuple[str, datetime], ...] = ()
     # The side hour by hour as the per-day walk counts it, where that differs
     # from ``kwh``: each half of a register pair over its own hours, on the
     # days both halves report. A half that missed an hour carries its energy
@@ -1417,6 +1436,26 @@ def _silent_periods(
     if stopped == ["injection"]:
         return "injection", both, {p for p in periods if p > max(inj)}
     return None, both, set()
+
+
+def _silent_sensors(
+    sensors: tuple[str, ...], last: Iterable[tuple[str, _P]], other: Collection[_P]
+) -> tuple[str, ...]:
+    """The sensors to name for a side that went silent under ``other``
+    (:func:`_silent_periods`), given the last period each register of its
+    pair reported.
+
+    Of a pair, the registers whose last period trails the other side's as
+    :func:`_stopped` judges it: naming the side named the half that carries
+    on beside the one that stopped. The whole side when no register stands
+    out, as when it recorded nothing at all.
+    """
+    named = tuple(
+        entity_id
+        for entity_id, when in last
+        if _stopped(((entity_id, (when,)), ("", other)))
+    )
+    return named or sensors
 
 
 def _total_stands_in(

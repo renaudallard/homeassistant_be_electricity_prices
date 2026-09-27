@@ -943,10 +943,11 @@ successful refresh:
   bills that side in full the card still names the broken register, on a
   wording that says so and that the cost is unaffected. The same card names
   a consumption or injection meter that stopped while the other side
-  carries on. The days a consumption meter misses are billed on neither
-  side, rather than as a household that used nothing while its feed-in was
-  credited, so the cost reads low; the days an injection meter misses are
-  billed on their consumption without the feed-in, so it reads high. An
+  carries on, and of a day/night pair only the register that stopped. The
+  days a consumption meter misses are billed on neither side, rather than
+  as a household that used nothing while its feed-in was credited, so the
+  cost reads low; the days an injection meter misses are billed on their
+  consumption without the feed-in, so it reads high. An
   injection meter that recorded nothing at all is named too, and so is a
   consumption meter that compiles no statistics while its state still
   reads, whatever the solar regime: the year is then billed on today's

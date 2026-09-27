@@ -4343,6 +4343,73 @@ async def test_an_injection_register_gap_keeps_the_consumption(
     assert len(sides.injection.kwh) == 264
 
 
+@pytest.mark.parametrize(
+    ("stats", "named"),
+    [
+        pytest.param(
+            {"sensor.cons": 265, "sensor.inj_day": 150, "sensor.inj_night": 265},
+            ("sensor.inj_day",),
+            id="injection-half",
+        ),
+        pytest.param(
+            {"sensor.day": 150, "sensor.night": 265, "sensor.inj": 265},
+            ("sensor.day",),
+            id="consumption-half",
+        ),
+        pytest.param(
+            {"sensor.day": 150, "sensor.night": 150, "sensor.inj": 265},
+            ("sensor.day", "sensor.night"),
+            id="both-halves",
+        ),
+    ],
+)
+async def test_a_silent_side_names_only_the_register_that_stopped(
+    freezer: Any, stats: dict[str, int], named: tuple[str, ...]
+) -> None:
+    """One register of a pair stopped in June while its twin and the other
+    side carried on. The side went silent under the other, and the Repairs
+    card named both registers, the healthy one too. It now names the one that
+    stopped, as the pair check does, and both when both did."""
+    freezer.move_to("2026-09-23 15:00:00+02:00")
+    today = date(2026, 9, 23)
+    year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
+    wired = {
+        "sensor.cons": "consumption_kwh",
+        "sensor.day": "day_consumption_kwh",
+        "sensor.night": "night_consumption_kwh",
+        "sensor.inj": "injection_kwh",
+        "sensor.inj_day": "day_injection_kwh",
+        "sensor.inj_night": "night_injection_kwh",
+    }
+    entry = SimpleNamespace(
+        data={
+            "solar_regime": "injection",
+            **{wired[sensor]: sensor for sensor in stats},
+        }
+    )
+    rows, live_patch = _pair_through_the_recorder(
+        {sensor: year[:days] for sensor, days in stats.items()}, {}
+    )
+    billed: dict[str, tuple[str, ...]] = {}
+    with rows, live_patch:
+        await energy_meters._resolve_daily_kwh(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            today,
+            date(2026, 1, 1),
+            billed=billed,
+        )
+        sides = await energy_meters._metered_sides(
+            None,  # type: ignore[arg-type]
+            entry,  # type: ignore[arg-type]
+            date(2026, 1, 1),
+            today,
+        )
+    assert billed["silent"] == named
+    assert sides is not None
+    assert sides.silent == named
+
+
 async def test_measured_kwh_counts_days_across_a_register_pair(
     hass: HomeAssistant,
 ) -> None:
