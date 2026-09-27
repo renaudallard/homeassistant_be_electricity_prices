@@ -32,7 +32,6 @@ card's printed rate.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -46,7 +45,7 @@ from .const import (
 )
 from .energy_meters import _bills_injection, _kwh_sensor_ids, reading_year_ahead
 from .injection import _compute_injection_price, _injection_is_spot_formula
-from .projected_cost import _contract_basis
+from .projected_cost import _contract_basis, held_at_index
 from .projected_volume import _last_year_window, _same_days_last_year
 from .providers._rates import DynamicRates, SpotMonthlyRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
@@ -112,8 +111,7 @@ async def _compute_year_end_cost(
     ``energy_index`` is the running month's index for a month-indexed energy
     leg. ``previous_eur`` is what the contracts held earlier in the year cost.
     """
-    if isinstance(card.energy, SpotMonthlyRates):
-        card = replace(card, energy=replace(card.energy, index_realised=energy_index))
+    card = held_at_index(card, energy_index)
     why = _unpriceable(card, entry)
     if why is not None:
         breakdown["energy_basis"] = why

@@ -7668,7 +7668,58 @@ async def test_projection_refuses_a_spot_priced_contract(
         hass, _projection_entry(), _daily(10.0), snapshot=snap, priced=snap
     )
     assert got is None
-    assert "no forward price exists" in diag["energy_basis"]
+    assert diag["energy_basis"].endswith(
+        "no forward price exists"
+        if isinstance(energy, DynamicRates)
+        else "this month's is not known yet"
+    )
+
+
+@pytest.mark.parametrize("spliced", [False, True])
+async def test_projection_holds_this_months_index_on_a_month_indexed_leg(
+    hass: HomeAssistant, freezer: Any, spliced: bool
+) -> None:
+    """The running month's index, held for the year the way a variable card's
+    printed rate is: the card as priced, the ENTSO-E key's re-price and the
+    signing cohort's alike. Each extra unit of index costs the year's kWh at
+    the leg's factor."""
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    leg = replace(_yearly_snapshot(), energy=SpotMonthlyRates(factor=1.1, base=0.02))
+    card = (
+        replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+        if spliced
+        else leg
+    )
+
+    async def at(index: float | None) -> tuple[float | None, dict[str, Any]]:
+        return await _project(
+            hass,
+            _projection_entry(api_key="KEY"),
+            _daily(10.0),
+            snapshot=card,
+            priced=leg,
+            energy_index=index,
+        )
+
+    low, diag = await at(0.05)
+    high, _ = await at(0.15)
+    assert low is not None and high is not None
+    assert diag["energy_basis"] == "this month's index, held for a full year"
+    assert high - low == pytest.approx(3650.0 * 1.1 * 0.10)
+    none, diag = await at(None)
+    assert none is None
+    assert diag["energy_basis"].endswith("this month's is not known yet")
+
+
+def test_a_leg_settled_on_its_index_is_priced_without_a_spot() -> None:
+    """The month's settled index is that month's price; a spot handed in still
+    wins, and a leg with neither has no price."""
+    when = datetime(2026, 7, 1, 12, tzinfo=UTC)
+    leg = SpotMonthlyRates(factor=1.1, base=0.02, index_realised=0.09)
+    assert energy_eur_per_kwh(leg, when, None) == pytest.approx(1.1 * 0.09 + 0.02)
+    assert energy_eur_per_kwh(leg, when, 0.05) == pytest.approx(1.1 * 0.05 + 0.02)
+    with pytest.raises(ValueError):
+        energy_eur_per_kwh(replace(leg, index_realised=None), when, None)
 
 
 async def test_projection_blames_the_cohort_splice_when_that_is_the_cause(

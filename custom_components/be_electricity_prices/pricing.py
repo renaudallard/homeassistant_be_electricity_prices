@@ -360,6 +360,10 @@ def energy_eur_per_kwh(
     if isinstance(energy, SpotMonthlyRates):
         # The caller passes the delivery month's mean spot in place of the
         # live slot price, so the flat monthly rate is the same pure formula.
+        # A leg settled on its month's index needs none: that value is the
+        # month's, whichever mean a caller could compute.
+        if spot_eur_per_kwh is None:
+            spot_eur_per_kwh = energy.index_realised
         if spot_eur_per_kwh is None:
             raise ValueError("spot-monthly tariff needs a monthly mean spot")
         factor, base = energy.factor, energy.base

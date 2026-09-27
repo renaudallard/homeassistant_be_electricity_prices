@@ -766,6 +766,9 @@ class _TickMixin:
             # figure by tens of euro a day.
             spots=self._historical_spots,
             signing=signing,
+            # The running month's index, held for the year on a month-indexed
+            # leg, as current_price bills this month.
+            energy_index=energy_mean,
             breakdown=projection_breakdown,
         )
         # The calendar year's metered volume on each side. A profile is used

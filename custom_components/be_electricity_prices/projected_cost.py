@@ -58,6 +58,7 @@ month-indexed card without any start date, and the basis names the key then.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -91,6 +92,10 @@ _SPOT_BASIS = (
     "not projected: this contract settles on a Belpex index for months that "
     "have not happened yet, and no forward price exists"
 )
+_NO_INDEX_BASIS = (
+    "not projected: this contract settles on a monthly Belpex index, and this "
+    "month's is not known yet"
+)
 _NO_INJECTION_YEAR = (
     "not folded in: needs a full year of feed-in history, and a partial one "
     "cannot be scaled without a production profile"
@@ -106,12 +111,23 @@ _NO_INJECTION_RATE = (
 _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
 _COHORT_SPOT_BASIS = (
     "not projected: the {setting} re-prices this card to its signing cohort, "
-    "which settles on a monthly Belpex index that does not exist yet"
+    "which settles on a monthly Belpex index, and this month's is not known yet"
 )
 _KEYED_SPOT_BASIS = (
     "not projected: with an ENTSO-E key this card is re-priced on each month's "
-    "Belpex index, as the supplier bills it, and that index does not exist yet"
+    "Belpex index, as the supplier bills it, and this month's is not known yet"
 )
+
+
+def held_at_index(snapshot: SupplierSnapshot, index: float | None) -> SupplierSnapshot:
+    """``snapshot`` with a month-indexed energy leg settled on ``index``.
+
+    The running month's index, held for the months ahead the way a variable
+    card's printed rate is. Any other leg is returned as it is.
+    """
+    if not isinstance(snapshot.energy, SpotMonthlyRates):
+        return snapshot
+    return replace(snapshot, energy=replace(snapshot.energy, index_realised=index))
 
 
 def _contract_basis(entry: ConfigEntry, today: date) -> str:
@@ -162,6 +178,7 @@ async def _compute_projected_year_cost(
     credited: SupplierSnapshot | None = None,
     signing: SupplierSnapshot | None = None,
     spots: dict[datetime, float] | None = None,
+    energy_index: float | None = None,
     breakdown: dict[str, Any] | None = None,
 ) -> float | None:
     """Cost of a full year on this contract at today's tariffs, or ``None``.
@@ -193,6 +210,10 @@ async def _compute_projected_year_cost(
     annual row credits the same contract at. Short of a full year of both
     the credit is left out and the basis says so.
 
+    ``energy_index`` is the running month's index, for a leg that settles on
+    one: held for the year (:func:`held_at_index`), it is to that leg what the
+    printed rate is to a variable card. Without it such a leg is not priced.
+
     Returns ``None`` when the contract cannot be projected or the rate cannot
     be resolved. It never raises: the caller runs inside the coordinator tick,
     where an exception would mark the whole update failed and take every
@@ -218,7 +239,14 @@ async def _compute_projected_year_cost(
     if breakdown is None:
         breakdown = {}
 
-    if isinstance(priced.energy, (DynamicRates, SpotMonthlyRates)):
+    held = isinstance(priced.energy, SpotMonthlyRates) and energy_index is not None
+    if held:
+        priced = held_at_index(priced, energy_index)
+        if credited is not None:
+            credited = held_at_index(credited, energy_index)
+    if isinstance(priced.energy, DynamicRates) or (
+        isinstance(priced.energy, SpotMonthlyRates) and not held
+    ):
         # A card the user's own contract does not settle on: blaming a Belpex
         # index reads as wrong to someone holding a Variable card, so say when
         # the signing-cohort splice is what put them on that axis.
@@ -234,7 +262,11 @@ async def _compute_projected_year_cost(
         from .cohort import _parse_iso_date, _tariff_card_month
 
         if not spliced:
-            basis = _SPOT_BASIS
+            basis = (
+                _SPOT_BASIS
+                if isinstance(priced.energy, DynamicRates)
+                else _NO_INDEX_BASIS
+            )
         elif _tariff_card_month(entry) is not None:
             basis = _COHORT_SPOT_BASIS.format(
                 setting=(
@@ -434,7 +466,11 @@ async def _compute_projected_year_cost(
     )
     breakdown["welcome_credit_eur"] = welcome_credit
 
-    breakdown["energy_basis"] = "today's published rate, held for a full year"
+    breakdown["energy_basis"] = (
+        "this month's index, held for a full year"
+        if held
+        else "today's published rate, held for a full year"
+    )
     breakdown["contract_basis"] = _contract_basis(entry, today)
     breakdown["fee_basis"] = "today's network tariffs, taxes and fees, held for a year"
     breakdown["volume_basis"] = annual.source
