@@ -67,7 +67,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from .providers._resolve import without_welcome_credit
+from .providers._resolve import card_residential_vat, without_welcome_credit
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -77,10 +77,12 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
     VariableRates,
+    rescale_vat,
 )
 from .injection import _slot_coefficients
 from .snapshot_months import _month_card_retrievable, _snapshot_for_month
 from .snapshot_resolve import _include_vat
+from .vat_rates import residential_vat
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -540,16 +542,44 @@ class _CohortLegs(NamedTuple):
     energy: EnergyRates | None
     injection: InjectionRates | None
     card: str = ""
+    # The residential VAT rate the energy leg's coefficients carry: the rate
+    # of the card and month it was read off. None where it carries none to
+    # move (a leg read off the card of the month being billed, or a card
+    # priced excluding VAT, which the engine grosses at the month's rate).
+    vat_rate: float | None = None
 
-    def splice(self, snapshot: "SupplierSnapshot") -> "SupplierSnapshot":
+    def energy_on(
+        self, snapshot: "SupplierSnapshot", delivery_month: date
+    ) -> EnergyRates | None:
+        """The energy leg put onto ``snapshot``'s VAT basis for
+        ``delivery_month``.
+
+        A cohort keeps the coefficients it signed for, not the VAT of the
+        month it signed in: VAT is owed at the rate of the month delivered,
+        so a leg read off an earlier card is moved onto that one's rate.
+        Identity while the two rates agree, which is every month today.
+        """
+        if self.energy is None or self.vat_rate is None:
+            return self.energy
+        taxes = snapshot.taxes
+        if taxes.published_vat_rate or taxes.vat_rate:
+            return self.energy
+        rate = card_residential_vat(snapshot, delivery_month)
+        return rescale_vat(self.energy, (1.0 + rate) / (1.0 + self.vat_rate))
+
+    def splice(
+        self, snapshot: "SupplierSnapshot", delivery_month: date | None = None
+    ) -> "SupplierSnapshot":
         """``snapshot`` billed on this cohort: each leg it overrides replaced,
         the rest of the card kept. The same object back when there is nothing
-        to override, so a caller can tell the no-op by identity."""
+        to override, so a caller can tell the no-op by identity.
+        ``delivery_month`` is the month billed, today's when None."""
         if self.energy is None and self.injection is None:
             return snapshot
+        energy = self.energy_on(snapshot, delivery_month or dt_util.now().date())
         return replace(
             snapshot,
-            energy=snapshot.energy if self.energy is None else self.energy,
+            energy=snapshot.energy if energy is None else energy,
             injection=snapshot.injection if self.injection is None else self.injection,
         )
 
@@ -753,11 +783,36 @@ async def _cohort_legs(
             archived_snap, month_snapshot or current_snapshot
         )
     )
+    # The VAT the leg's coefficients carry: the signing month's, on the card
+    # retrieved for it or, for a rate typed off the household's own contract
+    # with no card retrieved, the month it was signed in whatever today's card
+    # states; today's on the current card's own leg.
+    vat_rate: float | None
+    if archived_snap is not None and (manual is not None or archived is not None):
+        vat_rate = _leg_vat(archived_snap, start)
+    elif manual is not None:
+        vat_rate = (
+            None
+            if _leg_vat(current_snapshot, start) is None
+            else residential_vat(start)
+        )
+    else:
+        vat_rate = _leg_vat(current_snapshot, now.date())
     return _CohortLegs(
         energy=energy,
         injection=injection,
         card=_cohort_card(start, this_month, archived_snap, current_snapshot),
+        vat_rate=vat_rate,
     )
+
+
+def _leg_vat(snapshot: "SupplierSnapshot", month: date) -> float | None:
+    """The residential rate a leg read off ``snapshot`` carries, or None on a
+    card priced excluding VAT, whose legs carry none."""
+    taxes = snapshot.taxes
+    if taxes.published_vat_rate or taxes.vat_rate:
+        return None
+    return card_residential_vat(snapshot, month)
 
 
 async def _cohort_energy_leg(
@@ -909,8 +964,8 @@ async def _effective_snapshot_for_month(
     if legs.energy is None and legs.injection is None:
         return snap_m
     changes: dict[str, object] = {}
-    if legs.energy is not None:
-        energy = legs.energy
+    energy = legs.energy_on(snap_m, year_month)
+    if energy is not None:
         if isinstance(energy, SpotMonthlyRates):
             # The month's own archived card may carry the value its index
             # settled at (Eneco prints it on the next card). The cohort leg

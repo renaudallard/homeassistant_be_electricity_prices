@@ -73,6 +73,7 @@ from .providers._resolve import (
     resolve_settlement_grid,
     resolve_volume_tier,
     resolve_vreg_network_ceiling,
+    resolve_vat_rate,
     resolve_welcome_credit_meter,
 )
 
@@ -248,7 +249,13 @@ def _resolve_snapshot(
     # Brugel publishes is stated excluding VAT and has to be put onto the
     # basis the card printed on before anything else moves it.
     month = delivery_month or dt_util.now().date()
-    resolved = resolve_brussels_power_term(snap, terms=cached_power_term(month.year))
+    professional = is_professional(snap.supplier, snap.contract)
+    # First: every figure below is put onto the card's VAT basis, which is
+    # the month's rate where the card's own was an assumption.
+    resolved = resolve_vat_rate(snap, month, professional=professional)
+    resolved = resolve_brussels_power_term(
+        resolved, terms=cached_power_term(month.year), month=month
+    )
     # Before apply_vat for the same reason, and the month decides it the way
     # it decides the two federal levies below: the VREG sets one ceiling for
     # all of Flanders per calendar year, so a card stating another one is out
@@ -257,7 +264,6 @@ def _resolve_snapshot(
     resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
     # than by the card that prints them.
-    professional = is_professional(snap.supplier, snap.contract)
     resolved = resolve_federal_contribution(resolved, month, professional=professional)
     resolved = resolve_federal_excise(resolved, month, professional=professional)
     if annual_kwh is None:

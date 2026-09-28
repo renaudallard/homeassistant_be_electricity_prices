@@ -36,6 +36,7 @@ about what the card meant.
 from __future__ import annotations
 
 from .base import DsoOverlay, SupplierSnapshot
+from ..vat_rates import residential_vat, standard_vat
 
 from ..const import (
     DSO_SIBELGA,
@@ -58,10 +59,13 @@ from ._rates import (
     InjectionRates,
     SpotMonthlyRates,
     VariableRates,
+    rescale_vat,
 )
 from dataclasses import replace
 from datetime import date
 from typing import Any
+
+from homeassistant.util import dt as dt_util
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
@@ -425,7 +429,17 @@ def resolve_federal_excise(
     month = (delivery_month.year, delivery_month.month)
     if not FEDERAL_EXCISE_KNOWN_FROM <= month < FEDERAL_EXCISE_KNOWN_UNTIL:
         return snapshot
-    rate = FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + taxes.vat_rate)
+    # The constant carries the reduced rate; a VAT-inclusive card takes it at
+    # the rate the card states or else the month's, an ex-VAT one without.
+    rate = (
+        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + taxes.vat_rate)
+        if taxes.vat_rate > 0.0
+        else FEDERAL_EXCISE_RESIDENTIAL_TVAC
+        * (
+            (1.0 + card_residential_vat(snapshot, delivery_month))
+            / (1.0 + VAT_RATE_REDUCED)
+        )
+    )
     if abs(rate - taxes.federal_excise) < 5e-7:
         return snapshot
     return replace(snapshot, taxes=replace(taxes, federal_excise=rate))
@@ -628,8 +642,9 @@ def resolve_vreg_network_ceiling(
         return snapshot
     ceiling = VREG_NETWORK_CEILING_HTVA
     if snapshot.taxes.vat_rate <= 0.0:
-        # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed.
-        ceiling *= 1.0 + VAT_RATE_REDUCED
+        # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed,
+        # at the rate the card states or else the month's.
+        ceiling *= 1.0 + card_residential_vat(snapshot, delivery_month)
     changed = {
         key: replace(overlay, network_ceiling_eur_per_kwh=ceiling)
         for key, overlay in snapshot.dsos.items()
@@ -645,19 +660,24 @@ def resolve_vreg_network_ceiling(
 
 
 def _brussels_terms_on_card_basis(
-    snapshot: SupplierSnapshot, terms: tuple[float, float]
+    snapshot: SupplierSnapshot, terms: tuple[float, float], month: date | None
 ) -> tuple[float, float]:
-    """Brugel's ex-VAT pair put onto the basis this card prints on."""
+    """Brugel's ex-VAT pair put onto the basis this card prints on, at the
+    rate the card states or else ``month``'s (today's when None)."""
     low, high = terms
     if snapshot.taxes.vat_rate <= 0.0:
         # A VAT-inclusive card, so the ex-VAT figures have to be grossed.
-        low *= 1.0 + VAT_RATE_REDUCED
-        high *= 1.0 + VAT_RATE_REDUCED
+        rate = card_residential_vat(snapshot, month or dt_util.now().date())
+        low *= 1.0 + rate
+        high *= 1.0 + rate
     return low, high
 
 
 def omits_brussels_power_term(
-    snapshot: SupplierSnapshot, *, terms: tuple[float, float] | None
+    snapshot: SupplierSnapshot,
+    *,
+    terms: tuple[float, float] | None,
+    month: date | None = None,
 ) -> bool:
     """Whether this card prints the metering half of Sibelga's charge alone.
 
@@ -684,12 +704,15 @@ def omits_brussels_power_term(
         return False
     if terms is None:
         return False
-    low, _high = _brussels_terms_on_card_basis(snapshot, terms)
+    low, _high = _brussels_terms_on_card_basis(snapshot, terms, month)
     return overlay.data_management_per_year < low
 
 
 def resolve_brussels_power_term(
-    snapshot: SupplierSnapshot, *, terms: tuple[float, float] | None
+    snapshot: SupplierSnapshot,
+    *,
+    terms: tuple[float, float] | None,
+    month: date | None = None,
 ) -> SupplierSnapshot:
     """Add Sibelga's "Puissance mise a disposition" to a card that omits it.
 
@@ -713,15 +736,15 @@ def resolve_brussels_power_term(
 
     The published figures are "prix hors TVA" and a residential card prints
     VAT-inclusive, so they are put onto the card's own basis before being
-    added. That is the same 6% the card's own professional edition differs by.
+    added, at the rate the card states or else the month's residential one.
     """
     if terms is None:
         return snapshot
     overlay = snapshot.dsos.get(DSO_SIBELGA)
-    if not omits_brussels_power_term(snapshot, terms=terms):
+    if not omits_brussels_power_term(snapshot, terms=terms, month=month):
         return snapshot
     assert overlay is not None
-    low, high = _brussels_terms_on_card_basis(snapshot, terms)
+    low, high = _brussels_terms_on_card_basis(snapshot, terms, month)
     metering = overlay.data_management_per_year
     return replace(
         snapshot,
@@ -908,3 +931,53 @@ def resolve_settlement_grid(
             ),
         )
     return snapshot
+
+
+def card_residential_vat(snapshot: SupplierSnapshot, month: date) -> float:
+    """The residential rate figures on this card's basis are grossed at: the
+    one the card states, else ``month``'s (:mod:`..vat_rates`). A card that
+    states a rate keeps it for everything on its own basis, even against a
+    month's consensus."""
+    stated = snapshot.taxes.card_vat_rate
+    return residential_vat(month) if stated is None else stated
+
+
+def resolve_vat_rate(
+    snapshot: SupplierSnapshot, month: date, *, professional: bool
+) -> SupplierSnapshot:
+    """The card put on the VAT rate of the month it bills, where its own
+    basis was an assumption.
+
+    A professional card is priced excluding VAT at the standard rate its
+    parser set, which becomes ``month``'s. A residential card whose parser
+    grossed a formula on an assumed rate (``TaxOverlay.assumed_vat_rate``)
+    has those coefficients moved onto ``month``'s residential rate, or, on a
+    card priced excluding VAT, its ``vat_rate`` set to it; the field then
+    records the rate the card is on. Identity for a card stating its own rate
+    and for any month at the rate assumed, which is every card today.
+
+    Run before ``apply_vat``, which settles the card's basis for the entry.
+    """
+    taxes = snapshot.taxes
+    if professional:
+        rate = standard_vat(month)
+        if taxes.vat_rate <= 0.0 or taxes.card_vat_rate is not None:
+            return snapshot
+        if taxes.vat_rate == rate:
+            return snapshot
+        return replace(snapshot, taxes=replace(taxes, vat_rate=rate))
+    assumed = taxes.assumed_vat_rate
+    if assumed is None:
+        return snapshot
+    rate = residential_vat(month)
+    if rate == assumed:
+        return snapshot
+    if taxes.vat_rate > 0.0:
+        return replace(
+            snapshot, taxes=replace(taxes, vat_rate=rate, assumed_vat_rate=rate)
+        )
+    return replace(
+        snapshot,
+        energy=rescale_vat(snapshot.energy, (1.0 + rate) / (1.0 + assumed)),
+        taxes=replace(taxes, assumed_vat_rate=rate),
+    )

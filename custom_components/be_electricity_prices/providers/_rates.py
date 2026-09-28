@@ -35,7 +35,7 @@ without pulling in the pricing engine.
 from __future__ import annotations
 
 from ..const import REGIONS, VAT_RATE_REDUCED
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from typing import Literal
 
 
@@ -545,6 +545,18 @@ def vat_grossed_fields(energy: EnergyRates) -> tuple[str, ...]:
         ):
             names.append(name)
     return tuple(names)
+
+
+def rescale_vat(energy: EnergyRates, ratio: float) -> EnergyRates:
+    """``energy`` with the fields a parser grosses (:func:`vat_grossed_fields`)
+    moved from one VAT rate onto another, ``ratio`` being ``(1 + new) / (1 +
+    old)``. Identity at a ratio of exactly one."""
+    if ratio == 1.0:
+        return energy
+    return replace(
+        energy,
+        **{name: getattr(energy, name) * ratio for name in vat_grossed_fields(energy)},
+    )
 
 
 def vat_basis(

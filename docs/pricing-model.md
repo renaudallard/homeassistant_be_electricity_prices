@@ -162,6 +162,23 @@ pricing engine:
   the live, YTD, backfill and compare paths each sum them raw.
   `_resolve.apply_vat` (`providers/_resolve.py`) bakes them once instead.
 
+**Which rate.** A card that states its VAT rate is priced at it for everything on
+its own basis; `TaxOverlay.card_vat_rate` records it. Three suppliers state none
+(Bolt, energie.be, OCTA+ since June 2026), so their parsers gross the energy formula
+by the residential rate as an assumption, recorded as `TaxOverlay.assumed_vat_rate`.
+`resolve_vat_rate` (`providers/_resolve.py`), the first step of `_resolve_snapshot`,
+moves exactly those coefficients (`_rates.vat_grossed_fields`) onto the rate of the
+month being billed (`vat_rates.residential_vat`), sets an ex-VAT card's assumed
+`vat_rate` to it (Ecopower, were its sentence to go missing), and gives a
+professional card the month's standard rate. The regulated figures published
+excluding VAT - the flat excise, the VREG network ceiling and Brugel's power term -
+are put onto a VAT-inclusive card at the rate it states, or else the month's
+(`card_residential_vat`). A signing cohort keeps the coefficients it signed for but
+not the VAT of the month it signed in: `_CohortLegs.vat_rate` records the rate its
+leg carries and `energy_on` moves it onto the month delivered (`cohort.py`). Every
+rate is the delivery month's and none is applied backwards; with no table held the
+months take the constants, so all of this is identity today.
+
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`snapshot_resolve.py`), never before the shared snapshot cache: that cache is
 keyed on `(supplier, contract, region)` and shared between entries that may

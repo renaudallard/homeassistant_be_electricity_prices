@@ -251,6 +251,17 @@ VAT is applied to each component and a VAT-exempt levy (the Walloon connection
 fee) is added at face value, so `energy_component + network_component +
 taxes_component` always equals `current_price` to the cent.
 
+### The VAT rate
+
+Residential electricity carries 6% VAT. Most cards print their prices with it
+included and say so ("Prix 6% TVA comprise", "inclusief 6% btw"), and those cards
+are priced at the rate they state. Three do not state one (Bolt, energie.be, and
+OCTA+ since June 2026), so their formula is priced at the rate of the month being
+billed, as are the regulated figures published without VAT (the flat excise, the
+Flemish network ceiling and the Brussels power term). A contract that locks its
+signing-month formula is billed at the VAT of the month delivered, not the month
+it was signed in. Professional contracts use the standard 21%.
+
 ### The federal levies come from the law, not from your card
 
 Two items in that `levies` term are set by federal law rather than by your
