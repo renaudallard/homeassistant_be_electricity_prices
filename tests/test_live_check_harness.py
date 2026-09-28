@@ -3762,3 +3762,15 @@ def test_a_justel_page_listing_nothing_is_filed_and_one_not_answering_is_not() -
     lc.CHECKS.clear()
     asyncio.run(lc._check_vat_law(_Session(_Page(503, b""))))
     assert lc.CHECKS == []
+
+
+def test_a_justel_request_failing_any_way_is_left_to_the_next_run() -> None:
+    """Not only aiohttp's errors: a RuntimeError from the transport was
+    recorded as a crashed phase and filed as an extractor issue."""
+
+    class _Failing:
+        def get(self, *_args: Any, **_kwargs: Any) -> _Page:
+            raise RuntimeError("socket refused")
+
+    asyncio.run(lc._check_vat_law(_Failing()))  # type: ignore[arg-type]
+    assert lc.CHECKS == []

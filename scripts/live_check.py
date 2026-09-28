@@ -2320,7 +2320,10 @@ async def _check_vat_law(session: aiohttp.ClientSession) -> None:
             if resp.status != 200:
                 return
             page = await resp.read()
-    except (aiohttp.ClientError, TimeoutError):
+    except Exception:  # noqa: BLE001 - an unreachable page is the next run's
+        # Any failure to fetch it, not only aiohttp's: a transport error of
+        # another type escaped as a crashed phase, which files an extractor
+        # issue for a government page that merely did not answer.
         return
     acts = _vat_law_acts(page)
     if not acts:
