@@ -643,6 +643,67 @@ _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
 }
 
 
+# Suppliers whose residential cards state their VAT rate, which the parser
+# records as taxes.card_vat_rate and grosses its formula by. A card of one of
+# them that comes back without it was grossed on the assumed residential rate
+# instead: a reworded sentence, silent until a rate change bills it wrong.
+# Bolt and energie.be state none; OCTA+ stopped in June 2026.
+_STATES_VAT = frozenset(
+    {
+        "cociter",
+        "ebem",
+        "ecofix",
+        "ecopower",
+        "eneco",
+        "energyknights",
+        "energyvision",
+        "engie",
+        "frank",
+        "luminus",
+        "mega",
+        "totalenergies",
+        "trevion",
+    }
+)
+# A card of one of those stating none, already looked at: it is priced on the
+# month's rate, as a card of a supplier stating none always is.
+_ALLOWED_VAT_MARKER = "KnownVatStatement"
+# (supplier, region) -> (expires, why).
+_KNOWN_VAT_GAPS: dict[tuple[str, str], tuple[date, str]] = {
+    ("totalenergies", "brussels"): (
+        date(2027, 1, 1),
+        "the September 2026 Brussels cards render 'TVA % incluse', the digit "
+        "missing from the text layer; priced on the month's rate",
+    ),
+}
+
+
+def _expect_vat_stated(
+    prefix: str, contract_id: str, region: str, snap: object
+) -> None:
+    """A residential card of a supplier that states its VAT rate carries it."""
+    supplier = _supplier_of(prefix)
+    registered = _CONTRACTS_BY_ID.get(contract_id)
+    if (
+        supplier not in _STATES_VAT
+        or registered is None
+        or getattr(registered, "professional", False)
+    ):
+        return
+    stated = getattr(getattr(snap, "taxes", None), "card_vat_rate", None)
+    if stated is not None:
+        return
+    detail = (
+        "the card states no VAT rate the parser reads, so its formula was "
+        "grossed on the assumed residential rate"
+    )
+    known = _KNOWN_VAT_GAPS.get((supplier, region))
+    today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+    if known is not None and today < known[0]:
+        detail = f"{_ALLOWED_VAT_MARKER}: {detail}; {known[1]}"
+    _record(f"{prefix}: VAT rate stated", False, detail)
+
+
 def _vreg_ceiling_allowance(supplier: str, printed: float, today: date) -> str | None:
     """The reason this exact ceiling is allowed today, or ``None``.
 
@@ -686,6 +747,7 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
                     _WITHDRAWN_MARKER,
                     _ALLOWED_TAX_MARKER,
                     _ALLOWED_NETWORK_MARKER,
+                    _ALLOWED_VAT_MARKER,
                 )
             ),
         )
@@ -2564,6 +2626,60 @@ def _check_federal_tax_consensus(
             )
 
 
+def _check_vat_consensus(archive: Path | None) -> None:
+    """Assert every residential card of a month states the same VAT rate.
+
+    The rate is set by law, so a card stating another one is out of date or
+    misread, and the month it disagrees about is one the archive's vat.json
+    leaves out, installations holding the last month the cards agreed on. Same
+    shape as :func:`_check_federal_tax_consensus`: the month most residential
+    cards are filed under, the majority is the answer, a tie is not reported,
+    and it files under the tax kind, being no parser bug of this repository.
+    """
+    if archive is None:
+        return
+    rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
+    residential = [
+        row
+        for row in rows
+        if (registered := _CONTRACTS_BY_ID.get(row.parts[-3])) is not None
+        and not getattr(registered, "professional", False)
+    ]
+    counts: dict[str, int] = {}
+    for row in residential:
+        counts[row.stem] = counts.get(row.stem, 0) + 1
+    if not counts:
+        return
+    month = max(counts, key=lambda stem: (counts[stem], stem))
+    by_rate: dict[float, set[str]] = {}
+    for row in residential:
+        if row.stem != month:
+            continue
+        try:
+            rate = json.loads(row.read_text(encoding="utf-8"))["taxes"].get(
+                "card_vat_rate"
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        if isinstance(rate, (int, float)):
+            by_rate.setdefault(round(float(rate), 4), set()).add(row.parts[-4])
+    if len(by_rate) < 2:
+        return
+    ranked = sorted(by_rate.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    (top_rate, top_suppliers), (_, runner_up) = ranked[0], ranked[1]
+    if len(top_suppliers) == len(runner_up):
+        return
+    for rate, suppliers in ranked[1:]:
+        for supplier in sorted(suppliers):
+            _record(
+                f"{supplier}/VAT rate disagrees for {month}",
+                False,
+                f"states {rate:g} against {top_rate:g} on {len(top_suppliers)} "
+                f"other suppliers ({', '.join(sorted(top_suppliers))})",
+                kind="tax",
+            )
+
+
 # The regulated network figures a card prints, compared across suppliers.
 # Each is set by the distribution system operator and the regional regulator,
 # so for one month and one DSO every card carries the same figure once put on
@@ -3747,6 +3863,7 @@ def _validate_snapshot(
     # call sites: the levy is federal and the unit slip it catches is not.
     _expect_energy_contribution(prefix, getattr(snap, "taxes", None))
     _expect_regional_levies(prefix, contract_id, region, getattr(snap, "taxes", None))
+    _expect_vat_stated(prefix, contract_id, region, snap)
     _validate_energy(
         prefix,
         contract_id,
@@ -4696,6 +4813,14 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:  # noqa: BLE001
                 _record(
                     "_federal: consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                _check_vat_consensus(texts)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_federal: VAT consensus check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )

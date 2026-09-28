@@ -1675,6 +1675,7 @@ def _drive_run(
         "_check_vreg_ceiling_window": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
+        "_check_vat_consensus": _sync_no_op,
         "_check_network_consensus": _sync_no_op,
         "_check_card_freshness": _async_no_op,
         "_check_spot_fallback": _async_no_op,
@@ -3617,3 +3618,83 @@ def test_the_endpoint_probe_installs_what_it_imports(tmp_path: Path) -> None:
     assert done.returncode == 0, done.stderr
     probe = next(s for s in steps if s.get("name") == "Probe")
     assert probe.get("shell") == "bash"
+
+
+def _vat_snap(rate: float | None) -> SimpleNamespace:
+    return SimpleNamespace(taxes=SimpleNamespace(card_vat_rate=rate))
+
+
+def test_a_supplier_stating_its_vat_rate_is_held_to_it(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A card that came back without the rate its supplier always states was
+    grossed on an assumed one: filed, unless it is a gap already looked at,
+    and only until that allowance expires."""
+    freezer.move_to("2026-10-01 08:00:00+02:00")
+    monkeypatch.setitem(
+        lc._CONTRACTS_BY_ID, "power_fix", SimpleNamespace(professional=False)
+    )
+    monkeypatch.setitem(lc._CONTRACTS_BY_ID, "pro", SimpleNamespace(professional=True))
+    monkeypatch.setitem(
+        lc._CONTRACTS_BY_ID, "te_dyn", SimpleNamespace(professional=False)
+    )
+    lc._expect_vat_stated(
+        "eneco/power_fix/flanders", "power_fix", "flanders", _vat_snap(0.06)
+    )
+    assert lc.CHECKS == []
+    lc._expect_vat_stated(
+        "eneco/power_fix/flanders", "power_fix", "flanders", _vat_snap(None)
+    )
+    (row,) = lc.CHECKS
+    assert not row.ok and not row.expected
+    lc.CHECKS.clear()
+    # A supplier that states none, and a professional card, are not asked.
+    lc._expect_vat_stated(
+        "bolt/power_fix/flanders", "power_fix", "flanders", _vat_snap(None)
+    )
+    lc._expect_vat_stated("eneco/pro/flanders", "pro", "flanders", _vat_snap(None))
+    assert lc.CHECKS == []
+    lc._expect_vat_stated(
+        "totalenergies/te_dyn/brussels", "te_dyn", "brussels", _vat_snap(None)
+    )
+    (row,) = lc.CHECKS
+    assert not row.ok and row.expected
+    assert row.detail.startswith(lc._ALLOWED_VAT_MARKER)
+    lc.CHECKS.clear()
+    freezer.move_to("2027-01-02 08:00:00+01:00")
+    lc._expect_vat_stated(
+        "totalenergies/te_dyn/brussels", "te_dyn", "brussels", _vat_snap(None)
+    )
+    (row,) = lc.CHECKS
+    assert not row.expected
+
+
+def _vat_row(
+    archive: Path, supplier: str, contract: str, month: str, rate: float
+) -> None:
+    folder = archive / "cards" / supplier / contract / "flanders"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{month}.json").write_text(
+        json.dumps({"taxes": {"card_vat_rate": rate}})
+    )
+
+
+def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for name in ("a_fix", "b_fix", "c_fix", "d_fix"):
+        monkeypatch.setitem(
+            lc._CONTRACTS_BY_ID, name, SimpleNamespace(professional=False)
+        )
+    for supplier in ("a", "b", "c"):
+        _vat_row(tmp_path, supplier, f"{supplier}_fix", "2026-11", 0.07)
+    _vat_row(tmp_path, "d", "d_fix", "2026-11", 0.06)
+    lc._check_vat_consensus(tmp_path)
+    (row,) = lc.CHECKS
+    assert row.label == "d/VAT rate disagrees for 2026-11"
+    assert row.kind == "tax" and not row.ok
+    lc.CHECKS.clear()
+    # Two against two is no consensus to measure a card against.
+    _vat_row(tmp_path, "c", "c_fix", "2026-11", 0.06)
+    lc._check_vat_consensus(tmp_path)
+    assert lc.CHECKS == []

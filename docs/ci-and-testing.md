@@ -307,6 +307,20 @@ and three did not: Ecofix and TotalEnergies in every region they sell, Cociter i
 still printing the separate energy contribution the others had folded into the excise on
 1 August 2026. It is the supplier's card that is wrong, so the check reports rather than corrects.
 
+### The VAT rate
+
+Two checks guard the rate the cards state (`TaxOverlay.card_vat_rate`). `_expect_vat_stated`
+asserts, card by card, that a residential card of a supplier that states its rate
+(`_STATES_VAT`: every one except Bolt, energie.be and OCTA+) came back with it: a reworded
+sentence would otherwise gross the formula on the assumed residential rate in silence, which
+only a rate change would show. A gap already looked at is allowed until it expires
+(`_KNOWN_VAT_GAPS`: TotalEnergies' September 2026 Brussels cards, whose text layer lost the
+digit). `_check_vat_consensus` asks the archive the federal check's question of the rate: the
+month most residential cards are filed under, the supplier as the voter, the majority as the
+answer and a tie unreported, a supplier stating another rate filed under the tax kind. A month
+they disagree on is also the month the archive's `vat.json` leaves out, so installations keep
+the last one that agreed.
+
 ### Network figures
 
 `_check_network_consensus` (`scripts/live_check.py`) asks the same question of the regulated
@@ -1171,9 +1185,9 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 
-The tax report carries four kinds of row: a supplier whose federal block disagrees with the
+The tax report carries five kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
-(`_check_vreg_ceiling_consensus`), and the standing requests to extend each window before it
+(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), and the standing requests to extend each window before it
 lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until eight weeks out).
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
 and fail no pull request. The issue is titled after what failed, as the products one is: a run
