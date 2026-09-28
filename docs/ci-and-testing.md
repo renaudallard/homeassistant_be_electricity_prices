@@ -321,6 +321,14 @@ answer and a tie unreported, a supplier stating another rate filed under the tax
 they disagree on is also the month the archive's `vat.json` leaves out, so installations keep
 the last one that agreed.
 
+`_check_vat_law` watches the law itself. Royal Decree n° 20 sets the VAT rates, and Justel lists
+every act amending it (`_JUSTEL_VAT_URL`); an act published after `_VAT_LAW_REVIEWED` files a
+tax row naming it, which stays until someone has read it and moved the date. It is a warning and
+never a rate: Justel does not publish the annex's text, and the electricity measures of 2022 and
+2023 landed in articles 1bis, 1ter and the one listed as "N", not in the annex, so any new act is
+reported. The page is decoded in the charset it declares, iso-8859-1: read as UTF-8 it loses
+every "publié" and the watch goes blind, which is also why a page listing no act at all is filed.
+
 ### Network figures
 
 `_check_network_consensus` (`scripts/live_check.py`) asks the same question of the regulated
@@ -1185,9 +1193,10 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 
-The tax report carries five kinds of row: a supplier whose federal block disagrees with the
+The tax report carries six kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
-(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), and the standing requests to extend each window before it
+(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), an act amending
+the VAT decree since the last review (`_check_vat_law`), and the standing requests to extend each window before it
 lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until eight weeks out).
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
 and fail no pull request. The issue is titled after what failed, as the products one is: a run
