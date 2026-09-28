@@ -125,7 +125,10 @@ questions, so nothing else moved.
 
 `_extract_monthly` reads the VAT-exclusive formula printed as
 `(factor * Belpex_RLP_VL +/- base) * 1,06`. Both coefficients are grossed to
-the VAT-inclusive snapshot convention. The feed-in formula is VAT-exempt and
+the VAT-inclusive snapshot convention, by the multiplier the formula prints
+(`_extract_formula` reads it rather than requiring `1,06`, so a card at
+another rate is priced at it instead of refused). The title line's
+`Incl. 6% BTW` is recorded as `TaxOverlay.card_vat_rate`. The feed-in formula is VAT-exempt and
 is converted from the card's EUR/MWh notation without the multiplier. Until the
 delivery month's SPP-weighted mean is available, `current` is derived from the
 latest known SPP index printed beside the formula.

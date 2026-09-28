@@ -265,7 +265,9 @@ class TaxOverlay:
     # The rate a parser grossed this card's energy formula by because the card
     # states none (Bolt, energie.be, OCTA+ in some months): the Belgian
     # residential rate as a fallback, which _resolve_snapshot rescales to the
-    # delivery month's rate. None where nothing was grossed on a guess.
+    # delivery month's rate. On a card priced excluding VAT (Ecopower) it is
+    # the rate ``vat_rate`` was set to for want of one stated. None where
+    # nothing was put on a guess.
     assumed_vat_rate: float | None = None
 
 

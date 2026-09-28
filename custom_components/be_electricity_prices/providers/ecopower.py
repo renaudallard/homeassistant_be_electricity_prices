@@ -74,6 +74,7 @@ import aiohttp
 from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
+    VAT_RATE_REDUCED,
 )
 from ._pdf import (
     NL_MONTHS,
@@ -82,6 +83,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
@@ -625,13 +627,21 @@ _FUND_RE = re.compile(
 )
 
 
+# "Alle bedragen zijn exclusief btw. Particuliere klanten betalen 6% btw."
+_VAT_RE = re.compile(
+    r"Particuliere\s+klanten\s+betalen\s+(\d+)\s*%\s*btw", re.IGNORECASE
+)
+
+
 def _extract_taxes(text: str) -> TaxOverlay:
     """Parse the federal/regional tax block.
 
-    Ecopower prints all values HTVA. ``vat_rate=0.06`` tells the
-    pricing engine to scale up to TVAC for residential customers,
-    every other supplier publishes TVAC and uses ``vat_rate=0.0``, but
-    Ecopower is the cooperative outlier.
+    Ecopower prints all values HTVA. ``vat_rate`` tells the pricing engine
+    to scale up to TVAC for residential customers, at the rate the card
+    states for them ("Particuliere klanten betalen 6% btw"); every other
+    supplier publishes TVAC and uses ``vat_rate=0.0``, but Ecopower is the
+    cooperative outlier. A card that stopped stating it would be priced at
+    the residential rate and say it was assumed.
 
     Flanders renewables: GSC + WKK certificate costs are the regional
     renewable surcharge in disguise. They're listed in the energy
@@ -653,6 +663,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
     # per-kWh charge without failing, so require them like the federal rows.
     if not gsc_match or not wkk_match:
         raise ExtractorError("could not parse Ecopower GSC/WKK renewable surcharge")
+    printed = printed_vat_rate(text, _VAT_RE)
     return TaxOverlay(
         federal_excise=to_float(federal_match.group(1)),
         energy_contribution=to_float(contrib_match.group(1)),
@@ -662,7 +673,9 @@ def _extract_taxes(text: str) -> TaxOverlay:
         energy_fund_eur_per_month=(
             to_float(fund_match.group(1)) if fund_match else 0.0
         ),
-        vat_rate=0.06,
+        vat_rate=VAT_RATE_REDUCED if printed is None else printed,
+        card_vat_rate=printed,
+        assumed_vat_rate=VAT_RATE_REDUCED if printed is None else None,
     )
 
 

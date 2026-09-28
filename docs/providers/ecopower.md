@@ -32,7 +32,8 @@ The two products (module docstring, `ecopower.py`):
    card is republished only when the formula, DSO or tax rates change.
 
 Both cards print all amounts **HTVA** (ex-VAT). Ecopower is the cooperative outlier here: every
-other supplier publishes TVAC and sets `vat_rate=0.0`. Ecopower sets `vat_rate=0.06` in the tax
+other supplier publishes TVAC and sets `vat_rate=0.0`. Ecopower sets `vat_rate` to the rate its card
+states for households ("Particuliere klanten betalen 6% btw", `_VAT_RE`), 0.06 today, in the tax
 overlay so `compute_breakdown` scales the per-kWh energy and levies up to TVAC (module docstring
 `ecopower.py`; `_extract_taxes` `ecopower.py`). Residential injection is VAT-exempt,
 so injection formulas are stored unscaled.
@@ -303,7 +304,7 @@ would let the backfill path silently skip whole months (it swallows the resultin
 | `energy_contribution` | Bijdrage op de energie | `_ENERGY_CONTRIB_RE` | yes |
 | `flanders_renewables` | Kost GSC + Kost WKK | `_GSC_RE` + `_WKK_RE` | yes (both) |
 | `energy_fund_eur_per_month` | Bijdrage Energiefonds euro/maand | `_FUND_RE` | optional (0 if absent) |
-| `vat_rate` | (constant) | n/a | always `0.06` |
+| `vat_rate` | Particuliere klanten betalen N% btw | `_VAT_RE` | yes in practice; if absent, `VAT_RATE_REDUCED` and `assumed_vat_rate` records it |
 
 Wallonia and Brussels renewables stay 0 (Ecopower is Flanders-only, `test_ecopower.py`).
 
@@ -490,9 +491,10 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    (`ecopower.py`), `_resolve_latest_pdf` / `_resolve_latest_dbs_pdf`
    (`ecopower.py`), and `discover` (`ecopower.py`). Symptom: `no Ecopower
    tariefkaart link found`.
-6. **VAT rate change (no longer 6%)** -> the single `0.06` in `_extract_taxes`
-   (`ecopower.py`). Nothing else: it is the only place the rate is written, and both
-   `compute_breakdown` and `apply_vat` read it from there.
+6. **VAT rate change (no longer 6%)** -> nothing to edit: `_extract_taxes` reads the
+   rate the card states for households (`_VAT_RE`), and both `compute_breakdown` and
+   `apply_vat` read it from the snapshot. A reworded sentence falls back to
+   `VAT_RATE_REDUCED` and records it in `assumed_vat_rate`.
 
 All EUR figures above (0,1274 energy, 0,1378 split energy, 0,02 / 0,0329 injection, 17,85 / 18,92
 databeheer, 49,40 / 54,20 / 50,12 capacity, 60,00 HTVA / 63,60 TVAC subscription) come from source

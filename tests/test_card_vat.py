@@ -27,6 +27,7 @@ from custom_components.be_electricity_prices.providers import (
     cociter,
     ebem,
     ecofix,
+    ecopower,
     eneco,
     energiebe,
     energyknights,
@@ -37,6 +38,7 @@ from custom_components.be_electricity_prices.providers import (
     mega,
     octaplus,
     totalenergies,
+    trevion,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_aligned,
@@ -447,3 +449,48 @@ def test_a_brussels_card_whose_text_lost_its_rate_is_assumed() -> None:
 
 
 _ = REGION_BRUSSELS
+
+
+def test_trevion_grosses_by_the_multiplier_its_formula_prints() -> None:
+    """ "(0,107* Belpex 15 MTU+1,3) *1,06": the multiplier is read, so a card
+    printing *1,07 is priced at it instead of refused, and the title line's
+    "Incl. 6% BTW" is the rate it states."""
+    text = _layout("trevion_dynamic_2026-09.pdf")
+    at_six = trevion.parse_snapshot("groene_energie_dynamisch", text)
+    assert (at_six.taxes.card_vat_rate, at_six.taxes.assumed_vat_rate) == (0.06, None)
+    at_seven = trevion.parse_snapshot(
+        "groene_energie_dynamisch", text.replace(") *1,06", ") *1,07")
+    )
+    assert isinstance(at_six.energy, DynamicRates)
+    assert isinstance(at_seven.energy, DynamicRates)
+    assert at_seven.energy.factor == pytest.approx(at_six.energy.factor * 1.07 / 1.06)
+    assert at_seven.energy.base == pytest.approx(at_six.energy.base * 1.07 / 1.06)
+    unstated = trevion.parse_snapshot(
+        "groene_energie_dynamisch", _restated(text, (trevion._VAT_RE,), "")
+    )
+    assert (unstated.taxes.card_vat_rate, unstated.taxes.assumed_vat_rate) == (
+        None,
+        None,
+    )
+
+
+def test_ecopower_is_priced_at_the_rate_it_states_for_households() -> None:
+    """The card is printed excluding VAT and says what a household pays on
+    top: that is its vat_rate, read rather than written in."""
+    text = _layout("ecopower_burgerstroom_jul.pdf")
+    snap = ecopower.parse_snapshot(text, "t://", "2026-07")
+    assert snap.taxes.vat_rate == pytest.approx(0.06)
+    assert (snap.taxes.card_vat_rate, snap.taxes.assumed_vat_rate) == (0.06, None)
+    at_seven = ecopower.parse_snapshot(
+        _restated(text, (ecopower._VAT_RE,), "7"), "t://", "2026-07"
+    )
+    assert at_seven.taxes.vat_rate == pytest.approx(0.07)
+    assert at_seven.taxes.card_vat_rate == pytest.approx(0.07)
+    unstated = ecopower.parse_snapshot(
+        _restated(text, (ecopower._VAT_RE,), ""), "t://", "2026-07"
+    )
+    assert unstated.taxes.vat_rate == pytest.approx(VAT_RATE_REDUCED)
+    assert (unstated.taxes.card_vat_rate, unstated.taxes.assumed_vat_rate) == (
+        None,
+        VAT_RATE_REDUCED,
+    )

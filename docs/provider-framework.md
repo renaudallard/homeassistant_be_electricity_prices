@@ -437,7 +437,7 @@ energy fund.
 | `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py`), so an extractor serving more than one region must return `0.0` outside Flanders. |
 | `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
 | `card_vat_rate` | `float \| None` | `None` | The VAT rate the card states for its own customers, as a fraction (`0.06` on a residential card printing "6% TVA"), `None` where it states none. Left out of a stored row while `None`. |
-| `assumed_vat_rate` | `float \| None` | `None` | The rate a parser grossed an energy formula by because the card states none (the residential `VAT_RATE_REDUCED`): Bolt's variable cards, energie.be's dynamic and variable ones, OCTA+ in the months its header is missing. `None` where nothing was grossed on a guess. Left out of a stored row while `None`. |
+| `assumed_vat_rate` | `float \| None` | `None` | The rate a parser grossed an energy formula by because the card states none (the residential `VAT_RATE_REDUCED`): Bolt's variable cards, energie.be's dynamic and variable ones, OCTA+ in the months its header is missing. On a card priced excluding VAT (Ecopower), the rate `vat_rate` was set to for want of one stated. `None` where nothing was put on a guess. Left out of a stored row while `None`. |
 
 Regional renewables differ across the three regions; the pricing engine picks
 the right one per region, and an extractor that operates in only one or two

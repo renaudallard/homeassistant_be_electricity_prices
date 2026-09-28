@@ -49,6 +49,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._parse import SIGN_CHARS, to_float
 from ._validity import archive_validity_check
@@ -58,6 +59,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._resolve import settled_injection
 from ._rates import (
@@ -407,9 +409,19 @@ _FIXED_FOR_TERM = re.compile(
 )
 
 
+# The card's title line: "september 2026 – Incl. 6% BTW".
+_VAT_RE = re.compile(r"Incl\.\s*(\d+)\s*%\s*BTW", re.IGNORECASE)
+
+
 def _extract_formula(text: str, marker: str) -> tuple[float, float]:
+    """The formula's factor and base, grossed by the multiplier it prints.
+
+    "(0,107* Belpex 15 MTU+1,3) *1,06": the card applies its VAT inside the
+    formula, so that multiplier is read rather than assumed, and a card
+    printing another rate is priced at it.
+    """
     match = re.search(
-        rf"\(({_NUM})\*\s*{marker}\s*([{SIGN_CHARS}])\s*({_NUM})\)\s*\*\s*1[.,]06",
+        rf"\(({_NUM})\*\s*{marker}\s*([{SIGN_CHARS}])\s*({_NUM})\)\s*\*\s*(1[.,]\d+)",
         text,
         re.IGNORECASE,
     )
@@ -422,11 +434,12 @@ def _extract_formula(text: str, marker: str) -> tuple[float, float]:
     # base divides cents into EUR. Both were short by that ten, which priced
     # the commodity leg of every Trevion dynamic and monthly contract at a
     # tenth of the card: 1,5958 c€/kWh where the card says 15,96.
-    factor = _number(match.group(1)) * 10.0 * 1.06
+    vat = _number(match.group(4))
+    factor = _number(match.group(1)) * 10.0 * vat
     base = (
         (_number(match.group(3)) if match.group(2) == "+" else -_number(match.group(3)))
         / 100.0
-        * 1.06
+        * vat
     )
     return factor, base
 
@@ -589,16 +602,21 @@ def parse_snapshot(
         # Belpex_RLP_VL product in June, and a past month is stored as the
         # product it was.
         energy, injection = _extract_dynamic(text)
-    return SupplierSnapshot(
-        supplier="trevion",
-        contract=contract_id,
-        energy=energy,
-        injection=injection,
-        dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=_extract_validity(text),
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="trevion",
+            contract=contract_id,
+            energy=energy,
+            injection=injection,
+            dsos=_extract_dsos(text),
+            taxes=_extract_taxes(text),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=_extract_validity(text),
+        ),
+        printed_vat_rate(text, _VAT_RE),
+        # Grossed by the multiplier its formula prints, not by this rate.
+        grossed=False,
     )
 
 
