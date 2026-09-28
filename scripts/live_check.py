@@ -2282,17 +2282,22 @@ _JUSTEL_ACT_RE = re.compile(
 )
 
 
-def _vat_law_acts(page: bytes) -> list[tuple[date, str, str]]:
-    """``(published, act, articles)`` for every act the Justel page lists as
-    amending the decree.
+def _justel_text(page: bytes) -> str:
+    """The Justel page as text, one line per HTML element.
 
     Decoded in the charset the page declares: read as UTF-8 its accents are
-    lost, and with them every "publié" the pattern needs.
+    lost, and with them every "publié" the act pattern needs.
     """
     declared = re.search(rb"charset=([A-Za-z0-9_-]+)", page)
     text = page.decode(declared.group(1).decode() if declared else "latin-1", "replace")
     text = html.unescape(re.sub(r"<[^>]+>", "\n", text))
-    text = re.sub(r"\s*\n\s*", "\n", text)
+    return re.sub(r"\s*\n\s*", "\n", text)
+
+
+def _vat_law_acts(page: bytes) -> list[tuple[date, str, str]]:
+    """``(published, act, articles)`` for every act the Justel page lists as
+    amending the decree."""
+    text = _justel_text(page)
     return [
         (
             date(int(y), int(m), int(d)),
@@ -2319,6 +2324,7 @@ async def _check_vat_law(session: aiohttp.ClientSession) -> None:
         ) as resp:
             if resp.status != 200:
                 return
+            ctype = resp.headers.get("Content-Type", "")
             page = await resp.read()
     except Exception:  # noqa: BLE001 - an unreachable page is the next run's
         # Any failure to fetch it, not only aiohttp's: a transport error of
@@ -2327,7 +2333,16 @@ async def _check_vat_law(session: aiohttp.ClientSession) -> None:
         return
     acts = _vat_law_acts(page)
     if not acts:
-        _record(label, False, f"no amending act read on {_JUSTEL_VAT_URL}", kind="tax")
+        # Say what answered instead. The runners were served a page without
+        # the list while it read fine off-runner, and the row alone could not
+        # tell a block page from a new layout (issue #106).
+        head = re.sub(r"\s+", " ", _justel_text(page)).strip()[:200]
+        detail = (
+            f"no amending act read on {_JUSTEL_VAT_URL}: {len(page)} bytes "
+            f"of {ctype or 'unknown type'}, starting {head!r}"
+        )
+        print(f"warning: {detail}", file=sys.stderr)
+        _record(label, False, detail, kind="tax")
         return
     newer = sorted(a for a in acts if a[0] > _VAT_LAW_REVIEWED)
     if not newer:

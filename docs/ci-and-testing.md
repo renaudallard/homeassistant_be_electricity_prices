@@ -328,6 +328,8 @@ never a rate: Justel does not publish the annex's text, and the electricity meas
 2023 landed in articles 1bis, 1ter and the one listed as "N", not in the annex, so any new act is
 reported. The page is decoded in the charset it declares, iso-8859-1: read as UTF-8 it loses
 every "publié" and the watch goes blind, which is also why a page listing no act at all is filed.
+That row gives the size, type and first 200 characters of what answered, and the same line goes
+to the job log, since the runners have been served such a page while it read fine elsewhere.
 
 ### Network figures
 

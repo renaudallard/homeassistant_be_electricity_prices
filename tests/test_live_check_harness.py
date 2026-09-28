@@ -3704,6 +3704,7 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
 class _Page:
     def __init__(self, status: int, body: bytes) -> None:
         self.status = status
+        self.headers = {"Content-Type": "text/html; charset=ISO-8859-1"}
         self._body = body
 
     async def __aenter__(self) -> "_Page":
@@ -3755,10 +3756,19 @@ def test_an_act_after_the_last_review_is_filed(monkeypatch: pytest.MonkeyPatch) 
     assert "Loi du 10-02-2026 publié le 20-02-2026" in row.detail
 
 
-def test_a_justel_page_listing_nothing_is_filed_and_one_not_answering_is_not() -> None:
-    asyncio.run(lc._check_vat_law(_Session(_Page(200, b"<html>maintenance</html>"))))
+def test_a_justel_page_listing_nothing_is_filed_and_one_not_answering_is_not(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    page = b"<html><title>Access denied</title><p>Request\n  blocked</p></html>"
+    asyncio.run(lc._check_vat_law(_Session(_Page(200, page))))
     (row,) = lc.CHECKS
     assert not row.ok and "no amending act" in row.detail
+    # What answered instead is on the row and in the job log.
+    assert (
+        f"{len(page)} bytes of text/html; charset=ISO-8859-1, "
+        "starting 'Access denied Request blocked'"
+    ) in row.detail
+    assert row.detail in capsys.readouterr().err
     lc.CHECKS.clear()
     asyncio.run(lc._check_vat_law(_Session(_Page(503, b""))))
     assert lc.CHECKS == []
