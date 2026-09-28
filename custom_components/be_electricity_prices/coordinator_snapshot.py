@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from .brugel import cached_power_term
+from .vat_rates import residential_vat, standard_vat
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_transient_fetch_error
@@ -95,6 +96,14 @@ _EXTRACTOR_ISSUE_THRESHOLD = 2
 _LOGGER = logging.getLogger(__name__)
 
 
+def _vat_now() -> tuple[float, float]:
+    """The residential and standard rates the running month resolves at: the
+    VAT table is refreshed on the tick and a month can change rate, so the
+    card resolved before either is resolved again."""
+    today = dt_util.now().date()
+    return residential_vat(today), standard_vat(today)
+
+
 class _SnapshotMixin:
     """Mixed into BePricesCoordinator."""
 
@@ -116,6 +125,7 @@ class _SnapshotMixin:
     _register_pair_covered: bool
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
+    _snapshot_vat: tuple[float, float]
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int
@@ -334,9 +344,11 @@ class _SnapshotMixin:
             return
         annual_kwh = entry_annual_kwh(self.entry, self)
         power_term = cached_power_term(dt_util.now().year)
+        vat = _vat_now()
         if (
             self._snapshot_annual_kwh == annual_kwh
             and self._snapshot_power_term == power_term
+            and self._snapshot_vat == vat
         ):
             return
         self._snapshot = _resolve_snapshot(
@@ -344,6 +356,7 @@ class _SnapshotMixin:
         )
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = power_term
+        self._snapshot_vat = vat
 
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
@@ -375,6 +388,7 @@ class _SnapshotMixin:
         )
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
+        self._snapshot_vat = _vat_now()
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without

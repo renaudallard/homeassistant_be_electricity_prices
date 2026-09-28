@@ -118,3 +118,18 @@ def _card_archive_holds_nothing() -> Iterator[None]:
         snapshot_months, "_archived_card_from_github", AsyncMock(return_value=None)
     ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _vat_table_holds_nothing() -> Iterator[None]:
+    """The tick reads the card archive's VAT table over the network. Tests
+    that are not about it see no table, so every month takes the constants,
+    and whatever a test holds is gone before the next one."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import coordinator_tick, vat_rates
+
+    with patch.object(coordinator_tick, "ensure_vat_rates", AsyncMock()):
+        yield
+    vat_rates._RESIDENTIAL.clear()
+    vat_rates._STANDARD.clear()

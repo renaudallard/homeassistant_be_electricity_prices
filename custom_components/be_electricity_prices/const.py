@@ -565,6 +565,12 @@ CARD_ARCHIVE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
     "electricity/cards"
 )
+# The VAT rate the archived cards of each month agree on (vat_rates.py), read
+# under the same card-archive option as the cards.
+VAT_TABLE_URL: Final = (
+    "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
+    "electricity/vat.json"
+)
 # The earliest month the archive can hold for a supplier with no archive of
 # its own. A backfill only mirrors a supplier's own archive, so for those
 # suppliers the archive starts at its daily captures, which began in

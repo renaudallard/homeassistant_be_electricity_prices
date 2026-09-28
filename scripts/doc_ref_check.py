@@ -81,6 +81,7 @@ NOT_OURS = frozenset(
         "tax_failures.txt",
         "tax_report.md",
         "unparsed.json",
+        "vat.json",
     }
 )
 # Words in backticks that look like identifiers and are not symbols of this

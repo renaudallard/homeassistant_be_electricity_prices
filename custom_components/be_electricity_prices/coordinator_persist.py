@@ -45,6 +45,8 @@ from .coordinator_profiles import (
     _seed_profile_cache,
 )
 from .snapshot_codec import _snapshot_from_dict, _snapshot_to_dict
+from .vat_rates import held_table as held_vat_table
+from .vat_rates import restore as restore_vat_rates
 from .coordinator_spots import _spot_is_sane, _spots_for_local_days
 from .cohort import _tariff_card_month, ytd_window_start
 from homeassistant.util import dt as dt_util
@@ -109,6 +111,10 @@ class _PersistMixin:
         stored = await self._store.async_load()
         if not stored:
             return
+        # Before the stored card is resolved below, which reads it.
+        vat_table = stored.get("vat_rates")
+        if isinstance(vat_table, dict):
+            restore_vat_rates(vat_table)
         # If the persisted blob was written under a different supplier
         # tuple (typical case: OptionsFlow swap landed while a tick was
         # still in flight, and the slow tick saved over the file after
@@ -521,6 +527,9 @@ class _PersistMixin:
             payload["previous_contracts"] = priced_to_dict(self._previous_priced)
         if self._backfill_retry_from is not None:
             payload["backfill_retry_from"] = self._backfill_retry_from.isoformat()
+        # The VAT table this process holds, so a restart without the network
+        # still bills the last month the cards agreed on.
+        payload["vat_rates"] = held_vat_table()
         # Nothing to write when nothing moved. The blob is rebuilt whole on
         # every tick and is mostly slow-changing: the card, the peak history,
         # the spot cache and the compare rows are identical on 23 ticks out of

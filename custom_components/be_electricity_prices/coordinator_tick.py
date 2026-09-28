@@ -36,6 +36,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .const import (
+    CONF_CARD_ARCHIVE,
+    DEFAULT_CARD_ARCHIVE,
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
@@ -128,6 +130,7 @@ from .snapshot_months import archived_months_present
 import asyncio
 from homeassistant.util import dt as dt_util
 from .brugel import ensure_power_term
+from .vat_rates import ensure_vat_rates
 from .creg_ev import (
     ensure_rates as ensure_ev_rates,
     quarter_start as ev_quarter_start,
@@ -256,6 +259,10 @@ class _TickMixin:
         # disagreeing with what the next tick would say.
         if self.entry.data.get(CONF_REGION) == REGION_BRUSSELS:
             await ensure_power_term(self._session, dt_util.now().year)
+        # The month's VAT rate, read before the card is resolved like the term
+        # above, and from the card archive, so only where the entry reads it.
+        if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):
+            await ensure_vat_rates(self._session)
         if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             self._refresh_custom_snapshot()
         else:

@@ -258,7 +258,10 @@ included and say so ("Prix 6% TVA comprise", "inclusief 6% btw"), and those card
 are priced at the rate they state. Three do not state one (Bolt, energie.be, and
 OCTA+ since June 2026), so their formula is priced at the rate of the month being
 billed, as are the regulated figures published without VAT (the flat excise, the
-Flemish network ceiling and the Brussels power term). A contract that locks its
+Flemish network ceiling and the Brussels power term). That month's rate is the one
+the cards themselves agree on, read from the project's card archive (see
+[The card archive](#the-card-archive)): if the law changes the rate, the cards
+change with it, and so does every price they leave without one. A contract that locks its
 signing-month formula is billed at the VAT of the month delivered, not the month
 it was signed in. Professional contracts use the standard 21%.
 
@@ -1556,9 +1559,15 @@ neither has it. The request names the supplier, contract, region and month
 and nothing else, and it is only made for a month the archive can hold: a
 closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach.
+The same run writes `vat.json`: for each month, the VAT rate the cards agree
+on, when at least three suppliers state one rate and none states another. The
+integration reads it once a day to price what a card leaves without a rate
+(see [The VAT rate](#the-vat-rate)); a month the cards disagree on is left out,
+and the last month they agreed on stands.
 The *Read past cards from the project's archive* box on the meters step,
-on by default, switches it off per entry: the integration then never
-contacts GitHub, and those months are priced on the current card. A row
+on by default, switches both off per entry: the integration then never
+contacts GitHub, those months are priced on the current card, and a rate a
+card does not state is taken as 6%. A row
 holds what the extractor of that day parsed, and the day after a parser
 change every row is re-parsed from the texts the archive kept, so a fix
 reaches past months within a day.

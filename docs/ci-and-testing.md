@@ -978,7 +978,12 @@ read, and those bytes are uploaded like any other card, so something has to say 
 are. `_write_unparsed` keeps that list in `unparsed.json`, by the row the card would have become,
 merged with what earlier runs saw so a run over one supplier does not forget the others, and an
 entry whose month has a row is dropped, so a month that starts parsing leaves by itself.
-`_write_listings` writes the sheets and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
+`_write_vat` writes `vat.json` from the rows too: per card month, the VAT rate the rows' cards
+state (`taxes.card_vat_rate`), `residential` from the residential contracts and `standard` from
+the professional ones. A month gets a `rate` only when at least three suppliers state one and
+none states another; a disagreement is written as `disputed` and a lone rate as `too_few`, and
+an installation reads neither (`vat_rates.py` keeps the last month that agreed).
+`_write_listings` writes the sheets and the VAT table and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
 The workflow rewrites them once more after the upload step (`--index-only`, no fetch) so the
 day's new files are linked the day they are uploaded, writes the two READMEs itself (`Write the
 two READMEs`: the root one names the namespaces, the `electricity/` one the layout) and pushes

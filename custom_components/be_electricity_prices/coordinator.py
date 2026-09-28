@@ -231,6 +231,8 @@ class BePricesCoordinator(
         # Brussels billed 50,07 EUR a year less until the yearly volume next
         # moved, and never at all on an entry with no meter configured.
         self._snapshot_power_term: tuple[float, float] | None = None
+        # The VAT rates the snapshot was resolved at (coordinator_snapshot.py).
+        self._snapshot_vat: tuple[float, float] = (0.0, 0.0)
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Which schema the snapshot in hand was parsed under, and what

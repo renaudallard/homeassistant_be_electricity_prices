@@ -54,13 +54,17 @@ OCT, NOV, DEC = date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)
 @pytest.fixture
 def seven_from_november() -> Iterator[None]:
     """The residential rate moving to 7% from November 2026."""
-    held = dict(vat_rates._HELD)
-    vat_rates._HELD.clear()
-    vat_rates._HELD[(2026, 10)] = (0.06, 0.21)
-    vat_rates._HELD[(2026, 11)] = (0.07, 0.21)
+    held = vat_rates.held_table()
+    vat_rates.hold(
+        {
+            "residential": {"2026-10": {"rate": 0.06}, "2026-11": {"rate": 0.07}},
+            "standard": {"2026-10": {"rate": 0.21}},
+        }
+    )
     yield
-    vat_rates._HELD.clear()
-    vat_rates._HELD.update(held)
+    vat_rates._RESIDENTIAL.clear()
+    vat_rates._STANDARD.clear()
+    vat_rates.hold(held)
 
 
 def test_a_month_takes_its_own_rate_or_the_last_one_before_it(
@@ -177,7 +181,7 @@ def test_a_professional_card_takes_the_months_standard_rate(
         taxes=TaxOverlay(federal_excise=0.01, energy_contribution=0.0, vat_rate=0.21)
     )
     assert resolve_vat_rate(card, NOV, professional=True) is card
-    monkeypatch.setitem(vat_rates._HELD, (2026, 11), (0.07, 0.22))
+    monkeypatch.setitem(vat_rates._STANDARD, (2026, 11), 0.22)
     assert resolve_vat_rate(card, NOV, professional=True).taxes.vat_rate == 0.22
 
 

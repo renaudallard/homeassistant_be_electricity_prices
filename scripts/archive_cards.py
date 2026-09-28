@@ -104,6 +104,7 @@ from custom_components.be_electricity_prices.const import (  # noqa: E402
 )
 from custom_components.be_electricity_prices.providers import (  # noqa: E402
     all_extractors,
+    is_professional,
 )
 from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
     _MIN_TEXT_LAYER_CHARS,
@@ -160,6 +161,7 @@ _RELEASE_PREFIX = "electricity"
 # and to the JSON it produced; and an index of the sheets, since one
 # table of every supplier grows by a column a month.
 _COVERAGE = "coverage.md"
+_VAT = "vat.json"
 _COVERAGE_DIR = "coverage"
 # Which cards were downloaded and could not be read, by the row they would
 # have become. Ecofix publishes page images some months and no reader can
@@ -1177,13 +1179,74 @@ def _write_coverage(
     (out / _COVERAGE).write_text("\n".join(index), encoding="utf-8")
 
 
+# How many suppliers have to state one rate for a month, none stating another,
+# before it is the month's rate (vat_rates.py reads the result).
+_VAT_AGREEING = 3
+
+
+def _vat_consensus(stated: dict[str, set[float]]) -> dict[str, Any]:
+    """One month's entry from ``{supplier: rates its cards state}``.
+
+    ``rate`` only when at least ``_VAT_AGREEING`` suppliers state one rate and
+    none states another, one of which may be the same supplier stating two.
+    A disagreement is written out as ``disputed``, a single rate stated by too
+    few as ``too_few``: an installation reads neither and keeps the last month
+    that agreed.
+    """
+    by_rate: dict[float, list[str]] = {}
+    for supplier, rates in stated.items():
+        for rate in rates:
+            by_rate.setdefault(rate, []).append(supplier)
+    listed = {f"{rate:g}": sorted(names) for rate, names in sorted(by_rate.items())}
+    if len(by_rate) > 1:
+        return {"disputed": listed}
+    ((rate, names),) = by_rate.items()
+    if len(names) < _VAT_AGREEING:
+        return {"too_few": listed}
+    return {"rate": rate, "suppliers": sorted(names)}
+
+
+def _write_vat(out: Path) -> None:
+    """``vat.json``: the VAT rate the cards of each month agree on.
+
+    Built from the rows on disk, each carrying the rate its card states
+    (``taxes.card_vat_rate``), per card month: ``residential`` from the
+    residential contracts, ``standard`` from the professional ones. A row whose
+    card states none adds nothing. Deterministic, so a day that changed
+    nothing rewrites the same bytes.
+    """
+    stated: dict[str, dict[str, dict[str, set[float]]]] = {
+        "residential": {},
+        "standard": {},
+    }
+    for path in sorted(out.glob(f"{_ROWS}/*/*/*/????-??.json")):
+        row = _read_row(path)
+        rate = (row or {}).get("taxes", {}).get("card_vat_rate")
+        if not isinstance(rate, (int, float)):
+            continue
+        supplier, contract = path.parts[-4], path.parts[-3]
+        kind = "standard" if is_professional(supplier, contract) else "residential"
+        stated[kind].setdefault(path.stem, {}).setdefault(supplier, set()).add(
+            round(float(rate), 4)
+        )
+    table = {
+        kind: {month: _vat_consensus(by) for month, by in sorted(months.items())}
+        for kind, months in stated.items()
+    }
+    (out / _VAT).write_text(
+        json.dumps(table, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
-    """The coverage sheets, rewritten when out of date. The index of PDFs by
-    release that earlier versions wrote is removed, the coverage sheets having
-    taken it over; the README beside them is the workflow's."""
+    """The coverage sheets and the VAT table, rewritten when out of date. The
+    index of PDFs by release that earlier versions wrote is removed, the
+    coverage sheets having taken it over; the README beside them is the
+    workflow's."""
     _write_coverage(out, pdf_base_url, archive_base_url)
+    _write_vat(out)
     (out / "pdfs.md").unlink(missing_ok=True)
 
 
