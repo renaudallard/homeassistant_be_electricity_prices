@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -40,6 +41,23 @@ def test_a_register_pair_flag_is_written_only_when_set() -> None:
     row = _snapshot_to_dict(pair, NOW)
     assert row["injection"]["bi_hourly"] is True
     assert _snapshot_from_dict(row).injection == pair.injection
+
+
+def test_a_card_vat_basis_is_written_only_when_set() -> None:
+    """The same rule for the tax overlay's two VAT fields: a card stating no
+    rate and assuming none keeps the row shape every earlier version reads."""
+    plain = make_snapshot()
+    row = _snapshot_to_dict(plain, NOW)
+    assert "card_vat_rate" not in row["taxes"]
+    assert "assumed_vat_rate" not in row["taxes"]
+    assert _snapshot_from_dict(row).taxes == plain.taxes
+    stated = replace(plain, taxes=replace(plain.taxes, card_vat_rate=0.06))
+    row = _snapshot_to_dict(stated, NOW)
+    assert row["taxes"]["card_vat_rate"] == 0.06
+    assert "assumed_vat_rate" not in row["taxes"]
+    assert _snapshot_from_dict(row).taxes == stated.taxes
+    assumed = replace(plain, taxes=replace(plain.taxes, assumed_vat_rate=0.06))
+    assert _snapshot_from_dict(_snapshot_to_dict(assumed, NOW)).taxes == assumed.taxes
 
 
 def test_a_field_this_version_does_not_know_is_dropped_not_refused() -> None:

@@ -106,6 +106,9 @@ pro lane is just `_ContractDef.segment` feeding `_document_url`. Three things di
   block is still headed `TTC`, but its numbers match the other suppliers' ex-VAT tables to the
   cent, so the label is stale rather than the values - do not trust that heading.
 - **Injection is taxed** (`vat_applies=True`), against the residential exemption.
+- **No residential card states its VAT rate either.** The variable cards' settlement formula and
+  Impact bands are grossed by the residential rate (`_RESIDENTIAL_VAT`), recorded on the snapshot
+  as `TaxOverlay.assumed_vat_rate`; a fixed card grosses nothing and records none.
 - **The `N% TVA` phrase is gone.** `_extract_dynamic_energy` reads it to scale the Belpex formula,
   and `vat_multiplier` falls back to 6% when it is missing, which would have scaled an already
   ex-VAT formula and then let `vat_rate` scale it again. The professional branch asserts `HTVA`

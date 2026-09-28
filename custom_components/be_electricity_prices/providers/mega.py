@@ -85,6 +85,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._validity import (
     archive_validity_check,
@@ -121,6 +122,7 @@ from ._mega_cards import (
     _extract_valid_until,
     _injection_vat_applies,
     _realized_rates,
+    _VAT_PATTERNS,
 )
 from .base import (
     CardNotReadableError,
@@ -128,10 +130,12 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     ALL_REGIONS,
     Contract,
+    DynamicRates,
     ImpactRates,
     TariffKind,
     VariableRates,
@@ -852,41 +856,49 @@ def parse_snapshot(
     # first regularisation invoice after that, which is the anniversary shape
     # rather than a daily accrual.
     ristourne = extract_ristourne(text)
-    return SupplierSnapshot(
-        supplier="mega",
-        contract=contract_id,
-        energy=energy,
-        dsos=dsos,
-        taxes=TaxOverlay(
-            federal_excise=federal_excise,
-            energy_contribution=energy_contribution,
-            federal_excise_bands=excise_bands,
-            flanders_renewables=flanders_renewables,
-            wallonia_renewables=wallonia_renewables,
-            brussels_renewables=brussels_renewables,
-            region_connection_fee=region_connection_fee,
-            energy_fund_eur_per_month=_extract_energy_fund(
-                text, region, professional=professional
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="mega",
+            contract=contract_id,
+            energy=energy,
+            dsos=dsos,
+            taxes=TaxOverlay(
+                federal_excise=federal_excise,
+                energy_contribution=energy_contribution,
+                federal_excise_bands=excise_bands,
+                flanders_renewables=flanders_renewables,
+                wallonia_renewables=wallonia_renewables,
+                brussels_renewables=brussels_renewables,
+                region_connection_fee=region_connection_fee,
+                energy_fund_eur_per_month=_extract_energy_fund(
+                    text, region, professional=professional
+                ),
+                # The professional card prints HTVA throughout; _resolve.apply_vat
+                # resolves it for the entry.
+                vat_rate=VAT_RATE_STANDARD if professional else 0.0,
             ),
-            # The professional card prints HTVA throughout; _resolve.apply_vat
-            # resolves it for the entry.
-            vat_rate=VAT_RATE_STANDARD if professional else 0.0,
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=parse_valid_until(text) or _extract_valid_until(text),
+            injection=injection,
+            supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
+                text, region, contract.kind
+            ),
+            welcome_credit_eur=ristourne["welcome_credit_eur"],
+            welcome_credit_eur_per_kwh=ristourne["welcome_credit_eur_per_kwh"],
+            welcome_credit_injection_eur_per_kwh=extract_injection_bonus(text),
+            welcome_credit_cap_eur=ristourne["welcome_credit_cap_eur"],
+            welcome_credit_direct_debit_eur=ristourne[
+                "welcome_credit_direct_debit_eur"
+            ],
+            welcome_credit_requires_direct_debit=ristourne_requires_direct_debit(text),
+            welcome_credit_after_months=ristourne_wait_months(text),
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
         ),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=parse_valid_until(text) or _extract_valid_until(text),
-        injection=injection,
-        supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
-            text, region, contract.kind
-        ),
-        welcome_credit_eur=ristourne["welcome_credit_eur"],
-        welcome_credit_eur_per_kwh=ristourne["welcome_credit_eur_per_kwh"],
-        welcome_credit_injection_eur_per_kwh=extract_injection_bonus(text),
-        welcome_credit_cap_eur=ristourne["welcome_credit_cap_eur"],
-        welcome_credit_direct_debit_eur=ristourne["welcome_credit_direct_debit_eur"],
-        welcome_credit_requires_direct_debit=ristourne_requires_direct_debit(text),
-        welcome_credit_after_months=ristourne_wait_months(text),
-        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        None if professional else printed_vat_rate(text, *_VAT_PATTERNS),
+        professional=professional,
+        # The dynamic formula is printed VAT-inclusive and grossed by nothing.
+        grossed=not isinstance(energy, DynamicRates),
     )
 
 

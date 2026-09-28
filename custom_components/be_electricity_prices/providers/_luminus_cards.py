@@ -551,12 +551,18 @@ _INJECTION_FORMULA_RE = re.compile(
 )
 
 
+# "Le taux de TVA sur les prix indiques ... est de 6 %", else "TVA 6%". Not the
+# injection's "La TVA s'eleve a 0%", which no pattern here reads. The gap to
+# the rate is bounded and holds no percent sign: left open, a sentence that
+# lost its figure matched the next "N %" anywhere further down the card.
+_VAT_PATTERNS = (
+    re.compile(r"TVA\s*sur\s*les\s*prix[^%]{0,120}?(\d+)\s*%"),
+    re.compile(r"TVA\s*(\d+)\s*%"),
+)
+
+
 def _vat_multiplier(text: str) -> float:
-    return vat_multiplier(
-        text,
-        re.compile(r"TVA\s*sur\s*les\s*prix.+?(\d+)\s*%", re.S),
-        r"TVA\s*(\d+)\s*%",
-    )
+    return vat_multiplier(text, *_VAT_PATTERNS)
 
 
 def _extract_yearly_fee(text: str) -> float:

@@ -42,10 +42,11 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     walloon_dso_overlay,
+    with_vat_basis,
 )
 import re
 from ._energyvision_cards import _spp_injection, _tiered_legs
-from ._pdf import NUM_NO_THOUSANDS
+from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
 from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 
 _NUM = NUM_NO_THOUSANDS
@@ -72,16 +73,19 @@ def _parse_wallonia(
         energy, injection = _extract_tiered_fr(text)
     else:
         energy, injection = _extract_fixed_fr(text)
-    return SupplierSnapshot(
-        supplier="energyvision",
-        contract=contract_id,
-        energy=energy,
-        dsos=_extract_dsos_fr(text),
-        taxes=_extract_taxes_fr(text),
-        source_url=source_url,
-        publication_label=publication_label or _publication_label_fr(text),
-        valid_until=parse_valid_until(text),
-        injection=injection,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="energyvision",
+            contract=contract_id,
+            energy=energy,
+            dsos=_extract_dsos_fr(text),
+            taxes=_extract_taxes_fr(text),
+            source_url=source_url,
+            publication_label=publication_label or _publication_label_fr(text),
+            valid_until=parse_valid_until(text),
+            injection=injection,
+        ),
+        printed_vat_rate(text, _VAT_FR_RE),
     )
 
 

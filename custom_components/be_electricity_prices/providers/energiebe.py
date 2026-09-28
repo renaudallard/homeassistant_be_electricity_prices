@@ -55,6 +55,8 @@ Region: Flanders only (all 8 Fluvius sub-areas).
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 from datetime import date
 import logging
@@ -65,6 +67,7 @@ import aiohttp
 from ..const import (
     FLUVIUS_CARD_TOKENS,
     REGION_FLANDERS,
+    VAT_RATE_REDUCED,
 )
 from ._pdf import (
     NL_MONTHS,
@@ -92,6 +95,7 @@ from ._rates import (
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
+    vat_basis,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -144,8 +148,10 @@ _ARCHIVE_TARIFF_TYPE = {
 # VAT-inclusive basis (vat_rate stays 0.0, matching Frank). Verified against
 # the card's own printed price: 11,93 c€/kWh (incl. VAT) equals
 # (1,04 x 10,34 + 0,50) x 1,06. The card's only printed percentage (21% on
-# energiedelen) is unrelated, so the rate is a constant, not scraped.
-_VAT_MULT = 1.06
+# energiedelen) is unrelated, so the formula is grossed by the residential
+# rate as an assumption, recorded on the snapshot (assumed_vat_rate) for
+# _resolve_snapshot to rescale to the delivery month's rate.
+_VAT_MULT = 1.0 + VAT_RATE_REDUCED
 
 # Only the residential block is priced; the card appends a professional block
 # whose GSC/WKK, taxes and DSO rows differ. Cut at the professional section
@@ -391,12 +397,19 @@ def parse_snapshot(
         energy = _extract_variable_energy(section)
     else:
         energy = _extract_energy(section)
+    # The card states no residential rate, so the dynamic and variable
+    # formulas were grossed on an assumed one; the fixed rate is printed.
+    card_vat, assumed_vat = vat_basis(None, energy)
     return SupplierSnapshot(
         supplier="energiebe",
         contract=contract_id,
         energy=energy,
         dsos=_extract_dsos(section),
-        taxes=_extract_taxes(section),
+        taxes=replace(
+            _extract_taxes(section),
+            card_vat_rate=card_vat,
+            assumed_vat_rate=assumed_vat,
+        ),
         source_url=source_url,
         publication_label=publication_label or _publication_label(section),
         valid_until=parse_valid_until(section),

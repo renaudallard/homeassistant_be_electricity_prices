@@ -97,6 +97,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._validity import (
     archive_validity_check,
@@ -109,6 +110,7 @@ from .base import (
     ExtractorError,
     SupplierExtractor,
     SupplierSnapshot,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -129,6 +131,7 @@ from ._energyvision_cards import (
     _extract_dynamic,
     _extract_fixed,
     _extract_tiered,
+    _VAT_RE,
 )
 from .energiebe import _NUM
 
@@ -593,18 +596,23 @@ def parse_snapshot(
     # The energy leg is worded identically in both regions and needs no
     # branch; the network and tax blocks are each region's own.
     brussels = region == REGION_BRUSSELS
-    return SupplierSnapshot(
-        supplier="energyvision",
-        contract=contract_id,
-        energy=energy,
-        dsos=_extract_brussels_dsos(text) if brussels else _extract_dsos(text),
-        taxes=_extract_brussels_taxes(text) if brussels else _extract_taxes(text),
-        source_url=source_url,
-        publication_label=publication_label or _publication_label(text),
-        valid_until=parse_valid_until(text),
-        injection=injection,
-        welcome_credit_eur=_welcome_credit(text),
-        direct_debit_discount_eur=_direct_debit_discount(text, energy.yearly_fixed_fee),
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="energyvision",
+            contract=contract_id,
+            energy=energy,
+            dsos=_extract_brussels_dsos(text) if brussels else _extract_dsos(text),
+            taxes=_extract_brussels_taxes(text) if brussels else _extract_taxes(text),
+            source_url=source_url,
+            publication_label=publication_label or _publication_label(text),
+            valid_until=parse_valid_until(text),
+            injection=injection,
+            welcome_credit_eur=_welcome_credit(text),
+            direct_debit_discount_eur=_direct_debit_discount(
+                text, energy.yearly_fixed_fee
+            ),
+        ),
+        printed_vat_rate(text, _VAT_RE),
     )
 
 

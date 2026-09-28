@@ -54,6 +54,7 @@ import aiohttp
 from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
+    VAT_RATE_REDUCED,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -63,6 +64,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
     render_pdf,
     vat_multiplier,
 )
@@ -86,6 +88,7 @@ from ._rates import (
     TariffKind,
     VariableRates,
     fixed_or_variable_rates,
+    vat_basis,
 )
 from ._octaplus_overlays import (
     _extract_flanders_dsos,
@@ -380,6 +383,9 @@ def parse_snapshot(
         wallonia_renewables = _extract_wallonia_renewables(text)
         dsos = _extract_wallonia_dsos(text)
 
+    # Only a formula is grossed by the card's rate; the printed rates of a
+    # fixed or Impact card are already VAT-inclusive whatever the header says.
+    card_vat, assumed_vat = vat_basis(printed_vat_rate(text, _VAT_RE), energy)
     return SupplierSnapshot(
         supplier="octaplus",
         contract=contract_id,
@@ -393,6 +399,8 @@ def parse_snapshot(
             region_connection_fee=region_connection_fee,
             energy_fund_eur_per_month=0.0,
             vat_rate=0.0,
+            card_vat_rate=card_vat,
+            assumed_vat_rate=assumed_vat,
         ),
         source_url=source_url,
         publication_label=publication_label,
@@ -422,9 +430,16 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1))
 
 
+# The card header ("Tarifs 6% TVAC"), printed through May 2026 and not since.
+_VAT_RE = re.compile(r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
+# What the formulas are grossed by when the header is missing, recorded on the
+# snapshot as assumed (assumed_vat_rate) for _resolve_snapshot to rescale.
+_RESIDENTIAL_VAT = 1.0 + VAT_RATE_REDUCED
+
+
 def _vat_multiplier(text: str) -> float:
     """Read the VAT % from the card header ('Tarifs 6% TVAC')."""
-    return vat_multiplier(text, r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
+    return vat_multiplier(text, _VAT_RE, default=_RESIDENTIAL_VAT)
 
 
 # The January and February 2026 cards name both indices Belpex: "Belpex 15' * 1

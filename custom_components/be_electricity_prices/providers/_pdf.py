@@ -573,6 +573,19 @@ def vat_multiplier(
     ex-VAT coefficients and no rate at all (every residential Bolt card) the
     fallback is what the entry bills on, and such a caller names it.
     """
+    rate = printed_vat_rate(text, *patterns)
+    return default if rate is None else 1.0 + rate
+
+
+def printed_vat_rate(text: str, *patterns: str | re.Pattern[str]) -> float | None:
+    """The VAT rate a card states, as a fraction, or ``None`` where none of
+    ``patterns`` matches.
+
+    What :func:`vat_multiplier` reads, without its fallback: a parser records
+    whether the rate it grossed by was read or assumed (``TaxOverlay``'s
+    ``card_vat_rate`` and ``assumed_vat_rate``), and the default hides that.
+    Group 1 of the first pattern that matches is the percentage.
+    """
     for pattern in patterns:
         match = (
             re.search(pattern, text)
@@ -580,8 +593,8 @@ def vat_multiplier(
             else pattern.search(text)
         )
         if match:
-            return 1.0 + to_float(match.group(1)) / 100.0
-    return default
+            return to_float(match.group(1)) / 100.0
+    return None
 
 
 # A caller that will read the same document many times in quick succession can

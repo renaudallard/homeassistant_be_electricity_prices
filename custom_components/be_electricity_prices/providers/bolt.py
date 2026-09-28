@@ -75,6 +75,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._validity import (
     archive_validity_check,
@@ -93,6 +94,7 @@ from .base import (
 from ._rates import (
     Contract,
     TariffKind,
+    vat_basis,
 )
 from ._bolt_overlays import (
     _extract_brussels_dsos,
@@ -103,6 +105,7 @@ from ._bolt_overlays import (
     _extract_wallonia_dsos,
 )
 from ._bolt_cards import (
+    _VAT_PHRASE_RE,
     _extract_energy,
     _extract_injection,
 )
@@ -532,6 +535,12 @@ def parse_snapshot(
     else:
         dsos = _extract_brussels_dsos(text)
 
+    # No Bolt card states its residential rate, so the settlement formula and
+    # the Impact bands of a variable card were grossed on an assumed one. A
+    # fixed card's rates are printed and nothing on it is grossed.
+    card_vat, assumed_vat = vat_basis(
+        printed_vat_rate(text, _VAT_PHRASE_RE), energy, professional=professional
+    )
     return SupplierSnapshot(
         supplier="bolt",
         contract=contract_id,
@@ -550,6 +559,8 @@ def parse_snapshot(
             # the other suppliers' ex-VAT tables to the cent, so the label
             # is stale, not the values. _resolve.apply_vat resolves it.
             vat_rate=VAT_RATE_STANDARD if professional else 0.0,
+            card_vat_rate=card_vat,
+            assumed_vat_rate=assumed_vat,
         ),
         source_url=source_url,
         publication_label=publication_label,

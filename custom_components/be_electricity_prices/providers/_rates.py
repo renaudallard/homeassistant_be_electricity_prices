@@ -34,8 +34,8 @@ without pulling in the pricing engine.
 
 from __future__ import annotations
 
-from ..const import REGIONS
-from dataclasses import dataclass, field
+from ..const import REGIONS, VAT_RATE_REDUCED
+from dataclasses import dataclass, field, fields
 from typing import Literal
 
 
@@ -517,6 +517,62 @@ EnergyRates = (
     | ImpactRates
     | SpotMonthlyRates
 )
+
+
+def vat_grossed_fields(energy: EnergyRates) -> tuple[str, ...]:
+    """The fields of ``energy`` a parser grosses by the card's VAT rate.
+
+    A formula over an index is printed excluding VAT on every card that prints
+    one, and its coefficients are grossed onto the VAT-inclusive basis the rest
+    of the card is on: ``factor`` / ``base`` and their per-band forms, the
+    ``formula_factor`` / ``formula_base`` pair and its forms, and the Impact
+    pairs (``pic_factor`` ...). Bolt's variable Impact bands too, the only
+    ``impact_*`` a parser fills, derived from a formula at the card's index.
+    Printed rates, ceilings, fees and tier rates are left out: a card prints
+    them VAT-inclusive. Only the fields holding a value are named, so an
+    empty tuple means nothing on the leg was grossed.
+    """
+    names = []
+    for f in fields(energy):
+        name = f.name
+        if getattr(energy, name) is None or isinstance(getattr(energy, name), bool):
+            continue
+        if (
+            name in ("factor", "base")
+            or name.startswith(("factor_", "base_", "formula_factor", "formula_base"))
+            or name.endswith(("_factor", "_base"))
+            or (isinstance(energy, VariableRates) and name.startswith("impact_"))
+        ):
+            names.append(name)
+    return tuple(names)
+
+
+def vat_basis(
+    printed: float | None,
+    energy: EnergyRates,
+    *,
+    professional: bool = False,
+    grossed: bool | None = None,
+) -> tuple[float | None, float | None]:
+    """``TaxOverlay``'s ``(card_vat_rate, assumed_vat_rate)`` for a card that
+    states ``printed`` as its rate, or none.
+
+    Where the card states none and its parser grossed a formula on ``energy``
+    anyway, it grossed by the residential rate, and that is recorded as
+    assumed so the delivery month's rate can replace it. A professional card
+    is priced excluding VAT and grosses nothing.
+
+    ``grossed`` says whether the parser grosses this leg's formula by the
+    card's stated rate, and defaults to whether the leg has one to gross
+    (:func:`vat_grossed_fields`). A parser passes False for a formula printed
+    VAT-inclusive (Mega Dynamic) or carrying its own multiplier ("x 1,06" on
+    Eneco Dynamic and Frank), which no stated rate was ever assumed for.
+    """
+    if grossed is None:
+        grossed = bool(vat_grossed_fields(energy))
+    if professional or printed is not None or not grossed:
+        return printed, None
+    return printed, VAT_RATE_REDUCED
 
 
 @dataclass(frozen=True, kw_only=True)

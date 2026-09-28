@@ -69,6 +69,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
+    printed_vat_rate,
     vat_multiplier,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_prosumer_column, parse_sign, to_float
@@ -92,6 +93,7 @@ from ._rates import (
     RlpBlend,
     TariffKind,
     VariableRates,
+    vat_basis,
 )
 
 # The index the card's printed rates were computed on, in EUR/MWh. EBEM says
@@ -453,6 +455,7 @@ def parse_snapshot(
     injection = _extract_injection(text, contract)
     federal_excise, energy_contribution = _extract_federal_taxes(text)
     flanders_renewables = _extract_flanders_renewables(text)
+    card_vat, assumed_vat = vat_basis(printed_vat_rate(text, *_VAT_PATTERNS), energy)
     return SupplierSnapshot(
         supplier="ebem",
         contract=contract_id,
@@ -467,6 +470,8 @@ def parse_snapshot(
             region_connection_fee=0.0,
             energy_fund_eur_per_month=0.0,
             vat_rate=0.0,
+            card_vat_rate=card_vat,
+            assumed_vat_rate=assumed_vat,
         ),
         source_url=source_url,
         publication_label=publication_label,
@@ -502,12 +507,15 @@ def _extract_validity(text: str) -> date | None:
 # to ``cociter.py``'s dynamic conversion: factor * vat * 10 (cents/kWh per
 # €/MWh -> EUR/kWh per EUR/kWh), base * vat / 100. Read from the card so
 # a future regulator-driven rate change propagates without a code change.
+# "INCL. BTW 6%" over the price columns, else "BTW 6%".
+_VAT_PATTERNS = (
+    re.compile(r"INCL\.?\s*BTW\s*(\d+)\s*%", re.IGNORECASE),
+    re.compile(r"BTW\s*(\d+)\s*%", re.IGNORECASE),
+)
+
+
 def _vat_multiplier(text: str) -> float:
-    return vat_multiplier(
-        text,
-        re.compile(r"INCL\.?\s*BTW\s*(\d+)\s*%", re.IGNORECASE),
-        re.compile(r"BTW\s*(\d+)\s*%", re.IGNORECASE),
-    )
+    return vat_multiplier(text, *_VAT_PATTERNS)
 
 
 def _formula_to_dynamic(

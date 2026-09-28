@@ -436,6 +436,8 @@ energy fund.
 | `region_connection_fee` | `float` | `0.0` | Regional connection fee. |
 | `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py`), so an extractor serving more than one region must return `0.0` outside Flanders. |
 | `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
+| `card_vat_rate` | `float \| None` | `None` | The VAT rate the card states for its own customers, as a fraction (`0.06` on a residential card printing "6% TVA"), `None` where it states none. Left out of a stored row while `None`. |
+| `assumed_vat_rate` | `float \| None` | `None` | The rate a parser grossed an energy formula by because the card states none (the residential `VAT_RATE_REDUCED`): Bolt's variable cards, energie.be's dynamic and variable ones, OCTA+ in the months its header is missing. `None` where nothing was grossed on a guess. Left out of a stored row while `None`. |
 
 Regional renewables differ across the three regions; the pricing engine picks
 the right one per region, and an extractor that operates in only one or two
@@ -627,7 +629,9 @@ downstream regex would miss silently.
 | `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_parse.py`). |
 | `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_parse.py`). Supplier PDFs flip silently between these on re-renders. |
 | `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_parse.py`). |
-| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_parse.py`). |
+| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py`). |
+| `printed_vat_rate` | `printed_vat_rate(text, *patterns) -> float \| None` | The same read without the fallback: the stated rate as a fraction, or `None` (`_pdf.py`). |
+| `with_vat_basis` | `with_vat_basis(snapshot, printed, *, professional=False, grossed=None) -> SupplierSnapshot` | Record `card_vat_rate` and `assumed_vat_rate` on the snapshot (`base.py`, through `_rates.vat_basis`). `grossed` says whether the parser grosses this leg's formula by the stated rate; it defaults to whether the leg has formula coefficients (`_rates.vat_grossed_fields`), and a parser passes `False` for a formula printed VAT-inclusive or carrying its own multiplier. |
 
 ### Belgium-specific table and date parsers
 
@@ -666,7 +670,11 @@ Grounded in the protocol above, a minimal new PDF provider looks like this:
    sub-area the card covers, keyed by the canonical `const.py` DSO keys. Raise
    `ExtractorError` on any parse failure; never invent a EUR value.
 4. Populate `TaxOverlay`. Remember `vat_rate=0.0` means "prices are already
-   VAT-incl"; only set a non-zero rate if the card ships ex-VAT numbers.
+   VAT-incl"; only set a non-zero rate if the card ships ex-VAT numbers. Return
+   the snapshot through `with_vat_basis(snapshot, printed_vat_rate(text,
+   <your pattern>))`, reading the rate with the same pattern the formula is
+   grossed by, so the archive can build its VAT consensus from the card and a
+   formula grossed on an assumed rate is marked as such.
 5. Populate `injection` (`InjectionRates`) if the contract has feed-in. Emit
    `current` only for monthly-indexed injection; emit `factor`/`base` only for a
    genuine hourly-spot formula; use the per-slot triplet only for a TOU contract

@@ -213,11 +213,21 @@ def _variable_cohort_coefficients(
     return factor, base
 
 
+# The residential rate as the cards state it: "(TVA de 6% incluse)" beside the
+# ristourne and "TVAC (6%)" beside the welcome credit. The pattern read here
+# before took "TVA 6% incluse" only, which no 2026 card prints, so every
+# residential formula was grossed by vat_multiplier's default instead.
+_VAT_PATTERNS = (
+    re.compile(r"TVA\s*(?:de\s*)?(\d+)\s*%\s*incluse", re.I),
+    re.compile(r"TVAC\s*\((\d+)\s*%\)", re.I),
+)
+
+
 def _cohort_vat_multiplier(text: str, *, professional: bool) -> float:
     """Basis multiplier for a cohort formula: 1 ex-VAT, the card's rate else."""
     if professional:
         return 1.0
-    return vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+    return vat_multiplier(text, *_VAT_PATTERNS)
 
 
 def _variable_band_coefficients(
@@ -266,11 +276,7 @@ def _impact_band_coefficients(
     that prints only some of them still contributes what it has.
     """
     flat = re.sub(r"\s+", " ", text)
-    vat_mult = (
-        1.0
-        if professional
-        else vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
-    )
+    vat_mult = 1.0 if professional else vat_multiplier(text, *_VAT_PATTERNS)
     out: dict[str, float | None] = {}
     for band, pattern in _IMPACT_BAND_RES.items():
         match = pattern.search(flat)

@@ -69,6 +69,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._validity import (
     archive_validity_check,
@@ -84,6 +85,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -101,6 +103,7 @@ from ._engie_overlays import (
 from ._engie_cards import (
     _extract_energy,
     _extract_injection,
+    _VAT_RE,
 )
 
 _API_URL = (
@@ -542,28 +545,32 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
             dsos.update(_extract_brussels_dsos(text))
             brussels_renewables = renewables
 
-    return SupplierSnapshot(
-        supplier="engie",
-        contract=contract_id,
-        energy=energy,
-        dsos=dsos,
-        taxes=TaxOverlay(
-            federal_excise=federal_excise,
-            energy_contribution=energy_contribution,
-            federal_excise_bands=excise_bands,
-            flanders_renewables=flanders_renewables,
-            wallonia_renewables=wallonia_renewables,
-            brussels_renewables=brussels_renewables,
-            region_connection_fee=region_connection_fee,
-            energy_fund_eur_per_month=energy_fund,
-            # The professional card prints everything excluding VAT at
-            # 21%; _resolve.apply_vat resolves it for the entry.
-            vat_rate=VAT_RATE_STANDARD if professional else 0.0,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="engie",
+            contract=contract_id,
+            energy=energy,
+            dsos=dsos,
+            taxes=TaxOverlay(
+                federal_excise=federal_excise,
+                energy_contribution=energy_contribution,
+                federal_excise_bands=excise_bands,
+                flanders_renewables=flanders_renewables,
+                wallonia_renewables=wallonia_renewables,
+                brussels_renewables=brussels_renewables,
+                region_connection_fee=region_connection_fee,
+                energy_fund_eur_per_month=energy_fund,
+                # The professional card prints everything excluding VAT at
+                # 21%; _resolve.apply_vat resolves it for the entry.
+                vat_rate=VAT_RATE_STANDARD if professional else 0.0,
+            ),
+            source_url=_API_URL,
+            publication_label=publication_label,
+            valid_until=parse_valid_until(any_text),
+            injection=injection,
         ),
-        source_url=_API_URL,
-        publication_label=publication_label,
-        valid_until=parse_valid_until(any_text),
-        injection=injection,
+        None if professional else printed_vat_rate(any_text, _VAT_RE),
+        professional=professional,
     )
 
 

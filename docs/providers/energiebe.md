@@ -249,9 +249,11 @@ factor = factor_pdf * _VAT_MULT           # no * 10: Belpex already c€/kWh
 base   = base_cents / 100.0 * _VAT_MULT
 ```
 
-`_VAT_MULT = 1.06` (`providers/energiebe.py`) is the Belgian residential rate. It is a
-constant, not scraped: the formula is stated ex-VAT while every other card value is
-VAT-inclusive, and the card's only printed percentage (21% on energiedelen) is unrelated.
+`_VAT_MULT` (`providers/energiebe.py`) is the Belgian residential rate, `1 + VAT_RATE_REDUCED`.
+It is an assumption, not scraped: the formula is stated ex-VAT while every other card value is
+VAT-inclusive, and the card's only printed percentage (21% on energiedelen) is unrelated. The
+dynamic and variable snapshots record it as `TaxOverlay.assumed_vat_rate`; the fixed one grosses
+nothing and records none.
 Scaling the energy leg to the VAT-inclusive basis keeps `TaxOverlay.vat_rate=0.0`, the same
 convention as Frank. `test_energy_formula_factor` pins `1.04 * 1.06` and
 `test_energy_formula_base` pins `0.50 / 100 * 1.06`.

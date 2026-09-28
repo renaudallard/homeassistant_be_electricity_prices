@@ -63,6 +63,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     vat_multiplier,
+    printed_vat_rate,
 )
 from ._parse import SIGN_CHARS, parse_sign, require_contract, to_float
 from ._validity import parse_valid_until
@@ -71,6 +72,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     ALL_REGIONS,
@@ -289,25 +291,28 @@ def parse_snapshot(
         brussels_renewables = _extract_renewables(text)
         dsos = _extract_brussels_dsos(text)
 
-    return SupplierSnapshot(
-        supplier="totalenergies",
-        contract=contract_id,
-        energy=energy,
-        dsos=dsos,
-        taxes=TaxOverlay(
-            federal_excise=federal_excise,
-            energy_contribution=energy_contribution,
-            flanders_renewables=flanders_renewables,
-            wallonia_renewables=wallonia_renewables,
-            brussels_renewables=brussels_renewables,
-            region_connection_fee=region_connection_fee,
-            energy_fund_eur_per_month=energy_fund,
-            vat_rate=0.0,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="totalenergies",
+            contract=contract_id,
+            energy=energy,
+            dsos=dsos,
+            taxes=TaxOverlay(
+                federal_excise=federal_excise,
+                energy_contribution=energy_contribution,
+                flanders_renewables=flanders_renewables,
+                wallonia_renewables=wallonia_renewables,
+                brussels_renewables=brussels_renewables,
+                region_connection_fee=region_connection_fee,
+                energy_fund_eur_per_month=energy_fund,
+                vat_rate=0.0,
+            ),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=parse_valid_until(text),
+            injection=injection,
         ),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=parse_valid_until(text),
-        injection=injection,
+        printed_vat_rate(text, _VAT_RE),
     )
 
 
@@ -356,8 +361,12 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
     return factor, sign, to_float(after_formule.group(1))
 
 
+# "TVA 6 % incluse" under the prices, and "(hors TVA 6%)" on the formulas.
+_VAT_RE = re.compile(r"TVA\s*(\d+)\s*%")
+
+
 def _vat_multiplier(text: str) -> float:
-    return vat_multiplier(text, r"TVA\s*(\d+)\s*%")
+    return vat_multiplier(text, _VAT_RE)
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:

@@ -74,6 +74,7 @@ from ._pdf import (
     head_freshness_key,
     head_ok,
     vat_multiplier,
+    printed_vat_rate,
 )
 from ._parse import (
     SIGN_CHARS,
@@ -91,6 +92,7 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     walloon_dso_overlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -220,6 +222,10 @@ async def _head_probe_ids(session: aiohttp.ClientSession) -> set[str]:
 # ---- pure parser -------------------------------------------------------------
 
 
+# "(Prijzen inclusief 6% BTW)" in the card header.
+_VAT_RE = re.compile(r"inclusief\s+(\d+)\s*%\s*BTW", re.IGNORECASE)
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
@@ -253,24 +259,27 @@ def parse_snapshot(
         # should already prevent this, but keep the snapshot well-formed.
         dsos = {}
 
-    return SupplierSnapshot(
-        supplier="ecofix",
-        contract=contract_id,
-        energy=energy,
-        dsos=dsos,
-        taxes=TaxOverlay(
-            federal_excise=federal_excise,
-            energy_contribution=energy_contribution,
-            flanders_renewables=flanders_renewables,
-            wallonia_renewables=wallonia_renewables,
-            region_connection_fee=region_connection_fee,
-            energy_fund_eur_per_month=0.0,
-            vat_rate=0.0,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="ecofix",
+            contract=contract_id,
+            energy=energy,
+            dsos=dsos,
+            taxes=TaxOverlay(
+                federal_excise=federal_excise,
+                energy_contribution=energy_contribution,
+                flanders_renewables=flanders_renewables,
+                wallonia_renewables=wallonia_renewables,
+                region_connection_fee=region_connection_fee,
+                energy_fund_eur_per_month=0.0,
+                vat_rate=0.0,
+            ),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=valid_until,
+            injection=injection,
         ),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=valid_until,
-        injection=injection,
+        printed_vat_rate(text, _VAT_RE),
     )
 
 
@@ -406,9 +415,7 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
         # VAT changes without a code update. Conversion to
         # EUR/kWh-against-EUR/kWh-spot: factor stays unitless (x1000/100
         # = x10) and base divides cents->EUR (/100).
-        vat = vat_multiplier(
-            text, re.compile(r"inclusief\s+(\d+)\s*%\s*BTW", re.IGNORECASE)
-        )
+        vat = vat_multiplier(text, _VAT_RE)
         # Motion / Motion Online bill on the 15-minute Belpex spot (the
         # card's "Belpex 15M" formula), so keep the native 15-minute
         # slots like Engie rather than the hourly mean.

@@ -69,6 +69,7 @@ from ._pdf import (
     fetch_text,
     head_or_raise,
     is_transient_fetch_error,
+    printed_vat_rate,
     vat_multiplier,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
@@ -90,6 +91,7 @@ from ._rates import (
     FixedRates,
     InjectionRates,
     VariableRates,
+    vat_basis,
 )
 
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
@@ -392,6 +394,12 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
     return None
 
 
+# "Alle prijzen en tarieven zijn inclusief 6% btw". The card's other rate,
+# "(3) inclusief 21% btw", is written without "zijn" and reads the same, so
+# the first match is taken, which is the residential footer on every card.
+_VAT_RE = re.compile(r"inclusief\s*(\d+)\s*%\s*btw", re.IGNORECASE)
+
+
 def parse_snapshot(
     text: str, contract_id: str, source_url: str, region: str
 ) -> SupplierSnapshot:
@@ -403,12 +411,24 @@ def parse_snapshot(
     """
     if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
+    energy = _extract_energy(text, contract_id)
+    # The dynamic formula prints its own multiplier ("x 1,06") and is grossed
+    # by that, so only the variable one is grossed by the footer's rate.
+    card_vat, assumed_vat = vat_basis(
+        printed_vat_rate(text, _VAT_RE),
+        energy,
+        grossed=not isinstance(energy, DynamicRates),
+    )
     return SupplierSnapshot(
         supplier="eneco",
         contract=contract_id,
-        energy=_extract_energy(text, contract_id),
+        energy=energy,
         dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text, region),
+        taxes=replace(
+            _extract_taxes(text, region),
+            card_vat_rate=card_vat,
+            assumed_vat_rate=assumed_vat,
+        ),
         source_url=source_url,
         publication_label=_extract_publication_month(text),
         valid_until=parse_valid_until(text),
@@ -505,9 +525,7 @@ def _extract_variable(text: str) -> VariableRates:
     f_factor: float | None = None
     f_base: float | None = None
     if formula_match:
-        vat_mult = vat_multiplier(
-            text, re.compile(r"inclusief\s*(\d+)\s*%\s*btw", re.IGNORECASE)
-        )
+        vat_mult = vat_multiplier(text, _VAT_RE)
         f_factor = to_float(formula_match.group(1)) * vat_mult * 10.0
         f_base = (
             parse_sign(formula_match.group(2))

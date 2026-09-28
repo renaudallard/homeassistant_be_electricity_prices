@@ -61,6 +61,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
@@ -73,6 +74,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -270,24 +272,32 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     return out
 
 
+# "(0,1 x BELIX + 5) + 6% TVA": the rate every formula row adds, and the one
+# the formulas are grossed by.
+_VAT_RE = re.compile(r"\)\s*\+\s*(\d+)\s*%\s*TVA")
+
+
 def parse_snapshot(
     text: str, contract_id: str, source_url: str, publication_label: str
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
     energy = _extract_energy(text, contract_id)
-    return SupplierSnapshot(
-        supplier="cociter",
-        contract=contract_id,
-        energy=energy,
-        dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=parse_valid_until(text),
-        injection=_extract_injection(text),
-        supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
-            text, contract_id
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="cociter",
+            contract=contract_id,
+            energy=energy,
+            dsos=_extract_dsos(text),
+            taxes=_extract_taxes(text),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=parse_valid_until(text),
+            injection=_extract_injection(text),
+            supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
+                text, contract_id
+            ),
         ),
+        printed_vat_rate(text, _VAT_RE),
     )
 
 

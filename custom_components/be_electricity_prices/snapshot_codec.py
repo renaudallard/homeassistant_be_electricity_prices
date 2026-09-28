@@ -392,7 +392,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # welcome_credit_injection_eur_per_kwh, the first-year feed-in bonus every Mega
 # card with a feed-in formula prints beside its ristourne: an entry already on
 # one of those cards is owed it and a v71 row cannot say so.
-_SNAPSHOT_SCHEMA_VERSION = 72
+# v73: TaxOverlay carries card_vat_rate and assumed_vat_rate, the VAT rate a
+# card states and the one a parser grossed an unstated formula by. The
+# residential rate is read from the cards and the month's consensus rather
+# than assumed, and a v72 row cannot say which of its figures were a guess.
+_SNAPSHOT_SCHEMA_VERSION = 73
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -420,6 +424,9 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # and every one of them would have been rewritten with the field at null.
 _INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised")
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
+# The same rule for the tax overlay, from v73.
+_TAXES_OPTIONAL_KEYS = ("card_vat_rate", "assumed_vat_rate")
+_TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
 
 
 def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
@@ -434,6 +441,16 @@ def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
     data = dict(inj.__dict__)
     for key in _INJECTION_OPTIONAL_KEYS:
         if data.get(key) == _INJECTION_DEFAULTS[key]:
+            data.pop(key, None)
+    return data
+
+
+def _taxes_to_dict(taxes: TaxOverlay) -> dict[str, Any]:
+    """The tax overlay as a row, without the optional fields it does not use
+    (see ``_INJECTION_OPTIONAL_KEYS`` for why)."""
+    data = dict(taxes.__dict__)
+    for key in _TAXES_OPTIONAL_KEYS:
+        if data.get(key) == _TAXES_DEFAULTS[key]:
             data.pop(key, None)
     return data
 
@@ -490,7 +507,7 @@ def _snapshot_to_dict(
         "energy_kind": _energy_kind(snap.energy),
         "energy": snap.energy.__dict__,
         "dsos": {k: v.__dict__ for k, v in snap.dsos.items()},
-        "taxes": snap.taxes.__dict__,
+        "taxes": _taxes_to_dict(snap.taxes),
         "source_url": snap.source_url,
         "publication_label": snap.publication_label,
         "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,

@@ -106,6 +106,7 @@ from ._pdf import (
     head_freshness_key,
     is_transient_fetch_error,
     vat_multiplier,
+    printed_vat_rate,
 )
 from ._parse import SIGN_CHARS, parse_sign, regional_tax_overlay, to_float
 from ._validity import (
@@ -118,6 +119,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -591,16 +593,19 @@ def parse_snapshot(
         energy = _dynamic_energy(rows, fee, vat, contract, green)
     else:
         energy = _spot_monthly_energy(rows, fee, vat, contract, green)
-    return SupplierSnapshot(
-        supplier="energyknights",
-        contract=contract_id,
-        energy=energy,
-        dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
-        source_url=source_url,
-        publication_label=_publication_label(text),
-        valid_until=parse_valid_until(text),
-        injection=_extract_injection(text, contract),
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="energyknights",
+            contract=contract_id,
+            energy=energy,
+            dsos=_extract_dsos(text),
+            taxes=_extract_taxes(text),
+            source_url=source_url,
+            publication_label=_publication_label(text),
+            valid_until=parse_valid_until(text),
+            injection=_extract_injection(text, contract),
+        ),
+        printed_vat_rate(text, _VAT_RE),
     )
 
 

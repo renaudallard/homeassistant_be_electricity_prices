@@ -211,7 +211,9 @@ By kind:
   (`test_an_unread_consumption_formula_is_not_taken_from_the_amr_clause`).
   The card formula is HTVA and in EUR/MWh, so it is converted to the model's
   TVAC EUR/kWh: `factor = factor_pdf * vat`, `base = base_eur_mwh / 1000 * vat`
-. VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`
+. VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`, a header the cards
+  printed through May 2026 and not since: from June the formula is grossed by the
+  residential rate and the snapshot records it as `TaxOverlay.assumed_vat_rate`
 . `test_dynamic_parses_smr3_formula` pins illustrative
   `factor == 1.14798` and `base == 0.0044202` for `Epex 15' * 1,083 + 4,17` at
   6% VAT.

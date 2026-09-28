@@ -32,6 +32,7 @@ for power, as opposed to what it collects on someone else's behalf.
 
 from __future__ import annotations
 
+from ..const import VAT_RATE_REDUCED
 from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
@@ -405,7 +406,7 @@ _IMPACT_ROW_RE = re.compile(
 # print no "N% TVA" phrase for the multiplier to read, so this is the value
 # every residential entry bills on, and a helper default is where a reader
 # would not look for it.
-_RESIDENTIAL_VAT = 1.06
+_RESIDENTIAL_VAT = 1.0 + VAT_RATE_REDUCED
 _VAT_PHRASE_RE = re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
 
 

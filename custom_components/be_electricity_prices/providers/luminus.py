@@ -62,6 +62,7 @@ from ._pdf import (
     fetch_pdf_text,
     fetch_text,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._validity import (
     archive_validity_check,
@@ -75,6 +76,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -92,6 +94,7 @@ from ._luminus_cards import (
     _extract_energy,
     _extract_injection,
     _extract_promo,
+    _VAT_PATTERNS,
 )
 
 _API_URL = "https://www.luminus.be/api-next/get-pricelist/"
@@ -351,25 +354,28 @@ def parse_snapshot(
         wallonia_renewables = _extract_wallonia_renewables(text)
         dsos = _extract_wallonia_dsos(text)
 
-    return SupplierSnapshot(
-        supplier="luminus",
-        contract=contract_id,
-        energy=energy,
-        dsos=dsos,
-        taxes=TaxOverlay(
-            federal_excise=federal_excise,
-            energy_contribution=energy_contribution,
-            flanders_renewables=flanders_renewables,
-            wallonia_renewables=wallonia_renewables,
-            region_connection_fee=connection_fee,
-            energy_fund_eur_per_month=energy_fund,
-            vat_rate=0.0,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="luminus",
+            contract=contract_id,
+            energy=energy,
+            dsos=dsos,
+            taxes=TaxOverlay(
+                federal_excise=federal_excise,
+                energy_contribution=energy_contribution,
+                flanders_renewables=flanders_renewables,
+                wallonia_renewables=wallonia_renewables,
+                region_connection_fee=connection_fee,
+                energy_fund_eur_per_month=energy_fund,
+                vat_rate=0.0,
+            ),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=parse_valid_until(text),
+            injection=injection,
+            **_extract_promo(text),  # type: ignore[arg-type]
         ),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=parse_valid_until(text),
-        injection=injection,
-        **_extract_promo(text),  # type: ignore[arg-type]
+        printed_vat_rate(text, *_VAT_PATTERNS),
     )
 
 

@@ -82,6 +82,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     is_transient_fetch_error,
+    printed_vat_rate,
 )
 from ._parse import (
     SIGN_CHARS,
@@ -101,6 +102,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    with_vat_basis,
 )
 from ._rates import (
     Contract,
@@ -342,24 +344,33 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 # ---- snapshot parser ---------------------------------------------------------
 
 
+# "De tarieven (incl. 6% btw, tenzij anders vermeld)".
+_VAT_RE = re.compile(r"incl\.?\s*(\d+)\s*%\s*btw", re.IGNORECASE)
+
+
 def parse_snapshot(
     text: str,
     source_url: str,
     contract_id: str,
     publication_label: str = "",
 ) -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier="frank",
-        contract=contract_id,
-        energy=_extract_dynamic(text),
-        dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
-        source_url=source_url,
-        publication_label=publication_label,
-        valid_until=_valid_until(text),
-        injection=_extract_injection(text),
-        welcome_credit_eur=_welcome_credit(text),
-        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    return with_vat_basis(
+        SupplierSnapshot(
+            supplier="frank",
+            contract=contract_id,
+            energy=_extract_dynamic(text),
+            dsos=_extract_dsos(text),
+            taxes=_extract_taxes(text),
+            source_url=source_url,
+            publication_label=publication_label,
+            valid_until=_valid_until(text),
+            injection=_extract_injection(text),
+            welcome_credit_eur=_welcome_credit(text),
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        ),
+        printed_vat_rate(text, _VAT_RE),
+        # Grossed by the multiplier its formula prints, not by this rate.
+        grossed=False,
     )
 
 

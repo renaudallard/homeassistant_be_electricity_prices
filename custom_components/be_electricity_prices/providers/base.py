@@ -55,7 +55,7 @@ belong here.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 import aiohttp
@@ -67,6 +67,7 @@ from ._rates import (
     Contract,
     EnergyRates,
     InjectionRates,
+    vat_basis,
 )
 
 
@@ -255,6 +256,17 @@ class TaxOverlay:
     # ``published_vat_rate or vat_rate`` so a raw (unresolved) card, and a
     # cache written before this field existed, both answer correctly.
     published_vat_rate: float = 0.0
+    # The VAT rate the card states for its own customers, as a fraction: 0.06
+    # on a residential card printing "6% TVA", 0.21 on a professional one.
+    # None where the card states none. What the archive's consensus is built
+    # from (vat_rates.py), and the basis a figure the card does not print is
+    # put onto when the card states its own rate.
+    card_vat_rate: float | None = None
+    # The rate a parser grossed this card's energy formula by because the card
+    # states none (Bolt, energie.be, OCTA+ in some months): the Belgian
+    # residential rate as a fallback, which _resolve_snapshot rescales to the
+    # delivery month's rate. None where nothing was grossed on a guess.
+    assumed_vat_rate: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -446,6 +458,24 @@ SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None
 ArchivedSnapshotFetcher = Callable[
     [aiohttp.ClientSession, str, str, "date"], Awaitable["SupplierSnapshot | None"]
 ]
+
+
+def with_vat_basis(
+    snapshot: SupplierSnapshot,
+    printed: float | None,
+    *,
+    professional: bool = False,
+    grossed: bool | None = None,
+) -> SupplierSnapshot:
+    """``snapshot`` with its card's VAT basis recorded (:func:`vat_basis`):
+    the rate the card states as ``printed``, or None where it states none."""
+    card, assumed = vat_basis(
+        printed, snapshot.energy, professional=professional, grossed=grossed
+    )
+    return replace(
+        snapshot,
+        taxes=replace(snapshot.taxes, card_vat_rate=card, assumed_vat_rate=assumed),
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
