@@ -89,10 +89,9 @@ class BePriceSensorDescription(SensorEntityDescription):
     # January.
     last_reset_fn: Callable[[CoordinatorData], datetime | None] | None = None
     # A None from value_fn reads as unavailable rather than unknown. For the
-    # band sensors, which exist for a constant the card may not print: a
-    # bi-hourly meter on a monthly-indexed card has no constant day rate,
-    # and only one card in the registry prints a feed-in register pair, so
-    # the pair read unknown for good on every other supplier.
+    # band sensors, which exist for a constant the entry may not have: a
+    # monthly-indexed card has one only once the month's mean is known, and
+    # a bi-hourly meter on the Walloon Impact tariff has none at all.
     unavailable_when_none: bool = False
 
 

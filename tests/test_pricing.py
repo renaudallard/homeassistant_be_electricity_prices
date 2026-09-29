@@ -764,6 +764,51 @@ def test_wallonia_midday_offpeak_only_applies_from_2026() -> None:
         assert is_offpeak(datetime(year, 6, 21, 12, 0), "wallonia")
 
 
+def test_a_monthly_leg_has_a_band_rate_once_its_mean_is_known() -> None:
+    """A card priced on the month's index bills one rate per band for the
+    whole month, so the static day and night rates exist once the mean does.
+    They sat unavailable on every such card, and must say what the hourly
+    engine bills at a day hour and a night hour of the same month, ceilings
+    included."""
+    from custom_components.be_electricity_prices.pricing import (
+        StaticBand,
+        energy_eur_per_kwh,
+        static_energy_eur_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    mean = 0.12932
+    pair = SpotMonthlyRates(
+        factor=1.2296,
+        base=0.02226,
+        factor_peak=1.4151,
+        base_peak=0.02226,
+        factor_offpeak=1.0445,
+        base_offpeak=0.02226,
+        ceiling_single=0.40,
+        ceiling_peak=0.20,
+        ceiling_offpeak=0.40,
+    )
+    day = datetime(2026, 3, 5, 10, tzinfo=UTC)
+    night = datetime(2026, 3, 5, 23, tzinfo=UTC)
+    bands: tuple[tuple[StaticBand, datetime], ...] = (("peak", day), ("offpeak", night))
+    for band, when in bands:
+        assert static_energy_eur_per_kwh(pair, band, mean) == pytest.approx(
+            energy_eur_per_kwh(pair, when, mean, meter="bi", region="flanders")
+        )
+    # The day formula runs over its cap and is held at it, as billed.
+    assert static_energy_eur_per_kwh(pair, "peak", mean) == pytest.approx(0.20)
+    mono = SpotMonthlyRates(factor=1.2296, base=0.02226)
+    assert static_energy_eur_per_kwh(mono, "offpeak", mean) == pytest.approx(
+        1.2296 * mean + 0.02226
+    )
+    # Without the mean there is no rate, which is what the year-to-date walk
+    # reads to take such a month through its own path.
+    assert static_energy_eur_per_kwh(pair, "peak") is None
+
+
 def test_a_half_published_band_pair_is_not_a_split() -> None:
     """A card publishing a peak rate but no off-peak one is malformed, not
     mono-only, and the two costing walks used to read it differently.

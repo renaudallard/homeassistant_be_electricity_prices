@@ -80,10 +80,10 @@ def test_the_feed_in_pair_follows_the_engine_onto_a_digital_meter() -> None:
 
 
 def test_a_band_with_no_constant_reads_unavailable_not_unknown() -> None:
-    """A bi-hourly meter on a monthly-indexed card has no constant day rate,
-    and with no feed-in credit resolved either there is nothing for the
-    feed-in pair to show. Unknown for good looks like a broken sensor; a
-    figure the card does not give is unavailable."""
+    """With no band rate resolved, a monthly-indexed card before its month's
+    mean is known for one, and no feed-in credit either, there is nothing for
+    the band sensors to show. Unknown looks like a broken sensor; a figure
+    the entry does not have is unavailable."""
     from unittest.mock import MagicMock
 
     from custom_components.be_electricity_prices.sensor import (

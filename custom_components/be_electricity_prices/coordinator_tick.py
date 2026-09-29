@@ -924,13 +924,18 @@ class _TickMixin:
         # Compute static peak/offpeak breakdowns for the Energy Dashboard.
         # These are the constant all-in rates for day and night, independent
         # of the current time. None for dynamic/TOU contracts or impact tariff.
+        # A monthly leg is constant for the month, so it takes the mean its
+        # price table was built on; without it every card priced on the
+        # month's index left both sensors unavailable.
         dso_key = self.entry.data.get(CONF_DSO, "")
         region = self.entry.data.get(CONF_REGION, "")
         dso_mode = self.entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
         try:
-            static_peak = static_breakdown(priced, dso_key, region, "peak", dso_mode)
+            static_peak = static_breakdown(
+                priced, dso_key, region, "peak", dso_mode, energy_mean
+            )
             static_offpeak = static_breakdown(
-                priced, dso_key, region, "offpeak", dso_mode
+                priced, dso_key, region, "offpeak", dso_mode, energy_mean
             )
         except KeyError:
             # DSO not in snapshot, which happens for custom entries or incomplete

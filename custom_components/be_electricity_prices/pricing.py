@@ -493,7 +493,9 @@ def energy_eur_per_kwh(
 StaticBand = Literal["single", "peak", "offpeak"]
 
 
-def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | None:
+def static_energy_eur_per_kwh(
+    energy: EnergyRates, band: StaticBand, month_mean: float | None = None
+) -> float | None:
     """Stable (no time-of-day) energy rate for a given band.
 
     Used by ``static_breakdown`` to compute the all-in rate plugged into
@@ -519,7 +521,14 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     kept billing a rate the contract caps, so the running bill would climb
     past the plafond in exactly the spike the plafond exists for, while the
     price sensor beside it sat at the cap.
+
+    A monthly leg is as stable as a variable card's rate, one figure for the
+    whole month, but only once that month's mean is known: ``month_mean``
+    passes it, and without it the leg has no rate here, which is what the
+    year-to-date walk relies on to take such a month through its own path.
     """
+    if isinstance(energy, SpotMonthlyRates):
+        return _static_monthly(energy, band, month_mean)
     if isinstance(energy, FixedRates):
         if band == "single" or energy.peak is None or energy.offpeak is None:
             return energy.single
@@ -534,7 +543,37 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     return None
 
 
-def _static_ceiling(energy: VariableRates, band: StaticBand) -> float | None:
+def _static_monthly(
+    energy: SpotMonthlyRates, band: StaticBand, month_mean: float | None
+) -> float | None:
+    """The monthly leg's rate for one band at ``month_mean``.
+
+    The band is chosen the way ``energy_eur_per_kwh`` bills it: the per-meter
+    pair when the card prints both halves, the mono pair otherwise. A
+    time-of-use or Tarif Impact schedule has no day and night band to report.
+    """
+    if month_mean is None:
+        return None
+    if energy.factor_transition is not None or energy.factor_pic is not None:
+        return None
+    factor, base = energy.factor, energy.base
+    if (
+        band != "single"
+        and energy.factor_peak is not None
+        and energy.factor_offpeak is not None
+    ):
+        if band == "offpeak":
+            factor, base = energy.factor_offpeak, energy.base_offpeak or 0.0
+        else:
+            factor, base = energy.factor_peak, energy.base_peak or 0.0
+    rate = factor * month_mean + base
+    ceiling = _static_ceiling(energy, band)
+    return rate if ceiling is None else min(rate, ceiling)
+
+
+def _static_ceiling(
+    energy: VariableRates | SpotMonthlyRates, band: StaticBand
+) -> float | None:
     """The energy ceiling for one band, or ``None`` when the card caps nothing.
 
     Routed on its OWN half-pair rule rather than the rate's, which is what the
@@ -634,6 +673,7 @@ def static_breakdown(
     region: str,
     band: StaticBand,
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    month_mean: float | None = None,
 ) -> PriceBreakdown | None:
     """All-in EUR/kWh for the static rate sheet of one band.
 
@@ -646,7 +686,7 @@ def static_breakdown(
     VAT applies uniformly to each component, mirroring
     :func:`compute_breakdown`.
     """
-    energy = static_energy_eur_per_kwh(snapshot.energy, band)
+    energy = static_energy_eur_per_kwh(snapshot.energy, band, month_mean)
     if energy is None:
         return None
     overlay = _require_overlay(snapshot, dso_key)
