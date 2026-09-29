@@ -1589,7 +1589,9 @@ and the last month they agreed on stands.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches both off per entry: the integration then never
 contacts GitHub, those months are priced on the current card, a rate a
-card does not state is taken as 6%, and a card published as page images
+card does not state is the last one read while the box was on, or else 6%
+for a household and 21% on a professional contract, and a card published as
+page images
 (Ecofix's) has no prices, since the archive's reading of it is the only one.
 A row
 holds what the extractor of that day parsed, and the day after a parser
