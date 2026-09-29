@@ -721,6 +721,9 @@
     "not_enough_hours": {
       "message": "Nur {available} Preis-Slots sind im gewuenschten Fenster verfuegbar; benoetigt: {needed}."
     },
+    "not_enough_contiguous_hours": {
+      "message": "Das gewuenschte Fenster hat hoechstens {available} aufeinanderfolgende Preis-Slots; benoetigt: {needed}."
+    },
     "duration_too_small": {
       "message": "duration_hours muss mindestens 1 sein."
     },

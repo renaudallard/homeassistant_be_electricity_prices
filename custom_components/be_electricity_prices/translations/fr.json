@@ -721,6 +721,9 @@
     "not_enough_hours": {
       "message": "Seulement {available} creneaux sont disponibles dans la fenetre demandee; il en faut {needed}."
     },
+    "not_enough_contiguous_hours": {
+      "message": "La fenetre demandee compte au plus {available} creneaux consecutifs; il en faut {needed}."
+    },
     "duration_too_small": {
       "message": "duration_hours doit valoir au moins 1."
     },

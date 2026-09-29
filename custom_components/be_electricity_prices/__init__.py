@@ -719,7 +719,7 @@ def _find_window(
             f"only {longest} contiguous slots available in the requested "
             f"window; need {duration_slots}",
             translation_domain=DOMAIN,
-            translation_key="not_enough_hours",
+            translation_key="not_enough_contiguous_hours",
             translation_placeholders={
                 "available": str(longest),
                 "needed": str(duration_slots),

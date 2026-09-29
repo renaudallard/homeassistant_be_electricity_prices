@@ -93,8 +93,12 @@ def test_find_window_raises_when_no_contiguous_run() -> None:
     table = _hourly([0.10, 0.10, 0.10, 0.10, 0.10], start)
     for h in (1, 3):
         del table[start + timedelta(hours=h)]
-    with pytest.raises(ServiceValidationError, match="contiguous"):
+    with pytest.raises(ServiceValidationError, match="contiguous") as err:
         _find_window(table, 2, start, None, minimize=True)
+    # Its own message: {available} is the longest run here, not the number of
+    # slots in the window, which the plain one counts.
+    assert err.value.translation_key == "not_enough_contiguous_hours"
+    assert err.value.translation_placeholders == {"available": "1", "needed": "2"}
 
 
 def test_find_window_respects_earliest_start() -> None:

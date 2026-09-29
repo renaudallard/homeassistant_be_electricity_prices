@@ -721,6 +721,9 @@
     "not_enough_hours": {
       "message": "Slechts {available} prijsslots beschikbaar in het gevraagde venster; {needed} nodig."
     },
+    "not_enough_contiguous_hours": {
+      "message": "Het gevraagde venster heeft hoogstens {available} opeenvolgende prijsslots; {needed} nodig."
+    },
     "duration_too_small": {
       "message": "duration_hours moet minstens 1 zijn."
     },

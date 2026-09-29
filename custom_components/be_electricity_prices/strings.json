@@ -721,6 +721,9 @@
     "not_enough_hours": {
       "message": "Only {available} price slots are available in the requested window; need {needed}."
     },
+    "not_enough_contiguous_hours": {
+      "message": "The requested window has at most {available} consecutive price slots; need {needed}."
+    },
     "duration_too_small": {
       "message": "duration_hours must be at least 1."
     },
