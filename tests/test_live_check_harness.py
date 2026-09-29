@@ -807,6 +807,25 @@ def test_the_aspiravi_catalog_baseline_is_its_registered_contracts() -> None:
     assert set(aspiravi._PRODUCT_CODES.values()) <= baseline
 
 
+def test_every_supplier_that_discovers_has_a_catalog_baseline() -> None:
+    """A discover() with no baseline reports every product found as new, so a
+    supplier added with one and no baseline files an issue for its own
+    registered products the first night (issue #110). Caught here instead."""
+    import importlib
+
+    discovering = {
+        name
+        for name in lc._SUPPLIERS
+        if hasattr(
+            importlib.import_module(
+                f"custom_components.be_electricity_prices.providers.{name}"
+            ),
+            "discover",
+        )
+    }
+    assert discovering - set(lc._CATALOG_BASELINES) == set()
+
+
 def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
     """A dead network is not Mega failing to publish, and the extractor rows
     already report a real break."""

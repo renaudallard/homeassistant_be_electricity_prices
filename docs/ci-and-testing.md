@@ -736,7 +736,10 @@ rerun.
 `_CATALOG_BASELINES` (`scripts/live_check.py`), one lambda per supplier deriving the
 registered identifier set from the provider module, so the baseline cannot drift away from
 the code. The rule is that it must cover exactly what that supplier's discovery surface
-enumerates, no more.
+enumerates, no more. A supplier with a `discover()` and no entry fails its own row
+(`<supplier>/catalog: has a baseline`) rather than reporting every product it found as new,
+which is how Aspiravi's one registered product was filed as a new one (issue #110), and
+`test_every_supplier_that_discovers_has_a_catalog_baseline` catches the gap before release.
 
 Mega and Bolt advertise only their **residential** cards -- Bolt's `discover` filters on the
 `res` segment and Mega's listing carries only `-B2C-` hrefs -- while a professional edition

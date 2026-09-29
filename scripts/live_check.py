@@ -1925,7 +1925,18 @@ async def _check_catalogs(
             )
             continue
         baseline = _CATALOG_BASELINES.get(name)
-        new_ids = sorted(discovered - (baseline(mod) if baseline else set()))
+        if baseline is None:
+            # Without a baseline every product found would read as new, which
+            # is how Aspiravi's one registered product was filed as a new one
+            # (issue #110). Say what is missing instead.
+            _record(
+                f"{name}/catalog: has a baseline",
+                False,
+                "discover() is implemented but _CATALOG_BASELINES has no entry",
+                kind="catalog",
+            )
+            continue
+        new_ids = sorted(discovered - baseline(mod))
         _record(
             f"{name}/catalog: no new products at supplier",
             not new_ids,
