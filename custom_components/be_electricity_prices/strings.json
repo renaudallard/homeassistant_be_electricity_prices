@@ -181,14 +181,14 @@
       },
       "custom_dso": {
         "title": "Grid (DSO) tariffs",
-        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0.",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0. The yearly box takes the data-management fee (databeheer) in Flanders, the fixed term (terme fixe) in Wallonia, which the Impact tariff does not bill, and the metering and fixed-term charges together in Brussels.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",
           "custom_dso_distribution_offpeak": "Distribution off-peak (EUR/kWh)",
           "custom_dso_distribution_exclusive_night": "Distribution exclusive-night (EUR/kWh)",
           "custom_dso_transport": "Transport (EUR/kWh)",
-          "custom_dso_data_management_per_year": "Data-management fee (EUR/year)",
+          "custom_dso_data_management_per_year": "Data-management fee or fixed term (EUR/year)",
           "custom_dso_capacity_eur_per_kw_year": "Capacity tariff (EUR/kW/year)",
           "custom_dso_prosumer_eur_per_kva_year": "Prosumer tariff (EUR/kVA/year)",
           "custom_dso_distribution_pic": "Distribution PIC band (EUR/kWh)",
