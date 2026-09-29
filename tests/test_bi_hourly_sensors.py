@@ -80,10 +80,10 @@ def test_the_feed_in_pair_follows_the_engine_onto_a_digital_meter() -> None:
 
 
 def test_a_band_with_no_constant_reads_unavailable_not_unknown() -> None:
-    """Only one card in the registry prints a feed-in register pair, and a
-    bi-hourly meter on a monthly-indexed card has no constant day rate. The
-    sensors read unknown for good on those, which looks like a broken
-    sensor; a constant the card does not print is unavailable."""
+    """A bi-hourly meter on a monthly-indexed card has no constant day rate,
+    and with no feed-in credit resolved either there is nothing for the
+    feed-in pair to show. Unknown for good looks like a broken sensor; a
+    figure the card does not give is unavailable."""
     from unittest.mock import MagicMock
 
     from custom_components.be_electricity_prices.sensor import (
@@ -105,3 +105,43 @@ def test_a_band_with_no_constant_reads_unavailable_not_unknown() -> None:
         coordinator, next(d for d in SENSORS if d.key == "current_price")
     )
     assert entity.available is True
+
+
+def test_the_feed_in_pair_shows_the_one_credit_a_card_gives_both_registers() -> None:
+    """Only Trevion Vast prints a feed-in rate per register. Every other card
+    credits both registers on its one formula or rate, so both sensors show
+    the credit of the current slot, the one injection_price shows: it is what
+    the register counting now is paid, and the Energy dashboard prices each
+    return register off its own sensor. On Frank they sat unavailable."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.sensor import (
+        BI_HOURLY_INJECTION_SENSORS,
+        INJECTION_SENSORS,
+        BePriceSensor,
+    )
+
+    coordinator = MagicMock()
+    coordinator.entry = make_entry(
+        meter="dynamic", solar_regime="injection", solar_kva=5.0
+    )
+    coordinator.last_update_success = True
+
+    coordinator.data = CoordinatorData(injection_price_eur_per_kwh=0.07052)
+    (injection,) = INJECTION_SENSORS
+    assert BePriceSensor(coordinator, injection).native_value == 0.07052
+    for description in BI_HOURLY_INJECTION_SENSORS:
+        entity = BePriceSensor(coordinator, description)
+        assert entity.available is True, description.key
+        assert entity.native_value == 0.07052, description.key
+
+    # A card that prints the pair keeps its own constants.
+    coordinator.data = CoordinatorData(
+        injection_price_eur_per_kwh=0.057615,
+        static_injection_peak=0.063329,
+        static_injection_offpeak=0.04333,
+    )
+    peak, offpeak = (
+        BePriceSensor(coordinator, d).native_value for d in BI_HOURLY_INJECTION_SENSORS
+    )
+    assert (peak, offpeak) == (0.063329, 0.04333)

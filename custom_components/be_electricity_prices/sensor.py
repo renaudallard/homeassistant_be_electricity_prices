@@ -450,19 +450,29 @@ INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh("injection_price", _current_injection),
 )
 
-# Static injection (feed-in) rates for bi-hourly meter configurations.
-# These are the constant day and night feed-in rates for contracts that
-# print separate injection rates per register (e.g. Trevion Vast).
-# None for contracts with a single injection rate or spot-indexed formulas.
+# The feed-in rate of each register of a two-register meter. A card that
+# prints one per register (Trevion Vast) gives each its own constant. Every
+# other card credits both registers on the one formula or rate, so both carry
+# the credit of the current slot, the injection_price one: that is what the
+# register counting now is paid, and the Energy dashboard prices each return
+# register off its own sensor. They sat unavailable on those cards before.
 BI_HOURLY_INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh(
         "injection_price_peak",
-        lambda d: d.static_injection_peak,
+        lambda d: (
+            _current_injection(d)
+            if d.static_injection_peak is None
+            else d.static_injection_peak
+        ),
         unavailable_when_none=True,
     ),
     _eur_per_kwh(
         "injection_price_offpeak",
-        lambda d: d.static_injection_offpeak,
+        lambda d: (
+            _current_injection(d)
+            if d.static_injection_offpeak is None
+            else d.static_injection_offpeak
+        ),
         unavailable_when_none=True,
     ),
 )
