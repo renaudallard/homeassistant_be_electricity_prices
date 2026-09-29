@@ -208,7 +208,8 @@ are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of
 0.015. An injection formula works the same way and keeps the sign of its base:
 (0.07 × Belpex − 2) c€/kWh is a factor of 0.7 and a base of −0.02. A fixed
-contract takes a flat feed-in rate only. This trades away the whole point of the live-extractor model: there is no
+contract takes a flat feed-in rate only. Every per-kWh box refuses a figure no
+real one reaches, which is how a figure typed in c€/kWh shows up. This trades away the whole point of the live-extractor model: there is no
 card to refresh and no drift check, so the numbers are a static snapshot you must
 keep current yourself, and a monthly-average rate is a running estimate until the
 month closes. For injection, the monthly-average mode offers an optional

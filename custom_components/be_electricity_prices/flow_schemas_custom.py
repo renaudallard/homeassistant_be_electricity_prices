@@ -126,7 +126,7 @@ def _add_custom_num(
         _add_manual_num(fields, defaults, key, negative=negative)
         return
     fields[vol.Optional(key, default=float(defaults.get(key, default)))] = _custom_num(
-        negative=negative
+        negative=negative, key=key
     )
 
 

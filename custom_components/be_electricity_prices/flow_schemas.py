@@ -86,6 +86,18 @@ from .const import (
     CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
+    CONF_CUSTOM_DSO_TRANSPORT,
+    CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_SINGLE,
+    CONF_CUSTOM_INJECTION_BASE,
+    CONF_CUSTOM_INJECTION_CURRENT,
+    CONF_CUSTOM_INJECTION_FACTOR,
+    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
+    CONF_CUSTOM_TAX_FEDERAL_EXCISE,
+    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_PEAK,
@@ -483,7 +495,7 @@ def _add_manual_num(
     ``default`` would re-inject the value on a blank submit.
     """
     stored = defaults.get(key)
-    selector = _custom_num(negative=negative)
+    selector = _custom_num(negative=negative, key=key)
     if stored is not None:
         fields[vol.Optional(key, description={"suggested_value": float(stored)})] = (
             selector
@@ -1017,17 +1029,58 @@ def _compare_solar_schema(defaults: dict[str, Any], *, ask_volumes: bool) -> vol
     return vol.Schema(fields)
 
 
-def _custom_num(*, negative: bool = False) -> NumberSelector:
+# The largest a hand-entered per-kWh figure can be, in EUR/kWh, or for a
+# formula's factor the multiplier itself. Each sits well above any Belgian
+# figure, crisis prices included, and well below the same figure typed in
+# c€/kWh, which is what the box would otherwise take and bill a hundred times
+# over. The small levies matter most, because typed in cents they still look
+# like a plausible price: a Walloon connection fee of 0,075 c€/kWh typed as
+# 0.075 added 260 EUR a year at 3500 kWh.
+_PER_KWH_BOUND: dict[str, float] = {
+    CONF_CUSTOM_ENERGY_SINGLE: 2.0,
+    CONF_CUSTOM_ENERGY_PEAK: 2.0,
+    CONF_CUSTOM_ENERGY_OFFPEAK: 2.0,
+    CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 2.0,
+    CONF_MANUAL_ENERGY_SINGLE: 2.0,
+    CONF_MANUAL_ENERGY_PEAK: 2.0,
+    CONF_MANUAL_ENERGY_OFFPEAK: 2.0,
+    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT: 2.0,
+    CONF_CUSTOM_ENERGY_FACTOR: 10.0,
+    CONF_CUSTOM_INJECTION_FACTOR: 10.0,
+    CONF_MANUAL_ENERGY_FACTOR: 10.0,
+    CONF_CUSTOM_ENERGY_BASE: 0.5,
+    CONF_CUSTOM_INJECTION_BASE: 0.5,
+    CONF_MANUAL_ENERGY_BASE: 0.5,
+    CONF_CUSTOM_INJECTION_CURRENT: 1.0,
+    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM: 0.5,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO: 0.5,
+    CONF_CUSTOM_DSO_TRANSPORT: 0.1,
+    CONF_CUSTOM_TAX_FEDERAL_EXCISE: 0.1,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES: 0.1,
+    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION: 0.01,
+    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE: 0.01,
+}
+
+
+def _custom_num(*, negative: bool = False, key: str = "") -> NumberSelector:
     """Number selector for a hand-entered EUR/kWh rate or coefficient.
 
     ``negative=True`` for values a Belgian formula can legitimately drive
     below zero (an injection factor/base, a spot multiplier/offset); the
-    rest are floored at 0.
+    rest are floored at 0. ``key`` bounds the figure by ``_PER_KWH_BOUND``,
+    on both sides when it may be negative.
     """
-    if negative:
-        return NumberSelector(
-            NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
-        )
-    return NumberSelector(
-        NumberSelectorConfig(min=0.0, step="any", mode=NumberSelectorMode.BOX)
-    )
+    bound = _PER_KWH_BOUND.get(key)
+    config = NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
+    if not negative:
+        config["min"] = 0.0
+    elif bound is not None:
+        config["min"] = -bound
+    if bound is not None:
+        config["max"] = bound
+    return NumberSelector(config)

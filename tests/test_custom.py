@@ -1078,3 +1078,31 @@ def test_a_fixed_contract_is_not_offered_an_injection_formula() -> None:
     assert not formula & keys(const.CUSTOM_CONTRACT_FIXED)
     assert formula <= keys(const.CUSTOM_CONTRACT_DYNAMIC)
     assert formula <= keys(const.CUSTOM_CONTRACT_MONTHLY)
+
+
+def test_a_per_kwh_figure_typed_in_cents_is_refused() -> None:
+    """A hand-entered per-kWh box took any figure, so one typed in c€/kWh was
+    billed a hundred times over; the small levies still look plausible that
+    way. Each box refuses what no real figure reaches and keeps real ones."""
+    import voluptuous as vol
+
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.flow_schemas import _custom_num
+
+    fee = _custom_num(key=const.CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
+    assert fee(0.00075) == 0.00075
+    with pytest.raises(vol.Invalid):
+        fee(0.075)
+    base = _custom_num(negative=True, key=const.CONF_CUSTOM_ENERGY_BASE)
+    assert base(-0.02) == -0.02
+    for cents in (1.5, -1.5):
+        with pytest.raises(vol.Invalid):
+            base(cents)
+    rate = _custom_num(key=const.CONF_MANUAL_ENERGY_SINGLE)
+    assert rate(0.7) == 0.7
+    with pytest.raises(vol.Invalid):
+        rate(18.021)
+    # A yearly figure is not a per-kWh one and keeps no bound.
+    assert (
+        _custom_num(key=const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)(400.0) == 400.0
+    )
