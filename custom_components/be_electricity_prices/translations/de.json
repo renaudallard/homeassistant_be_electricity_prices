@@ -656,7 +656,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in ganzen Stunden. Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
+          "description": "Fensterlaenge in Stunden, auf die naechste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -678,7 +678,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in ganzen Stunden. Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
+          "description": "Fensterlaenge in Stunden, auf die naechste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",

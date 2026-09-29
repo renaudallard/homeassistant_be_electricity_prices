@@ -656,7 +656,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures entieres. Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
+          "description": "Longueur de la plage en heures, arrondie a l'heure entiere la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
         },
         "entry_id": {
           "name": "ID de l'entree",
@@ -678,7 +678,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures entieres. Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
+          "description": "Longueur de la plage en heures, arrondie a l'heure entiere la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
         },
         "entry_id": {
           "name": "ID de l'entree",

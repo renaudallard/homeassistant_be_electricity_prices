@@ -1024,7 +1024,7 @@ upcoming price table. Both services share the same fields:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `duration_hours` | _required_ | Window length in whole hours (1-48). On a 15-minute contract (Cociter / EBEM / Ecofix / Ecopower Dynamische Burgerstroom / energie.be / Energy Knights Agilior Online and Agilior Online Green / EnergyVision / Engie / OCTA+ / Trevion, Bolt or Frank Energie with the quarter-hour box ticked, and the expert custom supplier with its *Bill per quarter-hour* box ticked) the window aligns to quarter-hour boundaries. |
+| `duration_hours` | _required_ | Window length in hours (1-48), rounded to the nearest whole hour, a half rounding up. On a 15-minute contract (Cociter / EBEM / Ecofix / Ecopower Dynamische Burgerstroom / energie.be / Energy Knights Agilior Online and Agilior Online Green / EnergyVision / Engie / OCTA+ / Trevion, Bolt or Frank Energie with the quarter-hour box ticked, and the expert custom supplier with its *Bill per quarter-hour* box ticked) the window aligns to quarter-hour boundaries. |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `earliest_start` | now | Don't consider windows starting before this time. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |
