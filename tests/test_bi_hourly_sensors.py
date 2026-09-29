@@ -158,3 +158,18 @@ def test_the_feed_in_pair_shows_the_one_credit_a_card_gives_both_registers() -> 
         BePriceSensor(coordinator, d).native_value for d in BI_HOURLY_INJECTION_SENSORS
     )
     assert (peak, offpeak) == (0.063329, 0.04333)
+
+
+def test_the_prosumer_cost_is_only_created_where_it_is_billed() -> None:
+    """Wallonia alone bills the prosumer tariff. An entry saved with the
+    compensation regime elsewhere, before the regime was restricted to
+    Wallonia, read 0 for good."""
+
+    def entry(region: str, dso: str) -> Any:
+        return make_entry(
+            region=region, dso=dso, solar_regime="compensation", solar_kva=5.0
+        )
+
+    assert "prosumer_cost" in _added(entry("wallonia", "ores"))
+    for region, dso in (("flanders", "fluvius_imewo"), ("brussels", "sibelga")):
+        assert "prosumer_cost" not in _added(entry(region, dso))

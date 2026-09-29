@@ -61,6 +61,7 @@ from .const import (
     METER_BI,
     METER_DYNAMIC,
     REGION_FLANDERS,
+    REGION_WALLONIA,
     RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
@@ -692,7 +693,14 @@ async def async_setup_entry(
     except (TypeError, ValueError):
         solar_kva = 0.0
     regime = entry.data.get(CONF_SOLAR_REGIME)
-    if solar_kva > 0.0 and regime == SOLAR_REGIME_COMPENSATION:
+    # Wallonia alone bills the prosumer tariff (fees._walloon_compensation_kva),
+    # and an entry saved with compensation elsewhere before the regime was
+    # restricted to Wallonia read 0 for good.
+    if (
+        solar_kva > 0.0
+        and regime == SOLAR_REGIME_COMPENSATION
+        and entry.data.get(CONF_REGION) == REGION_WALLONIA
+    ):
         descriptions.extend(PROSUMER_SENSORS)
     if regime in (SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION):
         descriptions.extend((_PROJECTED_INJECTION, _ROLLING_INJECTION))
