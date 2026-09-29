@@ -561,9 +561,11 @@ EXTRACTOR = SupplierExtractor(
             label=_CONTRACT_LABEL,
             kind="variable",
             regions=_DATS24_REGIONS,
-            # Injection indexes on the monthly BE_spotSPP. Flanders only; the
-            # Walloon card pays no feed-in, so the key step never comes up
-            # there because the injection regime is not on offer.
+            # Injection indexes on the monthly BE_spotSPP, in Flanders only:
+            # the card reserves its feed-in tariff to Flemish customers, so a
+            # Walloon entry on the injection regime is credited nothing. The
+            # flow still offers that regime there, and the key step with it,
+            # which then has no credit to index.
             spot_indexed_injection=True,
         ),
     ),
