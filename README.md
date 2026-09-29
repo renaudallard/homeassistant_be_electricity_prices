@@ -261,9 +261,7 @@ billed, as are the regulated figures published without VAT (the flat excise, the
 Flemish network ceiling and the Brussels power term). That month's rate is the one
 the cards themselves agree on, read from the project's card archive (see
 [The card archive](#the-card-archive)): if the law changes the rate, the cards
-change with it, and so does every price they leave without one. The project's
-daily check also watches the decree that sets the rates and flags any new act
-amending it for review. A contract that locks its
+change with it, and so does every price they leave without one. A contract that locks its
 signing-month formula is billed at the VAT of the month delivered, not the month
 it was signed in. Professional contracts use the standard 21%.
 

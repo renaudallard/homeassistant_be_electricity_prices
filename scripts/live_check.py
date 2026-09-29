@@ -42,7 +42,6 @@ import argparse
 import asyncio
 import importlib
 import importlib.util as iu
-import html
 import json
 import re
 import sys
@@ -2262,98 +2261,6 @@ async def _check_mega_professional(
         f"which carries last month's index on the variable and dynamic "
         f"contracts: {', '.join(sorted(missing)[:6])}"
         + (" ..." if len(missing) > 6 else ""),
-    )
-
-
-# Royal Decree n° 20 sets the VAT rates, electricity's among them (NUMAC
-# 1970072012). Justel lists every act that amended it; the text of its annex
-# is not published there, so an amendment can only be pointed at, never read
-# as a rate. The rates themselves come from the cards (vat_rates.py).
-_JUSTEL_VAT_URL = (
-    "https://www.ejustice.just.fgov.be/eli/arrete/1970/07/20/1970072012/justel"
-)
-# The publication date of the newest amending act read and found to leave the
-# residential electricity rate where the cards say it is. Move it forward
-# after reading the act the row below names.
-_VAT_LAW_REVIEWED = date(2026, 2, 23)
-_JUSTEL_ACT_RE = re.compile(
-    r"([^\n]*?\bdu\s+\d{2}-\d{2}-\d{4}\s+publi[ée]\s+le\s+(\d{2})-(\d{2})-(\d{4}))"
-    r"\s*\nArticle modifi[ée]\s*:\s*([^\n]+)"
-)
-
-
-def _justel_text(page: bytes) -> str:
-    """The Justel page as text, one line per HTML element.
-
-    Decoded in the charset the page declares: read as UTF-8 its accents are
-    lost, and with them every "publié" the act pattern needs.
-    """
-    declared = re.search(rb"charset=([A-Za-z0-9_-]+)", page)
-    text = page.decode(declared.group(1).decode() if declared else "latin-1", "replace")
-    text = html.unescape(re.sub(r"<[^>]+>", "\n", text))
-    return re.sub(r"\s*\n\s*", "\n", text)
-
-
-def _vat_law_acts(page: bytes) -> list[tuple[date, str, str]]:
-    """``(published, act, articles)`` for every act the Justel page lists as
-    amending the decree."""
-    text = _justel_text(page)
-    return [
-        (
-            date(int(y), int(m), int(d)),
-            re.sub(r"\s+", " ", act).strip(),
-            articles.strip(),
-        )
-        for act, d, m, y, articles in _JUSTEL_ACT_RE.findall(text)
-    ]
-
-
-async def _check_vat_law(session: aiohttp.ClientSession) -> None:
-    """Report an act amending the VAT decree after the last one reviewed.
-
-    A warning to read the act, never a rate: the annex is not on Justel, and a
-    change of the residential rate reaches the bill through the cards. Filed
-    under the tax kind with the other things a maintainer has to look at. A
-    page that answers but lists no act is filed too, since that is the watch
-    going blind; a page that does not answer is left to the next run.
-    """
-    label = "_federal: VAT decree (Royal Decree n° 20) not amended since review"
-    try:
-        async with session.get(
-            _JUSTEL_VAT_URL, timeout=aiohttp.ClientTimeout(total=30)
-        ) as resp:
-            if resp.status != 200:
-                return
-            ctype = resp.headers.get("Content-Type", "")
-            page = await resp.read()
-    except Exception:  # noqa: BLE001 - an unreachable page is the next run's
-        # Any failure to fetch it, not only aiohttp's: a transport error of
-        # another type escaped as a crashed phase, which files an extractor
-        # issue for a government page that merely did not answer.
-        return
-    acts = _vat_law_acts(page)
-    if not acts:
-        # Say what answered instead. The runners were served a page without
-        # the list while it read fine off-runner, and the row alone could not
-        # tell a block page from a new layout (issue #106).
-        head = re.sub(r"\s+", " ", _justel_text(page)).strip()[:200]
-        detail = (
-            f"no amending act read on {_JUSTEL_VAT_URL}: {len(page)} bytes "
-            f"of {ctype or 'unknown type'}, starting {head!r}"
-        )
-        print(f"warning: {detail}", file=sys.stderr)
-        _record(label, False, detail, kind="tax")
-        return
-    newer = sorted(a for a in acts if a[0] > _VAT_LAW_REVIEWED)
-    if not newer:
-        _record(label, True)
-        return
-    listed = "; ".join(f"{act} (article {articles})" for _day, act, articles in newer)
-    _record(
-        label,
-        False,
-        f"{listed}. Read it at {_JUSTEL_VAT_URL}, then move _VAT_LAW_REVIEWED",
-        kind="tax",
     )
 
 
@@ -4882,14 +4789,6 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:  # noqa: BLE001
                 _record(
                     "_federal: excise window check crashed",
-                    False,
-                    f"{type(err).__name__}: {err}",
-                )
-            try:
-                await _check_vat_law(session)
-            except Exception as err:  # noqa: BLE001
-                _record(
-                    "_federal: VAT decree check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )

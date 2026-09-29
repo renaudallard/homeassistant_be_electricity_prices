@@ -1672,7 +1672,6 @@ def _drive_run(
     phases: dict[str, Callable[..., Any]] = {
         "_check_catalogs": _async_no_op,
         "_check_excise_window": _sync_no_op,
-        "_check_vat_law": _async_no_op,
         "_check_vreg_ceiling_window": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
@@ -3698,89 +3697,4 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
     # Two against two is no consensus to measure a card against.
     _vat_row(tmp_path, "c", "c_fix", "2026-11", 0.06)
     lc._check_vat_consensus(tmp_path)
-    assert lc.CHECKS == []
-
-
-class _Page:
-    def __init__(self, status: int, body: bytes) -> None:
-        self.status = status
-        self.headers = {"Content-Type": "text/html; charset=ISO-8859-1"}
-        self._body = body
-
-    async def __aenter__(self) -> "_Page":
-        return self
-
-    async def __aexit__(self, *_exc: object) -> None:
-        return None
-
-    async def read(self) -> bytes:
-        return self._body
-
-
-class _Session:
-    def __init__(self, page: _Page) -> None:
-        self._page = page
-
-    def get(self, *_args: Any, **_kwargs: Any) -> _Page:
-        return self._page
-
-
-_JUSTEL = (Path(__file__).parent / "fixtures" / "justel_ar20.html").read_bytes()
-
-
-def test_the_vat_decree_amendments_are_read_off_justel() -> None:
-    """Decoded in the page's own charset, every "publié" survives: read as
-    UTF-8 the list came back empty."""
-    acts = lc._vat_law_acts(_JUSTEL)
-    assert len(acts) == 59
-    assert max(acts) == (
-        date(2026, 2, 23),
-        "Arrêté royal du 14-02-2026 publié le 23-02-2026",
-        "N",
-    )
-    # The page declares iso-8859-1; read as UTF-8 no "publié" is left.
-    assert b'charset="iso-8859-1"' in _JUSTEL
-    assert "publié" not in _JUSTEL.decode("utf-8", "replace")
-
-
-def test_an_act_after_the_last_review_is_filed(monkeypatch: pytest.MonkeyPatch) -> None:
-    asyncio.run(lc._check_vat_law(_Session(_Page(200, _JUSTEL))))
-    (row,) = lc.CHECKS
-    assert row.ok
-    lc.CHECKS.clear()
-    monkeypatch.setattr(lc, "_VAT_LAW_REVIEWED", date(2026, 2, 1))
-    asyncio.run(lc._check_vat_law(_Session(_Page(200, _JUSTEL))))
-    (row,) = lc.CHECKS
-    assert not row.ok and row.kind == "tax"
-    assert "Arrêté royal du 14-02-2026 publié le 23-02-2026" in row.detail
-    assert "Loi du 10-02-2026 publié le 20-02-2026" in row.detail
-
-
-def test_a_justel_page_listing_nothing_is_filed_and_one_not_answering_is_not(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    page = b"<html><title>Access denied</title><p>Request\n  blocked</p></html>"
-    asyncio.run(lc._check_vat_law(_Session(_Page(200, page))))
-    (row,) = lc.CHECKS
-    assert not row.ok and "no amending act" in row.detail
-    # What answered instead is on the row and in the job log.
-    assert (
-        f"{len(page)} bytes of text/html; charset=ISO-8859-1, "
-        "starting 'Access denied Request blocked'"
-    ) in row.detail
-    assert row.detail in capsys.readouterr().err
-    lc.CHECKS.clear()
-    asyncio.run(lc._check_vat_law(_Session(_Page(503, b""))))
-    assert lc.CHECKS == []
-
-
-def test_a_justel_request_failing_any_way_is_left_to_the_next_run() -> None:
-    """Not only aiohttp's errors: a RuntimeError from the transport was
-    recorded as a crashed phase and filed as an extractor issue."""
-
-    class _Failing:
-        def get(self, *_args: Any, **_kwargs: Any) -> _Page:
-            raise RuntimeError("socket refused")
-
-    asyncio.run(lc._check_vat_law(_Failing()))  # type: ignore[arg-type]
     assert lc.CHECKS == []
