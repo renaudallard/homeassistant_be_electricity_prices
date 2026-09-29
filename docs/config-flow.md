@@ -487,7 +487,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py` docstring; `const.py`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
-`flow_schemas.py`). Each side (consumption, injection) is resolved independently,
+`flow_schemas.py`) while they report whole: the total stands in for a pair that cannot be billed whole, a dead, frozen or late half or halves reporting different periods (`_total_stands_in`, `energy_meters.py`). Each side (consumption, injection) is resolved independently,
 so the user can mix one side as registers and the other as a total
 (`strings.json`). All three resolvers enforce that precedence:
 `_kwh_sensor_ids` (daily path plus diagnostics), `_hourly_consumption_sensors`

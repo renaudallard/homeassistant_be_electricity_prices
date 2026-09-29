@@ -8690,7 +8690,10 @@ def test_the_meters_step_explains_every_field() -> None:
     # The two facts that were missing and cost a user an evening.
     joined = " ".join(meters["data_description"].values()).lower()
     assert "climb" in joined, "the cumulative requirement is not stated"
-    assert "registers above are empty" in joined, "the precedence is not stated"
+    assert "registers are empty" in joined, "the precedence is not stated"
+    # And that a total also bills in place of a broken pair, which the
+    # register-pair Repairs card says and the help used to deny.
+    assert "in place of a pair" in joined, "the stand-in is not stated"
 
 
 def test_every_sensor_name_exists_in_all_translations() -> None:

@@ -547,7 +547,9 @@ different.
      silently undercount. Without a solar regime the injection meters are
      not read at all, so a half-wired injection pair is let through.
    - When both wirings are filled for the same side the day/night
-     registers win, with the exception above. Missing inputs collapse to
+     registers win while they report whole; the total stands in for a
+     pair with a dead, frozen or late half, or halves reporting different
+     periods. Missing inputs collapse to
      the fees-only floor, so the sensor is unknown only while a recorded
      supplier switch still has an earlier contract to price.
    - **Auto-fill from the Energy dashboard**: if you've already
