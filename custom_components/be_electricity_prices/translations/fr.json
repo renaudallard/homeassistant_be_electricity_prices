@@ -815,7 +815,7 @@
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) tarifie la domiciliation et cette entrée n'a pas été interrogée",
-      "description": "La carte tarifaire de {contract} tarifie différemment un ménage qui paie par domiciliation : sur les Cosy Flex et Smart Fixed de Mega et leurs éditions professionnelles, la ristourne de bienvenue n'est accordée qu'au payeur par domiciliation, et sur les autres cartes elle ajoute un supplément.\n\nCette entrée a été créée avant que la question ne soit posée : aucune réponse n'est enregistrée et la ristourne est donc omise plutôt que devinée. Si vous payez bien par domiciliation, cela représente jusqu'à 522 € par an pour 3500 kWh. Ouvrez les options de l'intégration et répondez « Je paie par domiciliation » pour qu'elle soit facturée. Cet avis disparaît dès qu'une réponse, quelle qu'elle soit, est enregistrée."
+      "description": "La carte tarifaire de {contract} tarifie différemment un ménage qui paie par domiciliation : selon la carte, le payeur par domiciliation paie une redevance fixe plus basse, ou reçoit une ristourne de bienvenue, ou une plus grande.\n\nCette entrée a été créée avant que la question ne soit posée : aucune réponse n'est enregistrée et la différence est donc omise plutôt que devinée. Ouvrez les options de l'intégration et répondez « Je paie par domiciliation » pour qu'elle soit facturée. Cet avis disparaît dès qu'une réponse, quelle qu'elle soit, est enregistrée."
     },
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) est facturé sans le terme de puissance de Sibelga",

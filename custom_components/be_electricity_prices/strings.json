@@ -815,7 +815,7 @@
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) prices direct debit and this entry has not been asked",
-      "description": "The tariff card for {contract} prices a household that pays by direct debit differently: on Mega's Cosy Flex, Smart Fixed and their business editions the whole welcome ristourne is granted only to a direct-debit payer, and on the other cards it adds a supplement.\n\nThis entry was set up before the question was asked, so no answer is stored and the credit is left out rather than guessed. If you do pay by direct debit, that is worth up to €522 a year at 3500 kWh. Open the integration's options and answer \"I pay by direct debit\" to have it billed. This notice clears as soon as an answer of either value is stored."
+      "description": "The tariff card for {contract} prices a household that pays by direct debit differently: depending on the card, a direct-debit payer pays a lower standing charge, or receives a welcome credit, or a larger one.\n\nThis entry was set up before the question was asked, so no answer is stored and the difference is left out rather than guessed. Open the integration's options and answer \"I pay by direct debit\" to have it billed. This notice clears as soon as an answer of either value is stored."
     },
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) is billed without Sibelga's power term",

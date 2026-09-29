@@ -954,8 +954,8 @@ successful refresh:
   cap.
 - **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
   payer differently and this entry has no stored answer, which an entry
-  created before the question existed does not. The credit is left out
-  rather than guessed, so answer it in the options to have it billed. On a
+  created before the question existed does not. The difference is left
+  out rather than guessed, so answer it in the options to have it billed. On a
   card whose direct-debit part is a welcome credit it is raised only while
   that credit can still reach this year's bill: it needs the contract start
   date and a card of the month you signed whose credit depends on direct
