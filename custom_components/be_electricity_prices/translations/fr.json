@@ -367,6 +367,15 @@
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
           "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
+        },
+        "data_description": {
+          "manual_energy_single": "Sur la carte actuelle ({card_month}) : {card_single}",
+          "manual_energy_peak": "Sur la carte actuelle ({card_month}) : {card_peak}",
+          "manual_energy_offpeak": "Sur la carte actuelle ({card_month}) : {card_offpeak}",
+          "manual_energy_exclusive_night": "Sur la carte actuelle ({card_month}) : {card_exclusive_night}",
+          "manual_energy_factor": "Sur la carte actuelle ({card_month}) : {card_factor}",
+          "manual_energy_base": "Sur la carte actuelle ({card_month}) : {card_base}",
+          "manual_yearly_fee": "Sur la carte actuelle ({card_month}) : {card_fee}"
         }
       },
       "dso": {

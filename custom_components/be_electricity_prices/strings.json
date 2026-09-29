@@ -367,6 +367,15 @@
           "manual_energy_factor": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_factor%]",
           "manual_energy_base": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_base%]",
           "manual_yearly_fee": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_yearly_fee%]"
+        },
+        "data_description": {
+          "manual_energy_single": "On the current card ({card_month}): {card_single}",
+          "manual_energy_peak": "On the current card ({card_month}): {card_peak}",
+          "manual_energy_offpeak": "On the current card ({card_month}): {card_offpeak}",
+          "manual_energy_exclusive_night": "On the current card ({card_month}): {card_exclusive_night}",
+          "manual_energy_factor": "On the current card ({card_month}): {card_factor}",
+          "manual_energy_base": "On the current card ({card_month}): {card_base}",
+          "manual_yearly_fee": "On the current card ({card_month}): {card_fee}"
         }
       },
       "dso": {

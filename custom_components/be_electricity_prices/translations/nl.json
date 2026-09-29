@@ -367,6 +367,15 @@
           "manual_energy_factor": "Vastgelegde spotfactor",
           "manual_energy_base": "Vastgelegde spotbasis (EUR/kWh)",
           "manual_yearly_fee": "Vastgelegd jaarlijks vast bedrag (EUR, incl. btw)"
+        },
+        "data_description": {
+          "manual_energy_single": "Op de huidige kaart ({card_month}): {card_single}",
+          "manual_energy_peak": "Op de huidige kaart ({card_month}): {card_peak}",
+          "manual_energy_offpeak": "Op de huidige kaart ({card_month}): {card_offpeak}",
+          "manual_energy_exclusive_night": "Op de huidige kaart ({card_month}): {card_exclusive_night}",
+          "manual_energy_factor": "Op de huidige kaart ({card_month}): {card_factor}",
+          "manual_energy_base": "Op de huidige kaart ({card_month}): {card_base}",
+          "manual_yearly_fee": "Op de huidige kaart ({card_month}): {card_fee}"
         }
       },
       "dso": {

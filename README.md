@@ -392,7 +392,9 @@ base is in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has
 to be converted: (0.1068 × Belpex + 1.5) × 1.06 c€/kWh is a factor of 1.13208
 and a base of 0.0159. Per-kWh values include VAT on a residential contract and
 exclude it on a professional contract and on Ecopower's cards; the yearly fee
-includes VAT.
+includes VAT. When you edit an existing entry, each box also shows what the
+current card gives it, so you can see whether your contract says anything
+different.
 
 1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
    have announced their exit from the residential market are dropped from

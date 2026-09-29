@@ -367,6 +367,15 @@
           "manual_energy_factor": "Festgelegter Spot-Faktor",
           "manual_energy_base": "Festgelegte Spot-Basis (EUR/kWh)",
           "manual_yearly_fee": "Festgelegte Jahresgebühr (EUR, inkl. MwSt.)"
+        },
+        "data_description": {
+          "manual_energy_single": "Auf dem aktuellen Tarifblatt ({card_month}): {card_single}",
+          "manual_energy_peak": "Auf dem aktuellen Tarifblatt ({card_month}): {card_peak}",
+          "manual_energy_offpeak": "Auf dem aktuellen Tarifblatt ({card_month}): {card_offpeak}",
+          "manual_energy_exclusive_night": "Auf dem aktuellen Tarifblatt ({card_month}): {card_exclusive_night}",
+          "manual_energy_factor": "Auf dem aktuellen Tarifblatt ({card_month}): {card_factor}",
+          "manual_energy_base": "Auf dem aktuellen Tarifblatt ({card_month}): {card_base}",
+          "manual_yearly_fee": "Auf dem aktuellen Tarifblatt ({card_month}): {card_fee}"
         }
       },
       "dso": {

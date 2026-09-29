@@ -161,6 +161,50 @@ def _entry_title(data: dict[str, Any]) -> str:
     return f"{extractor.label} - {contract_label} ({data[CONF_REGION].capitalize()})"
 
 
+# The boxes of the signing-rate step, each against the field of the card's
+# energy leg it overrides and the unit it is shown in.
+_CARD_FIGURES = {
+    "card_single": ("single", " EUR/kWh"),
+    "card_peak": ("peak", " EUR/kWh"),
+    "card_offpeak": ("offpeak", " EUR/kWh"),
+    "card_exclusive_night": ("exclusive_night", " EUR/kWh"),
+    "card_factor": ("factor", ""),
+    "card_base": ("base", " EUR/kWh"),
+}
+
+
+def _card_figures(entry: ConfigEntry) -> dict[str, str]:
+    """The current card's figures, for the signing-rate step in Edit settings.
+
+    Shown under each box so the household sees whether its contract states
+    anything else, and in which scale and VAT basis to type it: a per-kWh
+    figure as the entry holds it, which is how a typed one is read, and the
+    fee including VAT, as its box asks. A deducting business holds its fee
+    without VAT, so it is grossed back for the comparison. "-" where the
+    entry has no card yet or the card has no such figure, so no box shows a
+    raw placeholder.
+    """
+    from .coordinator import BePricesCoordinator
+
+    figures = dict.fromkeys((*_CARD_FIGURES, "card_fee", "card_month"), "-")
+    coord = getattr(entry, "runtime_data", None)
+    snapshot = coord._snapshot if isinstance(coord, BePricesCoordinator) else None
+    if snapshot is None:
+        return figures
+    energy = snapshot.energy
+    for key, (field, unit) in _CARD_FIGURES.items():
+        value = getattr(energy, field, None)
+        if value is not None:
+            figures[key] = f"{round(value, 6):g}{unit}"
+    fee = energy.yearly_fixed_fee
+    taxes = snapshot.taxes
+    if not taxes.vat_rate and taxes.published_vat_rate:
+        fee *= 1.0 + taxes.published_vat_rate
+    figures["card_fee"] = f"{round(fee, 2):g} EUR"
+    figures["card_month"] = snapshot.publication_label or "-"
+    return figures
+
+
 # ---- shared wizard steps ------------------------------------------------------
 
 
@@ -363,7 +407,12 @@ class _WizardStepsMixin:
         return self.async_show_form(
             step_id="signed_rate",
             data_schema=_signed_rate_schema(self._data),
+            description_placeholders=self._signed_rate_placeholders(),
         )
+
+    def _signed_rate_placeholders(self) -> dict[str, str] | None:
+        """Nothing at setup: the card is not fetched until the entry exists."""
+        return None
 
     async def async_step_dso(
         self, user_input: dict[str, Any] | None = None
@@ -902,6 +951,9 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     (the original options flow) or run a one-off comparison quote
     against a different supplier (no save, no extra entry).
     """
+
+    def _signed_rate_placeholders(self) -> dict[str, str]:
+        return _card_figures(self.config_entry)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

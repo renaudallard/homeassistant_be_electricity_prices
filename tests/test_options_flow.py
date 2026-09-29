@@ -4620,6 +4620,87 @@ async def test_card_date_alone_offers_the_signing_rate_step(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_signing_rate_step_shows_the_card_it_would_override(
+    hass: HomeAssistant,
+) -> None:
+    """Under each box, the figure the current card gives it (issue #107): a
+    household on a promotion its supplier publishes as a card sees there is
+    nothing to type, and anyone who does type sees the scale and basis the
+    box reads."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.2071)
+    )
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "power_fix", "tariff_card_date": "2026-06-18"},
+    )
+    assert result["step_id"] == "signed_rate"
+    placeholders = result["description_placeholders"]
+    assert placeholders is not None
+    assert placeholders["card_month"] == "april 2026"
+    assert placeholders["card_single"] == "0.2071 EUR/kWh"
+    assert placeholders["card_fee"] == "60 EUR"
+    # A fixed card has no spot pair; the box is not shown, and its
+    # placeholder is still filled so nothing renders as a raw token.
+    assert placeholders["card_factor"] == "-"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_signing_rate_step_without_a_loaded_entry_shows_dashes(
+    hass: HomeAssistant,
+) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "power_fix", "tariff_card_date": "2026-06-18"},
+    )
+    assert result["step_id"] == "signed_rate"
+    placeholders = result["description_placeholders"]
+    assert placeholders is not None
+    assert set(placeholders.values()) == {"-"}
+
+
+async def test_card_fee_is_shown_with_vat_for_a_deducting_business(
+    hass: HomeAssistant,
+) -> None:
+    """The fee box asks for the fee including VAT. A business that deducts VAT
+    holds its card's fee without it, so the figure shown beside the box is
+    grossed back, or it would read 21% low against what the box wants."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.config_flow import _card_figures
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    entry = _make_entry()
+    snapshot = _stub_snapshot("engie", "engie_pro_easy_fixed", 0.15)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = replace(
+        snapshot,
+        taxes=replace(snapshot.taxes, vat_rate=0.0, published_vat_rate=0.21),
+    )
+    entry.runtime_data = coord
+    figures = _card_figures(entry)
+    assert figures["card_fee"] == "72.6 EUR"
+    # A per-kWh figure is shown as held, which is how a typed one is read.
+    assert figures["card_single"] == "0.15 EUR/kWh"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_contract_step_rejects_future_start_date(hass: HomeAssistant) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
