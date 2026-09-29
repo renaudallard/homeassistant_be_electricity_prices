@@ -56,6 +56,19 @@ def test_a_dynamic_meter_does_not() -> None:
     assert not (BANDS & _added(make_entry(meter="dynamic")))
 
 
+def test_the_walloon_impact_tariff_gets_no_band_prices() -> None:
+    """On the Impact tariff the distribution follows the CWaPE bands every
+    Walloon card prints, so there is no constant day or night rate and the
+    pair sat unavailable for good. A custom entry left without the bands
+    bills one distribution rate and keeps them."""
+    assert not (BANDS & _added(make_entry(meter="bi", dso_tariff_mode="impact")))
+    assert BANDS <= _added(make_entry(meter="bi", dso_tariff_mode="bi_horaire"))
+    custom = make_entry(
+        meter="bi", supplier="custom", contract="custom_fixed", dso_tariff_mode="impact"
+    )
+    assert BANDS <= _added(custom)
+
+
 def test_the_feed_in_pair_needs_both_a_two_tariff_meter_and_injection() -> None:
     both = _added(make_entry(meter="bi", solar_regime="injection", solar_kva=5.0))
     assert INJECTION_BANDS <= both

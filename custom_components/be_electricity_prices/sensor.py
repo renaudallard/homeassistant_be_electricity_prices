@@ -50,17 +50,21 @@ from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
+    CONF_DSO_TARIFF_MODE,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    DSO_MODE_IMPACT,
     METER_BI,
     METER_DYNAMIC,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
+    SUPPLIER_CUSTOM,
     DEFAULT_DAILY_COMPARE,
     DEFAULT_EV_HOME_CHARGING_RATE,
 )
@@ -672,9 +676,14 @@ async def async_setup_entry(
         descriptions.extend(EV_RATE_SENSORS)
     # Only where the two bands are a thing the household is billed on. On a
     # single-rate or dynamic meter these have no constant to report and would
-    # sit unavailable for good, which is two dead entities per entry.
-    bi_hourly = entry.data.get(CONF_METER) == METER_BI
-    if bi_hourly:
+    # sit unavailable for good, which is two dead entities per entry. The
+    # same on the Walloon Impact tariff, whose distribution follows the
+    # CWaPE bands every card prints, except a custom entry left without them.
+    impact = (
+        entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
+        and entry.data.get(CONF_SUPPLIER) != SUPPLIER_CUSTOM
+    )
+    if entry.data.get(CONF_METER) == METER_BI and not impact:
         descriptions.extend(BI_HOURLY_SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
