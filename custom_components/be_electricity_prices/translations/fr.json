@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "Effacer TOUTE la serie avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour une re-execution annuelle. Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
+          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour une re-execution annuelle ; une fenetre qui commence apres le 1er janvier de l'annee de fin est refusee avec clear actif, sauf si la fenetre se termine dans une annee close (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
         }
       }
     }
