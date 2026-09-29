@@ -1057,8 +1057,12 @@ estimate before the next card prints the settled index), so a later backfill fil
 settled, and a month already on disk is never asked again. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
 any month a supplier's own path cannot serve. Only for suppliers walked while they were still
-publishing, though: DATS 24 left before the archive existed and holds no rows here at all. The daily schedule runs with `--backfill 0`; the
-workflow's manual dispatch takes the number as an input.
+publishing, though: DATS 24 left before the archive existed and holds no rows here at all. The daily schedule runs with `--backfill 12`,
+so a newly added supplier gets its last year mirrored on the first run after it lands, a year
+being as far back as a promotion's signing month matters; the workflow's manual dispatch takes the
+number as an input, 12 by default. A month on disk is never asked again, so once the year is
+filled only the months the suppliers do not serve are: 808 of them on 2026-09-29, which took the
+day's run from 3 minutes to 18.
 
 Per card, transient failures are retried three times with the live check's own classification
 (`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
@@ -1280,8 +1284,8 @@ Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for 
 and on manual dispatch (`.github/workflows/archive_cards.yml`), with `contents: write` because
 it pushes. The dispatch takes three inputs: `backfill_months`, passed to the script as `--backfill`, and
 the two booleans `reparse` and `rerender`, passed as the flags of the same names. The schedule
-runs with none of them. A dispatch asking for a backfill or a re-render gets a six-hour job
-timeout instead of the usual one hour, since either is far more work than the daily walk: a
+runs with a 12-month backfill and neither boolean, inside the usual hour. A dispatch asking for
+a backfill or a re-render gets a six-hour job timeout instead, since either is far more work than the daily walk: a
 backfill is one archived card per supplier, contract, region and month, a re-render downloads
 and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and
 clones `be_price_cards` shallow under `tmp/cards`, which `.gitignore` covers, using the

@@ -12,7 +12,7 @@ on:
         description: >-
           Also mirror this many closed months before the current one from the
           supplier archives, for months the archive does not hold yet.
-        default: "0"
+        default: "12"
         required: false
         type: string
       reparse:
@@ -107,10 +107,15 @@ jobs:
       - name: Store today's cards
         id: store
         # A full walk is about 250 cards, 21 minutes on a Raspberry Pi; a
-        # parse that never returns is bounded per card by the script. A
-        # backfill asks one archived card per supplier, contract, region and
-        # month on top, and a re-render fetches every kept card back, so
-        # either gets six hours.
+        # parse that never returns is bounded per card by the script. The
+        # schedule mirrors the last 12 months too, so a supplier added since
+        # the last run gets its year filled with no one asking, a year being
+        # as far back as a promotion's signing month matters. Once they are
+        # filled a month on disk is never asked again, and only the months
+        # the suppliers do not serve are: 808 of them, 18 minutes against 3
+        # for the walk alone, measured on 2026-09-29, so the hour holds. A
+        # manual backfill asks for as many months as it is told and a
+        # re-render fetches every kept card back, so either gets six hours.
         timeout-minutes: ${{ (steps.budget.outputs.rerender == 'true' || (github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') || github.event.inputs.rerender == 'true') && 360 || 60 }}
         env:
           CARDS_REPO: renaudallard/be_price_cards
@@ -118,7 +123,7 @@ jobs:
           python scripts/archive_cards.py --out tmp/cards/electricity --pdfs tmp/pdfs
           --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
           --archive-base-url "https://github.com/${CARDS_REPO}/blob/main/electricity"
-          --backfill "${{ github.event.inputs.backfill_months || '0' }}"
+          --backfill "${{ github.event.inputs.backfill_months || '12' }}"
           ${{ github.event.inputs.reparse == 'true' && '--reparse' || '' }}
           ${{ github.event.inputs.rerender == 'true' && '--rerender' || '' }}
 
