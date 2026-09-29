@@ -1886,6 +1886,7 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "frank": lambda m: {t[0] for t in m._TIERS},
     "energyvision": lambda m: set(m.DISCOVER_IDS),
     "energyknights": lambda m: set(m.DISCOVER_IDS),
+    "aspiravi": lambda m: {c.id for c in m.EXTRACTOR.contracts},
 }
 
 

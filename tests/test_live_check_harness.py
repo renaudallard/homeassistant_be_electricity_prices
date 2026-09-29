@@ -796,6 +796,17 @@ def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
     assert lc._CATALOG_BASELINES["bolt"](bolt) == {"go/fix"}  # type: ignore[arg-type]
 
 
+def test_the_aspiravi_catalog_baseline_is_its_registered_contracts() -> None:
+    """Aspiravi shipped with no baseline, so the catalog check reported the
+    one product it already sells as new at the supplier (issue #110). Every
+    product code discover() maps to a contract has to be in it."""
+    from custom_components.be_electricity_prices.providers import aspiravi
+
+    baseline = lc._CATALOG_BASELINES["aspiravi"](aspiravi)  # type: ignore[arg-type]
+    assert baseline == {"aspiravi_eco_plus_flex"}
+    assert set(aspiravi._PRODUCT_CODES.values()) <= baseline
+
+
 def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
     """A dead network is not Mega failing to publish, and the extractor rows
     already report a real break."""
