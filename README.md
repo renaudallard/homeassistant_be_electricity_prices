@@ -924,8 +924,10 @@ successful refresh:
 - **`extractor_unreadable_no_prices_<entry>`** — the same unreadable card
   on an entry with no cached one to stand in: a brand-new entry, or one
   whose cache predates the card-as-parsed change. Every sensor on it reads
-  unavailable until the supplier publishes a readable card, so the card
-  points at the Custom (expert) supplier rather than warning about drift.
+  unavailable until the supplier publishes a readable card, or until the
+  project's card archive files its daily reading of this one, which the
+  entry reads while the archive box is on, so the card points at the
+  Custom (expert) supplier rather than warning about drift.
 - **`card_read_by_ocr_<entry>`** — the same unreadable card, being priced
   anyway off the reading this project's daily card archive makes of its
   pixels. Not a failure and not a drift warning: the figures are the ones
@@ -1586,8 +1588,10 @@ integration reads it once a day to price what a card leaves without a rate
 and the last month they agreed on stands.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches both off per entry: the integration then never
-contacts GitHub, those months are priced on the current card, and a rate a
-card does not state is taken as 6%. A row
+contacts GitHub, those months are priced on the current card, a rate a
+card does not state is taken as 6%, and a card published as page images
+(Ecofix's) has no prices, since the archive's reading of it is the only one.
+A row
 holds what the extractor of that day parsed, and the day after a parser
 change every row is re-parsed from the texts the archive kept, so a fix
 reaches past months within a day.
