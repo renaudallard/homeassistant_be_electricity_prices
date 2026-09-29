@@ -169,12 +169,12 @@
       },
       "custom_injection": {
         "title": "Aangepaste injectieformule",
-        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. De index en de basis zijn allebei in EUR/kWh, en de basis behoudt haar teken: een kaart met (0,07 x Belpex - 2) c€/kWh, op een Belpex in EUR/MWh, is een factor van 0.7 en een basis van -0.02. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
         "data": {
           "custom_injection_mode": "Injectietarifering",
           "custom_injection_current": "Vast injectietarief (EUR/kWh)",
-          "custom_injection_factor": "Injectiefactor",
-          "custom_injection_base": "Injectiebasis (EUR/kWh)",
+          "custom_injection_factor": "Injectiefactor (vermenigvuldiger op de index in EUR/kWh)",
+          "custom_injection_base": "Injectiebasis (EUR/kWh, negatief voor een aftrek)",
           "custom_injection_floor": "Nooit negatief (ondergrens 0)",
           "custom_injection_spp_weighted": "Injectie wegen met het zonneprofiel (SPP)"
         }
@@ -508,12 +508,12 @@
       },
       "custom_injection": {
         "title": "Aangepaste injectieformule",
-        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. De index en de basis zijn allebei in EUR/kWh, en de basis behoudt haar teken: een kaart met (0,07 x Belpex - 2) c€/kWh, op een Belpex in EUR/MWh, is een factor van 0.7 en een basis van -0.02. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
         "data": {
           "custom_injection_mode": "Injectietarifering",
           "custom_injection_current": "Vast injectietarief (EUR/kWh)",
-          "custom_injection_factor": "Injectiefactor",
-          "custom_injection_base": "Injectiebasis (EUR/kWh)",
+          "custom_injection_factor": "Injectiefactor (vermenigvuldiger op de index in EUR/kWh)",
+          "custom_injection_base": "Injectiebasis (EUR/kWh, negatief voor een aftrek)",
           "custom_injection_floor": "Nooit negatief (ondergrens 0)",
           "custom_injection_spp_weighted": "Injectie wegen met het zonneprofiel (SPP)"
         }

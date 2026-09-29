@@ -1060,3 +1060,21 @@ def test_custom_taxes_book_the_connection_fee_in_wallonia_only() -> None:
     assert _build_taxes(data, const.REGION_FLANDERS).region_connection_fee == 0.0
     assert _build_taxes(data, const.REGION_BRUSSELS).region_connection_fee == 0.0
     assert _build_taxes(data, const.REGION_FLANDERS).flanders_renewables == 0.0156
+
+
+def test_a_fixed_contract_is_not_offered_an_injection_formula() -> None:
+    """A fixed custom contract offers the flat feed-in rate alone, so factor
+    and base boxes there were stored and never read."""
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.flow_schemas_custom import (
+        _custom_injection_schema,
+    )
+
+    def keys(contract: str) -> set[str]:
+        schema = _custom_injection_schema({const.CONF_CONTRACT: contract})
+        return {getattr(key, "schema", key) for key in schema.schema}
+
+    formula = {const.CONF_CUSTOM_INJECTION_FACTOR, const.CONF_CUSTOM_INJECTION_BASE}
+    assert not formula & keys(const.CUSTOM_CONTRACT_FIXED)
+    assert formula <= keys(const.CUSTOM_CONTRACT_DYNAMIC)
+    assert formula <= keys(const.CUSTOM_CONTRACT_MONTHLY)

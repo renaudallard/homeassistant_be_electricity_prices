@@ -210,8 +210,13 @@ def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
         ),
     }
     _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_CURRENT)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True)
-    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
+    if contract != CUSTOM_CONTRACT_FIXED:
+        # A fixed contract offers the flat rate alone, so a formula typed
+        # there would be stored and never read.
+        _add_custom_num(
+            fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True
+        )
+        _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
     fields[
         vol.Optional(
             CONF_CUSTOM_INJECTION_FLOOR,
