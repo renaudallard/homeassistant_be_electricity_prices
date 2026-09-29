@@ -173,3 +173,32 @@ def test_the_prosumer_cost_is_only_created_where_it_is_billed() -> None:
     assert "prosumer_cost" in _added(entry("wallonia", "ores"))
     for region, dso in (("flanders", "fluvius_imewo"), ("brussels", "sibelga")):
         assert "prosumer_cost" not in _added(entry(region, dso))
+
+
+def test_no_saving_sensor_where_the_ranking_has_nothing_to_rank() -> None:
+    """Engie Empower Flextime is the only slot contract sold in Brussels, so
+    the nightly ranking skips such an entry and the sensor read unknown for
+    good. It is created where there is an alternative to rank."""
+    from unittest.mock import patch
+
+    def created(**data: Any) -> bool:
+        with patch(
+            "custom_components.be_electricity_prices.sensor.PotentialSavingSensor"
+        ) as sensor:
+            _added(make_entry(daily_compare=True, **data))
+        return sensor.called
+
+    assert not created(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        region="brussels",
+        dso="sibelga",
+        meter="dynamic",
+    )
+    assert created(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        region="flanders",
+        dso="fluvius_imewo",
+        meter="dynamic",
+    )

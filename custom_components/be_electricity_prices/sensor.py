@@ -77,6 +77,7 @@ from .coordinator import (
     supplier_device_info,
 )
 from .coordinator_data import CoordinatorData
+from .flow_contracts import _ranking_candidates
 from .pricing import PriceBreakdown, breakdown_row, slot_start
 
 # What one slot of a per-slot table holds: a PriceBreakdown for the price
@@ -717,7 +718,12 @@ async def async_setup_entry(
     end_date = _parse_iso_date(entry.data.get(CONF_CONTRACT_END_DATE))
     if end_date is not None:
         entities.append(ContractEndDateSensor(coordinator, end_date))
-    if entry.data.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE):
+    # Not where the ranking has nothing to rank, such as Engie Empower
+    # Flextime in Brussels: the nightly run skips the entry and the sensor
+    # would read unknown for good.
+    if entry.data.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE) and not isinstance(
+        _ranking_candidates(entry.data), str
+    ):
         entities.append(PotentialSavingSensor(coordinator))
     coordinator.intended_unique_ids["sensor"] = {
         e.unique_id for e in entities if e.unique_id

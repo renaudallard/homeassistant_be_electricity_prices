@@ -57,10 +57,8 @@ from .const import (
 )
 from .energy_meters import memoise_meter_reads
 from .flow_contracts import (
-    _contract_group,
-    _contract_is_professional,
     _contract_kind,
-    _sweep_candidates,
+    _ranking_candidates,
 )
 from .providers import get as get_extractor, settlement_answer
 from .providers._pdf import memoise_text_fetches
@@ -440,34 +438,11 @@ class _SweepEngine(_HouseholdMixin):
         """
         current = self.config_entry.data
         region = current[CONF_REGION]
-        # Through the household's own settlement, not the registered kind: a
-        # Bolt variable card is a static contract settled monthly and a spot
-        # one settled per quarter-hour, and the ranking only ranks within one
-        # group. Read off the registry alone it put a quarter-hourly household
-        # in the static cell, measuring their bill against 52 monthly
-        # contracts and none of the dynamic ones they could actually move to.
-        group = _contract_group(
-            current[CONF_SUPPLIER],
-            current[CONF_CONTRACT],
-            quarter_hourly=settlement_answer(current),
-        )
-        if not group:
-            # The entry's contract has left the catalogue, so there is no
-            # group to rank it within. Distinct from an empty cell: nothing is
-            # missing from the market, we just cannot place this household.
-            return "compare_all_unknown_contract"
-
-        candidates = _sweep_candidates(
-            region,
-            group,
-            _contract_is_professional(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
-            current[CONF_CONTRACT],
-        )
-        if not candidates:
-            # A real answer, not a failure: a Brussels time-of-use household
-            # has exactly one slot contract in the region and it is theirs.
+        found = _ranking_candidates(current)
+        if isinstance(found, str):
             # Saying so is more use than an empty table.
-            return "compare_all_no_alternatives"
+            return found
+        group, candidates = found
 
         # Cheapest card first, so a budget buys many rows before few. Ties
         # broken on the label so the order is stable between opens and the

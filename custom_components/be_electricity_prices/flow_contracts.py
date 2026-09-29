@@ -33,16 +33,25 @@ does its feed-in follow an index. Read-only over the registry.
 
 from __future__ import annotations
 
-from .const import CONF_REGION, CONF_SUPPLIER, DSO_CHOICES, KIND_GROUP, SUPPLIER_CUSTOM
+from .const import (
+    CONF_CONTRACT,
+    CONF_REGION,
+    CONF_SUPPLIER,
+    DSO_CHOICES,
+    KIND_GROUP,
+    SUPPLIER_CUSTOM,
+)
 from .providers import (
     all_extractors,
     effective_kind,
     get as get_extractor,
     is_professional,
+    settlement_answer,
 )
 from .providers._rates import Contract
 from .providers.base import ExtractorError
 from homeassistant.helpers.selector import SelectOptionDict
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -294,3 +303,42 @@ def _contract_group(
     except ExtractorError:
         return ""
     return KIND_GROUP.get(kind, "")
+
+
+def _ranking_candidates(
+    data: Mapping[str, Any],
+) -> tuple[str, list[tuple[str, Contract, bool]]] | str:
+    """The kind group this entry's ranking ranks within and the alternatives it
+    quotes there, or why it has none.
+
+    Grouped by the household's own settlement, not the registered kind: a
+    Bolt variable card is a static contract settled monthly and a spot one
+    settled per quarter-hour, and the ranking only ranks within one group.
+    Read off the registry alone it put a quarter-hourly household in the
+    static cell, measuring their bill against 52 monthly contracts and none of
+    the dynamic ones they could actually move to.
+
+    Shared by the ranking and by the sensor that publishes it, which is not
+    created for an entry with nothing to rank: it would read unknown for good.
+    """
+    group = _contract_group(
+        data[CONF_SUPPLIER],
+        data[CONF_CONTRACT],
+        quarter_hourly=settlement_answer(data),
+    )
+    if not group:
+        # The entry's contract has left the catalogue, so there is no group
+        # to rank it within. Distinct from an empty cell: nothing is missing
+        # from the market, we just cannot place this household.
+        return "compare_all_unknown_contract"
+    candidates = _sweep_candidates(
+        data[CONF_REGION],
+        group,
+        _contract_is_professional(data[CONF_SUPPLIER], data[CONF_CONTRACT]),
+        data[CONF_CONTRACT],
+    )
+    if not candidates:
+        # A real answer, not a failure: a Brussels time-of-use household has
+        # exactly one slot contract in the region and it is theirs.
+        return "compare_all_no_alternatives"
+    return group, candidates
