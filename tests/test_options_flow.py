@@ -4694,10 +4694,33 @@ async def test_card_fee_is_shown_with_vat_for_a_deducting_business(
         taxes=replace(snapshot.taxes, vat_rate=0.0, published_vat_rate=0.21),
     )
     entry.runtime_data = coord
-    figures = _card_figures(entry)
+    figures = _card_figures(entry, entry.data)
     assert figures["card_fee"] == "72.6 EUR"
     # A per-kWh figure is shown as held, which is how a typed one is read.
     assert figures["card_single"] == "0.15 EUR/kWh"
+
+
+async def test_card_figures_are_only_shown_for_the_contract_they_belong_to(
+    hass: HomeAssistant,
+) -> None:
+    """The loaded card is the entry's current contract. An edit that moves the
+    entry elsewhere, which recording a switch always does, must not present
+    the card being left as the current one of the contract being chosen."""
+    from custom_components.be_electricity_prices.config_flow import _card_figures
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.2071)
+    )
+    assert _card_figures(entry, entry.data)["card_single"] == "0.2071 EUR/kWh"
+    for key, other in (
+        ("supplier", "engie"),
+        ("contract", "power_flex"),
+        ("region", "flanders"),
+    ):
+        moved = {**entry.data, key: other}
+        assert set(_card_figures(entry, moved).values()) == {"-"}, key
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

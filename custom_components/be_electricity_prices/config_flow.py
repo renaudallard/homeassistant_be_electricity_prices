@@ -47,6 +47,7 @@ the coordinator from each supplier's own publication.
 from __future__ import annotations
 
 
+from collections.abc import Mapping
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -173,7 +174,7 @@ _CARD_FIGURES = {
 }
 
 
-def _card_figures(entry: ConfigEntry) -> dict[str, str]:
+def _card_figures(entry: ConfigEntry, data: Mapping[str, Any]) -> dict[str, str]:
     """The current card's figures, for the signing-rate step in Edit settings.
 
     Shown under each box so the household sees whether its contract states
@@ -183,13 +184,21 @@ def _card_figures(entry: ConfigEntry) -> dict[str, str]:
     without VAT, so it is grossed back for the comparison. "-" where the
     entry has no card yet or the card has no such figure, so no box shows a
     raw placeholder.
+
+    Only while the step is about the contract that card is for: ``data`` is
+    what this edit has chosen so far, and an edit that moves the entry to
+    another supplier, contract or region, which recording a switch always
+    does, would otherwise show the card being left as the current one.
     """
     from .coordinator import BePricesCoordinator
 
     figures = dict.fromkeys((*_CARD_FIGURES, "card_fee", "card_month"), "-")
     coord = getattr(entry, "runtime_data", None)
     snapshot = coord._snapshot if isinstance(coord, BePricesCoordinator) else None
-    if snapshot is None:
+    if snapshot is None or any(
+        data.get(key) != entry.data.get(key)
+        for key in (CONF_SUPPLIER, CONF_CONTRACT, CONF_REGION)
+    ):
         return figures
     energy = snapshot.energy
     for key, (field, unit) in _CARD_FIGURES.items():
@@ -953,7 +962,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     """
 
     def _signed_rate_placeholders(self) -> dict[str, str]:
-        return _card_figures(self.config_entry)
+        return _card_figures(self.config_entry, self._data)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
