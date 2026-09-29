@@ -247,8 +247,11 @@ no reason to bill it. `_manual_energy_leg` (`cohort.py`) overlays what the user
 typed onto whichever card was retrieved, **per field**, so a half-filled form
 keeps the archived signing-month values for the boxes left blank rather than
 today's. The archive is authoritative only about the *published* card; a
-promotional, brokered or negotiated rate exists nowhere online, so the typed
-value has to win. It used to lose, which made the signing-rate step a no-op on
+brokered or negotiated rate, or a promotion the supplier publishes no card for,
+exists nowhere online, so the typed value has to win. Many promotions do have a
+card of their own (Frank Energie's Korting tier is one), and a household that
+typed that card's figures anyway had them override it, which is why the step
+now says to leave it empty unless the contract states other figures. It used to lose, which made the signing-rate step a no-op on
 exactly the seven suppliers that keep an archive (issue #54).
 
 A typed yearly fee is entered as the card prints it, so on a card published

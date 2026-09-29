@@ -380,9 +380,19 @@ The UI walks **up to twelve steps**, thirteen with the *Expert: custom formula*
 supplier, depending on contract type and region. Apart from two paths no
 EUR values are asked, since energy, DSO and tax rates all come from the
 supplier's tariff card. The exceptions are the optional **signing-rate**
-step, which appears when you set a contract start date or a tariff card
-month and lets you type the rate and yearly fee you actually signed, and the **Expert: custom
-formula** supplier, which has no card and asks for the whole set.
+step and the **Expert: custom formula** supplier, which has no card and asks
+for the whole set.
+
+The signing-rate step appears when you set a contract start date or a tariff
+card month, and is only for a contract whose figures differ from the
+supplier's published card. Many offers, promotions sold through comparison
+sites among them, have a card of their own, which is already read: leave the
+step empty then. A spot factor multiplies the market price in EUR/kWh and a
+base is in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has
+to be converted: (0.1068 × Belpex + 1.5) × 1.06 c€/kWh is a factor of 1.13208
+and a base of 0.0159. Per-kWh values include VAT on a residential contract and
+exclude it on a professional contract and on Ecopower's cards; the yearly fee
+includes VAT.
 
 1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
    have announced their exit from the residential market are dropped from
