@@ -61,7 +61,7 @@
         },
         "data_description": {
           "include_vat": "Zet dit uit als uw onderneming btw kan aftrekken: prijzen, vergoedingen en kosten worden dan exclusief btw gerapporteerd. Injectie volgt dezelfde keuze.",
-          "annual_consumption_kwh": "Bepaalt de accijnsschijf (schijven op 20 000 en 50 000 kWh per jaar)."
+          "annual_consumption_kwh": "Uw jaarverbruik. De accijns wordt per schijf aangerekend (20 000 en 50 000 kWh per jaar: elk deel van het jaar aan zijn eigen tarief), en de vergelijkingen gebruiken het ook. Zodra er een volledig jaar op uw meters gemeten is, wordt de meting gebruikt; 0 gebruikt de meting, of 3500 kWh zolang er geen is."
         }
       },
       "direct_debit": {
@@ -400,7 +400,7 @@
         },
         "data_description": {
           "include_vat": "Zet dit uit als uw onderneming btw kan aftrekken: prijzen, vergoedingen en kosten worden dan exclusief btw gerapporteerd. Injectie volgt dezelfde keuze.",
-          "annual_consumption_kwh": "Bepaalt de accijnsschijf (schijven op 20 000 en 50 000 kWh per jaar)."
+          "annual_consumption_kwh": "Uw jaarverbruik. De accijns wordt per schijf aangerekend (20 000 en 50 000 kWh per jaar: elk deel van het jaar aan zijn eigen tarief), en de vergelijkingen gebruiken het ook. Zodra er een volledig jaar op uw meters gemeten is, wordt de meting gebruikt; 0 gebruikt de meting, of 3500 kWh zolang er geen is."
         }
       },
       "direct_debit": {

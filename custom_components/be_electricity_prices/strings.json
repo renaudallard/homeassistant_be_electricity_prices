@@ -61,7 +61,7 @@
         },
         "data_description": {
           "include_vat": "Turn this off if your business deducts VAT: prices, fees and costs are then reported excluding it. Injection follows the same choice.",
-          "annual_consumption_kwh": "Selects the excise band (bands at 20 000 and 50 000 kWh per year)."
+          "annual_consumption_kwh": "Your yearly consumption. The excise is billed per tranche (20 000 and 50 000 kWh per year: each slice of the year at its own rate), and the comparison quotes use it too. Once a full year has been measured on your meters, the measurement is used instead; 0 uses the measurement, or 3500 kWh until there is one."
         }
       },
       "direct_debit": {
@@ -400,7 +400,7 @@
         },
         "data_description": {
           "include_vat": "Turn this off if your business deducts VAT: prices, fees and costs are then reported excluding it. Injection follows the same choice.",
-          "annual_consumption_kwh": "Selects the excise band (bands at 20 000 and 50 000 kWh per year)."
+          "annual_consumption_kwh": "Your yearly consumption. The excise is billed per tranche (20 000 and 50 000 kWh per year: each slice of the year at its own rate), and the comparison quotes use it too. Once a full year has been measured on your meters, the measurement is used instead; 0 uses the measurement, or 3500 kWh until there is one."
         }
       },
       "direct_debit": {

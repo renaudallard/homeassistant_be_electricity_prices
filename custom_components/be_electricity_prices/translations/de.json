@@ -61,7 +61,7 @@
         },
         "data_description": {
           "include_vat": "Ausschalten, wenn Ihr Unternehmen die MwSt. abziehen kann: Preise, Gebühren und Kosten werden dann ohne MwSt. ausgewiesen. Die Einspeisung folgt derselben Wahl.",
-          "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
+          "annual_consumption_kwh": "Ihr Jahresverbrauch. Die Verbrauchsteuer wird je Stufe berechnet (20 000 und 50 000 kWh pro Jahr: jeder Teil des Jahres zu seinem eigenen Satz), und die Vergleiche verwenden ihn ebenfalls. Sobald ein volles Jahr an Ihren Zählern gemessen ist, wird die Messung verwendet; 0 verwendet die Messung, oder 3500 kWh, solange es keine gibt."
         }
       },
       "direct_debit": {
@@ -400,7 +400,7 @@
         },
         "data_description": {
           "include_vat": "Ausschalten, wenn Ihr Unternehmen die MwSt. abziehen kann: Preise, Gebühren und Kosten werden dann ohne MwSt. ausgewiesen. Die Einspeisung folgt derselben Wahl.",
-          "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
+          "annual_consumption_kwh": "Ihr Jahresverbrauch. Die Verbrauchsteuer wird je Stufe berechnet (20 000 und 50 000 kWh pro Jahr: jeder Teil des Jahres zu seinem eigenen Satz), und die Vergleiche verwenden ihn ebenfalls. Sobald ein volles Jahr an Ihren Zählern gemessen ist, wird die Messung verwendet; 0 verwendet die Messung, oder 3500 kWh, solange es keine gibt."
         }
       },
       "direct_debit": {

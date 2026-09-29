@@ -61,7 +61,7 @@
         },
         "data_description": {
           "include_vat": "Désactivez si votre entreprise récupère la TVA : les prix, redevances et coûts sont alors rapportés hors TVA. L'injection suit le même choix.",
-          "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
+          "annual_consumption_kwh": "Votre consommation annuelle. L'accise est facturée par tranche (20 000 et 50 000 kWh par an : chaque part de l'année à son propre taux), et les comparaisons l'utilisent aussi. Dès qu'une année complète a été mesurée sur vos compteurs, la mesure est utilisée à la place ; 0 utilise la mesure, ou 3500 kWh tant qu'il n'y en a pas."
         }
       },
       "direct_debit": {
@@ -400,7 +400,7 @@
         },
         "data_description": {
           "include_vat": "Désactivez si votre entreprise récupère la TVA : les prix, redevances et coûts sont alors rapportés hors TVA. L'injection suit le même choix.",
-          "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
+          "annual_consumption_kwh": "Votre consommation annuelle. L'accise est facturée par tranche (20 000 et 50 000 kWh par an : chaque part de l'année à son propre taux), et les comparaisons l'utilisent aussi. Dès qu'une année complète a été mesurée sur vos compteurs, la mesure est utilisée à la place ; 0 utilise la mesure, ou 3500 kWh tant qu'il n'y en a pas."
         }
       },
       "direct_debit": {
