@@ -164,7 +164,7 @@
           "custom_energy_peak": "Dagtarief (EUR/kWh, excl. btw)",
           "custom_energy_offpeak": "Nachttarief (EUR/kWh, excl. btw)",
           "custom_energy_exclusive_night": "Exclusief nachttarief (EUR/kWh, excl. btw)",
-          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar)"
+          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar, excl. btw)"
         }
       },
       "custom_injection": {
@@ -503,7 +503,7 @@
           "custom_energy_peak": "Dagtarief (EUR/kWh, excl. btw)",
           "custom_energy_offpeak": "Nachttarief (EUR/kWh, excl. btw)",
           "custom_energy_exclusive_night": "Exclusief nachttarief (EUR/kWh, excl. btw)",
-          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar)"
+          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar, excl. btw)"
         }
       },
       "custom_injection": {

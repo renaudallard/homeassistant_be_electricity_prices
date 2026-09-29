@@ -164,7 +164,7 @@
           "custom_energy_peak": "Peak rate (EUR/kWh, excl. VAT)",
           "custom_energy_offpeak": "Off-peak rate (EUR/kWh, excl. VAT)",
           "custom_energy_exclusive_night": "Exclusive-night rate (EUR/kWh, excl. VAT)",
-          "custom_yearly_fixed_fee": "Yearly fixed fee (EUR/year)"
+          "custom_yearly_fixed_fee": "Yearly fixed fee (EUR/year, excl. VAT)"
         }
       },
       "custom_injection": {

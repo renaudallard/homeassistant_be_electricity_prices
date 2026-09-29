@@ -164,7 +164,7 @@
           "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
           "custom_energy_offpeak": "Tarif nuit (EUR/kWh, hors TVA)",
           "custom_energy_exclusive_night": "Tarif nuit exclusif (EUR/kWh, hors TVA)",
-          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an)"
+          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an, hors TVA)"
         }
       },
       "custom_injection": {
@@ -503,7 +503,7 @@
           "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
           "custom_energy_offpeak": "Tarif nuit (EUR/kWh, hors TVA)",
           "custom_energy_exclusive_night": "Tarif nuit exclusif (EUR/kWh, hors TVA)",
-          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an)"
+          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an, hors TVA)"
         }
       },
       "custom_injection": {

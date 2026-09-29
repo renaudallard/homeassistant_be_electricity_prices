@@ -164,7 +164,7 @@
           "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
-          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr)"
+          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr, ohne MwSt.)"
         }
       },
       "custom_injection": {
@@ -503,7 +503,7 @@
           "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
-          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr)"
+          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr, ohne MwSt.)"
         }
       },
       "custom_injection": {
