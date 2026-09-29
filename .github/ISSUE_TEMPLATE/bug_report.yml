@@ -126,6 +126,7 @@ body:
         - Frank Energie
         - OCTA+
         - Trevion
+        - Aspiravi Energy
         - "Expert: custom formula (no public card)"
     validations:
       required: true

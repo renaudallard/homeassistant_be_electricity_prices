@@ -765,6 +765,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
     from custom_components.be_electricity_prices.providers import all_extractors
 
     labels = {
+        "aspiravi": "Aspiravi",
         "bolt": "Bolt fix",
         "cociter": "Cociter",
         "dats24": "DATS 24",

@@ -47,6 +47,7 @@ machinery.
 
 | Test module | Covers |
 | --- | --- |
+| `tests/test_aspiravi.py` | Aspiravi Energy extractor |
 | `tests/test_bolt.py` | Bolt extractor (`providers/bolt.py`) |
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_dats24.py` | DATS 24 extractor |

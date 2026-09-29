@@ -51,6 +51,7 @@ from ._rates import (
     SpotMonthlyRates,
     VariableRates,
 )
+from .aspiravi import EXTRACTOR as _ASPIRAVI
 from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
 from .custom import EXTRACTOR as _CUSTOM
@@ -88,6 +89,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _ENERGYVISION.id: _ENERGYVISION,
     _ENERGYKNIGHTS.id: _ENERGYKNIGHTS,
     _OCTAPLUS.id: _OCTAPLUS,
+    _ASPIRAVI.id: _ASPIRAVI,
     # Expert escape hatch, listed last so it sorts to the bottom of the
     # supplier dropdown.
     _CUSTOM.id: _CUSTOM,

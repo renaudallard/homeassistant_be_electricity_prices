@@ -46,6 +46,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 
 | Supplier | Document |
 | --- | --- |
+| Aspiravi Energy | [providers/aspiravi.md](providers/aspiravi.md) |
 | Bolt | [providers/bolt.md](providers/bolt.md) |
 | Cociter | [providers/cociter.md](providers/cociter.md) |
 | DATS 24 | [providers/dats24.md](providers/dats24.md) |

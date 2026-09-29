@@ -130,8 +130,8 @@ relative to that package directory.
 | `providers/_parse.py` | Reading a figure off a line of that text: the number formats Belgian cards print in, the sign words, the DSO table columns and the regional tax overlay. |
 | `providers/_validity.py` | Which month a card is for and until when it is good: the validity sentences, the month-name headings and the archive's date check. |
 
-In addition, seventeen scraped supplier modules live under `providers/`, each exposing a top-level
-`EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
+In addition, eighteen scraped supplier modules live under `providers/`, each exposing a top-level
+`EXTRACTOR`: `aspiravi.py`, `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
 `eneco.py`, `energiebe.py`, `energyknights.py`, `energyvision.py`, `engie.py`, `frank.py`,
 `luminus.py`, `mega.py`, `octaplus.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
 [providers/](providers/).

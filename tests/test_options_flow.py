@@ -6106,8 +6106,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
 
     expected = {
         # Trevion adds one fixed card and five dynamic/monthly-indexed cards,
-        # all residential and Flanders-only.
-        ("flanders", "static", False): 54,
+        # all residential and Flanders-only. Aspiravi Eco Plus Flex adds one
+        # more, a month-indexed variable card that reads in about 1,3 s.
+        ("flanders", "static", False): 55,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land

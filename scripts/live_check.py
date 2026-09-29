@@ -95,6 +95,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "energiebe",
     "energyvision",
     "energyknights",
+    "aspiravi",
 )
 
 
@@ -620,6 +621,11 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
         date(2027, 1, 1),
         "prints both levies rounded; billed from the law either way",
     ),
+    ("aspiravi", 0.0503288, 0.002042): (
+        date(2027, 1, 1),
+        "prints the excise and the contribution of before August 2026; both "
+        "levies are billed from the law",
+    ),
 }
 
 
@@ -650,6 +656,7 @@ _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
 # Bolt and energie.be state none; OCTA+ stopped in June 2026.
 _STATES_VAT = frozenset(
     {
+        "aspiravi",
         "cociter",
         "ebem",
         "ecofix",
@@ -1305,16 +1312,15 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
         _validate_snapshot(prefix, cid, snap, region="flanders")
 
 
-async def _check_trevion(
-    session: aiohttp.ClientSession, trevion: types.ModuleType
+async def _check_flanders_supplier(
+    session: aiohttp.ClientSession, mod: types.ModuleType, supplier: str
 ) -> None:
-    for contract in trevion.EXTRACTOR.contracts:
+    """Walk every contract of a supplier that sells in Flanders only."""
+    for contract in mod.EXTRACTOR.contracts:
         cid = contract.id
-        prefix = f"trevion/{cid}/flanders"
+        prefix = f"{supplier}/{cid}/flanders"
         try:
-            snap = await _fetch_with_retry(
-                partial(trevion.fetch, session, cid, "flanders")
-            )
+            snap = await _fetch_with_retry(partial(mod.fetch, session, cid, "flanders"))
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -1323,6 +1329,18 @@ async def _check_trevion(
         _validate_snapshot(
             prefix, cid, snap, region="flanders", require_capacity=_CAPACITY_REQUIRED
         )
+
+
+async def _check_trevion(
+    session: aiohttp.ClientSession, trevion: types.ModuleType
+) -> None:
+    await _check_flanders_supplier(session, trevion, "trevion")
+
+
+async def _check_aspiravi(
+    session: aiohttp.ClientSession, aspiravi: types.ModuleType
+) -> None:
+    await _check_flanders_supplier(session, aspiravi, "aspiravi")
 
 
 async def _check_two_region_supplier(
@@ -3402,6 +3420,9 @@ _INJECTION_SHAPE: dict[str, str] = {
     "power_fix": "month",
     "power_flex": "month",
     "power_flex_one": "month",
+    # Aspiravi Eco Plus Flex indexes its credit on the same plain monthly
+    # Belpex mean as its energy, and prints last month's figure.
+    "aspiravi_eco_plus_flex": "month",
     # EBEM indexes on SPP0, the solar-weighted mean, same reasoning.
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
@@ -4718,6 +4739,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "energiebe": _check_energiebe,
     "energyvision": _check_energyvision,
     "energyknights": _check_energyknights,
+    "aspiravi": _check_aspiravi,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "
