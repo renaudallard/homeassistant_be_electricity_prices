@@ -894,7 +894,7 @@ successful refresh:
   supplier's own file store refusing the download). Raised only after
   two consecutive failed refreshes, since a single CDN hiccup usually
   clears on the next tick; cached prices keep serving.
-- **`entsoe_auth_failed_<entry>`** *(dynamic and monthly-indexed contracts)* — ENTSO-E
+- **`entsoe_auth_failed_<entry>`** *(dynamic and monthly-indexed contracts, and a contract whose feed-in credit alone follows the market)* — ENTSO-E
   returned 401 for the configured API key. Edit the entry's options
   and replace the key with a fresh token from
   transparency.entsoe.eu.

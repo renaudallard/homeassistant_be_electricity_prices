@@ -337,8 +337,8 @@ class _TickMixin:
         # or a fresh fetch). Reaching this point with no live
         # ``_last_error`` means the extractor produced a clean
         # snapshot; the cycle-7 entsoe_auth_failed clear is
-        # unconditional because that issue can only ever be set
-        # inside the DynamicRates branch below.
+        # unconditional because that issue can only ever be set by
+        # one of the two spot fetches below, each on its own failure.
         #
         # The extractor clear is gated on ``_last_error`` because
         # _maybe_refresh_snapshot raises the same Repairs issue when
@@ -393,6 +393,11 @@ class _TickMixin:
                 _LOGGER.debug(
                     "injection spot fetch failed (energy unaffected): %s", err
                 )
+                if isinstance(err, EntsoeAuthError):
+                    # A rejected key is not an outage: the credit stays out
+                    # until the key is replaced, and the key step promised a
+                    # notice when that happens.
+                    self._sync_entsoe_auth_issue(True, str(err))
                 spot_prices = self._fallback_spots()
 
         # The contracts the household held earlier this year, when it recorded

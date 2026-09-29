@@ -2588,6 +2588,57 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots.assert_awaited()
 
 
+async def test_a_rejected_key_for_a_spot_indexed_credit_raises_the_notice(
+    hass: HomeAssistant,
+) -> None:
+    """A static card whose feed-in follows the spot per hour fetches spots for
+    the credit alone. A rejected key used to be logged at debug level and the
+    credit dropped with nothing to say so, while the key step's unreachable
+    screen promised a Repairs notice. The energy is still priced."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "BADKEY",
+        },
+        title="Cociter Variable injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        side_effect=EntsoeAuthError("401 Unauthorized")
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+
+    with patch(
+        "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+        AsyncMock(return_value=0.0),
+    ):
+        data = await coord._async_update_data()
+
+    issue_id = f"entsoe_auth_failed_{entry.entry_id}"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+    assert data.hourly
+
+
 async def test_the_projection_is_handed_the_day_ahead_history(
     hass: HomeAssistant,
 ) -> None:

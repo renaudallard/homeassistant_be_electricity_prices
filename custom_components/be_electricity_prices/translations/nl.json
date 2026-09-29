@@ -767,7 +767,7 @@
     },
     "entsoe_auth_failed": {
       "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
-      "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan kan deze entry niet berekend worden en zijn haar sensoren niet beschikbaar."
+      "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan kan niets op deze entry dat de day-aheadmarkt volgt berekend worden: op een dynamisch of maandelijks geïndexeerd contract zijn haar sensoren niet beschikbaar, en op een contract waarvan alleen de injectievergoeding de markt volgt, is die vergoeding het niet."
     },
     "supplier_deprecated": {
       "title": "{supplier} draagt je contract op {ends_on} over aan {successor}",
