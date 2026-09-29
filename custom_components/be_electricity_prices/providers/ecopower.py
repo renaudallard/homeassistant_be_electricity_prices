@@ -424,8 +424,11 @@ def _extract_energy(text: str) -> EnergyRates:
 # The '×' is U+00D7 but a re-render could swap it; accept the common
 # multiplication glyphs. SIGN_CHARS covers every minus/plus variant for the
 # additive base so a punctuation drift never flips the sign silently.
+# The cards up to September 2025 say "elk uur": the product settled on the
+# hourly EPEX DA price until the day-ahead market moved to quarter-hours, and
+# a past month is stored as the product it was.
 _DBS_ENERGY_RE = re.compile(
-    r"Dynamische\s+burgerstroom\s+elk\s+kwartier\s+"
+    r"Dynamische\s+burgerstroom\s+elk\s+(kwartier|uur)\s+"
     r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
     re.IGNORECASE,
@@ -453,13 +456,13 @@ def _extract_dbs_energy(text: str) -> DynamicRates:
         raise ExtractorError(
             "could not parse Ecopower 'Dynamische burgerstroom' formula"
         )
-    factor = to_float(match.group(1)) * 1000.0
-    base = parse_sign(match.group(2)) * to_float(match.group(3))
+    factor = to_float(match.group(2)) * 1000.0
+    base = parse_sign(match.group(3)) * to_float(match.group(4))
     return DynamicRates(
         factor=factor,
         base=base,
         yearly_fixed_fee=_extract_dbs_abonnement(text),
-        quarter_hourly=True,
+        quarter_hourly=match.group(1).lower() == "kwartier",
     )
 
 
@@ -840,10 +843,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
     )
 
 
-# The dynamic card prints the injection formula like the consumption one:
+# The dynamic card prints the injection formula like the consumption one,
+# on the same grid:
 #   "Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015 euro/kWh"
 _DBS_INJECTION_RE = re.compile(
-    r"Terugleververgoeding\s+elk\s+kwartier\s+"
+    r"Terugleververgoeding\s+elk\s+(?:kwartier|uur)\s+"
     r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
     re.IGNORECASE,

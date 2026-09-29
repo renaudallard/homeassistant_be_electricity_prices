@@ -445,6 +445,28 @@ def test_dbs_card_injection_is_dynamic_formula() -> None:
     assert snap.injection.base == pytest.approx(-0.015)
 
 
+def test_a_dbs_card_settled_per_hour_is_stored_as_the_hourly_product() -> None:
+    """Up to September 2025 the card said "elk uur": the product settled on
+    the hourly EPEX DA price until the day-ahead market moved to
+    quarter-hours. Both formulas required "elk kwartier", so the archive could
+    not store that month, and the feed-in formula alone would have dropped
+    out without a word. Same coefficients, on the hourly grid."""
+    snap = parse_dbs_snapshot(
+        _text("ecopower_dynamische_burgerstroom_2025-09.pdf"),
+        "test://ecopower-dbs",
+        "2025-09",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+    assert snap.energy.factor == pytest.approx(1.02)
+    assert snap.energy.base == pytest.approx(0.004)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
+    assert isinstance(snap.injection, InjectionRates)
+    assert snap.injection.factor == pytest.approx(0.98)
+    assert snap.injection.base == pytest.approx(-0.015)
+    assert len(snap.dsos) == 8
+
+
 def test_dbs_card_dsos_cover_all_eight_fluvius_subareas() -> None:
     """The narrower dynamic card wraps 'Fluvius Midden-Vlaanderen' across
     its data row; the label-stitch must keep all eight sub-areas."""

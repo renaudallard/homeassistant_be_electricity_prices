@@ -80,7 +80,10 @@ Notes:
   multiplies the 15-minute EPEX DA spot, so the live price table, current / next-slot sensors and
   the cheapest-window service keep the native 15-minute slots. YTD billing stays hourly regardless
   (Home Assistant only retains hourly long-term statistics). See `DynamicRates` docstring,
-  `_rates.py`.
+  `_rates.py`. The cards up to September 2025 say "elk uur" instead: the product settled on the
+  hourly EPEX DA price until the day-ahead market moved to quarter-hours, so both formula
+  readers accept either word and such a card is stored with `quarter_hourly=False`, the product
+  it was. Requiring "elk kwartier" left the archive unable to store September 2025.
 - Groene Burgerstroom sets `spot_indexed_injection`; the dynamic contract does not, its
   energy formula collecting the ENTSO-E key already. The variable card's printed indicative is
   a fallback rather than a reason to skip the key: the credit resolves against a monthly mean
