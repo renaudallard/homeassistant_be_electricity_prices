@@ -660,7 +660,7 @@
         },
         "entry_id": {
           "name": "ID de l'entree",
-          "description": "Entree de configuration ciblee (optionnel)."
+          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "earliest_start": {
           "name": "Debut au plus tot",
@@ -682,7 +682,7 @@
         },
         "entry_id": {
           "name": "ID de l'entree",
-          "description": "Entree de configuration ciblee (optionnel)."
+          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "earliest_start": {
           "name": "Debut au plus tot",
@@ -700,7 +700,7 @@
       "fields": {
         "entry_id": {
           "name": "ID de l'entree",
-          "description": "Entree de configuration ciblee (optionnel)."
+          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "start": {
           "name": "Debut",

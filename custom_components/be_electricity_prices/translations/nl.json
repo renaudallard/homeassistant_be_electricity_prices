@@ -660,7 +660,7 @@
         },
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Configuratie-entry om te targeten (optioneel)."
+          "description": "Optioneel. Zonder deze waarde wordt de eerst geladen invoer gebruikt, dus vul ze in als je meer dan één invoer hebt."
         },
         "earliest_start": {
           "name": "Vroegste start",
@@ -682,7 +682,7 @@
         },
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Configuratie-entry om te targeten (optioneel)."
+          "description": "Optioneel. Zonder deze waarde wordt de eerst geladen invoer gebruikt, dus vul ze in als je meer dan één invoer hebt."
         },
         "earliest_start": {
           "name": "Vroegste start",
@@ -700,7 +700,7 @@
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Optionele configuratie-entry om te targeten."
+          "description": "Optioneel. Zonder deze waarde wordt de eerst geladen invoer gebruikt, dus vul ze in als je meer dan één invoer hebt."
         },
         "start": {
           "name": "Start",

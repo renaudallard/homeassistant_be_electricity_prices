@@ -660,7 +660,7 @@
         },
         "entry_id": {
           "name": "Entry ID",
-          "description": "Optional config entry to target."
+          "description": "Optional. Without it the first loaded entry is used, so set it when you have more than one entry."
         },
         "earliest_start": {
           "name": "Earliest start",
@@ -682,7 +682,7 @@
         },
         "entry_id": {
           "name": "Entry ID",
-          "description": "Optional config entry to target."
+          "description": "Optional. Without it the first loaded entry is used, so set it when you have more than one entry."
         },
         "earliest_start": {
           "name": "Earliest start",
@@ -700,7 +700,7 @@
       "fields": {
         "entry_id": {
           "name": "Entry ID",
-          "description": "Optional config entry to target."
+          "description": "Optional. Without it the first loaded entry is used, so set it when you have more than one entry."
         },
         "start": {
           "name": "Start",

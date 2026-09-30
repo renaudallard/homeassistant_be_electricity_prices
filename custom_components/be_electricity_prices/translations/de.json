@@ -660,7 +660,7 @@
         },
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Konfigurationseintrag (optional)."
+          "description": "Optional. Ohne Angabe wird der zuerst geladene Eintrag verwendet; geben Sie ihn an, wenn Sie mehrere Einträge haben."
         },
         "earliest_start": {
           "name": "Frueher Beginn",
@@ -682,7 +682,7 @@
         },
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Konfigurationseintrag (optional)."
+          "description": "Optional. Ohne Angabe wird der zuerst geladene Eintrag verwendet; geben Sie ihn an, wenn Sie mehrere Einträge haben."
         },
         "earliest_start": {
           "name": "Frueher Beginn",
@@ -700,7 +700,7 @@
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
-          "description": "Konfigurationseintrag (optional)."
+          "description": "Optional. Ohne Angabe wird der zuerst geladene Eintrag verwendet; geben Sie ihn an, wenn Sie mehrere Einträge haben."
         },
         "start": {
           "name": "Beginn",
