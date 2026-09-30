@@ -18,6 +18,7 @@ from custom_components.be_electricity_prices.const import (
     VAT_RATE_REDUCED,
 )
 from custom_components.be_electricity_prices.providers import (
+    _ecopower_overlays,
     _energyvision_cards,
     _energyvision_wallonia,
     _engie_cards,
@@ -482,12 +483,12 @@ def test_ecopower_is_priced_at_the_rate_it_states_for_households() -> None:
     assert snap.taxes.vat_rate == pytest.approx(0.06)
     assert (snap.taxes.card_vat_rate, snap.taxes.assumed_vat_rate) == (0.06, None)
     at_seven = ecopower.parse_snapshot(
-        _restated(text, (ecopower._VAT_RE,), "7"), "t://", "2026-07"
+        _restated(text, (_ecopower_overlays._VAT_RE,), "7"), "t://", "2026-07"
     )
     assert at_seven.taxes.vat_rate == pytest.approx(0.07)
     assert at_seven.taxes.card_vat_rate == pytest.approx(0.07)
     unstated = ecopower.parse_snapshot(
-        _restated(text, (ecopower._VAT_RE,), ""), "t://", "2026-07"
+        _restated(text, (_ecopower_overlays._VAT_RE,), ""), "t://", "2026-07"
     )
     assert unstated.taxes.vat_rate == pytest.approx(VAT_RATE_REDUCED)
     assert (unstated.taxes.card_vat_rate, unstated.taxes.assumed_vat_rate) == (

@@ -21,6 +21,7 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.providers import (
     _bolt_cards,
+    _ecopower_overlays,
     bolt,
     ecopower,
     energiebe,
@@ -167,7 +168,7 @@ def test_a_card_priced_excluding_vat_takes_the_months_rate_where_it_assumed(
     stated = ecopower.parse_snapshot(text, "t://", "2026-07")
     assert resolve_vat_rate(stated, NOV, professional=False) is stated
     unstated = ecopower.parse_snapshot(
-        _restated(text, (ecopower._VAT_RE,), ""), "t://", "2026-07"
+        _restated(text, (_ecopower_overlays._VAT_RE,), ""), "t://", "2026-07"
     )
     got = resolve_vat_rate(unstated, NOV, professional=False)
     assert got.taxes.vat_rate == 0.07

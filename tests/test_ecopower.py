@@ -44,10 +44,12 @@ from custom_components.be_electricity_prices.providers._rates import (
     InjectionRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.ecopower import (
-    _card_stamp_keys,
+from custom_components.be_electricity_prices.providers._ecopower_cards import (
     _extract_energy,
     _extract_injection,
+)
+from custom_components.be_electricity_prices.providers.ecopower import (
+    _card_stamp_keys,
     _resolve_latest_dbs_pdf,
     _resolve_latest_pdf,
     fetch_for_month,
