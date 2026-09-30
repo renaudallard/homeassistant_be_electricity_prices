@@ -215,11 +215,12 @@ jobs:
             fi
           done
           # Same retention as the rows: a month more than twelve back goes.
-          # Only this integration's releases, not the gas or water ones.
+          # Only this integration's releases, not the gas or water ones, and
+          # counted from the 1st so no day of the month shifts the cutoff.
           # Listed with an explicit limit: gh stops at 30 by default, and with
           # two releases a month the ones past the cutoff would sit beyond it
           # from 2029 on, never listed and never deleted.
-          cutoff="electricity-$(date -u -d '-12 months' +%Y-%m)"
+          cutoff="electricity-$(date -u -d "$(date -u +%Y-%m-01) -12 months" +%Y-%m)"
           gh release list --repo "$CARDS_REPO" --limit 1000 --json tagName --jq '.[].tagName'             | while read -r tag; do
               case "$tag" in electricity-*) ;; *) continue ;; esac
               if [ "$tag" \< "$cutoff" ]; then
