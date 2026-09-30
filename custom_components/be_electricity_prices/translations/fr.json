@@ -31,8 +31,8 @@
         "description": "Laissez cette étape vide, sauf si la confirmation de votre contrat indique d'autres chiffres que la carte tarifaire publiée par votre fournisseur. Beaucoup d'offres, y compris les promotions vendues via des sites de comparaison, ont leur propre carte, que l'intégration lit déjà. Ne saisissez qu'un chiffre que votre contrat indique : il remplace la valeur de la carte, et un champ laissé vide la conserve. Si votre fournisseur archive ses anciennes cartes tarifaires, celle de votre mois de signature complète les champs vides ; sinon c'est la carte actuelle. Le facteur spot multiplie le prix du marché en EUR/kWh et la base est en EUR/kWh, donc une formule imprimée en c€/kWh sur un Belpex en EUR/MWh doit être convertie : (0,1068 × Belpex + 1,5) × 1,06 c€/kWh donne un facteur de 1,13208 et une base de 0,0159. Les valeurs au kWh sont TVA comprise sur un contrat résidentiel, et hors TVA sur un contrat professionnel et sur les cartes d'Ecopower ; le forfait annuel est TVA comprise.",
         "data": {
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
-          "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
-          "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_peak": "Tarif jour signé (EUR/kWh)",
+          "manual_energy_offpeak": "Tarif nuit signé (EUR/kWh)",
           "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
@@ -71,7 +71,7 @@
           "direct_debit": "Je paie par domiciliation"
         },
         "data_description": {
-          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce qu'elle déplace dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur EnergyVision Groene stroom (vendu sous le nom Brusol à Bruxelles) c'est la redevance fixe annuelle, 250 EUR par an contre 230."
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce sur quoi elle porte dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur EnergyVision Groene stroom (vendu sous le nom Brusol à Bruxelles) c'est la redevance fixe annuelle, 250 EUR par an contre 230."
         }
       },
       "dso_tariff_mode": {
@@ -90,14 +90,14 @@
       },
       "api_key": {
         "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par slot pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
+        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection reglee par tranche horaire n'est pas creditee et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection réglée par créneau n'est pas creditee et son prix reste indisponible.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -146,8 +146,8 @@
           "night_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
           "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
-          "consumption_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "injection_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "consumption_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe en panne, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "injection_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe en panne, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
           "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Lit aussi, une fois par jour, le taux de TVA sur lequel les cartes archivées s'accordent, pour les prix qu'une carte donne sans taux, et fournit la lecture par le projet d'une carte publiée en images de page, si bien qu'un fournisseur qui publie ainsi (Ecofix depuis août 2026) n'a pas de prix si elle est désactivée. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle, et un taux de TVA qu'une carte n'indique pas est le dernier lu quand l'option était active, ou sinon 6 % pour un ménage et 21 % sur un contrat professionnel.",
           "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre."
@@ -188,7 +188,7 @@
           "custom_dso_distribution_offpeak": "Distribution nuit (EUR/kWh)",
           "custom_dso_distribution_exclusive_night": "Distribution nuit exclusif (EUR/kWh)",
           "custom_dso_transport": "Transport (EUR/kWh)",
-          "custom_dso_data_management_per_year": "Frais de gestion ou terme fixe (EUR/an)",
+          "custom_dso_data_management_per_year": "Frais de gestion des données ou terme fixe (EUR/an)",
           "custom_dso_capacity_eur_per_kw_year": "Tarif capacitaire (EUR/kW/an)",
           "custom_dso_prosumer_eur_per_kva_year": "Tarif prosumer (EUR/kVA/an)",
           "custom_dso_distribution_pic": "Distribution bande PIC (EUR/kWh)",
@@ -361,8 +361,8 @@
         "description": "Laissez cette étape vide, sauf si la confirmation de votre contrat indique d'autres chiffres que la carte tarifaire publiée par votre fournisseur. Beaucoup d'offres, y compris les promotions vendues via des sites de comparaison, ont leur propre carte, que l'intégration lit déjà. Ne saisissez qu'un chiffre que votre contrat indique : il remplace la valeur de la carte, et un champ laissé vide la conserve. Si votre fournisseur archive ses anciennes cartes tarifaires, celle de votre mois de signature complète les champs vides ; sinon c'est la carte actuelle. Le facteur spot multiplie le prix du marché en EUR/kWh et la base est en EUR/kWh, donc une formule imprimée en c€/kWh sur un Belpex en EUR/MWh doit être convertie : (0,1068 × Belpex + 1,5) × 1,06 c€/kWh donne un facteur de 1,13208 et une base de 0,0159. Les valeurs au kWh sont TVA comprise sur un contrat résidentiel, et hors TVA sur un contrat professionnel et sur les cartes d'Ecopower ; le forfait annuel est TVA comprise.",
         "data": {
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
-          "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
-          "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_peak": "Tarif jour signé (EUR/kWh)",
+          "manual_energy_offpeak": "Tarif nuit signé (EUR/kWh)",
           "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
@@ -410,7 +410,7 @@
           "direct_debit": "Je paie par domiciliation"
         },
         "data_description": {
-          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce qu'elle déplace dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur EnergyVision Groene stroom (vendu sous le nom Brusol à Bruxelles) c'est la redevance fixe annuelle, 250 EUR par an contre 230."
+          "direct_debit": "Affiché uniquement lorsque la carte tarifaire mentionne une différence, et ce sur quoi elle porte dépend de la carte. Sur les dix-sept produits de Mega il s'agit de la ristourne de bienvenue : quatre ne l'accordent qu'au payeur par domiciliation, les autres ajoutent un supplément. Sur EnergyVision Groene stroom (vendu sous le nom Brusol à Bruxelles) c'est la redevance fixe annuelle, 250 EUR par an contre 230."
         }
       },
       "dso_tariff_mode": {
@@ -429,14 +429,14 @@
       },
       "api_key": {
         "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par slot pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
+        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection reglee par tranche horaire n'est pas creditee et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection réglée par créneau n'est pas creditee et son prix reste indisponible.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -485,8 +485,8 @@
           "night_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
           "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », n'est lu correctement que si sa state class est total_increasing ou s'il publie last_reset ; toute autre baisse compte pour zéro.",
-          "consumption_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "injection_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "consumption_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe en panne, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "injection_kwh": "Utilisé pour son côté quand les deux registres de ce côté sont vides, et à la place d'une paire qui tombe en panne, se fige ou rapporte des périodes différentes : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
           "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Lit aussi, une fois par jour, le taux de TVA sur lequel les cartes archivées s'accordent, pour les prix qu'une carte donne sans taux, et fournit la lecture par le projet d'une carte publiée en images de page, si bien qu'un fournisseur qui publie ainsi (Ecofix depuis août 2026) n'a pas de prix si elle est désactivée. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle, et un taux de TVA qu'une carte n'indique pas est le dernier lu quand l'option était active, ou sinon 6 % pour un ménage et 21 % sur un contrat professionnel.",
           "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre."
@@ -527,7 +527,7 @@
           "custom_dso_distribution_offpeak": "Distribution nuit (EUR/kWh)",
           "custom_dso_distribution_exclusive_night": "Distribution nuit exclusif (EUR/kWh)",
           "custom_dso_transport": "Transport (EUR/kWh)",
-          "custom_dso_data_management_per_year": "Frais de gestion ou terme fixe (EUR/an)",
+          "custom_dso_data_management_per_year": "Frais de gestion des données ou terme fixe (EUR/an)",
           "custom_dso_capacity_eur_per_kw_year": "Tarif capacitaire (EUR/kW/an)",
           "custom_dso_prosumer_eur_per_kva_year": "Tarif prosumer (EUR/kVA/an)",
           "custom_dso_distribution_pic": "Distribution bande PIC (EUR/kWh)",
@@ -790,7 +790,7 @@
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",
-      "description": "Votre entree est configuree pour un compteur exclusif nuit separe, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif heures creuses. L'integration facture ce circuit au tarif de distribution de jour, donc la part reseau de son prix est plus elevee que ce qui vous est reellement facture. La part energie n'est pas affectee.\n\nRien ne peut etre substitue automatiquement : l'integration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez a {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
+      "description": "Votre entree est configuree pour un compteur exclusif nuit separe, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif de nuit. L'integration facture ce circuit au tarif de distribution de jour, donc la part reseau de son prix est plus elevee que ce qui vous est reellement facture. La part energie n'est pas affectee.\n\nRien ne peut etre substitue automatiquement : l'integration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez a {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
     },
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) ne publie pas les tarifs Tarif Impact pour {dso}",
