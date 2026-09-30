@@ -40,6 +40,7 @@ from custom_components.be_electricity_prices import (
 from custom_components.be_electricity_prices import ytd_cost, ytd_energy
 
 from custom_components.be_electricity_prices import energy_meters
+from custom_components.be_electricity_prices import meter_daily, meter_hourly
 
 import calendar
 from collections.abc import Mapping
@@ -1619,7 +1620,7 @@ async def test_the_hourly_walks_bill_each_register_over_its_own_hours(
         return dict(per_sensor[entity_id])
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly):
-        sides = await energy_meters._metered_sides(
+        sides = await meter_hourly._metered_sides(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -2006,7 +2007,7 @@ async def test_a_day_one_register_did_not_report_is_billed_on_neither_side(
         {},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             d0 + timedelta(days=29),
@@ -2246,13 +2247,13 @@ async def test_today_is_not_billed_on_a_pair_one_half_of_which_stopped(
         {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.inj": 3.0},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -2268,7 +2269,7 @@ async def test_today_is_not_billed_on_a_pair_one_half_of_which_stopped(
 async def test_a_pair_is_not_topped_up_off_one_half(hass: HomeAssistant) -> None:
     """The top-up summed whichever sensors read live, so a pair with one half
     unreadable added the other band's whole day to the current hour."""
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_hourly import (
         _top_up_today_hourly,
     )
 
@@ -2646,7 +2647,7 @@ async def test_band_ratio_refuses_a_once_a_day_sensor(hass: HomeAssistant) -> No
     year. Measured on a 2415 kWh year against a true off-peak share of 0,457:
     a 04:00 poll billed the distribution leg 31,7% low and a 13:00 poll 26,7%
     high, and the bi-hourly energy rate splits on the same ratio."""
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_daily import (
         _recorder_daily_band_ratio,
     )
 
@@ -2675,7 +2676,7 @@ async def test_band_ratio_refuses_a_once_a_day_sensor(hass: HomeAssistant) -> No
     assert 0.0 < spread[day][1] < 1.0
     # The once-a-day reading must NOT come back as 100% off-peak.
     assert once[day] != (0.0, 1.0)
-    assert once[day] == energy_meters._default_band_ratio_for(day, "wallonia")
+    assert once[day] == meter_daily._default_band_ratio_for(day, "wallonia")
 
 
 async def test_ytd_reports_coverage_against_elapsed_not_against_priced(
@@ -2812,7 +2813,7 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
         patch.object(energy_meters, "_recorder_daily_kwh", new=_dead_night),
         caplog.at_level("WARNING"),
     ):
-        got = await energy_meters._measured_kwh(
+        got = await meter_daily._measured_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             d0,
@@ -2820,7 +2821,7 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
             warn=True,
         )
     # Refused outright rather than billed at half, and said out loud.
-    assert got == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
+    assert got == meter_daily.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
     assert "sensor.night" in caplog.text
 
 
@@ -2853,7 +2854,7 @@ async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
         patch.object(energy_meters, "_recorder_daily_kwh", new=_night_stops),
         caplog.at_level("WARNING"),
     ):
-        got = await energy_meters._measured_kwh(
+        got = await meter_daily._measured_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             d0,
@@ -3258,7 +3259,7 @@ async def test_measured_kwh_names_a_register_that_stopped_or_never_recorded(
     async def _fault(day: range, night: range) -> str:
         spans.update({"sensor.day": day, "sensor.night": night})
         with patch.object(energy_meters, "_recorder_daily_kwh", new=_rows):
-            got = await energy_meters._measured_kwh(hass, entry, d0, end)  # type: ignore[arg-type]
+            got = await meter_daily._measured_kwh(hass, entry, d0, end)  # type: ignore[arg-type]
         return got.pair_fault
 
     assert await _fault(range(60), range(60)) == ""
@@ -3330,20 +3331,20 @@ async def test_a_register_with_only_a_live_reading_is_a_dead_half(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             today - timedelta(days=364),
             today,
         )
     assert daily is None
-    assert measured == energy_meters.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
+    assert measured == meter_daily.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
 
 
 @pytest.mark.parametrize(
@@ -3377,20 +3378,20 @@ async def test_a_meter_with_only_a_live_reading_is_named(
         {"sensor.total": 7.0, "sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        year = await energy_meters._measured_kwh(
+        year = await meter_daily._measured_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             date(2026, 1, 1),
             today,
         )
-        opening = await energy_meters._measured_kwh(
+        opening = await meter_daily._measured_kwh(
             hass,
             entry,  # type: ignore[arg-type]
             today,
             today,
         )
-    assert year == energy_meters.MeasuredKwh(7.0, 1, pair_fault=named)
-    assert opening == energy_meters.MeasuredKwh(7.0, 1)
+    assert year == meter_daily.MeasuredKwh(7.0, 1, pair_fault=named)
+    assert opening == meter_daily.MeasuredKwh(7.0, 1)
 
 
 async def test_a_register_that_stopped_is_named_though_it_reads_live_today(
@@ -3407,7 +3408,7 @@ async def test_a_register_that_stopped_is_named_though_it_reads_live_today(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3440,7 +3441,7 @@ async def test_a_register_rewired_late_stays_named(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3463,13 +3464,13 @@ async def test_a_healthy_pair_still_bills_today_off_the_live_meter(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_ENTRY,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3478,7 +3479,7 @@ async def test_a_healthy_pair_still_bills_today_off_the_live_meter(
     assert daily is not None
     assert len(daily) == 266
     assert daily[today] == (5.0, 2.0, 0.0, 0.0)
-    assert measured == energy_meters.MeasuredKwh(265 * 2.0 + 7.0, 266)
+    assert measured == meter_daily.MeasuredKwh(265 * 2.0 + 7.0, 266)
 
 
 _PAIR_AND_TOTAL = SimpleNamespace(
@@ -3517,20 +3518,20 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
         {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.total": 7.0},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        hourly = await energy_meters._metered_hourly_kwh(
+        hourly = await meter_hourly._metered_hourly_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             "consumption",
             date(2026, 1, 1),
             today,
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3542,7 +3543,7 @@ async def test_a_wired_total_stands_in_for_a_pair_that_cannot_be_billed(
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
     assert len(hourly.kwh) == 265
-    assert measured == energy_meters.MeasuredKwh(
+    assert measured == meter_daily.MeasuredKwh(
         530.0 + 7.0, 266, pair_fault=fault, covered=True
     )
 
@@ -3567,20 +3568,20 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        hourly = await energy_meters._metered_hourly_kwh(
+        hourly = await meter_hourly._metered_hourly_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             "consumption",
             date(2026, 1, 1),
             today,
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3592,7 +3593,7 @@ async def test_a_total_recording_less_than_the_pair_does_not_stand_in(
     assert hourly is not None
     assert hourly.sensors == ("sensor.day", "sensor.night")
     assert len(hourly.kwh) == 264
-    assert measured == energy_meters.MeasuredKwh(264 * 2.0 + 7.0, 265)
+    assert measured == meter_daily.MeasuredKwh(264 * 2.0 + 7.0, 265)
 
 
 async def _pair_and_total(
@@ -3604,20 +3605,20 @@ async def _pair_and_total(
         stats, {"sensor.day": 5.0, "sensor.night": 2.0, "sensor.total": 7.0}
     )
     with rows, live:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        hourly = await energy_meters._metered_hourly_kwh(
+        hourly = await meter_hourly._metered_hourly_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             "consumption",
             date(2026, 1, 1),
             today,
         )
-        measured = await energy_meters._measured_kwh(
+        measured = await meter_daily._measured_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -3718,7 +3719,7 @@ async def test_a_total_stands_in_for_a_pair_short_of_it(
     assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
-    assert measured == energy_meters.MeasuredKwh(
+    assert measured == meter_daily.MeasuredKwh(
         530.0 + 7.0, 266, pair_fault=fault, covered=True
     )
 
@@ -3745,7 +3746,7 @@ async def test_a_late_total_stands_in_for_a_pair_that_stopped_earlier(
     assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(468.0 + 7.0)
     assert hourly is not None
     assert hourly.sensors == ("sensor.total",)
-    assert measured == energy_meters.MeasuredKwh(
+    assert measured == meter_daily.MeasuredKwh(
         468.0 + 7.0, 235, pair_fault="sensor.night", covered=True
     )
 
@@ -3771,7 +3772,7 @@ async def test_a_healthy_pair_keeps_billing_beside_a_healthy_total(
     assert sum(r[0] + r[1] for r in daily.values()) == pytest.approx(530.0 + 7.0)
     assert hourly is not None
     assert hourly.sensors == ("sensor.day", "sensor.night")
-    assert measured == energy_meters.MeasuredKwh(530.0 + 7.0, 266)
+    assert measured == meter_daily.MeasuredKwh(530.0 + 7.0, 266)
 
 
 def _polled_once_a_day(days: list[date], kwh: float) -> dict[datetime, float]:
@@ -3805,9 +3806,9 @@ async def test_a_meter_read_once_a_day_is_spread_over_its_hours(
     ) -> dict[datetime, float]:
         return dict(per_hour)
 
-    energy_meters._READ_DAILY_LOGGED.clear()
+    meter_hourly._READ_DAILY_LOGGED.clear()
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass, entry, "consumption", days[0], days[-1]
         )
     assert metered is not None
@@ -3893,7 +3894,7 @@ async def test_a_meter_that_moved_in_one_hour_on_a_dull_day_is_left_alone(
         return dict(per_hour)
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass, entry, "consumption", days[0], days[-1]
         )
     assert metered is not None
@@ -3931,7 +3932,7 @@ async def test_a_meter_read_once_a_day_is_judged_on_the_days_before_the_window(
             (date(2026, 1, 1), date(2026, 1, 2)),
             (date(2025, 12, 1), date(2025, 12, 5)),
         ):
-            metered = await energy_meters._metered_hourly_kwh(
+            metered = await meter_hourly._metered_hourly_kwh(
                 hass, entry, "consumption", start, end
             )
             assert metered is not None
@@ -3982,7 +3983,7 @@ async def test_a_meter_turned_poller_before_the_window_is_judged_on_the_window(
         }
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass, entry, "consumption", date(2026, 1, 1), date(2026, 1, 31)
         )
     assert metered is not None
@@ -4024,7 +4025,7 @@ async def test_a_poller_turned_hourly_is_not_spread_on_its_old_shape(
         }
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass, entry, "consumption", date(2026, 1, 1), date(2026, 1, 3)
         )
     assert metered is not None
@@ -4067,7 +4068,7 @@ async def test_an_hourly_pair_missing_rows_keeps_billing_over_a_late_total(
         }
 
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass,
             _PAIR_AND_TOTAL,  # type: ignore[arg-type]
             "consumption",
@@ -4097,9 +4098,9 @@ async def test_a_day_or_two_of_single_hour_feed_in_is_not_a_daily_poll(
     ) -> dict[datetime, float]:
         return dict(per_hour)
 
-    energy_meters._READ_DAILY_LOGGED.clear()
+    meter_hourly._READ_DAILY_LOGGED.clear()
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
-        metered = await energy_meters._metered_hourly_kwh(
+        metered = await meter_hourly._metered_hourly_kwh(
             hass, entry, "injection", days[0], days[-1]
         )
     assert metered is not None
@@ -4127,13 +4128,13 @@ async def _both_sides(
         {"sensor.cons": cons, "sensor.inj": inj}, live
     )
     with rows, live_patch:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        sides = await energy_meters._metered_sides(
+        sides = await meter_hourly._metered_sides(
             None,  # type: ignore[arg-type]
             _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -4195,13 +4196,13 @@ def _no_solar(**extra: str) -> SimpleNamespace:
 
 
 async def _read(entry: SimpleNamespace, today: date) -> tuple[Any, Any]:
-    daily = await energy_meters._resolve_daily_kwh(
+    daily = await meter_daily._resolve_daily_kwh(
         None,  # type: ignore[arg-type]
         entry,  # type: ignore[arg-type]
         today,
         date(2026, 1, 1),
     )
-    sides = await energy_meters._metered_sides(
+    sides = await meter_hourly._metered_sides(
         None,  # type: ignore[arg-type]
         entry,  # type: ignore[arg-type]
         date(2026, 1, 1),
@@ -4252,13 +4253,13 @@ async def test_the_daily_memo_keeps_the_regimes_apart(freezer: Any) -> None:
         {"sensor.cons": 5.0},
     )
     with rows, live, energy_meters.memoise_meter_reads({}):
-        own = await energy_meters._resolve_daily_kwh(
+        own = await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             _no_solar(),  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        what_if = await energy_meters._resolve_daily_kwh(
+        what_if = await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             _no_solar(solar_regime="injection"),  # type: ignore[arg-type]
             today,
@@ -4350,7 +4351,7 @@ async def test_the_first_day_reads_the_silent_side_off_todays_hours(
         {"sensor.day": 5.0, "sensor.night": 2.0},
     )
     with rows, live_patch:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             _PAIR_ENTRY,  # type: ignore[arg-type]
             today,
@@ -4451,13 +4452,13 @@ async def test_an_injection_register_gap_keeps_the_consumption(
         {"sensor.cons": 5.0},
     )
     with rows, live_patch:
-        daily = await energy_meters._resolve_daily_kwh(
+        daily = await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
-        sides = await energy_meters._metered_sides(
+        sides = await meter_hourly._metered_sides(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -4520,14 +4521,14 @@ async def test_a_silent_side_names_only_the_register_that_stopped(
     )
     billed: dict[str, tuple[str, ...]] = {}
     with rows, live_patch:
-        await energy_meters._resolve_daily_kwh(
+        await meter_daily._resolve_daily_kwh(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
             billed=billed,
         )
-        sides = await energy_meters._metered_sides(
+        sides = await meter_hourly._metered_sides(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             date(2026, 1, 1),
@@ -4567,7 +4568,7 @@ async def test_measured_kwh_counts_days_across_a_register_pair(
         return {d0: 1.0, d0 + timedelta(days=2): 1.0}
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
-        got = await energy_meters._measured_kwh(hass, entry, d0, d0 + timedelta(days=2))  # type: ignore[arg-type]
+        got = await meter_daily._measured_kwh(hass, entry, d0, d0 + timedelta(days=2))  # type: ignore[arg-type]
     assert got.kwh == pytest.approx(5.0)
     assert got.days_with_data == 1
 
@@ -4587,7 +4588,7 @@ async def test_measured_kwh_counts_days_for_a_totals_sensor(
         return {d0 + timedelta(days=i): 2.0 for i in range(5)}
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
-        got = await energy_meters._measured_kwh(hass, entry, d0, d0 + timedelta(days=4))  # type: ignore[arg-type]
+        got = await meter_daily._measured_kwh(hass, entry, d0, d0 + timedelta(days=4))  # type: ignore[arg-type]
     assert got.kwh == pytest.approx(10.0)
     assert got.days_with_data == 5
 
@@ -4612,7 +4613,7 @@ async def test_measured_kwh_refuses_a_half_wired_register_pair(
         return {d0: 99.0}
 
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
-        got = await energy_meters._measured_kwh(hass, entry, d0, d0)  # type: ignore[arg-type]
+        got = await meter_daily._measured_kwh(hass, entry, d0, d0)  # type: ignore[arg-type]
     assert got.kwh == 0.0
     assert got.days_with_data == 0
 
@@ -4637,8 +4638,8 @@ async def test_measured_kwh_separates_no_wiring_from_a_zero_reading(
     wired_entry = SimpleNamespace(data={"consumption_kwh": "sensor.total"})
     bare_entry = SimpleNamespace(data={})
     with patch.object(energy_meters, "_recorder_daily_kwh", new=_zeros):
-        wired = await energy_meters._measured_kwh(hass, wired_entry, d0, d0)  # type: ignore[arg-type]
-        bare = await energy_meters._measured_kwh(hass, bare_entry, d0, d0)  # type: ignore[arg-type]
+        wired = await meter_daily._measured_kwh(hass, wired_entry, d0, d0)  # type: ignore[arg-type]
+        bare = await meter_daily._measured_kwh(hass, bare_entry, d0, d0)  # type: ignore[arg-type]
     assert wired.kwh == 0.0 and wired.days_with_data == 3
     assert bare.kwh == 0.0 and bare.days_with_data == 0
 
@@ -4842,7 +4843,7 @@ async def test_top_up_today_hourly_adds_the_uncompiled_remainder(
     hourly-billed contract stepped once an hour at best and froze when
     compilation stalled. Top today up from the live meter, attributing the
     shortfall to the current hour, where the missing energy actually was."""
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_hourly import (
         _top_up_today_hourly,
     )
 
@@ -4877,7 +4878,7 @@ async def test_top_up_today_hourly_leaves_caught_up_statistics_alone(
 ) -> None:
     """When statistics already carry today's whole total there is nothing to
     add, and a meter that ran backwards must not invent a negative hour."""
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_hourly import (
         _top_up_today_hourly,
     )
 
@@ -4904,7 +4905,7 @@ async def test_top_up_today_hourly_without_a_live_reading_is_a_no_op(
 ) -> None:
     """An unavailable meter leaves the statistics figure standing, exactly as
     the per-day path degrades."""
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_hourly import (
         _top_up_today_hourly,
     )
 
@@ -6161,7 +6162,7 @@ async def test_year_cost_meter_override_splits_a_totals_sensor_into_bands(
     peak_all_in, offpeak_all_in, single_all_in = 0.4065, 0.3465, 0.3765
     blend = 0.0
     for day in days:
-        d_ratio, n_ratio = energy_meters._default_band_ratio_for(day, "wallonia")
+        d_ratio, n_ratio = meter_daily._default_band_ratio_for(day, "wallonia")
         blend += 10.0 * (d_ratio * peak_all_in + n_ratio * offpeak_all_in)
     mono_energy = 10.0 * len(days) * single_all_in
     assert as_bi - as_mono == pytest.approx(blend - mono_energy)
@@ -8906,7 +8907,7 @@ def test_the_compare_quote_helpers_read_only_entry_data() -> None:
             )
             # The typed volume was read off entry.data, not defaulted.
             assert vol.kwh == pytest.approx(4200.0)
-            await energy_meters._measured_kwh(
+            await meter_daily._measured_kwh(
                 no_hass, proxy, date(2026, 1, 1), date(2026, 7, 1)
             )
 
@@ -10916,7 +10917,7 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
 
     today = date(2026, 8, 1)
     with patch.object(energy_meters, "_recorder_daily_kwh", AsyncMock(return_value={})):
-        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        daily = await meter_daily._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
     assert daily is None, "static path must refuse a half-wired pair"
 
     hourly = await ytd_cost._ytd_hourly_energy(
@@ -10974,7 +10975,7 @@ async def test_both_year_to_date_walks_refuse_a_silent_register_half() -> None:
         patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
     ):
-        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        daily = await meter_daily._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
         hourly = await ytd_cost._ytd_hourly_energy(
             None,  # type: ignore[arg-type]
             None,  # type: ignore[arg-type]
@@ -11029,8 +11030,8 @@ async def test_both_year_to_date_walks_bill_a_stopped_pair_where_both_report() -
         patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
     ):
-        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
-        hourly = await energy_meters._metered_hourly_kwh(
+        daily = await meter_daily._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        hourly = await meter_hourly._metered_hourly_kwh(
             None,  # type: ignore[arg-type]
             entry,  # type: ignore[arg-type]
             "consumption",
@@ -11071,7 +11072,7 @@ async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
     with patch.object(
         energy_meters, "_recorder_daily_kwh", AsyncMock(return_value={today: 10.0})
     ):
-        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+        daily = await meter_daily._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
     assert daily is not None, "the totals sensor must still be used"
 
     # With no totals sensor it is still refused.
@@ -13696,7 +13697,7 @@ async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> N
     with 90 days of meter scaling to 52.000 had its excise band resolved on
     30.000 and its rows priced on 52.000."""
     from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.snapshot_resolve import (
         entry_annual_kwh,
     )

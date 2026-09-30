@@ -599,7 +599,7 @@ def _tou_weighted_per_kwh(
     welcome credit is capped against.
 
     ``hour_weights`` is the household's measured share of consumption per hour
-    of the day (:func:`energy_meters._measured_hour_weights`). Weighting the
+    of the day (:func:`meter_hourly._measured_hour_weights`). Weighting the
     slot rates by CLOCK hours instead assumes a household that consumes
     uniformly around the clock, which none does: measured on a residential
     profile the peak band carried 0,56 of the kWh against the 0,38 of the week

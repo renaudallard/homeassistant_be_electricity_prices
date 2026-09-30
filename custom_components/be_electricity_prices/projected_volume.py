@@ -48,7 +48,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import MEASURED_FULL_YEAR_DAYS, MEASURED_MIN_DAYS, MEASURED_YEAR_GAP_DAYS
-from .energy_meters import MeasuredKwh, _kwh_sensor_ids, _measured_kwh
+from .energy_meters import _kwh_sensor_ids
+from .meter_daily import (
+    MeasuredKwh,
+    _measured_kwh,
+)
 from .year_ahead import last_year
 
 _PROFILE_NAME = {

@@ -50,8 +50,8 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .energy_meters import (
-    _hourly_injection_sensors,
+from .energy_meters import _hourly_injection_sensors
+from .meter_hourly import (
     _metered_sides,
     _top_up_today_hourly,
 )

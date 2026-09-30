@@ -99,9 +99,9 @@ def _forget_read_daily_shapes() -> None:
     """Start every test with no meter judged read once a day. What the days
     before a window showed is kept for the day, keyed on the sensor names,
     and tests reuse the names and the frozen dates with other readings."""
-    from custom_components.be_electricity_prices import energy_meters
+    from custom_components.be_electricity_prices import meter_hourly
 
-    energy_meters._READ_DAILY_BEFORE.clear()
+    meter_hourly._READ_DAILY_BEFORE.clear()
 
 
 @pytest.fixture(autouse=True)

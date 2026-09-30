@@ -94,6 +94,9 @@ relative to that package directory.
 | `year_end_cost.py` | `projected_year_end_cost`: the year-to-date walk run to 31 December under `year_ahead`, and when the rest of the year has no rate to price it on. |
 | `projected_volume.py` | The rolling-year consumption and injection (the last 365 days, the volume `projected_year_cost` prices) and the calendar-year projections: this year's closed days plus last year's same remaining days, with a Synergrid profile fallback only where the entry already holds one. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
+| `meter_faults.py` | Judges the registers those reads come from: a pair wired by halves, a register that stopped or started late, a totals sensor standing in for a pair. |
+| `meter_hourly.py` | The hourly kWh series an hourly-billed contract is walked on, with once-a-day meters spread over their hours and the running day topped up live. |
+| `meter_daily.py` | Per-day kWh for the static bill, and the measured volume over a window with how much of it the meters cover. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
 | `config_flow.py` | The config flow and the options flow: where each starts, the options menu, and how the result is saved. |

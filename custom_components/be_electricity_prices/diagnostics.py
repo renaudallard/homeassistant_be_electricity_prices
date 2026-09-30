@@ -49,10 +49,10 @@ from .coordinator import (
 from .snapshot_resolve import entry_annual_kwh
 from .energy_meters import (
     _kwh_sensor_ids,
-    _metered_sides,
     _recorder_daily_kwh,
-    _resolve_daily_kwh,
 )
+from .meter_daily import _resolve_daily_kwh
+from .meter_hourly import _metered_sides
 from .snapshot_store import (
     _monthly_snapshots,
     _shared_failed_fetches,

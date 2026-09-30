@@ -75,11 +75,11 @@ from .compare_weighting import (
 )
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
-from .energy_meters import (
+from .meter_daily import _measured_kwh
+from .meter_hourly import (
     _hour_of_day_shares,
     _measured_hour_weights,
     _measured_hourly,
-    _measured_kwh,
 )
 from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
 from .contract_periods import billed_from

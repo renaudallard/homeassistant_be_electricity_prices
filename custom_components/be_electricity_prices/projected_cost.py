@@ -229,11 +229,11 @@ async def _compute_projected_year_cost(
         _compare_injection_credit,
         _tou_weighted_per_kwh,
     )
-    from .energy_meters import (
+    from .meter_daily import _measured_kwh
+    from .meter_hourly import (
         _hour_of_day_shares,
         _measured_hour_weights,
         _measured_hourly,
-        _measured_kwh,
     )
 
     if breakdown is None:

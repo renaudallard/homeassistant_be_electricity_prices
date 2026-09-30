@@ -63,7 +63,10 @@ from .const import (
 from .compare_weighting import (
     _tou_weighted_per_kwh,
 )
-from .energy_meters import MeasuredKwh, _measured_kwh
+from .meter_daily import (
+    MeasuredKwh,
+    _measured_kwh,
+)
 from .fees import (
     _annual_static_fees,
     _compute_capacity,
@@ -437,7 +440,7 @@ async def _read_total_kwh(
     """Sum of consumption (or injection) kWh between ``start`` and ``end``
     from the entry's configured kWh sensors.
 
-    Thin wrapper over :func:`energy_meters._measured_kwh` so there is one
+    Thin wrapper over :func:`meter_daily._measured_kwh` so there is one
     recorder-read shape rather than two that can drift. Returns ``None`` for a
     total of zero or less, which is what the year-to-date and injection call
     sites treat as "nothing to bill". That conflates "no sensor wired" with

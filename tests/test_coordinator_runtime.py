@@ -2884,7 +2884,7 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
 
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
-    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
     entry = MockConfigEntry(
@@ -2972,8 +2972,8 @@ async def test_a_register_a_total_bills_for_has_its_own_wording(
 
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
-    from custom_components.be_electricity_prices.energy_meters import (
-        MeasuredKwh,
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
+    from custom_components.be_electricity_prices.meter_hourly import (
         MeteredHours,
         MeteredSides,
     )
@@ -3093,7 +3093,7 @@ async def test_no_injection_repairs_card_without_a_solar_regime(
     the running cost reads low would be wrong. They are not read at all."""
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
-    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
     entry = MockConfigEntry(
@@ -3146,7 +3146,7 @@ async def test_a_silent_meter_side_is_named_in_repairs(
     The daily volume read names it on the same card as a stopped register."""
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
-    from custom_components.be_electricity_prices.energy_meters import (
+    from custom_components.be_electricity_prices.meter_hourly import (
         MeteredHours,
         MeteredSides,
     )
@@ -3248,7 +3248,7 @@ async def test_a_year_of_sold_export_is_measured_for_the_feed_in_bonus(
     regime, a full trailing year or nothing, and on no other regime."""
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
-    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.snapshot_resolve import (
         entry_annual_injection_kwh,
     )

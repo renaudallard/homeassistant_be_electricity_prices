@@ -884,9 +884,9 @@ async def test_the_memo_key_separates_households_that_must_not_share(
     which is the one way this optimisation could reach a bill.
     """
     from custom_components.be_electricity_prices.energy_meters import (
-        _resolve_daily_kwh,
         memoise_meter_reads,
     )
+    from custom_components.be_electricity_prices.meter_daily import _resolve_daily_kwh
 
     calls: list[str] = []
 

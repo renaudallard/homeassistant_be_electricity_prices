@@ -66,9 +66,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .energy_meters import (
-    _resolve_daily_kwh,
-)
+from .meter_daily import _resolve_daily_kwh
 from .fees import (
     _welcome_credit_eur,
     first_year_net_kwh,

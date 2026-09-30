@@ -52,7 +52,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .energy_meters import _metered_sides
+from .meter_hourly import _metered_sides
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
