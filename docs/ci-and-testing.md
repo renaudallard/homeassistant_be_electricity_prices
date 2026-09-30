@@ -901,7 +901,7 @@ Three design points:
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the archive gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
+  (12) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
   row names (`_drop_unnamed_texts`): the day's copy of a listing page that carries a nonce, or
   the text a rewritten row no longer reads. Nothing reaches a text except through a row, and on
   22 September 2026 such copies were 84 of the store's 1732 texts, 10,2 MB of 29,3.
@@ -1322,7 +1322,7 @@ weeks before it, files an issue under its own `archive-cards-token` label throug
 `scripts/file_ci_issue.sh`, fingerprinted on the expiry date so it repeats once a week until the
 secret is replaced. A token that reports no expiry, or none at all, files nothing; the failure
 issue still covers a token that has already expired. They cannot live in the cards repository's tree: one walk downloads about 100 MB of PDFs
-(214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
+(214 distinct files, measured), so the thirteen months kept would be around 1.3 GB in a repository every clone
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
 repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created

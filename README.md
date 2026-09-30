@@ -79,7 +79,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Ranked comparison of every alternative** — prices every contract sold in your region against your own settings and sorts them cheapest first, with your own row badged and every gap signed. Optionally once a day in the background, publishing the best saving as a sensor.
 - **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract, which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Both live under [Reconfiguring later](#reconfiguring-later).
-- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier from August 2026 on through the project's [card archive](#the-card-archive). The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
+- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier through the project's [card archive](#the-card-archive) for a signing month from August 2026 on and within the twelve months it keeps. The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
 - **Renewal reminder**: set your contract's end date and a timestamp sensor carries it, so an automation can remind you before the contract rolls over.
 
 **Running it**
@@ -1584,7 +1584,7 @@ three ids the integration uses, which are the directory names under
    checking a figure against the card without opening the PDF. A card is filed under the month its
 own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
-changed, and months older than three years are dropped.
+changed, and months more than twelve before the running one are dropped.
 
 The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the archive has not seen before is uploaded
@@ -1609,7 +1609,12 @@ for a month the project's does not hold, and the current card stands in when
 neither has it. The request names the supplier, contract, region and month
 and nothing else, and it is only made for a month the archive can hold: a
 closed one, and for a supplier with no archive of its own not before August
-2026, the earliest month the daily captures reach.
+2026, the earliest month the daily captures reach. A signing month older than
+the twelve kept, which the supplier's own archive does not hold either, bills
+on the current card as an entry with no signing month does, unless you typed
+the rate you signed. A signing card an installation has read is kept on disk until an
+update changes the stored card format, so this matters when the entry is
+new, its signing date changes, or such an update is installed.
 The same run writes `vat.json`: for each month, the VAT rate the cards agree
 on, when at least three suppliers state one rate and none states another. The
 integration reads it once a day to price what a card leaves without a rate

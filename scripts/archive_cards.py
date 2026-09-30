@@ -25,7 +25,7 @@ card is for (the month of the row that read it, so a mirrored March card
 goes to March), and the workflow uploads each directory as the assets of
 the release of that name in the cards repository shared with
 be_water_prices: one release per month of cards, about two hundred files,
-since a month of cards is about 100 MB and three years of them no git
+since a month of cards is about 100 MB and a year of them no git
 tree can hold. Where each one landed is recorded in ``<out>/pdfs.json``. A card's
 ``_sources`` entry names its PDF by digest alone; the manifest is the one
 place that says where it lives. The same digest is what keeps a daily run
@@ -258,6 +258,9 @@ class _Patience:
 
 
 _MANIFEST = "pdfs.json"
+# The running month and the twelve before it, the same retention the gas and
+# water namespaces keep.
+_KEEP_MONTHS = 12
 # The rows sit under their own directory of the cards repository, so the
 # texts, the manifest and the sheets keep the top of it readable.
 _ROWS = "cards"
@@ -1583,7 +1586,7 @@ async def archive(
     out: Path,
     *,
     only: set[str] | None = None,
-    keep_months: int = 36,
+    keep_months: int = _KEEP_MONTHS,
     backfill_months: int = 0,
     pdf_dir: Path | None = None,
     pdf_base_url: str | None = None,
@@ -1783,7 +1786,7 @@ def main() -> int:
     parser.add_argument(
         "--only", action="append", default=[], help="restrict to a supplier id"
     )
-    parser.add_argument("--keep-months", type=int, default=36)
+    parser.add_argument("--keep-months", type=int, default=_KEEP_MONTHS)
     parser.add_argument(
         "--pdfs",
         type=Path,
