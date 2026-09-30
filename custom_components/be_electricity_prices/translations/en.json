@@ -750,11 +750,11 @@
     },
     "extractor_failed": {
       "title": "Could not parse the tariff card for {supplier} ({contract})",
-      "description": "The supplier extractor raised an error: {error}. The integration is still serving the last successfully parsed prices, but they may no longer match what is actually billed. This usually means the supplier changed the layout of its tariff PDF or HTML page; please open an issue on GitHub with the supplier and contract so the extractor can be updated."
+      "description": "The supplier extractor raised an error: {error}. If a card was parsed before, the integration keeps serving its prices, but they may no longer match what is actually billed; otherwise this entry's sensors stay unavailable until a fetch succeeds. This usually means the supplier changed the layout of its tariff PDF or HTML page; please open an issue on GitHub with the supplier and contract so the extractor can be updated."
     },
     "extractor_unreachable": {
       "title": "Could not reach the supplier for {supplier} ({contract})",
-      "description": "The integration could not download the tariff card after several attempts: {error}. It is still serving the last successfully parsed prices. This is usually a temporary network or CDN problem that clears on the next refresh; run the be_electricity_prices.refresh service or check your network if it keeps happening."
+      "description": "The integration could not download the tariff card after several attempts: {error}. If a card was parsed before, it keeps serving its prices; otherwise this entry's sensors stay unavailable until a fetch succeeds. This is usually a temporary network or CDN problem that clears on the next refresh; run the be_electricity_prices.refresh service or check your network if it keeps happening."
     },
     "card_read_by_ocr": {
       "title": "Prices for {supplier} are read from pictures of its card",

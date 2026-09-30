@@ -750,11 +750,11 @@
     },
     "extractor_failed": {
       "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",
-      "description": "L'extracteur du fournisseur a leve une erreur : {error}. L'integration sert encore les derniers prix correctement analyses, mais ils ne correspondent peut-etre plus a ce qui est facture. Cela signifie generalement que le fournisseur a change la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis a jour."
+      "description": "L'extracteur du fournisseur a leve une erreur : {error}. Si une carte a déjà été lue, l'intégration continue de servir ses prix, mais ils ne correspondent peut-être plus à ce qui est facturé ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Cela signifie generalement que le fournisseur a change la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis a jour."
     },
     "extractor_unreachable": {
       "title": "Impossible de joindre le fournisseur pour {supplier} ({contract})",
-      "description": "L'integration n'a pas pu telecharger la carte tarifaire apres plusieurs tentatives : {error}. Elle sert encore les derniers prix correctement analyses. Il s'agit generalement d'un probleme reseau ou CDN temporaire qui se resout au prochain rafraichissement; utilisez le service be_electricity_prices.refresh ou verifiez votre reseau si cela persiste."
+      "description": "L'integration n'a pas pu telecharger la carte tarifaire apres plusieurs tentatives : {error}. Si une carte a déjà été lue, elle continue de servir ses prix ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Il s'agit generalement d'un probleme reseau ou CDN temporaire qui se resout au prochain rafraichissement; utilisez le service be_electricity_prices.refresh ou verifiez votre reseau si cela persiste."
     },
     "card_read_by_ocr": {
       "title": "Les prix de {supplier} sont lus sur des images de sa carte",

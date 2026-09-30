@@ -750,11 +750,11 @@
     },
     "extractor_failed": {
       "title": "Tariefkaart voor {supplier} ({contract}) kon niet ontleed worden",
-      "description": "De leveranciers-extractor gaf een fout: {error}. De integratie blijft de laatst goed ontledede prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
+      "description": "De leveranciers-extractor gaf een fout: {error}. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
     },
     "extractor_unreachable": {
       "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
-      "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Ze blijft de laatst goed ontledede prijzen tonen. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
+      "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Werd er eerder een kaart ingelezen, dan blijft ze die prijzen tonen; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
     },
     "card_read_by_ocr": {
       "title": "De prijzen van {supplier} worden van foto's van zijn kaart gelezen",

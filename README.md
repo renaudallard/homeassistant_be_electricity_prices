@@ -909,12 +909,14 @@ successful refresh:
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;
-  cached prices keep serving.
+  cached prices keep serving, and with no cached card the sensors stay
+  unavailable.
 - **`extractor_unreachable_<entry>`** — the tariff card could not be
   downloaded (network timeout, reset, a transient server error, or the
   supplier's own file store refusing the download). Raised only after
   two consecutive failed refreshes, since a single CDN hiccup usually
-  clears on the next tick; cached prices keep serving.
+  clears on the next tick; cached prices keep serving, and with no cached
+  card the sensors stay unavailable.
 - **`entsoe_auth_failed_<entry>`** *(dynamic and monthly-indexed contracts, and a contract whose feed-in credit alone follows the market)* — ENTSO-E
   returned 401 for the configured API key. Edit the entry's options
   and replace the key with a fresh token from
