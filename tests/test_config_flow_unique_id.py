@@ -77,7 +77,7 @@ async def _unique_for(hass: HomeAssistant, meter: str) -> str:
         patch.object(BePricesConfigFlow, "async_set_unique_id", _capture),
         patch.object(BePricesConfigFlow, "_abort_if_unique_id_configured"),
         patch(
-            "custom_components.be_electricity_prices.config_flow._WizardStepsMixin"
+            "custom_components.be_electricity_prices.flow_wizard._WizardStepsMixin"
             "._after_meter",
             AsyncMock(return_value=None),
         ),

@@ -91,7 +91,7 @@ async def test_where_the_flow_lands(
         # Required: an empty submission is rejected, not skipped, and the
         # step answers that itself without asking ENTSO-E.
         with patch(
-            "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+            "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
             return_value="invalid_api_key",
         ) as validate:
             result = await cfg(flow, {const.CONF_API_KEY: ""})
@@ -142,7 +142,7 @@ async def test_unreachable_entsoe_offers_a_choice_instead_of_blocking(
     platform is not a bad key, and the user cannot fix it either way."""
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="cannot_connect",
     ):
         result = await cfg(flow, {const.CONF_API_KEY: "probably-fine"})
@@ -167,7 +167,7 @@ async def test_an_empty_key_is_never_offered_the_unverified_branch(
     """
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="cannot_connect",
     ) as validate:
         result = await cfg(flow, {const.CONF_API_KEY: "   "})
@@ -182,7 +182,7 @@ async def test_a_rejected_key_still_blocks(hass: HomeAssistant) -> None:
     and theirs to fix, so it must never reach the continue-anyway menu."""
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="invalid_api_key",
     ):
         result = await cfg(flow, {const.CONF_API_KEY: "bad"})
@@ -198,7 +198,7 @@ async def test_continuing_unverified_keeps_the_key_and_moves_on(
     key the user typed is the one that gets stored."""
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="cannot_connect",
     ):
         await cfg(flow, {const.CONF_API_KEY: "typed-key"})
@@ -215,12 +215,12 @@ async def test_rechecking_lets_a_recovered_platform_through(
     and a platform that came back finishes the check properly."""
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="cannot_connect",
     ):
         await cfg(flow, {const.CONF_API_KEY: "typed-key"})
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value=None,
     ):
         result = await cfg(flow, {"next_step_id": "api_key_recheck"})
@@ -235,12 +235,12 @@ async def test_a_recheck_that_exposes_a_bad_key_returns_to_the_form(
     keeping a continue-anyway they should not take."""
     cfg, flow = await _to_api_key_step(hass)
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="cannot_connect",
     ):
         await cfg(flow, {const.CONF_API_KEY: "bad"})
     with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value="invalid_api_key",
     ):
         result = await cfg(flow, {"next_step_id": "api_key_recheck"})
@@ -278,7 +278,7 @@ async def test_a_recheck_that_rejects_an_optional_key_keeps_it_optional(
     )
     assert result["step_id"] == "injection_api_key"
     validate = (
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key"
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key"
     )
     with patch(validate, return_value="cannot_connect"):
         result = await cfg(flow, {const.CONF_API_KEY: "typed"})

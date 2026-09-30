@@ -583,7 +583,7 @@ def _no_setup() -> Any:
 
 def _mock_key() -> Any:
     return patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
         return_value=None,
     )
 

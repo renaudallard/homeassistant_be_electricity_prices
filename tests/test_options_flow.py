@@ -79,7 +79,7 @@ def _bypass_entsoe_validation() -> Iterator[MagicMock]:
     # API-key step would make a live request to transparency.entsoe.eu.
     with (
         patch(
-            "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+            "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
             return_value=None,
         ) as mock,
         patch(
@@ -5241,8 +5241,10 @@ async def test_professional_step_only_shows_for_a_pro_contract(
 ) -> None:
     """The VAT treatment and the yearly volume are questions only a
     professional card raises; a residential entry must never be asked."""
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.flow_contracts import (
         _contract_is_professional,
+    )
+    from custom_components.be_electricity_prices.flow_schemas import (
         _professional_schema,
     )
 
@@ -5325,7 +5327,7 @@ def test_region_mismatch_is_a_form_error_not_an_abort() -> None:
     text even said "go back and pick a different combination", which HA gives
     no way to do from an abort.
     """
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.flow_contracts import (
         _region_mismatch_error,
     )
     from custom_components.be_electricity_prices.const import CONF_REGION, CONF_SUPPLIER

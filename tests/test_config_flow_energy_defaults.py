@@ -521,7 +521,7 @@ def test_half_wired_register_pair_is_rejected() -> None:
     """A day/night pair only works as a pair: the coordinator gives up on a
     half-wired one and current_year_cost collapses to the fees-only floor
     with no error, no repair and nothing in the log a user would see."""
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
         _incomplete_register_pairs,
     )
 
@@ -560,7 +560,7 @@ def test_a_half_wired_injection_pair_passes_without_a_solar_regime() -> None:
     wired there for the Energy dashboard cannot break the bill. Refusing it
     kept a household with no panels out of its own meters form over a field
     the coordinator ignores."""
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
         _incomplete_register_pairs,
     )
 
@@ -585,7 +585,7 @@ def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
         _incomplete_register_pairs,
     )
     from custom_components.be_electricity_prices.energy_meters import (

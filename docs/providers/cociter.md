@@ -300,7 +300,7 @@ overlay bills the whole network leg at zero.
 
 `distribution_single` has no source on the trihoraire card and is filled with
 the PIC rate. Nothing reads it -- the contract is `tou_impact`, so the config
-flow forces the Impact network mode in Wallonia (`config_flow.py`) and the
+flow forces the Impact network mode in Wallonia (`flow_wizard.py`) and the
 compare page does the same (`compare_flow.py`) -- and it is the highest of
 the three bands so a path that somehow reached it would over-bill visibly
 rather than under-bill quietly.

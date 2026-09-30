@@ -8745,7 +8745,7 @@ def test_every_wizard_step_is_translated_on_both_flows() -> None:
     import pathlib
     import re
 
-    from custom_components.be_electricity_prices.config_flow import _WizardStepsMixin
+    from custom_components.be_electricity_prices.flow_wizard import _WizardStepsMixin
 
     shown = set(
         re.findall(r'step_id="([a-z_]+)"', inspect.getsource(_WizardStepsMixin))

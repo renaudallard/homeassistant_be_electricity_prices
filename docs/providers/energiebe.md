@@ -134,7 +134,7 @@ plain arithmetic mean it used before ran a few percent low - 0,59 c€/kWh on Ju
 about 20 EUR/year at 3500 kWh. Eneco reads the same phrase as the mean of the three
 distinct curves; each supplier's own published table settles which.
 The kind is also what makes the config flow collect an ENTSO-E key
-(`config_flow.py`) - without one this contract cannot be priced at all.
+(`flow_wizard.py`) - without one this contract cannot be priced at all.
 
 ## Fetch strategy
 
