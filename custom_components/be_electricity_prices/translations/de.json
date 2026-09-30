@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Belgische Strompreise",
-        "description": "Lieferant und Region waehlen. Energie- und Netztarife werden live aus der Veroeffentlichung des Lieferanten geholt.",
+        "description": "Lieferant und Region wählen. Energie- und Netztarife werden live aus der Veröffentlichung des Lieferanten geholt.",
         "data": {
           "supplier": "Lieferant",
           "region": "Region"
@@ -11,7 +11,7 @@
       },
       "contract": {
         "title": "Vertrag",
-        "description": "Vertrag waehlen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
+        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
@@ -20,10 +20,10 @@
           "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
-          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
+          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermaßen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
           "tariff_card_date": "Ein beliebiges Datum im Monat der Tarifkarte, auf der Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach der bei Vertragsabschluss geltenden Tarifkarte berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass diese Tarifkarte oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach der Tarifkarte liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
-          "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
+          "ytd_from_contract_start": "Standardmäßig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
@@ -46,10 +46,10 @@
         }
       },
       "meter": {
-        "title": "Zaehlertyp",
-        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
+        "title": "Zählertyp",
+        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
         "data": {
-          "meter": "Zaehler"
+          "meter": "Zähler"
         }
       },
       "professional": {
@@ -76,7 +76,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zähler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }
@@ -89,17 +89,17 @@
         }
       },
       "api_key": {
-        "title": "ENTSO-E API-Schluessel",
-        "description": "Erforderlich fuer diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "title": "ENTSO-E API-Schlüssel",
+        "description": "Erforderlich für diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
         "data": {
-          "api_key": "ENTSO-E API-Schluessel"
+          "api_key": "ENTSO-E API-Schlüssel"
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-Schluessel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
+        "title": "ENTSO-E API-Schlüssel (optional)",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
-          "api_key": "ENTSO-E API-Schluessel"
+          "api_key": "ENTSO-E API-Schlüssel"
         }
       },
       "api_key_unreachable": {
@@ -111,8 +111,8 @@
         }
       },
       "capacity": {
-        "title": "Kapazitaetstarif (Flandern)",
-        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zaehlers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stuendlich abgetastet und ist nur eine Naeherung. Oder festen Wert waehlen.",
+        "title": "Kapazitätstarif (Flandern)",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
           "capacity_peak_sensor": "Monatsspitzen-Sensor",
@@ -121,15 +121,15 @@
       },
       "solar": {
         "title": "Solaranlage",
-        "description": "Wechselrichterleistung in kVA und das fuer Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur fuer vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flaemische intelligente Zaehler sind im Einspeisetarif.",
+        "description": "Wechselrichterleistung in kVA und das für Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur für vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flämische intelligente Zähler sind im Einspeisetarif.",
         "data": {
           "solar_kva": "Wechselrichter (kVA)",
           "solar_regime": "Regime"
         }
       },
       "meters": {
-        "title": "Energiezaehler (Kosten dieses Jahr)",
-        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister, solange sie vollstaendig melden; die Summe springt fuer ein Paar mit einer toten, eingefrorenen oder spaet gestarteten Haelfte ein, oder mit Haelften, die verschiedene Zeitraeume melden. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewaehlt. Vorausgefuellte Werte bleiben editierbar.",
+        "title": "Energiezähler (Kosten dieses Jahr)",
+        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zählers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhängig aufgelöst; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen für dieselbe Seite ausgefüllt sind, gewinnen die Tag-/Nachtregister, solange sie vollständig melden; die Summe springt für ein Paar mit einer toten, eingefrorenen oder spät gestarteten Hälfte ein, oder mit Hälften, die verschiedene Zeiträume melden. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewählt. Vorausgefüllte Werte bleiben editierbar.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
           "night_consumption_kwh": "Verbrauch Nacht (kWh)",
@@ -155,7 +155,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliche Tarifkarte. Veroeffentlicht Ihr Lieferant eine, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrer Tarifkarte, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur für Lieferanten OHNE öffentliche Tarifkarte. Veröffentlicht Ihr Lieferant eine, öffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): öffnen Sie ein Issue mit Ihrer Tarifkarte, damit es für alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Prüfung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index in EUR/kWh)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
@@ -164,24 +164,24 @@
           "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
-          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr, ohne MwSt.)"
+          "custom_yearly_fixed_fee": "Jährliche Grundgebühr (EUR/Jahr, ohne MwSt.)"
         }
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
+        "description": "Wie Ihre Solar-Einspeisung vergütet wird. Ein Fixtarif ist eine feste EUR/kWh-Vergütung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behält ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
-          "custom_injection_mode": "Einspeiseverguetung",
+          "custom_injection_mode": "Einspeisevergütung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
           "custom_injection_factor": "Einspeisefaktor (Multiplikator auf den Index in EUR/kWh)",
-          "custom_injection_base": "Einspeisebasis (EUR/kWh, negativ fuer einen Abzug)",
+          "custom_injection_base": "Einspeisebasis (EUR/kWh, negativ für einen Abzug)",
           "custom_injection_floor": "Nie negativ (Untergrenze 0)",
           "custom_injection_spp_weighted": "Einspeisung mit dem Solarprofil (SPP) gewichten"
         }
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
+        "description": "Regulierte Netzkosten, für jeden Lieferanten in Ihrem VNB gleich. Übernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder für Tag, Nacht und die Tarifbänder leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jährliche Feld nimmt in Flandern die Datenverwaltungsgebühr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Brüssel Mess- und Festkosten zusammen.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
@@ -189,12 +189,12 @@
           "custom_dso_distribution_exclusive_night": "Verteilung exklusive Nacht (EUR/kWh)",
           "custom_dso_transport": "Transport (EUR/kWh)",
           "custom_dso_data_management_per_year": "Datenverwaltung oder Festterm (EUR/Jahr)",
-          "custom_dso_capacity_eur_per_kw_year": "Kapazitaetstarif (EUR/kW/Jahr)",
+          "custom_dso_capacity_eur_per_kw_year": "Kapazitätstarif (EUR/kW/Jahr)",
           "custom_dso_prosumer_eur_per_kva_year": "Prosumer-Tarif (EUR/kVA/Jahr)",
           "custom_dso_distribution_pic": "Verteilung PIC-Band (EUR/kWh)",
           "custom_dso_distribution_medium": "Verteilung MEDIUM-Band (EUR/kWh)",
           "custom_dso_distribution_eco": "Verteilung ECO-Band (EUR/kWh)",
-          "custom_dso_brussels_osp": "Brugel-OSP-Gebuehr (EUR/Jahr)"
+          "custom_dso_brussels_osp": "Brugel-OSP-Gebühr (EUR/Jahr)"
         }
       },
       "custom_tax": {
@@ -221,15 +221,15 @@
       }
     },
     "abort": {
-      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
+      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewählten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
       "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
-      "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfuegbar.",
-      "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert."
+      "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfügbar.",
+      "compare_done": "Vergleich abgeschlossen - keine Änderungen gespeichert."
     },
     "error": {
-      "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und laesst sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+      "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Prüfen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprüft werden. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
@@ -240,19 +240,19 @@
   },
   "options": {
     "abort": {
-      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
+      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewählten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
       "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
-      "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfuegbar.",
-      "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert.",
+      "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfügbar.",
+      "compare_done": "Vergleich abgeschlossen - keine Änderungen gespeichert.",
       "compare_all_no_alternatives": "In Ihrer Region wird kein weiterer Vertrag dieser Art verkauft, es gibt also nichts zu ordnen. Der einmalige Vergleich kann weiterhin eine andere Vertragsart berechnen.",
-      "compare_all_unknown_contract": "Der Vertrag dieses Eintrags steht nicht mehr im Katalog des Anbieters und kann daher nicht eingeordnet werden. Waehlen Sie ihn zuerst unter Einstellungen bearbeiten neu aus.",
+      "compare_all_unknown_contract": "Der Vertrag dieses Eintrags steht nicht mehr im Katalog des Anbieters und kann daher nicht eingeordnet werden. Wählen Sie ihn zuerst unter Einstellungen bearbeiten neu aus.",
       "compare_all_entry_reloading": "Der Eintrag wird noch geladen. Bitte gleich erneut versuchen.",
       "no_switch_recorded": "Für diesen Eintrag ist in diesem Jahr kein Lieferantenwechsel erfasst."
     },
     "error": {
-      "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und laesst sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+      "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Prüfen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprüft werden. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "start_date_before_switch": "Der Vertragsbeginn darf nicht vor dem letzten für diesen Eintrag erfassten Lieferantenwechsel liegen.",
       "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
@@ -260,7 +260,7 @@
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten seit Jahresbeginn Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region.",
-      "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden.",
+      "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte für Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezähler zugeordnet, sie können also nicht ausgelesen werden.",
       "switch_date_outside_year": "Das Wechseldatum muss zwischen dem 2. Januar und heute liegen.",
       "switch_date_before_last": "Das Wechseldatum muss nach dem zuletzt erfassten Wechsel dieses Jahres liegen.",
       "switch_date_before_start": "Das Wechseldatum muss nach dem Beginn des Vertrags liegen, den Sie verlassen."
@@ -292,7 +292,7 @@
       },
       "edit": {
         "title": "Belgische Strompreise",
-        "description": "Lieferant und Region waehlen. Energie- und Netztarife werden live aus der Veroeffentlichung des Lieferanten geholt.",
+        "description": "Lieferant und Region wählen. Energie- und Netztarife werden live aus der Veröffentlichung des Lieferanten geholt.",
         "data": {
           "supplier": "Lieferant",
           "region": "Region"
@@ -300,28 +300,28 @@
       },
       "compare": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber und Spitze bleiben gleich wie beim aktuellen Eintrag; Zählerart (außer der Vertrag verlangt einen intelligenten Zähler) und, bei einem Eintrag mit Solaranlage, Solarregime lassen sich in einem späteren Schritt ändern, um eine Was-wäre-wenn-Rechnung zu erhalten. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
+        "description": "Lieferanten zum Vergleich wählen. Region, Netzbetreiber und Spitze bleiben gleich wie beim aktuellen Eintrag; Zählerart (außer der Vertrag verlangt einen intelligenten Zähler) und, bei einem Eintrag mit Solaranlage, Solarregime lassen sich in einem späteren Schritt ändern, um eine Was-wäre-wenn-Rechnung zu erhalten. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie über Vertragsarten hinweg vergleichen können.",
         "data": {
           "supplier": "Lieferant"
         }
       },
       "compare_contract": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Waehlen Sie einen Vertrag von {supplier}. Statische und dynamische Vertraege stehen zur Auswahl, sodass Sie ueber Vertragsarten hinweg vergleichen koennen, und Ihr eigener Vertrag steht ebenfalls in der Liste: waehlen Sie ihn, um zu sehen, was derselbe Vertrag mit einem anderen Zählertyp oder Solarregime kosten würde, wo diese Schritte angeboten werden: der Zähler nur bei einem Vertrag ohne Pflicht zum intelligenten Zähler, das Solarregime nur bei einem Eintrag mit Solaranlage.",
+        "description": "Wählen Sie einen Vertrag von {supplier}. Statische und dynamische Verträge stehen zur Auswahl, sodass Sie über Vertragsarten hinweg vergleichen können, und Ihr eigener Vertrag steht ebenfalls in der Liste: wählen Sie ihn, um zu sehen, was derselbe Vertrag mit einem anderen Zählertyp oder Solarregime kosten würde, wo diese Schritte angeboten werden: der Zähler nur bei einem Vertrag ohne Pflicht zum intelligenten Zähler, das Solarregime nur bei einem Eintrag mit Solaranlage.",
         "data": {
           "contract": "Vertrag"
         }
       },
       "compare_meter": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Zaehlerart fuer den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; aendern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Tag / Nacht).",
+        "description": "Zählerart für den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; ändern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Tag / Nacht).",
         "data": {
-          "meter": "Zaehlerart"
+          "meter": "Zählerart"
         }
       },
       "compare_solar": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Solarregime fuer dieses Angebot. Waehlen Sie ein anderes, um zu sehen, was Sie bei einer anderen Zaehlerregelung zahlen wuerden; das Regime Ihres Eintrags ist vorausgewaehlt. Anders als die Zaehlerart gilt dies fuer beide Seiten, denn das Regime gehoert zu Ihrem Netzanschluss und nicht zum Lieferanten. Es wird nichts gespeichert. Die beiden Mengenfelder erscheinen, wenn diesem Eintrag kein Einspeisezaehler zugeordnet ist: ein rueckwaerts laufender Zaehler meldet den Verbrauch bereits mit der Einspeisung verrechnet, und das ist nicht die Grundlage des Einspeisetarifs. Tragen Sie dann Ihre Brutto-Jahreswerte aus der Wechselrichter-App oder vom Jahresablesewert ein.",
+        "description": "Solarregime für dieses Angebot. Wählen Sie ein anderes, um zu sehen, was Sie bei einer anderen Zählerregelung zahlen würden; das Regime Ihres Eintrags ist vorausgewählt. Anders als die Zählerart gilt dies für beide Seiten, denn das Regime gehört zu Ihrem Netzanschluss und nicht zum Lieferanten. Es wird nichts gespeichert. Die beiden Mengenfelder erscheinen, wenn diesem Eintrag kein Einspeisezähler zugeordnet ist: ein rückwärts laufender Zähler meldet den Verbrauch bereits mit der Einspeisung verrechnet, und das ist nicht die Grundlage des Einspeisetarifs. Tragen Sie dann Ihre Brutto-Jahreswerte aus der Wechselrichter-App oder vom Jahresablesewert ein.",
         "data": {
           "solar_regime": "Regime",
           "whatif_consumption_kwh": "Aus dem Netz bezogen (kWh/Jahr)",
@@ -330,18 +330,18 @@
       },
       "compare_api_key": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Dieser Vergleich benoetigt ENTSO-E day-ahead Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfuegen, damit die Spotpreise abgerufen werden koennen. Der Token wird nur fuer diesen Vergleich verwendet, nicht gespeichert. Lassen Sie das Feld leer, um ohne Token fortzufahren; das Angebot ist dann weniger genau, und das Ergebnis nennt die Einspeisevergütung, die es weglassen musste.",
+        "description": "Dieser Vergleich benötigt ENTSO-E day-ahead Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfügen, damit die Spotpreise abgerufen werden können. Der Token wird nur für diesen Vergleich verwendet, nicht gespeichert. Lassen Sie das Feld leer, um ohne Token fortzufahren; das Angebot ist dann weniger genau, und das Ergebnis nennt die Einspeisevergütung, die es weglassen musste.",
         "data": {
-          "api_key": "ENTSO-E API-Schluessel"
+          "api_key": "ENTSO-E API-Schlüssel"
         }
       },
       "compare_result": {
         "title": "Einmaliges Angebot",
-        "description": "Verwendete Zaehlerart: {meter_used}. Jahresschaetzung verwendet {annual_kwh} kWh Verbrauch ({consumption_source}). {solar_note}\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Jahresdifferenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n```\n{annual_chart}\n```\n\n**Seit {ytd_from}** ({ytd_kwh} kWh verbraucht, {ytd_injection_kwh} kWh eingespeist, Ihr Eintrag so, wie seine Kosten dieses Jahr ihn abrechnen, die Alternative mit der eigenen Tarifkarte jedes Monats, wenn beide Anbieter ein Archiv früherer Karten führen, sonst zum aktuellen Tarif):\n  Aktuell: {current_ytd} EUR\n  Alternative: {compare_ytd} EUR\n  Differenz: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nNichts wurde gespeichert. Mit Bestaetigen den Dialog schliessen."
+        "description": "Verwendete Zählerart: {meter_used}. Jahresschätzung verwendet {annual_kwh} kWh Verbrauch ({consumption_source}). {solar_note}\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschätzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschätzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Jahresdifferenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n```\n{annual_chart}\n```\n\n**Seit {ytd_from}** ({ytd_kwh} kWh verbraucht, {ytd_injection_kwh} kWh eingespeist, Ihr Eintrag so, wie seine Kosten dieses Jahr ihn abrechnen, die Alternative mit der eigenen Tarifkarte jedes Monats, wenn beide Anbieter ein Archiv früherer Karten führen, sonst zum aktuellen Tarif):\n  Aktuell: {current_ytd} EUR\n  Alternative: {compare_ytd} EUR\n  Differenz: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nNichts wurde gespeichert. Mit Bestätigen den Dialog schließen."
       },
       "contract": {
         "title": "Vertrag",
-        "description": "Vertrag waehlen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
+        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
@@ -350,10 +350,10 @@
           "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
-          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
+          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermaßen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
           "tariff_card_date": "Ein beliebiges Datum im Monat der Tarifkarte, auf der Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach der bei Vertragsabschluss geltenden Tarifkarte berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass diese Tarifkarte oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach der Tarifkarte liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
-          "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
+          "ytd_from_contract_start": "Standardmäßig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
@@ -385,10 +385,10 @@
         }
       },
       "meter": {
-        "title": "Zaehlertyp",
-        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
+        "title": "Zählertyp",
+        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
         "data": {
-          "meter": "Zaehler"
+          "meter": "Zähler"
         }
       },
       "professional": {
@@ -415,7 +415,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zähler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }
@@ -428,17 +428,17 @@
         }
       },
       "api_key": {
-        "title": "ENTSO-E API-Schluessel",
-        "description": "Erforderlich fuer diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "title": "ENTSO-E API-Schlüssel",
+        "description": "Erforderlich für diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
         "data": {
-          "api_key": "ENTSO-E API-Schluessel"
+          "api_key": "ENTSO-E API-Schlüssel"
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-Schluessel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
+        "title": "ENTSO-E API-Schlüssel (optional)",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
-          "api_key": "ENTSO-E API-Schluessel"
+          "api_key": "ENTSO-E API-Schlüssel"
         }
       },
       "api_key_unreachable": {
@@ -450,8 +450,8 @@
         }
       },
       "capacity": {
-        "title": "Kapazitaetstarif (Flandern)",
-        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zaehlers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stuendlich abgetastet und ist nur eine Naeherung. Oder festen Wert waehlen.",
+        "title": "Kapazitätstarif (Flandern)",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
           "capacity_peak_sensor": "Monatsspitzen-Sensor",
@@ -460,15 +460,15 @@
       },
       "solar": {
         "title": "Solaranlage",
-        "description": "Wechselrichterleistung in kVA und das fuer Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur fuer vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flaemische intelligente Zaehler sind im Einspeisetarif.",
+        "description": "Wechselrichterleistung in kVA und das für Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur für vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flämische intelligente Zähler sind im Einspeisetarif.",
         "data": {
           "solar_kva": "Wechselrichter (kVA)",
           "solar_regime": "Regime"
         }
       },
       "meters": {
-        "title": "Energiezaehler (Kosten dieses Jahr)",
-        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister, solange sie vollstaendig melden; die Summe springt fuer ein Paar mit einer toten, eingefrorenen oder spaet gestarteten Haelfte ein, oder mit Haelften, die verschiedene Zeitraeume melden. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewaehlt. Vorausgefuellte Werte bleiben editierbar.",
+        "title": "Energiezähler (Kosten dieses Jahr)",
+        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zählers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhängig aufgelöst; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen für dieselbe Seite ausgefüllt sind, gewinnen die Tag-/Nachtregister, solange sie vollständig melden; die Summe springt für ein Paar mit einer toten, eingefrorenen oder spät gestarteten Hälfte ein, oder mit Hälften, die verschiedene Zeiträume melden. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewählt. Vorausgefüllte Werte bleiben editierbar.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
           "night_consumption_kwh": "Verbrauch Nacht (kWh)",
@@ -494,7 +494,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliche Tarifkarte. Veroeffentlicht Ihr Lieferant eine, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrer Tarifkarte, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur für Lieferanten OHNE öffentliche Tarifkarte. Veröffentlicht Ihr Lieferant eine, öffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): öffnen Sie ein Issue mit Ihrer Tarifkarte, damit es für alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Prüfung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index in EUR/kWh)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
@@ -503,24 +503,24 @@
           "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
           "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
-          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr, ohne MwSt.)"
+          "custom_yearly_fixed_fee": "Jährliche Grundgebühr (EUR/Jahr, ohne MwSt.)"
         }
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
+        "description": "Wie Ihre Solar-Einspeisung vergütet wird. Ein Fixtarif ist eine feste EUR/kWh-Vergütung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behält ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
-          "custom_injection_mode": "Einspeiseverguetung",
+          "custom_injection_mode": "Einspeisevergütung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
           "custom_injection_factor": "Einspeisefaktor (Multiplikator auf den Index in EUR/kWh)",
-          "custom_injection_base": "Einspeisebasis (EUR/kWh, negativ fuer einen Abzug)",
+          "custom_injection_base": "Einspeisebasis (EUR/kWh, negativ für einen Abzug)",
           "custom_injection_floor": "Nie negativ (Untergrenze 0)",
           "custom_injection_spp_weighted": "Einspeisung mit dem Solarprofil (SPP) gewichten"
         }
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
+        "description": "Regulierte Netzkosten, für jeden Lieferanten in Ihrem VNB gleich. Übernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder für Tag, Nacht und die Tarifbänder leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jährliche Feld nimmt in Flandern die Datenverwaltungsgebühr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Brüssel Mess- und Festkosten zusammen.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
@@ -528,12 +528,12 @@
           "custom_dso_distribution_exclusive_night": "Verteilung exklusive Nacht (EUR/kWh)",
           "custom_dso_transport": "Transport (EUR/kWh)",
           "custom_dso_data_management_per_year": "Datenverwaltung oder Festterm (EUR/Jahr)",
-          "custom_dso_capacity_eur_per_kw_year": "Kapazitaetstarif (EUR/kW/Jahr)",
+          "custom_dso_capacity_eur_per_kw_year": "Kapazitätstarif (EUR/kW/Jahr)",
           "custom_dso_prosumer_eur_per_kva_year": "Prosumer-Tarif (EUR/kVA/Jahr)",
           "custom_dso_distribution_pic": "Verteilung PIC-Band (EUR/kWh)",
           "custom_dso_distribution_medium": "Verteilung MEDIUM-Band (EUR/kWh)",
           "custom_dso_distribution_eco": "Verteilung ECO-Band (EUR/kWh)",
-          "custom_dso_brussels_osp": "Brugel-OSP-Gebuehr (EUR/Jahr)"
+          "custom_dso_brussels_osp": "Brugel-OSP-Gebühr (EUR/Jahr)"
         }
       },
       "custom_tax": {
@@ -553,7 +553,7 @@
       },
       "compare_all_result": {
         "title": "Alternativen nach Preis",
-        "description": "Alle Vertraege derselben Familie wie Ihrer (fest oder variabel, spotindexiert oder mit Zeitfenstern), die in Ihrer Region verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag traegt das Abzeichen YOUR CONTRACT; jede andere Zeile endet mit dem Abstand dazu, wobei ein Minus eine Ersparnis ist.\n\n{ranking}\n\nSchätzungen, keine Angebote. Jede Zeile rechnet ein volles Jahr Ihrer gemessenen Mengen gegen eine einzelne veröffentlichte Tarifkarte: sie sagt, was ein Jahr zu diesen Preisen kosten würde, nicht was Ihnen berechnet wird. Es wird nichts gespeichert; zum Schließen bestätigen.",
+        "description": "Alle Verträge derselben Familie wie Ihrer (fest oder variabel, spotindexiert oder mit Zeitfenstern), die in Ihrer Region verfügbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag trägt das Abzeichen YOUR CONTRACT; jede andere Zeile endet mit dem Abstand dazu, wobei ein Minus eine Ersparnis ist.\n\n{ranking}\n\nSchätzungen, keine Angebote. Jede Zeile rechnet ein volles Jahr Ihrer gemessenen Mengen gegen eine einzelne veröffentlichte Tarifkarte: sie sagt, was ein Jahr zu diesen Preisen kosten würde, nicht was Ihnen berechnet wird. Es wird nichts gespeichert; zum Schließen bestätigen.",
         "data": {
           "with_ytd": "Auch die Kosten seit Jahresbeginn berechnen (langsamer: holt die Tarifkarte jedes vergangenen Monats)",
           "refresh": "Jetzt neu berechnen (dauert etwa zwei Minuten)"
@@ -581,7 +581,7 @@
       }
     },
     "progress": {
-      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Tarifkarten zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n{ranking}"
+      "sweeping": "{priced} von {total} Verträgen berechnet. Die schnellsten Tarifkarten zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n{ranking}"
     }
   },
   "selector": {
@@ -589,7 +589,7 @@
       "options": {
         "flanders": "Flandern",
         "wallonia": "Wallonien",
-        "brussels": "Bruessel"
+        "brussels": "Brüssel"
       }
     },
     "capacity_mode": {
@@ -602,8 +602,8 @@
       "options": {
         "mono": "Mono (Eintarif)",
         "bi": "Doppeltarif (Tag / Nacht)",
-        "dynamic": "Dynamisch (intelligenter Zaehler)",
-        "exclusive_night": "Exklusiv-Nachtkreis (separater Zaehler)"
+        "dynamic": "Dynamisch (intelligenter Zähler)",
+        "exclusive_night": "Exklusiv-Nachtkreis (separater Zähler)"
       }
     },
     "dso_tariff_mode": {
@@ -629,7 +629,7 @@
       "options": {
         "none": "Keine Solaranlage",
         "compensation": "Kompensationsregelung (Wallonien, vor 2024-01-01 zertifiziert, bis 2030)",
-        "injection": "Einspeisetarif (nach-2024 Anlage oder intelligenter Zaehler)"
+        "injection": "Einspeisetarif (nach-2024 Anlage oder intelligenter Zähler)"
       }
     },
     "custom_injection_mode": {
@@ -651,12 +651,12 @@
       }
     },
     "cheapest_window": {
-      "name": "Guenstigstes Zeitfenster",
-      "description": "Liefert das guenstigste zusammenhaengende N-Stunden-Fenster aus der Preistabelle.",
+      "name": "Günstigstes Zeitfenster",
+      "description": "Liefert das günstigste zusammenhängende N-Stunden-Fenster aus der Preistabelle.",
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden, auf die naechste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
+          "description": "Fensterlänge in Stunden, auf die nächste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -664,21 +664,21 @@
         },
         "earliest_start": {
           "name": "Frühester Beginn",
-          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
+          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 berücksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
-          "name": "Spaetestes Ende",
+          "name": "Spätestes Ende",
           "description": "Optional. Standard: Ende des Cache."
         }
       }
     },
     "most_expensive_window": {
       "name": "Teuerstes Zeitfenster",
-      "description": "Liefert das teuerste zusammenhaengende N-Stunden-Fenster aus der Preistabelle.",
+      "description": "Liefert das teuerste zusammenhängende N-Stunden-Fenster aus der Preistabelle.",
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden, auf die naechste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
+          "description": "Fensterlänge in Stunden, auf die nächste ganze Stunde gerundet (eine halbe Stunde rundet auf). Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -686,17 +686,17 @@
         },
         "earliest_start": {
           "name": "Frühester Beginn",
-          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
+          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 berücksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
-          "name": "Spaetestes Ende",
+          "name": "Spätestes Ende",
           "description": "Optional. Standard: Ende des Cache."
         }
       }
     },
     "backfill_statistics": {
-      "name": "Statistiken nachbefuellen",
-      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im aktuellen Zeitraum seit Jahresbeginn neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
+      "name": "Statistiken nachbefüllen",
+      "description": "Befüllt die Long-Term-Statistik des Recorders für die Preissensoren und current_year_cost dieses Eintrags über einen Zeitraum, damit das Energie-Dashboard auch Verläufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im aktuellen Zeitraum seit Jahresbeginn neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -708,21 +708,21 @@
         },
         "end": {
           "name": "Ende",
-          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Zeitraums seit Jahresbeginn, werden nur die Preissensoren neu aufgebaut."
+          "description": "Erste Stunde, die NICHT mehr befüllt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Zeitraums seit Jahresbeginn, werden nur die Preissensoren neu aufgebaut."
         },
         "clear": {
-          "name": "GESAMTE Reihe vor dem Import loeschen",
-          "description": "Destruktiv: loescht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import fuellt anschliessend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum seit Jahresbeginn neu zu befuellen; ein Fenster, das nach dem Beginn des Zeitraums seit Jahresbeginn im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des aktuellen Zeitraums seit Jahresbeginn (dort bleibt die Kostenreihe sowohl beim Loeschen als auch beim erneuten Import aussen vor). Fuer schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und ueberschreibt die angeforderten Stunden bereits, ohne etwas ausserhalb des Bereichs anzuruehren."
+          "name": "GESAMTE Reihe vor dem Import löschen",
+          "description": "Destruktiv: löscht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import füllt anschließend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum seit Jahresbeginn neu zu befüllen; ein Fenster, das nach dem Beginn des Zeitraums seit Jahresbeginn im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des aktuellen Zeitraums seit Jahresbeginn (dort bleibt die Kostenreihe sowohl beim Löschen als auch beim erneuten Import außen vor). Für schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und überschreibt die angeforderten Stunden bereits, ohne etwas außerhalb des Bereichs anzurühren."
         }
       }
     }
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Nur {available} Preis-Slots sind im gewuenschten Fenster verfuegbar; benoetigt: {needed}."
+      "message": "Nur {available} Preis-Slots sind im gewünschten Fenster verfügbar; benötigt: {needed}."
     },
     "not_enough_contiguous_hours": {
-      "message": "Das gewuenschte Fenster hat hoechstens {available} aufeinanderfolgende Preis-Slots; benoetigt: {needed}."
+      "message": "Das gewünschte Fenster hat höchstens {available} aufeinanderfolgende Preis-Slots; benötigt: {needed}."
     },
     "duration_too_small": {
       "message": "duration_hours muss mindestens 1 sein."
@@ -745,56 +745,56 @@
   },
   "issues": {
     "snapshot_stale": {
-      "title": "Tarifdaten fuer {supplier} ({contract}) sind aelter als {days} Tage",
-      "description": "Die Integration konnte die Tarifkarte beim Lieferanten nicht aktualisieren und verwendet einen Cache, der aelter als {days} Tage ist. Letzter Fehler: {last_error}. Die Preise spiegeln moeglicherweise nicht mehr wider, was tatsaechlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, pruefen Sie Ihr Netzwerk, oder oeffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
+      "title": "Tarifdaten für {supplier} ({contract}) sind älter als {days} Tage",
+      "description": "Die Integration konnte die Tarifkarte beim Lieferanten nicht aktualisieren und verwendet einen Cache, der älter als {days} Tage ist. Letzter Fehler: {last_error}. Die Preise spiegeln möglicherweise nicht mehr wider, was tatsächlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, prüfen Sie Ihr Netzwerk, oder öffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
     },
     "extractor_failed": {
-      "title": "Tarifkarte fuer {supplier} ({contract}) konnte nicht ausgewertet werden",
-      "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geaendert; oeffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
+      "title": "Tarifkarte für {supplier} ({contract}) konnte nicht ausgewertet werden",
+      "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geändert; öffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
     },
     "extractor_unreachable": {
-      "title": "Lieferant fuer {supplier} ({contract}) nicht erreichbar",
-      "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Wurde früher eine Karte gelesen, verwendet sie weiterhin deren Preise; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Das ist meist ein voruebergehendes Netzwerk- oder CDN-Problem, das sich beim naechsten Aktualisieren von selbst loest; nutzen Sie den Dienst be_electricity_prices.refresh oder pruefen Sie Ihr Netzwerk, falls es weiter auftritt."
+      "title": "Lieferant für {supplier} ({contract}) nicht erreichbar",
+      "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Wurde früher eine Karte gelesen, verwendet sie weiterhin deren Preise; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Das ist meist ein vorübergehendes Netzwerk- oder CDN-Problem, das sich beim nächsten Aktualisieren von selbst löst; nutzen Sie den Dienst be_electricity_prices.refresh oder prüfen Sie Ihr Netzwerk, falls es weiter auftritt."
     },
     "card_read_by_ocr": {
       "title": "Die Preise von {supplier} werden aus Bildern seiner Karte gelesen",
-      "description": "{supplier} veroffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass aus dem Dokument selbst nichts gelesen werden kann. Diese Preise fur {contract} stammen aus der eigenen Lesung der Kartenpixel durch das Projekt, einmal taglich durchgefuhrt und von jeder Installation geteilt. Sie liest eine Zahl als das Einzige, was sie sein kann, oder gar nicht, sodass das Angezeigte vollstandig gelesen und nicht geraten wurde. Es bleibt aber eine Lesung, die Sie vor dem Handeln mit Ihrer Karte abgleichen sollten. Diese Meldung verschwindet von selbst, sobald {supplier} wieder eine lesbare Karte veroffentlicht."
+      "description": "{supplier} veröffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass aus dem Dokument selbst nichts gelesen werden kann. Diese Preise für {contract} stammen aus der eigenen Lesung der Kartenpixel durch das Projekt, einmal täglich durchgeführt und von jeder Installation geteilt. Sie liest eine Zahl als das Einzige, was sie sein kann, oder gar nicht, sodass das Angezeigte vollständig gelesen und nicht geraten wurde. Es bleibt aber eine Lesung, die Sie vor dem Handeln mit Ihrer Karte abgleichen sollten. Diese Meldung verschwindet von selbst, sobald {supplier} wieder eine lesbare Karte veröffentlicht."
     },
     "extractor_unreadable_no_prices": {
-      "title": "Keine Preise fur {supplier}: die Tarifkarte ist nicht lesbar",
-      "description": "{supplier} veroffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass die Preise nicht ausgelesen werden konnen, und dieser Eintrag hat keine altere Karte im Cache, auf die er zuruckgreifen konnte. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts zu lesen. Alle Sensoren dieses Eintrags ({contract}) bleiben nicht verfugbar, bis {supplier} wieder eine lesbare Karte veroffentlicht, oder bis das Kartenarchiv des Projekts seine eigene Lesung dieser Karte ablegt, was es einmal taglich tut und was dieser Eintrag liest, solange \"Frühere Tarifkarten aus dem Projektarchiv lesen\" an ist. Fur Preise jetzt gleich: einen Eintrag mit dem Anbieter „Expert: custom formula“ anlegen und die Werte der Karte von Hand eintragen. Diese Meldung verschwindet von selbst, sobald eines von beiden eintritt."
+      "title": "Keine Preise für {supplier}: die Tarifkarte ist nicht lesbar",
+      "description": "{supplier} veröffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass die Preise nicht ausgelesen werden können, und dieser Eintrag hat keine ältere Karte im Cache, auf die er zurückgreifen könnte. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts zu lesen. Alle Sensoren dieses Eintrags ({contract}) bleiben nicht verfügbar, bis {supplier} wieder eine lesbare Karte veröffentlicht, oder bis das Kartenarchiv des Projekts seine eigene Lesung dieser Karte ablegt, was es einmal täglich tut und was dieser Eintrag liest, solange \"Frühere Tarifkarten aus dem Projektarchiv lesen\" an ist. Für Preise jetzt gleich: einen Eintrag mit dem Anbieter „Expert: custom formula“ anlegen und die Werte der Karte von Hand eintragen. Diese Meldung verschwindet von selbst, sobald eines von beiden eintritt."
     },
     "extractor_unreadable": {
       "title": "Die Tarifkarte von {supplier} ist nicht mehr lesbar",
-      "description": "{supplier} veroffentlicht die Tarifkarte jetzt als Seitenbilder ohne Textebene, sodass die Preise nicht mehr ausgelesen werden konnen. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts Lesbares. Dieser Eintrag verwendet weiter die zuletzt erfolgreich gelesenen Preise ({contract}), die mit jeder neuen Karte weiter von Ihrer echten Rechnung abweichen. Fur korrekte Preise wechseln Sie den Anbieter oder legen Sie einen Eintrag mit dem Anbieter „Expert: custom formula“ an und tragen die Werte Ihrer Karte selbst ein. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veröffentlicht oder das Kartenarchiv des Projekts seine eigene Lesung dieser Karte ablegt, was es einmal täglich tut und was dieser Eintrag liest, solange \"Frühere Tarifkarten aus dem Projektarchiv lesen\" an ist."
+      "description": "{supplier} veröffentlicht die Tarifkarte jetzt als Seitenbilder ohne Textebene, sodass die Preise nicht mehr ausgelesen werden können. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts Lesbares. Dieser Eintrag verwendet weiter die zuletzt erfolgreich gelesenen Preise ({contract}), die mit jeder neuen Karte weiter von Ihrer echten Rechnung abweichen. Für korrekte Preise wechseln Sie den Anbieter oder legen Sie einen Eintrag mit dem Anbieter „Expert: custom formula“ an und tragen die Werte Ihrer Karte selbst ein. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veröffentlicht oder das Kartenarchiv des Projekts seine eigene Lesung dieser Karte ablegt, was es einmal täglich tut und was dieser Eintrag liest, solange \"Frühere Tarifkarten aus dem Projektarchiv lesen\" an ist."
     },
     "entsoe_auth_failed": {
-      "title": "ENTSO-E hat den API-Schluessel fuer {supplier} ({contract}) abgelehnt",
-      "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin kann nichts an diesem Eintrag, das dem Day-Ahead-Markt folgt, berechnet werden: bei einem dynamischen oder monatlich indexierten Vertrag sind seine Sensoren nicht verfuegbar, und bei einem Vertrag, bei dem nur die Einspeiseverguetung dem Markt folgt, ist es diese Verguetung."
+      "title": "ENTSO-E hat den API-Schlüssel für {supplier} ({contract}) abgelehnt",
+      "description": "transparency.entsoe.eu antwortete mit 401 für den konfigurierten Schlüssel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schlüssel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin kann nichts an diesem Eintrag, das dem Day-Ahead-Markt folgt, berechnet werden: bei einem dynamischen oder monatlich indexierten Vertrag sind seine Sensoren nicht verfügbar, und bei einem Vertrag, bei dem nur die Einspeisevergütung dem Markt folgt, ist es diese Vergütung."
     },
     "supplier_deprecated": {
-      "title": "{supplier} uebertraegt Ihren Vertrag am {ends_on} an {successor}",
-      "description": "{supplier} verlaesst den Markt fuer Haushaltsenergie: Ihr Vertrag geht am {ends_on} automatisch an {successor} ueber. Die Preise bleiben korrekt, bis {supplier} seine Tarifkarte nicht mehr veroeffentlicht, es ist also noch nichts defekt, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Sobald {successor} Sie beliefert, öffnen Sie die Optionen dieses Eintrags, wählen „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem {successor} Sie beliefert hat, und wählen dann {successor} und das Produkt, das in dessen Schreiben genannt wird. So bleiben die Tage von {supplier} auf seinen eigenen Tarifkarten berechnet, wo „Einstellungen bearbeiten“ das ganze Jahr auf den Karten von {successor} berechnen würde. Lag dieser Tag in einem früheren Jahr, verwenden Sie stattdessen „Einstellungen bearbeiten“. Steht es nicht in der Liste, kann diese Integration dieses Produkt noch nicht berechnen: der Anbieter „Expert: custom formula“ übernimmt solange die Werte Ihrer Tarifkarte, von Hand eingetragen, und ein Issue auf GitHub ist der Weg zu einer richtigen Unterstuetzung."
+      "title": "{supplier} überträgt Ihren Vertrag am {ends_on} an {successor}",
+      "description": "{supplier} verlässt den Markt für Haushaltsenergie: Ihr Vertrag geht am {ends_on} automatisch an {successor} über. Die Preise bleiben korrekt, bis {supplier} seine Tarifkarte nicht mehr veröffentlicht, es ist also noch nichts defekt, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Sobald {successor} Sie beliefert, öffnen Sie die Optionen dieses Eintrags, wählen „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem {successor} Sie beliefert hat, und wählen dann {successor} und das Produkt, das in dessen Schreiben genannt wird. So bleiben die Tage von {supplier} auf seinen eigenen Tarifkarten berechnet, wo „Einstellungen bearbeiten“ das ganze Jahr auf den Karten von {successor} berechnen würde. Lag dieser Tag in einem früheren Jahr, verwenden Sie stattdessen „Einstellungen bearbeiten“. Steht es nicht in der Liste, kann diese Integration dieses Produkt noch nicht berechnen: der Anbieter „Expert: custom formula“ übernimmt solange die Werte Ihrer Tarifkarte, von Hand eingetragen, und ein Issue auf GitHub ist der Weg zu einer richtigen Unterstützung."
     },
     "supplier_deprecated_ended": {
-      "title": "{supplier} hat Ihren Vertrag an {successor} ubertragen",
-      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen, und Ihr Vertrag wurde automatisch an {successor} ubertragen. Es wird keine Tarifkarte mehr veroffentlicht, dieser Eintrag kann sich also nicht mehr aktualisieren: er zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Um Ihren neuen Vertrag zu berechnen, öffnen Sie die Optionen dieses Eintrags, wählen „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem {successor} Sie beliefert hat, und wählen dann {successor} und das Produkt, das in dessen Schreiben genannt wird. So bleiben die Tage von {supplier} auf seinen eigenen Tarifkarten berechnet, wo „Einstellungen bearbeiten“ das ganze Jahr auf den Karten von {successor} berechnen würde. Lag dieser Tag in einem früheren Jahr, verwenden Sie stattdessen „Einstellungen bearbeiten“. Steht es nicht in der Liste, kann diese Integration dieses Produkt noch nicht berechnen: der Anbieter „Expert: custom formula“ übernimmt solange die Werte Ihrer Tarifkarte, von Hand eingetragen, und ein Issue auf GitHub ist der Weg zu einer richtigen Unterstuetzung."
+      "title": "{supplier} hat Ihren Vertrag an {successor} übertragen",
+      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen, und Ihr Vertrag wurde automatisch an {successor} übertragen. Es wird keine Tarifkarte mehr veröffentlicht, dieser Eintrag kann sich also nicht mehr aktualisieren: er zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Um Ihren neuen Vertrag zu berechnen, öffnen Sie die Optionen dieses Eintrags, wählen „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem {successor} Sie beliefert hat, und wählen dann {successor} und das Produkt, das in dessen Schreiben genannt wird. So bleiben die Tage von {supplier} auf seinen eigenen Tarifkarten berechnet, wo „Einstellungen bearbeiten“ das ganze Jahr auf den Karten von {successor} berechnen würde. Lag dieser Tag in einem früheren Jahr, verwenden Sie stattdessen „Einstellungen bearbeiten“. Steht es nicht in der Liste, kann diese Integration dieses Produkt noch nicht berechnen: der Anbieter „Expert: custom formula“ übernimmt solange die Werte Ihrer Tarifkarte, von Hand eingetragen, und ein Issue auf GitHub ist der Weg zu einer richtigen Unterstützung."
     },
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stellt die Belieferung von Haushalten am {ends_on} ein",
-      "description": "{supplier} verlaesst am {ends_on} den Markt fuer Haushaltsenergie. Die Preise bleiben korrekt, bis die Tarifkarte nicht mehr veroeffentlicht wird, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Ihr Vertrag geht an einen anderen Anbieter ueber: prüfen Sie das Schreiben, das Sie erhalten. Sobald dieser Anbieter Sie beliefert, wählen Sie in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem er Sie beliefert hat, und wählen ihn dann aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Anbieters berechnen, außer dieser Tag lag in einem früheren Jahr. Steht er nicht in der Liste, unterstuetzt diese Integration ihn in Ihrer Region noch nicht: oeffnen Sie dann bitte ein Issue auf GitHub."
+      "description": "{supplier} verlässt am {ends_on} den Markt für Haushaltsenergie. Die Preise bleiben korrekt, bis die Tarifkarte nicht mehr veröffentlicht wird, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Ihr Vertrag geht an einen anderen Anbieter über: prüfen Sie das Schreiben, das Sie erhalten. Sobald dieser Anbieter Sie beliefert, wählen Sie in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben den ersten Tag ein, an dem er Sie beliefert hat, und wählen ihn dann aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Anbieters berechnen, außer dieser Tag lag in einem früheren Jahr. Steht er nicht in der Liste, unterstützt diese Integration ihn in Ihrer Region noch nicht: öffnen Sie dann bitte ein Issue auf GitHub."
     },
     "supplier_deprecated_ended_no_successor": {
       "title": "{supplier} liefert keine Privatkunden-Energie mehr",
-      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen und veroffentlicht keine Tarifkarte mehr: dieser Eintrag kann sich nicht mehr aktualisieren und zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Ihr Vertrag wurde an einen anderen Anbieter ubertragen: prüfen Sie das Schreiben, wählen Sie dann in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben Sie den ersten Tag ein, an dem der neue Anbieter Sie beliefert hat, und wählen Sie ihn aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Anbieters berechnen, außer dieser Tag lag in einem früheren Jahr. Steht er nicht in der Liste, deckt diese Integration ihn in Ihrer Region noch nicht ab: bitte eroffnen Sie ein Issue auf GitHub."
+      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen und veröffentlicht keine Tarifkarte mehr: dieser Eintrag kann sich nicht mehr aktualisieren und zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Ihr Vertrag wurde an einen anderen Anbieter übertragen: prüfen Sie das Schreiben, wählen Sie dann in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben Sie den ersten Tag ein, an dem der neue Anbieter Sie beliefert hat, und wählen Sie ihn aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Anbieters berechnen, außer dieser Tag lag in einem früheren Jahr. Steht er nicht in der Liste, deckt diese Integration ihn in Ihrer Region noch nicht ab: bitte eröffnen Sie ein Issue auf GitHub."
     },
     "exclusive_night_rate_missing": {
-      "title": "{supplier} ({contract}) veroeffentlicht keinen Verteilungstarif fuer Exklusiv-Nacht",
-      "description": "Dieser Eintrag ist fuer einen separaten Exklusiv-Nacht-Zaehler konfiguriert, aber die Tarifkarte, die {supplier} fuer {dso} veroeffentlicht, enthaelt weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tag-Verteilungstarif ab, der Netzanteil des Preises liegt also hoeher als der tatsaechlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu uebernehmen waere geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder waehlen Sie einen Anbieter, dessen Karte sie veroeffentlicht."
+      "title": "{supplier} ({contract}) veröffentlicht keinen Verteilungstarif für Exklusiv-Nacht",
+      "description": "Dieser Eintrag ist für einen separaten Exklusiv-Nacht-Zähler konfiguriert, aber die Tarifkarte, die {supplier} für {dso} veröffentlicht, enthält weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tag-Verteilungstarif ab, der Netzanteil des Preises liegt also höher als der tatsächlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu übernehmen wäre geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder wählen Sie einen Anbieter, dessen Karte sie veröffentlicht."
     },
     "impact_rates_missing": {
-      "title": "{supplier} ({contract}) veroeffentlicht keine Tarif-Impact-Saetze fuer {dso}",
-      "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} fuer {contract} veroeffentlicht, enthaelt keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil faellt auf den Tag/Nacht-Zeitplan zurück, waehrend der Energieanteil weiter den Impact-Baendern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewaehlten Tarif abgerechnet. Stellen Sie den „Verteilungs-Modus“ dieses Eintrags auf „Doppeltarif (Tag / Nacht)“ um, oder waehlen Sie einen Vertrag, dessen Karte den Impact-Block veroeffentlicht."
+      "title": "{supplier} ({contract}) veröffentlicht keine Tarif-Impact-Sätze für {dso}",
+      "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} für {contract} veröffentlicht, enthält keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil fällt auf den Tag/Nacht-Zeitplan zurück, während der Energieanteil weiter den Impact-Bändern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewählten Tarif abgerechnet. Stellen Sie den „Verteilungs-Modus“ dieses Eintrags auf „Doppeltarif (Tag / Nacht)“ um, oder wählen Sie einen Vertrag, dessen Karte den Impact-Block veröffentlicht."
     },
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) veröffentlicht die wallonische Anschlussgebühr nicht mehr",
@@ -810,11 +810,11 @@
     },
     "register_pair_incomplete": {
       "title": "Ein Zähler von {supplier} ({contract}) zeichnet nicht mehr auf",
-      "description": "{entities} zeichnet nichts auf oder hat aufgehört aufzuzeichnen, während das andere Register seines Tag/Nacht-Paares oder der Zähler der anderen Richtung (Verbrauch oder Einspeisung) weiterläuft. Ein Tag, den nicht alle Verbrauchszähler liefern, wird auf keiner Seite abgerechnet, die laufenden Kosten dieses Eintrags fallen deshalb zu niedrig aus; ein Tag, der nur einem Einspeisezähler fehlt, wird ohne seine Einspeisung abgerechnet, die Kosten fallen dann zu hoch aus. Keine andere Fehlermeldung weist darauf hin. Ein Register, das lange nach seinem Gegenstück begann, wie eines, das nach einem Austausch neu zugeordnet wurde, lässt das Paar erst ab seinem ersten Tag abrechnen; dieser Hinweis bleibt deshalb bestehen, bis das Paar den Großteil des Jahres abdeckt, es sei denn, ein Gesamtsensor auf dieser Seite wird stattdessen abgerechnet.\n\nPrüfen Sie, ob der Sensor noch existiert und eine state_class total_increasing hat; wurde er umbenannt oder ersetzt, geben Sie im Schritt Energiezaehler den neuen an. Ein Sensor, dem ein Lieferant und zwei Daten folgen, gehört zu einem Vertrag, den Sie früher im Jahr hatten, und der die Zähler behält, die er beim Erfassen des Lieferantenwechsels hatte: Um ihn auf einen anderen Sensor zu verweisen, entfernen Sie den Lieferantenwechsel, korrigieren den Schritt Energiezaehler und erfassen den Wechsel erneut. Dieser Hinweis verschwindet automatisch, sobald alle Zähler wieder Werte liefern."
+      "description": "{entities} zeichnet nichts auf oder hat aufgehört aufzuzeichnen, während das andere Register seines Tag/Nacht-Paares oder der Zähler der anderen Richtung (Verbrauch oder Einspeisung) weiterläuft. Ein Tag, den nicht alle Verbrauchszähler liefern, wird auf keiner Seite abgerechnet, die laufenden Kosten dieses Eintrags fallen deshalb zu niedrig aus; ein Tag, der nur einem Einspeisezähler fehlt, wird ohne seine Einspeisung abgerechnet, die Kosten fallen dann zu hoch aus. Keine andere Fehlermeldung weist darauf hin. Ein Register, das lange nach seinem Gegenstück begann, wie eines, das nach einem Austausch neu zugeordnet wurde, lässt das Paar erst ab seinem ersten Tag abrechnen; dieser Hinweis bleibt deshalb bestehen, bis das Paar den Großteil des Jahres abdeckt, es sei denn, ein Gesamtsensor auf dieser Seite wird stattdessen abgerechnet.\n\nPrüfen Sie, ob der Sensor noch existiert und eine state_class total_increasing hat; wurde er umbenannt oder ersetzt, geben Sie im Schritt Energiezähler den neuen an. Ein Sensor, dem ein Lieferant und zwei Daten folgen, gehört zu einem Vertrag, den Sie früher im Jahr hatten, und der die Zähler behält, die er beim Erfassen des Lieferantenwechsels hatte: Um ihn auf einen anderen Sensor zu verweisen, entfernen Sie den Lieferantenwechsel, korrigieren den Schritt Energiezähler und erfassen den Wechsel erneut. Dieser Hinweis verschwindet automatisch, sobald alle Zähler wieder Werte liefern."
     },
     "register_pair_covered": {
       "title": "Ein Register von {supplier} ({contract}) ist defekt",
-      "description": "{entities} zeichnet nichts auf, hat aufgehört aufzuzeichnen, während das andere Register seines Tag/Nacht-Paares weiterläuft, oder zählt nicht mehr weiter. Stattdessen wird der Gesamtsensor derselben Seite abgerechnet, die laufenden Kosten dieses Eintrags sind davon also nicht betroffen.\n\nDas Register sollte trotzdem repariert werden: Prüfen Sie, ob der Sensor noch existiert und eine state_class total_increasing hat; wurde er umbenannt oder ersetzt, geben Sie im Schritt Energiezaehler den neuen an. Dieser Hinweis verschwindet automatisch, sobald das Register wieder Werte liefert."
+      "description": "{entities} zeichnet nichts auf, hat aufgehört aufzuzeichnen, während das andere Register seines Tag/Nacht-Paares weiterläuft, oder zählt nicht mehr weiter. Stattdessen wird der Gesamtsensor derselben Seite abgerechnet, die laufenden Kosten dieses Eintrags sind davon also nicht betroffen.\n\nDas Register sollte trotzdem repariert werden: Prüfen Sie, ob der Sensor noch existiert und eine state_class total_increasing hat; wurde er umbenannt oder ersetzt, geben Sie im Schritt Energiezähler den neuen an. Dieser Hinweis verschwindet automatisch, sobald das Register wieder Werte liefert."
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) berechnet Lastschrift anders und dieser Eintrag wurde nicht gefragt",
@@ -831,7 +831,7 @@
         "name": "Aktueller Preis"
       },
       "next_hour_price": {
-        "name": "Preis naechste Stunde"
+        "name": "Preis nächste Stunde"
       },
       "today_average": {
         "name": "Durchschnitt heute"
@@ -867,7 +867,7 @@
         "name": "Niedertarifpreis (Nacht)"
       },
       "capacity_cost": {
-        "name": "Kapazitaetskosten"
+        "name": "Kapazitätskosten"
       },
       "monthly_peak_kw": {
         "name": "Monatliche Spitzenleistung"
@@ -926,12 +926,12 @@
     },
     "binary_sensor": {
       "tomorrow_prices_available": {
-        "name": "Preise fur morgen verfugbar"
+        "name": "Preise für morgen verfügbar"
       }
     },
     "button": {
       "reset_monthly_peak": {
-        "name": "Monatsspitze zurucksetzen"
+        "name": "Monatsspitze zurücksetzen"
       }
     }
   }
