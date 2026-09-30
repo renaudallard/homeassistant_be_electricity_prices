@@ -245,7 +245,7 @@
       "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
       "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen.",
       "compare_all_no_alternatives": "Er wordt in uw gewest geen ander contract van dit type verkocht, dus er valt niets te rangschikken. De eenmalige vergelijking kan nog steeds een ander type contract berekenen.",
-      "compare_all_unknown_contract": "Het contract van deze invoer staat niet meer in de catalogus van de leverancier en kan dus niet naast de andere worden geplaatst. Kies het eerst opnieuw bij Instellingen bewerken.",
+      "compare_all_unknown_contract": "Het contract van deze invoer staat niet meer in de catalogus van de leverancier en kan dus niet naast de andere worden geplaatst. Kies het eerst opnieuw bij Instellingen wijzigen.",
       "compare_all_entry_reloading": "De invoer wordt nog geladen. Probeer het zo meteen opnieuw.",
       "no_switch_recorded": "Er is dit jaar geen leverancierswissel geregistreerd voor deze entry."
     },
@@ -794,7 +794,7 @@
     },
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) publiceert geen Tarif Impact-tarieven voor {dso}",
-      "description": "Deze invoer staat op de Waalse Tarif Impact-facturatiemodus, maar de tariefkaart die {supplier} voor {contract} publiceert bevat geen PIC / MEDIUM / ECO distributietarieven. Het netgedeelte valt terug op het tweevoudige schema terwijl het energiegedeelte de Impact-blokken blijft volgen; die twee lopen uiteen tussen 22.00 en 01.00 uur, waar Impact MEDIUM aanrekent.\n\nDe factuur blijft dichtbij, maar u wordt niet gefactureerd op het tarief dat u koos. Zet de distributiemodus van deze invoer op tweevoudig, of kies een contract waarvan de kaart het Impact-blok publiceert."
+      "description": "Deze invoer staat op de Waalse Tarif Impact-facturatiemodus, maar de tariefkaart die {supplier} voor {contract} publiceert bevat geen PIC / MEDIUM / ECO distributietarieven. Het netgedeelte valt terug op het tweevoudige schema terwijl het energiegedeelte de Impact-blokken blijft volgen; die twee lopen uiteen tussen 22.00 en 01.00 uur, waar Impact MEDIUM aanrekent.\n\nDe factuur blijft dichtbij, maar u wordt niet gefactureerd op het tarief dat u koos. Zet de 'Distributiemodus' van deze invoer op 'Tweevoudig (dag / nacht)', of kies een contract waarvan de kaart het Impact-blok publiceert."
     },
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) publiceert de Waalse aansluitingsvergoeding niet meer",
@@ -818,7 +818,7 @@
     },
     "direct_debit_unanswered": {
       "title": "{supplier} ({contract}) rekent domiciliëring anders aan en deze ingave is niets gevraagd",
-      "description": "De tariefkaart van {contract} rekent een gezin dat met domiciliëring betaalt anders aan: naargelang de kaart betaalt een domiciliëringsbetaler een lagere vaste vergoeding, of krijgt hij een welkomstkorting, of een grotere.\n\nDeze ingave is aangemaakt voordat de vraag werd gesteld, dus er is geen antwoord opgeslagen en het verschil wordt weggelaten in plaats van geraden. Open de opties van de integratie en antwoord \"Ik betaal met domiciliëring\" om het aan te rekenen. Deze melding verdwijnt zodra er een antwoord is opgeslagen, welk ook."
+      "description": "De tariefkaart van {contract} rekent een gezin dat met domiciliëring betaalt anders aan: naargelang de kaart betaalt een domiciliëringsbetaler een lagere vaste vergoeding, of krijgt hij een welkomstkorting, of een grotere.\n\nDeze ingave is aangemaakt voordat de vraag werd gesteld, dus er is geen antwoord opgeslagen en het verschil wordt weggelaten in plaats van geraden. Open de opties van de integratie en antwoord \"Ik betaal via domiciliëring\" om het aan te rekenen. Deze melding verdwijnt zodra er een antwoord is opgeslagen, welk ook."
     },
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) wordt aangerekend zonder het vermogensterm van Sibelga",
