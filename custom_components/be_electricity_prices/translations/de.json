@@ -15,20 +15,20 @@
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
-          "tariff_card_date": "Monat des Tarifblatts (optional)",
+          "tariff_card_date": "Monat der Tarifkarte (optional)",
           "contract_end_date": "Vertragsende (optional)",
           "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
-          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
+          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
+          "tariff_card_date": "Ein beliebiges Datum im Monat der Tarifkarte, auf der Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach der bei Vertragsabschluss geltenden Tarifkarte berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass diese Tarifkarte oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach der Tarifkarte liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
           "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
         "title": "Vertragstarif bei Abschluss (optional)",
-        "description": "Lassen Sie diesen Schritt leer, es sei denn, Ihre Vertragsbestätigung nennt andere Zahlen als das veröffentlichte Tarifblatt Ihres Anbieters. Viele Angebote, auch Aktionen über Vergleichsportale, haben ein eigenes Tarifblatt, das die Integration bereits liest. Tragen Sie nur Zahlen ein, die Ihr Vertrag nennt: Sie ersetzen den Wert des Tarifblatts, ein leeres Feld behält ihn. Führt Ihr Anbieter ein Archiv alter Tarifblätter, füllt das Blatt Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Der Spot-Faktor multipliziert den Marktpreis in EUR/kWh und die Spot-Basis ist in EUR/kWh, eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss also umgerechnet werden: (0,1068 × Belpex + 1,5) × 1,06 c€/kWh ergibt einen Faktor von 1,13208 und eine Basis von 0,0159. Werte pro kWh sind bei einem Privatvertrag inklusive MwSt., bei einem Geschäftsvertrag und auf den Tarifblättern von Ecopower exklusive MwSt.; die Jahresgebühr ist inklusive MwSt.",
+        "description": "Lassen Sie diesen Schritt leer, es sei denn, Ihre Vertragsbestätigung nennt andere Zahlen als die veröffentlichte Tarifkarte Ihres Anbieters. Viele Angebote, auch Aktionen über Vergleichsportale, haben eine eigene Tarifkarte, die die Integration bereits liest. Tragen Sie nur Zahlen ein, die Ihr Vertrag nennt: Sie ersetzen den Wert der Tarifkarte, ein leeres Feld behält ihn. Führt Ihr Anbieter ein Archiv alter Tarifkarten, füllt die Karte Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Der Spot-Faktor multipliziert den Marktpreis in EUR/kWh und die Spot-Basis ist in EUR/kWh, eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss also umgerechnet werden: (0,1068 × Belpex + 1,5) × 1,06 c€/kWh ergibt einen Faktor von 1,13208 und eine Basis von 0,0159. Werte pro kWh sind bei einem Privatvertrag inklusive MwSt., bei einem Geschäftsvertrag und auf den Tarifkarten von Ecopower exklusive MwSt.; die Jahresgebühr ist inklusive MwSt.",
         "data": {
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",
@@ -155,7 +155,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliches Tarifblatt. Veroeffentlicht Ihr Lieferant eines, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihr Tarifblatt (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrem Tarifblatt, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliche Tarifkarte. Veroeffentlicht Ihr Lieferant eine, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrer Tarifkarte, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index in EUR/kWh)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
@@ -169,7 +169,7 @@
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: ein Tarifblatt mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
           "custom_injection_mode": "Einspeiseverguetung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
@@ -181,7 +181,7 @@
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
@@ -231,7 +231,7 @@
       "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und laesst sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
-      "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
+      "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten seit Jahresbeginn Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
@@ -255,7 +255,7 @@
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "start_date_before_switch": "Der Vertragsbeginn darf nicht vor dem letzten für diesen Eintrag erfassten Lieferantenwechsel liegen.",
-      "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
+      "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten seit Jahresbeginn Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
@@ -345,20 +345,20 @@
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
-          "tariff_card_date": "Monat des Tarifblatts (optional)",
+          "tariff_card_date": "Monat der Tarifkarte (optional)",
           "contract_end_date": "Vertragsende (optional)",
           "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
-          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
+          "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann von der Tarifkarte jenes Monats gelesen statt von der aktuellen, bei jedem Anbieter, der seine alten Tarifkarten archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt die von Ihnen unterschriebene Tarifkarte einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt die Tarifkarte, auf der der Eintrag gelandet ist. Leer lassen, um immer die aktuelle Tarifkarte zu verwenden.",
+          "tariff_card_date": "Ein beliebiges Datum im Monat der Tarifkarte, auf der Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach der bei Vertragsabschluss geltenden Tarifkarte berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass diese Tarifkarte oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach der Tarifkarte liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
           "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
         "title": "Vertragstarif bei Abschluss (optional)",
-        "description": "Lassen Sie diesen Schritt leer, es sei denn, Ihre Vertragsbestätigung nennt andere Zahlen als das veröffentlichte Tarifblatt Ihres Anbieters. Viele Angebote, auch Aktionen über Vergleichsportale, haben ein eigenes Tarifblatt, das die Integration bereits liest. Tragen Sie nur Zahlen ein, die Ihr Vertrag nennt: Sie ersetzen den Wert des Tarifblatts, ein leeres Feld behält ihn. Führt Ihr Anbieter ein Archiv alter Tarifblätter, füllt das Blatt Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Der Spot-Faktor multipliziert den Marktpreis in EUR/kWh und die Spot-Basis ist in EUR/kWh, eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss also umgerechnet werden: (0,1068 × Belpex + 1,5) × 1,06 c€/kWh ergibt einen Faktor von 1,13208 und eine Basis von 0,0159. Werte pro kWh sind bei einem Privatvertrag inklusive MwSt., bei einem Geschäftsvertrag und auf den Tarifblättern von Ecopower exklusive MwSt.; die Jahresgebühr ist inklusive MwSt.",
+        "description": "Lassen Sie diesen Schritt leer, es sei denn, Ihre Vertragsbestätigung nennt andere Zahlen als die veröffentlichte Tarifkarte Ihres Anbieters. Viele Angebote, auch Aktionen über Vergleichsportale, haben eine eigene Tarifkarte, die die Integration bereits liest. Tragen Sie nur Zahlen ein, die Ihr Vertrag nennt: Sie ersetzen den Wert der Tarifkarte, ein leeres Feld behält ihn. Führt Ihr Anbieter ein Archiv alter Tarifkarten, füllt die Karte Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Der Spot-Faktor multipliziert den Marktpreis in EUR/kWh und die Spot-Basis ist in EUR/kWh, eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss also umgerechnet werden: (0,1068 × Belpex + 1,5) × 1,06 c€/kWh ergibt einen Faktor von 1,13208 und eine Basis von 0,0159. Werte pro kWh sind bei einem Privatvertrag inklusive MwSt., bei einem Geschäftsvertrag und auf den Tarifkarten von Ecopower exklusive MwSt.; die Jahresgebühr ist inklusive MwSt.",
         "data": {
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",
@@ -369,13 +369,13 @@
           "manual_yearly_fee": "Festgelegte Jahresgebühr (EUR, inkl. MwSt.)"
         },
         "data_description": {
-          "manual_energy_single": "Auf dem aktuellen Tarifblatt ({card_month}): {card_single}",
-          "manual_energy_peak": "Auf dem aktuellen Tarifblatt ({card_month}): {card_peak}",
-          "manual_energy_offpeak": "Auf dem aktuellen Tarifblatt ({card_month}): {card_offpeak}",
-          "manual_energy_exclusive_night": "Auf dem aktuellen Tarifblatt ({card_month}): {card_exclusive_night}",
-          "manual_energy_factor": "Auf dem aktuellen Tarifblatt ({card_month}): {card_factor}",
-          "manual_energy_base": "Auf dem aktuellen Tarifblatt ({card_month}): {card_base}",
-          "manual_yearly_fee": "Auf dem aktuellen Tarifblatt ({card_month}): {card_fee}"
+          "manual_energy_single": "Auf der aktuellen Tarifkarte ({card_month}): {card_single}",
+          "manual_energy_peak": "Auf der aktuellen Tarifkarte ({card_month}): {card_peak}",
+          "manual_energy_offpeak": "Auf der aktuellen Tarifkarte ({card_month}): {card_offpeak}",
+          "manual_energy_exclusive_night": "Auf der aktuellen Tarifkarte ({card_month}): {card_exclusive_night}",
+          "manual_energy_factor": "Auf der aktuellen Tarifkarte ({card_month}): {card_factor}",
+          "manual_energy_base": "Auf der aktuellen Tarifkarte ({card_month}): {card_base}",
+          "manual_yearly_fee": "Auf der aktuellen Tarifkarte ({card_month}): {card_fee}"
         }
       },
       "dso": {
@@ -494,7 +494,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliches Tarifblatt. Veroeffentlicht Ihr Lieferant eines, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihr Tarifblatt (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrem Tarifblatt, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliche Tarifkarte. Veroeffentlicht Ihr Lieferant eine, oeffnen Sie bitte lieber ein Issue auf GitHub, ihn als vollwertigen Lieferanten aufzunehmen, und ebenso, wenn Ihr Lieferant schon gelistet ist, der Eintrag Ihren Vertrag aber nicht so berechnet wie Ihre Tarifkarte (eine auf den Vertragsmonat festgeschriebene Formel, eine Zeile, die der Parser verfehlt): oeffnen Sie ein Issue mit Ihrer Tarifkarte, damit es fuer alle behoben statt hier nachgebaut wird. ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Werte Ihres Vertrags ohne MwSt. ein; der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis, Index (der Live-Spot oder das Monatsmittel) und Basis beide in EUR/kWh. Eine Formel in c€/kWh auf einen Belpex in EUR/MWh muss umgerechnet werden: (0,1068 x Belpex + 1,5) c€/kWh ergibt einen Faktor von 1.068 und eine Basis von 0.015. Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index in EUR/kWh)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
@@ -508,7 +508,7 @@
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: ein Tarifblatt mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Index und Basis sind beide in EUR/kWh, und die Basis behaelt ihr Vorzeichen: eine Tarifkarte mit (0,07 x Belpex - 2) c€/kWh, auf einen Belpex in EUR/MWh, ergibt einen Faktor von 0.7 und eine Basis von -0.02. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
           "custom_injection_mode": "Einspeiseverguetung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
@@ -520,7 +520,7 @@
       },
       "custom_dso": {
         "title": "Netztarife (VNB)",
-        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder der Tarifkarte des VNB, ohne MwSt. Nur die Verteilung ist erforderlich. Lassen Sie die Felder fuer Tag, Nacht und die Tarifbaender leer, wenn Ihr Tarif diese Aufteilung nicht hat: leer berechnet den einheitlichen Verteilungstarif, 0 berechnet nichts. Lassen Sie andere nicht gezahlte Posten auf 0. Das jaehrliche Feld nimmt in Flandern die Datenverwaltungsgebuehr (databeheer), in Wallonien den Festterm (terme fixe), den der Impact-Tarif nicht berechnet, und in Bruessel Mess- und Festkosten zusammen.",
         "data": {
           "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
           "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
@@ -581,7 +581,7 @@
       }
     },
     "progress": {
-      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n{ranking}"
+      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Tarifkarten zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n{ranking}"
     }
   },
   "selector": {
