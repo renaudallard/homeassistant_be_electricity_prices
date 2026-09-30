@@ -76,7 +76,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }
@@ -97,7 +97,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schluessel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, damit abgerechnet, dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }
@@ -199,7 +199,7 @@
       },
       "custom_tax": {
         "title": "Steuern und Abgaben",
-        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Die belgische Wohn-MwSt. ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
@@ -314,7 +314,7 @@
       },
       "compare_meter": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Zaehlerart fuer den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; aendern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Spitze / Nebenzeit).",
+        "description": "Zaehlerart fuer den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; aendern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Tag / Nacht).",
         "data": {
           "meter": "Zaehlerart"
         }
@@ -415,7 +415,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }
@@ -436,7 +436,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schluessel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, damit abgerechnet, dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, waehrend eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfuegbar bleibt.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }
@@ -538,7 +538,7 @@
       },
       "custom_tax": {
         "title": "Steuern und Abgaben",
-        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Die belgische Wohn-MwSt. ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
@@ -553,7 +553,7 @@
       },
       "compare_all_result": {
         "title": "Alternativen nach Preis",
-        "description": "Alle Vertraege derselben Familie wie Ihrer (fest oder variabel, spotindexiert oder mit Zeitfenstern), die in Ihrer Region verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag traegt das Abzeichen YOUR CONTRACT; jede andere Zeile endet mit dem Abstand dazu, wobei ein Minus eine Ersparnis ist.\n\n{ranking}\n\nSchätzungen, keine Angebote. Jede Zeile rechnet ein volles Jahr Ihrer gemessenen Mengen gegen eine einzelne veröffentlichte Tarifkarte: sie sagt, was ein Jahr zu diesen Preisen kostete, nicht was Ihnen berechnet wird. Es wird nichts gespeichert; zum Schließen bestätigen.",
+        "description": "Alle Vertraege derselben Familie wie Ihrer (fest oder variabel, spotindexiert oder mit Zeitfenstern), die in Ihrer Region verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag traegt das Abzeichen YOUR CONTRACT; jede andere Zeile endet mit dem Abstand dazu, wobei ein Minus eine Ersparnis ist.\n\n{ranking}\n\nSchätzungen, keine Angebote. Jede Zeile rechnet ein volles Jahr Ihrer gemessenen Mengen gegen eine einzelne veröffentlichte Tarifkarte: sie sagt, was ein Jahr zu diesen Preisen kosten würde, nicht was Ihnen berechnet wird. Es wird nichts gespeichert; zum Schließen bestätigen.",
         "data": {
           "with_ytd": "Auch die Kosten seit Jahresbeginn berechnen (langsamer: holt die Tarifkarte jedes vergangenen Monats)",
           "refresh": "Jetzt neu berechnen (dauert etwa zwei Minuten)"
@@ -608,7 +608,7 @@
     },
     "dso_tariff_mode": {
       "options": {
-        "simple": "Eintarif (eine Rate, alle Stunden)",
+        "simple": "Eintarif (ein Tarif, alle Stunden)",
         "bi_horaire": "Doppeltarif (Tag / Nacht)",
         "impact": "Tarif Impact (3 Tageszeit-Bereiche)"
       }
@@ -663,7 +663,7 @@
           "description": "Optional. Ohne Angabe wird der zuerst geladene Eintrag verwendet; geben Sie ihn an, wenn Sie mehrere Einträge haben."
         },
         "earliest_start": {
-          "name": "Frueher Beginn",
+          "name": "Frühester Beginn",
           "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
@@ -685,7 +685,7 @@
           "description": "Optional. Ohne Angabe wird der zuerst geladene Eintrag verwendet; geben Sie ihn an, wenn Sie mehrere Einträge haben."
         },
         "earliest_start": {
-          "name": "Frueher Beginn",
+          "name": "Frühester Beginn",
           "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
@@ -790,11 +790,11 @@
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) veroeffentlicht keinen Verteilungstarif fuer Exklusiv-Nacht",
-      "description": "Dieser Eintrag ist fuer einen separaten Exklusiv-Nacht-Zaehler konfiguriert, aber die Tarifkarte, die {supplier} fuer {dso} veroeffentlicht, enthaelt weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tagtarif ab, der Netzanteil des Preises liegt also hoeher als der tatsaechlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu uebernehmen waere geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder waehlen Sie einen Anbieter, dessen Karte sie veroeffentlicht."
+      "description": "Dieser Eintrag ist fuer einen separaten Exklusiv-Nacht-Zaehler konfiguriert, aber die Tarifkarte, die {supplier} fuer {dso} veroeffentlicht, enthaelt weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tag-Verteilungstarif ab, der Netzanteil des Preises liegt also hoeher als der tatsaechlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu uebernehmen waere geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder waehlen Sie einen Anbieter, dessen Karte sie veroeffentlicht."
     },
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) veroeffentlicht keine Tarif-Impact-Saetze fuer {dso}",
-      "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} fuer {contract} veroeffentlicht, enthaelt keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil faellt auf den Zweitarif-Zeitplan zurueck, waehrend der Energieanteil weiter den Impact-Baendern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewaehlten Tarif abgerechnet. Stellen Sie den Verteilungsmodus dieses Eintrags auf Zweitarif um, oder waehlen Sie einen Vertrag, dessen Karte den Impact-Block veroeffentlicht."
+      "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} fuer {contract} veroeffentlicht, enthaelt keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil faellt auf den Tag/Nacht-Zeitplan zurück, waehrend der Energieanteil weiter den Impact-Baendern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewaehlten Tarif abgerechnet. Stellen Sie den „Verteilungs-Modus“ dieses Eintrags auf „Doppeltarif (Tag / Nacht)“ um, oder waehlen Sie einen Vertrag, dessen Karte den Impact-Block veroeffentlicht."
     },
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) veröffentlicht die wallonische Anschlussgebühr nicht mehr",
