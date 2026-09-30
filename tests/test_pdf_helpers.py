@@ -712,12 +712,15 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     600-character line has an order of magnitude of headroom either side.
     This asserts the margin rather than the constant, so shrinking the
     threshold toward real data fails here.
+
+    Read through fixture_text, which runs the same extract_pdf_text and keeps
+    what it read: extracting every fixture here, uncached, was nine minutes
+    of a twenty-minute suite on one worker.
     """
-    from tests import FIXTURES
+    from tests import FIXTURES, fixture_text
 
     smallest = min(
-        len(extract_pdf_text(path.read_bytes()).strip())
-        for path in sorted(FIXTURES.glob("*.pdf"))
+        len(fixture_text(path.name).strip()) for path in sorted(FIXTURES.glob("*.pdf"))
     )
     assert smallest > 4 * _MIN_TEXT_LAYER_CHARS
 
