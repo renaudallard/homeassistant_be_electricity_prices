@@ -17,7 +17,7 @@
           "contract_start_date": "Date de début du contrat (facultatif)",
           "tariff_card_date": "Mois de la carte tarifaire (facultatif)",
           "contract_end_date": "Date de fin du contrat (facultatif)",
-          "ytd_from_contract_start": "Facturer le cumul annuel à partir de la date de début du contrat"
+          "ytd_from_contract_start": "Facturer le coût de l'année à partir de la date de début du contrat"
         },
         "data_description": {
           "contract_start_date": "La date à laquelle votre fourniture sous ce contrat a commencé. Votre tarif est alors lu sur la carte tarifaire de ce mois-là au lieu de la grille actuelle, chez tout fournisseur qui archive ses anciennes cartes, aussi bien pour les contrats fixes que dynamiques ou indexés mensuellement. Si la carte tarifaire que vous avez signée porte un autre mois, indiquez ce mois dans le champ ci-dessous. L'attribut signing_card du capteur current_price indique la carte sur laquelle l'entrée a abouti. Laissez vide pour toujours utiliser la carte actuelle.",
@@ -347,7 +347,7 @@
           "contract_start_date": "Date de début du contrat (facultatif)",
           "tariff_card_date": "Mois de la carte tarifaire (facultatif)",
           "contract_end_date": "Date de fin du contrat (facultatif)",
-          "ytd_from_contract_start": "Facturer le cumul annuel à partir de la date de début du contrat"
+          "ytd_from_contract_start": "Facturer le coût de l'année à partir de la date de début du contrat"
         },
         "data_description": {
           "contract_start_date": "La date à laquelle votre fourniture sous ce contrat a commencé. Votre tarif est alors lu sur la carte tarifaire de ce mois-là au lieu de la grille actuelle, chez tout fournisseur qui archive ses anciennes cartes, aussi bien pour les contrats fixes que dynamiques ou indexés mensuellement. Si la carte tarifaire que vous avez signée porte un autre mois, indiquez ce mois dans le champ ci-dessous. L'attribut signing_card du capteur current_price indique la carte sur laquelle l'entrée a abouti. Laissez vide pour toujours utiliser la carte actuelle.",
