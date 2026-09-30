@@ -17,13 +17,13 @@
           "contract_start_date": "Vertragsbeginn (optional)",
           "tariff_card_date": "Monat des Tarifblatts (optional)",
           "contract_end_date": "Vertragsende (optional)",
-          "ytd_from_contract_start": "Jahreskosten ab Vertragsbeginn abrechnen"
+          "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihre Jahreskosten und Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
+          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
-          "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
+          "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
@@ -233,7 +233,7 @@
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
-      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
+      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten seit Jahresbeginn Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region."
     }
@@ -257,7 +257,7 @@
       "start_date_before_switch": "Der Vertragsbeginn darf nicht vor dem letzten für diesen Eintrag erfassten Lieferantenwechsel liegen.",
       "card_date_in_future": "Der Monat des Tarifblatts kann nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
-      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
+      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten seit Jahresbeginn Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "compensation_kva_missing": "Der wallonische Prosumer-Tarif der Kompensationsregelung wird aus der Wechselrichterleistung berechnet: Geben Sie sie in kVA an.",
       "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region.",
       "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden.",
@@ -347,13 +347,13 @@
           "contract_start_date": "Vertragsbeginn (optional)",
           "tariff_card_date": "Monat des Tarifblatts (optional)",
           "contract_end_date": "Vertragsende (optional)",
-          "ytd_from_contract_start": "Jahreskosten ab Vertragsbeginn abrechnen"
+          "ytd_from_contract_start": "Kosten seit Jahresbeginn erst ab Vertragsbeginn zählen"
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihre Belieferung unter diesem Vertrag begonnen hat. Ihr Tarif wird dann vom Tarifblatt jenes Monats gelesen statt vom aktuellen, bei jedem Anbieter, der seine alten Tarifblätter archiviert, und bei Festpreis-, dynamischen und monatlich indexierten Verträgen gleichermassen. Trägt das von Ihnen unterschriebene Tarifblatt einen anderen Monat, geben Sie diesen im Feld darunter an. Das Attribut signing_card des Sensors current_price nennt das Tarifblatt, auf dem der Eintrag gelandet ist. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihre Jahreskosten und Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
+          "tariff_card_date": "Ein beliebiges Datum im Monat des Tarifblatts, auf dem Ihr Vertrag läuft. Ein Festpreis- oder dynamischer Vertrag wird nach dem bei Vertragsabschluss geltenden Tarifblatt berechnet, und ein Anbieterwechsel dauert etwa einen Monat, sodass dieses Tarifblatt oft den Monat vor Beginn Ihrer Belieferung trägt. energie.be nennt ihn im Produktnamen (Elektriciteit dynamisch particulier online 06/26). Leer lassen, um den Monat des Lieferbeginns zu verwenden, was stimmt, wenn Sie im selben Monat unterschrieben und begonnen haben. Nur die Suche nach dem Tarifblatt liest dieses Datum: Ihr Zeitraum seit Jahresbeginn und Ihre Gebühren zählen weiter ab dem Vertragsbeginn darüber.",
           "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den rollierenden Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
-          "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
+          "ytd_from_contract_start": "Standardmässig zählen die Kosten seit Jahresbeginn ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
@@ -642,11 +642,11 @@
   "services": {
     "refresh": {
       "name": "Aktualisieren",
-      "description": "Lässt jeden Eintrag von Belgian Electricity Prices sofort die Tarifkarte des Anbieters, die Monatskarten, nach denen die Jahreskosten abgerechnet werden, und die heutigen ENTSO-E-Preise neu laden, statt auf den nächsten Durchlauf zu warten. Der Zwischenspeicher der VERGANGENEN Stundenpreise hinter den Jahreskosten bleibt unberührt; dafür ist Preisverlauf löschen da.",
+      "description": "Lässt jeden Eintrag von Belgian Electricity Prices sofort die Tarifkarte des Anbieters, die Monatskarten, nach denen die Kosten seit Jahresbeginn abgerechnet werden, und die heutigen ENTSO-E-Preise neu laden, statt auf den nächsten Durchlauf zu warten. Der Zwischenspeicher der VERGANGENEN Stundenpreise hinter den Kosten seit Jahresbeginn bleibt unberührt; dafür ist Preisverlauf löschen da.",
       "fields": {
         "clear_history": {
           "name": "Preisverlauf löschen",
-          "description": "Verwirft zusätzlich die zwischengespeicherten vergangenen Stundenpreise, die den Jahreskosten zugrunde liegen, und lädt sie neu. Standardmäßig aus: es lädt jeden Tag seit dem 1. Januar (oder seit Vertragsbeginn, wenn der Eintrag ab dann abrechnet) neu von einem Dienst mit Ratenbegrenzung. Die Tage davor werden nicht erneut geladen, sodass eine Einspeisevergütung, die pro Zeitfenster dem Spotpreis folgt, aus den rollierenden Jahreskosten und den Vergleichen herausfällt, bis wieder ein volles Jahr vorliegt. Zu verwenden, wenn ein Jahreskostenwert falsch aussieht und eine normale Aktualisierung nichts ändert."
+          "description": "Verwirft zusätzlich die zwischengespeicherten vergangenen Stundenpreise, die den Kosten seit Jahresbeginn zugrunde liegen, und lädt sie neu. Standardmäßig aus: es lädt jeden Tag seit dem 1. Januar (oder seit Vertragsbeginn, wenn der Eintrag ab dann abrechnet) neu von einem Dienst mit Ratenbegrenzung. Die Tage davor werden nicht erneut geladen, sodass eine Einspeisevergütung, die pro Zeitfenster dem Spotpreis folgt, aus den rollierenden Jahreskosten und den Vergleichen herausfällt, bis wieder ein volles Jahr vorliegt. Zu verwenden, wenn ein Wert der Kosten seit Jahresbeginn falsch aussieht und eine normale Aktualisierung nichts ändert."
         }
       }
     },
@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Statistiken nachbefuellen",
-      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im laufenden Jahreskostenfenster neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
+      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im aktuellen Zeitraum seit Jahresbeginn neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -704,15 +704,15 @@
         },
         "start": {
           "name": "Beginn",
-          "description": "Erste Stunde des Backfills. Standard: der Beginn des Jahreskostenfensters, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet."
+          "description": "Erste Stunde des Backfills. Standard: der Beginn des Zeitraums seit Jahresbeginn, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet."
         },
         "end": {
           "name": "Ende",
-          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Jahreskostenfensters, werden nur die Preissensoren neu aufgebaut."
+          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Zeitraums seit Jahresbeginn, werden nur die Preissensoren neu aufgebaut."
         },
         "clear": {
           "name": "GESAMTE Reihe vor dem Import loeschen",
-          "description": "Destruktiv: loescht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import fuellt anschliessend nur den angeforderten Bereich. NUR verwenden, um das ganze Jahreskostenfenster neu zu befuellen; ein Fenster, das nach dem Beginn des Jahreskostenfensters des Endjahres beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des laufenden Jahreskostenfensters (dort bleibt die Kostenreihe sowohl beim Loeschen als auch beim erneuten Import aussen vor). Fuer schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und ueberschreibt die angeforderten Stunden bereits, ohne etwas ausserhalb des Bereichs anzuruehren."
+          "description": "Destruktiv: loescht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import fuellt anschliessend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum seit Jahresbeginn neu zu befuellen; ein Fenster, das nach dem Beginn des Zeitraums seit Jahresbeginn im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des aktuellen Zeitraums seit Jahresbeginn (dort bleibt die Kostenreihe sowohl beim Loeschen als auch beim erneuten Import aussen vor). Fuer schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und ueberschreibt die angeforderten Stunden bereits, ohne etwas ausserhalb des Bereichs anzuruehren."
         }
       }
     }
