@@ -142,10 +142,10 @@
           "ev_home_charging_rate": "Publish the CREG home charging rate for a company car"
         },
         "data_description": {
-          "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
-          "night_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
-          "day_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
-          "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, is read right only if its state class is total_increasing or it publishes last_reset; any other fall reads as zero.",
+          "night_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, is read right only if its state class is total_increasing or it publishes last_reset; any other fall reads as zero.",
+          "day_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, is read right only if its state class is total_increasing or it publishes last_reset; any other fall reads as zero.",
+          "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, is read right only if its state class is total_increasing or it publishes last_reset; any other fall reads as zero.",
           "consumption_kwh": "Used for its side when that side's two registers are empty, and in place of a pair that goes dead, freezes or reports different periods: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
           "injection_kwh": "Used for its side when that side's two registers are empty, and in place of a pair that goes dead, freezes or reports different periods: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
           "daily_compare": "Off by default. Once a day, at a fixed time derived from this entry so installs do not all fetch at once, price every contract of your kind sold in your region and publish the yearly saving of the best one as a sensor. Most days this costs a handful of freshness checks, because tariff cards are republished about once a month.",
