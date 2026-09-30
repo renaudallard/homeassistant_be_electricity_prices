@@ -128,7 +128,7 @@
         }
       },
       "meters": {
-        "title": "Compteurs (coût de l année)",
+        "title": "Compteurs (coût de l'année)",
         "description": "Facultatif. Sélectionnez soit les quatre registres jour/nuit du compteur (recommandé - exact dès le départ), soit des capteurs cumulatifs uniques de consommation / injection (l'intégration lit les kWh depuis le recorder de HA et répartit chaque journée passée en jour/nuit via l'horaire bi-horaire au besoin). Chaque côté - consommation, injection - est résolu indépendamment; vous pouvez mélanger un côté en registres et l'autre en capteur unique. Quand les deux câblages sont remplis pour le même côté, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitié est morte, figée ou démarrée tard, ou dont les moitiés rapportent des périodes différentes. Si le tableau de bord Énergie de HA est déjà configuré, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pré-sélectionnés. Les valeurs pré-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
@@ -235,7 +235,7 @@
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
-      "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
     }
   },
   "options": {
@@ -259,7 +259,7 @@
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
-      "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
       "whatif_volumes_required": "Chiffrer un autre régime demande vos volumes annuels prélevés et injectés en kWh: aucun compteur d'injection n'est associé à cette entrée, ils ne peuvent donc pas être lus.",
       "switch_date_outside_year": "La date du changement doit se situer entre le 2 janvier et aujourd'hui.",
       "switch_date_before_last": "La date du changement doit suivre le dernier changement enregistré cette année.",
@@ -467,7 +467,7 @@
         }
       },
       "meters": {
-        "title": "Compteurs (coût de l année)",
+        "title": "Compteurs (coût de l'année)",
         "description": "Facultatif. Sélectionnez soit les quatre registres jour/nuit du compteur (recommandé - exact dès le départ), soit des capteurs cumulatifs uniques de consommation / injection (l'intégration lit les kWh depuis le recorder de HA et répartit chaque journée passée en jour/nuit via l'horaire bi-horaire au besoin). Chaque côté - consommation, injection - est résolu indépendamment; vous pouvez mélanger un côté en registres et l'autre en capteur unique. Quand les deux câblages sont remplis pour le même côté, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitié est morte, figée ou démarrée tard, ou dont les moitiés rapportent des périodes différentes. Si le tableau de bord Énergie de HA est déjà configuré, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pré-sélectionnés. Les valeurs pré-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
@@ -894,7 +894,7 @@
         "name": "Tarif CREG recharge à domicile"
       },
       "current_year_cost": {
-        "name": "Coût de l année"
+        "name": "Coût de l'année"
       },
       "current_month_cost": {
         "name": "Coût du mois"
