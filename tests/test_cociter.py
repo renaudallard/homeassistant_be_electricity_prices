@@ -634,7 +634,7 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
 
     snap = parse_snapshot(
@@ -806,7 +806,7 @@ def test_trihoraire_is_billed_on_the_delivery_month() -> None:
     at LAST month's BELIX (129,32 for August on the September 2026 card). So the
     printed bands are the fallback and the delivery month is billed on its own
     mean, per band, the way the variable card's mono pair already is."""
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
@@ -870,7 +870,7 @@ def test_trihoraire_with_a_band_formula_unreadable_keeps_its_printed_bands() -> 
     """A card whose indicative rates parse but one band's formula does not is
     billed on the printed bands for the whole month rather than on two
     formulas and a hole: the flag is only set when all three pairs are read."""
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
 
     raw = fixture_text("cociter_vai_2609.pdf").replace(
         "(0,08 x BELIX + 5) + 6% TVA", "(0,08 x BELIX + 5) TVAC"

@@ -124,7 +124,7 @@ def test_the_night_circuit_gets_its_own_formula() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import (
+    from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import (

@@ -1517,7 +1517,7 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import (
+    from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import (
@@ -1569,7 +1569,7 @@ def test_a_cap_cohort_keeps_its_ceiling() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import (
+    from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
@@ -1615,7 +1615,7 @@ def test_mega_reprices_its_variable_and_impact_cards_on_the_delivery_month() -> 
     """
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import (
+    from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import (

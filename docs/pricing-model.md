@@ -363,7 +363,7 @@ printed rate therefore bills last month's index: the April 2026 card's printed
 settled at 78,93 and 11,5749.
 
 `VariableRates.month_indexed` marks such a card, and `_month_indexed_leg`
-(`cohort.py`) resolves the coefficients against the delivery month's mean
+(`cohort_legs.py`) resolves the coefficients against the delivery month's mean
 through the same `SpotMonthlyRates` leg a signing cohort uses, so all five
 costing paths follow one decision. BELIX is exactly the arithmetic monthly mean
 the coordinator already computes, so nothing is approximated here.

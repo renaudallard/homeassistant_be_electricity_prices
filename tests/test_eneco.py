@@ -874,7 +874,7 @@ def test_flex_is_month_indexed_on_the_rlp_weighted_mean() -> None:
     re-priced through the same leg Cociter uses, with the weighting carried."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )

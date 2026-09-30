@@ -240,10 +240,10 @@ suppliers that keep none (`_month_card_retrievable`, `snapshot_months.py`); aski
 the supplier's alone left a TotalEnergies or Ecofix cohort billed on each month's
 card. When neither of the first two yields a rate (a contract signed
 this month, a month neither archive holds, a month older than the archive
-reaches), a month-indexed card still takes `_month_indexed_leg` (`cohort.py`),
+reaches), a month-indexed card still takes `_month_indexed_leg` (`cohort_legs.py`),
 exactly as it does with no cohort month at all: its printed figure is last
 month's index by the card's own words, and a date the archive cannot serve is
-no reason to bill it. `_manual_energy_leg` (`cohort.py`) overlays what the user
+no reason to bill it. `_manual_energy_leg` (`cohort_legs.py`) overlays what the user
 typed onto whichever card was retrieved, **per field**, so a half-filled form
 keeps the archived signing-month values for the boxes left blank rather than
 today's. The archive is authoritative only about the *published* card; a

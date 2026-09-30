@@ -174,7 +174,7 @@ def test_flextime_energy_is_month_indexed_per_band() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
@@ -826,7 +826,7 @@ def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
     from custom_components.be_electricity_prices.const import (
         CONF_SOLAR_REGIME,
         SOLAR_REGIME_INJECTION,

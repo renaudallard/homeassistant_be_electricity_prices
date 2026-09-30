@@ -504,7 +504,7 @@ def _reprices_on_spots(period: ContractPeriod) -> bool:
     """Whether the walk re-prices a variable contract's energy off the day-ahead.
 
     Two ways, and only with an ENTSO-E key in the settings, which is the walk's
-    own guard (``cohort._month_indexed_leg`` and the variable cohort in
+    own guard (``cohort_legs._month_indexed_leg`` and the variable cohort in
     ``cohort._cohort_legs``): a card indexed on the delivery month's mean, which
     the registry flags ``month_indexed_energy`` and mostly registers as variable,
     and a signing cohort re-priced off its archived variable card's formula.

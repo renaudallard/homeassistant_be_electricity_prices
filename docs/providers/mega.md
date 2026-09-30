@@ -392,7 +392,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > two from August), on every fixed card and no other.
 > `_extract_injection` sets `InjectionRates.fixed_for_term` from that sentence, and a
 > signing cohort then keeps its own card's printed feed-in price
-> (`_cohort_injection_from_archived`, `cohort.py`) where it would otherwise track each
+> (`_cohort_injection_from_archived`, `cohort_legs.py`) where it would otherwise track each
 > month's card: a January 2026 Online Fixed signer is paid 0,98 c/kWh for the term,
 > not the 3,56 September's card prints.
 >

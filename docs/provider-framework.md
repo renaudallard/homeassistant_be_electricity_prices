@@ -331,7 +331,7 @@ it has, and `None` means "not published" rather than zero.
 
 With `month_indexed` set they are what the contract bills. Cociter's trihoraire
 card prints its bands at the previous month's BELIX and its note (7) settles the
-delivery month on its own, so `_cohort_energy_from_archived` (`cohort.py`)
+delivery month on its own, so `_cohort_energy_from_archived` (`cohort_legs.py`)
 turns the three pairs into a `SpotMonthlyRates` leg carrying `factor_pic` /
 `factor_medium` / `factor_eco` and the per-band ceilings, which `energy_eur_per_kwh`
 routes by `dso_impact_band`; every month-mean gate then prices it like the variable

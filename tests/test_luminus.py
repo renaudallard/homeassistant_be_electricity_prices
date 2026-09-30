@@ -457,7 +457,7 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.cohort import (
+    from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh

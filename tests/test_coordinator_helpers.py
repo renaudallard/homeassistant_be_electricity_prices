@@ -27,7 +27,11 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import cohort, snapshot_resolve
+from custom_components.be_electricity_prices import (
+    cohort,
+    cohort_legs,
+    snapshot_resolve,
+)
 from custom_components.be_electricity_prices import (
     snapshot_codec,
     snapshot_months,
@@ -73,10 +77,12 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE
 from custom_components.be_electricity_prices.cohort import (
-    _cohort_energy_from_archived,
     _cohort_energy_leg,
     _tariff_card_month,
     _effective_snapshot_for_month,
+)
+from custom_components.be_electricity_prices.cohort_legs import (
+    _cohort_energy_from_archived,
     _manual_energy_leg,
     _month_indexed_leg,
 )
@@ -7728,7 +7734,7 @@ async def test_projection_blames_the_cohort_splice_when_that_is_the_cause(
     """A start date can move a Variable card onto a spot axis, and the reason
     the sensor went quiet has to name that.
 
-    ``cohort._cohort_energy_from_archived`` rewrites a Variable card with
+    ``cohort_legs._cohort_energy_from_archived`` rewrites a Variable card with
     parsed coefficients into SpotMonthlyRates, so filling in an optional
     renewal-reminder field turns the sensor off. Telling that user their card
     settles on a Belpex index reads as simply wrong: their card does not."""
@@ -10842,7 +10848,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
     typed only their locked energy rate, and zeroed a dynamic formula's base."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.cohort import _manual_energy_leg
+    from custom_components.be_electricity_prices.cohort_legs import _manual_energy_leg
     from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         FixedRates,
@@ -11232,17 +11238,17 @@ def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
         )
 
     # Deducting business: the gross figure is converted to the card's basis.
-    net = cohort._manual_energy_leg(_entry_with(False), card, 0.21)  # type: ignore[arg-type]
+    net = cohort_legs._manual_energy_leg(_entry_with(False), card, 0.21)  # type: ignore[arg-type]
     assert net is not None
     assert net.yearly_fixed_fee == pytest.approx(100.0)
 
     # Not deducting: the entry bills gross, so the typed figure stands.
-    gross = cohort._manual_energy_leg(_entry_with(True), card, 0.21)  # type: ignore[arg-type]
+    gross = cohort_legs._manual_energy_leg(_entry_with(True), card, 0.21)  # type: ignore[arg-type]
     assert gross is not None
     assert gross.yearly_fixed_fee == pytest.approx(121.0)
 
     # A residential (VAT-inclusive) card has no conversion to make either way.
-    res = cohort._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
+    res = cohort_legs._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
     assert res is not None
     assert res.yearly_fixed_fee == pytest.approx(121.0)
 

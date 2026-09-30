@@ -82,6 +82,7 @@ relative to that package directory.
 | `snapshot_resolve.py` | `_resolve_snapshot`: the per-entry VAT, excise-band, settlement-grid and direct-debit resolution applied to a parsed card on load. |
 | `snapshot_months.py` | One month's card: the archive reader, the per-month cache it fills and the blob those rows persist to. |
 | `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
+| `cohort_legs.py` | The legs a cohort is priced on: the typed signing rate, the energy and injection legs of the archived card, and a month-indexed leg re-priced on its delivery month. |
 | `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
 | `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
 | `ytd_cost.py` | The year-to-date cost walk itself: which months it covers, what each is billed on, and the total the sensor publishes. |
