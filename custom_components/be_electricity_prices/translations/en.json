@@ -330,7 +330,7 @@
       },
       "compare_api_key": {
         "title": "Compare another supplier",
-        "description": "This comparison needs ENTSO-E day-ahead spot prices: a contract priced off the spot (a dynamic one per slot, a monthly-indexed one on the delivery month's mean), or, on the injection regime, a contract whose solar feed-in is priced off the spot. Paste an ENTSO-E API token so the spot prices can be fetched. The token is used only for this comparison and is not saved.",
+        "description": "This comparison needs ENTSO-E day-ahead spot prices: a contract priced off the spot (a dynamic one per slot, a monthly-indexed one on the delivery month's mean), or, on the injection regime, a contract whose solar feed-in is priced off the spot. Paste an ENTSO-E API token so the spot prices can be fetched. The token is used only for this comparison and is not saved. Leave it blank to continue without one; the quote is then less exact, and the result says which feed-in credit it had to leave out.",
         "data": {
           "api_key": "ENTSO-E API key"
         }
