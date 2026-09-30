@@ -660,7 +660,7 @@
         },
         "entry_id": {
           "name": "ID de l'entrée",
-          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
+          "description": "Optionnel. Sans cet identifiant, la première entrée chargée est utilisée : renseignez-le si vous avez plusieurs entrées."
         },
         "earliest_start": {
           "name": "Début au plus tôt",
@@ -682,7 +682,7 @@
         },
         "entry_id": {
           "name": "ID de l'entrée",
-          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
+          "description": "Optionnel. Sans cet identifiant, la première entrée chargée est utilisée : renseignez-le si vous avez plusieurs entrées."
         },
         "earliest_start": {
           "name": "Début au plus tôt",
@@ -700,7 +700,7 @@
       "fields": {
         "entry_id": {
           "name": "ID de l'entrée",
-          "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
+          "description": "Optionnel. Sans cet identifiant, la première entrée chargée est utilisée : renseignez-le si vous avez plusieurs entrées."
         },
         "start": {
           "name": "Début",
