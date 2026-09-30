@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Zaehlertyp",
-        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
+        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
         "data": {
           "meter": "Zaehler"
         }
@@ -386,7 +386,7 @@
       },
       "meter": {
         "title": "Zaehlertyp",
-        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
+        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
         "data": {
           "meter": "Zaehler"
         }

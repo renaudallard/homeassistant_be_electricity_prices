@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Metertype",
-        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
+        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan.",
         "data": {
           "meter": "Meter"
         }
@@ -386,7 +386,7 @@
       },
       "meter": {
         "title": "Metertype",
-        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
+        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan.",
         "data": {
           "meter": "Meter"
         }

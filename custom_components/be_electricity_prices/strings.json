@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Meter type",
-        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts.",
+        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate.",
         "data": {
           "meter": "Meter"
         }

@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Type de compteur",
-        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
         "data": {
           "meter": "Compteur"
         }
@@ -386,7 +386,7 @@
       },
       "meter": {
         "title": "Type de compteur",
-        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
         "data": {
           "meter": "Compteur"
         }
