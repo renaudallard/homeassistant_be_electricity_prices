@@ -306,7 +306,7 @@
         }
       },
       "compare_contract": {
-        "title": "Een contract vergelijken",
+        "title": "Andere leverancier vergelijken",
         "description": "Kies een contract bij {supplier}. Zowel vaste als dynamische contracten staan in de lijst, zodat u over contracttypes heen kunt vergelijken, en uw eigen contract staat er ook bij: kies het om te zien wat hetzelfde contract zou kosten met een ander metertype of zonneregime.",
         "data": {
           "contract": "Contract"
