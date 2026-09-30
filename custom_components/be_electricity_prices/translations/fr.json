@@ -222,7 +222,7 @@
     },
     "abort": {
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Recommencez et choisissez un autre fournisseur ou une autre région.",
-      "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif de nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
+      "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
       "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre région à comparer.",
       "compare_done": "Comparaison terminée - aucune modification enregistrée."
     },
@@ -241,7 +241,7 @@
   "options": {
     "abort": {
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Recommencez et choisissez un autre fournisseur ou une autre région.",
-      "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif de nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
+      "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
       "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre région à comparer.",
       "compare_done": "Comparaison terminée - aucune modification enregistrée.",
       "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre région, il n'y a donc rien à classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",

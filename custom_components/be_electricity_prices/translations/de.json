@@ -83,7 +83,7 @@
       },
       "connection_power": {
         "title": "Anschlussleistung (Brüssel)",
-        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen und über 13 kVA den höheren Leistungsterm von Sibelga. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V/25-A-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen und über 13 kVA das höhere Leistungsentgelt von Sibelga. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V/25-A-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
         "data": {
           "connection_kva_tier": "Anschlussleistung"
         }
@@ -142,10 +142,10 @@
           "ev_home_charging_rate": "CREG-Tarif für das Heimladen eines Firmenwagens veröffentlichen"
         },
         "data_description": {
-          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
           "consumption_kwh": "Wird für seine Seite verwendet, wenn deren zwei Register leer sind, und anstelle eines Paares, das ausfällt, einfriert oder verschiedene Zeiträume meldet: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird für seine Seite verwendet, wenn deren zwei Register leer sind, und anstelle eines Paares, das ausfällt, einfriert oder verschiedene Zeiträume meldet: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
@@ -222,7 +222,7 @@
     },
     "abort": {
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewählten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
-      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
+      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der Exklusiv-Nachtkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
       "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfügbar.",
       "compare_done": "Vergleich abgeschlossen - keine Änderungen gespeichert."
     },
@@ -241,7 +241,7 @@
   "options": {
     "abort": {
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewählten Region keinen Privathaushaltsstrom. Bitte neu beginnen und einen anderen Anbieter oder eine andere Region wählen.",
-      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
+      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der Exklusiv-Nachtkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
       "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfügbar.",
       "compare_done": "Vergleich abgeschlossen - keine Änderungen gespeichert.",
       "compare_all_no_alternatives": "In Ihrer Region wird kein weiterer Vertrag dieser Art verkauft, es gibt also nichts zu ordnen. Der einmalige Vergleich kann weiterhin eine andere Vertragsart berechnen.",
@@ -422,7 +422,7 @@
       },
       "connection_power": {
         "title": "Anschlussleistung (Brüssel)",
-        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen und über 13 kVA den höheren Leistungsterm von Sibelga. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V/25-A-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen und über 13 kVA das höhere Leistungsentgelt von Sibelga. Die meisten Haushalte liegen bei 13 kVA oder weniger; ein 3x400-V/25-A-Anschluss mit Wärmepumpe oder Ladestation liegt darüber.",
         "data": {
           "connection_kva_tier": "Anschlussleistung"
         }
@@ -481,10 +481,10 @@
           "ev_home_charging_rate": "CREG-Tarif für das Heimladen eines Firmenwagens veröffentlichen"
         },
         "data_description": {
-          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
-          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine State-Class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
+          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, wird nur richtig gelesen, wenn seine state_class total_increasing ist oder er last_reset veröffentlicht; jeder andere Rückgang zählt als null.",
           "consumption_kwh": "Wird für seine Seite verwendet, wenn deren zwei Register leer sind, und anstelle eines Paares, das ausfällt, einfriert oder verschiedene Zeiträume meldet: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird für seine Seite verwendet, wenn deren zwei Register leer sind, und anstelle eines Paares, das ausfällt, einfriert oder verschiedene Zeiträume meldet: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
