@@ -38,8 +38,7 @@ blanked box has to be popped from the entry or the stored value survives.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -48,9 +47,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.selector import (
     BooleanSelector,
-    DateSelector,
-    EntitySelector,
-    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -65,21 +61,10 @@ from homeassistant.helpers.selector import (
 
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
-    CAPACITY_MODE_FIXED,
-    CAPACITY_MODE_SENSOR,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
-    CONF_CAPACITY_FIXED_KW,
-    CONF_CAPACITY_MODE,
-    CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONNECTION_KVA_TIER,
-    CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
-    CONF_CONTRACT_END_DATE,
-    CONF_CONTRACT_START_DATE,
-    CONF_PREVIOUS_CONTRACTS,
-    CONF_SWITCH_DATE,
-    CONF_YTD_FROM_CONTRACT_START,
     CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
     CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
@@ -101,16 +86,9 @@ from .const import (
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_PEAK,
-    CONF_DAY_CONSUMPTION_KWH,
-    CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
-    CONF_CARD_ARCHIVE,
-    CONF_DAILY_COMPARE,
-    CONF_EV_HOME_CHARGING_RATE,
     CONF_INCLUDE_VAT,
-    CONF_INJECTION_KWH,
-    METER_SENSOR_KEYS,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -120,23 +98,13 @@ from .const import (
     CONF_DIRECT_DEBIT,
     CONF_MANUAL_YEARLY_FEE,
     CONF_METER,
-    CONF_NIGHT_CONSUMPTION_KWH,
-    CONF_NIGHT_INJECTION_KWH,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
-    CONF_SOLAR_KVA,
-    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
-    CONF_TARIFF_CARD_DATE,
-    CONF_WHATIF_CONSUMPTION_KWH,
-    CONF_WHATIF_INJECTION_KWH,
     CONNECTION_KVA_TIERS,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_CONNECTION_KVA_TIER,
-    DEFAULT_CARD_ARCHIVE,
-    DEFAULT_DAILY_COMPARE,
-    DEFAULT_EV_HOME_CHARGING_RATE,
     DEFAULT_INCLUDE_VAT,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
@@ -145,13 +113,8 @@ from .const import (
     METER_MONO,
     METER_TYPES,
     REGIONS,
-    REGION_WALLONIA,
     SMART_METER_CONTRACT_KINDS,
-    SOLAR_REGIMES,
-    SOLAR_REGIME_COMPENSATION,
-    SOLAR_REGIME_NONE,
     SPOT_PRICED_CONTRACT_KINDS,
-    VREG_CAPACITY_FLOOR_KW,
 )
 from .flow_contracts import (
     _contract_kind,
@@ -160,6 +123,7 @@ from .flow_contracts import (
     _region_dso_slugs,
     _supplier_options,
 )
+from .flow_switch import _add_contract_date_fields
 
 
 def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -231,205 +195,6 @@ def _contract_schema(
     )
     _add_contract_date_fields(fields, defaults)
     return vol.Schema(fields)
-
-
-def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) -> None:
-    """Append the optional contract start / tariff card / end date pickers.
-
-    Pre-filled with the stored value as a *suggestion* (not a default) on the
-    options / reconfigure pass, so blanking the picker truly omits the key from
-    ``user_input``: the step handler then pops it, which is how a date is
-    cleared. A ``default`` would re-inject the stored value on a blank submit,
-    making the date unclearable.
-    """
-    date_selector = DateSelector()
-    for key in (
-        CONF_CONTRACT_START_DATE,
-        CONF_TARIFF_CARD_DATE,
-        CONF_CONTRACT_END_DATE,
-    ):
-        stored = defaults.get(key)
-        if stored:
-            fields[vol.Optional(key, description={"suggested_value": stored})] = (
-                date_selector
-            )
-        else:
-            fields[vol.Optional(key)] = date_selector
-    # Sits with the dates because it is meaningless without a start date, and
-    # this is the only step that collects one. A plain default (rather than a
-    # suggested_value) is right here: an unticked box DOES reach user_input as
-    # False, so there is nothing to clear and nothing to re-inject.
-    fields[
-        vol.Optional(
-            CONF_YTD_FROM_CONTRACT_START,
-            default=bool(defaults.get(CONF_YTD_FROM_CONTRACT_START, False)),
-        )
-    ] = BooleanSelector()
-
-
-def _validate_contract_dates(
-    user_input: dict[str, Any], data: Mapping[str, Any] | None = None
-) -> dict[str, str]:
-    """Reject a future start or card date, an end date not after the start, or
-    a start before the last recorded supplier switch.
-
-    All three fields are independently optional: an end date without a start
-    date is fine (a bare renewal reminder), so the ordering check only fires
-    when both are present.
-
-    The card date is checked only against today. It is NOT required to fall on
-    or before the start date, which looks like the obvious guard and is wrong:
-    a renewal re-signs a supply that began years ago onto this month's card, so
-    a card date after the start date is as ordinary as one before it.
-
-    ``data`` is the entry's settings, for its recorded switches. The contract
-    configured is the one supplying since the last of them, so it cannot have
-    started before it: the year would price the contract left only from that
-    start, and the cohort would look the signing card up a month too early.
-    """
-    from .cohort import _parse_iso_date
-    from .contract_periods import recorded_contracts
-
-    errors: dict[str, str] = {}
-    start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
-    card = _parse_iso_date(user_input.get(CONF_TARIFF_CARD_DATE))
-    end = _parse_iso_date(user_input.get(CONF_CONTRACT_END_DATE))
-    today = dt_util.now().date()
-    records = recorded_contracts(data or {})
-    if start is not None and start > today:
-        errors[CONF_CONTRACT_START_DATE] = "start_date_in_future"
-    elif start is not None and records and start < records[-1][0]:
-        errors[CONF_CONTRACT_START_DATE] = "start_date_before_switch"
-    if card is not None and card > today:
-        errors[CONF_TARIFF_CARD_DATE] = "card_date_in_future"
-    if start is not None and end is not None and end <= start:
-        errors[CONF_CONTRACT_END_DATE] = "end_before_start"
-    return errors
-
-
-_MANUAL_RATE_KEYS: tuple[str, ...] = (
-    CONF_MANUAL_ENERGY_SINGLE,
-    CONF_MANUAL_ENERGY_PEAK,
-    CONF_MANUAL_ENERGY_OFFPEAK,
-    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
-    CONF_MANUAL_ENERGY_FACTOR,
-    CONF_MANUAL_ENERGY_BASE,
-    CONF_MANUAL_YEARLY_FEE,
-)
-
-
-def _switch_schema(today: date) -> vol.Schema:
-    """The one question a supplier switch asks: the new contract's first day."""
-    return vol.Schema(
-        {vol.Required(CONF_SWITCH_DATE, default=today.isoformat()): DateSelector()}
-    )
-
-
-def _validate_switch_date(
-    data: Mapping[str, Any], user_input: dict[str, Any]
-) -> dict[str, str]:
-    """Refuse a switch date that prices nothing, or that overlaps a recorded one.
-
-    It has to fall after 1 January, so the contract being left has at least one
-    day this year, and not after today, since the day is when the new contract
-    started supplying, not when it will. And after the last switch recorded,
-    because each contract ends where the next begins, and after the start date
-    of the contract being left, which cannot end before it began.
-    """
-    from .cohort import _parse_iso_date
-    from .contract_periods import recorded_contracts
-
-    until = _parse_iso_date(user_input.get(CONF_SWITCH_DATE))
-    today = dt_util.now().date()
-    if until is None or until > today or until <= date(today.year, 1, 1):
-        return {CONF_SWITCH_DATE: "switch_date_outside_year"}
-    records = recorded_contracts(data)
-    if records and until <= records[-1][0]:
-        return {CONF_SWITCH_DATE: "switch_date_before_last"}
-    # The contract being left cannot end before it began.
-    started = _parse_iso_date(data.get(CONF_CONTRACT_START_DATE))
-    if started is not None and until <= started:
-        return {CONF_SWITCH_DATE: "switch_date_before_start"}
-    return {}
-
-
-def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
-    """The entry's settings with its current contract kept as the one held until
-    the day before ``until``, ready for the new contract to be picked.
-
-    The settings are kept whole, so the old contract is priced on exactly what
-    was configured for it. A switch from an earlier year prices nothing this
-    year and is dropped. The start date moves to the switch day, since the
-    contract now being set up is the new one, and the answers that belonged to
-    the old contract go: its card month, a typed signing rate and its end date,
-    none of which describe the new one. So does the box that bills the year
-    from the contract start, which would leave the old contract out of the year.
-    """
-    from .contract_periods import recorded_contracts
-
-    held = {key: value for key, value in data.items() if key != CONF_PREVIOUS_CONTRACTS}
-    kept = [
-        {"until": when.isoformat(), "data": dict(settings)}
-        for when, settings in recorded_contracts(data)
-        if when > date(until.year, 1, 1)
-    ]
-    out = {
-        **data,
-        CONF_PREVIOUS_CONTRACTS: [*kept, {"until": until.isoformat(), "data": held}],
-        CONF_CONTRACT_START_DATE: until.isoformat(),
-    }
-    for key in (
-        CONF_TARIFF_CARD_DATE,
-        CONF_CONTRACT_END_DATE,
-        CONF_YTD_FROM_CONTRACT_START,
-        *_MANUAL_RATE_KEYS,
-    ):
-        out.pop(key, None)
-    return out
-
-
-def _removable_switch(
-    data: Mapping[str, Any], today: date
-) -> tuple[date, Mapping[str, Any]] | None:
-    """The last recorded switch, when it falls in ``today``'s year.
-
-    Only such a switch prices anything, so only it can be a mistake worth
-    undoing. One recorded in an earlier year is a real change of supplier
-    long settled, kept until the next switch drops it, and removing it would
-    put back a contract the household left before the year began.
-    """
-    from .contract_periods import recorded_contracts
-
-    records = recorded_contracts(data)
-    if not records or records[-1][0] <= date(today.year, 1, 1):
-        return None
-    return records[-1]
-
-
-def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
-    """The entry's settings as they stood before its last switch was recorded.
-
-    ``_record_switch`` keeps those settings whole as the contract held until the
-    switch, so they are put back as they were: the contract being left, its
-    start date, card month, signing rate, end date and year-to-date box. The
-    switches recorded before it stay. A switch recorded with the wrong date, or
-    that never happened, has no other way out: a new one must be later than the
-    last, and it would keep the contract set up since as the one left.
-    """
-    from .contract_periods import recorded_contracts
-
-    records = recorded_contracts(data)
-    if not records:
-        return dict(data)
-    held = dict(records[-1][1])
-    held.pop(CONF_PREVIOUS_CONTRACTS, None)
-    kept = [
-        {"until": when.isoformat(), "data": dict(settings)}
-        for when, settings in records[:-1]
-    ]
-    if kept:
-        held[CONF_PREVIOUS_CONTRACTS] = kept
-    return held
 
 
 # The custom-supplier rate boxes whose ABSENCE is meaningful: ``_routed_rate``
@@ -769,264 +534,6 @@ async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
     if not prices:
         return "cannot_connect"
     return None
-
-
-def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
-    fields: dict[Any, Any] = {
-        vol.Required(
-            CONF_CAPACITY_MODE,
-            default=defaults.get(CONF_CAPACITY_MODE, CAPACITY_MODE_SENSOR),
-        ): SelectSelector(
-            SelectSelectorConfig(
-                options=[CAPACITY_MODE_SENSOR, CAPACITY_MODE_FIXED],
-                mode=SelectSelectorMode.LIST,
-                translation_key="capacity_mode",
-            )
-        ),
-    }
-    # Restrict the picker to power sensors so the user can't accidentally
-    # land on a kWh / unitless / temperature sensor and have it inflate
-    # the capacity bill (issue #19). Coordinator-side scaling already
-    # honours W / kW / VA / kVA, but cutting the long tail at the picker
-    # is the only real "this bug class can't recur" guarantee.
-    peak_selector = EntitySelectorConfig(
-        domain="sensor",
-        device_class=["power", "apparent_power"],
-    )
-    if (sensor := defaults.get(CONF_CAPACITY_PEAK_SENSOR)) is not None:
-        # Suggestion, not default: see _meters_schema. A `default` re-injects
-        # the old entity id when the user blanks the picker.
-        fields[
-            vol.Optional(
-                CONF_CAPACITY_PEAK_SENSOR, description={"suggested_value": sensor}
-            )
-        ] = EntitySelector(peak_selector)
-    else:
-        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR)] = EntitySelector(peak_selector)
-    fields[
-        vol.Optional(
-            CONF_CAPACITY_FIXED_KW,
-            default=defaults.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW),
-        )
-    ] = NumberSelector(
-        NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)
-    )
-    return vol.Schema(fields)
-
-
-# The six kWh entity pickers, in the order the meters step renders them.
-# Shared by the schema and the step handler, which pops any the user blanked,
-# and with energy_meters, which memoises reads keyed on the same six.
-_METER_SENSOR_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
-
-
-def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
-    """Report a day/night register pair that has only one half filled.
-
-    A half-wired pair with nothing else covering that side is fatal:
-    ``_resolve_daily_kwh`` and ``_hourly_consumption_sensors`` both give up on
-    it, and ``current_year_cost`` then collapses to the fees-only floor without
-    an error, a repair or any log line the user would look at. The form is the
-    one place the mistake is visible, so refuse it there.
-
-    A totals sensor rescues it, though, and the reader says so
-    (``energy_meters._resolve_daily_kwh``): the odd register half is ignored and the side
-    bills off the total. Refusing that combination too would lock an entry
-    that has always billed correctly out of its own options flow over a field
-    that never affected its bill, so this mirrors the coordinator's rule
-    exactly rather than tightening it.
-
-    The injection side is read only with a solar regime
-    (``energy_meters._bills_injection``), so without one a half-wired
-    injection pair, wired for the Energy dashboard, never reaches the bill and
-    is not refused either.
-
-    Keyed on the NIGHT field of each side, which is where the message renders.
-    """
-    errors: dict[str, str] = {}
-    sides = [
-        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH, CONF_CONSUMPTION_KWH)
-    ]
-    if data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE) != SOLAR_REGIME_NONE:
-        sides.append(
-            (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH, CONF_INJECTION_KWH)
-        )
-    for day_key, night_key, total_key in sides:
-        if bool(data.get(day_key)) != bool(data.get(night_key)) and not data.get(
-            total_key
-        ):
-            errors[night_key] = "register_pair_incomplete"
-    return errors
-
-
-def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Cumulative-kWh sensors for the current_year_cost computation.
-
-    Two ways to feed the sensor, both optional:
-
-      * Direct day/night registers off the meter (4 fields). Used as-is
-        when populated.
-      * Single cumulative totals (2 fields). The coordinator splits
-        deltas into day/night buckets via is_offpeak(now) and persists
-        them, so the running current_year_cost survives restarts.
-
-    When both are filled, the day/night registers win (more accurate;
-    no warm-up period).
-    """
-    # Restrict to energy-class (cumulative kWh) sensors so the user
-    # cannot land on a power / temperature / unitless sensor and have
-    # the year-cost engine read its raw value as kWh.
-    kwh_selector = EntitySelectorConfig(
-        domain="sensor",
-        device_class="energy",
-    )
-    fields: dict[Any, Any] = {}
-    for conf in _METER_SENSOR_KEYS:
-        stored = defaults.get(conf)
-        # A stored entity id is a SUGGESTION, not a default. ha-form omits a
-        # blanked selector from user_input entirely, and voluptuous then
-        # re-injects a `default`, so the cleared sensor came straight back and
-        # a wired meter could never be unwired. Same shape the contract-date
-        # and manual-rate fields already use; the step handler pops the key.
-        if stored is not None:
-            fields[vol.Optional(conf, description={"suggested_value": stored})] = (
-                EntitySelector(kwh_selector)
-            )
-        else:
-            fields[vol.Optional(conf)] = EntitySelector(kwh_selector)
-    # The last box on the last step, because it is the only one here that is
-    # not about wiring a meter: turn it on and the entry ranks every contract
-    # of its kind once a day and publishes the saving as a sensor.
-    fields[
-        vol.Optional(
-            CONF_DAILY_COMPARE,
-            default=bool(defaults.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE)),
-        )
-    ] = BooleanSelector()
-    # And the one box that is about where past cards come from rather than
-    # about a meter: on by default, and the only way to keep the integration
-    # from contacting GitHub for a month the supplier no longer serves.
-    fields[
-        vol.Optional(
-            CONF_CARD_ARCHIVE,
-            default=bool(defaults.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE)),
-        )
-    ] = BooleanSelector()
-    # Off by default: only a household reimbursed for charging a company car
-    # at home has a use for the CREG rate, and ticking it is what lets the
-    # entry contact creg.be at all.
-    fields[
-        vol.Optional(
-            CONF_EV_HOME_CHARGING_RATE,
-            default=bool(
-                defaults.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE)
-            ),
-        )
-    ] = BooleanSelector()
-    return vol.Schema(fields)
-
-
-def _regime_options(region: Any) -> list[str]:
-    """Solar regimes that can apply in ``region``.
-
-    The compensation ("terugdraaiende teller" / net-metering) regime is
-    Walloon-only: that meter pays the prosumer tariff and no capacity
-    tariff, so offering it in Flanders would double-count the Flanders
-    capaciteitstarief. Outside Wallonia only "none" / "injection" apply.
-
-    Shared with the compare flow's what-if picker, which has to narrow the
-    same way: a Flemish entry quoted on the compensation regime would net
-    injection 1:1 against consumption while still paying the capacity
-    tariff and no prosumer fee, a bill no Belgian contract can issue.
-    """
-    return [
-        r
-        for r in SOLAR_REGIMES
-        if r != SOLAR_REGIME_COMPENSATION or region == REGION_WALLONIA
-    ]
-
-
-def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
-    regimes = _regime_options(defaults.get(CONF_REGION))
-    stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
-    default_regime = stored if stored in regimes else SOLAR_REGIME_NONE
-    return vol.Schema(
-        {
-            vol.Optional(
-                CONF_SOLAR_KVA,
-                default=defaults.get(CONF_SOLAR_KVA, 0.0),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
-                )
-            ),
-            vol.Required(
-                CONF_SOLAR_REGIME,
-                default=default_regime,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=regimes,
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="solar_regime",
-                )
-            ),
-        }
-    )
-
-
-def _compare_solar_schema(defaults: dict[str, Any], *, ask_volumes: bool) -> vol.Schema:
-    """What-if solar picker for the compare branch.
-
-    Same regime list as the install step, narrowed the same way, but
-    nothing here is written back: it only re-prices the quote.
-
-    Deliberately no inverter-kVA field. The kVA only reaches the bill
-    through the Walloon prosumer fee, which only the compensation regime
-    pays, so it could only matter for a what-if INTO compensation, and
-    that regime is closed to installations certified after 2024: anyone
-    eligible is already on it and has a kVA set. An entry that somehow
-    reaches it without one is told so on the result page instead.
-
-    The two volume fields appear only when the entry has no injection
-    sensor to read. A compensation meter may net injection against
-    consumption in a single register, and that reading is not what the
-    injection tariff bills, so those users type the two gross yearly
-    figures instead of having a netted one silently re-used.
-    """
-    regimes = _regime_options(defaults.get(CONF_REGION))
-    stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
-    fields: dict[Any, Any] = {
-        vol.Required(
-            CONF_SOLAR_REGIME,
-            default=stored if stored in regimes else SOLAR_REGIME_NONE,
-        ): SelectSelector(
-            SelectSelectorConfig(
-                options=regimes,
-                mode=SelectSelectorMode.LIST,
-                translation_key="solar_regime",
-            )
-        ),
-    }
-    if ask_volumes:
-        for key in (CONF_WHATIF_CONSUMPTION_KWH, CONF_WHATIF_INJECTION_KWH):
-            selector = NumberSelector(
-                NumberSelectorConfig(
-                    min=0.0, max=200000.0, step=1.0, mode=NumberSelectorMode.BOX
-                )
-            )
-            typed = defaults.get(key)
-            # A figure already typed is a SUGGESTION, not a default: a
-            # voluptuous default is re-injected on a blank submit, and the
-            # "both volumes or none" check could then never fire. Same
-            # shape the manual-rate and meter fields use. Without it, the
-            # half a user did fill in is wiped by the error re-show.
-            if typed is None:
-                fields[vol.Optional(key)] = selector
-            else:
-                fields[vol.Optional(key, description={"suggested_value": typed})] = (
-                    selector
-                )
-    return vol.Schema(fields)
 
 
 # The largest a hand-entered per-kWh figure can be, in EUR/kWh, or for a

@@ -61,7 +61,7 @@ from custom_components.be_electricity_prices.contract_periods import (
     with_previous_contracts,
 )
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
-from custom_components.be_electricity_prices.flow_schemas import (
+from custom_components.be_electricity_prices.flow_switch import (
     _record_switch,
     _remove_last_switch,
     _removable_switch,

@@ -62,15 +62,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from .flow_schemas import (
-    _MANUAL_RATE_KEYS,
-    _record_switch,
-    _remove_last_switch,
-    _removable_switch,
-    _switch_schema,
-    _validate_switch_date,
-    _METER_SENSOR_KEYS,
     _api_key_schema,
-    _capacity_schema,
     _connection_power_schema,
     _contract_schema,
     _direct_debit_schema,
@@ -79,17 +71,29 @@ from .flow_schemas import (
     _drop_blanked,
     _dso_schema,
     _dso_tariff_mode_schema,
-    _incomplete_register_pairs,
     _injection_api_key_schema,
     _meter_schema,
-    _meters_schema,
     _professional_schema,
     _settlement_schema,
     _signed_rate_schema,
-    _solar_schema,
     _user_schema,
-    _validate_contract_dates,
     _validate_entsoe_key,
+)
+from .flow_schemas_meters import (
+    _METER_SENSOR_KEYS,
+    _capacity_schema,
+    _incomplete_register_pairs,
+    _meters_schema,
+    _solar_schema,
+)
+from .flow_switch import (
+    _MANUAL_RATE_KEYS,
+    _record_switch,
+    _remove_last_switch,
+    _removable_switch,
+    _switch_schema,
+    _validate_switch_date,
+    _validate_contract_dates,
 )
 from .flow_schemas_custom import (
     _custom_dso_schema,

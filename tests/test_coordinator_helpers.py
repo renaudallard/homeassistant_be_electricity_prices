@@ -8244,7 +8244,7 @@ async def test_projection_takes_an_end_date_without_a_start_date(
 ) -> None:
     """The two contract dates are independently optional.
 
-    ``flow_schemas._validate_contract_dates`` only cross-checks them when both
+    ``flow_switch._validate_contract_dates`` only cross-checks them when both
     are present, so an end date with no start date is a valid stored state and
     must not need the cohort path to resolve."""
 

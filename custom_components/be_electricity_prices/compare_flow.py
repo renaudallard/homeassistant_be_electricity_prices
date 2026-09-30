@@ -81,10 +81,10 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .flow_schemas import (
-    _compare_solar_schema,
     _settlement_schema,
     _validate_entsoe_key,
 )
+from .flow_schemas_meters import _compare_solar_schema
 from .flow_contracts import (
     _contract_has_spot_injection,
     _contract_is_professional,
