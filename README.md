@@ -946,7 +946,9 @@ successful refresh:
 - **`extractor_unreadable_<entry>`** — the card downloaded fine but its
   pages carry no text layer, so no parser change here can read it (Ecofix
   since the August 2026 card). Cached prices keep serving, and it clears
-  by itself the moment the supplier publishes a readable card.
+  by itself the moment the supplier publishes a readable card, or once the
+  project's card archive files its daily reading of this one while the
+  archive box is on.
 - **`extractor_unreadable_no_prices_<entry>`** — the same unreadable card
   on an entry with no cached one to stand in: a brand-new entry, or one
   whose cache predates the card-as-parsed change. Every sensor on it reads

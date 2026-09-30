@@ -766,7 +766,7 @@
     },
     "extractor_unreadable": {
       "title": "De tariefkaart van {supplier} is niet meer leesbaar",
-      "description": "{supplier} publiceert zijn tariefkaart nu als paginafoto's zonder tekstlaag, waardoor de prijzen er niet meer uit gelezen kunnen worden. Dit is geen fout in de integratie en melden helpt niet: er valt niets te lezen in het document. Deze invoer blijft de laatst succesvol ingelezen prijzen gebruiken ({contract}); die wijken elke maand verder af van je echte factuur. Om correct te blijven, stap over naar een andere leverancier of maak een invoer met de leverancier 'Expert: custom formula' en typ de waarden van je kaart zelf in. Deze melding verdwijnt vanzelf zodra {supplier} weer leesbare kaarten publiceert."
+      "description": "{supplier} publiceert zijn tariefkaart nu als paginafoto's zonder tekstlaag, waardoor de prijzen er niet meer uit gelezen kunnen worden. Dit is geen fout in de integratie en melden helpt niet: er valt niets te lezen in het document. Deze invoer blijft de laatst succesvol ingelezen prijzen gebruiken ({contract}); die wijken elke maand verder af van je echte factuur. Om correct te blijven, stap over naar een andere leverancier of maak een invoer met de leverancier 'Expert: custom formula' en typ de waarden van je kaart zelf in. Deze melding verdwijnt vanzelf zodra {supplier} weer leesbare kaarten publiceert, of zodra het kaartarchief van dit project zijn eigen lezing van deze kaart opslaat, wat het één keer per dag doet en wat deze invoer leest zolang \"Oude tariefkaarten uit het projectarchief lezen\" aan staat."
     },
     "entsoe_auth_failed": {
       "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
