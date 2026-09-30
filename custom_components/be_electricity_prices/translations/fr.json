@@ -2,16 +2,16 @@
   "config": {
     "step": {
       "user": {
-        "title": "Prix de l'electricite en Belgique",
-        "description": "Choisissez votre fournisseur et votre region. L'energie et les tarifs reseau sont recuperes en direct depuis la publication du fournisseur.",
+        "title": "Prix de l'électricité en Belgique",
+        "description": "Choisissez votre fournisseur et votre région. L'énergie et les tarifs réseau sont récupérés en direct depuis la publication du fournisseur.",
         "data": {
           "supplier": "Fournisseur",
-          "region": "Region"
+          "region": "Région"
         }
       },
       "contract": {
         "title": "Contrat",
-        "description": "Choisissez votre contrat. L'integration recupere la carte tarifaire courante a chaque rafraichissement.",
+        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement.",
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",
@@ -33,14 +33,14 @@
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif jour signé (EUR/kWh)",
           "manual_energy_offpeak": "Tarif nuit signé (EUR/kWh)",
-          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
+          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signé (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
           "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
         }
       },
       "dso": {
-        "title": "Gestionnaire de reseau",
+        "title": "Gestionnaire de réseau",
         "data": {
           "dso": "GRD"
         }
@@ -76,30 +76,30 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
+        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
       },
       "connection_power": {
         "title": "Puissance de raccordement (Bruxelles)",
-        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci, et au-delà de 13 kVA le terme de puissance plus élevé de Sibelga. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle à celle-ci, et au-delà de 13 kVA le terme de puissance plus élevé de Sibelga. La plupart des logements sont à 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe à chaleur ou une borne de recharge se situe au-dessus.",
         "data": {
           "connection_kva_tier": "Puissance de raccordement"
         }
       },
       "api_key": {
-        "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
+        "title": "Clé API ENTSO-E",
+        "description": "Nécessaire pour ce contrat. Son prix de l'énergie est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Clé gratuite sur transparency.entsoe.eu.",
         "data": {
-          "api_key": "Cle API ENTSO-E"
+          "api_key": "Clé API ENTSO-E"
         }
       },
       "injection_api_key": {
-        "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection réglée par créneau n'est pas creditee et son prix reste indisponible.",
+        "title": "Clé API ENTSO-E (facultative)",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
-          "api_key": "Cle API ENTSO-E"
+          "api_key": "Clé API ENTSO-E"
         }
       },
       "api_key_unreachable": {
@@ -112,7 +112,7 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Preferez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire reellement facture par Fluvius. Un simple capteur de puissance est echantillonne chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
+        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
         "data": {
           "capacity_mode": "Source du pic",
           "capacity_peak_sensor": "Capteur de pic mensuel",
@@ -121,15 +121,15 @@
       },
       "solar": {
         "title": "Panneaux solaires",
-        "description": "Puissance de l'onduleur en kVA et regime applicable a votre installation. Le regime de compensation wallon n'est valable que pour les installations certifiees avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
+        "description": "Puissance de l'onduleur en kVA et régime applicable à votre installation. Le régime de compensation wallon n'est valable que pour les installations certifiées avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
           "solar_kva": "Puissance onduleur (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Régime"
         }
       },
       "meters": {
-        "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitie est morte, figee ou demarree tard, ou dont les moities rapportent des periodes differentes. Si le tableau de bord Energie de HA est deja configure, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pre-selectionnes. Les valeurs pre-remplies restent modifiables.",
+        "title": "Compteurs (coût de l année)",
+        "description": "Facultatif. Sélectionnez soit les quatre registres jour/nuit du compteur (recommandé - exact dès le départ), soit des capteurs cumulatifs uniques de consommation / injection (l'intégration lit les kWh depuis le recorder de HA et répartit chaque journée passée en jour/nuit via l'horaire bi-horaire au besoin). Chaque côté - consommation, injection - est résolu indépendamment; vous pouvez mélanger un côté en registres et l'autre en capteur unique. Quand les deux câblages sont remplis pour le même côté, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitié est morte, figée ou démarrée tard, ou dont les moitiés rapportent des périodes différentes. Si le tableau de bord Énergie de HA est déjà configuré, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pré-sélectionnés. Les valeurs pré-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
@@ -154,11 +154,11 @@
         }
       },
       "custom_energy": {
-        "title": "Formule d'energie personnalisee",
-        "description": "Note : option expert reservee aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutot une issue sur GitHub pour l'ajouter comme fournisseur a part entiere, et de meme si votre fournisseur figure deja dans la liste mais que l'entree ne tarifie pas votre contrat comme votre fiche (une formule figee au mois de signature, une ligne que l'analyseur rate) : ouvrez une issue avec votre fiche pour que ce soit corrige pour tous plutot que reconstruit ici. un contrat saisi a la main est un instantane fige, sans rafraichissement de la fiche ni detection de derive, donc les valeurs ne restent correctes que si vous les tenez a jour vous-meme. Entrez les chiffres de votre contrat hors TVA ; le taux de TVA de l'etape taxes les applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base, l'indice (le spot en direct, ou la moyenne du mois de livraison) et la base etant tous deux en EUR/kWh. Une formule imprimee en c€/kWh sur un Belpex en EUR/MWh doit etre convertie : (0,1068 x Belpex + 1,5) c€/kWh donne un facteur de 1.068 et une base de 0.015. Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "title": "Formule d'énergie personnalisée",
+        "description": "Note : option expert réservée aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutôt une issue sur GitHub pour l'ajouter comme fournisseur à part entière, et de même si votre fournisseur figure déjà dans la liste mais que l'entrée ne tarifie pas votre contrat comme votre fiche (une formule figée au mois de signature, une ligne que l'analyseur rate) : ouvrez une issue avec votre fiche pour que ce soit corrigé pour tous plutôt que reconstruit ici. un contrat saisi à la main est un instantané figé, sans rafraîchissement de la fiche ni détection de dérive, donc les valeurs ne restent correctes que si vous les tenez à jour vous-même. Entrez les chiffres de votre contrat hors TVA ; le taux de TVA de l'étape taxes les applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base, l'indice (le spot en direct, ou la moyenne du mois de livraison) et la base étant tous deux en EUR/kWh. Une formule imprimée en c€/kWh sur un Belpex en EUR/MWh doit être convertie : (0,1068 x Belpex + 1,5) c€/kWh donne un facteur de 1.068 et une base de 0.015. Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
         "data": {
-          "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice en EUR/kWh)",
-          "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
+          "custom_energy_factor": "Facteur d'énergie (multiplicateur de l'indice en EUR/kWh)",
+          "custom_energy_base": "Base d'énergie (EUR/kWh, hors TVA)",
           "custom_energy_quarter_hourly": "Facturation au quart d'heure",
           "custom_energy_single": "Tarif simple (EUR/kWh, hors TVA)",
           "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
@@ -168,20 +168,20 @@
         }
       },
       "custom_injection": {
-        "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
+        "title": "Formule d'injection personnalisée",
+        "description": "Comment votre injection solaire est payée. Un tarif fixe est un crédit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'pondérer l'injection par le profil solaire' pour pondérer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (récupéré en direct ; une prévision ex-ante, donc proche mais pas exactement la valeur SPP définitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
           "custom_injection_factor": "Facteur d'injection (multiplicateur de l'indice en EUR/kWh)",
-          "custom_injection_base": "Base d'injection (EUR/kWh, negative pour une deduction)",
-          "custom_injection_floor": "Jamais negatif (plancher a 0)",
-          "custom_injection_spp_weighted": "Ponderer l'injection par le profil solaire (SPP)"
+          "custom_injection_base": "Base d'injection (EUR/kWh, négative pour une déduction)",
+          "custom_injection_floor": "Jamais négatif (plancher à 0)",
+          "custom_injection_spp_weighted": "Pondérer l'injection par le profil solaire (SPP)"
         }
       },
       "custom_dso": {
-        "title": "Tarifs reseau (GRD)",
-        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette separation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez a 0 les autres couts que vous ne payez pas. La case annuelle prend les frais de gestion des donnees (databeheer) en Flandre, le terme fixe en Wallonie, que le tarif Impact ne facture pas, et les frais de mesure et le terme fixe ensemble a Bruxelles.",
+        "title": "Tarifs réseau (GRD)",
+        "description": "Coûts réseau régulés, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette séparation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez à 0 les autres coûts que vous ne payez pas. La case annuelle prend les frais de gestion des données (databeheer) en Flandre, le terme fixe en Wallonie, que le tarif Impact ne facture pas, et les frais de mesure et le terme fixe ensemble à Bruxelles.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
@@ -198,14 +198,14 @@
         }
       },
       "custom_tax": {
-        "title": "Taxes et prelevements",
-        "description": "Taxes et prelevements regules, hors TVA. Le taux de TVA ci-dessous s'applique a l'energie, au reseau et aux taxes (l'injection reste exoneree). La TVA residentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "title": "Taxes et prélèvements",
+        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
         "data": {
-          "custom_tax_federal_excise": "Accise federale (EUR/kWh)",
-          "custom_tax_energy_contribution": "Cotisation energie (EUR/kWh)",
+          "custom_tax_federal_excise": "Accise fédérale (EUR/kWh)",
+          "custom_tax_energy_contribution": "Cotisation énergie (EUR/kWh)",
           "custom_tax_regional_renewables": "Prélèvement vert : GSC + WKK en Flandre, contribution énergie verte en Wallonie et à Bruxelles (EUR/kWh)",
           "custom_tax_region_connection_fee": "Redevance de raccordement wallonne (exonérée de TVA, Wallonie uniquement) (EUR/kWh)",
-          "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
+          "custom_tax_energy_fund_per_month": "Fonds énergie (EUR/mois)",
           "custom_vat_rate": "Taux de TVA (ex. 0.06)"
         }
       },
@@ -221,55 +221,55 @@
       }
     },
     "abort": {
-      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Recommencez et choisissez un autre fournisseur ou une autre région.",
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Recommencez et choisissez un autre fournisseur ou une autre région.",
       "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif de nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
-      "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre region a comparer.",
-      "compare_done": "Comparaison terminee - aucune modification enregistree."
+      "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre région à comparer.",
+      "compare_done": "Comparaison terminée - aucune modification enregistrée."
     },
     "error": {
-      "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexe sur le marche day-ahead et ne peut pas etre configure sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "Impossible de joindre ENTSO-E pour verifier le jeton. Verifiez votre reseau et reessayez.",
+      "invalid_api_key": "ENTSO-E a rejeté ce jeton. Vérifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Impossible de joindre ENTSO-E pour vérifier le jeton. Vérifiez votre réseau et réessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
-      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutot le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le cout annuel ne peut pas repartir votre consommation et se limite aux frais fixes.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
     }
   },
   "options": {
     "abort": {
-      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Recommencez et choisissez un autre fournisseur ou une autre région.",
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Recommencez et choisissez un autre fournisseur ou une autre région.",
       "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif de nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
-      "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre region a comparer.",
-      "compare_done": "Comparaison terminee - aucune modification enregistree.",
-      "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre region, il n'y a donc rien a classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",
-      "compare_all_unknown_contract": "Le contrat de cette entree ne figure plus au catalogue du fournisseur, il ne peut donc pas etre situe par rapport aux autres. Re-selectionnez-le d'abord dans Modifier les parametres.",
-      "compare_all_entry_reloading": "L'entree est encore en cours de chargement. Reessayez dans un instant.",
+      "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre région à comparer.",
+      "compare_done": "Comparaison terminée - aucune modification enregistrée.",
+      "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre région, il n'y a donc rien à classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",
+      "compare_all_unknown_contract": "Le contrat de cette entrée ne figure plus au catalogue du fournisseur, il ne peut donc pas être situé par rapport aux autres. Re-sélectionnez-le d'abord dans Modifier les paramètres.",
+      "compare_all_entry_reloading": "L'entrée est encore en cours de chargement. Réessayez dans un instant.",
       "no_switch_recorded": "Aucun changement de fournisseur n'est enregistré sur cette entrée pour cette année."
     },
     "error": {
-      "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexe sur le marche day-ahead et ne peut pas etre configure sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "Impossible de joindre ENTSO-E pour verifier le jeton. Verifiez votre reseau et reessayez.",
+      "invalid_api_key": "ENTSO-E a rejeté ce jeton. Vérifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Impossible de joindre ENTSO-E pour vérifier le jeton. Vérifiez votre réseau et réessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
       "start_date_before_switch": "La date de début du contrat ne peut pas précéder le dernier changement de fournisseur enregistré sur cette entrée.",
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
-      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutot le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le cout annuel ne peut pas repartir votre consommation et se limite aux frais fixes.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
-      "whatif_volumes_required": "Chiffrer un autre regime demande vos volumes annuels preleves et injectes en kWh: aucun compteur d'injection n'est associe a cette entree, ils ne peuvent donc pas etre lus.",
+      "whatif_volumes_required": "Chiffrer un autre régime demande vos volumes annuels prélevés et injectés en kWh: aucun compteur d'injection n'est associé à cette entrée, ils ne peuvent donc pas être lus.",
       "switch_date_outside_year": "La date du changement doit se situer entre le 2 janvier et aujourd'hui.",
       "switch_date_before_last": "La date du changement doit suivre le dernier changement enregistré cette année.",
       "switch_date_before_start": "La date du changement doit suivre la date de début du contrat que vous quittez."
     },
     "step": {
       "init": {
-        "title": "Prix de l'electricite en Belgique",
+        "title": "Prix de l'électricité en Belgique",
         "menu_options": {
-          "edit": "Modifier les parametres",
+          "edit": "Modifier les paramètres",
           "switch": "Enregistrer un changement de fournisseur",
           "remove_switch": "Supprimer le dernier changement de fournisseur",
           "compare": "Comparer un autre fournisseur (devis ponctuel)",
@@ -291,57 +291,57 @@
         "description": "Ceci supprime le changement enregistré pour le {until}, quand vous avez quitté {supplier} - {contract}, et remet l'entrée dans l'état où elle était avant l'enregistrement de ce changement : {supplier} - {contract} redevient votre contrat actuel, avec les paramètres qu'il avait alors, et tout ce qui a été modifié depuis est annulé. Pour corriger la date d'un changement, supprimez-le, puis enregistrez-le à nouveau avec la bonne date et choisissez à nouveau le nouveau contrat. Validez pour le supprimer."
       },
       "edit": {
-        "title": "Prix de l'electricite en Belgique",
-        "description": "Choisissez votre fournisseur et votre region. L'energie et les tarifs reseau sont recuperes en direct depuis la publication du fournisseur.",
+        "title": "Prix de l'électricité en Belgique",
+        "description": "Choisissez votre fournisseur et votre région. L'énergie et les tarifs réseau sont récupérés en direct depuis la publication du fournisseur.",
         "data": {
           "supplier": "Fournisseur",
-          "region": "Region"
+          "region": "Région"
         }
       },
       "compare": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un fournisseur a comparer. La region, le GRD et le pic restent identiques a votre entree actuelle; le type de compteur (sauf si le contrat exige un compteur intelligent) et, sur une entrée avec panneaux solaires, le régime solaire peuvent être modifiés à une étape suivante pour un calcul hypothétique. Les fournisseurs statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat.",
+        "description": "Choisissez un fournisseur à comparer. La région, le GRD et le pic restent identiques à votre entrée actuelle; le type de compteur (sauf si le contrat exige un compteur intelligent) et, sur une entrée avec panneaux solaires, le régime solaire peuvent être modifiés à une étape suivante pour un calcul hypothétique. Les fournisseurs statiques et dynamiques sont listés, vous pouvez donc comparer entre types de contrat.",
         "data": {
           "supplier": "Fournisseur"
         }
       },
       "compare_contract": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un contrat chez {supplier}. Les contrats statiques et dynamiques sont proposes, afin de comparer entre types de contrat, et votre propre contrat figure aussi dans la liste : choisissez-le pour savoir ce que couterait le meme contrat avec un autre type de compteur ou un autre régime solaire, là où ces étapes sont proposées : le compteur seulement pour un contrat qui n'exige pas de compteur intelligent, le régime solaire seulement sur une entrée avec panneaux solaires.",
+        "description": "Choisissez un contrat chez {supplier}. Les contrats statiques et dynamiques sont proposés, afin de comparer entre types de contrat, et votre propre contrat figure aussi dans la liste : choisissez-le pour savoir ce que coûterait le même contrat avec un autre type de compteur ou un autre régime solaire, là où ces étapes sont proposées : le compteur seulement pour un contrat qui n'exige pas de compteur intelligent, le régime solaire seulement sur une entrée avec panneaux solaires.",
         "data": {
           "contract": "Contrat"
         }
       },
       "compare_meter": {
         "title": "Comparer un autre fournisseur",
-        "description": "Type de compteur pour la comparaison. Par defaut le reglage de votre entree actuelle; modifiez pour voir la facture sous un autre mode (mono = tarif unique, bi = jour / nuit).",
+        "description": "Type de compteur pour la comparaison. Par défaut le réglage de votre entrée actuelle; modifiez pour voir la facture sous un autre mode (mono = tarif unique, bi = jour / nuit).",
         "data": {
           "meter": "Type de compteur"
         }
       },
       "compare_solar": {
         "title": "Comparer un autre fournisseur",
-        "description": "Regime solaire pour ce devis. Choisissez-en un autre pour voir ce que vous paieriez sous un autre mode de comptage; le regime de votre entree est preselectionne. Contrairement au type de compteur, cela s'applique aux deux cotes, car le regime depend de votre raccordement et non du fournisseur. Rien n'est enregistre. Les deux champs de volume apparaissent lorsque aucun compteur d'injection n'est associe a cette entree: un compteur qui tourne a l'envers rapporte une consommation deja compensee par l'injection, ce qui n'est pas ce que facture le tarif d'injection. Encodez alors vos volumes annuels bruts, releves dans l'application de votre onduleur ou sur votre index annuel.",
+        "description": "Régime solaire pour ce devis. Choisissez-en un autre pour voir ce que vous paieriez sous un autre mode de comptage; le régime de votre entrée est présélectionné. Contrairement au type de compteur, cela s'applique aux deux côtés, car le régime dépend de votre raccordement et non du fournisseur. Rien n'est enregistré. Les deux champs de volume apparaissent lorsque aucun compteur d'injection n'est associé à cette entrée: un compteur qui tourne à l'envers rapporte une consommation déjà compensée par l'injection, ce qui n'est pas ce que facture le tarif d'injection. Encodez alors vos volumes annuels bruts, relevés dans l'application de votre onduleur ou sur votre index annuel.",
         "data": {
-          "solar_regime": "Regime",
-          "whatif_consumption_kwh": "Preleve du reseau (kWh/an)",
-          "whatif_injection_kwh": "Injecte sur le reseau (kWh/an)"
+          "solar_regime": "Régime",
+          "whatif_consumption_kwh": "Prélevé du réseau (kWh/an)",
+          "whatif_injection_kwh": "Injecté sur le réseau (kWh/an)"
         }
       },
       "compare_api_key": {
         "title": "Comparer un autre fournisseur",
         "description": "Cette comparaison nécessite les prix day-ahead d'ENTSO-E : un contrat indexé sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), ou, en régime d'injection, un contrat dont l'injection solaire est indexée sur le spot. Collez un jeton ENTSO-E pour que les prix spot puissent être récupérés. Le jeton n'est utilisé que pour cette comparaison et n'est pas enregistré. Laissez le champ vide pour continuer sans jeton ; le devis est alors moins précis, et le résultat indique quelle rémunération d'injection il a dû laisser de côté.",
         "data": {
-          "api_key": "Cle API ENTSO-E"
+          "api_key": "Clé API ENTSO-E"
         }
       },
       "compare_result": {
         "title": "Devis ponctuel",
-        "description": "Type de compteur utilise : {meter_used}. Estimation annuelle calculee avec {annual_kwh} kWh consommes ({consumption_source}). {solar_note}\n\n**Votre entree actuelle**\n  {current_supplier} - {current_contract}\n  Par kWh maintenant : {current_per_kwh} EUR/kWh\n  Facture annuelle estimee : {current_annual} EUR/an\n\n**Comparee a**\n  {compare_supplier} - {compare_contract}\n  Par kWh maintenant : {compare_per_kwh} EUR/kWh\n  Facture annuelle estimee : {compare_annual} EUR/an\n\n**Difference annuelle** : {delta_annual} EUR/an (positif = alternative plus chere).\n\n```\n{annual_chart}\n```\n\n**Depuis le {ytd_from}** ({ytd_kwh} kWh consommes, {ytd_injection_kwh} kWh injectes, votre entrée comme la facture son coût de l'année, l'alternative sur la carte propre à chaque mois quand les deux fournisseurs conservent une archive de leurs anciennes cartes, sinon au tarif actuel) :\n  Actuel : {current_ytd} EUR\n  Alternative : {compare_ytd} EUR\n  Difference : {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nRien n'a ete enregistre. Validez pour fermer ce dialogue."
+        "description": "Type de compteur utilisé : {meter_used}. Estimation annuelle calculée avec {annual_kwh} kWh consommés ({consumption_source}). {solar_note}\n\n**Votre entrée actuelle**\n  {current_supplier} - {current_contract}\n  Par kWh maintenant : {current_per_kwh} EUR/kWh\n  Facture annuelle estimée : {current_annual} EUR/an\n\n**Comparée à**\n  {compare_supplier} - {compare_contract}\n  Par kWh maintenant : {compare_per_kwh} EUR/kWh\n  Facture annuelle estimée : {compare_annual} EUR/an\n\n**Différence annuelle** : {delta_annual} EUR/an (positif = alternative plus chère).\n\n```\n{annual_chart}\n```\n\n**Depuis le {ytd_from}** ({ytd_kwh} kWh consommés, {ytd_injection_kwh} kWh injectés, votre entrée comme la facture son coût de l'année, l'alternative sur la carte propre à chaque mois quand les deux fournisseurs conservent une archive de leurs anciennes cartes, sinon au tarif actuel) :\n  Actuel : {current_ytd} EUR\n  Alternative : {compare_ytd} EUR\n  Différence : {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{card_note}\n\n{error}\n\nRien n'a été enregistré. Validez pour fermer ce dialogue."
       },
       "contract": {
         "title": "Contrat",
-        "description": "Choisissez votre contrat. L'integration recupere la carte tarifaire courante a chaque rafraichissement.",
+        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement.",
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",
@@ -363,7 +363,7 @@
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif jour signé (EUR/kWh)",
           "manual_energy_offpeak": "Tarif nuit signé (EUR/kWh)",
-          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
+          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signé (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
           "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
@@ -379,7 +379,7 @@
         }
       },
       "dso": {
-        "title": "Gestionnaire de reseau",
+        "title": "Gestionnaire de réseau",
         "data": {
           "dso": "GRD"
         }
@@ -415,30 +415,30 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
+        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
       },
       "connection_power": {
         "title": "Puissance de raccordement (Bruxelles)",
-        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci, et au-delà de 13 kVA le terme de puissance plus élevé de Sibelga. La plupart des logements sont a 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe a chaleur ou une borne de recharge se situe au-dessus.",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle à celle-ci, et au-delà de 13 kVA le terme de puissance plus élevé de Sibelga. La plupart des logements sont à 13 kVA ou moins ; un raccordement 3x400 V / 25 A avec une pompe à chaleur ou une borne de recharge se situe au-dessus.",
         "data": {
           "connection_kva_tier": "Puissance de raccordement"
         }
       },
       "api_key": {
-        "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
+        "title": "Clé API ENTSO-E",
+        "description": "Nécessaire pour ce contrat. Son prix de l'énergie est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Clé gratuite sur transparency.entsoe.eu.",
         "data": {
-          "api_key": "Cle API ENTSO-E"
+          "api_key": "Clé API ENTSO-E"
         }
       },
       "injection_api_key": {
-        "title": "Cle API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, une fiche qui imprime un montant mensuel est facturee sur celui-ci, celui du mois precedent, tandis qu'une formule d'injection réglée par créneau n'est pas creditee et son prix reste indisponible.",
+        "title": "Clé API ENTSO-E (facultative)",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
-          "api_key": "Cle API ENTSO-E"
+          "api_key": "Clé API ENTSO-E"
         }
       },
       "api_key_unreachable": {
@@ -451,7 +451,7 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Preferez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire reellement facture par Fluvius. Un simple capteur de puissance est echantillonne chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
+        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
         "data": {
           "capacity_mode": "Source du pic",
           "capacity_peak_sensor": "Capteur de pic mensuel",
@@ -460,15 +460,15 @@
       },
       "solar": {
         "title": "Panneaux solaires",
-        "description": "Puissance de l'onduleur en kVA et regime applicable a votre installation. Le regime de compensation wallon n'est valable que pour les installations certifiees avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
+        "description": "Puissance de l'onduleur en kVA et régime applicable à votre installation. Le régime de compensation wallon n'est valable que pour les installations certifiées avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
           "solar_kva": "Puissance onduleur (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Régime"
         }
       },
       "meters": {
-        "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitie est morte, figee ou demarree tard, ou dont les moities rapportent des periodes differentes. Si le tableau de bord Energie de HA est deja configure, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pre-selectionnes. Les valeurs pre-remplies restent modifiables.",
+        "title": "Compteurs (coût de l année)",
+        "description": "Facultatif. Sélectionnez soit les quatre registres jour/nuit du compteur (recommandé - exact dès le départ), soit des capteurs cumulatifs uniques de consommation / injection (l'intégration lit les kWh depuis le recorder de HA et répartit chaque journée passée en jour/nuit via l'horaire bi-horaire au besoin). Chaque côté - consommation, injection - est résolu indépendamment; vous pouvez mélanger un côté en registres et l'autre en capteur unique. Quand les deux câblages sont remplis pour le même côté, les registres jour/nuit l'emportent tant qu'ils rapportent entiers ; le total prend le relais d'une paire dont une moitié est morte, figée ou démarrée tard, ou dont les moitiés rapportent des périodes différentes. Si le tableau de bord Énergie de HA est déjà configuré, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pré-sélectionnés. Les valeurs pré-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
@@ -493,11 +493,11 @@
         }
       },
       "custom_energy": {
-        "title": "Formule d'energie personnalisee",
-        "description": "Note : option expert reservee aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutot une issue sur GitHub pour l'ajouter comme fournisseur a part entiere, et de meme si votre fournisseur figure deja dans la liste mais que l'entree ne tarifie pas votre contrat comme votre fiche (une formule figee au mois de signature, une ligne que l'analyseur rate) : ouvrez une issue avec votre fiche pour que ce soit corrige pour tous plutot que reconstruit ici. un contrat saisi a la main est un instantane fige, sans rafraichissement de la fiche ni detection de derive, donc les valeurs ne restent correctes que si vous les tenez a jour vous-meme. Entrez les chiffres de votre contrat hors TVA ; le taux de TVA de l'etape taxes les applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base, l'indice (le spot en direct, ou la moyenne du mois de livraison) et la base etant tous deux en EUR/kWh. Une formule imprimee en c€/kWh sur un Belpex en EUR/MWh doit etre convertie : (0,1068 x Belpex + 1,5) c€/kWh donne un facteur de 1.068 et une base de 0.015. Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "title": "Formule d'énergie personnalisée",
+        "description": "Note : option expert réservée aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutôt une issue sur GitHub pour l'ajouter comme fournisseur à part entière, et de même si votre fournisseur figure déjà dans la liste mais que l'entrée ne tarifie pas votre contrat comme votre fiche (une formule figée au mois de signature, une ligne que l'analyseur rate) : ouvrez une issue avec votre fiche pour que ce soit corrigé pour tous plutôt que reconstruit ici. un contrat saisi à la main est un instantané figé, sans rafraîchissement de la fiche ni détection de dérive, donc les valeurs ne restent correctes que si vous les tenez à jour vous-même. Entrez les chiffres de votre contrat hors TVA ; le taux de TVA de l'étape taxes les applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base, l'indice (le spot en direct, ou la moyenne du mois de livraison) et la base étant tous deux en EUR/kWh. Une formule imprimée en c€/kWh sur un Belpex en EUR/MWh doit être convertie : (0,1068 x Belpex + 1,5) c€/kWh donne un facteur de 1.068 et une base de 0.015. Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
         "data": {
-          "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice en EUR/kWh)",
-          "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
+          "custom_energy_factor": "Facteur d'énergie (multiplicateur de l'indice en EUR/kWh)",
+          "custom_energy_base": "Base d'énergie (EUR/kWh, hors TVA)",
           "custom_energy_quarter_hourly": "Facturation au quart d'heure",
           "custom_energy_single": "Tarif simple (EUR/kWh, hors TVA)",
           "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
@@ -507,20 +507,20 @@
         }
       },
       "custom_injection": {
-        "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
+        "title": "Formule d'injection personnalisée",
+        "description": "Comment votre injection solaire est payée. Un tarif fixe est un crédit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'pondérer l'injection par le profil solaire' pour pondérer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (récupéré en direct ; une prévision ex-ante, donc proche mais pas exactement la valeur SPP définitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
           "custom_injection_factor": "Facteur d'injection (multiplicateur de l'indice en EUR/kWh)",
-          "custom_injection_base": "Base d'injection (EUR/kWh, negative pour une deduction)",
-          "custom_injection_floor": "Jamais negatif (plancher a 0)",
-          "custom_injection_spp_weighted": "Ponderer l'injection par le profil solaire (SPP)"
+          "custom_injection_base": "Base d'injection (EUR/kWh, négative pour une déduction)",
+          "custom_injection_floor": "Jamais négatif (plancher à 0)",
+          "custom_injection_spp_weighted": "Pondérer l'injection par le profil solaire (SPP)"
         }
       },
       "custom_dso": {
-        "title": "Tarifs reseau (GRD)",
-        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette separation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez a 0 les autres couts que vous ne payez pas. La case annuelle prend les frais de gestion des donnees (databeheer) en Flandre, le terme fixe en Wallonie, que le tarif Impact ne facture pas, et les frais de mesure et le terme fixe ensemble a Bruxelles.",
+        "title": "Tarifs réseau (GRD)",
+        "description": "Coûts réseau régulés, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise. Laissez vides les cases jour, nuit et par plage si votre tarif n'a pas cette séparation : vide facture le tarif de distribution unique, 0 ne facture rien. Laissez à 0 les autres coûts que vous ne payez pas. La case annuelle prend les frais de gestion des données (databeheer) en Flandre, le terme fixe en Wallonie, que le tarif Impact ne facture pas, et les frais de mesure et le terme fixe ensemble à Bruxelles.",
         "data": {
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
@@ -537,14 +537,14 @@
         }
       },
       "custom_tax": {
-        "title": "Taxes et prelevements",
-        "description": "Taxes et prelevements regules, hors TVA. Le taux de TVA ci-dessous s'applique a l'energie, au reseau et aux taxes (l'injection reste exoneree). La TVA residentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "title": "Taxes et prélèvements",
+        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
         "data": {
-          "custom_tax_federal_excise": "Accise federale (EUR/kWh)",
-          "custom_tax_energy_contribution": "Cotisation energie (EUR/kWh)",
+          "custom_tax_federal_excise": "Accise fédérale (EUR/kWh)",
+          "custom_tax_energy_contribution": "Cotisation énergie (EUR/kWh)",
           "custom_tax_regional_renewables": "Prélèvement vert : GSC + WKK en Flandre, contribution énergie verte en Wallonie et à Bruxelles (EUR/kWh)",
           "custom_tax_region_connection_fee": "Redevance de raccordement wallonne (exonérée de TVA, Wallonie uniquement) (EUR/kWh)",
-          "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
+          "custom_tax_energy_fund_per_month": "Fonds énergie (EUR/mois)",
           "custom_vat_rate": "Taux de TVA (ex. 0.06)"
         }
       },
@@ -552,8 +552,8 @@
         "title": "Calcul des alternatives"
       },
       "compare_all_result": {
-        "title": "Alternatives classees",
-        "description": "Tous les contrats de la même famille que le vôtre (fixe ou variable, indexé sur le spot, ou à plages horaires) disponibles dans votre région, calcules avec vos propres parametres. Votre contrat actuel porte le badge YOUR CONTRACT ; chaque autre ligne se termine par l'ecart avec lui, un signe moins etant une economie.\n\n{ranking}\n\nDes estimations, pas des offres. Chaque ligne calcule une année complète de vos volumes mesurés sur une seule carte tarifaire publiée : elle dit ce que coûterait une année à ces prix, pas ce qui vous sera facturé. Rien n'est enregistré ; validez pour fermer.",
+        "title": "Alternatives classées",
+        "description": "Tous les contrats de la même famille que le vôtre (fixe ou variable, indexé sur le spot, ou à plages horaires) disponibles dans votre région, calculés avec vos propres paramètres. Votre contrat actuel porte le badge YOUR CONTRACT ; chaque autre ligne se termine par l'écart avec lui, un signe moins étant une économie.\n\n{ranking}\n\nDes estimations, pas des offres. Chaque ligne calcule une année complète de vos volumes mesurés sur une seule carte tarifaire publiée : elle dit ce que coûterait une année à ces prix, pas ce qui vous sera facturé. Rien n'est enregistré ; validez pour fermer.",
         "data": {
           "with_ytd": "Calculer aussi le cumul de l'année en cours (plus lent : récupère la carte de chaque mois passé)",
           "refresh": "Recalculer maintenant (environ deux minutes)"
@@ -581,7 +581,7 @@
       }
     },
     "progress": {
-      "sweeping": "{priced} contrats sur {total} calcules. Les fiches les plus rapides sont recuperees en premier : une pause est un fournisseur lent, pas un blocage.\n\n{ranking}"
+      "sweeping": "{priced} contrats sur {total} calculés. Les fiches les plus rapides sont récupérées en premier : une pause est un fournisseur lent, pas un blocage.\n\n{ranking}"
     }
   },
   "selector": {
@@ -603,7 +603,7 @@
         "mono": "Mono (tarif unique)",
         "bi": "Bi-horaire (jour / nuit)",
         "dynamic": "Dynamique (compteur intelligent)",
-        "exclusive_night": "Circuit exclusif nuit (compteur separe)"
+        "exclusive_night": "Circuit exclusif nuit (compteur séparé)"
       }
     },
     "dso_tariff_mode": {
@@ -616,19 +616,19 @@
     "connection_kva_tier": {
       "options": {
         "le1_44": "1,44 kVA ou moins (pas de redevance OSP)",
-        "le6": "Plus de 1,44 jusqu'a 6 kVA",
-        "le9_6": "Plus de 6 jusqu'a 9,6 kVA",
-        "le13": "Plus de 9,6 jusqu'a 13 kVA",
-        "le18": "Plus de 13 jusqu'a 18 kVA",
-        "le36": "Plus de 18 jusqu'a 36 kVA",
-        "le56": "Plus de 36 jusqu'a 56 kVA",
+        "le6": "Plus de 1,44 jusqu'à 6 kVA",
+        "le9_6": "Plus de 6 jusqu'à 9,6 kVA",
+        "le13": "Plus de 9,6 jusqu'à 13 kVA",
+        "le18": "Plus de 13 jusqu'à 18 kVA",
+        "le36": "Plus de 18 jusqu'à 36 kVA",
+        "le56": "Plus de 36 jusqu'à 56 kVA",
         "gt56": "Plus de 56 kVA"
       }
     },
     "solar_regime": {
       "options": {
         "none": "Pas de panneaux",
-        "compensation": "Regime de compensation (Wallonie, certifie avant 2024-01-01, jusqu'en 2030)",
+        "compensation": "Régime de compensation (Wallonie, certifié avant 2024-01-01, jusqu'en 2030)",
         "injection": "Tarif d'injection (installation post-2024 ou compteur intelligent)"
       }
     },
@@ -641,7 +641,7 @@
   },
   "services": {
     "refresh": {
-      "name": "Rafraichir",
+      "name": "Rafraîchir",
       "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût annuel en cours est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût annuel en cours ; pour cela, utilisez Effacer l'historique des prix.",
       "fields": {
         "clear_history": {
@@ -651,150 +651,150 @@
       }
     },
     "cheapest_window": {
-      "name": "Plage la moins chere",
-      "description": "Renvoie la plage contigue de N heures la moins chere dans la table des prix à venir.",
+      "name": "Plage la moins chère",
+      "description": "Renvoie la plage contiguë de N heures la moins chère dans la table des prix à venir.",
       "fields": {
         "duration_hours": {
-          "name": "Duree",
-          "description": "Longueur de la plage en heures, arrondie a l'heure entiere la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
+          "name": "Durée",
+          "description": "Longueur de la plage en heures, arrondie à l'heure entière la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer à n'importe quel quart d'heure."
         },
         "entry_id": {
-          "name": "ID de l'entree",
+          "name": "ID de l'entrée",
           "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "earliest_start": {
-          "name": "Debut au plus tot",
-          "description": "Optionnel. Tronque au debut de son creneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considere encore le creneau de 14:00. Par defaut: maintenant."
+          "name": "Début au plus tôt",
+          "description": "Optionnel. Tronqué au début de son créneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considère encore le créneau de 14:00. Par défaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",
-          "description": "Optionnel. Par defaut: fin de la table en cache."
+          "description": "Optionnel. Par défaut: fin de la table en cache."
         }
       }
     },
     "most_expensive_window": {
-      "name": "Plage la plus chere",
-      "description": "Renvoie la plage contigue de N heures la plus chere dans la table des prix à venir.",
+      "name": "Plage la plus chère",
+      "description": "Renvoie la plage contiguë de N heures la plus chère dans la table des prix à venir.",
       "fields": {
         "duration_hours": {
-          "name": "Duree",
-          "description": "Longueur de la plage en heures, arrondie a l'heure entiere la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
+          "name": "Durée",
+          "description": "Longueur de la plage en heures, arrondie à l'heure entière la plus proche (une demi-heure arrondit vers le haut). Sur un contrat au quart d'heure, la plage peut commencer à n'importe quel quart d'heure."
         },
         "entry_id": {
-          "name": "ID de l'entree",
+          "name": "ID de l'entrée",
           "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "earliest_start": {
-          "name": "Debut au plus tot",
-          "description": "Optionnel. Tronque au debut de son creneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considere encore le creneau de 14:00. Par defaut: maintenant."
+          "name": "Début au plus tôt",
+          "description": "Optionnel. Tronqué au début de son créneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considère encore le créneau de 14:00. Par défaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",
-          "description": "Optionnel. Par defaut: fin de la table en cache."
+          "description": "Optionnel. Par défaut: fin de la table en cache."
         }
       }
     },
     "backfill_statistics": {
       "name": "Backfill des statistiques",
-      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entree sur une plage de dates, afin que le tableau de bord Energie affiche un historique anterieur au premier tick de l'integration. Le coût n'est reconstitué que dans la fenêtre du coût annuel en cours (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
+      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entrée sur une plage de dates, afin que le tableau de bord Énergie affiche un historique antérieur au premier tick de l'intégration. Le coût n'est reconstitué que dans la fenêtre du coût annuel en cours (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
       "fields": {
         "entry_id": {
-          "name": "ID de l'entree",
+          "name": "ID de l'entrée",
           "description": "Optionnel. Sans elle, la première entrée chargée est utilisée : renseignez-la si vous avez plusieurs entrées."
         },
         "start": {
-          "name": "Debut",
-          "description": "Premiere heure a reconstituer. Par defaut: le debut de la fenetre du cout annuel, soit le 1er janvier 00:00 de l'annee locale en cours, soit la date de debut du contrat si l'entree facture a partir de celle-ci."
+          "name": "Début",
+          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût annuel, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée facture à partir de celle-ci."
         },
         "end": {
           "name": "Fin",
-          "description": "Premiere heure NON reconstituee (exclusif). Par defaut: heure courante. Au plus tard au début de la fenêtre du coût annuel, seuls les capteurs de prix sont reconstitués."
+          "description": "Première heure NON reconstituée (exclusif). Par défaut: heure courante. Au plus tard au début de la fenêtre du coût annuel, seuls les capteurs de prix sont reconstitués."
         },
         "clear": {
-          "name": "Effacer TOUTE la serie avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour re-executer toute la fenetre du cout annuel ; une fenetre qui commence apres le debut de la fenetre du cout annuel de l'annee de fin (le 1er janvier, ou la date de debut du contrat si l'entree facture a partir de celle-ci) est refusee avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût annuel en cours (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
+          "name": "Effacer TOUTE la série avant import",
+          "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût annuel ; une fenêtre qui commence après le début de la fenêtre du coût annuel de l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût annuel en cours (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
         }
       }
     }
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Seulement {available} creneaux sont disponibles dans la fenetre demandee; il en faut {needed}."
+      "message": "Seulement {available} créneaux sont disponibles dans la fenêtre demandée; il en faut {needed}."
     },
     "not_enough_contiguous_hours": {
-      "message": "La fenetre demandee compte au plus {available} creneaux consecutifs; il en faut {needed}."
+      "message": "La fenêtre demandée compte au plus {available} créneaux consécutifs; il en faut {needed}."
     },
     "duration_too_small": {
       "message": "duration_hours doit valoir au moins 1."
     },
     "no_loaded_entry": {
-      "message": "Aucune entree Belgian Electricity Prices chargee."
+      "message": "Aucune entrée Belgian Electricity Prices chargée."
     },
     "no_loaded_entry_with_id": {
-      "message": "Aucune entree Belgian Electricity Prices chargee avec l'id {entry_id}."
+      "message": "Aucune entrée Belgian Electricity Prices chargée avec l'id {entry_id}."
     },
     "entry_reloading": {
-      "message": "L'entree est en cours de rechargement; reessayez dans un instant."
+      "message": "L'entrée est en cours de rechargement; réessayez dans un instant."
     },
     "price_table_empty": {
-      "message": "Le tableau de prix est vide; rafraichissez l'entree d'abord."
+      "message": "Le tableau de prix est vide; rafraîchissez l'entrée d'abord."
     },
     "snapshot_not_loaded": {
-      "message": "L'instantane du fournisseur n'est pas encore charge; rafraichissez l'entree d'abord."
+      "message": "L'instantané du fournisseur n'est pas encore chargé; rafraîchissez l'entrée d'abord."
     }
   },
   "issues": {
     "snapshot_stale": {
-      "title": "Les donnees tarifaires de {supplier} ({contract}) ont plus de {days} jours",
-      "description": "L'integration n'a pas pu rafraichir la carte tarifaire chez le fournisseur et utilise un cache de plus de {days} jours. Derniere erreur : {last_error}. Les prix peuvent ne plus refleter ce qui est facture. Essayez le service be_electricity_prices.refresh, verifiez votre reseau, ou ouvrez un ticket sur GitHub si le probleme persiste."
+      "title": "Les données tarifaires de {supplier} ({contract}) ont plus de {days} jours",
+      "description": "L'intégration n'a pas pu rafraîchir la carte tarifaire chez le fournisseur et utilise un cache de plus de {days} jours. Dernière erreur : {last_error}. Les prix peuvent ne plus refléter ce qui est facturé. Essayez le service be_electricity_prices.refresh, vérifiez votre réseau, ou ouvrez un ticket sur GitHub si le problème persiste."
     },
     "extractor_failed": {
       "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",
-      "description": "L'extracteur du fournisseur a leve une erreur : {error}. Si une carte a déjà été lue, l'intégration continue de servir ses prix, mais ils ne correspondent peut-être plus à ce qui est facturé ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Cela signifie generalement que le fournisseur a change la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis a jour."
+      "description": "L'extracteur du fournisseur a levé une erreur : {error}. Si une carte a déjà été lue, l'intégration continue de servir ses prix, mais ils ne correspondent peut-être plus à ce qui est facturé ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Cela signifie généralement que le fournisseur a changé la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis à jour."
     },
     "extractor_unreachable": {
       "title": "Impossible de joindre le fournisseur pour {supplier} ({contract})",
-      "description": "L'integration n'a pas pu telecharger la carte tarifaire apres plusieurs tentatives : {error}. Si une carte a déjà été lue, elle continue de servir ses prix ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Il s'agit generalement d'un probleme reseau ou CDN temporaire qui se resout au prochain rafraichissement; utilisez le service be_electricity_prices.refresh ou verifiez votre reseau si cela persiste."
+      "description": "L'intégration n'a pas pu télécharger la carte tarifaire après plusieurs tentatives : {error}. Si une carte a déjà été lue, elle continue de servir ses prix ; sinon, les capteurs de cette entrée restent indisponibles jusqu'à ce qu'un téléchargement réussisse. Il s'agit généralement d'un problème réseau ou CDN temporaire qui se résout au prochain rafraîchissement; utilisez le service be_electricity_prices.refresh ou vérifiez votre réseau si cela persiste."
     },
     "card_read_by_ocr": {
       "title": "Les prix de {supplier} sont lus sur des images de sa carte",
-      "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : rien ne peut etre extrait du document lui-meme. Ces prix pour {contract} proviennent de la lecture des pixels de la carte faite par le projet, une fois par jour et partagee par toutes les installations. Elle lit un chiffre comme la seule valeur possible ou pas du tout, donc ce que vous voyez a ete lu entierement plutot que devine. Cela reste une lecture, qu'il vaut la peine de verifier sur votre carte avant d'agir. Cette alerte disparait d'elle-meme des que {supplier} republie une carte lisible."
+      "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : rien ne peut être extrait du document lui-même. Ces prix pour {contract} proviennent de la lecture des pixels de la carte faite par le projet, une fois par jour et partagée par toutes les installations. Elle lit un chiffre comme la seule valeur possible ou pas du tout, donc ce que vous voyez a été lu entièrement plutôt que deviné. Cela reste une lecture, qu'il vaut la peine de vérifier sur votre carte avant d'agir. Cette alerte disparaît d'elle-même dès que {supplier} republie une carte lisible."
     },
     "extractor_unreadable_no_prices": {
       "title": "Aucun prix pour {supplier} : sa carte tarifaire est illisible",
-      "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : les prix ne peuvent pas en etre extraits, et cette entree n'a aucune carte plus ancienne en cache sur laquelle se rabattre. Il ne s'agit pas d'un bug de l'integration et le signaler n'aidera pas : il n'y a rien a lire dans le document. Tous les capteurs de cette entree ({contract}) restent indisponibles jusqu'a ce que {supplier} republie une carte lisible, ou jusqu'a ce que l'archive de cartes du projet enregistre sa propre lecture de cette carte, ce qu'elle fait une fois par jour et que cette entree lit tant que \"Lire les anciennes cartes dans l'archive du projet\" est active. Pour obtenir des prix des maintenant, créez une entrée avec le fournisseur « Expert: custom formula » et encodez vous-meme les valeurs de votre carte. Cette alerte disparait d'elle-meme des que l'un ou l'autre se produit."
+      "description": "{supplier} publie sa carte tarifaire sous forme d'images de page, sans couche de texte : les prix ne peuvent pas en être extraits, et cette entrée n'a aucune carte plus ancienne en cache sur laquelle se rabattre. Il ne s'agit pas d'un bug de l'intégration et le signaler n'aidera pas : il n'y a rien à lire dans le document. Tous les capteurs de cette entrée ({contract}) restent indisponibles jusqu'à ce que {supplier} republie une carte lisible, ou jusqu'à ce que l'archive de cartes du projet enregistre sa propre lecture de cette carte, ce qu'elle fait une fois par jour et que cette entrée lit tant que \"Lire les anciennes cartes dans l'archive du projet\" est activé. Pour obtenir des prix dès maintenant, créez une entrée avec le fournisseur « Expert: custom formula » et encodez vous-même les valeurs de votre carte. Cette alerte disparaît d'elle-même dès que l'un ou l'autre se produit."
     },
     "extractor_unreadable": {
       "title": "La carte tarifaire de {supplier} n'est plus lisible",
-      "description": "{supplier} publie desormais sa carte tarifaire sous forme d'images de page, sans couche de texte : les prix ne peuvent plus en etre extraits. Il ne s'agit pas d'un bug de l'integration et le signaler n'aidera pas : il n'y a rien a lire dans le document. Cette entree continue d'utiliser les derniers prix analyses avec succes ({contract}), qui s'ecartent un peu plus de votre facture reelle a chaque nouvelle carte. Pour rester exact, changez de fournisseur ou créez une entrée avec le fournisseur « Expert: custom formula » et encodez vous-meme les valeurs de votre carte. Cette alerte disparaît d'elle-même si {supplier} republie des cartes lisibles, ou dès que l'archive de cartes du projet enregistre sa propre lecture de cette carte, ce qu'elle fait une fois par jour et que cette entrée lit tant que \"Lire les anciennes cartes dans l'archive du projet\" est activé."
+      "description": "{supplier} publie désormais sa carte tarifaire sous forme d'images de page, sans couche de texte : les prix ne peuvent plus en être extraits. Il ne s'agit pas d'un bug de l'intégration et le signaler n'aidera pas : il n'y a rien à lire dans le document. Cette entrée continue d'utiliser les derniers prix analysés avec succès ({contract}), qui s'écartent un peu plus de votre facture réelle à chaque nouvelle carte. Pour rester exact, changez de fournisseur ou créez une entrée avec le fournisseur « Expert: custom formula » et encodez vous-même les valeurs de votre carte. Cette alerte disparaît d'elle-même si {supplier} republie des cartes lisibles, ou dès que l'archive de cartes du projet enregistre sa propre lecture de cette carte, ce qu'elle fait une fois par jour et que cette entrée lit tant que \"Lire les anciennes cartes dans l'archive du projet\" est activé."
     },
     "entsoe_auth_failed": {
-      "title": "ENTSO-E a refuse la cle API pour {supplier} ({contract})",
-      "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, rien de ce qui suit le marche day-ahead sur cette entree ne peut etre calcule : sur un contrat dynamique ou indexe au mois, ses capteurs sont indisponibles, et sur un contrat dont seul le credit d'injection suit le marche, c'est ce credit qui l'est."
+      "title": "ENTSO-E a refusé la clé API pour {supplier} ({contract})",
+      "description": "transparency.entsoe.eu a renvoyé 401 pour la clé configurée : {error}. Modifiez les options de l'entrée et remplacez la clé par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, rien de ce qui suit le marché day-ahead sur cette entrée ne peut être calculé : sur un contrat dynamique ou indexé au mois, ses capteurs sont indisponibles, et sur un contrat dont seul le crédit d'injection suit le marché, c'est ce crédit qui l'est."
     },
     "supplier_deprecated": {
-      "title": "{supplier} transfere votre contrat a {successor} le {ends_on}",
-      "description": "{supplier} quitte le marche de l'energie residentielle : votre contrat sera transfere automatiquement a {successor} le {ends_on}. Les prix restent corrects jusqu'a ce que {supplier} cesse de publier sa carte tarifaire, donc rien n'est casse pour l'instant, mais cette entree cessera ensuite de se mettre a jour. Dès que {successor} vous fournit, ouvrez les options de cette entrée, choisissez « Enregistrer un changement de fournisseur », saisissez le premier jour où {successor} vous a fourni, puis sélectionnez {successor} et le produit nommé dans le courrier qu'ils vous ont envoyé. Les jours de {supplier} restent ainsi tarifés sur ses propres cartes, là où « Modifier les paramètres » tarifierait toute l'année sur les cartes de {successor}. Si ce jour tombe dans une année précédente, utilisez plutôt « Modifier les paramètres ». S'il ne figure pas dans la liste, cette integration ne sait pas encore tarifer ce produit : le fournisseur « Expert: custom formula » reprend en attendant les valeurs de votre fiche tarifaire, et une issue sur GitHub est la maniere de le faire couvrir correctement."
+      "title": "{supplier} transfère votre contrat à {successor} le {ends_on}",
+      "description": "{supplier} quitte le marché de l'énergie résidentielle : votre contrat sera transféré automatiquement à {successor} le {ends_on}. Les prix restent corrects jusqu'à ce que {supplier} cesse de publier sa carte tarifaire, donc rien n'est cassé pour l'instant, mais cette entrée cessera ensuite de se mettre à jour. Dès que {successor} vous fournit, ouvrez les options de cette entrée, choisissez « Enregistrer un changement de fournisseur », saisissez le premier jour où {successor} vous a fourni, puis sélectionnez {successor} et le produit nommé dans le courrier qu'ils vous ont envoyé. Les jours de {supplier} restent ainsi tarifés sur ses propres cartes, là où « Modifier les paramètres » tarifierait toute l'année sur les cartes de {successor}. Si ce jour tombe dans une année précédente, utilisez plutôt « Modifier les paramètres ». S'il ne figure pas dans la liste, cette intégration ne sait pas encore tarifer ce produit : le fournisseur « Expert: custom formula » reprend en attendant les valeurs de votre fiche tarifaire, et une issue sur GitHub est la manière de le faire couvrir correctement."
     },
     "supplier_deprecated_ended": {
-      "title": "{supplier} a transfere votre contrat a {successor}",
-      "description": "{supplier} a quitte le marche de l'energie residentielle le {ends_on} et votre contrat a ete transfere automatiquement a {successor}. Sa carte tarifaire n'est plus publiee : cette entree ne peut donc plus se mettre a jour et affiche encore les derniers prix lus, qui ne correspondent plus a votre facture. Pour tarifer votre nouveau contrat, ouvrez les options de cette entrée, choisissez « Enregistrer un changement de fournisseur », saisissez le premier jour où {successor} vous a fourni, puis sélectionnez {successor} et le produit nommé dans le courrier qu'ils vous ont envoyé. Les jours de {supplier} restent ainsi tarifés sur ses propres cartes, là où « Modifier les paramètres » tarifierait toute l'année sur les cartes de {successor}. Si ce jour tombe dans une année précédente, utilisez plutôt « Modifier les paramètres ». S'il ne figure pas dans la liste, cette integration ne sait pas encore tarifer ce produit : le fournisseur « Expert: custom formula » reprend en attendant les valeurs de votre fiche tarifaire, et une issue sur GitHub est la maniere de le faire couvrir correctement."
+      "title": "{supplier} a transféré votre contrat à {successor}",
+      "description": "{supplier} a quitté le marché de l'énergie résidentielle le {ends_on} et votre contrat a été transféré automatiquement à {successor}. Sa carte tarifaire n'est plus publiée : cette entrée ne peut donc plus se mettre à jour et affiche encore les derniers prix lus, qui ne correspondent plus à votre facture. Pour tarifer votre nouveau contrat, ouvrez les options de cette entrée, choisissez « Enregistrer un changement de fournisseur », saisissez le premier jour où {successor} vous a fourni, puis sélectionnez {successor} et le produit nommé dans le courrier qu'ils vous ont envoyé. Les jours de {supplier} restent ainsi tarifés sur ses propres cartes, là où « Modifier les paramètres » tarifierait toute l'année sur les cartes de {successor}. Si ce jour tombe dans une année précédente, utilisez plutôt « Modifier les paramètres ». S'il ne figure pas dans la liste, cette intégration ne sait pas encore tarifer ce produit : le fournisseur « Expert: custom formula » reprend en attendant les valeurs de votre fiche tarifaire, et une issue sur GitHub est la manière de le faire couvrir correctement."
     },
     "supplier_deprecated_no_successor": {
-      "title": "{supplier} cesse de fournir l'energie residentielle le {ends_on}",
-      "description": "{supplier} quitte le marche de l'energie residentielle le {ends_on}. Les prix restent corrects jusqu'a ce que la carte tarifaire ne soit plus publiee, mais cette entree cessera ensuite de se mettre a jour. Votre contrat est transfere a un autre fournisseur : consultez le courrier que vous recevrez. Dès que ce fournisseur vous fournit, choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour où il vous a fourni, puis sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau fournisseur, sauf si ce jour tombe dans une année précédente. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region : ouvrez alors une issue sur GitHub."
+      "title": "{supplier} cesse de fournir l'énergie résidentielle le {ends_on}",
+      "description": "{supplier} quitte le marché de l'énergie résidentielle le {ends_on}. Les prix restent corrects jusqu'à ce que la carte tarifaire ne soit plus publiée, mais cette entrée cessera ensuite de se mettre à jour. Votre contrat est transféré à un autre fournisseur : consultez le courrier que vous recevrez. Dès que ce fournisseur vous fournit, choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour où il vous a fourni, puis sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau fournisseur, sauf si ce jour tombe dans une année précédente. S'il ne figure pas dans la liste, cette intégration ne le couvre pas encore dans votre région : ouvrez alors une issue sur GitHub."
     },
     "supplier_deprecated_ended_no_successor": {
-      "title": "{supplier} ne fournit plus d'energie residentielle",
-      "description": "{supplier} a quitte le marche de l'energie residentielle le {ends_on} et ne publie plus de carte tarifaire : cette entree ne peut donc plus se mettre a jour et affiche encore les derniers prix lus, qui ne correspondent plus a votre facture. Votre contrat a ete transfere a un autre fournisseur : consultez le courrier reçu, puis choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour où le nouveau fournisseur vous a fourni et sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau fournisseur, sauf si ce jour tombe dans une année précédente. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region : ouvrez une issue sur GitHub."
+      "title": "{supplier} ne fournit plus d'énergie résidentielle",
+      "description": "{supplier} a quitté le marché de l'énergie résidentielle le {ends_on} et ne publie plus de carte tarifaire : cette entrée ne peut donc plus se mettre à jour et affiche encore les derniers prix lus, qui ne correspondent plus à votre facture. Votre contrat a été transféré à un autre fournisseur : consultez le courrier reçu, puis choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour où le nouveau fournisseur vous a fourni et sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau fournisseur, sauf si ce jour tombe dans une année précédente. S'il ne figure pas dans la liste, cette intégration ne le couvre pas encore dans votre région : ouvrez une issue sur GitHub."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",
-      "description": "Votre entree est configuree pour un compteur exclusif nuit separe, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif de nuit. L'integration facture ce circuit au tarif de distribution de jour, donc la part reseau de son prix est plus elevee que ce qui vous est reellement facture. La part energie n'est pas affectee.\n\nRien ne peut etre substitue automatiquement : l'integration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez a {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
+      "description": "Votre entrée est configurée pour un compteur exclusif nuit séparé, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif de nuit. L'intégration facture ce circuit au tarif de distribution de jour, donc la part réseau de son prix est plus élevée que ce qui vous est réellement facturé. La part énergie n'est pas affectée.\n\nRien ne peut être substitué automatiquement : l'intégration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez à {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
     },
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) ne publie pas les tarifs Tarif Impact pour {dso}",
-      "description": "Cette entree utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part reseau du prix revient a la grille bi-horaire tandis que la part energie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, où Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'etes pas facture sur le tarif choisi. Passez le « Mode de facturation GRD » de cette entrée en « Bi-horaire (jour / nuit) », ou choisissez un contrat dont la carte publie le bloc Impact."
+      "description": "Cette entrée utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part réseau du prix revient à la grille bi-horaire tandis que la part énergie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, où Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'êtes pas facturé sur le tarif choisi. Passez le « Mode de facturation GRD » de cette entrée en « Bi-horaire (jour / nuit) », ou choisissez un contrat dont la carte publie le bloc Impact."
     },
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) ne publie plus la redevance de raccordement wallonne",
@@ -852,10 +852,10 @@
         "name": "Maximum demain"
       },
       "energy_component": {
-        "name": "Composante energie"
+        "name": "Composante énergie"
       },
       "network_component": {
-        "name": "Composante reseau"
+        "name": "Composante réseau"
       },
       "taxes_component": {
         "name": "Composante taxes"
@@ -867,7 +867,7 @@
         "name": "Prix heures creuses (nuit)"
       },
       "capacity_cost": {
-        "name": "Cout capacitaire"
+        "name": "Coût capacitaire"
       },
       "monthly_peak_kw": {
         "name": "Pic de puissance mensuel"
@@ -888,28 +888,28 @@
         "name": "Redevance fixe par an"
       },
       "energy_fund_eur_per_month": {
-        "name": "Fonds energie par mois"
+        "name": "Fonds énergie par mois"
       },
       "ev_home_charging_rate": {
-        "name": "Tarif CREG recharge a domicile"
+        "name": "Tarif CREG recharge à domicile"
       },
       "current_year_cost": {
-        "name": "Cout de l annee"
+        "name": "Coût de l année"
       },
       "current_month_cost": {
-        "name": "Cout du mois"
+        "name": "Coût du mois"
       },
       "projected_year_cost": {
-        "name": "Cout annuel glissant"
+        "name": "Coût annuel glissant"
       },
       "projected_year_end_cost": {
-        "name": "Cout projete au 31 decembre"
+        "name": "Coût projeté au 31 décembre"
       },
       "projected_year_consumption": {
-        "name": "Consommation annuelle projetee"
+        "name": "Consommation annuelle projetée"
       },
       "projected_year_injection": {
-        "name": "Injection annuelle projetee"
+        "name": "Injection annuelle projetée"
       },
       "rolling_year_consumption": {
         "name": "Consommation annuelle glissante"
@@ -931,7 +931,7 @@
     },
     "button": {
       "reset_monthly_peak": {
-        "name": "Reinitialiser le pic mensuel"
+        "name": "Réinitialiser le pic mensuel"
       }
     }
   }
