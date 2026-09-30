@@ -2587,6 +2587,11 @@ def _check_federal_tax_consensus(
     grouping them together would file eight rows a day against cards that are
     correct.
 
+    Each pair is compared including VAT, the basis nearly every card prints.
+    Ecopower prints its levies excluding VAT and stores vat_rate 0.06, so its
+    0,046 is the fleet's 0,04876: compared raw, its September 2026 card filed
+    against a figure that was right.
+
     The majority is the answer, and a tie is not reported: with two suppliers
     disagreeing there is no consensus to measure against, and guessing which
     is right is how a check starts filing issues against the wrong card.
@@ -2623,9 +2628,10 @@ def _check_federal_tax_consensus(
         supplier, contract, region = row.parts[-4:-1]
         try:
             taxes = json.loads(row.read_text(encoding="utf-8"))["taxes"]
+            basis = 1.0 + float(taxes.get("vat_rate") or 0.0)
             pair = (
-                round(float(taxes["federal_excise"]), 7),
-                round(float(taxes["energy_contribution"]), 7),
+                round(float(taxes["federal_excise"]) * basis, 7),
+                round(float(taxes["energy_contribution"]) * basis, 7),
             )
         except (KeyError, TypeError, ValueError):
             continue

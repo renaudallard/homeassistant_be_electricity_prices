@@ -2399,25 +2399,27 @@ def test_a_card_whose_month_indexing_disagrees_with_the_registry_fails() -> None
 
 
 def _federal_archive(
-    root: Path, rows: dict[tuple[str, str, str], tuple[float, float]]
+    root: Path,
+    rows: dict[tuple[str, str, str], tuple[float, float]],
+    vat_rates: dict[str, float] | None = None,
 ) -> Path:
-    """A card archive holding just the tax block each row needs."""
+    """A card archive holding just the tax block each row needs.
+
+    ``vat_rates`` maps a supplier to the vat_rate its rows store; a row of any
+    other supplier stores none, as a card printed including VAT does.
+    """
     import json
 
     for (supplier, contract, region), (excise, contribution) in rows.items():
         path = root / "cards" / supplier / contract / region / "2026-09.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {
-                    "taxes": {
-                        "federal_excise": excise,
-                        "energy_contribution": contribution,
-                    }
-                }
-            ),
-            encoding="utf-8",
-        )
+        taxes: dict[str, float] = {
+            "federal_excise": excise,
+            "energy_contribution": contribution,
+        }
+        if vat_rates and supplier in vat_rates:
+            taxes["vat_rate"] = vat_rates[supplier]
+        path.write_text(json.dumps({"taxes": taxes}), encoding="utf-8")
     return root
 
 
@@ -2457,6 +2459,44 @@ def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
     assert not check.ok
     assert check.label.startswith("stale/")
     assert "0.0503288" in check.detail and "0.04876" in check.detail
+
+
+def test_a_tax_block_printed_excluding_vat_agrees_with_the_fleet(
+    tmp_path: Path,
+) -> None:
+    """Ecopower prints its levies excluding VAT and stores vat_rate 0.06, so
+    its 0,046 excise is the fleet's 0,04876 once the 6% is added. Compared
+    raw, its September 2026 card filed issue #111 against a figure that was
+    right. A card that is stale on the same basis still files.
+    """
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "c_fixed": SimpleNamespace(professional=False),
+            "ex_vat": SimpleNamespace(professional=False),
+        }
+    )
+    rows = {
+        ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+        ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+        ("c", "c_fixed", "flanders"): (0.04876, 0.0),
+        ("ecopower", "ex_vat", "flanders"): (0.046, 0.0),
+    }
+    archive = _federal_archive(tmp_path / "right", rows, {"ecopower": 0.06})
+    lc._check_federal_tax_consensus(archive, date(2026, 9, 30))
+    assert lc.CHECKS == []
+
+    rows[("ecopower", "ex_vat", "flanders")] = (0.0474801, 0.0019261)
+    stale = _federal_archive(tmp_path / "stale", rows, {"ecopower": 0.06})
+    lc._check_federal_tax_consensus(stale, date(2026, 9, 30))
+    assert len(lc.CHECKS) == 1
+    check = lc.CHECKS[0]
+    assert not check.ok
+    assert check.label.startswith("ecopower/")
+    assert "0.0503289" in check.detail and "0.0020417" in check.detail
 
 
 def test_the_excise_window_asks_to_be_extended_before_it_lapses(
