@@ -642,11 +642,11 @@
   "services": {
     "refresh": {
       "name": "Vernieuwen",
-      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de jaarkost niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
+      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier, de maandkaarten waarop de jaarkost berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de jaarkost niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
       "fields": {
         "clear_history": {
           "name": "Prijsgeschiedenis wissen",
-          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de jaarkost opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari opnieuw op bij een dienst met snelheidslimiet. Gebruik dit wanneer een jaarkost verkeerd lijkt en een gewone vernieuwing dat niet oplost."
+          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de jaarkost opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de startdatum van het contract, als de invoer daarvan uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een terugleververgoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer een jaarkost verkeerd lijkt en een gewone vernieuwing dat niet oplost."
         }
       }
     },
@@ -704,7 +704,7 @@
         },
         "start": {
           "name": "Start",
-          "description": "Eerste uur om aan te vullen. Standaard: 1 januari 00:00 van het huidige lokale jaar."
+          "description": "Eerste uur om aan te vullen. Standaard: het begin van het jaarkostvenster, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer daarvan uitgaat."
         },
         "end": {
           "name": "Eind",
@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "VOLLEDIGE reeks wissen voor herimport",
-          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN voor een volledige jaar-herrun; een venster dat na 1 januari van het eindjaar begint, wordt met clear aan geweigerd, tenzij het venster in een afgesloten jaar eindigt (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
+          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige jaarkostvenster opnieuw te draaien; een venster dat begint na het begin van het jaarkostvenster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster in een afgesloten jaar eindigt (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
     }

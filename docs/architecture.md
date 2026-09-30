@@ -317,9 +317,10 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   freshness key like `Last-Modified`, `ETag`, or the resolved PDF URL). The full `fetch` runs
   only when the key changes, so a new publication is caught within an hour at near-zero
   bandwidth (`providers/base.py`).
-- TTL fallback: suppliers with no usable probe (DATS 24, energie.be, Engie, Luminus, where the
-  only cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
-  `snapshot_store.py`).
+- TTL fallback: suppliers with no usable probe (energie.be, Engie, Luminus, where the only
+  cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
+  `snapshot_store.py`). DATS 24 has no probe either, but left the market on 2026-08-31 and is
+  no longer fetched at all.
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,

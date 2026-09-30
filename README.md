@@ -37,7 +37,10 @@ Belgian electricity, taking into account every component of a Belgian bill
 capacity tariff billed on the monthly peak.
 
 Energy prices are fetched **live** from each supplier's own published
-tariff card. **No EUR values are hardcoded in the source.** A supplier is one
+tariff card. **No supplier EUR value is hardcoded in the source**: the only
+EUR rates in it are two regulated ones, the federal excise and the Flemish
+network ceiling, which replace a card's out-of-date figure for the months
+they are known for. A supplier is one
 Python module that knows where to find that supplier's publication and how to
 read it. If yours is missing, **open an issue asking for it** rather than
 writing the module: a tariff card carries a dozen things that are easy to read
@@ -56,12 +59,12 @@ Each of these has a section of its own further down; this is the scan.
 
 **Prices**
 
-- **Live tariff cards** — every figure comes from the supplier's own published card. No EUR value is hardcoded.
+- **Live tariff cards** — every figure comes from the supplier's own published card. No supplier EUR value is hardcoded.
 - **Whole-bill view** — energy, distribution, transport, levies and VAT in one EUR/kWh, not just the commodity.
 - **Dynamic contracts** — `factor x spot + base` against the Belgian day-ahead price, per hour or per quarter-hour depending on how the supplier bills. See [What the integration computes](#what-the-integration-computes).
 - **Monthly-indexed contracts** — `factor x this month's mean spot + base`, for cards that settle on a month rather than an hour.
 - **Time-of-Use and Tarif Impact** — peak / off-peak / super-off-peak cards, and the Walloon three-band CWaPE tariff, each priced on its own schedule.
-- **Flanders capacity tariff** — billed the way Fluvius bills it, on the mean of your last twelve monthly peaks, floored per month at 2,5 kW. Worth 52 to 60 EUR per kW per year and invisible on the price graph, so it lands in `current_year_cost` alone.
+- **Flanders capacity tariff** — billed the way Fluvius bills it, on the mean of your last twelve monthly peaks, floored per month at 2,5 kW. Worth 52 to 60 EUR per kW per year and invisible on the price graph, so it lands in the cost sensors and `capacity_cost` rather than in the per-kWh price.
 - **Solar** — compensation regime, injection tariff, or neither.
 
 **Costs over time**
@@ -76,14 +79,14 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Ranked comparison of every alternative** — prices every contract sold in your region against your own settings and sorts them cheapest first, with your own row badged and every gap signed. Optionally once a day in the background, publishing the best saving as a sensor.
 - **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract, which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Both live under [Reconfiguring later](#reconfiguring-later).
-- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors). The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
+- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier from August 2026 on through the project's [card archive](#the-card-archive). The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
 - **Renewal reminder**: set your contract's end date and a timestamp sensor carries it, so an automation can remind you before the contract rolls over.
 
 **Running it**
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from a keyless source until it recovers. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills a monthly-indexed card's printed figure while a feed-in formula settled per slot stays uncredited and its price unavailable.
+- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from a keyless source until it recovers. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills a monthly-indexed card's printed figure while a feed-in formula settled per slot stays uncredited and its price unknown.
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
@@ -107,7 +110,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House · the same eight as **pro** contracts, minus Direct Online and Basic Online | All three regions, Basic Online is Flanders + Wallonia only · [`engie.py`](./custom_components/be_electricity_prices/providers/engie.py) · [notes](./docs/providers/engie.md)
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch Korting · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic · most months run a new-customer campaign tied to the month you sign, either a share of the energy cost (33% on the September 2026 Comfy card) or a volume of free energy (750 kWh as a cashback after 12 months, valued at the card's own mono-hourly rate because that is the rate its terms name), and it is billed from the card of your contract start month, which the archive can only supply from September 2026 on: Luminus's own tariff archive serves a past month without its campaign, so a contract signed before then is priced with no campaign at all | Flanders + Wallonia only · [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
-| **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin), and seventeen cards price it on whether the household pays by direct debit; every card with a feed-in formula adds a first-year bonus on the export, credited with the ristourne to a household on the injection regime once a year of its feed-in is measured · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
+| **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin, and on Smart Flex and its pro twin in the months their card says so), and seventeen cards price it on whether the household pays by direct debit; every card that grants the ristourne adds a first-year bonus on the export, credited with the ristourne to a household on the injection regime once a year of its feed-in is measured · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
 | **OCTA+** | Fixed · Fixed Impact *(Wallonia, CWaPE 3-band)* · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
 | **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before)* · Energreen | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
@@ -136,16 +139,17 @@ Each of these has a section of its own further down; this is the scan.
 > a picture taken in July still prints September's. The tax block is the one
 > that has moved. Ecofix's September 2026 card still carries the federal scheme
 > that ended on 1 August, an excise of 0,0503288 with a 0,0020417 contribution
-> beside it, where every other supplier's card for the same month carries a flat
+> beside it, where most suppliers' cards for the same month carry a flat
 > 0,04876 and no contribution. Neither is billed. Both are federal levies set
 > by law rather than by your supplier, so the integration bills what the law
 > sets for the month being billed: the contribution was abolished on 1 August
-> and is dropped, and the excise is the 0,04876 every other card in the country
-> prints. That is the 0,0036105 €/kWh, about 12,64 € a year on 3.500 kWh, the
-> stale block used to cost you. The daily live check still compares every
+> and is dropped, and the excise is billed at the flat 0,04876. That is the
+> 0,0036105 €/kWh, about 12,64 € a year on 3.500 kWh, the stale block used to
+> cost you. The daily live check still compares every
 > supplier's federal block against the rest and reports a card that drifts. A
 > figure the reader could not read whole is left out rather than guessed. If you would rather type the numbers in yourself, the
-> **Expert: custom formula** supplier takes them.
+> **Expert: custom formula** supplier takes them, though its federal levies
+> follow the law the same way.
 >
 > The full story — what changed in their generator, what Ecofix said about it,
 > the measurements, and the current formulas to copy — is in
@@ -176,7 +180,8 @@ extra settings appear:
   on if your business cannot deduct VAT; turn it off if it can, and every price,
   fee and cost sensor reports the ex-VAT amount you actually bear. Injection
   follows the same choice (unlike residential injection, which is VAT-exempt
-  outright). Residential contracts print VAT-inclusive already, so the setting is
+  outright). A residential contract is always priced with its VAT, whether its
+  card prints prices with it or, like Ecopower's, without, so the setting is
   hidden for them.
 - **Estimated yearly consumption** — the Engie and Mega professional cards
   print the federal special excise as a degressive schedule (bands at
@@ -202,7 +207,11 @@ dropdown lets a knowledgeable user type the pricing themselves: a dynamic
 equal to `factor × the delivery month's mean spot + base`, or a plain fixed
 rate, each with an optional never-negative injection floor (on by default for
 the monthly average) — plus the regulated DSO
-and tax values, which are identical for every supplier on your grid. Coefficients
+and tax values, which are identical for every supplier on your grid. The two
+federal levies among them follow the law as they do on every card (see
+[The federal levies come from the law](#the-federal-levies-come-from-the-law-not-from-your-card)):
+from August 2026 the energy contribution is dropped whatever you type, and
+through December 2026 the excise is billed at the legal flat rate. Coefficients
 are entered excluding VAT and the VAT rate grosses them up. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of
@@ -232,9 +241,10 @@ The coordinator ticks once an hour. On each tick it runs the supplier's
 `ETag`, or the resolved PDF URL) — and only re-runs the full PDF fetch when
 that key changes from what we last fetched. This catches a supplier
 publication within an hour at near-zero ongoing bandwidth instead of a
-fixed 24-hour schedule. Suppliers that have no usable probe (DATS 24, energie.be, Engie
+fixed 24-hour schedule. Suppliers that have no usable probe (energie.be, Engie
 and Luminus, where no cheap freshness key is exposed) keep the time-based
-24-hour TTL.
+24-hour TTL. DATS 24, which left the market on 31 August 2026, is not fetched
+at all any more.
 
 ## What the integration computes
 
@@ -261,8 +271,9 @@ taxes_component` always equals `current_price` to the cent.
 
 Residential electricity carries 6% VAT. Most cards print their prices with it
 included and say so ("Prix 6% TVA comprise", "inclusief 6% btw"), and those cards
-are priced at the rate they state. Three do not state one (Bolt, energie.be, and
-OCTA+ since June 2026), so their formula is priced at the rate of the month being
+are priced at the rate they state. Some do not state one (Bolt, energie.be,
+OCTA+ since June 2026, and TotalEnergies' Brussels variable cards since
+September 2026, whose text lost the digit), so their formula is priced at the rate of the month being
 billed, as are the regulated figures published without VAT (the flat excise, the
 Flemish network ceiling and the Brussels power term). That month's rate is the one
 the cards themselves agree on, read from the project's card archive (see
@@ -281,17 +292,20 @@ month being billed decides them, not the month your card was printed in.
 Since **1 August 2026** the law sets a flat excise of **4,876 c€/kWh** and
 abolished the energy contribution, folding it into that rate. The integration
 bills exactly that for every month from then on, and a card that still prints
-the old pair is not billed as printed. Three suppliers were still printing it
-in September 2026: Ecofix, whose card is an image of its July card, Cociter,
-and TotalEnergies with a rounded figure. Together the two corrections are worth
-about 12,64 € a year at 3.500 kWh on an Ecofix contract.
+the old pair is not billed as printed. Four suppliers were still printing some
+of it in September 2026: Ecofix, whose card is an image of its July card, and
+Aspiravi printed the whole old pair, Cociter the contribution beside the new
+excise, and TotalEnergies a rounded excise with the contribution. Together the two
+corrections are worth about 12,64 € a year at 3.500 kWh on an Ecofix or
+Aspiravi contract.
 
 Two limits worth knowing. **Professional contracts are untouched**, because
 that scheme bands the excise by annual volume and is a genuinely different
 rate. And **the correction covers the months we can verify**: the same measure
 steps the excise down again each January from 2027, so from 1 January 2027 your
-card's own figure is used again until the new rate is confirmed against the
-fleet. Before August 2026 the card's figures were always used, so a bill for an
+card's own excise is used again until the new rate is confirmed against the
+fleet. The contribution stays dropped: it was abolished, not set for a
+period. Before August 2026 the card's figures were always used, so a bill for an
 earlier month is unaffected.
 
 The daily live check compares every supplier's federal block against the rest
@@ -314,7 +328,7 @@ All sensors share one device per config entry.
 
 | Sensor | Description |
 | --- | --- |
-| `current_price` | All-in EUR/kWh **now**. Attributes carry today's and tomorrow's slot-by-slot prices, the cheapest and most expensive 4-hour windows, the snapshot's publication month and age, and `card_read_by_ocr` while a card is being read off its pixels. See [docs/entities.md](./docs/entities.md). |
+| `current_price` | All-in EUR/kWh **now**. Attributes carry today's and tomorrow's slot-by-slot prices, the four cheapest and four most expensive hours of today (not necessarily consecutive), the snapshot's publication month and age, and `card_read_by_ocr` while a card is being read off its pixels. See [docs/entities.md](./docs/entities.md). |
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
@@ -325,11 +339,11 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month, as the card prints it for your contract (€0 outside Flanders, €0 for a domiciled residential customer in Flanders, and the non-residential figure on a professional contract). |
-| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Aspiravi / Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), on the current one as a stand-in where it does not, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Changed supplier during the year? Record the switch and each contract is billed on its own supplier's cards for its own days, listed in the `previous_contracts` attribute: see [Switching supplier during the year](#switching-supplier-during-the-year). Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_priced` / `hours_elapsed`, `days_seen` / `days_priced` / `days_elapsed`, `injection_hours_uncredited`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
+| `current_year_cost` | Running bill **since 1 January**, or since your contract start date if you tick that option. Every kWh is priced at the tariff that applied when you used it: past months bill on their own card where the supplier archives historical cards (Aspiravi / Bolt fix / Cociter / DATS 24 / EBEM / Ecopower / Eneco / energie.be / Energy Knights / EnergyVision / Engie / Frank / Luminus / Mega / OCTA+ / Trevion), and for every supplier from August 2026 on through the project's [card archive](#the-card-archive), on the current one as a stand-in where neither has it, dynamic contracts replay each hour's actual spot, and annual fees pro-rate across the year. Under the Walloon compensation regime injection nets against consumption and the energy term is floored at zero, so a value that stops moving while you keep injecting is that floor rather than a stalled sensor. Changed supplier during the year? Record the switch and each contract is billed on its own supplier's cards for its own days, listed in the `previous_contracts` attribute: see [Switching supplier during the year](#switching-supplier-during-the-year). Configured in the **Energy meters** step. Coverage and cost attributes (`hours_seen` / `hours_priced` / `hours_elapsed`, `days_seen` / `days_priced` / `days_elapsed`, `injection_hours_uncredited`, `capacity_ytd_eur`, `fees_ytd_eur` and the rest) say how complete the figure is — read them with [When the year-to-date looks too low](#when-the-year-to-date-looks-too-low), and see [docs/entities.md](./docs/entities.md) for the full list. |
 | `current_month_cost` | The same bill as `current_year_cost` over the running month, which is the period a household budgets in and the one an invoice covers. Priced as its own window rather than sliced off the year, so under the Walloon compensation regime it nets **that month's** registers and twelve of these do not add up to the yearly figure; on every other regime they do. Resets on the 1st. See [docs/entities.md](./docs/entities.md). |
 | `tomorrow_prices_available` | Binary sensor. ON when the price table covers at least one hour with tomorrow's local date **and** the supplier's published validity still covers tomorrow. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET). For fixed/variable contracts it is ON throughout the month, but flips OFF on the last day of a month whose card stops at month-end, since next month's rates are not published yet. |
 | `projected_year_consumption` | kWh your meter will have recorded by 31 December: what it recorded from 1 January to yesterday, plus what it recorded over the same remaining days last year, so the rest of the year follows your own season rather than an average day. Without last year's history, an entry that already loads Synergrid's residential load profile (an RLP-indexed card, or the compensation regime) extrapolates this year's days on that profile once 90 of them are recorded; the profile is never downloaded just for this. Otherwise unknown. Moves once a day. The `volume_basis`, `ytd_kwh` and `remaining_kwh` attributes say which method was used and how the figure splits. |
-| `projected_year_cost` | Shown as *Rolling year cost*. Roughly what a year on this contract costs in EUR, priced once at today's tariffs against the volume your meter recorded over the last 365 days (`rolling_year_consumption`), or, short of a year of readings, against the yearly volume you entered or an estimate; the `volume_basis` attribute says which. It covers the last 365 days, not the calendar year that `current_year_cost` and the `projected_year_*` kWh sensors cover. An indication for ranking contracts, not a forecast of your settlement: tariffs move and your usage will not repeat exactly. A card that settles on a monthly Belpex index, or one your ENTSO-E key or signing cohort re-prices on it, holds this month's index for the year, the way a variable card holds its printed rate. Unknown on a dynamic contract, and early in a month whose index is not known yet. A feed-in credit that follows the spot price per slot is credited on the day-ahead prices of the past year's closed days, each hour weighted by what you exported in it, as the comparison page credits it, so the figure does not move with each day's prices. It needs a full year of both: the day-ahead is fetched from 1 January (or from the contract start, if you bill from it) and then kept for a year, so until a full year of day-ahead prices and of your own feed-in is held (in an installation's first year, and after a change of contract) the credit is left out and the attributes say so; the comparison page and the daily ranking leave it out too, the page's note says so and the ranking tags the row. See [docs/entities.md](./docs/entities.md). |
+| `projected_year_cost` | Shown as *Rolling year cost*. Roughly what a year on this contract costs in EUR, priced once at today's tariffs against the volume your meter recorded over the last 365 days (`rolling_year_consumption`), or, short of a year of readings, against the yearly volume you entered or an estimate; the `volume_basis` attribute says which. It covers the last 365 days, not the calendar year that `current_year_cost` and the `projected_year_*` kWh sensors cover. An indication for ranking contracts, not a forecast of your settlement: tariffs move and your usage will not repeat exactly. A card that settles on a monthly Belpex index, or one your ENTSO-E key or signing cohort re-prices on it, holds this month's index for the year, the way a variable card holds its printed rate. Unknown on a dynamic contract, early in a month whose index is not known yet, and under the compensation regime until a full year of your feed-in is recorded, since a shorter window cannot be netted against a year. A feed-in credit that follows the spot price per slot is credited on the day-ahead prices of the past year's closed days, each hour weighted by what you exported in it, as the comparison page credits it, so the figure does not move with each day's prices. It needs a full year of both: the day-ahead is fetched from 1 January (or from the contract start, if you bill from it) and then kept for a year, so until a full year of day-ahead prices and of your own feed-in is held (in an installation's first year, and after a change of contract) the credit is left out and the attributes say so; the comparison page and the daily ranking leave it out too, the page's note says so and the ranking tags the row. See [docs/entities.md](./docs/entities.md). |
 | `projected_year_end_cost` | What this calendar year's bill will stand at on 31 December, in EUR: the bill `current_year_cost` walks, run on to 31 December over last year's same remaining days (the days `projected_year_consumption` and `projected_year_injection` read them from), each month to date on its own card and the months after this one on today's card. Fees, the welcome credit and any earlier contracts after a supplier switch are in it, and under the Walloon compensation regime the year is netted once, so a summer surplus pays for the winter after it rather than being forfeit. A month-indexed card holds this month's index to 31 December. Unknown on a dynamic contract, on a feed-in credit that follows the spot price per slot, early in a month whose index is not known yet (energy or feed-in), and when your meter's history does not cover last year's remaining days; the `energy_basis` and `volume_basis` attributes say which. Moves once a day, and when the card or this month's index does. |
 | `rolling_year_consumption` | kWh your meter recorded over the last 365 days, today's live reading included: the volume `projected_year_cost` prices. Up to 15 missing recorder days are scaled across; with more missing it is unknown rather than part of a year. The `volume_basis` attribute says how many days were measured. |
 
@@ -337,12 +351,12 @@ All sensors share one device per config entry.
 
 | Sensor | Created when | Description |
 | --- | --- | --- |
-| `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). In 2026 it is capped at the VREG network ceiling: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
-| `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak, which measures nothing and adds no month to the history. The months measured before stay, and count again when you return to the sensor. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it (use after a misconfigured sensor inflated the peak). |
+| `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). In 2026 it is capped at the VREG network ceiling: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
+| `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak, which measures nothing and adds no month to the history. The months measured before stay, and count again when you return to the sensor. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
 | `prosumer_cost` | Wallonia, compensation regime + `solar_kva > 0` | Monthly compensation fee in EUR (`solar_kva × (DSO_prosumer_rate + supplier_forfait) / 12`). Most suppliers bill only the regulated DSO rate; Cociter Tarif Variable and Variable Trihoraire, Mega and OCTA+ add a supplier-side PV forfait (already TVAC) on top. Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
-| `price_peak` / `price_offpeak` | Bi-hourly meter | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate. |
+| `price_peak` / `price_offpeak` | Bi-hourly meter | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate, except on an *Expert: custom formula* entry. |
 | `injection_price_peak` / `injection_price_offpeak` | Bi-hourly or dynamic (smart) meter, injection regime | The feed-in credit of each register. A card that prints a day and a night injection rate (Trevion Groene Energie Vast) gives each its own; every other card credits both registers on one formula or rate, so both show the current credit, the same figure as `injection_price`, which is what lets the Energy dashboard price each return register off its own sensor. Both or neither: a card carrying only one of the pair is read as having none. |
-| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. A card that indexes the credit per settlement slot follows the spot hour by hour; one that indexes it on the delivery month is resolved against that month's own mean; a flat card shows its printed figure. Without an ENTSO-E key a card that indexes the credit on the month shows the figure it prints, where it prints one; a credit settled per slot is unavailable. See [docs/entities.md](./docs/entities.md). |
+| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. A card that indexes the credit per settlement slot follows the spot hour by hour; one that indexes it on the delivery month is resolved against that month's own mean; a flat card shows its printed figure. Without an ENTSO-E key a card that indexes the credit on the month shows the figure it prints, where it prints one; a credit settled per slot is unknown. See [docs/entities.md](./docs/entities.md). |
 | `projected_year_injection` | Compensation or injection regime | The same for feed-in, read off your injection meter. Its fallback is Synergrid's solar production profile, used only where the entry already loads it (a feed-in indexed on Belpex SPP, or a custom entry weighting its feed-in on SPP). |
 | `rolling_year_injection` | Compensation or injection regime | The same as `rolling_year_consumption` for feed-in, read off your injection meter. |
 | `contract_end_date` | A contract end date is set | Timestamp of your contract's end date (`device_class: timestamp`), so an automation can remind you to renew before it rolls over. Changes no billed rate. It does bound the projection: `projected_year_cost` reads it to report how much of the year today's contract still covers. Stays available even when a supplier fetch fails. |
@@ -381,15 +395,17 @@ manifest.
 
 ## Configuration
 
-The UI walks **up to twelve steps**, thirteen with the *Expert: custom formula*
+The UI walks **up to eleven steps**, twelve with the *Expert: custom formula*
 supplier, depending on contract type and region. Apart from two paths no
 EUR values are asked, since energy, DSO and tax rates all come from the
 supplier's tariff card. The exceptions are the optional **signing-rate**
 step and the **Expert: custom formula** supplier, which has no card and asks
 for the whole set.
 
-The signing-rate step appears when you set a contract start date or a tariff
-card month, and is only for a contract whose figures differ from the
+The signing-rate step appears on a fixed, dynamic or monthly-indexed contract
+(a Bolt variable card billed per quarter-hour counts as dynamic) when you set a
+contract start date or a tariff card month; variable, time-of-use and Impact
+contracts never ask for one. It is only for a contract whose figures differ from the
 supplier's published card. Many offers, promotions sold through comparison
 sites among them, have a card of their own, which is already read: leave the
 step empty then. A spot factor multiplies the market price in EUR/kWh and a
@@ -399,7 +415,8 @@ and a base of 0.0159. Per-kWh values include VAT on a residential contract and
 exclude it on a professional contract and on Ecopower's cards; the yearly fee
 includes VAT. When you edit an existing entry, each box also shows what the
 current card gives it, so you can see whether your contract says anything
-different.
+different, as long as the edit keeps the same supplier, contract and region
+(recording a supplier switch never does).
 
 1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
    have announced their exit from the residential market are dropped from
@@ -410,7 +427,9 @@ different.
 2. **Contract** — filtered by supplier *and* region (e.g., TotalEnergies
    Impact only appears in Wallonia). Bolt's variable cards and Frank Energie
    then ask whether you are billed per quarter-hour; on Bolt the answer moves
-   the contract to dynamic settlement.
+   the contract to dynamic settlement. The same step takes the optional
+   **Contract start date**, **Tariff card month** and **Contract end date**,
+   and the **Bill the year-to-date from the contract start date** box.
 3. **DSO** — filtered by region.
 4. **Meter type** — *mono* (single rate), *bi* (peak / off-peak),
    *dynamic* (smart meter), or *exclusive-night circuit* (a separate
@@ -418,7 +437,10 @@ different.
    Luminus SmartFlex) and Impact contracts (Cociter Tarif Variable
    Trihoraire, Mega Off-peak Impact, OCTA+ Fixed Impact) lock the picker to
    *dynamic* — the SMR3 meter is required to bill by hour-of-day.
-5. **Direct debit** *(only where the card prices it)* — whether you pay your
+5. **Professional contract** *(pro contracts only)* — **Prices include VAT
+   (21%)** and **Estimated yearly consumption**; see *Professional (B2B)
+   tariffs* above.
+6. **Direct debit** *(only where the card prices it)* — whether you pay your
    supplier by direct debit. Some cards charge a lower yearly standing
    charge when the invoice is settled that way: Brusol Groene stroom is
    250 € a year and 230 € on domiciliëring. On seventeen Mega cards it is
@@ -428,17 +450,17 @@ different.
    direct-debit payer and to nobody else. The amounts are read off the card,
    not typed, and nothing else on the bill changes. The box is hidden on
    every contract whose card grants none, and an answer given on one
-   contract is dropped when you switch to another, so it cannot come back
-   into force later.
-6. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
-   requires a smart meter; Simple and Bi-horaire follow the existing
+   contract is dropped when you switch to a contract that does not ask for
+   it, so it cannot come back into force later.
+7. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-hourly* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
+   requires a smart meter; Simple and Bi-hourly follow the existing
    meter convention.
-7. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
+8. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
-   card prints last month's figure, on any solar regime — Cociter Variable
-   and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
+   card prints last month's figure, on any solar regime — Aspiravi Eco Plus
+   Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
    OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
    myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
@@ -463,7 +485,7 @@ different.
    setup, and a feed-in credit settled per hour stays unavailable, while one
    indexed on the month keeps the card's printed figure, until you add a key
    via Reconfigure.
-8. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
+9. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
    kW value (default 2.5 kW, the VREG regulated minimum). Leaving it at that
    default when your real peak is higher understates the bill by the
    difference times the per-kW rate, which is the largest single thing that
@@ -485,13 +507,13 @@ different.
    dashboard's grid source, so users with the typical P1-power →
    kWh-Riemann → dashboard chain don't have to pick the same sensor
    twice; the auto-pick refuses non-power sources.
-9. **Connection power** *(Brussels only)* — the contractual connection power
+10. **Connection power** *(Brussels only)* — the contractual connection power
    tier (≤ 1.44 / 1.44-6 / 6-9.6 / 9.6-13 / 13-18 / 18-36 / 36-56 / > 56 kVA).
    Brussels bills a Brugel OSP (Obligations de Service Public) annual fee
    scaled by this tier, and a connection above 13 kVA is billed Sibelga's
    own higher power term in place of the data-management charge; existing
    entries default to the 1.44-6 kVA tier.
-10. **Solar panels** — inverter capacity in kVA + the regime that applies:
+11. **Solar panels** — inverter capacity in kVA + the regime that applies:
    - **No solar panels** *(default)* — no extra sensors.
    - **Compensation regime** — Wallonia only, installations **certified before
      2024-01-01**, valid until 2030-12-31. Needs the inverter capacity, which
@@ -501,7 +523,7 @@ different.
      meters and Brussels. Creates `injection_price`, ready for HA Energy,
      `projected_year_injection` and `rolling_year_injection`, plus the day and night
      injection price sensors on a bi-hourly or dynamic meter.
-11. **Energy meters** *(optional, all four / two fields are skippable)* —
+12. **Energy meters** *(optional, all four / two fields are skippable)* —
    feeds the `current_year_cost` sensor. Whichever way you wire it, every
    field wants a **cumulative** kWh reading, one that only ever climbs.
    A sensor that resets, such as a "this year" or "this month" total,
@@ -661,13 +683,12 @@ opens a menu of four options, five once a supplier switch has been recorded this
   each card lands. A card that would not fit in the time left is skipped rather
   than started, so the page stops cleanly instead of freezing for most of a
   minute on one slow supplier; reopening finishes the rest from what it already
-  downloaded. On a Raspberry Pi the 50-candidate Flanders static cell prices
-  about 15 rows in the first ten seconds, 34 in the first minute and 39 within
-  the two-minute budget, the tail being Bolt and TotalEnergies at 13 to 45
-  seconds a card. Where two products share one tariff card the sweep reads it
-  once and reuses the text, which matters most on Bolt: each of its four
-  variable cards is sold on both settlements, and the parse, not the download,
-  is what the budget is spent on.
+  downloaded. Measured on a Raspberry Pi on 2026-08-30, the Flanders static
+  cell, the largest, priced about 15 rows in the first ten seconds, 34 in the
+  first minute and 39 within the two-minute budget, the tail being Bolt and
+  TotalEnergies at 13 to 45 seconds a card. Where two products share one tariff
+  card the sweep reads it once and reuses the text, since the parse, not the
+  download, is what the budget is spent on.
   Rows that could not be priced are **shown, not dropped**, saying whether the
   card was unreadable or the supplier unreachable, because a missing row reads
   as *not competitive* and that is the one thing it does not mean. Suppliers
@@ -689,7 +710,7 @@ opens a menu of four options, five once a supplier switch has been recorded this
   with the table saying when it ran and a box to price it again on the spot.
   Off by default because it fetches tariff cards from suppliers you have no
   relationship with, which is a decision to take rather than one an update
-  makes for you. It is cheap once running: thirteen of the seventeen suppliers
+  makes for you. It is cheap once running: fourteen of the seventeen suppliers
   publish a freshness check, including the two slowest cards, so a day on which
   nothing was republished costs a handful of conditional requests rather than
   the minutes of fetching a cold sweep costs, and tariff cards move about
@@ -699,8 +720,8 @@ opens a menu of four options, five once a supplier switch has been recorded this
   budget and skips nothing**, because the budget only exists to keep a progress
   bar honest, and a ranking stopped early would call the cheapest row that
   *fitted* the cheapest there is.
-- **Compare another supplier** — one-off price quote against a different
-  supplier and contract, with your region / DSO / peak
+- **Compare another supplier (one-off quote)** — a price quote against any
+  supplier and contract, your own included, with your region / DSO / peak
   settings held fixed for an apples-to-apples comparison. **Static
   ↔ dynamic crossings are allowed**: the flow prompts for an ENTSO-E
   API key when a side needs spot data (a dynamic or monthly-indexed
@@ -838,7 +859,7 @@ back a contract you left before the year began.
 - **Supplier snapshot** — the coordinator runs a cheap `probe()` every
   hour and only re-fetches the full PDF when the probe key changes
   (see *How often the integration polls* above). Suppliers without a
-  probe (DATS 24, energie.be, Engie, Luminus) fall back to a 24 h time-based TTL.
+  probe (energie.be, Engie, Luminus) fall back to a 24 h time-based TTL.
   Multiple entries pointing at the same
   `(supplier, contract, region)` tuple share their fetched snapshot
   through an in-memory cache, so the same PDF is never polled twice.
@@ -1002,20 +1023,23 @@ successful refresh:
 
 ### `be_electricity_prices.refresh` service
 
-Drops the cached supplier snapshot **and today's** ENTSO-E prices for every
-loaded entry, then re-fetches both immediately. Handy after a tariff card
+Drops the cached supplier snapshot, the month cards the year-to-date is
+billed on, **and today's** ENTSO-E prices for every loaded entry, then
+re-fetches them immediately. Handy after a tariff card
 update or to clear a transient fetch error without waiting for the next
 hourly tick.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `clear_history` | `false` | Also discard the cached **past** hourly prices that `current_year_cost` replays, and re-fetch them. Off by default because it re-fetches every day since 1 January against a rate-limited endpoint. |
+| `clear_history` | `false` | Also discard the cached **past** hourly prices that `current_year_cost` replays, and re-fetch them. Off by default because it re-fetches every day since 1 January (or the contract start, if you bill from it) against a rate-limited endpoint. Only those days come back: the days before them, which `projected_year_cost` and the comparison pages credit a per-slot feed-in on, are not fetched again, so that credit is left out until a full year of day-ahead is held again. |
 
-Without `clear_history` the past-price cache is left alone, which is worth
+Without `clear_history` the past day-ahead cache is left alone, which is worth
 knowing when a year-to-date figure looks wrong: an ordinary refresh will not
-change it. Nothing else repairs that cache either, since a cached day already holding
-at least 20 of its 24 hours is never re-fetched however wrong the values are, so this flag is
-the only way to correct one short of deleting and re-adding the entry.
+correct a wrong hourly price in it. Little else repairs that cache either, since a
+cached day already holding at least 20 of its 24 hours is never re-fetched however
+wrong the values are (a restart only discards a price off the scale entirely, below
+-1 or above 5 EUR/kWh), so this flag is the only way to correct one short of
+deleting and re-adding the entry.
 
 ### `be_electricity_prices.cheapest_window` / `most_expensive_window` services
 
@@ -1026,7 +1050,7 @@ upcoming price table. Both services share the same fields:
 | --- | --- | --- |
 | `duration_hours` | _required_ | Window length in hours (1-48), rounded to the nearest whole hour, a half rounding up. On a 15-minute contract (Cociter / EBEM / Ecofix / Ecopower Dynamische Burgerstroom / energie.be / Energy Knights Agilior Online and Agilior Online Green / EnergyVision / Engie / OCTA+ / Trevion, Bolt or Frank Energie with the quarter-hour box ticked, and the expert custom supplier with its *Bill per quarter-hour* box ticked) the window aligns to quarter-hour boundaries. |
 | `entry_id` | first loaded | Optional config entry to target. |
-| `earliest_start` | now | Don't consider windows starting before this time. |
+| `earliest_start` | now | Don't consider windows starting before this time. The time is truncated down to its price slot (the hour, or the quarter on a 15-minute contract), so 14:30 still considers the 14:00 slot on an hourly contract. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |
 
 Response shape:
@@ -1092,8 +1116,8 @@ window:
 | --- | --- | --- |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `start` | Start of the year-to-date window (Jan 1 00:00 local, or your contract start date if the entry bills from there) | First hour to backfill. The price sensors are written from this hour. `current_year_cost` resets at that window start, so it is backfilled only for the **end year**, accumulated from that Jan 1 — a mid-year `start` still carries the correct year-to-date total, and a multi-year range backfills only the current year's running cost (avoiding a spurious negative jump at the year boundary). |
-| `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. Set it on or before 1 January of the current year and only the price sensors are rebuilt: a past year's cost series would sit immediately before the current year's, and the recorder ignores `last_reset` on imported statistics, so the join would show roughly minus one annual bill on the Energy dashboard. The response then carries a `skipped` note saying so. |
-| `clear` | `false` | **Destructive.** Wipes each target statistic series in full, not just the requested range, while the re-import only repopulates `[start, end)` — for the price series, anything outside the window is gone. Use it for a full-year re-run (the default Jan 1 → now window). To redo a narrower window after fixing a tariff card, leave it off: the re-import upserts on `(statistic_id, hour)` and already overwrites exactly those hours. With `clear` on, a window that starts after 1 January of the end year is refused, unless it ends in a finished year, where the cost series is neither wiped nor re-imported. |
+| `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. Set it on or before the start of the year-to-date window (1 January of the current year, or your contract start date if the entry bills from there) and only the price sensors are rebuilt: a cost series ending there would sit immediately before the current one, and the recorder ignores `last_reset` on imported statistics, so the join would show roughly minus one annual bill on the Energy dashboard. The response then carries a `skipped` note saying so. |
+| `clear` | `false` | **Destructive.** Wipes each target statistic series in full, not just the requested range, while the re-import only repopulates `[start, end)` — for the price series, anything outside the window is gone. Use it to re-run the whole default window (the start of the year-to-date window → now). To redo a narrower window after fixing a tariff card, leave it off: the re-import upserts on `(statistic_id, hour)` and already overwrites exactly those hours. With `clear` on, a window that starts after the end year's year-to-date start (1 January, or the contract start date if the entry bills from there) is refused, unless it ends in a finished year, where the cost series is neither wiped nor re-imported. |
 
 Re-runs without `clear` are idempotent (rows are upserted by
 `(statistic_id, hour)`). For dynamic suppliers the service reuses
@@ -1299,8 +1323,8 @@ Two notes on the `tomorrow` half of the chart:
   publishes, around 13:00 CET. The `tomorrow_prices_available` binary
   sensor on the same device says when it has arrived.
 - On a **fixed or variable** contract the curve is flat by design, so
-  the chart is a row of equal bars, except on a bi-hourly meter or a
-  time-of-use contract, where the day/night step shows, and under the
+  the chart is a row of equal bars, except on a bi-hourly or smart
+  (*dynamic*) meter or a time-of-use contract, where the day/night step shows, and under the
   Walloon Tarif Impact distribution mode, where the PIC / MEDIUM / ECO
   bands show as a three-level step on any meter.
 
@@ -1437,7 +1461,9 @@ python scripts/live_check.py    # hits real supplier endpoints
 python scripts/archive_cards.py --out tmp/archive   # stores today's cards there
 ```
 
-`scripts/gate.sh` runs all of those checks at once, plus actionlint when
+`scripts/gate.sh` runs the lint, type, doc-reference and test checks above at
+once (not the live check or the archive walk, so it contacts no supplier),
+plus actionlint when
 `tmp/actionlint` exists, against a throwaway worktree of HEAD, so commit
 first. When the host named by `GATE_REMOTE` answers over ssh, pytest runs
 there on the same snapshot while the rest runs locally: about 6 minutes,
@@ -1475,7 +1501,7 @@ changed since the morning's archive walk is rendered again:
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
   and a catalogue addition stay in distinct threads. A discovery that
-  sees no product at all files in the same thread, as
+  fails, or sees no product at all, files its own issue,
   `[live-check] supplier product discovery failed …`, since it means that
   supplier's new products would go unseen.
 - **Freshness phase** — for the eight supplier-families that pick a card
@@ -1487,8 +1513,9 @@ changed since the morning's archive walk is rendered again:
   resolution fails loudly on its own.
 - **Cross-checks**: a supplier whose fetch blows its latency or size budget
   files `[live-check] supplier drift detected`, and a card whose federal tax
-  block or regulated network figure disagrees with the month's other cards
-  files its own issue, since both are supplier-side and billed as printed.
+  block, stated VAT rate, Flemish network ceiling or regulated network figure
+  disagrees with the month's other cards files its own issue, as does a federal
+  or VREG constant whose known window is about to lapse.
 
 ### The card archive
 
@@ -1512,9 +1539,11 @@ repository shared with be_water_prices in which this integration owns the
 `electricity/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the
 text of every page or document that parse read under
 `electricity/texts/<YYYY-MM>/`, so a card can be re-read or checked by hand
-later. A manual run of the same workflow can also mirror past months from
-the supplier archives into it, which keeps them readable should a supplier
-drop its own. That only covers suppliers walked while they were still
+later. Every run also mirrors the last 12 months from the supplier archives
+into it, for the months it does not hold yet, which fills a newly added
+supplier's year with no one asking and keeps those months readable should a
+supplier drop its own archive; a manual run can be told to go further back.
+That only covers suppliers walked while they were still
 publishing: DATS 24 left the market before this archive existed, so none of
 its months are in here and they are read from its own server for as long as
 that lasts.
@@ -1561,10 +1590,10 @@ The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the archive has not seen before is uploaded
 to an `electricity-<YYYY-MM>` release of that same repository. A release
 holds the cards for one month, whatever day each was captured or mirrored
-on, 140 to 240 files named by their SHA-256. Each stored card names
+on, each file named by its SHA-256. Each stored card names
 its PDF by that digest under `_sources`, and `electricity/pdfs.json` says
-which release holds it. A month of cards is 35 to 125 MB, which is why they
-live in releases rather than in the tree. That digest also keeps the daily
+which release holds it. A month of cards runs to tens of MB and more, which is
+why they live in releases rather than in the tree. That digest also keeps the daily
 run cheap: a card whose bytes have not changed is served the text the
 archive already holds instead of being rendered again. And a parser fix
 reaches the stored months on its own: when the parser sources change, the

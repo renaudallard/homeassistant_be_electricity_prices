@@ -506,12 +506,14 @@ async def _backfill_range(
         # exactly that window (a start in the year BEFORE the one they typed
         # as `end` is not "after 1 January of the end year", and the remedy it
         # suggests is already satisfied).
+        anchor = dt_util.as_local(cost_anchor_utc).date().isoformat()
         raise ServiceValidationError(
             "clear=True deletes the entire statistics series, but this "
-            "window starts after 1 January of the end year, so the cleared "
-            "rows before the start would not be re-imported. Re-run with a "
-            "window starting on or before 1 January, or leave clear off (a "
-            "re-import already overwrites the requested hours)."
+            f"window starts after {anchor}, where the cost sensor starts "
+            "accumulating, so the cleared rows before the start would not be "
+            f"re-imported. Re-run with a window starting on or before {anchor}, "
+            "or leave clear off (a re-import already overwrites the requested "
+            "hours)."
         )
     # Fetch spots over the union of the price window and the cost window
     # so the dynamic price rows AND the cost sensor's pre-start
@@ -593,10 +595,12 @@ async def _backfill_range(
         **gaps,
     }
     if skip_cost:
+        anchor = dt_util.as_local(this_year_anchor_utc).date().isoformat()
         result["skipped"] = (
-            "cost: a window ending on or before 1 January of the current year "
-            "would paint a large negative cost at the year boundary, because "
-            "the recorder ignores last_reset on imported statistics"
+            f"cost: a window ending on or before {anchor}, where the cost "
+            "sensor starts accumulating, would paint a large negative cost at "
+            "that boundary, because the recorder ignores last_reset on "
+            "imported statistics"
         )
     if retry and retry_later:
         result["retry"] = [f"{first}..{last}: {why}" for first, last, why, _ in retry]

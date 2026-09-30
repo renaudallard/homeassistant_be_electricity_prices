@@ -783,7 +783,7 @@ async def test_backfill_range_rejects_clear_with_midyear_window(
     start = datetime(2026, 3, 1, 0, 0, tzinfo=BRUSSELS)
     end = start + timedelta(hours=3)
     with patch.object(bf, "BePricesCoordinator", SimpleNamespace):
-        with pytest.raises(ServiceValidationError, match="starts after 1 January"):
+        with pytest.raises(ServiceValidationError, match="starts after 2026-01-01"):
             await bf.backfill_range(hass, entry, start, end, clear=True)
 
 

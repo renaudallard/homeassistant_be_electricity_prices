@@ -353,9 +353,9 @@ def resolve_federal_contribution(
     whether it is owed, not the month the card was written in: a July bill
     still owes it, a September one does not, whatever the card prints.
 
-    Three residential card families went on printing it into September 2026
-    (Cociter, Ecofix, TotalEnergies), two of them a stale block and one a
-    figure its publisher has not withdrawn. A card printing a levy nobody owes
+    Four residential card families went on printing it into September 2026
+    (Aspiravi, Cociter, Ecofix, TotalEnergies), three of them a stale block
+    and one a figure its publisher has not withdrawn. A card printing a levy nobody owes
     billed it, about 7 EUR a year at 3.500 kWh. Resolving it here rather than
     in the parsers keeps the archive holding what each card actually printed,
     needs no schema bump, and reaches every path that rebuilds a bill, since
@@ -370,7 +370,7 @@ def resolve_federal_contribution(
     Those encode a rate that is IN FORCE and expire into reading the card,
     because a rate goes out of date. This encodes an ABOLITION, which does
     not: the line was struck from the law and nothing schedules its return.
-    Giving it an end date would be the harmful choice, because three
+    Giving it an end date would be the harmful choice, because four
     residential card families still print the abolished line and would be
     billed it again the month the window closed, about 7 EUR a year each.
 

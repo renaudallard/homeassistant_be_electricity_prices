@@ -790,7 +790,7 @@ on a time correlated with its rollover second. Derived rather than randomised
 each day: an install that runs at a different time every day cannot be
 reasoned about when it fails.
 
-Cheap in the steady state. Thirteen of the seventeen suppliers publish a
+Cheap in the steady state. Fourteen of the seventeen suppliers publish a
 freshness probe, including the two slowest cards, so a day on which nothing
 was republished costs a handful of conditional requests rather than the minutes
 of fetching a cold sweep costs; cards move about monthly. No figure is pinned

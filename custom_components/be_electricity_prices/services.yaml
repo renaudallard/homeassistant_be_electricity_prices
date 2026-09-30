@@ -2,8 +2,8 @@ refresh:
   name: Refresh
   description: >-
     Force-refresh every Belgian Electricity Prices entry: drops the cached
-    supplier snapshot and TODAY's ENTSO-E prices, then re-fetches both
-    immediately. Useful after a tariff card update or to clear a temporary
+    supplier snapshot, the month cards the year-to-date cost is billed on
+    and TODAY's ENTSO-E prices, then re-fetches them immediately. Useful after a tariff card update or to clear a temporary
     fetch error without waiting for the next refresh tick. It does NOT touch
     the cache of past hourly prices that the year-to-date cost replays; that
     needs clear_history below.
@@ -13,9 +13,13 @@ refresh:
       description: >-
         Also discard the cached past hourly prices behind the year-to-date
         cost and re-fetch them. Off by default because it re-fetches every day
-        since 1 January against a rate-limited endpoint. Nothing else can
-        repair a wrong value in there: a cached day that looks complete is
-        never re-fetched on its own.
+        since 1 January (or the contract start, if the entry bills from it)
+        against a rate-limited endpoint. The days before that are not fetched
+        again, so a feed-in credit that follows the spot price per slot drops
+        out of the rolling year cost and the comparisons until a full year is
+        held again. Short of a value off the scale, which a restart discards,
+        nothing else can repair a wrong value in there: a cached day that
+        looks complete is never re-fetched on its own.
       default: false
       selector:
         boolean:
@@ -72,12 +76,13 @@ backfill_statistics:
     Populate the recorder's long-term statistics for this entry's
     price sensors and current_year_cost over a date range. Useful to
     redo a window after fixing a tariff card or to seed history
-    further back than the automatic Jan 1 anchor. Re-runs are safe:
+    further back than the automatic year-to-date anchor. Re-runs are safe:
     rows are upserted by (statistic_id, hour). Pass clear=true to
     delete the target series first when the underlying tariff
-    changed. A window ending on or before 1 January of the current
-    year rebuilds the price sensors only: a past year's cost series
-    would sit immediately before the current year's and paint a large
+    changed. A window ending on or before the start of the year-to-date
+    window (1 January, or the contract start date if the entry bills
+    from it) rebuilds the price sensors only: a cost series ending there
+    would sit immediately before the current one and paint a large
     negative cost onto the Energy dashboard at the boundary, because
     the recorder ignores last_reset on imported statistics.
   fields:
@@ -94,8 +99,9 @@ backfill_statistics:
     start:
       name: Start
       description: >-
-        First hour to backfill. Default = Jan 1 00:00 of the current
-        local year.
+        First hour to backfill. Default = the start of the year-to-date
+        window: Jan 1 00:00 of the current local year, or the contract
+        start date if the entry bills from it.
       example: "2026-01-01T00:00:00+01:00"
       selector:
         datetime:
@@ -104,9 +110,9 @@ backfill_statistics:
       description: >-
         First hour NOT to backfill (exclusive). Default = current
         hour, so the in-progress hour the live coordinator is about
-        to write itself stays untouched. Set this on or before 1
-        January of the current year and only the price sensors are
-        rebuilt (see the description above).
+        to write itself stays untouched. Set this on or before the start
+        of the year-to-date window and only the price sensors are rebuilt
+        (see the description above).
       example: "2026-05-01T00:00:00+02:00"
       selector:
         datetime:
@@ -116,11 +122,12 @@ backfill_statistics:
         Destructive: deletes EVERY existing row of the target
         statistic series, not just the requested range, and the
         re-import only repopulates the requested range. Use ONLY when
-        re-running a full year (default range = Jan 1 to now); a window
-        that starts after Jan 1 of the end year is rejected with clear
-        on, unless the window ends in a finished year -- the cost series
-        is left out of both the wipe and the re-import there, so there is
-        nothing to protect. For a narrower window, leave this off: the import upserts on
+        re-running the whole year-to-date window (the default range); a
+        window that starts after the end year's year-to-date start (Jan 1,
+        or the contract start date if the entry bills from it) is rejected
+        with clear on, unless the window ends in a finished year: the cost
+        series is left out of both the wipe and the re-import there, so
+        there is nothing to protect. For a narrower window, leave this off: the import upserts on
         (statistic_id, hour) so a re-run already overwrites the
         requested hours without touching anything outside the range.
       default: false

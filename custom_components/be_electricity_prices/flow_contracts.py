@@ -236,8 +236,9 @@ def _sweep_candidates(
     ranking only ever ranks within one group. Offering just the registered
     settlement would hide Bolt from every dynamic household and hide its
     quarter-hourly settlement from every static one, which is a row the page
-    used to have when the two were separate contract ids. Costs nothing to
-    fetch: the pair shares one document and the sweep now reads it once.
+    used to have when the two were separate contract ids. Costs nothing
+    extra to fetch: a ranking covers one kind group, so it only ever holds
+    one of the pair.
     """
     out: list[tuple[str, Contract, bool]] = []
     for ext in all_extractors():

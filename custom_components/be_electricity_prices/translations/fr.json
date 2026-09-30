@@ -642,11 +642,11 @@
   "services": {
     "refresh": {
       "name": "Rafraichir",
-      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût annuel en cours ; pour cela, utilisez Effacer l'historique des prix.",
+      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût annuel en cours est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût annuel en cours ; pour cela, utilisez Effacer l'historique des prix.",
       "fields": {
         "clear_history": {
           "name": "Effacer l'historique des prix",
-          "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût annuel en cours, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier sur un service à débit limité. À utiliser quand un coût annuel semble faux et qu'un rafraîchissement ordinaire n'y change rien."
+          "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût annuel en cours, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier (ou depuis le début du contrat, si l'entrée facture à partir de là) sur un service à débit limité. Les jours antérieurs ne sont pas récupérés à nouveau : une rémunération de l'injection qui suit le prix spot par créneau disparaît du coût annuel glissant et des comparaisons jusqu'à ce qu'une année complète soit de nouveau disponible. À utiliser quand un coût annuel semble faux et qu'un rafraîchissement ordinaire n'y change rien."
         }
       }
     },
@@ -704,7 +704,7 @@
         },
         "start": {
           "name": "Debut",
-          "description": "Premiere heure a reconstituer. Par defaut: 1er janvier 00:00 de l'annee locale en cours."
+          "description": "Premiere heure a reconstituer. Par defaut: le debut de la fenetre du cout annuel, soit le 1er janvier 00:00 de l'annee locale en cours, soit la date de debut du contrat si l'entree facture a partir de celle-ci."
         },
         "end": {
           "name": "Fin",
@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "Effacer TOUTE la serie avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour une re-execution annuelle ; une fenetre qui commence apres le 1er janvier de l'annee de fin est refusee avec clear actif, sauf si la fenetre se termine dans une annee close (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
+          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour re-executer toute la fenetre du cout annuel ; une fenetre qui commence apres le debut de la fenetre du cout annuel de l'annee de fin (le 1er janvier, ou la date de debut du contrat si l'entree facture a partir de celle-ci) est refusee avec clear actif, sauf si la fenetre se termine dans une annee close (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
         }
       }
     }

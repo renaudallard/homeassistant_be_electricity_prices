@@ -11,7 +11,8 @@ It computes the true all-in residential electricity price, and the solar injecti
 credit, for a Belgian household. It fuses three live inputs per refresh:
 
 1. A **supplier tariff snapshot** (the energy formula), fetched from each supplier's
-   own published tariff card. No EUR values are hardcoded anywhere in the source.
+   own published tariff card. No supplier EUR value is hardcoded in the source; the only EUR
+   rates in it are the regulated federal excise and Flemish network ceiling.
 2. The user's **DSO** (distribution grid operator) sub-area network and capacity
    overlay, parsed from the same card.
 3. Federal and regional **taxes and levies**, plus (for solar) the **injection**
