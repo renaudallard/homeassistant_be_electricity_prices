@@ -322,7 +322,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 | Key | Type | Meaning | Read by |
 |-----|------|---------|---------|
 | `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py`, `binary_sensor.py`) |
-| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py`; window sizing in `__init__.py` |
+| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor_values.py`; window sizing in `__init__.py` |
 | `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py`) |
 | `signing_card` | `str` | the card the cohort month resolved to; empty when the entry names none | `current_price` sensor attribute, diagnostics `coordinator` block |
 | `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py`) |
@@ -363,7 +363,7 @@ The current-slot sensors (`current_price`, `energy_component`, `network_componen
 - **Dynamic** (`coordinator_tick.py`): one breakdown per spot returned by ENTSO-E; the table's resolution follows the spot grid (15-minute for quarter-hourly suppliers).
 - **Static/TOU/Impact** (`coordinator_tick.py`): iterate UTC from local midnight to the start of the day after tomorrow, one slot per clock hour, so DST seams keep the wall-clock gap correct (47 slots spring-forward, 49 fall-back, 48 otherwise). The local-midnight anchor makes `today_min`/`today_max`/`today_average` cover the full local day rather than "now to midnight".
 
-The entities, not the coordinator, do the current/next-slot lookup. `sensor.py` truncates `utcnow()` to the slot with `slot_start(..., data.resolution)`, reads the exact slot, and if it is missing accepts the nearest slot within one slot width (`max_gap` 3600 s hourly, 900 s quarter-hourly, `sensor.py`). `next_hour_price` targets `slot_start(now) + 1h` (`sensor.py`).
+The entities, not the coordinator, do the current/next-slot lookup. `sensor_values.py` truncates `utcnow()` to the slot with `slot_start(..., data.resolution)`, reads the exact slot, and if it is missing accepts the nearest slot within one slot width (`max_gap` 3600 s hourly, 900 s quarter-hourly, `sensor.py`). `next_hour_price` targets `slot_start(now) + 1h` (`sensor.py`).
 
 ### 5.1 Slot-boundary push
 

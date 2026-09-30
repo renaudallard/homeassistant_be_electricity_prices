@@ -145,18 +145,18 @@ pulls (all fields defined at `coordinator_data.py`).
 
 ### Current-slot selection and the nearest-slot guard
 
-`_current_slot_value` (`sensor.py`) looks a per-slot table up at
+`_current_slot_value` (`sensor_values.py`) looks a per-slot table up at
 `slot_start(utcnow, resolution)`. On an exact miss it falls back to the
 temporally nearest slot but only within one billing slot of "now": `max_gap` is
 3600 s on an hourly contract and 900 s on a quarter-hourly one
-(`sensor.py`). This bound stops a stale spot cache from surfacing
+(`sensor_values.py`). This bound stops a stale spot cache from surfacing
 yesterday's last slot as "current"; a fixed 1 h window used to let a
 quarter-hourly sensor present an up-to-45-min-stale slot as current. The 1 h
 hourly window also absorbs the DST seam.
 
-Two sensors read the clock through it: `_current` (`sensor.py`) over
+Two sensors read the clock through it: `_current` (`sensor_values.py`) over
 `data.hourly` for the price sensors, and `_current_injection`
-(`sensor.py`) over `data.injection_hourly` for `injection_price`. Reading
+(`sensor_values.py`) over `data.injection_hourly` for `injection_price`. Reading
 the clock at state time rather than at refresh time is what keeps them on the
 slot the user is billed for, since the coordinator's own tick is a plain
 60-minute interval anchored on setup (`__init__.py`). `injection_price`
@@ -168,16 +168,16 @@ use, so the state shows an adjacent slot's rate; the tick's scalar survives
 only as the last resort, for the flat contracts that emit no array at all and
 for a table with nothing inside the window.
 
-`_next_hour` (`sensor.py`) targets `slot_start(now) + 1h`. On a 15-minute
+`_next_hour` (`sensor_values.py`) targets `slot_start(now) + 1h`. On a 15-minute
 contract that deliberately stays the same quarter one hour later, so the sensor
 keeps its "next hour" meaning rather than becoming "next 15 minutes". If that
 exact slot is absent the sensor is `None` (no nearest-slot fallback).
 
-The today/tomorrow scalar sensors (`_bucket`, `sensor.py`) reduce over every
+The today/tomorrow scalar sensors (`_bucket`, `sensor_values.py`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
-The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py`),
+The three tomorrow sensors go through `_tomorrow_bucket` (`sensor_values.py`),
 which returns `None` unless `_has_tomorrow(data)` holds. Reusing the binary
 sensor's own predicate rather than repeating its `snapshot_valid_until` check
 makes the invariant exact: a `tomorrow_*` sensor has a value precisely when
@@ -216,12 +216,12 @@ The payload:
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
 rounded to 6 decimals, `pricing.py`). `cheapest_4h_today` /
-`most_expensive_4h_today` rows are `{start, price}` (`sensor.py`).
+`most_expensive_4h_today` rows are `{start, price}` (`sensor_values.py`).
 
 Quarter-hourly vs hourly payloads: `today` and `tomorrow` carry the grid the
 contract settles on, 96 rows a day on a quarter-hourly one. `cheapest_4h_today`
 and `most_expensive_4h_today` stay hourly through `_hourly_view`
-(`sensor.py`), which averages each hour's four slots into one breakdown --
+(`sensor_values.py`), which averages each hour's four slots into one breakdown --
 they are counted in HOURS, and ranking the native slots and taking four would
 turn "the cheapest four hours" into the cheapest one.
 
@@ -236,12 +236,12 @@ the recorded remainder, which runs about 6 KB; a test measures both halves so
 a future attribute added without excluding it fails loudly rather than costing
 every other attribute its history (an over-cap state stores none of them).
 
-`_today_ranked` (`sensor.py`) guarantees the cheapest and dearest lists are
+`_today_ranked` (`sensor_values.py`) guarantees the cheapest and dearest lists are
 disjoint (cheapest take their share first) and breaks price ties on the hour so
 the result is deterministic across reloads. Gotcha for automation authors: on a
 flat tariff where every hour rounds to the same all-in price the tie-break makes
 "cheapest" simply the first N hours and "most expensive" the last N; the source
-comment (`sensor.py`) says to treat the output as undefined when prices do
+comment (`sensor_values.py`) says to treat the output as undefined when prices do
 not actually vary across the day.
 
 #### `injection_price`

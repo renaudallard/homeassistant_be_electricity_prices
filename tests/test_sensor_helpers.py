@@ -39,7 +39,7 @@ from custom_components.be_electricity_prices.binary_sensor import _has_tomorrow
 from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
-from custom_components.be_electricity_prices.sensor import (
+from custom_components.be_electricity_prices.sensor_values import (
     _current,
     _current_injection,
     _hourly_view,

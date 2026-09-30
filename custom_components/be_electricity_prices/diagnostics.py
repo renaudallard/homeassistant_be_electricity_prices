@@ -58,7 +58,7 @@ from .snapshot_store import (
     _shared_failed_fetches,
 )
 from .pricing import breakdown_row
-from .sensor import _current_injection
+from .sensor_values import _current_injection
 
 TO_REDACT = {CONF_API_KEY}
 

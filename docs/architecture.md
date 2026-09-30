@@ -119,6 +119,7 @@ relative to that package directory.
 | `backfill_cost.py` | The cost half, which is the long one: a cost is a running sum, so a row written into the middle of a year has to continue the total before it and leave the total after it consistent. |
 | `const.py` | All constants and config keys: `DOMAIN`, `PLATFORMS`, region and DSO keys, `CONF_*` option keys, meter types, DSO tariff modes, solar regimes, resolution tokens, TTLs, and the ENTSO-E endpoint. Intentionally holds zero prices. |
 | `sensor.py` | The sensor platform: current price, next-hour price, year-to-date cost, injection price, fixed-fee and energy-fund sensors, and diagnostic sensors. |
+| `sensor_values.py` | What the price sensors read off `CoordinatorData`: the current and next slot, the day's and tomorrow's average, minimum and maximum, the cheapest and dearest hours, and the today / tomorrow tables. |
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
 | `button.py` | A refresh button entity that forces an immediate snapshot re-fetch for the entry. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key. |

@@ -1244,7 +1244,7 @@ data (`injection.py`). Priority:
 This scalar is resolved once per coordinator tick, so it is not what the
 `injection_price` sensor publishes when the injection varies intra-day. There the
 sensor indexes `injection_hourly` at the current slot (`_current_injection`,
-`sensor.py`), the same way the price sensors index `hourly`, nearest-slot
+`sensor_values.py`), the same way the price sensors index `hourly`, nearest-slot
 guard included: an unpriced slot resolves to an adjacent slot's rate, and the
 scalar is reached only for a flat contract, which emits no array at all, or when
 nothing lies inside the guard's window. Beware that a dynamic contract with a
