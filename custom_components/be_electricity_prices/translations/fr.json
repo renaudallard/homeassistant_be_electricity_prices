@@ -233,7 +233,7 @@
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
-      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût de l'année ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
     }
@@ -257,7 +257,7 @@
       "start_date_before_switch": "La date de début du contrat ne peut pas précéder le dernier changement de fournisseur enregistré sur cette entrée.",
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
-      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût de l'année ne peut pas répartir votre consommation et se limite aux frais fixes.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
       "whatif_volumes_required": "Chiffrer un autre régime demande vos volumes annuels prélevés et injectés en kWh: aucun compteur d'injection n'est associé à cette entrée, ils ne peuvent donc pas être lus.",
@@ -642,11 +642,11 @@
   "services": {
     "refresh": {
       "name": "Rafraîchir",
-      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût annuel en cours est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût annuel en cours ; pour cela, utilisez Effacer l'historique des prix.",
+      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût de l'année est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût de l'année ; pour cela, utilisez Effacer l'historique des prix.",
       "fields": {
         "clear_history": {
           "name": "Effacer l'historique des prix",
-          "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût annuel en cours, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier (ou depuis le début du contrat, si l'entrée facture à partir de là) sur un service à débit limité. Les jours antérieurs ne sont pas récupérés à nouveau : une rémunération de l'injection qui suit le prix spot par créneau disparaît du coût annuel glissant et des comparaisons jusqu'à ce qu'une année complète soit de nouveau disponible. À utiliser quand un coût annuel semble faux et qu'un rafraîchissement ordinaire n'y change rien."
+          "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût de l'année, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier (ou depuis le début du contrat, si l'entrée facture à partir de là) sur un service à débit limité. Les jours antérieurs ne sont pas récupérés à nouveau : une rémunération de l'injection qui suit le prix spot par créneau disparaît du coût annuel glissant et des comparaisons jusqu'à ce qu'une année complète soit de nouveau disponible. À utiliser quand le coût de l'année semble faux et qu'un rafraîchissement ordinaire n'y change rien."
         }
       }
     },
@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Backfill des statistiques",
-      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entrée sur une plage de dates, afin que le tableau de bord Énergie affiche un historique antérieur au premier tick de l'intégration. Le coût n'est reconstitué que dans la fenêtre du coût annuel en cours (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
+      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entrée sur une plage de dates, afin que le tableau de bord Énergie affiche un historique antérieur au premier tick de l'intégration. Le coût n'est reconstitué que dans la fenêtre du coût de l'année (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
       "fields": {
         "entry_id": {
           "name": "ID de l'entrée",
@@ -704,15 +704,15 @@
         },
         "start": {
           "name": "Début",
-          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût annuel, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée facture à partir de celle-ci."
+          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût de l'année, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée facture à partir de celle-ci."
         },
         "end": {
           "name": "Fin",
-          "description": "Première heure NON reconstituée (exclusif). Par défaut: heure courante. Au plus tard au début de la fenêtre du coût annuel, seuls les capteurs de prix sont reconstitués."
+          "description": "Première heure NON reconstituée (exclusif). Par défaut: heure courante. Au plus tard au début de la fenêtre du coût de l'année, seuls les capteurs de prix sont reconstitués."
         },
         "clear": {
           "name": "Effacer TOUTE la série avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût annuel ; une fenêtre qui commence après le début de la fenêtre du coût annuel de l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût annuel en cours (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
+          "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût de l'année ; une fenêtre qui commence après le début de la fenêtre du coût de l'année pour l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût de l'année (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
         }
       }
     }
