@@ -330,7 +330,7 @@
       },
       "compare_api_key": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Dieser Vergleich benötigt ENTSO-E day-ahead Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfügen, damit die Spotpreise abgerufen werden können. Der Token wird nur für diesen Vergleich verwendet, nicht gespeichert. Lassen Sie das Feld leer, um ohne Token fortzufahren: ein am Spotpreis indexierter Vertrag erhält dann keinen Preis, und eine Einspeisevergütung, die dem Spotpreis folgt, wird weggelassen, wie das Ergebnis vermerkt.",
+        "description": "Dieser Vergleich benötigt ENTSO-E day-ahead Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfügen, damit die Spotpreise abgerufen werden können. Der Token wird nur für diesen Vergleich verwendet, nicht gespeichert. Lassen Sie das Feld leer, um ohne Token fortzufahren: ein am Spotpreis indexierter Vertrag erhält dann keinen Preis, eine Einspeisevergütung, die je Zeitfenster dem Spotpreis folgt, wird weggelassen, wie das Ergebnis vermerkt, und eine auf einen Monatsmittelwert indexierte wird zu dem Betrag berechnet, den die Tarifkarte druckt.",
         "data": {
           "api_key": "ENTSO-E API-Schlüssel"
         }

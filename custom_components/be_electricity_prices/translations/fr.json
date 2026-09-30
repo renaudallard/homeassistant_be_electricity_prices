@@ -330,7 +330,7 @@
       },
       "compare_api_key": {
         "title": "Comparer un autre fournisseur",
-        "description": "Cette comparaison nécessite les prix day-ahead d'ENTSO-E : un contrat indexé sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), ou, en régime d'injection, un contrat dont l'injection solaire est indexée sur le spot. Collez un jeton ENTSO-E pour que les prix spot puissent être récupérés. Le jeton n'est utilisé que pour cette comparaison et n'est pas enregistré. Laissez le champ vide pour continuer sans jeton : un contrat indexé sur le spot n'obtient alors aucun prix, et une rémunération d'injection qui suit le spot est laissée de côté, comme le résultat l'indique.",
+        "description": "Cette comparaison nécessite les prix day-ahead d'ENTSO-E : un contrat indexé sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), ou, en régime d'injection, un contrat dont l'injection solaire est indexée sur le spot. Collez un jeton ENTSO-E pour que les prix spot puissent être récupérés. Le jeton n'est utilisé que pour cette comparaison et n'est pas enregistré. Laissez le champ vide pour continuer sans jeton : un contrat indexé sur le spot n'obtient alors aucun prix, une rémunération d'injection qui suit le spot par créneau est laissée de côté, comme le résultat l'indique, et une rémunération indexée sur une moyenne mensuelle est tarifée au montant imprimé sur la carte.",
         "data": {
           "api_key": "Clé API ENTSO-E"
         }
