@@ -652,7 +652,7 @@
     },
     "cheapest_window": {
       "name": "Günstigstes Zeitfenster",
-      "description": "Liefert das günstigste zusammenhängende N-Stunden-Fenster aus der Preistabelle.",
+      "description": "Liefert das günstigste zusammenhängende N-Stunden-Fenster aus der Tabelle der kommenden Preise.",
       "fields": {
         "duration_hours": {
           "name": "Dauer",
@@ -674,7 +674,7 @@
     },
     "most_expensive_window": {
       "name": "Teuerstes Zeitfenster",
-      "description": "Liefert das teuerste zusammenhängende N-Stunden-Fenster aus der Preistabelle.",
+      "description": "Liefert das teuerste zusammenhängende N-Stunden-Fenster aus der Tabelle der kommenden Preise.",
       "fields": {
         "duration_hours": {
           "name": "Dauer",

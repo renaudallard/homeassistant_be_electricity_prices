@@ -652,7 +652,7 @@
     },
     "cheapest_window": {
       "name": "Goedkoopste tijdvak",
-      "description": "Geeft het goedkoopste aaneengesloten venster van N uur in de prijstabel terug.",
+      "description": "Geeft het goedkoopste aaneengesloten venster van N uur in de prijstabel van de komende uren terug.",
       "fields": {
         "duration_hours": {
           "name": "Duur",
@@ -674,7 +674,7 @@
     },
     "most_expensive_window": {
       "name": "Duurste tijdvak",
-      "description": "Geeft het duurste aaneengesloten venster van N uur in de prijstabel terug.",
+      "description": "Geeft het duurste aaneengesloten venster van N uur in de prijstabel van de komende uren terug.",
       "fields": {
         "duration_hours": {
           "name": "Duur",
