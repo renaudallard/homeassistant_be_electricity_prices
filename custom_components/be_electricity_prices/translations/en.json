@@ -300,14 +300,14 @@
       },
       "compare": {
         "title": "Compare another supplier",
-        "description": "Pick a supplier to quote against. Region, DSO and peak stay the same as your current entry; the meter type and the solar regime can be changed on a later step to quote a what-if. Both static and dynamic suppliers are listed, so you can quote across contract kinds.",
+        "description": "Pick a supplier to quote against. Region, DSO and peak stay the same as your current entry; the meter type (unless the contract needs a smart meter) and, on an entry with solar panels, the solar regime can be changed on a later step to quote a what-if. Both static and dynamic suppliers are listed, so you can quote across contract kinds.",
         "data": {
           "supplier": "Supplier"
         }
       },
       "compare_contract": {
         "title": "Compare another supplier",
-        "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds, and your own contract is listed too: pick it to ask what the same contract would cost with a different meter type or solar regime.",
+        "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds, and your own contract is listed too: pick it to ask what the same contract would cost with a different meter type or solar regime, where those steps are offered: the meter only on a contract that does not need a smart meter, the solar regime only on an entry with solar panels.",
         "data": {
           "contract": "Contract"
         }

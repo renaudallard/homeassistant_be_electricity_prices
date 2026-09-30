@@ -300,14 +300,14 @@
       },
       "compare": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber und Spitze bleiben gleich wie beim aktuellen Eintrag; Zaehlerart und Solarregime lassen sich in einem spaeteren Schritt aendern, um eine Was-waere-wenn-Rechnung zu erhalten. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
+        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber und Spitze bleiben gleich wie beim aktuellen Eintrag; Zählerart (außer der Vertrag verlangt einen intelligenten Zähler) und, bei einem Eintrag mit Solaranlage, Solarregime lassen sich in einem späteren Schritt ändern, um eine Was-wäre-wenn-Rechnung zu erhalten. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
         "data": {
           "supplier": "Lieferant"
         }
       },
       "compare_contract": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Waehlen Sie einen Vertrag von {supplier}. Statische und dynamische Vertraege stehen zur Auswahl, sodass Sie ueber Vertragsarten hinweg vergleichen koennen, und Ihr eigener Vertrag steht ebenfalls in der Liste: waehlen Sie ihn, um zu sehen, was derselbe Vertrag mit einem anderen Zaehlertyp oder Solarregime kosten wuerde.",
+        "description": "Waehlen Sie einen Vertrag von {supplier}. Statische und dynamische Vertraege stehen zur Auswahl, sodass Sie ueber Vertragsarten hinweg vergleichen koennen, und Ihr eigener Vertrag steht ebenfalls in der Liste: waehlen Sie ihn, um zu sehen, was derselbe Vertrag mit einem anderen Zählertyp oder Solarregime kosten würde, wo diese Schritte angeboten werden: der Zähler nur bei einem Vertrag ohne Pflicht zum intelligenten Zähler, das Solarregime nur bei einem Eintrag mit Solaranlage.",
         "data": {
           "contract": "Vertrag"
         }

@@ -300,14 +300,14 @@
       },
       "compare": {
         "title": "Andere leverancier vergelijken",
-        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB en piek blijven dezelfde als bij je huidige ingang; het metertype en het zonneregime kun je in een latere stap wijzigen voor een wat-als-berekening. Zowel statische als dynamische leveranciers worden getoond, zodat je over contractsoorten heen kunt vergelijken.",
+        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB en piek blijven dezelfde als bij je huidige ingang; het metertype (tenzij het contract een digitale meter vereist) en, bij een invoer met zonnepanelen, het zonneregime kun je in een latere stap wijzigen voor een wat-als-berekening. Zowel statische als dynamische leveranciers worden getoond, zodat je over contractsoorten heen kunt vergelijken.",
         "data": {
           "supplier": "Leverancier"
         }
       },
       "compare_contract": {
         "title": "Andere leverancier vergelijken",
-        "description": "Kies een contract bij {supplier}. Zowel vaste als dynamische contracten staan in de lijst, zodat u over contracttypes heen kunt vergelijken, en uw eigen contract staat er ook bij: kies het om te zien wat hetzelfde contract zou kosten met een ander metertype of zonneregime.",
+        "description": "Kies een contract bij {supplier}. Zowel vaste als dynamische contracten staan in de lijst, zodat u over contracttypes heen kunt vergelijken, en uw eigen contract staat er ook bij: kies het om te zien wat hetzelfde contract zou kosten met een ander metertype of zonneregime, waar die stappen worden aangeboden: de meter alleen bij een contract zonder verplichte digitale meter, het zonneregime alleen bij een invoer met zonnepanelen.",
         "data": {
           "contract": "Contract"
         }

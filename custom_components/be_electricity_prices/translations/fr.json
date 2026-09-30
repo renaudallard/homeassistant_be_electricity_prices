@@ -300,14 +300,14 @@
       },
       "compare": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un fournisseur a comparer. La region, le GRD et le pic restent identiques a votre entree actuelle; le type de compteur et le regime solaire peuvent etre modifies a une etape suivante pour un calcul hypothetique. Les fournisseurs statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat.",
+        "description": "Choisissez un fournisseur a comparer. La region, le GRD et le pic restent identiques a votre entree actuelle; le type de compteur (sauf si le contrat exige un compteur intelligent) et, sur une entrée avec panneaux solaires, le régime solaire peuvent être modifiés à une étape suivante pour un calcul hypothétique. Les fournisseurs statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat.",
         "data": {
           "supplier": "Fournisseur"
         }
       },
       "compare_contract": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un contrat chez {supplier}. Les contrats statiques et dynamiques sont proposes, afin de comparer entre types de contrat, et votre propre contrat figure aussi dans la liste : choisissez-le pour savoir ce que couterait le meme contrat avec un autre type de compteur ou un autre regime solaire.",
+        "description": "Choisissez un contrat chez {supplier}. Les contrats statiques et dynamiques sont proposes, afin de comparer entre types de contrat, et votre propre contrat figure aussi dans la liste : choisissez-le pour savoir ce que couterait le meme contrat avec un autre type de compteur ou un autre régime solaire, là où ces étapes sont proposées : le compteur seulement pour un contrat qui n'exige pas de compteur intelligent, le régime solaire seulement sur une entrée avec panneaux solaires.",
         "data": {
           "contract": "Contrat"
         }
