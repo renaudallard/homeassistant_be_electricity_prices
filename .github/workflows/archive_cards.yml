@@ -11,7 +11,8 @@ on:
       backfill_months:
         description: >-
           Also mirror this many closed months before the current one from the
-          supplier archives, for months the archive does not hold yet.
+          supplier archives, for months the archive does not hold yet. At
+          most 12, the months the archive keeps.
         default: "12"
         required: false
         type: string

@@ -401,6 +401,47 @@ async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
     assert (summary.backfilled, summary.absent) == (0, 2)
 
 
+async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:
+    """A month past --keep-months would be stored only to be pruned at the
+    end of the run, and its PDFs uploaded only for the workflow to delete
+    their release: the backfill never asks for it."""
+    asked: list[date] = []
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(month)
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label=f"{month:%Y-%m}"
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_card_fetch("september 2026"),
+        fetch_for_month=fetch_for_month,
+    )
+    summary = await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        keep_months=2,
+        backfill_months=4,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert asked == [date(2026, 8, 1), date(2026, 7, 1)]
+    assert summary.backfilled == 2
+    assert (tmp_path / "cards/acme/acme_fix/wallonia/2026-07.json").exists()
+
+
 class _PdfResponse:
     status = 200
     content_length = None

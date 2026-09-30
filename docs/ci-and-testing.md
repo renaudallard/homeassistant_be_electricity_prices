@@ -1057,7 +1057,9 @@ months ago is expired.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
-months before the current one that the archive does not hold yet, and each answer is stored under
+months before the current one that the archive does not hold yet, at most `--keep-months` of
+them since a month past the retention would be stored only to be pruned and its PDFs uploaded
+only to be deleted, and each answer is stored under
 the month asked for with `_via` set to `archive` (a live capture carries `live`). A month the
 supplier answers None for is left absent, as is a card still flagged provisional (Eneco's
 estimate before the next card prints the settled index), so a later backfill fills it once it has

@@ -1542,7 +1542,8 @@ text of every page or document that parse read under
 later. Every run also mirrors the last 12 months from the supplier archives
 into it, for the months it does not hold yet, which fills a newly added
 supplier's year with no one asking and keeps those months readable should a
-supplier drop its own archive; a manual run can be told to go further back.
+supplier drop its own archive; a manual run can mirror fewer months, never
+more than the archive keeps.
 That only covers suppliers walked while they were still
 publishing: DATS 24 left the market before this archive existed, so none of
 its months are in here and they are read from its own server for as long as

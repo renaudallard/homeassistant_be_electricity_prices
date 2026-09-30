@@ -48,9 +48,9 @@ moved renders every kept card afresh the same way, since the stored texts
 are the old reader's; ``--rerender`` asks for that on demand.
 
 ``--backfill N`` also asks every supplier that keeps an archive of its own
-for the N closed months before this one, through the same
-``fetch_for_month`` the integration uses, and stores each month not held
-yet. That makes this a mirror of the supplier archives: insurance against a
+for the N closed months before this one, at most ``--keep-months``, through
+the same ``fetch_for_month`` the integration uses, and stores each month not
+held yet. That makes this a mirror of the supplier archives: insurance against a
 supplier dropping its own, and a cheap read for any month a supplier's own
 path cannot serve. It only ever holds what was walked while the supplier was
 still publishing: DATS 24 left before this script existed, so it has no rows
@@ -1671,7 +1671,9 @@ async def archive(
                 fetch_for_month = ex.fetch_for_month
                 if fetch_for_month is None or ex.id in patience.given_up:
                     continue
-                for back in range(1, backfill_months + 1):
+                # Past the retention a month would be stored only to be
+                # pruned, and its PDFs uploaded only to be deleted.
+                for back in range(1, min(backfill_months, keep_months) + 1):
                     if ex.id in patience.given_up:
                         break
                     month_id = _months_before(today, back)
@@ -1821,7 +1823,8 @@ def main() -> int:
         type=int,
         default=0,
         metavar="N",
-        help="also mirror the N closed months before this one from the supplier archives",
+        help="also mirror the N closed months before this one from the supplier "
+        "archives, at most --keep-months",
     )
     parser.add_argument(
         "--index-only",
