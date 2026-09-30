@@ -23,8 +23,8 @@ bytes the archive has not recorded yet is written to
 ``DIR/electricity-<YYYY-MM>/<sha256>.pdf``, where the month is the one the
 card is for (the month of the row that read it, so a mirrored March card
 goes to March), and the workflow uploads each directory as the assets of
-the release of that name in the cards repository shared with
-be_water_prices: one release per month of cards, about two hundred files,
+the release of that name in the cards repository shared with the gas
+and water integrations: one release per month of cards, about two hundred files,
 since a month of cards is about 100 MB and a year of them no git
 tree can hold. Where each one landed is recorded in ``<out>/pdfs.json``. A card's
 ``_sources`` entry names its PDF by digest alone; the manifest is the one
