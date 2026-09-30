@@ -931,7 +931,7 @@ successful refresh:
   supplier switch**, dated the first day it supplied you, so the months
   before stay priced on the old supplier's cards; **Edit settings** would
   price the whole year on the successor's, and is the right choice only
-  when that day was in an earlier year. Unlike the four
+  when that day was 1 January of this year or earlier. Unlike the four
   above, this one is not a failure and does not clear on a refresh — it
   clears when the entry points at a supplier that is still selling. The
   successor is only named when this integration can actually price it in
