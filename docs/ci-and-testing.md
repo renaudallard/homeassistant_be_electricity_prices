@@ -1296,7 +1296,7 @@ tmp/cards/electricity`, and commits and pushes to that repository only when its 
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
-shared with be_water_prices in which this integration owns the `electricity-` namespace: one
+shared with the gas and water integrations in which this integration owns the `electricity-` namespace: one
 release per month of cards (`electricity-YYYY-MM`, the month the card is for, whatever day it
 was captured or mirrored on) with each file named by its SHA-256. Where every file landed is
 recorded in the archive's `pdfs.json` before the commit step runs. GitHub caps a release at a thousand assets,
@@ -1304,8 +1304,8 @@ which the first backfill hit when every month's cards were filed under the month
 a month's own cards are about two hundred, so the cap is now far away, but the step still looks
 at every release of the month that exists, uploads into the last one while it has room and opens
 `electricity-YYYY-MM-2` should it ever fill; a file already present in any of them is not
-uploaded again, only recorded. Retention deletes only `electricity-` releases; the water
-integration's are not this job's. Where each file landed is merged into the manifest once per month
+uploaded again, only recorded. Retention deletes only `electricity-` releases; the gas and
+water integrations' are not this job's. Where each file landed is merged into the manifest once per month
 directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
 whole manifest for each took longer than some of the uploads.
 
@@ -1330,11 +1330,11 @@ goes through the `BE_ELECTRICITY_CARDS` token to `be_price_cards`, so nothing he
 by it and this repository's own token stays read-only. Concurrency is queued rather than cancelled
 (`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
 same day twice and lose the second push as non-fast-forward. That group only queues runs of this
-repository, and be_water_prices pushes its own archive to the same `main`, usually minutes
-apart. The two trees share one path, the root `README.md`, which each job rewrites with its own
-text; from any one base only the job whose text is not already there changes it, so at most one
-of two racing commits touches it. A rejected push therefore fetches, rebases onto the water
-commit without a conflict and tries again, up to five times, rather than losing everything the run wrote
+repository, and the gas and water integrations push their own archives to the same `main`,
+usually minutes apart. The trees share one path, the root `README.md`, which the three jobs
+write with the same text, so no racing commit changes what another wrote there. A rejected push
+therefore fetches, rebases onto the other commit without a conflict and tries again, up to five
+times, rather than losing everything the run wrote
 (`test_the_archive_push_survives_the_water_archives_push`).
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from

@@ -1534,8 +1534,8 @@ gap: it has run every morning since September 2026. It fetches every
 registered (supplier, contract, region) card exactly as the integration
 would, and commits what it parsed to
 [`be_price_cards`](https://github.com/renaudallard/be_price_cards), a
-repository shared with be_water_prices in which this integration owns the
-`electricity/` directory, as
+repository shared with the gas and water integrations in which this
+integration owns the `electricity/` directory, as
 `electricity/cards/<supplier>/<contract>/<region>/<YYYY-MM>.json`, with the
 text of every page or document that parse read under
 `electricity/texts/<YYYY-MM>/`, so a card can be re-read or checked by hand

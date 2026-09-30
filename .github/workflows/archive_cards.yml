@@ -130,11 +130,11 @@ jobs:
       - name: Keep the cards themselves
         id: keep
         # The PDFs go to the releases of be_price_cards, a repository shared
-        # with be_water_prices: this integration's releases are named
-        # electricity-<YYYY-MM> after the month the cards are for, the
-        # files by their SHA-256. A month of cards is about 100 MB, which no
-        # git tree should carry and which HACS would mistake for a release if
-        # it lived in this repository. GitHub caps a release at a thousand
+        # with the gas and water integrations: this integration's releases
+        # are named electricity-<YYYY-MM> after the month the cards are for,
+        # the files by their SHA-256. A month of cards is about 100 MB, which
+        # no git tree should carry and which HACS would mistake for a release
+        # if it lived in this repository. GitHub caps a release at a thousand
         # assets, five times what a month holds; should a month ever overflow
         # it spills into electricity-YYYY-MM-2, and pdfs.json says which
         # release holds each file. Needs a fine-grained token with contents
@@ -215,7 +215,7 @@ jobs:
             fi
           done
           # Same retention as the rows: a month older than three years goes.
-          # Only this integration's releases; the water ones are not ours.
+          # Only this integration's releases, not the gas or water ones.
           # Listed with an explicit limit: gh stops at 30 by default, and with
           # two releases a month the ones past the cutoff would sit beyond it
           # from 2029 on, never listed and never deleted.
@@ -241,17 +241,20 @@ jobs:
       - name: Write the two READMEs
         # The walk has already written the rows, the texts, the manifest and
         # the sheets into the clone. These two say what a person is looking
-        # at; the push at the end of the job sends the lot.
+        # at; the push at the end of the job sends the lot. The root README
+        # is the same text the gas and water workflows write, so none of the
+        # three rewrites another's.
         run: |
           printf '%s\n' \
             "# Price cards" \
             "" \
-            "Everything the Belgian price integrations read off a supplier's tariff card:" \
-            "the card itself, kept as a release asset named by its SHA-256, and what was" \
-            "parsed out of it. One namespace per integration:" \
+            "The tariff cards the Belgian price integrations read, kept as release assets" \
+            "named by their SHA-256. One namespace per integration, whose own README says" \
+            "what it keeps beside the cards:" \
             "" \
             "- \`electricity/\`: homeassistant_be_electricity_prices, releases \`electricity-<YYYY-MM>\`." \
-            "- \`water/\`: be_water_prices, releases \`water-<YYYY-MM>\`." \
+            "- \`gas/\`: homeassistant_be_gas_prices, releases \`gas-<YYYY-MM>\`." \
+            "- \`water/\`: homeassistant_be_water_prices, releases \`water-<YYYY-MM>\`." \
             "" \
             "Nothing here is edited by hand." \
             > tmp/cards/README.md
@@ -332,14 +335,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
-          # be_water_prices pushes to the same main, and the concurrency group
-          # only queues runs of this repository, so its daily push can land
-          # between this job's clone and this push. The two trees share one
-          # path, the root README.md, which each job rewrites with its own
-          # text. From any one base only the job whose text is not already
-          # there changes it, so at most one of the two commits touches it
-          # and rebasing onto the other is conflict-free: a rejected push
-          # fetches, rebases and tries again rather than losing the run.
+          # The gas and water archives push to the same main, and the
+          # concurrency group only queues runs of this repository, so their
+          # daily push can land between this job's clone and this push. The
+          # three trees share one path, the root README.md, which all three
+          # jobs write with the same text, so rebasing onto another job's
+          # commit is conflict-free: a rejected push fetches, rebases and
+          # tries again rather than losing the run.
           for attempt in 1 2 3 4 5; do
             git push -q origin HEAD:main && exit 0
             [ "$attempt" -lt 5 ] || break
