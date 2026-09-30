@@ -79,6 +79,7 @@ machinery.
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
 | `tests/test_window_service.py` | The offpeak/window service |
 | `tests/test_pdf_helpers.py` | Shared PDF text extraction (`providers/_pdf.py`) |
+| `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 
 Shared helpers live in `tests/__init__.py`:
 
