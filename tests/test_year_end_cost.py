@@ -495,7 +495,7 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
     first tick after 01:00, when yesterday's last hour has compiled, each
     walk again. The first tick after a start prices on the month cards
     already held, and the second walks again once they may have filled."""
-    from custom_components.be_electricity_prices import coordinator_tick
+    from custom_components.be_electricity_prices import coordinator_costs
     from custom_components.be_electricity_prices.coordinator import (
         BePricesCoordinator,
     )
@@ -521,7 +521,7 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
-        patch.object(coordinator_tick, "_compute_year_end_cost", walk),
+        patch.object(coordinator_costs, "_compute_year_end_cost", walk),
     ):
         await tick()
         freezer.tick(timedelta(minutes=5))

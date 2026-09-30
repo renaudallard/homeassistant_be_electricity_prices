@@ -82,6 +82,7 @@ from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from tests import make_entry, make_snapshot, make_stub_extractor
 
 _TICK = "custom_components.be_electricity_prices.coordinator_tick"
+_COSTS = "custom_components.be_electricity_prices.coordinator_costs"
 
 
 def _held(supplier: str, contract: str, **extra: Any) -> dict[str, Any]:
@@ -632,8 +633,8 @@ async def test_the_tick_adds_the_earlier_contract_and_reads_unknown_until_priced
         return [row]
 
     with (
-        patch(f"{_TICK}._compute_current_year_cost", new=own),
-        patch(f"{_TICK}.price_previous_periods", new=pricing),
+        patch(f"{_COSTS}._compute_current_year_cost", new=own),
+        patch(f"{_COSTS}.price_previous_periods", new=pricing),
         patch(f"{_TICK}._cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))),
         patch.object(coord, "_save_persistent", AsyncMock()),
     ):
@@ -760,7 +761,7 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
     fill = AsyncMock()
     coord._ensure_historical_spots = fill  # type: ignore[method-assign]
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
-    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
+    with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
     fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
 
@@ -806,7 +807,7 @@ async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spot
     coord._ensure_historical_spots = fill  # type: ignore[method-assign]
     coord._ensure_rlp_weights = AsyncMock()  # type: ignore[method-assign]
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
-    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
+    with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
     if fetched:
         fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
@@ -844,7 +845,7 @@ async def test_an_old_contract_settled_on_a_weighted_mean_loads_the_profile(
     coord._ensure_rlp_weights = rlp  # type: ignore[method-assign]
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
     assert contract_periods.periods_need_rlp(periods) is loaded
-    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[])):
+    with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
     if loaded:
         rlp.assert_awaited_once_with(coord._rlp_blend)
@@ -1152,7 +1153,7 @@ async def test_a_stand_in_keeps_the_pricing_on_its_own_cards_and_is_asked_again(
         month=date(2026, 9, 1),
         rows=(own,),
     )
-    with patch(f"{_TICK}.price_previous_periods", AsyncMock(return_value=[stand_in])):
+    with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[stand_in])):
         coord._schedule_previous_pricing(periods, today)
         assert coord._previous_pricing is not None
         await coord._previous_pricing
@@ -1206,7 +1207,7 @@ async def test_a_stand_in_for_cards_no_archive_kept_is_priced_once_a_day(
         stand_in=True,
     )
     priced = AsyncMock(return_value=[stand_in])
-    with patch(f"{_TICK}.price_previous_periods", priced):
+    with patch(f"{_COSTS}.price_previous_periods", priced):
         coord._schedule_previous_pricing(periods, today)
         assert coord._previous_pricing is not None
         await coord._previous_pricing

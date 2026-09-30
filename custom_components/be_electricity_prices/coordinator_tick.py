@@ -25,109 +25,70 @@
 
 """One update tick, start to finish.
 
-Fetches the card, resolves the past months, prices the day, and assembles the
-CoordinatorData every sensor reads. The background fills that the first tick
-defers live here too: setup runs on Home Assistant's stage-2 budget, so the
-tick answers from the cache and finishes the slow walks afterwards.
+Fetches the card, resolves the signing cohort, then hands the day's prices to
+``coordinator_prices`` and the bills to ``coordinator_costs``, and assembles
+the CoordinatorData every sensor reads from what they return. What only the
+tick decides stays here: the repairs it raises and the static band rates.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .const import (
     CONF_CARD_ARCHIVE,
     DEFAULT_CARD_ARCHIVE,
-    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
     CONF_REGION,
-    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DEFAULT_EV_HOME_CHARGING_RATE,
-    DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
-    SOLAR_REGIME_COMPENSATION,
-    SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
 from .coordinator_data import (
     CoordinatorData,
     month_window_reset,
-    month_window_start,
     ytd_window_reset,
 )
 from .providers import (
-    DynamicRates,
-    SpotMonthlyRates,
     SupplierSnapshot,
     get as get_extractor,
 )
 from .providers._rates import EnergyRates
-from .api import EntsoeAuthError, EntsoeError
 from collections.abc import Iterable
 from .pricing import (
     PriceBreakdown,
-    compute_breakdown,
     static_breakdown,
     yearly_fixed_fee_for_meter,
 )
-from .snapshot_store import SNAPSHOT_STALE_DAYS, _monthly_snapshots, cached_month_card
-from datetime import UTC, date, datetime, timedelta
+from .snapshot_store import SNAPSHOT_STALE_DAYS, cached_month_card
+from datetime import date, datetime
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
-    _bake_monthly_injection,
     _compute_injection_price,
-    _injection_bakes_to_month_mean,
-    _injection_needs_month_spot,
-    _injection_needs_spot,
-    _injection_price_for_slot,
-    _injection_varies_intraday,
     _static_injection_bands,
 )
 from .cohort import (
     _cohort_legs,
-    _effective_snapshot_for_month,
     _tariff_card_month,
-    signing_month_snapshot,
-    ytd_window_start,
 )
 from .fees import _compute_capacity, _compute_prosumer
-from .ytd_cost import _compute_current_year_cost
 from .contract_periods import (
-    ContractPeriod,
     PricedPeriods,
-    current_period_start,
-    keep_settled,
-    periods_key,
-    periods_need_rlp,
-    periods_need_spots,
-    previous_costs,
-    previous_periods,
     previous_rows,
-    price_previous_periods,
 )
-from .projected_cost import _compute_projected_year_cost
-from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
-from .year_end_cost import _compute_year_end_cost
 from .spot_stats import (
     _energy_is_quarter_hourly,
-    _energy_is_rlp_indexed,
-    _injection_is_spp_indexed,
-    _injection_on_month_mean,
-    _rlp_blend_for,
-    _spp_weighting_enabled,
 )
-from .snapshot_months import archived_months_present
-import asyncio
 from homeassistant.util import dt as dt_util
 from .brugel import ensure_power_term
 from .vat_rates import ensure_vat_rates
@@ -136,11 +97,11 @@ from .creg_ev import (
     quarter_start as ev_quarter_start,
     rate_for as ev_rate_for,
 )
-from .synergrid import RlpWeights, SppWeights
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import aiohttp
 import logging
+from .coordinator_costs import TickCosts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,34 +112,17 @@ class _TickMixin:
     # State the concrete class owns, declared as BARE annotations with no
     # value: a valued class attribute would change hasattr() and instance-dict
     # behaviour. __init__ over there is what actually creates these.
-    _historical_spot_quarters: dict[datetime, list[float]]
-    _historical_spots: dict[datetime, float]
     _last_error: str
     _peak_kw: float
     _peak_month: date | None
     _previous_priced: PricedPeriods | None
-    _previous_pricing: asyncio.Task[None] | None
-    _previous_tried: tuple[str, datetime] | None
-    _year_end_memo: tuple[tuple[Any, ...], float | None, dict[str, Any]] | None
     _priced: SupplierSnapshot | None
-    _rlp_blend: str
-    _rlp_fetched_at: datetime | None
-    _rlp_weights: RlpWeights
-    _rlp_weights_year: int | None
     _session: aiohttp.ClientSession
     _snapshot: SupplierSnapshot | None
     _snapshot_raw: SupplierSnapshot | None
     _spot_source: str
-    _spp_fetched_at: datetime | None
-    _spp_weights: SppWeights
-    _spp_weights_year: int | None
-    _supplier_tuple: tuple[str, str, str]
     entry: ConfigEntry
     _card_read_by_ocr: bool
-    _month_cards_deferred: bool
-    _profiles_deferred: bool
-    _unloaded: bool
-    _year_spots_deferred: bool
     hass: HomeAssistant
 
     if TYPE_CHECKING:
@@ -188,35 +132,14 @@ class _TickMixin:
         # one mixin composed anywhere else is the profiles mixin, which the
         # spots mixin extends.
         async def _ensure_annual_volume(self) -> None: ...
-        async def _ensure_historical_spots(
-            self, start: date, end: date, api_key: str | None = None
-        ) -> None: ...
-        async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
-        async def _ensure_spp_weights(self) -> None: ...
-        async def _fetch_spot_prices(self) -> dict[datetime, float]: ...
         async def _maybe_refresh_snapshot(self) -> None: ...
         async def _save_persistent(self) -> None: ...
         async def _track_monthly_peak(self) -> None: ...
-        async def async_request_refresh(self) -> "None": ...
         def _billed_peak_kw(self) -> float: ...
-        def _fallback_spots(self) -> dict[datetime, float]: ...
-        def _monthly_spot_mean(
-            self, year: int, month: int, extra_spots: dict[datetime, float]
-        ) -> float | None: ...
         def _peak_terms(self) -> list[float]: ...
         def _refresh_custom_snapshot(self) -> None: ...
         def _reresolve_snapshot(self) -> None: ...
-        def _rlp_weighted_month_mean(
-            self,
-            year: int,
-            month: int,
-            extra_spots: dict[datetime, float],
-            blend: str | None = None,
-        ) -> float | None: ...
         def _snapshot_age_hours(self) -> float: ...
-        def _spp_weighted_month_mean(
-            self, year: int, month: int, extra_spots: dict[datetime, float]
-        ) -> float | None: ...
         def _supply_ended(self) -> bool: ...
         def _sync_brussels_power_term_issue(self) -> None: ...
         def _sync_connection_fee_issue(self) -> None: ...
@@ -224,21 +147,54 @@ class _TickMixin:
         def _sync_direct_debit_unanswered_issue(
             self, signing: SupplierSnapshot | None
         ) -> None: ...
-        def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None: ...
         def _sync_exclusive_night_gap_issue(self) -> None: ...
-        def _sync_extractor_issue(
-            self,
-            message: str | None,
-            *,
-            transient: bool = False,
-            unreadable: bool = False,
-        ) -> None: ...
         def _sync_impact_gap_issue(self) -> None: ...
         def _sync_prosumer_gap_issue(self) -> None: ...
         def _sync_compensation_kva_issue(self) -> None: ...
         def _sync_register_pair_issue(self) -> None: ...
         def _sync_stale_issue(self, stale: bool) -> None: ...
-        def _ytd_months(self, today: date) -> list[date]: ...
+        def _build_hourly(
+            self,
+            snap: SupplierSnapshot,
+            spot_prices: dict[datetime, float],
+            monthly_mean: float | None = None,
+        ) -> dict[datetime, PriceBreakdown]: ...
+        def _build_injection_hourly(
+            self,
+            injection_snapshot: SupplierSnapshot,
+            energy: EnergyRates,
+            spot_prices: dict[datetime, float],
+            grid_keys: Iterable[datetime],
+        ) -> dict[datetime, float]: ...
+        async def _tick_costs(
+            self,
+            priced: SupplierSnapshot,
+            injection_snapshot: SupplierSnapshot,
+            energy_mean: float | None,
+            spp_weighted: bool,
+            rlp_weighted: bool,
+            allocating: bool,
+            billed_peak: float,
+        ) -> TickCosts: ...
+        def _tick_injection_leg(
+            self,
+            priced: SupplierSnapshot,
+            spot_prices: dict[datetime, float],
+            plain_mean: float | None,
+            spp_weighted: bool,
+        ) -> SupplierSnapshot: ...
+        def _tick_month_means(
+            self,
+            priced: SupplierSnapshot,
+            spot_prices: dict[datetime, float],
+            rlp_weighted: bool,
+        ) -> tuple[float | None, float | None]: ...
+        async def _tick_profiles(
+            self, priced: SupplierSnapshot, spot_prices: dict[datetime, float]
+        ) -> tuple[bool, bool, bool]: ...
+        async def _tick_spot_prices(
+            self, priced: SupplierSnapshot
+        ) -> dict[datetime, float]: ...
 
     async def _update_body(self) -> CoordinatorData:
         self._sync_deprecated_supplier_issue()
@@ -329,242 +285,13 @@ class _TickMixin:
         # runs; the resolution below is read off the same leg.
         self._priced = priced
 
-        spot_prices: dict[datetime, float] = {}
-        # Auth + extractor issue clear paths run OUTSIDE the
-        # DynamicRates branch so that an existing Repairs entry
-        # auto-resolves regardless of how the snapshot got refreshed
-        # this tick (sibling-cache adoption, self-fresh probe match,
-        # or a fresh fetch). Reaching this point with no live
-        # ``_last_error`` means the extractor produced a clean
-        # snapshot; the cycle-7 entsoe_auth_failed clear is
-        # unconditional because that issue can only ever be set by
-        # one of the two spot fetches below, each on its own failure.
-        #
-        # The extractor clear is gated on ``_last_error`` because
-        # _maybe_refresh_snapshot raises the same Repairs issue when
-        # a fresh fetch fails but a cached snapshot is still usable
-        # (the kept-cached path). Without the gate the unconditional
-        # clear immediately undoes that legitimate alert.
-        self._sync_entsoe_auth_issue(False)
-        if not self._last_error:
-            self._sync_extractor_issue(None)
-        if isinstance(priced.energy, (DynamicRates, SpotMonthlyRates)):
-            # Both the live per-slot price (dynamic) and the flat monthly rate
-            # (spot-monthly, from the month mean) need ENTSO-E spots, so they
-            # share the hard-fail-on-cold-start path.
-            try:
-                spot_prices = await self._fetch_spot_prices()
-                if (self._last_error or "").startswith("ENTSO-E:"):
-                    # The blip a previous tick recorded has cleared. Only that
-                    # message: a probe match clears an extractor error, and
-                    # on a probe-less supplier nothing else did, so the blip
-                    # sat on the sensor for up to the 24 h TTL. An extractor
-                    # failure kept from this tick is not the spot fetch's to
-                    # erase.
-                    self._last_error = ""
-            except EntsoeAuthError as err:
-                self._sync_entsoe_auth_issue(True, str(err))
-                raise UpdateFailed(f"ENTSO-E auth: {err}") from err
-            except EntsoeError as err:
-                # A transient ENTSO-E outage must not blank the entry: the
-                # last good day-ahead curve is still usable for breakdown
-                # computation, whether this session fetched it or it came
-                # back from the Store after a restart. Only fail when nothing
-                # on hand actually covers today: _fallback_spots refuses a
-                # curve from an earlier day rather than pricing today off it.
-                self._last_error = f"ENTSO-E: {err}"
-                _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
-                spot_prices = self._fallback_spots()
-                if not spot_prices:
-                    raise UpdateFailed(f"ENTSO-E: {err}") from err
-        elif _injection_needs_spot(
-            self._snapshot, self.entry
-        ) or _injection_needs_month_spot(self._snapshot, self.entry):
-            # Static-energy contract whose injection carries its own index:
-            # Cociter Variable per hour, energie.be Vast on the month's
-            # Belpex_SPP. The energy is priced without a spot, so
-            # a spot failure (missing key, ENTSO-E outage) must NOT tear
-            # the entry down: only the
-            # injection credit goes unavailable. Fetch softly, falling
-            # back to the cached curve, then to no injection price.
-            try:
-                spot_prices = await self._fetch_spot_prices()
-            except (EntsoeError, EntsoeAuthError) as err:
-                _LOGGER.debug(
-                    "injection spot fetch failed (energy unaffected): %s", err
-                )
-                if isinstance(err, EntsoeAuthError):
-                    # A rejected key is not an outage: the credit stays out
-                    # until the key is replaced, and the key step promised a
-                    # notice when that happens.
-                    self._sync_entsoe_auth_issue(True, str(err))
-                spot_prices = self._fallback_spots()
-
-        # The contracts the household held earlier this year, when it recorded
-        # a switch. Their days are priced off the tick (_price_previous), but
-        # the gates below decide on the load profile and the year's spots
-        # first, and an old dynamic contract needs those whatever this one does.
-        gate_day = dt_util.now().date()
-        gate_periods = previous_periods(
-            self.entry.data, ytd_window_start(self.entry, gate_day), gate_day
+        spot_prices = await self._tick_spot_prices(priced)
+        spp_weighted, rlp_weighted, allocating = await self._tick_profiles(
+            priced, spot_prices
         )
-
-        # Refresh the Synergrid SPP profile when this entry's injection is
-        # SPP-weighted: a card that indexes on Belpex_SPP, or a custom monthly
-        # entry that opted in. Soft-fail. What a failure degrades TO differs -
-        # the opt-in falls back to the plain mean, an SPP-indexed card must
-        # not and keeps its printed indicative instead (see the bake below).
-        # Asked of the priced leg: a signing cohort's feed-in reads the index
-        # its own card names. Not every gate here does: the spot fetches and
-        # the bake's SPP-only and indicative tests read today's card, and the
-        # per-hour test reads today's energy kind with the priced leg, which it
-        # must (see _injection_hourly_on_cohort).
-        spp_weighted = _spp_weighting_enabled(self.entry, priced)
-        # Only worth the download when there are prices to weight. energie.be
-        # Vast offers its ENTSO-E key as optional, so an entry that skipped it
-        # reaches here with no spots at all and would otherwise pull 52 MB to
-        # weight nothing, every restart.
-        wants_spp = bool(spp_weighted and (spot_prices or self._historical_spots))
-        # And the RLP profile when the ENERGY leg resolves against the
-        # RLP-weighted month mean (Eneco Flex and Flex One, whose Belpex-RLP-M
-        # weights each hour's Belpex by the residential load profile). Same
-        # soft-fail: without the profile the plain mean stands in, which is
-        # what every RLP card was priced on before.
-        rlp_weighted = _energy_is_rlp_indexed(priced.energy)
-        # A compensation entry wants the same profile for another reason: its
-        # yearly net is settled by spreading the volume over the year on it.
-        allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
-        wants_rlp = bool(
-            (rlp_weighted and (spot_prices or self._historical_spots))
-            or allocating
-            or periods_need_rlp(gate_periods)
+        plain_mean, energy_mean = self._tick_month_means(
+            priced, spot_prices, rlp_weighted
         )
-        blend = _rlp_blend_for(priced.energy)
-        # FIRST tick only, same reason as the spots and the archived cards
-        # above: this one runs inside config-entry setup. A cold profile is
-        # 18 s of download and xlsb parse on a Raspberry Pi, and every
-        # compensation entry wants one. The flag is cleared whether or not a
-        # profile is wanted, so only the tick setup waits on can defer.
-        first_tick = self._profiles_deferred
-        self._profiles_deferred = False
-        if first_tick and (wants_spp or wants_rlp):
-            self.entry.async_create_background_task(
-                self.hass,
-                self._fill_profiles(wants_spp, wants_rlp, blend),
-                f"{DOMAIN}_profiles_{self.entry.entry_id}",
-            )
-        else:
-            if wants_spp:
-                await self._ensure_spp_weights()
-            if wants_rlp:
-                await self._ensure_rlp_weights(blend)
-
-        # A spot-monthly contract bills a flat rate = factor * this month's
-        # mean spot + base. Compute the running mean once (over the persisted
-        # year-to-date hours plus today's fetched curve) and reuse it for the
-        # live price table and for baking the mean-indexed injection.
-        # Dynamic contracts replay historical hourly spots to bill the
-        # YTD energy term; spot-monthly contracts average them per month;
-        # static-energy contracts with a spot-indexed injection replay them
-        # to credit the YTD injection. Backfill any missing hours in
-        # [Jan 1, today] before anything reads the cache; failures degrade to
-        # "no data" for those hours rather than tearing the tick down.
-        #
-        # This has to run BEFORE the monthly mean below. _monthly_spot_mean
-        # averages self._historical_spots, and this is the only thing that
-        # fills it, so computing the mean first made a tick that started with
-        # an empty cache average today's curve alone and call it the month.
-        # On a cold start that flat rate was ~46% off, and it is what the
-        # whole today+tomorrow table and the baked injection credit use until
-        # the next tick.
-        if (
-            isinstance(priced.energy, (DynamicRates, SpotMonthlyRates))
-            or _injection_needs_spot(self._snapshot, self.entry)
-            or _injection_needs_month_spot(self._snapshot, self.entry)
-            or periods_need_spots(gate_periods)
-        ):
-            today_local = dt_util.now().date()
-            # An entry billing from its contract start date has no use for a
-            # spot before it: nothing prices those hours, so fetching them is
-            # the one thing issue #84 asked not to happen.
-            spots_from = ytd_window_start(self.entry, today_local)
-            if self._year_spots_deferred:
-                # FIRST tick only, and it is the one the user is watching:
-                # async_config_entry_first_refresh runs inside setup, which the
-                # config flow's final step waits on, so a cold cache spent that
-                # step fetching 35 week-chunks: minutes of a spinner on a
-                # fresh install, and far longer while ENTSO-E was down.
-                #
-                # Fetch the current month here, because the monthly mean below
-                # is computed for this month and nothing else can stand in for
-                # it, then fill the rest of the year in the background. What
-                # the deferral costs is the year-to-date's past hours on this
-                # one tick: they bill their network and tax legs and forfeit
-                # only the energy term, exactly as a cold cache already does,
-                # and the refresh the fill requests puts them back.
-                self._year_spots_deferred = False
-                # And bounded, because scoping the window is not the same as
-                # bounding the wait. Each week-chunk carries a 30 s client
-                # timeout and a chunk that times out is logged and followed by
-                # the next one, so a month is five of them plus the keyless
-                # fallback: about 180 s against a supplier that hangs rather
-                # than refuses, inside the same 300 s bootstrap budget issue
-                # #88 was cancelled by. On the deadline this keeps whatever
-                # chunks did land: they are merged per chunk, and the fill
-                # below asks for the rest, which is the arrangement the year
-                # already had.
-                try:
-                    async with asyncio.timeout(_FIRST_TICK_SPOT_BUDGET):
-                        await self._ensure_historical_spots(
-                            max(
-                                spots_from,
-                                date(today_local.year, today_local.month, 1),
-                            ),
-                            today_local,
-                        )
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "Day-ahead history for %s was still fetching after %ds "
-                        "during setup; continuing in the background",
-                        self.entry.title,
-                        int(_FIRST_TICK_SPOT_BUDGET),
-                    )
-                self.entry.async_create_background_task(
-                    self.hass,
-                    self._fill_year_spots(),
-                    f"{DOMAIN}_year_spots_{self.entry.entry_id}",
-                )
-            else:
-                await self._ensure_historical_spots(spots_from, today_local)
-
-        # Two means, because the two legs can name two indices. Eneco's
-        # energy is on Belpex-RLP-M, the RLP-weighted month mean, while its
-        # injection is on Belpex-injectie, the plain one, so the energy leg
-        # takes the weighted mean when the profile is loaded and the feed-in
-        # bake below keeps the plain mean whatever the energy did.
-        plain_mean: float | None = None
-        energy_mean: float | None = None
-        if _injection_on_month_mean(priced) or isinstance(
-            priced.energy, SpotMonthlyRates
-        ):
-            # Also for a card whose ENERGY needs no mean but whose feed-in
-            # credit is indexed on one: without it the bake below would resolve
-            # against None and wipe the credit instead of resolving it. Asked
-            # of the EFFECTIVE leg, and of the injection's own flags, so a
-            # month-indexed credit is resolved whatever the energy is priced
-            # on: a dynamic energy leg fetches its own spots and used to
-            # take the credit out of this question with them.
-            now_local = dt_util.now()
-            plain_mean = self._monthly_spot_mean(
-                now_local.year, now_local.month, spot_prices
-            )
-            energy_mean = plain_mean
-            if rlp_weighted:
-                weighted = self._rlp_weighted_month_mean(
-                    now_local.year, now_local.month, spot_prices
-                )
-                if weighted is not None:
-                    energy_mean = weighted
 
         try:
             hourly = self._build_hourly(priced, spot_prices, energy_mean)
@@ -587,313 +314,21 @@ class _TickMixin:
             capacity_cost = _compute_capacity(self._snapshot, self.entry, billed_peak)
 
         prosumer_cost = _compute_prosumer(self._snapshot, self.entry)
-        # For a spot-monthly contract, price the injection off the same
-        # monthly mean rather than the live hourly spot: bake the mean-indexed
-        # formula into a flat indicative for this tick (the stored snapshot
-        # keeps factor/base so the YTD path recomputes each month's own mean).
-        # Gate on the EFFECTIVE (cohort) energy so a variable contract re-priced
-        # to a SpotMonthlyRates cohort bakes its mean-indexed injection too;
-        # self._snapshot.energy stays VariableRates for such a contract, so
-        # keying off it would skip the bake. The bake is a no-op for a flat
-        # monthly-indicative injection (EBEM/Eneco/Mega).
-        #
-        # EXCEPT when the injection carries its own PER-HOUR index. The cohort
-        # re-price is an energy-leg concept: it freezes the coefficients the
-        # customer signed for the commodity, which a variable card indexes
-        # monthly. Cociter Tarif Variable indexes the two legs differently and
-        # says so on the card - note (7) "le prix ... est indexe mensuellement
-        # ... moyenne arithmetique ... (BELIX) durant le mois de fourniture"
-        # for consumption, note (9) "le prix de l'injection varie chaque heure"
-        # for injection. Baking that hourly formula to a month mean prices the
-        # feed-in credit off an index the contract never mentions, and because
-        # PV output peaks exactly when the day-ahead price troughs, a flat mean
-        # systematically over-credits. _injection_needs_spot identifies that
-        # shape (factor/base with no printed indicative), so leave it alone.
-        injection_snapshot = priced
-        if _injection_bakes_to_month_mean(priced, self._snapshot, self.entry):
-            inj_mean = plain_mean
-            spp_only = _injection_is_spp_indexed(self._snapshot)
-            # A card that prints an indicative has something to fall back to
-            # when the mean is missing; a formula-only leg does not. That, not
-            # which index the formula names, is what decides whether the bake
-            # can be skipped.
-            inj = self._snapshot.injection
-            has_indicative = inj is not None and inj.current is not None
-            if spp_weighted:
-                # SPP-weight the injection month-mean; keep the flat mean for
-                # energy.
-                now = dt_util.now()
-                spp_mean = self._spp_weighted_month_mean(
-                    now.year, now.month, spot_prices
-                )
-                if spp_mean is not None:
-                    inj_mean = spp_mean
-                elif spp_only:
-                    # The card indexes this formula on Belpex_SPP and the
-                    # profile is not available yet. The flat mean is a
-                    # DIFFERENT index, not a coarser one - it would roughly
-                    # double the credit in a sunny month - so leave the
-                    # snapshot alone and credit the card's own indicative.
-                    inj_mean = None
-            elif spp_only:
-                inj_mean = None
-            if inj_mean is None and has_indicative:
-                # Leave the snapshot alone so the card's printed indicative is
-                # credited. This used to test spp_only, on the belief that an
-                # SPP-indexed card was the only shape carrying an indicative.
-                # It is not: Eneco Power Fix and Flex are month_indexed and
-                # print one too, so they fell through to the bake and had
-                # current, factor and base all wiped, which drops the feed-in
-                # credit off the sensor entirely rather than degrading it to
-                # the printed figure.
-                #
-                # A formula-only leg still bakes to None deliberately. Leaving
-                # factor/base standing with no ``current`` is precisely the
-                # shape _injection_is_spot_formula reads as "price this per
-                # hour", turning a flat monthly credit into an hourly one at
-                # whatever the current slot costs.
-                pass
-            else:
-                injection_snapshot = _bake_monthly_injection(priced, inj_mean)
+        injection_snapshot = self._tick_injection_leg(
+            priced, spot_prices, plain_mean, spp_weighted
+        )
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )
-        ytd_breakdown: dict[str, float] = {}
-        # FIRST tick only, and for the same reason the year's spots are
-        # deferred above: this one runs inside config-entry setup. The
-        # year-to-date walk bills each past month with that month's own
-        # archived card, one PDF apiece, and a Frank Energie card takes about
-        # 25 s to lay out on a Raspberry Pi: 226 s for a September start,
-        # against the 300 s Home Assistant allows the whole of bootstrap
-        # stage 2. That is what cancelled setup in issue #88.
-        #
-        # So walk the months against whatever cards the process already holds
-        # (after a restart, the ones restored from the store), and fetch the
-        # rest in the background. What the deferral costs is the months still
-        # missing: they bill their fees, network and tax legs off the current
-        # card rather than their own, which is what a supplier with no archive
-        # bills all year anyway, and the refresh the fill requests puts the
-        # right ones back.
-        cached_months_only = self._month_cards_deferred
-        # One reading of the clock for both windows and the resets published
-        # beside them, so a figure and its last_reset always name one period.
-        window_now = dt_util.now()
-        ytd_start = ytd_window_start(self.entry, window_now.date())
-        # A recorded switch splits the window: this contract bills from the day
-        # it started and the earlier ones are added from their own pricing
-        # below. Without one this is the window's first day, as it always was.
-        periods = previous_periods(self.entry.data, ytd_start, window_now.date())
-        own_start = current_period_start(self.entry.data, ytd_start)
-        current_year_cost = await _compute_current_year_cost(
-            self.hass,
-            self._session,
-            get_extractor(self.entry.data[CONF_SUPPLIER]),
-            self._snapshot,
-            self.entry,
-            historical_spots=self._historical_spots,
-            spot_quarters=self._historical_spot_quarters,
-            spp_weights=self._spp_weights if spp_weighted else None,
-            rlp_weights=(
-                (self._rlp_weights or None) if (rlp_weighted or allocating) else None
-            ),
-            breakdown=ytd_breakdown,
-            billed_peak_kw=billed_peak,
-            cached_only=cached_months_only,
-            window_start_override=own_start if own_start != ytd_start else None,
-        )
-        # The same bill over the running month. A second pass rather than an
-        # accumulator inside the first: the walk has four branches and four
-        # fees-floor exits, and a month total threaded through all eight is the
-        # shape that drifts. A month is an eighth of a mid-year window, and the
-        # month cards and spots the first pass resolved are all cached, so what
-        # it costs is one short recorder read and the pricing loop over ~30
-        # days.
-        month_start = month_window_start(self.entry, window_now.date())
-        month_cost = await _compute_current_year_cost(
-            self.hass,
-            self._session,
-            get_extractor(self.entry.data[CONF_SUPPLIER]),
-            self._snapshot,
-            self.entry,
-            historical_spots=self._historical_spots,
-            spot_quarters=self._historical_spot_quarters,
-            spp_weights=self._spp_weights if spp_weighted else None,
-            rlp_weights=(
-                (self._rlp_weights or None) if (rlp_weighted or allocating) else None
-            ),
-            billed_peak_kw=billed_peak,
-            cached_only=cached_months_only,
-            window_start_override=max(month_start, own_start),
-        )
-        if periods:
-            self._schedule_previous_pricing(periods, window_now.date())
-        # Unknown rather than short while the earlier contracts are not priced
-        # yet, which is only the minutes after a switch is recorded: a year
-        # missing a whole contract lands on the recorder as a large negative
-        # change and then the same positive one.
-        prev_year, prev_month = previous_costs(
-            self._previous_priced, periods, month_start
-        )
-        if current_year_cost is not None:
-            current_year_cost = (
-                None if prev_year is None else current_year_cost + prev_year
-            )
-        if month_cost is not None:
-            month_cost = None if prev_month is None else month_cost + prev_month
-        if periods and prev_year is not None:
-            ytd_breakdown["previous_contracts_eur"] = prev_year
-        if cached_months_only:
-            self._month_cards_deferred = False
-            self.entry.async_create_background_task(
-                self.hass,
-                self._fill_month_cards(),
-                f"{DOMAIN}_month_cards_{self.entry.entry_id}",
-            )
-        projection_breakdown: dict[str, Any] = {}
-        # The card the welcome credit is read off, the same row the
-        # year-to-date walk just resolved, so a cache hit.
-        signing = await signing_month_snapshot(
-            self.hass,
-            self._session,
-            get_extractor(self.entry.data[CONF_SUPPLIER]),
-            self.entry.data[CONF_CONTRACT],
-            self.entry.data.get(CONF_REGION, ""),
-            self.entry,
-            self._snapshot,
-            cached_only=cached_months_only,
-        )
-        projected_year_cost = await _compute_projected_year_cost(
-            self.hass,
-            self.entry,
-            self._snapshot,
+        costs = await self._tick_costs(
             priced,
-            billed_peak_kw=billed_peak,
-            today=dt_util.now().date(),
-            # The month-baked leg, so the projection credits feed-in at the
-            # rate the injection_price sensor shows rather than at the card's
-            # printed figure, which is that formula on the previous month.
-            credited=injection_snapshot,
-            # The day-ahead history, for a feed-in credit that follows the
-            # spot price per slot, on the year the compare page credits it
-            # on. Not the live table's day or two, which moved this recorded
-            # figure by tens of euro a day.
-            spots=self._historical_spots,
-            signing=signing,
-            # The running month's index, held for the year on a month-indexed
-            # leg, as current_price bills this month.
-            energy_index=energy_mean,
-            breakdown=projection_breakdown,
-        )
-        # The calendar year's metered volume on each side. A profile is used
-        # only where the pricing already loaded this year's: never fetched
-        # for this.
-        today = window_now.date()
-        volume_breakdown: dict[str, dict[str, Any]] = {"consumption": {}}
-        projected_consumption = await _compute_projected_year_kwh(
-            self.hass,
-            self.entry,
-            today,
-            side="consumption",
-            profile=self._rlp_weights if self._rlp_weights_year == today.year else None,
-            breakdown=volume_breakdown["consumption"],
-        )
-        # And what each side metered over the last 365 days.
-        rolling_breakdown: dict[str, dict[str, Any]] = {"consumption": {}}
-        rolling_consumption = await _compute_rolling_year_kwh(
-            self.hass,
-            self.entry,
-            today,
-            side="consumption",
-            breakdown=rolling_breakdown["consumption"],
-        )
-        projected_injection = None
-        rolling_injection = None
-        if self.entry.data.get(CONF_SOLAR_REGIME) in (
-            SOLAR_REGIME_COMPENSATION,
-            SOLAR_REGIME_INJECTION,
-        ):
-            rolling_breakdown["injection"] = {}
-            rolling_injection = await _compute_rolling_year_kwh(
-                self.hass,
-                self.entry,
-                today,
-                side="injection",
-                breakdown=rolling_breakdown["injection"],
-            )
-            volume_breakdown["injection"] = {}
-            projected_injection = await _compute_projected_year_kwh(
-                self.hass,
-                self.entry,
-                today,
-                side="injection",
-                profile=(
-                    self._spp_weights if self._spp_weights_year == today.year else None
-                ),
-                profile_utc=True,
-                breakdown=volume_breakdown["injection"],
-            )
-
-        # And what the calendar year's bill will stand at on 31 December. It
-        # walks the whole year, hour by hour on an hourly-billed contract, and
-        # moves only with its inputs, so the last result is reused while none
-        # of them changed: the day, once more from 01:00 when yesterday's last
-        # hour has compiled, the cards and the month cards held, this month's
-        # index, the day-ahead held, the profiles, the billed peak, the window
-        # and the earlier contracts. A handful of walks a day instead of 24.
-        year_end_key = (
-            today,
-            window_now.hour >= 1,
-            self._snapshot,
             injection_snapshot,
             energy_mean,
-            prev_year,
+            spp_weighted,
+            rlp_weighted,
+            allocating,
             billed_peak,
-            own_start,
-            cached_months_only,
-            len(self._historical_spots),
-            len(self._historical_spot_quarters),
-            (self._rlp_weights_year, self._rlp_blend, self._rlp_fetched_at),
-            (self._spp_weights_year, self._spp_fetched_at),
-            sorted(
-                (key[3], card)
-                for key, card in _monthly_snapshots(self.hass).items()
-                if key[:3] == self._supplier_tuple
-            ),
         )
-        year_end_breakdown: dict[str, Any] = {}
-        year_end_cost = None
-        memo = self._year_end_memo
-        if memo is not None and memo[0] == year_end_key:
-            year_end_cost, year_end_breakdown = memo[1], dict(memo[2])
-        elif prev_year is None:
-            year_end_breakdown["energy_basis"] = (
-                "not projected: the earlier contracts this year are still being priced"
-            )
-        else:
-            year_end_cost = await _compute_year_end_cost(
-                self.hass,
-                self._session,
-                get_extractor(self.entry.data[CONF_SUPPLIER]),
-                self._snapshot,
-                self.entry,
-                injection_snapshot,
-                today,
-                energy_index=energy_mean,
-                previous_eur=prev_year,
-                breakdown=year_end_breakdown,
-                historical_spots=self._historical_spots,
-                spot_quarters=self._historical_spot_quarters,
-                spp_weights=self._spp_weights if spp_weighted else None,
-                rlp_weights=(
-                    (self._rlp_weights or None)
-                    if (rlp_weighted or allocating)
-                    else None
-                ),
-                billed_peak_kw=billed_peak,
-                cached_only=cached_months_only,
-                window_start_override=own_start if own_start != ytd_start else None,
-            )
-        self._year_end_memo = (year_end_key, year_end_cost, dict(year_end_breakdown))
 
         await self._save_persistent()
 
@@ -915,7 +350,7 @@ class _TickMixin:
         # the credit is withheld anyway.
         signed_on = self._snapshot_raw
         month = _tariff_card_month(self.entry)
-        if signing is not self._snapshot and month is not None:
+        if costs.signing is not self._snapshot and month is not None:
             signed_on = cached_month_card(
                 self.hass,
                 self.entry.data[CONF_SUPPLIER],
@@ -985,356 +420,24 @@ class _TickMixin:
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             ev_home_charging_rate_eur_per_kwh=ev_rate,
             ev_home_charging_quarter_start=ev_quarter,
-            current_year_cost_eur=current_year_cost,
-            previous_contracts=previous_rows(self._previous_priced, periods),
-            current_month_cost_eur=month_cost,
-            current_year_cost_reset=ytd_window_reset(self.entry, window_now),
-            current_month_cost_reset=month_window_reset(self.entry, window_now),
-            ytd_diagnostics=ytd_breakdown or None,
-            projected_year_cost_eur=projected_year_cost,
-            projection_diagnostics=projection_breakdown or None,
-            projected_year_consumption_kwh=projected_consumption,
-            projected_year_injection_kwh=projected_injection,
-            volume_projection_diagnostics=volume_breakdown,
-            rolling_year_consumption_kwh=rolling_consumption,
-            rolling_year_injection_kwh=rolling_injection,
-            rolling_volume_diagnostics=rolling_breakdown,
-            year_end_cost_eur=year_end_cost,
-            year_end_diagnostics=year_end_breakdown,
+            current_year_cost_eur=costs.current_year_cost,
+            previous_contracts=previous_rows(self._previous_priced, costs.periods),
+            current_month_cost_eur=costs.month_cost,
+            current_year_cost_reset=ytd_window_reset(self.entry, costs.window_now),
+            current_month_cost_reset=month_window_reset(self.entry, costs.window_now),
+            ytd_diagnostics=costs.ytd_breakdown or None,
+            projected_year_cost_eur=costs.projected_year_cost,
+            projection_diagnostics=costs.projection_breakdown or None,
+            projected_year_consumption_kwh=costs.projected_consumption,
+            projected_year_injection_kwh=costs.projected_injection,
+            volume_projection_diagnostics=costs.volume_breakdown,
+            rolling_year_consumption_kwh=costs.rolling_consumption,
+            rolling_year_injection_kwh=costs.rolling_injection,
+            rolling_volume_diagnostics=costs.rolling_breakdown,
+            year_end_cost_eur=costs.year_end_cost,
+            year_end_diagnostics=costs.year_end_breakdown,
             static_peak_price=static_peak,
             static_offpeak_price=static_offpeak,
             static_injection_peak=static_inj_peak,
             static_injection_offpeak=static_inj_offpeak,
         )
-
-    async def _fill_year_spots(self) -> None:
-        """Fetch the rest of the year's spots, off the setup path.
-
-        Scheduled by the first tick, which fetched only the current month so
-        that setup, and with it the config flow's final step, did not wait
-        on 35 week-chunks. Runs as an entry-tied background task, so unloading
-        the entry cancels it and the user can walk away from a fresh install
-        mid-backfill without leaving a fetch running.
-
-        Failures need no handling here: _ensure_historical_spots logs what it
-        could not fetch and leaves those hours absent, which every reader
-        already treats as "no data".
-
-        The refresh is what puts the year-to-date's past hours back into the
-        sensor, since the tick that scheduled this one priced them without
-        their energy term, so it is only asked for when the walk actually
-        found something. A restart runs this too, and there the persisted
-        cache already covers the year: nothing is fetched, nothing changed,
-        and an extra full tick per entry per restart would buy nothing.
-        """
-        today = dt_util.now().date()
-        before = (len(self._historical_spots), len(self._historical_spot_quarters))
-        await self._ensure_historical_spots(ytd_window_start(self.entry, today), today)
-        after = (len(self._historical_spots), len(self._historical_spot_quarters))
-        if self._unloaded or after == before:
-            return
-        await self.async_request_refresh()
-
-    async def _fill_profiles(self, spp: bool, rlp: bool, blend: str) -> None:
-        """Fetch the Synergrid profiles, off the setup path.
-
-        Scheduled by the first tick, which priced without them. Both are
-        national curves fetched at most once per process (see
-        ``_shared_profile``), so N entries scheduling this at the same moment
-        cost one download, not N.
-
-        Failures need no handling here: both ensures soft-fail, keep whatever
-        is held and back off, and the caller then prices the plain arithmetic
-        mean, which is what every RLP-indexed card was billed on before the
-        profile existed, and what a compensation entry falls back to when its
-        allocation cannot be weighted.
-
-        The refresh is asked for only when a profile actually landed. A restart
-        restores both from the Store, so the usual case fetches nothing and an
-        extra full tick per entry would buy nothing.
-        """
-        before = (self._spp_fetched_at, self._rlp_fetched_at, self._rlp_blend)
-        if spp:
-            await self._ensure_spp_weights()
-        if rlp:
-            await self._ensure_rlp_weights(blend)
-        after = (self._spp_fetched_at, self._rlp_fetched_at, self._rlp_blend)
-        if self._unloaded or after == before:
-            return
-        await self.async_request_refresh()
-
-    async def _fill_month_cards(self) -> None:
-        """Fetch the year's archived tariff cards, off the setup path.
-
-        Scheduled by the first tick, which priced the year-to-date from the
-        cards already in hand so that config-entry setup did not wait on one
-        PDF per elapsed month (issue #88). Runs as an entry-tied background
-        task, so unloading the entry cancels it.
-
-        Failures need no handling here: _snapshot_for_month logs the month it
-        could not fetch, leaves the row uncached and hands back the current
-        card, which is the same proxy the deferred tick already billed with.
-
-        The refresh is only asked for when the walk actually retrieved a card
-        the tick did not have. A restart on a supplier with no archive, or one
-        whose months are all restored from the store, changes nothing, and an
-        extra full tick per entry per restart would buy nothing.
-        """
-        if self._snapshot is None:
-            return
-        supplier, contract, region = self._supplier_tuple
-        extractor = get_extractor(supplier)
-        today = dt_util.now().date()
-        months = self._ytd_months(today)
-        before = archived_months_present(self.hass, supplier, contract, region, months)
-        for month_first in months:
-            if self._unloaded:
-                return
-            await _effective_snapshot_for_month(
-                self.hass,
-                self._session,
-                extractor,
-                contract,
-                region,
-                month_first,
-                self._snapshot,
-                self.entry,
-            )
-        after = archived_months_present(self.hass, supplier, contract, region, months)
-        if self._unloaded or after == before:
-            return
-        await self.async_request_refresh()
-
-    def _schedule_previous_pricing(
-        self, periods: list[ContractPeriod], today: date
-    ) -> None:
-        """Price the earlier contracts in the background, at most once a day.
-
-        A contract the household has left is a closed window: its figure moves
-        only when an archive publishes one of its months, or the day-ahead cache
-        fills an hour it lacked, so a day old is as good as an hour old, and
-        pricing it means fetching the old supplier's cards, which neither the
-        tick nor config-entry setup should wait on. Stale pricing for the same
-        periods keeps being served until the new one lands.
-
-        A pricing that could not price one of the periods at all, or priced
-        it on the entry's current card because a read failed just now, is not
-        kept for the day: the year reads unknown, or bills those days on
-        another supplier's card, while it stands, so the next hourly tick asks
-        again rather than tomorrow's. A period no archive kept any card of is
-        settled on that stand-in and asked again the next day, as its cards
-        will not turn up within the hour. Not sooner: the pricing asks for a
-        refresh when it lands, and that refresh is a tick, so without the wait
-        a period that cannot be priced was fetched and walked again every few
-        seconds.
-        """
-        key = periods_key(periods)
-        priced = self._previous_priced
-        if (
-            priced is not None
-            and priced.key == key
-            and priced.day == today
-            and all(row.settled for row in priced.rows)
-        ):
-            return
-        if self._previous_pricing is not None and not self._previous_pricing.done():
-            return
-        now = dt_util.utcnow()
-        tried = self._previous_tried
-        if tried is not None and tried[0] == key and now - tried[1] < _PREVIOUS_RETRY:
-            return
-        self._previous_tried = (key, now)
-        self._previous_pricing = self.entry.async_create_background_task(
-            self.hass,
-            self._price_previous(periods, today),
-            f"{DOMAIN}_previous_contracts_{self.entry.entry_id}",
-        )
-
-    async def _price_previous(self, periods: list[ContractPeriod], today: date) -> None:
-        """Price the earlier contracts, keep the result and ask for a refresh.
-
-        The year's day-ahead first when an old contract settles on it: on the
-        day a switch is recorded the tick's own fill is still running in the
-        background, and pricing an old dynamic contract before it lands would
-        settle that contract without its energy for the whole day. The fill is
-        behind the spot lock, so this waits for it rather than fetching twice.
-        The load profile likewise, for an old contract settled on its weighted
-        mean or netted over it, and the solar profile for one whose feed-in
-        settles on it (decided on the card, in ``price_previous_periods``).
-        """
-        if periods_need_spots(periods):
-            # The entry's own key first. A household that left a dynamic
-            # contract for a fixed one may hold none any more, and the settings
-            # kept with the contract it left still carry the one it used: the
-            # day-ahead is the same for every supplier, and the walk refuses to
-            # fetch at all without one.
-            api_key = self.entry.data.get(CONF_API_KEY) or next(
-                (p.data[CONF_API_KEY] for p in periods if p.data.get(CONF_API_KEY)),
-                None,
-            )
-            try:
-                await self._ensure_historical_spots(
-                    periods[0].start, periods[-1].end, api_key
-                )
-            except Exception as err:  # noqa: BLE001 - priced on what is cached
-                # An hour with no spot still bills its network and tax legs, as
-                # it does for the entry's own contract, so price on what the
-                # cache holds rather than not at all.
-                _LOGGER.debug("Day-ahead history for earlier contracts: %s", err)
-        if periods_need_rlp(periods):
-            # The profile too, which the first tick after a switch fills in the
-            # background and could still be fetching. In the entry's own blend:
-            # an old card's index is reduced from the same workbook read, and
-            # asking for its blend here would move the live coordinator's.
-            await self._ensure_rlp_weights(self._rlp_blend)
-        try:
-            month_start = month_window_start(self.entry, today)
-            rows = await price_previous_periods(
-                self.hass,
-                self._session,
-                self,
-                periods,
-                month_start=month_start,
-                load_profiles=True,
-            )
-        except Exception as err:  # noqa: BLE001 - the next tick asks again
-            _LOGGER.warning(
-                "Could not price the contracts %s held earlier this year: %s",
-                self.entry.title,
-                err,
-            )
-            return
-        if self._unloaded:
-            return
-        key = periods_key(periods)
-        self._previous_priced = PricedPeriods(
-            key=key,
-            day=today,
-            month=month_start,
-            rows=keep_settled(self._previous_priced, key, rows),
-        )
-        await self.async_request_refresh()
-
-    def _build_hourly(
-        self,
-        snap: SupplierSnapshot,
-        spot_prices: dict[datetime, float],
-        monthly_mean: float | None = None,
-    ) -> dict[datetime, PriceBreakdown]:
-        # ``snap`` is the signing-cohort-priced snapshot (energy leg swapped
-        # to the locked rate; DSO / tax overlays still the delivery month),
-        # not necessarily self._snapshot.
-        dso = self.entry.data[CONF_DSO]
-        region = self.entry.data[CONF_REGION]
-        meter = self.entry.data.get(CONF_METER, METER_MONO)
-        dso_mode = self.entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-
-        hourly: dict[datetime, PriceBreakdown] = {}
-        if isinstance(snap.energy, DynamicRates):
-            for utc_hour, spot in spot_prices.items():
-                local = dt_util.as_local(utc_hour)
-                hourly[utc_hour] = compute_breakdown(
-                    snap, dso, region, local, spot, meter, dso_mode
-                )
-            return hourly
-
-        # A spot-monthly contract bills a flat rate for the whole month; pass
-        # the delivery month's mean as the "spot" so every slot of the 48-slot
-        # walk prices to factor * mean + base. Without a mean yet (cold start,
-        # no cached spots) leave the table empty so the current price reads
-        # unknown rather than crashing on a missing spot.
-        slot_spot: float | None = None
-        if isinstance(snap.energy, SpotMonthlyRates):
-            if monthly_mean is None:
-                return hourly
-            slot_spot = monthly_mean
-
-        # Iterate in UTC for 48 contiguous slots so a DST seam preserves
-        # the wall-clock gap correctly. Spring-forward shifts one of the
-        # day's local hours into the next UTC slot (so today carries 23
-        # local hours, tomorrow 25); fall-back is the mirror. Naively
-        # walking local-time + timedelta would either collide two hours
-        # into one UTC slot (spring) or duplicate a UTC slot (fall) and
-        # silently drop one breakdown.
-        # Anchor at local midnight (converted to UTC) so today_min /
-        # today_max / today_average cover the full local day rather
-        # than "now → midnight".
-        local_midnight = dt_util.start_of_local_day()
-        start_utc = local_midnight.astimezone(UTC).replace(
-            minute=0, second=0, microsecond=0
-        )
-        # End at the start of the day after tomorrow (local) rather than a
-        # fixed 48 UTC hours: the fall-back Sunday has 25 local hours, so
-        # a fixed range(48) leaves only 23 UTC slots for tomorrow and
-        # drops its last local hour. This bound covers today + tomorrow in
-        # full (47 slots on spring-forward, 49 on fall-back, 48 otherwise).
-        end_utc = (
-            dt_util.start_of_local_day(local_midnight.date() + timedelta(days=2))
-            .astimezone(UTC)
-            .replace(minute=0, second=0, microsecond=0)
-        )
-        utc = start_utc
-        while utc < end_utc:
-            local = dt_util.as_local(utc)
-            hourly[utc] = compute_breakdown(
-                snap, dso, region, local, slot_spot, meter, dso_mode
-            )
-            utc += timedelta(hours=1)
-        return hourly
-
-    def _build_injection_hourly(
-        self,
-        injection_snapshot: SupplierSnapshot,
-        energy: EnergyRates,
-        spot_prices: dict[datetime, float],
-        grid_keys: Iterable[datetime],
-    ) -> dict[datetime, float]:
-        """Per-slot injection price (EUR/kWh) over the same today+tomorrow grid
-        as ``hourly``, for the injection sensor's today/tomorrow arrays.
-
-        Empty unless the user is on the injection regime AND the injection
-        actually varies intra-day: a flat contract would just repeat its
-        scalar, so no array is emitted. ``injection_snapshot`` is the possibly
-        mean-baked snapshot and ``energy`` the effective (cohort) energy, so a
-        spot-monthly / Cociter-cohort contract is treated as flat and gated
-        out: keeping the array consistent with the live scalar and the YTD
-        credit. Slots with no spot (tomorrow before the day-ahead publishes)
-        are dropped, exactly like the consumption tomorrow array.
-        """
-        if self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
-            return {}
-        inj = injection_snapshot.injection
-        meter = self.entry.data.get(CONF_METER, METER_MONO)
-        if inj is None or not _injection_varies_intraday(inj, energy, meter=meter):
-            return {}
-        region = self.entry.data.get(CONF_REGION, REGION_FLANDERS)
-        out: dict[datetime, float] = {}
-        for utc in grid_keys:
-            rate = _injection_price_for_slot(
-                inj,
-                energy,
-                spot_prices.get(utc),
-                dt_util.as_local(utc),
-                meter=meter,
-                region=region,
-            )
-            if rate is not None:
-                out[utc] = rate
-        return out
-
-
-# How long the FIRST tick may spend filling the running month's day-ahead
-# history before it gives up and leaves the rest to the background fill. Sized
-# off what it is protecting rather than off the fetch: config-entry setup runs
-# inside a bootstrap stage whose 300 s budget is shared with every other
-# integration, and the card fetch, the today/tomorrow curve and this all come
-# out of it. A month of chunks against a healthy ENTSO-E is a few seconds, so
-# this only ever bites on a source that hangs, which is exactly the case where
-# waiting buys nothing: the fill retries it off the setup path a moment later.
-_FIRST_TICK_SPOT_BUDGET = 45.0
-
-# How long an earlier contract's pricing that could not price a period waits
-# before it is tried again. Just under the hourly tick, so the next one asks
-# rather than the one after it, and well over the few seconds between the
-# refresh a pricing asks for and the tick that answers it.
-_PREVIOUS_RETRY = timedelta(minutes=50)

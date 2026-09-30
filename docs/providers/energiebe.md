@@ -124,7 +124,7 @@ realised Belpex_RLP of 11,42 - a true rate of 14,41 c€/kWh, nearly 10% higher.
 would ship a knowingly wrong rate that no later tick corrects, the 0.6.7 mispricing class.
 
 `spot_monthly` instead stores the coefficients and lets the coordinator resolve
-`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator_tick.py`),
+`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator_prices.py`),
 which firms up as the month fills in. That mean is RLP-weighted, on the `columns` blend:
 the card defines Belpex_RLP as the mean "van de verschillende distributienetbeheerders",
 and energie.be publishes the literal column reading of it, every DSO sub-area counting

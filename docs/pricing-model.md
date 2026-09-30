@@ -1216,7 +1216,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator_tick.py`). This is the
+unavailable (`coordinator_prices.py`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 

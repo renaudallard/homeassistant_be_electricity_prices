@@ -421,7 +421,7 @@ async def test_the_tick_fetches_and_records_the_rate_only_when_asked(
             AsyncMock(return_value=_CohortLegs(None, None)),
         ),
         patch(
-            "custom_components.be_electricity_prices.coordinator_tick."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),

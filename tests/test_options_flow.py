@@ -8469,7 +8469,7 @@ def test_the_projection_credits_the_month_baked_leg_when_given_one() -> None:
         "credited"
         in inspect.signature(projected_cost._compute_projected_year_cost).parameters
     )
-    src = inspect.getsource(coordinator.BePricesCoordinator._update_body)
+    src = inspect.getsource(coordinator.BePricesCoordinator._tick_costs)
     assert "credited=injection_snapshot" in src
 
 

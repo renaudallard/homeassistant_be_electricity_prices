@@ -88,6 +88,8 @@ from .coordinator_data import (
     CoordinatorData,
 )
 from .coordinator_persist import _PersistMixin
+from .coordinator_costs import _CostsMixin
+from .coordinator_prices import _PricesMixin
 from .coordinator_tick import _TickMixin
 
 _LOGGER = logging.getLogger(__name__)
@@ -127,6 +129,8 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
 
 class BePricesCoordinator(
     _TickMixin,
+    _PricesMixin,
+    _CostsMixin,
     _PersistMixin,
     _SnapshotMixin,
     _IssuesMixin,

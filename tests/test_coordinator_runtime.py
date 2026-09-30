@@ -434,7 +434,7 @@ async def test_the_tick_hands_the_quarter_cache_to_the_year_cost(
     spy = AsyncMock(return_value=0.0)
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator_tick."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             spy,
         ),
@@ -2646,7 +2646,7 @@ async def test_the_projection_is_handed_the_day_ahead_history(
     projected on the year of day-ahead the coordinator holds, not on the day
     or two the live price table reads, which moved the figure by tens of euro
     from one day to the next."""
-    from custom_components.be_electricity_prices import coordinator_tick
+    from custom_components.be_electricity_prices import coordinator_costs
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         VariableRates,
@@ -2687,7 +2687,7 @@ async def test_the_projection_is_handed_the_day_ahead_history(
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
-        patch.object(coordinator_tick, "_compute_projected_year_cost", projection),
+        patch.object(coordinator_costs, "_compute_projected_year_cost", projection),
     ):
         await coord._async_update_data()
 
@@ -4169,7 +4169,7 @@ async def test_the_tick_bakes_each_cost_sensor_its_own_reset(
             AsyncMock(return_value=_CohortLegs(None, None)),
         ),
         patch(
-            "custom_components.be_electricity_prices.coordinator_tick."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
@@ -6574,7 +6574,7 @@ async def test_the_first_tick_prices_the_year_from_cards_in_hand(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator_tick"
+            "custom_components.be_electricity_prices.coordinator_costs"
             "._compute_current_year_cost",
             _ytd,
         ),
@@ -6628,7 +6628,7 @@ async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
     _monthly_snapshots(hass).clear()
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_tick.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_costs.get_extractor",
         return_value=extractor,
     ):
         await coord._fill_month_cards()
@@ -6690,7 +6690,7 @@ async def test_the_first_tick_gives_up_on_a_hanging_source(
     coord._ensure_historical_spots = _hangs  # type: ignore[method-assign,assignment]
 
     with (
-        patch(f"{_COORD}_tick._FIRST_TICK_SPOT_BUDGET", 0.05),
+        patch(f"{_COORD}_prices._FIRST_TICK_SPOT_BUDGET", 0.05),
         patch.object(coord._store, "async_save", AsyncMock()),
         patch.object(entry, "async_create_background_task", _capture_task),
     ):
