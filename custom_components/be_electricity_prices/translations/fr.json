@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "Effacer TOUTE la serie avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour re-executer toute la fenetre du cout annuel ; une fenetre qui commence apres le debut de la fenetre du cout annuel de l'annee de fin (le 1er janvier, ou la date de debut du contrat si l'entree facture a partir de celle-ci) est refusee avec clear actif, sauf si la fenetre se termine dans une annee close (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
+          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour re-executer toute la fenetre du cout annuel ; une fenetre qui commence apres le debut de la fenetre du cout annuel de l'annee de fin (le 1er janvier, ou la date de debut du contrat si l'entree facture a partir de celle-ci) est refusee avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût annuel en cours (la serie de cout est alors exclue de l'effacement comme du re-import). Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
         }
       }
     }

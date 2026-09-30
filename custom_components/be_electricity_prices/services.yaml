@@ -125,7 +125,8 @@ backfill_statistics:
         re-running the whole year-to-date window (the default range); a
         window that starts after the end year's year-to-date start (Jan 1,
         or the contract start date if the entry bills from it) is rejected
-        with clear on, unless the window ends in a finished year: the cost
+        with clear on, unless the window ends on or before the current
+        year-to-date start: the cost
         series is left out of both the wipe and the re-import there, so
         there is nothing to protect. For a narrower window, leave this off: the import upserts on
         (statistic_id, hour) so a re-run already overwrites the

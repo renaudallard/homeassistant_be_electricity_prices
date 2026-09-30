@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "VOLLEDIGE reeks wissen voor herimport",
-          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige jaarkostvenster opnieuw te draaien; een venster dat begint na het begin van het jaarkostvenster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster in een afgesloten jaar eindigt (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
+          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige jaarkostvenster opnieuw te draaien; een venster dat begint na het begin van het jaarkostvenster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het lopende jaarkostvenster (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
     }

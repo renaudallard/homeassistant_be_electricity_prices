@@ -712,7 +712,7 @@
         },
         "clear": {
           "name": "Clear ENTIRE series before re-import",
-          "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY to re-run the whole year-to-date window; a window that starts after the end year's year-to-date start (Jan 1, or the contract start date if the entry bills from it) is rejected with clear on, unless the window ends in a finished year (the cost series is left out of both the wipe and the re-import there). For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
+          "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY to re-run the whole year-to-date window; a window that starts after the end year's year-to-date start (Jan 1, or the contract start date if the entry bills from it) is rejected with clear on, unless the window ends on or before the current year-to-date start (the cost series is left out of both the wipe and the re-import there). For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
         }
       }
     }
