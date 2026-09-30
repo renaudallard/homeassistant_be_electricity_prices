@@ -17,13 +17,13 @@
           "contract_start_date": "Startdatum van het contract (optioneel)",
           "tariff_card_date": "Maand van de tariefkaart (optioneel)",
           "contract_end_date": "Einddatum van het contract (optioneel)",
-          "ytd_from_contract_start": "Reken het jaartotaal vanaf de startdatum van het contract"
+          "ytd_from_contract_start": "Reken de kost van dit jaar vanaf de startdatum van het contract"
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw levering onder dit contract is gestart. Uw tarief wordt dan gelezen van de tariefkaart van die maand in plaats van de huidige, bij elke leverancier die zijn oude kaarten archiveert, en zowel voor vaste, dynamische als maandelijks geïndexeerde contracten. Draagt de tariefkaart die u tekende een andere maand, vul die dan hieronder in. Het attribuut signing_card van de sensor current_price noemt de kaart waarop deze invoer is uitgekomen. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw jaartotaal en vaste kosten blijven tellen vanaf de startdatum hierboven.",
+          "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw kost van dit jaar en vaste kosten blijven tellen vanaf de startdatum hierboven.",
           "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de voortschrijdende jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
-          "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
+          "ytd_from_contract_start": "Standaard telt de kost van dit jaar vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
       "signed_rate": {
@@ -233,7 +233,7 @@
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
-      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de kost van dit jaar uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
       "compensation_kva_missing": "Het Waalse prosumententarief van het compensatieregime wordt op het omvormervermogen berekend: vul het in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     }
@@ -257,7 +257,7 @@
       "start_date_before_switch": "De startdatum van het contract kan niet voor de laatste geregistreerde leverancierswissel van deze invoer liggen.",
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
-      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de kost van dit jaar uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
       "compensation_kva_missing": "Het Waalse prosumententarief van het compensatieregime wordt op het omvormervermogen berekend: vul het in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
       "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze invoer is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden.",
@@ -347,13 +347,13 @@
           "contract_start_date": "Startdatum van het contract (optioneel)",
           "tariff_card_date": "Maand van de tariefkaart (optioneel)",
           "contract_end_date": "Einddatum van het contract (optioneel)",
-          "ytd_from_contract_start": "Reken het jaartotaal vanaf de startdatum van het contract"
+          "ytd_from_contract_start": "Reken de kost van dit jaar vanaf de startdatum van het contract"
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw levering onder dit contract is gestart. Uw tarief wordt dan gelezen van de tariefkaart van die maand in plaats van de huidige, bij elke leverancier die zijn oude kaarten archiveert, en zowel voor vaste, dynamische als maandelijks geïndexeerde contracten. Draagt de tariefkaart die u tekende een andere maand, vul die dan hieronder in. Het attribuut signing_card van de sensor current_price noemt de kaart waarop deze invoer is uitgekomen. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw jaartotaal en vaste kosten blijven tellen vanaf de startdatum hierboven.",
+          "tariff_card_date": "Een willekeurige datum in de maand van de tariefkaart waarop uw contract loopt. Een vast of dynamisch contract wordt geprijsd op de kaart die gold toen u tekende, en een overstap duurt ongeveer een maand, dus die kaart draagt vaak de maand voor de start van uw levering. energie.be zet ze in de productnaam (Elektriciteit dynamisch particulier online 06/26). Laat leeg om de maand van de start van uw levering te gebruiken, wat klopt als u in dezelfde maand tekende en startte. Alleen het opzoeken van de kaart leest dit: uw kost van dit jaar en vaste kosten blijven tellen vanaf de startdatum hierboven.",
           "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de voortschrijdende jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
-          "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
+          "ytd_from_contract_start": "Standaard telt de kost van dit jaar vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
       "signed_rate": {
@@ -555,7 +555,7 @@
         "title": "Gerangschikte alternatieven",
         "description": "Alle contracten uit dezelfde familie als het uwe (vast of variabel, spotgeïndexeerd, of met tijdsblokken) die in uw regio beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract draagt de badge YOUR CONTRACT; elke andere regel eindigt met het verschil ten opzichte daarvan, waarbij een minteken een besparing is.\n\n{ranking}\n\nSchattingen, geen offertes. Elke regel berekent een volledig jaar van uw gemeten volumes tegen één gepubliceerde tariefkaart: het zegt wat een jaar tegen die prijzen zou kosten, niet wat u gefactureerd krijgt. Er wordt niets opgeslagen; bevestig om te sluiten.",
         "data": {
-          "with_ytd": "Ook het jaartotaal berekenen (trager: haalt de kaart van elke voorbije maand op)",
+          "with_ytd": "Ook de kost van dit jaar berekenen (trager: haalt de kaart van elke voorbije maand op)",
           "refresh": "Nu opnieuw berekenen (duurt ongeveer twee minuten)"
         }
       },
@@ -642,11 +642,11 @@
   "services": {
     "refresh": {
       "name": "Vernieuwen",
-      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier, de maandkaarten waarop de jaarkost berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de jaarkost niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
+      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier, de maandkaarten waarop de kost van dit jaar berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de kost van dit jaar niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
       "fields": {
         "clear_history": {
           "name": "Prijsgeschiedenis wissen",
-          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de jaarkost opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de startdatum van het contract, als de invoer daarvan uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een injectievergoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer een jaarkost verkeerd lijkt en een gewone vernieuwing dat niet oplost."
+          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de kost van dit jaar opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de startdatum van het contract, als de invoer daarvan uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een injectievergoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer de kost van dit jaar verkeerd lijkt en een gewone vernieuwing dat niet oplost."
         }
       }
     },
@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Statistieken aanvullen",
-      "description": "Vult de lange-termijn statistieken van de recorder aan voor de prijssensoren en current_year_cost van deze invoer over een datumbereik, zodat het Energie-dashboard ook geschiedenis toont van voor de eerste live tick. De kost wordt alleen herbouwd binnen het lopende jaarkostvenster (vanaf 1 januari, of de startdatum van het contract als de invoer daarvan uitgaat); een bereik dat op of vóór het begin ervan eindigt, herbouwt alleen de prijssensoren.",
+      "description": "Vult de lange-termijn statistieken van de recorder aan voor de prijssensoren en current_year_cost van deze invoer over een datumbereik, zodat het Energie-dashboard ook geschiedenis toont van voor de eerste live tick. De kost wordt alleen herbouwd binnen het venster van dit jaar (vanaf 1 januari, of de startdatum van het contract als de invoer daarvan uitgaat); een bereik dat op of vóór het begin ervan eindigt, herbouwt alleen de prijssensoren.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -704,15 +704,15 @@
         },
         "start": {
           "name": "Start",
-          "description": "Eerste uur om aan te vullen. Standaard: het begin van het jaarkostvenster, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer daarvan uitgaat."
+          "description": "Eerste uur om aan te vullen. Standaard: het begin van het venster van dit jaar, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer daarvan uitgaat."
         },
         "end": {
           "name": "Eind",
-          "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur. Op of vóór het begin van het jaarkostvenster worden alleen de prijssensoren herbouwd."
+          "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur. Op of vóór het begin van het venster van dit jaar worden alleen de prijssensoren herbouwd."
         },
         "clear": {
           "name": "VOLLEDIGE reeks wissen voor herimport",
-          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige jaarkostvenster opnieuw te draaien; een venster dat begint na het begin van het jaarkostvenster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het lopende jaarkostvenster (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
+          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige venster van dit jaar opnieuw te draaien; een venster dat begint na het begin van het venster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het venster van dit jaar (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
     }
