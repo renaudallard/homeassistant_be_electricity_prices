@@ -885,7 +885,7 @@
         "name": "Einspeisepreis Niedertarif (Nacht)"
       },
       "fixed_fee_eur_per_year": {
-        "name": "Feste Vergutung pro Jahr"
+        "name": "Feste Gebühr pro Jahr"
       },
       "energy_fund_eur_per_month": {
         "name": "Energiefonds pro Monat"
