@@ -76,7 +76,7 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
+        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
@@ -169,7 +169,7 @@
       },
       "custom_injection": {
         "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
@@ -415,7 +415,7 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
+        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
@@ -508,7 +508,7 @@
       },
       "custom_injection": {
         "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. L'indice et la base sont tous deux en EUR/kWh, et la base garde son signe : une fiche indiquant (0,07 x Belpex - 2) c€/kWh, sur un Belpex en EUR/MWh, donne un facteur de 0.7 et une base de -0.02. Cochez le plancher si le contrat garantit que le prix d'injection n'est jamais négatif. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
@@ -652,7 +652,7 @@
     },
     "cheapest_window": {
       "name": "Plage la moins chere",
-      "description": "Renvoie la plage contigue de N heures la moins chere dans la table de prix.",
+      "description": "Renvoie la plage contigue de N heures la moins chere dans la table des prix à venir.",
       "fields": {
         "duration_hours": {
           "name": "Duree",
@@ -674,7 +674,7 @@
     },
     "most_expensive_window": {
       "name": "Plage la plus chere",
-      "description": "Renvoie la plage contigue de N heures la plus chere dans la table de prix.",
+      "description": "Renvoie la plage contigue de N heures la plus chere dans la table des prix à venir.",
       "fields": {
         "duration_hours": {
           "name": "Duree",
@@ -794,7 +794,7 @@
     },
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) ne publie pas les tarifs Tarif Impact pour {dso}",
-      "description": "Cette entree utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part reseau du prix revient a la grille bi-horaire tandis que la part energie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, ou Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'etes pas facture sur le tarif choisi. Passez le mode de facturation de cette entree en bi-horaire, ou choisissez un contrat dont la carte publie le bloc Impact."
+      "description": "Cette entree utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part reseau du prix revient a la grille bi-horaire tandis que la part energie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, où Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'etes pas facture sur le tarif choisi. Passez le « Mode de facturation GRD » de cette entrée en « Bi-horaire (jour / nuit) », ou choisissez un contrat dont la carte publie le bloc Impact."
     },
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) ne publie plus la redevance de raccordement wallonne",
