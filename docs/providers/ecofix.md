@@ -82,7 +82,7 @@ Related reading:
 > with, so `_replay_stale_snapshot` puts the rejected card back rather than
 > leaving the entry with nothing. A brand-new entry has no card to replay, so it
 > sets up with every sensor unavailable and the `extractor_unreadable_no_prices`
-> Repairs card pointing at the Custom (expert) supplier.
+> Repairs card pointing at the **Expert: custom formula** supplier.
 >
 > What is gone is the whole regulated side — the DSO network tables and the tax
 > block — which is most of a Belgian all-in price, so `parse_snapshot` fails

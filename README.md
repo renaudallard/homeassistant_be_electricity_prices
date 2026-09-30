@@ -951,7 +951,7 @@ successful refresh:
   unavailable until the supplier publishes a readable card, or until the
   project's card archive files its daily reading of this one, which the
   entry reads while the archive box is on, so the card points at the
-  Custom (expert) supplier rather than warning about drift.
+  **Expert: custom formula** supplier rather than warning about drift.
 - **`card_read_by_ocr_<entry>`** — the same unreadable card, being priced
   anyway off the reading this project's daily card archive makes of its
   pixels. Not a failure and not a drift warning: the figures are the ones
