@@ -211,7 +211,7 @@
       },
       "settlement": {
         "title": "Mode de facturation",
-        "description": "La manière dont votre fournisseur facture ce contrat. Laissez désactivé sauf si vous avez demandé le changement.",
+        "description": "La manière dont votre fournisseur facture ce contrat. Cochez la case uniquement si votre compte est facturé au quart d'heure, que vous l'ayez choisi à la souscription ou demandé plus tard.",
         "data": {
           "quarter_hourly": "Facturation au quart d'heure"
         },
@@ -561,7 +561,7 @@
       },
       "settlement": {
         "title": "Mode de facturation",
-        "description": "La manière dont votre fournisseur facture ce contrat. Laissez désactivé sauf si vous avez demandé le changement.",
+        "description": "La manière dont votre fournisseur facture ce contrat. Cochez la case uniquement si votre compte est facturé au quart d'heure, que vous l'ayez choisi à la souscription ou demandé plus tard.",
         "data": {
           "quarter_hourly": "Facturation au quart d'heure"
         },

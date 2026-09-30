@@ -211,7 +211,7 @@
       },
       "settlement": {
         "title": "Abrechnung",
-        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aus lassen, sofern Sie die Umstellung nicht selbst verlangt haben.",
+        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aktivieren Sie das Feld nur, wenn Ihr Konto pro Viertelstunde abgerechnet wird, ob Sie das beim Vertragsabschluss gewählt oder später beantragt haben.",
         "data": {
           "quarter_hourly": "Abrechnung je Viertelstunde"
         },
@@ -561,7 +561,7 @@
       },
       "settlement": {
         "title": "Abrechnung",
-        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aus lassen, sofern Sie die Umstellung nicht selbst verlangt haben.",
+        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aktivieren Sie das Feld nur, wenn Ihr Konto pro Viertelstunde abgerechnet wird, ob Sie das beim Vertragsabschluss gewählt oder später beantragt haben.",
         "data": {
           "quarter_hourly": "Abrechnung je Viertelstunde"
         },

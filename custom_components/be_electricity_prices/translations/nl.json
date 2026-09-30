@@ -211,7 +211,7 @@
       },
       "settlement": {
         "title": "Afrekening",
-        "description": "Hoe je leverancier dit contract afrekent. Laat uit tenzij je zelf om de omschakeling hebt gevraagd.",
+        "description": "Hoe je leverancier dit contract afrekent. Vink het vakje alleen aan als je per kwartier wordt afgerekend, of je dat nu bij de inschrijving koos of later hebt aangevraagd.",
         "data": {
           "quarter_hourly": "Afrekening per kwartier"
         },
@@ -561,7 +561,7 @@
       },
       "settlement": {
         "title": "Afrekening",
-        "description": "Hoe je leverancier dit contract afrekent. Laat uit tenzij je zelf om de omschakeling hebt gevraagd.",
+        "description": "Hoe je leverancier dit contract afrekent. Vink het vakje alleen aan als je per kwartier wordt afgerekend, of je dat nu bij de inschrijving koos of later hebt aangevraagd.",
         "data": {
           "quarter_hourly": "Afrekening per kwartier"
         },

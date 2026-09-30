@@ -211,7 +211,7 @@
       },
       "settlement": {
         "title": "Settlement",
-        "description": "How your supplier settles this contract. Leave off unless you asked them to switch you.",
+        "description": "How your supplier settles this contract. Tick the box only if your account is billed per quarter-hour, whether you chose that when you signed up or switched to it later.",
         "data": {
           "quarter_hourly": "Bill per quarter-hour"
         },
@@ -561,7 +561,7 @@
       },
       "settlement": {
         "title": "Settlement",
-        "description": "How your supplier settles this contract. Leave off unless you asked them to switch you.",
+        "description": "How your supplier settles this contract. Tick the box only if your account is billed per quarter-hour, whether you chose that when you signed up or switched to it later.",
         "data": {
           "quarter_hourly": "Bill per quarter-hour"
         },
