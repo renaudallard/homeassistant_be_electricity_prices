@@ -76,7 +76,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zähler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
+        "description": "Wie Ihr Netzbetreiber Ihnen die Netznutzung abrechnet. 'Simple' / 'Bi-horaire' folgen der bestehenden Zählerkonvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }
@@ -415,7 +415,7 @@
       },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
-        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zähler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
+        "description": "Wie Ihr Netzbetreiber Ihnen die Netznutzung abrechnet. 'Simple' / 'Bi-horaire' folgen der bestehenden Zählerkonvention. 'Tarif Impact' verwendet die 3 CWaPE-Tarifbänder nach Tageszeit (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zähler.",
         "data": {
           "dso_tariff_mode": "Verteilungs-Modus"
         }

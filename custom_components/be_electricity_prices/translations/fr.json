@@ -76,7 +76,7 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
+        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages horaires CWaPE selon l'heure de la journée (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
@@ -415,7 +415,7 @@
       },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
-        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
+        "description": "Mode de facturation du réseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention des types de compteur. 'Tarif Impact' utilise les 3 plages horaires CWaPE selon l'heure de la journée (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et nécessite un compteur intelligent.",
         "data": {
           "dso_tariff_mode": "Mode de facturation GRD"
         }
