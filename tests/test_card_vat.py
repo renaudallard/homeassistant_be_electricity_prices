@@ -42,7 +42,6 @@ from custom_components.be_electricity_prices.providers import (
     trevion,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
-    extract_pdf_text_aligned,
     printed_vat_rate,
     vat_multiplier,
 )
@@ -54,7 +53,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     vat_grossed_fields,
 )
 from custom_components.be_electricity_prices.providers.base import SupplierSnapshot
-from tests import FIXTURES, fixture_text
+from tests import fixture_text
 
 
 def _layout(name: str) -> str:
@@ -62,9 +61,7 @@ def _layout(name: str) -> str:
 
 
 def _aligned(name: str) -> str:
-    return extract_pdf_text_aligned(
-        (FIXTURES / name).read_bytes(), x_join_threshold=1.0
-    )
+    return fixture_text(name, aligned=True)
 
 
 @dataclass(frozen=True)

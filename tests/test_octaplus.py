@@ -37,9 +37,6 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers._pdf import (
-    extract_pdf_text_aligned,
-)
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -52,13 +49,11 @@ from custom_components.be_electricity_prices.providers._octaplus_overlays import
     _extract_taxes,
     _extract_wallonia_renewables,
 )
-from tests import FIXTURES
+from tests import FIXTURES, fixture_text
 
 
 def _text(name: str) -> str:
-    return extract_pdf_text_aligned(
-        (FIXTURES / name).read_bytes(), x_join_threshold=1.0
-    )
+    return fixture_text(name, aligned=True)
 
 
 def test_octaplus_is_registered() -> None:

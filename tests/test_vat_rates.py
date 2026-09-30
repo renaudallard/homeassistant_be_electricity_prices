@@ -27,9 +27,6 @@ from custom_components.be_electricity_prices.providers import (
     energiebe,
     octaplus,
 )
-from custom_components.be_electricity_prices.providers._pdf import (
-    extract_pdf_text_aligned,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -46,7 +43,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from tests import FIXTURES, fixture_text, make_snapshot
+from tests import fixture_text, make_snapshot
 from tests.test_card_vat import _restated
 
 OCT, NOV, DEC = date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)
@@ -93,9 +90,7 @@ def _octaplus(text: str) -> SupplierSnapshot:
 
 
 def _octaplus_text() -> str:
-    text = extract_pdf_text_aligned(
-        (FIXTURES / "octaplus_dynamic_w.pdf").read_bytes(), x_join_threshold=1.0
-    )
+    text = fixture_text("octaplus_dynamic_w.pdf", aligned=True)
     # The header its cards stopped printing in June 2026.
     return _restated(text, (octaplus._VAT_RE,), "")
 

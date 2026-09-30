@@ -94,6 +94,11 @@ start() {
 }
 
 PYTEST_ARGS=("${@:-tests/}")
+# The text read out of the fixture PDFs, kept across runs (fixture_text in
+# tests/__init__.py). Each gate runs in a worktree it then deletes, so point
+# the suite at a directory that outlives it: the main checkout's tmp/ here,
+# beside the venv on the remote.
+export BE_FIXTURE_TEXT_CACHE="$ROOT/tmp/fixture_text"
 if remote_ready; then
   where="$REMOTE"
   remote_pytest="../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")-q -n auto --dist loadfile"
@@ -103,7 +108,7 @@ if remote_ready; then
   # running. -s holds even that on mains power, -i covers the battery;
   # a remote without it runs the suite plainly.
   start "pytest (on $REMOTE)" "${SSH[@]}" -n "$REMOTE" \
-    "cd $REMOTE_DIR && { command -v caffeinate >/dev/null && exec caffeinate -s -i $remote_pytest; exec $remote_pytest; }"
+    "cd $REMOTE_DIR && export BE_FIXTURE_TEXT_CACHE=\$HOME/be_gate/fixture_text && { command -v caffeinate >/dev/null && exec caffeinate -s -i $remote_pytest; exec $remote_pytest; }"
 else
   where=local
   start "pytest" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto --dist loadfile

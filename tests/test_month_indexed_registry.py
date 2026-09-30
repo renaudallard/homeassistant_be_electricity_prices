@@ -33,17 +33,12 @@ from custom_components.be_electricity_prices.providers import (
     octaplus,
     totalenergies,
 )
-from custom_components.be_electricity_prices.providers._pdf import (
-    extract_pdf_text_aligned,
-)
 from custom_components.be_electricity_prices.providers.base import SupplierSnapshot
-from tests import FIXTURES, fixture_text
+from tests import fixture_text
 
 
 def _aligned(name: str) -> str:
-    return extract_pdf_text_aligned(
-        (FIXTURES / name).read_bytes(), x_join_threshold=1.0
-    )
+    return fixture_text(name, aligned=True)
 
 
 _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [

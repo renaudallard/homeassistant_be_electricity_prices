@@ -86,13 +86,19 @@ Shared helpers live in `tests/__init__.py`:
 - `make_snapshot(...)` builds a `SupplierSnapshot` with sensible defaults (a canonical Wallonia
   fixed-rate snapshot under ORES) so a pricing or coordinator test can override just the one field
   it cares about (`tests/__init__.py`).
-- `fixture_text(name, *, layout=False)` reads a fixture PDF and runs it through the real
-  extractor, `extract_pdf_text` (pypdf) by default or `extract_pdf_text_layout` (pdfplumber) when
-  `layout=True` for the column-positional cards (Bolt, DATS 24, Ecopower, TotalEnergies)
-  (`tests/__init__.py`). It is `lru_cache`d for the process lifetime because PDF extraction
-  dominates suite runtime (the comment notes roughly 10s per fixture, and the cache cuts a full
-  run from about 190s to about 30s). The cache is process-scoped, so if you rewrite a fixture
-  mid-session call `fixture_text.cache_clear()` or restart pytest.
+- `fixture_text(name, *, layout=False, aligned=False)` reads a fixture PDF and runs it through the
+  real extractor, `extract_pdf_text` (pypdf) by default, `extract_pdf_text_layout` (pdfplumber)
+  when `layout=True` for the column-positional cards (Bolt, DATS 24, Ecopower, TotalEnergies), or
+  `extract_pdf_text_aligned` with OCTA+'s word joining when `aligned=True` (`tests/__init__.py`).
+  Reading the cards is most of what the suite spends, so the text is kept on disk across runs
+  under `tmp/fixture_text/`, one directory per extractor: the directory is named by a digest of
+  `providers/_pdf.py` and the pypdf and pdfplumber versions, and each file by the PDF's own
+  digest and the mode, so a changed card, extractor or reader is read afresh rather than served
+  stale. `BE_FIXTURE_TEXT_CACHE` moves it; `scripts/gate.sh` points its throwaway worktree at the
+  main checkout's, and `test.yml` keeps it between runs with `actions/cache`. Within a process it
+  is also `lru_cache`d, so a fixture rewritten mid-session keeps its old text until
+  `fixture_text.cache_clear()` or a restart; the copy on disk needs nothing, being keyed on the
+  new bytes.
 
 ### The fixture-driven pattern
 
@@ -1101,6 +1107,7 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 | Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml` |
 | Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml`) |
 | Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next daily scheduled run (`.github/workflows/test.yml`) |
+| Restore the fixture text | `actions/cache` on `tmp/fixture_text` | what `fixture_text` read on an earlier run; see above (`.github/workflows/test.yml`) |
 | Tests | `pytest tests/ -q -n auto --dist loadfile` | `.github/workflows/test.yml` |
 
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml`).

@@ -28,8 +28,11 @@
 from __future__ import annotations
 
 import ast
+import hashlib
+import os
 from datetime import date
 from functools import lru_cache
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -42,6 +45,7 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text,
+    extract_pdf_text_aligned,
     extract_pdf_text_layout,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -62,6 +66,27 @@ PACKAGE = (
     / "custom_components"
     / ("be_electricity_prices")
 )
+
+
+def _text_cache_dir() -> Path:
+    """Where ``fixture_text`` keeps what it extracted, across runs.
+
+    One directory per extractor: the digest covers ``providers/_pdf.py`` and
+    the pypdf and pdfplumber versions, so a change to either reads every card
+    afresh instead of serving text the current code would not produce. Under
+    ``tmp/`` by default, which git ignores; ``BE_FIXTURE_TEXT_CACHE`` moves
+    it, which the gate does so its throwaway worktree reuses the main one's.
+    """
+    extractor = hashlib.sha256((PACKAGE / "providers" / "_pdf.py").read_bytes())
+    for dist in ("pypdf", "pdfplumber"):
+        extractor.update(f"{dist} {version(dist)}".encode())
+    base = os.environ.get("BE_FIXTURE_TEXT_CACHE") or (
+        Path(__file__).resolve().parent.parent / "tmp" / "fixture_text"
+    )
+    return Path(base).resolve() / extractor.hexdigest()[:16]
+
+
+_TEXT_CACHE = _text_cache_dir()
 
 
 def compare_page_sources() -> dict[str, str]:
@@ -131,32 +156,50 @@ def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
 
 
 @lru_cache(maxsize=None)
-def fixture_text(name: str, *, layout: bool = False) -> str:
+def fixture_text(name: str, *, layout: bool = False, aligned: bool = False) -> str:
     """Read ``tests/fixtures/<name>`` and run it through the PDF extractor.
 
     ``layout=True`` routes through ``extract_pdf_text_layout`` for
     suppliers whose tariff cards rely on column positions (Bolt,
-    DATS 24, Ecopower, TotalEnergies, Trevion). Default is ``extract_pdf_text``
-    (pypdf), which is fine for the rest.
+    DATS 24, Ecopower, TotalEnergies, Trevion), and ``aligned=True`` through
+    ``extract_pdf_text_aligned`` with OCTA+'s word joining. Default is
+    ``extract_pdf_text`` (pypdf), which is fine for the rest.
 
-    Cached for the lifetime of the Python process: PDF extraction is
-    the dominant cost in the test suite (~10s per fixture), and every
-    call with the same arguments returns the same string. The cache
-    cuts the full suite from ~190s to ~30s.
+    The text is also kept on disk (``_text_cache_dir``), keyed on the PDF's
+    own digest and the mode, because reading the cards is most of what the
+    suite spends: every card once, in both modes, is about 2900 CPU seconds
+    on a Raspberry Pi 5, a single Bolt card over a minute of layout. A card
+    that fails to read raises as before and leaves nothing behind. Stored as
+    bytes, so the text comes back exactly, carriage returns included.
 
-    Constraints, because the cache is process-scoped, not session-
-    scoped:
-      * tests must not mutate the returned string (they don't today),
-      * a developer rewriting a fixture file mid-session (e.g. under
-        ``pytest-watch`` / ``--looponfail``) keeps seeing the old
-        text until the Python process restarts. Call
-        ``fixture_text.cache_clear()`` when iterating on a fixture, or
-        re-run pytest from scratch.
+    Also cached in memory for the life of the process, so a worker reads a
+    file off the disk once. Tests must not mutate the returned string. A
+    fixture rewritten mid-session (``pytest-watch``, ``--looponfail``) keeps
+    its old text until the process restarts or ``fixture_text.cache_clear()``
+    runs; the copy on disk is keyed on the new bytes and needs nothing.
     """
+    if layout and aligned:
+        raise ValueError("pick one of layout and aligned")
     payload = (FIXTURES / name).read_bytes()
-    if layout:
-        return extract_pdf_text_layout(payload)
-    return extract_pdf_text(payload)
+    mode = "aligned" if aligned else "layout" if layout else "plain"
+    kept = _TEXT_CACHE / f"{hashlib.sha256(payload).hexdigest()}.{mode}.txt"
+    try:
+        return kept.read_bytes().decode("utf-8", "surrogatepass")
+    except FileNotFoundError:
+        pass
+    if aligned:
+        text = extract_pdf_text_aligned(payload, x_join_threshold=1.0)
+    elif layout:
+        text = extract_pdf_text_layout(payload)
+    else:
+        text = extract_pdf_text(payload)
+    # Written aside and renamed into place: the xdist workers read and write
+    # the same directory, and a reader must never see half a file.
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    partial = kept.with_name(f"{kept.name}.{os.getpid()}")
+    partial.write_bytes(text.encode("utf-8", "surrogatepass"))
+    os.replace(partial, kept)
+    return text
 
 
 def make_snapshot(

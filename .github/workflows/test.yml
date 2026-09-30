@@ -54,6 +54,17 @@ jobs:
         # Nothing here needs network or fixtures, so it runs before the suite
         # and reports in seconds.
         run: python scripts/doc_ref_check.py
+      - name: Restore the text read out of the fixture PDFs
+        # Reading the cards is most of what the suite spends. fixture_text
+        # keys every entry on the PDF's digest, the extractor's source and the
+        # pypdf and pdfplumber versions, so an older cache restored through
+        # restore-keys can only serve text the current code would read; what
+        # no longer matches is simply not used.
+        uses: actions/cache@v6
+        with:
+          path: tmp/fixture_text
+          key: fixture-text-${{ hashFiles('tests/fixtures/*.pdf', 'custom_components/be_electricity_prices/providers/_pdf.py', 'requirements-dev.txt') }}
+          restore-keys: fixture-text-
       - name: Tests
         # Split across the runner's cores by file, so a file's fixtures are
         # built once in one worker rather than scattered. Measured on a
