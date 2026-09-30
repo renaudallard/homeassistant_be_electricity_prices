@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Backfill statistics",
-      "description": "Populate the recorder's long-term statistics for this entry's price sensors and current_year_cost across a date range, so the Energy dashboard shows history that predates the entry's first live tick.",
+      "description": "Populate the recorder's long-term statistics for this entry's price sensors and current_year_cost across a date range, so the Energy dashboard shows history that predates the entry's first live tick. The cost is only rebuilt inside the current year-to-date window (from 1 January, or the contract start date if the entry bills from it); a range ending on or before its start rebuilds the price sensors only.",
       "fields": {
         "entry_id": {
           "name": "Entry ID",
@@ -708,7 +708,7 @@
         },
         "end": {
           "name": "End",
-          "description": "First hour NOT to backfill (exclusive). Defaults to the current hour."
+          "description": "First hour NOT to backfill (exclusive). Defaults to the current hour. On or before the start of the year-to-date window, only the price sensors are rebuilt."
         },
         "clear": {
           "name": "Clear ENTIRE series before re-import",

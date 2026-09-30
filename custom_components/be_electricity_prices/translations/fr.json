@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Backfill des statistiques",
-      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entree sur une plage de dates, afin que le tableau de bord Energie affiche un historique anterieur au premier tick de l'integration.",
+      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entree sur une plage de dates, afin que le tableau de bord Energie affiche un historique anterieur au premier tick de l'integration. Le coût n'est reconstitué que dans la fenêtre du coût annuel en cours (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
       "fields": {
         "entry_id": {
           "name": "ID de l'entree",
@@ -708,7 +708,7 @@
         },
         "end": {
           "name": "Fin",
-          "description": "Premiere heure NON reconstituee (exclusif). Par defaut: heure courante."
+          "description": "Premiere heure NON reconstituee (exclusif). Par defaut: heure courante. Au plus tard au début de la fenêtre du coût annuel, seuls les capteurs de prix sont reconstitués."
         },
         "clear": {
           "name": "Effacer TOUTE la serie avant import",

@@ -696,7 +696,7 @@
     },
     "backfill_statistics": {
       "name": "Statistiken nachbefuellen",
-      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt.",
+      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im laufenden Jahreskostenfenster neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -708,7 +708,7 @@
         },
         "end": {
           "name": "Ende",
-          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde."
+          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Jahreskostenfensters, werden nur die Preissensoren neu aufgebaut."
         },
         "clear": {
           "name": "GESAMTE Reihe vor dem Import loeschen",
