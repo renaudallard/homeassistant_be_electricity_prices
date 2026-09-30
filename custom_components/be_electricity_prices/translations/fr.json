@@ -273,7 +273,7 @@
           "switch": "Enregistrer un changement de fournisseur",
           "remove_switch": "Supprimer le dernier changement de fournisseur",
           "compare": "Comparer un autre fournisseur (devis ponctuel)",
-          "compare_all": "Comparer tous les fournisseurs (classement)"
+          "compare_all": "Comparer tous les contrats de votre type (classement)"
         }
       },
       "switch": {

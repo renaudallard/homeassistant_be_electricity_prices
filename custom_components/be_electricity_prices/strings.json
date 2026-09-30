@@ -273,7 +273,7 @@
           "switch": "Record a supplier switch",
           "remove_switch": "Remove the last supplier switch",
           "compare": "Compare another supplier (one-off quote)",
-          "compare_all": "Compare every supplier (ranked)"
+          "compare_all": "Compare every contract of your kind (ranked)"
         }
       },
       "switch": {

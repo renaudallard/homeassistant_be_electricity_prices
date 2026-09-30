@@ -658,7 +658,7 @@ opens a menu of four options, five once a supplier switch has been recorded this
 - **Remove the last supplier switch** — shown once a switch is recorded this
   year. Puts the entry back as it stood before the last switch was recorded,
   the contract you left becoming the current one again.
-- **Compare every supplier (ranked)** — a separate menu entry from the one-off
+- **Compare every contract of your kind (ranked)** — a separate menu entry from the one-off
   quote below, and a different question. It prices **every contract of your own
   kind sold in your region** against your own settings and sorts them, cheapest
   first. **Your own contract is in the table** under a `YOUR CONTRACT` badge,

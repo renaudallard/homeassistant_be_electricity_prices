@@ -273,7 +273,7 @@
           "switch": "Lieferantenwechsel erfassen",
           "remove_switch": "Letzten Lieferantenwechsel entfernen",
           "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)",
-          "compare_all": "Alle Anbieter vergleichen (Rangliste)"
+          "compare_all": "Alle Verträge Ihrer Art vergleichen (Rangliste)"
         }
       },
       "switch": {
