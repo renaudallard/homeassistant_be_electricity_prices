@@ -119,15 +119,21 @@ jobs:
         # manual backfill asks for as many months as it is told and a
         # re-render fetches every kept card back, so either gets six hours.
         timeout-minutes: ${{ (steps.budget.outputs.rerender == 'true' || (github.event.inputs.backfill_months != '' && github.event.inputs.backfill_months != '0') || github.event.inputs.rerender == 'true') && 360 || 60 }}
+        # The dispatch inputs reach the shell through the environment, not
+        # pasted into the command, so what is typed there is only ever an
+        # argument.
         env:
           CARDS_REPO: renaudallard/be_price_cards
+          BACKFILL: ${{ github.event.inputs.backfill_months || '12' }}
+          REPARSE: ${{ github.event.inputs.reparse == 'true' && '--reparse' || '' }}
+          RERENDER: ${{ github.event.inputs.rerender == 'true' && '--rerender' || '' }}
         run: >-
           python scripts/archive_cards.py --out tmp/cards/electricity --pdfs tmp/pdfs
           --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
           --archive-base-url "https://github.com/${CARDS_REPO}/blob/main/electricity"
-          --backfill "${{ github.event.inputs.backfill_months || '12' }}"
-          ${{ github.event.inputs.reparse == 'true' && '--reparse' || '' }}
-          ${{ github.event.inputs.rerender == 'true' && '--rerender' || '' }}
+          --backfill "$BACKFILL"
+          ${REPARSE:+"$REPARSE"}
+          ${RERENDER:+"$RERENDER"}
 
       - name: Keep the cards themselves
         id: keep
