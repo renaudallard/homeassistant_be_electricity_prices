@@ -33,7 +33,7 @@ tick decides stays here: the repairs it raises and the static band rates.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .const import (
     CONF_CARD_ARCHIVE,
@@ -101,7 +101,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import aiohttp
 import logging
-from .coordinator_costs import TickCosts
+from .coordinator_costs import TickCosts, held_costs_blob
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +112,9 @@ class _TickMixin:
     # State the concrete class owns, declared as BARE annotations with no
     # value: a valued class attribute would change hasattr() and instance-dict
     # behaviour. __init__ over there is what actually creates these.
+    _held_costs: dict[str, Any] | None
     _last_error: str
+    _meter_reads_deferred: bool
     _peak_kw: float
     _peak_month: date | None
     _previous_priced: PricedPeriods | None
@@ -124,6 +126,7 @@ class _TickMixin:
     entry: ConfigEntry
     _card_read_by_ocr: bool
     hass: HomeAssistant
+    meter_reads_pending: bool
 
     if TYPE_CHECKING:
         # Provided by DataUpdateCoordinator and the sibling mixins. Declared
@@ -169,6 +172,7 @@ class _TickMixin:
             spot_prices: dict[datetime, float],
             grid_keys: Iterable[datetime],
         ) -> dict[datetime, float]: ...
+        async def _held_tick_costs(self) -> TickCosts: ...
         async def _tick_costs(
             self,
             priced: SupplierSnapshot,
@@ -200,12 +204,18 @@ class _TickMixin:
         ) -> dict[datetime, float]: ...
 
     async def _update_body(self) -> CoordinatorData:
+        # Setup's own refresh reads no meter: the day's results and the costs
+        # come back from the store, and setup asks for the refresh that reads
+        # them once Home Assistant is no longer waiting (issue #107).
+        deferred = self._meter_reads_deferred
+        self._meter_reads_deferred = False
         self._sync_deprecated_supplier_issue()
         self._sync_withdrawn_contract_issue()
         # Before the snapshot, because _set_snapshot resolves the volume
         # tranche and the network ceiling against it; _reresolve_snapshot
         # below catches the card that was already in hand.
-        await self._ensure_annual_volume()
+        if not deferred:
+            await self._ensure_annual_volume()
         # Sibelga's power term, for a Brussels entry whose card prints only the
         # metering half of the fixed charge. One small PDF a year, cached for
         # the life of the process, and the resolver leaves the card alone
@@ -324,15 +334,20 @@ class _TickMixin:
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )
-        costs = await self._tick_costs(
-            priced,
-            injection_snapshot,
-            energy_mean,
-            spp_weighted,
-            rlp_weighted,
-            allocating,
-            billed_peak,
-        )
+        if deferred:
+            costs = await self._held_tick_costs()
+        else:
+            costs = await self._tick_costs(
+                priced,
+                injection_snapshot,
+                energy_mean,
+                spp_weighted,
+                rlp_weighted,
+                allocating,
+                billed_peak,
+            )
+            self._held_costs = held_costs_blob(self.entry, costs)
+        self.meter_reads_pending = deferred
 
         await self._save_persistent()
 

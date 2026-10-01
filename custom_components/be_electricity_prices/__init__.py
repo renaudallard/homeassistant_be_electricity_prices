@@ -70,6 +70,7 @@ from .const import (
     PLATFORMS,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
+    COSTS_STORAGE_VERSION,
     STORAGE_VERSION,
     SUPPLIER_CUSTOM,
 )
@@ -328,7 +329,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     _migrate_current_year_cost_unique_id(hass, entry)
     _migrate_zeroed_custom_impact_bands(hass, entry)
     _migrate_bolt_dynamic_contract(hass, entry)
-    coordinator = BePricesCoordinator(hass, entry)
+    coordinator = BePricesCoordinator(hass, entry, defer_meter_reads=True)
     # Assigned BEFORE the first refresh, not after it as the usual pattern
     # has it. The tick resolves the archived month rows, the cohort card and
     # the Flemish network ceiling against the yearly volume, and those read
@@ -362,6 +363,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
         # back here too rather than leave a coordinator that never ran.
         object.__delattr__(entry, "runtime_data")
         raise
+
+    # The first refresh read no meter (issue #107): the refresh that does
+    # runs now, while the rest of Home Assistant starts, rather than inside
+    # the setup it waits on.
+    if coordinator.meter_reads_pending:
+        entry.async_create_background_task(
+            hass,
+            coordinator.async_request_refresh(),
+            f"{DOMAIN}_meter_reads_{entry.entry_id}",
+        )
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
@@ -610,6 +621,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
     )
     await store.async_remove()
+    costs: Store[dict[str, Any]] = Store(
+        hass, COSTS_STORAGE_VERSION, f"{DOMAIN}_costs_{entry.entry_id}"
+    )
+    await costs.async_remove()
     if not any(
         other.entry_id != entry.entry_id
         for other in hass.config_entries.async_entries(DOMAIN)

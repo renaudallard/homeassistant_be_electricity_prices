@@ -908,6 +908,16 @@ back a contract you left before the year began.
   once per month touched by that window. Annual fees are pro-rated to the elapsed
   fraction of the year, so on Jan 1 the sensor sits at ~0 and grows day
   by day instead of jumping to the full annual upfront.
+- **Startup reads no meter.** Home Assistant waits on each integration's
+  first refresh, with 300 s for all of them together, and the meter reads
+  behind the costs each cover a year of hours, which on a database on a NAS
+  can take minutes. So after a restart the cost and volume sensors show
+  what they showed before it, and the refresh that reads the meters runs
+  right after startup instead of inside it. A figure for a month or a year
+  that has ended since, or after a setting was edited, reads unknown until
+  then, as every cost does on a new entry. The yearly volume and the meter
+  check behind the register Repairs card are read once a day and kept
+  across restarts.
 
 ### Failure mode
 

@@ -73,6 +73,7 @@ from .const import (
     CONF_REGION,
     CONF_SUPPLIER,
     DOMAIN,
+    COSTS_STORAGE_VERSION,
     STORAGE_VERSION,
     UPDATE_INTERVAL_MINUTES,
 )
@@ -139,7 +140,13 @@ class BePricesCoordinator(
 ):
     """Pull supplier snapshot + ENTSO-E spot, build the hourly price table."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        *,
+        defer_meter_reads: bool = False,
+    ) -> None:
         self.entry = entry
         # Snapshot the (supplier, contract, region) tuple at construction
         # so async_unload_entry can target the *original* tuple even if
@@ -171,6 +178,12 @@ class BePricesCoordinator(
         self._store: Store[dict[str, Any]] = _MigratingStore(
             hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
         )
+        # The costs the last refresh published (_held_costs below), apart
+        # from the blob above: they move every tick and it should not.
+        self._costs_store: Store[dict[str, Any]] = Store(
+            hass, COSTS_STORAGE_VERSION, f"{DOMAIN}_costs_{entry.entry_id}"
+        )
+        self._saved_costs: dict[str, Any] | None = None
         # _snapshot is what this entry prices against: the card resolved
         # against its VAT preference. _snapshot_raw is the card exactly as
         # parsed, which is what gets shared with sibling entries and
@@ -296,6 +309,17 @@ class BePricesCoordinator(
         self._month_cards_deferred = True
         # And for the Synergrid load / production profiles. See _fill_profiles.
         self._profiles_deferred = True
+        # Whether the next refresh leaves the recorder alone: asked for by
+        # setup only, whose first refresh Home Assistant waits on. Each meter
+        # read covers a year of hours, and on a MariaDB on a NAS the reads
+        # took most of a 287 s start (issue #107). See _update_body.
+        self._meter_reads_deferred = defer_meter_reads
+        # Set by a refresh that left them out, for setup to ask for the one
+        # that reads them; cleared by that one.
+        self.meter_reads_pending = False
+        # The costs the last refresh that read the meters published, as they
+        # are kept with the entry (coordinator_costs.py, _held_tick_costs).
+        self._held_costs: dict[str, Any] | None = None
         # Synergrid solar production profile: hourly weights keyed by UTC
         # (month, day, hour), for SPP-weighted custom injection. Persisted so a
         # restart doesn't force a fresh 52 MB download; refreshed monthly (the

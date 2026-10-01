@@ -657,6 +657,8 @@ RESOLUTION_QUARTER: Final = "PT15M"
 UPDATE_INTERVAL_MINUTES: Final = 60
 
 STORAGE_VERSION: Final = 2
+# The costs store apart from it (coordinator.py, _costs_store).
+COSTS_STORAGE_VERSION: Final = 1
 
 # --- Expert custom-formula supplier ------------------------------------------
 # An escape hatch for suppliers that publish no public, machine-resolvable

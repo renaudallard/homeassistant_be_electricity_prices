@@ -75,6 +75,7 @@ class _PersistMixin:
     _annual_kwh_day: date | None
     _annual_kwh_full_year: bool
     _backfill_retry_from: date | None
+    _held_costs: dict[str, Any] | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
     _peak_history: dict[str, float]
@@ -91,6 +92,8 @@ class _PersistMixin:
     _spot_cache: dict[datetime, float]
     _stale_snapshot: dict[str, Any] | None
     _store: Store[dict[str, Any]]
+    _costs_store: Store[dict[str, Any]]
+    _saved_costs: dict[str, Any] | None
     _supplier_tuple: tuple[str, str, str]
     daily_compare: Any
     entry: ConfigEntry
@@ -117,6 +120,12 @@ class _PersistMixin:
         # finds what another entry already downloaded rather than fetching the
         # file again.
         await _load_profile_cache(self.hass)
+        # The costs the last refresh published, from their own store: they
+        # move every hour, and in the entry's blob every tick would rewrite
+        # the whole of it. _held_tick_costs checks what they cover.
+        held_costs = await self._costs_store.async_load()
+        if isinstance(held_costs, dict):
+            self._held_costs = held_costs
         stored = await self._store.async_load()
         if not stored:
             return
@@ -469,6 +478,11 @@ class _PersistMixin:
                 live_tuple,
             )
             return
+        if self._held_costs is not None and self._held_costs != self._saved_costs:
+            # A few hundred bytes an hour, in a store of their own so the
+            # entry's blob is still written only when something in it moved.
+            await self._costs_store.async_save(self._held_costs)
+            self._saved_costs = self._held_costs
         payload: dict[str, Any] = {
             # Stamp the snapshot's actual provenance (the tuple this
             # coordinator was constructed under) so the load path can

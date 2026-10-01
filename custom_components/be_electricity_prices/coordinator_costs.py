@@ -46,8 +46,11 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator_data import (
+    month_window_reset,
     month_window_start,
+    ytd_window_reset,
 )
+from .coordinator_persist import settings_digest
 from .providers import (
     SupplierSnapshot,
     get as get_extractor,
@@ -93,6 +96,19 @@ _LOGGER = logging.getLogger(__name__)
 # refresh a pricing asks for and the tick that answers it.
 _PREVIOUS_RETRY = timedelta(minutes=50)
 
+# The figures a refresh that read the meters published and the first refresh
+# after a restart publishes again, before it reads any (_held_tick_costs).
+_HELD_FIGURES = (
+    "current_year_cost",
+    "month_cost",
+    "projected_year_cost",
+    "projected_consumption",
+    "projected_injection",
+    "rolling_consumption",
+    "rolling_injection",
+    "year_end_cost",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TickCosts:
@@ -116,12 +132,26 @@ class TickCosts:
     year_end_breakdown: dict[str, Any]
 
 
+def held_costs_blob(entry: ConfigEntry, costs: TickCosts) -> dict[str, Any]:
+    """``costs`` as the entry's store keeps them for ``_held_tick_costs``.
+
+    With the windows they cover and the settings they were priced under, so
+    a restart serves them only while both still hold.
+    """
+    blob: dict[str, Any] = {name: getattr(costs, name) for name in _HELD_FIGURES}
+    blob["inputs"] = settings_digest(entry)
+    blob["year_reset"] = ytd_window_reset(entry, costs.window_now).isoformat()
+    blob["month_reset"] = month_window_reset(entry, costs.window_now).isoformat()
+    return blob
+
+
 class _CostsMixin:
     """Mixed into BePricesCoordinator."""
 
     # State the concrete class owns, declared as BARE annotations with no
     # value: a valued class attribute would change hasattr() and instance-dict
     # behaviour. __init__ over there is what actually creates these.
+    _held_costs: dict[str, Any] | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
     _previous_priced: PricedPeriods | None
@@ -422,6 +452,74 @@ class _CostsMixin:
             rolling_breakdown=rolling_breakdown,
             year_end_cost=year_end_cost,
             year_end_breakdown=year_end_breakdown,
+        )
+
+    async def _held_tick_costs(self) -> TickCosts:
+        """The costs setup's own refresh publishes, without reading a meter.
+
+        Every figure below reads a year of every meter from the recorder, and
+        Home Assistant waits on that refresh: on a MariaDB on a NAS the reads
+        took most of a 287 s start, close to the 300 s it allows the whole of
+        startup (issue #107). So that refresh publishes what the last one
+        before the restart did, and setup asks for the one that reads the
+        meters once Home Assistant no longer waits on it. A figure is served
+        only while it still covers the window the sensor publishes beside it
+        and was priced under the entry's settings: a new year or month, or a
+        setting edited since, leaves it unknown until that refresh lands
+        rather than show a period it does not cover. No breakdown is kept:
+        the attributes come back with the figures they explain.
+        """
+        assert self._snapshot is not None
+        window_now = dt_util.now()
+        today = window_now.date()
+        held = self._held_costs or {}
+        priced_under = held.get("inputs") == settings_digest(self.entry)
+        same_year = (
+            priced_under
+            and held.get("year_reset")
+            == ytd_window_reset(self.entry, window_now).isoformat()
+        )
+        same_month = (
+            same_year
+            and held.get("month_reset")
+            == month_window_reset(self.entry, window_now).isoformat()
+        )
+
+        def _figure(name: str, valid: bool) -> float | None:
+            value = held.get(name)
+            if not valid or not isinstance(value, (int, float)):
+                return None
+            return float(value)
+
+        signing = await signing_month_snapshot(
+            self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data.get(CONF_REGION, ""),
+            self.entry,
+            self._snapshot,
+            cached_only=True,
+        )
+        return TickCosts(
+            window_now=window_now,
+            periods=previous_periods(
+                self.entry.data, ytd_window_start(self.entry, today), today
+            ),
+            current_year_cost=_figure("current_year_cost", same_year),
+            month_cost=_figure("month_cost", same_month),
+            ytd_breakdown={},
+            signing=signing,
+            projected_year_cost=_figure("projected_year_cost", same_year),
+            projection_breakdown={},
+            projected_consumption=_figure("projected_consumption", same_year),
+            projected_injection=_figure("projected_injection", same_year),
+            volume_breakdown={},
+            rolling_consumption=_figure("rolling_consumption", same_year),
+            rolling_injection=_figure("rolling_injection", same_year),
+            rolling_breakdown={},
+            year_end_cost=_figure("year_end_cost", same_year),
+            year_end_breakdown={},
         )
 
     async def _fill_month_cards(self) -> None:
