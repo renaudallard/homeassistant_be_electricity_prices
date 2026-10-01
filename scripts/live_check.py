@@ -1701,7 +1701,8 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
         ),
         return_exceptions=True,
     )
-    for contract, result in zip(bolt._CONTRACTS, fetch_results, strict=True):
+    fetched = dict(zip(bolt._CONTRACTS, fetch_results, strict=True))
+    for contract, result in fetched.items():
         cid = contract.contract_id
         if isinstance(result, BaseException):
             for region_key in ("flanders", "wallonia", "brussels"):
@@ -1712,10 +1713,19 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 )
             continue
         url, text = result
+        # The card a contract is re-priced on is one of the cards fetched
+        # above, so read it from there as fetch() would.
+        reference = bolt._index_card(contract)
+        held = None if reference is None else fetched[reference]
+        index_text = (
+            None if held is None or isinstance(held, BaseException) else held[1]
+        )
         for region_key in ("flanders", "wallonia", "brussels"):
             prefix = f"bolt/{cid}/{region_key}"
             try:
-                snap = bolt.parse_snapshot(cid, text, region_key, url)
+                snap = bolt.parse_snapshot(
+                    cid, text, region_key, url, index_text=index_text
+                )
             except Exception as err:
                 _record(f"{prefix}: parse", False, f"{type(err).__name__}: {err}")
                 continue

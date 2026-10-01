@@ -33,7 +33,7 @@ for power, as opposed to what it collects on someone else's behalf.
 from __future__ import annotations
 
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
@@ -276,6 +276,47 @@ def _extract_energy(
     # per-entry reading of the variable card rather than a kind of its own, so
     # anything else here is a registry mistake.
     raise ExtractorError(f"Bolt: unexpected contract kind {kind!r}")
+
+
+def _reprice_on_index(energy: EnergyRates, reference: EnergyRates) -> EnergyRates:
+    """``energy``'s monthly prices at the index ``reference``'s card implies.
+
+    Every Bolt variable card prints its monthly price as its formula at the
+    month's index, per register, and names neither the index nor its value.
+    ``reference`` is a card whose price and formula agree, so each of its
+    registers gives the index back exactly, and ``energy``'s own formula then
+    prices that index. Both formulas are on the snapshot's basis, VAT baked
+    in, so no rate enters here.
+
+    Left as printed when either card carries no formula: there is then nothing
+    to derive the index from, or nothing to price it with.
+    """
+    if not isinstance(energy, VariableRates) or not isinstance(
+        reference, VariableRates
+    ):
+        return energy
+    factor, base = energy.formula_factor, energy.formula_base
+    ref_factor, ref_base = reference.formula_factor, reference.formula_base
+    if factor is None or base is None or not ref_factor or ref_base is None:
+        return energy
+
+    def priced(printed: float) -> float:
+        return factor * (printed - ref_base) / ref_factor + base
+
+    # A register the reference does not print keeps its own card's figure.
+    return replace(
+        energy,
+        current=priced(reference.current),
+        peak=energy.peak if reference.peak is None else priced(reference.peak),
+        offpeak=(
+            energy.offpeak if reference.offpeak is None else priced(reference.offpeak)
+        ),
+        exclusive_night=(
+            energy.exclusive_night
+            if reference.exclusive_night is None
+            else priced(reference.exclusive_night)
+        ),
+    )
 
 
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:

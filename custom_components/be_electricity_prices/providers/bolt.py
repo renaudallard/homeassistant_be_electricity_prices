@@ -111,6 +111,7 @@ from ._bolt_cards import (
     _extract_energy,
     _extract_injection,
     _extract_promotion,
+    _reprice_on_index,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -159,6 +160,10 @@ class _ContractDef:
     # True when the customer chooses whether this card settles per quarter-hour
     # or against the RLP-weighted month. Every variable card, no fixed one.
     settlement: bool = False
+    # The slug of the card whose printed monthly price fixes the index this
+    # one is billed at, for a card whose own printed price cannot be trusted
+    # to (see _reprice_on_index).
+    index_slug: str | None = None
 
     @property
     def professional(self) -> bool:
@@ -192,6 +197,11 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef(
         "bolt_online", "Bolt Online", "variable", "var", "online", settlement=True
     ),
+    # Plenty Online prints its own formula, "Belpex * 1,145 + 16,45", beside
+    # the base card's monthly price, which is the other formula's result: on
+    # the October 2026 card 19,05 c/kWh, where its own formula at the same
+    # index gives 18,66. The price billed is the card's own formula, so the
+    # index is read off the Online card, whose price and formula agree.
     _ContractDef(
         "bolt_plenty_online",
         "Bolt Plenty Online",
@@ -199,6 +209,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "plenty_online",
         settlement=True,
+        index_slug="online",
     ),
     # The professional editions: same paths with the segment swapped.
     _ContractDef(
@@ -441,6 +452,19 @@ async def _fetch_pdf_text(
         )
 
 
+def _index_card(contract: _ContractDef) -> _ContractDef | None:
+    """The card whose printed monthly price ``contract`` is re-priced on."""
+    if contract.index_slug is None:
+        return None
+    return next(
+        c
+        for c in _CONTRACTS
+        if c.folder == contract.folder
+        and c.slug == contract.index_slug
+        and c.segment == contract.segment
+    )
+
+
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -449,7 +473,11 @@ async def fetch(
     """Fetch the latest Bolt PDF for ``contract_id`` (covers every region)."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
     url, text = await _fetch_pdf_text(session, contract)
-    return parse_snapshot(contract_id, text, region, url)
+    reference = _index_card(contract)
+    index_text = (
+        None if reference is None else (await _fetch_pdf_text(session, reference))[1]
+    )
+    return parse_snapshot(contract_id, text, region, url, index_text=index_text)
 
 
 async def fetch_for_month(
@@ -498,9 +526,19 @@ async def fetch_for_month(
 
 
 def parse_snapshot(
-    contract_id: str, text: str, region: str, source_url: str = _BASE_URL
+    contract_id: str,
+    text: str,
+    region: str,
+    source_url: str = _BASE_URL,
+    *,
+    index_text: str | None = None,
 ) -> SupplierSnapshot:
-    """Pure parser exposed for unit tests."""
+    """Pure parser exposed for unit tests.
+
+    ``index_text`` is the card ``contract.index_slug`` names, required for a
+    contract that has one: its printed monthly price is re-derived from that
+    card's (see :func:`_reprice_on_index`).
+    """
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
     # Bolt's PDFs sprinkle U+2028 LINE SEPARATOR characters where one
     # would expect a newline; normalize to '\n' so a single set of
@@ -509,6 +547,20 @@ def parse_snapshot(
 
     professional = contract.professional
     energy = _extract_energy(text, contract.kind, professional=professional)
+    if contract.index_slug is not None:
+        if index_text is None:
+            raise ExtractorError(
+                f"Bolt: {contract_id} is billed at the index the "
+                f"{contract.index_slug} card prints, which was not read"
+            )
+        energy = _reprice_on_index(
+            energy,
+            _extract_energy(
+                index_text.replace("\u2028", "\n"),
+                contract.kind,
+                professional=professional,
+            ),
+        )
     injection = _extract_injection(text)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)

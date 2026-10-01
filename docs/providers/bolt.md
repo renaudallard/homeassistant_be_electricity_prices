@@ -97,6 +97,27 @@ it. The bill does not change: same coefficients, same standing charge, same feed
 card. The unique id stays put in the one case where the target is already taken, which is a
 household that deliberately ran both readings as two entries.
 
+### Plenty Online's monthly price
+
+The Plenty Online card prints its own formula, `Belpex * 1,145 + 16,45`, beside a monthly
+price that is not that formula's: it is the base card's, `1,168 + 16,90`, at the month's
+index, digit for digit the price the Variable, Plenty and Online cards print (October 2026:
+`19,05 20,09 18,15 18,15`). Back-solving each card's price against its own formula gives
+139,40 EUR/MWh on the three base cards and 142,59 on Plenty Online, the same month, and
+September shows the same split (100,06 against 102,47). The card contradicts itself, and
+the price billed is the one its own formula gives.
+
+So `bolt_plenty_online` carries `index_slug = "online"`: `fetch` also reads the Online card,
+and `_reprice_on_index` (`_bolt_cards.py`) reads the month's index back off each of its
+registers, whose price and formula agree, and prices it with Plenty Online's own formula.
+October 2026 bills 18,66 c/kWh mono instead of 19,05, 13,58 EUR a year less at 3500 kWh. A
+household that settles per quarter-hour was already on the formula and is not affected. The
+card names neither the index nor its value, which is why another card has to supply it; if
+Bolt prints Plenty Online's own price one day, the result is the same, since the index does
+not change. `parse_snapshot` refuses to price the contract without the Online card's text
+rather than fall back to the printed figure, and the live check hands it the card it already
+fetched.
+
 ### Plenty offers
 
 The Plenty cards print a new-signing offer under a `Réduction` heading, read by
@@ -204,7 +225,7 @@ source and not the operator's.
 | `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | yes | yes | `Belpex * 1,168 + 16,90`, 8,99 EUR/month |
 | `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | yes | yes | Same formula, 3,99 EUR/month |
 | `bolt_online` | Bolt Online | variable | `var` / `online` | yes | yes | Same formula, 5,99 EUR/month |
-| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | yes | yes | The one card with its own coefficients: `1,145 + 16,45`, 0,99 EUR/month |
+| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | yes | yes | The one card with its own coefficients: `1,145 + 16,45`, 0,99 EUR/month; its monthly price is re-derived from the Online card's (below) |
 
 The `spot_indexed_injection` column is the registry flag verbatim, and it reads the way it does
 because the flag answers "does this product's feed-in need spots its ENERGY leg never fetches".
@@ -635,6 +656,8 @@ Under `tests/fixtures/` (2,5 to 5 MB each, French-language, all three regions):
 | `bolt_variable.pdf` | Bolt Variable April 2026 | injection parity with fix, current-vs-annual bi-horaire selection, loud failure on missing Jour/Nuit |
 | `bolt_plenty_fix_sep.pdf` | Bolt Plenty Fixe September 2026 | the lump-and-bonus offer, its figure split from its currency by the other column |
 | `bolt_plenty_fix_oct.pdf` | Bolt Plenty Fixe October 2026, as republished on 1 October | the per-kWh offer, its Flanders gate and its basis |
+| `bolt_plenty_online_oct.pdf` | Bolt Plenty Online October 2026 | its monthly price re-derived at the Online card's index |
+| `bolt_online_oct.pdf` | Bolt Online October 2026 | the card that index is read off |
 
 Fixtures are loaded via `fixture_text("bolt_fix.pdf", layout=True)` (`tests/test_bolt.py`), which
 routes through the `pdfplumber` layout extractor so tests see the same text the live path parses.
