@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -190,8 +191,11 @@ def test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract() -> Non
             patch.object(mega_mod, "fetch_pdf_text", new=_capture),
         ):
             for contract_id, expected in (
-                ("mega_pro_smart_fixed", "-072026-Smart0107-Fixed.pdf"),
-                ("mega_pro_smart_flex", "-072026-Smart0107.pdf"),
+                (
+                    "mega_pro_smart_fixed",
+                    ["-072026-Smart0107-Fixed.pdf", "-072026-Smart0107-Fix.pdf"],
+                ),
+                ("mega_pro_smart_flex", ["-072026-Smart0107.pdf"]),
             ):
                 captured.clear()
                 out = await mega_mod.fetch_for_month(
@@ -201,11 +205,13 @@ def test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract() -> Non
                     date(2026, 7, 1),
                 )
                 assert out is None  # the patched fetch raised
-                # One attempt only: no previous-month retry, or an
-                # unpublished month would bill the neighbour's card.
-                assert len(captured) == 1
-                assert "-B2B-WL-" in captured[0]
-                assert captured[0].endswith(expected)
+                # The month's own card only, under each spelling of its
+                # variant: no previous-month retry, or an unpublished month
+                # would bill the neighbour's card.
+                assert len(captured) == len(expected)
+                for url, tail in zip(captured, expected, strict=True):
+                    assert "-B2B-WL-" in url
+                    assert url.endswith(tail)
 
     asyncio.run(_run())
 
@@ -1384,7 +1390,7 @@ async def test_the_running_months_next_card_is_not_out(freezer: Any) -> None:
     freezer.move_to("2026-09-30 22:00:00+02:00")
     contract = mega_mod._CONTRACTS_BY_ID["mega_pro_smart_flex"]
     with patch.object(
-        mega_mod, "_archive_pdf_url", new=AsyncMock(side_effect=AssertionError)
+        mega_mod, "_archive_pdf_urls", new=AsyncMock(side_effect=AssertionError)
     ):
         got = await mega_mod._realized_rates_for_month(
             None,  # type: ignore[arg-type]
@@ -1404,14 +1410,14 @@ async def test_a_timeout_on_the_next_card_is_retried_not_filed() -> None:
 
     contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
 
-    async def _url(*_a: object, **_k: object) -> str:
-        return "https://example.invalid/next.pdf"
+    async def _url(*_a: object, **_k: object) -> list[str]:
+        return ["https://example.invalid/next.pdf"]
 
     async def _timeout(*_a: object, **_k: object) -> str:
         raise ExtractorError("network error fetching next.pdf: TimeoutError")
 
     with (
-        patch.object(mega_mod, "_archive_pdf_url", new=_url),
+        patch.object(mega_mod, "_archive_pdf_urls", new=_url),
         patch.object(mega_mod, "fetch_pdf_text", new=_timeout),
         pytest.raises(ExtractorError),
     ):
@@ -1514,19 +1520,117 @@ async def test_pro_transient_error_is_not_rolled_back_to_last_month() -> None:
             await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
     assert len(served) == 1
 
-    # The control: a card that is not published yet still rolls back a month.
+    # The control: a card that is not published yet still rolls back a month,
+    # early in the month, once both spellings of this month's are missing.
     served.clear()
 
     async def _not_there_yet(session: object, url: str, *a: object, **k: object) -> str:
         served.append(url)
-        if len(served) == 1:
+        if "-102026-" in url:
             raise ExtractorError(f"HTTP 404 fetching {url}")
         return fixture_text("mega_pro_smart_fixed_w.pdf")
 
-    with patch.object(mega_mod, "fetch_pdf_text", new=_not_there_yet):
+    with (
+        patch.object(mega_mod, "fetch_pdf_text", new=_not_there_yet),
+        patch.object(mega_mod.dt_util, "now", new=_on(date(2026, 10, 2))),
+    ):
         snap = await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
-    assert len(served) == 2
+    assert [u.rsplit("-", 1)[-1] for u in served] == [
+        "Fixed.pdf",
+        "Fix.pdf",
+        "Fixed.pdf",
+    ]
+    assert "-092026-" in served[-1]
     assert snap.supplier == "mega"
+
+
+def _on(day: date) -> Callable[..., datetime]:
+    """A stand-in for dt_util.now pinned to noon on ``day``."""
+    from homeassistant.util import dt as dt_util
+
+    def _now(*_a: object, **_k: object) -> datetime:
+        return datetime(
+            day.year, day.month, day.day, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE
+        )
+
+    return _now
+
+
+def test_pro_pdf_urls_try_both_spellings_of_the_fixed_variant() -> None:
+    """Mega moves a product between "-Fixed" and "-Fix": Off-peak has always
+    been "-Fix", and the October 2026 pro Zen Fixed card came out as "-Fix"
+    while "-Fixed" answered the CDN's HTML stub."""
+    from custom_components.be_electricity_prices.providers.mega import (
+        _CONTRACTS_BY_ID,
+        _pro_pdf_urls,
+    )
+
+    month = date(2026, 10, 1)
+    assert [
+        u.rsplit("/", 1)[-1]
+        for u in _pro_pdf_urls(_CONTRACTS_BY_ID["mega_pro_zen_fixed"], "VL", month)
+    ] == [
+        "Mega-FR-EL-B2B-VL-102026-Zen0110-Fixed.pdf",
+        "Mega-FR-EL-B2B-VL-102026-Zen0110-Fix.pdf",
+    ]
+    assert [
+        u.rsplit("/", 1)[-1]
+        for u in _pro_pdf_urls(_CONTRACTS_BY_ID["mega_pro_offpeak_fixed"], "WL", month)
+    ] == [
+        "Mega-FR-EL-B2B-WL-102026-Offpeak-Bi0110-Fix.pdf",
+        "Mega-FR-EL-B2B-WL-102026-Offpeak-Bi0110-Fixed.pdf",
+    ]
+    assert len(_pro_pdf_urls(_CONTRACTS_BY_ID["mega_pro_smart_flex"], "WL", month)) == 1
+
+
+async def test_pro_card_under_its_other_spelling_is_this_months() -> None:
+    """The renamed card is found for the month it belongs to, instead of the
+    previous month's being served in its place all month."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    served: list[str] = []
+
+    async def _renamed(session: object, url: str, *a: object, **k: object) -> str:
+        served.append(url)
+        if url.endswith("-Fixed.pdf"):
+            raise ExtractorError(f"Mega: {url} did not return a PDF")
+        return fixture_text("mega_pro_smart_fixed_w.pdf")
+
+    with (
+        patch.object(mega_mod, "fetch_pdf_text", new=_renamed),
+        patch.object(mega_mod.dt_util, "now", new=_on(date(2026, 10, 12))),
+    ):
+        snap = await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    assert snap.source_url.endswith("-102026-Smart0110-Fix.pdf")
+    assert len(served) == 2
+
+
+async def test_pro_card_missing_past_the_grace_is_reported_not_rolled_back() -> None:
+    """Early in a month a missing professional card is a publication lag and
+    last month's stands in. Past the grace it has moved instead, and rolling
+    back served September's card for all of October with no error."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    served: list[str] = []
+
+    async def _missing(session: object, url: str, *a: object, **k: object) -> str:
+        served.append(url)
+        if "-102026-" in url:
+            raise ExtractorError(f"Mega: {url} did not return a PDF")
+        return fixture_text("mega_pro_smart_fixed_w.pdf")
+
+    late = date(2026, 10, mega_mod._PRO_PUBLICATION_GRACE_DAYS + 1)
+    with (
+        patch.object(mega_mod, "fetch_pdf_text", new=_missing),
+        patch.object(mega_mod.dt_util, "now", new=_on(late)),
+    ):
+        with pytest.raises(ExtractorError, match="did not return a PDF"):
+            await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    assert all("-102026-" in u for u in served)
 
 
 def test_cap_parses_the_energy_price_ceiling() -> None:

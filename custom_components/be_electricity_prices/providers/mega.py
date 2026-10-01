@@ -457,7 +457,17 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 _CDN_BASE = "https://my.mega.be/resources/tarif/"
 
 
-def _pro_pdf_url(c: _ContractDef, region_code: str, year_month: date) -> str:
+# Days into a month during which a professional card still missing for it
+# may be stood in for by last month's. Mega publishes them before the month
+# opens (the October 2026 cards are dated 28 to 30 September) and its lag has
+# been a day or two; past this, a missing card is reported, not rolled back.
+# The live check reads the same figure.
+_PRO_PUBLICATION_GRACE_DAYS = 5
+
+
+def _pro_pdf_url(
+    c: _ContractDef, region_code: str, year_month: date, variant: str | None = None
+) -> str:
     """Build the professional card's URL for a month.
 
     Mega serves the B2B cards from the same CDN as the residential ones
@@ -471,10 +481,50 @@ def _pro_pdf_url(c: _ContractDef, region_code: str, year_month: date) -> str:
     which fetch_pdf_text rejects, so a wrong guess fails loud.
     """
     mm = f"{year_month.month:02d}"
+    if variant is None:
+        variant = c.file_variant
     return (
         f"{_CDN_BASE}Mega-FR-EL-B2B-{region_code}-{mm}{year_month.year}-"
-        f"{c.file_family}01{mm}{c.file_variant}.pdf"
+        f"{c.file_family}01{mm}{variant}.pdf"
     )
+
+
+def _pro_pdf_urls(c: _ContractDef, region_code: str, year_month: date) -> list[str]:
+    """Every URL the professional card for a month may sit under, likeliest first.
+
+    Mega spells the fixed variant two ways and moves a product between them:
+    Off-peak has always been "-Fix" and the rest "-Fixed", until the October
+    2026 pro Zen Fixed card came out as "-Fix" while "-Fixed" answered the
+    CDN's HTML stub. So the registry's spelling is tried first and the other
+    one after it.
+    """
+    variants = [c.file_variant]
+    if c.file_variant.endswith("-Fixed"):
+        variants.append(c.file_variant[: -len("ed")])
+    elif c.file_variant.endswith("-Fix"):
+        variants.append(c.file_variant + "ed")
+    return [_pro_pdf_url(c, region_code, year_month, v) for v in variants]
+
+
+async def _fetch_first_card(
+    session: aiohttp.ClientSession, urls: list[str]
+) -> tuple[str, str]:
+    """The text of the first of ``urls`` that serves a card, and that URL.
+
+    Only a URL that is not there (a 404, or the CDN's HTML stub) moves on to
+    the next spelling. A card that downloaded with no text layer, and any
+    transient failure, raise at once: neither says the card lives elsewhere.
+    ``urls`` is never empty, and the last one's failure is what surfaces.
+    """
+    for url in urls[:-1]:
+        try:
+            return await fetch_pdf_text(session, url), url
+        except CardNotReadableError:
+            raise
+        except ExtractorError as err:
+            if is_transient_fetch_error(str(err)):
+                raise
+    return await fetch_pdf_text(session, urls[-1]), urls[-1]
 
 
 async def probe(
@@ -518,9 +568,10 @@ async def fetch(
 
     if contract.professional:
         today = dt_util.now().date()
-        pdf_url = _pro_pdf_url(contract, region_code, today)
         try:
-            text = await fetch_pdf_text(session, pdf_url)
+            text, pdf_url = await _fetch_first_card(
+                session, _pro_pdf_urls(contract, region_code, today)
+            )
         except CardNotReadableError:
             # Downloaded fine but has no text layer: not an unpublished
             # card, so it must surface rather than silently roll back a
@@ -536,11 +587,20 @@ async def fetch(
             # and falling back on it served last month's index, overlays
             # and taxes as this month's for the 24 h TTL, with no error
             # recorded, where every other supplier surfaces the failure.
+            #
+            # And only early: a card still missing past the grace has moved
+            # rather than lagged, which is what the October 2026 pro Zen
+            # Fixed did, and rolling back then served September's card all
+            # month with nothing to show for it. Past the grace it raises,
+            # so the entry keeps what it holds and says why.
             if is_transient_fetch_error(str(err)):
                 raise
+            if today.day > _PRO_PUBLICATION_GRACE_DAYS:
+                raise
             previous = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-            pdf_url = _pro_pdf_url(contract, region_code, previous)
-            text = await fetch_pdf_text(session, pdf_url)
+            text, pdf_url = await _fetch_first_card(
+                session, _pro_pdf_urls(contract, region_code, previous)
+            )
         return parse_snapshot(contract_id, text, region, pdf_url)
 
     listing = await _fetch_listing_html(session)
@@ -553,25 +613,25 @@ async def fetch(
     return parse_snapshot(contract_id, text, region, listed_url)
 
 
-async def _archive_pdf_url(
+async def _archive_pdf_urls(
     session: aiohttp.ClientSession,
     contract: _ContractDef,
     region_code: str,
     year_month: date,
     *,
     allow_current: bool = False,
-) -> str | None:
-    """The CDN URL of ``contract``'s card for one month, or None.
+) -> list[str]:
+    """The CDN URLs ``contract``'s card for one month may sit under, or none.
 
     Professional cards never appear in the public listing, so they take the
-    same built filename ``fetch`` uses with the requested month. Residential
+    same built filenames ``fetch`` tries with the requested month. Residential
     ones resolve the current URL from the listing and rewrite BOTH month
     placeholders: the ``-MMYYYY-`` segment and the ``<MM>`` half of the
     product's effective-date ``<DD><MM>`` suffix, while preserving the
     effective day, which is not the 1st for every product.
     """
     if contract.professional:
-        return _pro_pdf_url(contract, region_code, year_month)
+        return _pro_pdf_urls(contract, region_code, year_month)
     try:
         listing = await _fetch_listing_html(session)
     except ExtractorError as err:
@@ -579,14 +639,14 @@ async def _archive_pdf_url(
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
-        return None
+        return []
     current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
     if current_url is None:
-        return None
+        return []
     mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
     mmyyyy_match = mmyyyy_re.search(current_url)
     if mmyyyy_match is None:
-        return None
+        return []
     current_mm = mmyyyy_match.group(1)
     target_mm = f"{year_month.month:02d}"
     historical_mmyyyy = f"{target_mm}{year_month.year}"
@@ -610,8 +670,8 @@ async def _archive_pdf_url(
     # lookup wants it though: for the most recently completed month, the
     # card carrying its billed figures is precisely the current one.
     if new_url == current_url and not allow_current:
-        return None
-    return new_url
+        return []
+    return [new_url]
 
 
 def _next_month(year_month: date) -> date:
@@ -648,13 +708,13 @@ async def _realized_rates_for_month(
     following = _next_month(year_month)
     if following > date(dt_util.now().year, dt_util.now().month, 1):
         return None
-    url = await _archive_pdf_url(
+    urls = await _archive_pdf_urls(
         session, contract, region_code, following, allow_current=True
     )
-    if url is None:
+    if not urls:
         return None
     try:
-        text = await fetch_pdf_text(session, url)
+        text, url = await _fetch_first_card(session, urls)
         following_snap = parse_snapshot(contract.contract_id, text, region, url)
     except ExtractorError as err:
         if is_transient_fetch_error(str(err)):
@@ -711,11 +771,11 @@ async def fetch_for_month(
     region_code = _REGION_TO_CODE.get(region)
     if region_code is None:
         return None
-    url = await _archive_pdf_url(session, contract, region_code, year_month)
-    if url is None:
+    urls = await _archive_pdf_urls(session, contract, region_code, year_month)
+    if not urls:
         return None
     try:
-        text = await fetch_pdf_text(session, url)
+        text, url = await _fetch_first_card(session, urls)
         snap = parse_snapshot(contract_id, text, region, url)
     except ExtractorError as err:
         # Deliberately no previous-month retry, unlike fetch(): a month Mega

@@ -2222,13 +2222,6 @@ def _stamps_from(pattern: str, *urls: str | None) -> list[str | None]:
     return out
 
 
-# Days into a month after which Mega's professional card for that month is
-# expected to exist. fetch() falls back to the previous month when it does
-# not, and mega.py's own comment puts the lag at "a day or two"; the extra
-# margin keeps a normal publication delay from filing an issue every month.
-_PRO_PUBLICATION_GRACE_DAYS = 5
-
-
 async def _check_mega_professional(
     session: aiohttp.ClientSession, mega: types.ModuleType
 ) -> None:
@@ -2240,16 +2233,18 @@ async def _check_mega_professional(
     ``application/pdf`` and an unpublished one a ``text/html`` stub under
     the same 200, so HEAD is the whole check, and no card is downloaded.
 
-    What makes this worth a check at all is that ``fetch`` silently rolls
-    back one month when the current card is missing. On the professional
+    What makes this worth a check at all is that ``fetch`` rolls back one
+    month when the current card is missing, for the first
+    ``mega._PRO_PUBLICATION_GRACE_DAYS`` days of it. On the professional
     contracts that are variable or dynamic, last month's card carries last
-    month's index: the prices are WRONG, not merely old, and nothing else in
-    this run would say so.
+    month's index: the prices are WRONG, not merely old. Past the grace the
+    extractor raises instead, and this names every card at once.
 
     Early in a month the rollback is correct behaviour, not a defect, so
-    this only fails past :data:`_PRO_PUBLICATION_GRACE_DAYS`. Mega does not
+    this only fails past the same grace the extractor reads. Mega does not
     publish ahead: next month's URL is a stub today, so failing without
-    that grace would file an issue every month.
+    that grace would file an issue every month. Each card is looked for
+    under both spellings of its fixed variant, as the extractor does.
     """
     today = mega.dt_util.now().date()
     label = "mega/freshness: professional cards published for the current month"
@@ -2260,21 +2255,25 @@ async def _check_mega_professional(
         for region, code in mega._REGION_TO_CODE.items():
             if region not in contract.regions:
                 continue
-            url = mega._pro_pdf_url(contract, code, today)
-            try:
-                async with session.head(url, allow_redirects=True) as resp:
-                    ctype = resp.headers.get("Content-Type", "")
-            except aiohttp.ClientError as err:
-                # A transport failure is not a publication signal, and the
-                # supplier's own extractor rows already report a real break.
-                _record(label, True, f"HEAD failed: {type(err).__name__}: {err}")
-                return
-            if "pdf" not in ctype.lower():
+            published = False
+            for url in mega._pro_pdf_urls(contract, code, today):
+                try:
+                    async with session.head(url, allow_redirects=True) as resp:
+                        ctype = resp.headers.get("Content-Type", "")
+                except aiohttp.ClientError as err:
+                    # A transport failure is not a publication signal, and the
+                    # supplier's own extractor rows already report a real break.
+                    _record(label, True, f"HEAD failed: {type(err).__name__}: {err}")
+                    return
+                if "pdf" in ctype.lower():
+                    published = True
+                    break
+            if not published:
                 missing.append(f"{contract.contract_id}/{region}")
     if not missing:
         _record(label, True)
         return
-    if today.day <= _PRO_PUBLICATION_GRACE_DAYS:
+    if today.day <= mega._PRO_PUBLICATION_GRACE_DAYS:
         _record(
             label,
             True,
@@ -2287,7 +2286,7 @@ async def _check_mega_professional(
         label,
         False,
         f"{len(missing)} professional card(s) missing for {today:%Y-%m} well "
-        f"past publication; the extractor is silently serving last month's, "
+        f"past publication; entries keep last month's, "
         f"which carries last month's index on the variable and dynamic "
         f"contracts: {', '.join(sorted(missing)[:6])}"
         + (" ..." if len(missing) > 6 else ""),
@@ -3726,7 +3725,7 @@ _PERIOD_LAG_REVIEW_BY = date(2027, 2, 1)
 
 # Days into a month before a card still labelled for the previous month is
 # treated as stale rather than as a supplier publishing a little late. Same
-# reasoning as _PRO_PUBLICATION_GRACE_DAYS.
+# reasoning as Mega's _PRO_PUBLICATION_GRACE_DAYS.
 _PERIOD_GRACE_DAYS = 5
 
 _FR_MONTH_NAMES: dict[str, int] = {

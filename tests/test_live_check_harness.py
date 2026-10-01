@@ -752,6 +752,29 @@ def test_mega_professional_check_covers_every_contract_region(
     assert session.calls == expected == 30
 
 
+def test_mega_professional_check_finds_a_card_under_its_other_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The October 2026 pro Zen Fixed card is "-Fix" where every month before
+    was "-Fixed", which answers the stub. Looking under one spelling reported
+    a published card missing."""
+
+    class _RenamedSession(_FakeSession):
+        def head(self, _url: str, **_kw: object) -> _FakeHead:
+            self.calls += 1
+            renamed = "Zen0110-Fixed" in _url
+            return _FakeHead("text/html" if renamed else "application/pdf")
+
+    mega = _mega_module()
+    monkeypatch.setattr(mega, "dt_util", _FakeClock(date(2026, 10, 20)), raising=False)
+    session = _RenamedSession("")
+    asyncio.run(lc._check_mega_professional(session, mega))  # type: ignore[arg-type]
+    (row,) = _rows("mega/freshness: professional")
+    assert row.ok is True
+    # The three Zen regions took a second look each.
+    assert session.calls == 33
+
+
 def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
     """A professional edition must not vouch for a residential product.
 

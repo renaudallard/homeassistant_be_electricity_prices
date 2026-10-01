@@ -133,13 +133,23 @@ https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-<REGION>-<MMYYYY>-<Family>01<M
 
 `01<MM>` is the card's validity start, always the first of its month, so a
 contract only needs its family token (`Smart`, `Cosy`, `Dynamic`, ...) and the
-`-Fixed` variant suffix. A month Mega has not published resolves to the CDN's
+`-Fixed` variant suffix. Mega spells that suffix two ways and moves a product
+between them: Off-peak has always been `-Fix`, and the October 2026 pro Zen Fixed
+card came out as `-Fix` too while `-Fixed` answered the stub. So `_pro_pdf_urls`
+(`mega.py`) yields the registry's spelling and then the other one, and every pro
+path (`fetch`, `fetch_for_month`, the next-month settlement) tries them in turn
+(`_fetch_first_card`). A month Mega has not published resolves to the CDN's
 HTML stub, which `fetch_pdf_text` rejects, so a wrong guess fails loud; `fetch`
 then falls back to the previous month, which covers the day or two of lag around
 a month boundary. Only that case takes the fallback: a transient failure (a timeout,
 a reset, a 5xx, an anti-bot 403) is raised like everywhere else, because falling
 back on it served last month's index, overlays and taxes as this month's for the
-24 h TTL a probe-less contract gets, with no error recorded.
+24 h TTL a probe-less contract gets, with no error recorded. And only for the first
+`_PRO_PUBLICATION_GRACE_DAYS` (5) days of the month: a card still missing after that
+has moved rather than lagged, and rolling back served the September pro Zen Fixed
+card for all of October. Past the grace the fetch raises, so the entry keeps the card
+it holds and says why. The live check's publication row reads the same grace and the
+same two spellings.
 
 Consequences of having no listing:
 
@@ -422,7 +432,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > Two consequences worth knowing. It costs **one extra archive fetch per month**
 > for a variable or Impact contract, on a walk that already caches one snapshot
 > per month. And the most recently completed month's source card is the CURRENT
-> one, so `_archive_pdf_url` takes `allow_current=True` there; `fetch_for_month`
+> one, so `_archive_pdf_urls` takes `allow_current=True` there; `fetch_for_month`
 > itself still refuses to serve the current card as a historical month.
 
 The Wallonia Smart Fixed fixture pins mono / peak / offpeak / exclusive-night to
