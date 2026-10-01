@@ -151,6 +151,12 @@ async def _read_deltas(
     # It over-bills, it never self-corrects, and hours_seen reads full coverage
     # while it happens.
     window_start = dt_util.start_of_local_day(start).astimezone(UTC)
+    # And cut at the midnight after ``end``. Home Assistant runs a daily query
+    # a day further than the end it is handed, so the last row is the day
+    # after ``end``: an earlier contract read up to the day before a switch
+    # got the switch day as well, which the gap rule then took for its last
+    # reported day, leaving the contract's own last day out of the bill.
+    window_stop = dt_util.start_of_local_day(end + timedelta(days=1)).timestamp()
     rows = await _recorder_rows(
         hass, entity_id, start - timedelta(days=1), end, period, {"change", "sum"}
     )
@@ -160,7 +166,7 @@ async def _read_deltas(
     skip_first = not before
     for row in rows:
         ts = row.get("start")
-        if ts is None or ts < window_start.timestamp():
+        if ts is None or ts < window_start.timestamp() or ts >= window_stop:
             continue
         if skip_first:
             skip_first = False
