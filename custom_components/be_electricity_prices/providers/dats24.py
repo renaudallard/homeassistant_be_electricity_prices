@@ -80,6 +80,7 @@ from ._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     head_ok,
+    is_missing_card_error,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import parse_valid_until
@@ -150,17 +151,6 @@ def _card_months() -> tuple[tuple[int, int], tuple[int, int]]:
     return (today.year, today.month), (previous.year, previous.month)
 
 
-def _card_absent(message: str) -> bool:
-    """Whether a failure means "no card at this URL yet".
-
-    Only an absent file justifies reaching back a month. A timeout, a 5xx or
-    an unreadable payload must propagate instead: the coordinator then keeps
-    serving its cached snapshot for the current month, which beats silently
-    re-pricing every user at last month's rates.
-    """
-    return message.startswith(("HTTP 404", "HTTP 410"))
-
-
 async def _fetch_card(session: aiohttp.ClientSession) -> tuple[str, str]:
     """Fetch the newest published card. Returns ``(url, text)``.
 
@@ -173,7 +163,12 @@ async def _fetch_card(session: aiohttp.ClientSession) -> tuple[str, str]:
     try:
         return url, await fetch_pdf_text_layout(session, url)
     except ExtractorError as err:
-        if not _card_absent(str(err)):
+        # Only an absent file justifies reaching back a month. A timeout, a
+        # 5xx or an unreadable payload must propagate instead: the
+        # coordinator then keeps serving its cached snapshot for the current
+        # month, which beats silently re-pricing every user at last month's
+        # rates.
+        if not is_missing_card_error(str(err)):
             raise
         fallback = _card_url(*previous)
         _LOGGER.warning(
@@ -230,7 +225,7 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text_layout(session, url)
     except ExtractorError as err:
-        if _card_absent(str(err)):
+        if is_missing_card_error(str(err)):
             return None
         raise
     return parse_snapshot(text, url, region)

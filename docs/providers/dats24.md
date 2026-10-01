@@ -97,8 +97,8 @@ Two deliberate choices:
 - **Brussels local anchor** (`dats24.py`), matching `bolt.py`: a
   UTC anchor still names last month during the first two hours of every Belgian
   month and would fetch a card that has just been superseded.
-- **Only an absent card triggers the fallback** (`_card_absent`,
-  `dats24.py`). A timeout, a 5xx or an unreadable payload propagates, so
+- **Only an absent card triggers the fallback** (`is_missing_card_error`,
+  `_pdf.py`). A timeout, a 5xx or an unreadable payload propagates, so
   the coordinator classifies it transient and keeps serving its cached
   current-month snapshot. Falling back on any error would silently re-price
   every user at last month's rates, which is worse than a deferred refresh. `bolt.py`
@@ -434,7 +434,7 @@ comment or test:
    is what forced the move to the per-month CDN URL (`dats24.py`). Two
    consequences: the URL is now computed, not constant (so `snapshot.source_url`
    varies by month), and a fetch failure must be classified before falling back --
-   see `_card_absent` (`dats24.py`).
+   see `is_missing_card_error` (`_pdf.py`).
 2. **All values are TVAC; `vat_rate=0.0`.** The card is 6% VAT-inclusive except two
    `Niet aan btw onderworpen` lines that still use per-kWh/per-month conventions
    (`dats24.py`). Do not add VAT scaling in the pricing engine.
