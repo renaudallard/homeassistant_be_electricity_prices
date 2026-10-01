@@ -249,7 +249,144 @@ async def _recorder_rows(
     datetime as UTC, which round-trips correctly only for tz east of
     the prime meridian. Hand it the date so the function takes its
     date-typed branch and produces the unambiguous local midnight.
+
+    Inside a ``memoise_meter_reads`` block a window an earlier read of the
+    same meter covers is answered from that read, exactly as the recorder
+    would answer it (:func:`_held_rows`), so a tick asks the recorder once
+    per meter rather than once per window: a refresh read every meter 32
+    times, each read a year of hours, and on a MariaDB on a NAS the reads
+    were most of a 287 s start (issue #107).
     """
+    wanted = frozenset(fields or {"change"})
+    memo = _METER_MEMO.get()
+    key = ("rows", entity_id, wanted)
+    if memo is not None:
+        held = _held_rows(memo.get(key, ()), start, end, period, wanted)
+        if held is not None:
+            return held
+    rows = await _query_rows(hass, entity_id, start, end, period, wanted)
+    if rows is None:
+        return []
+    if memo is not None:
+        memo.setdefault(key, []).append((period, start, end, rows))
+    return rows
+
+
+async def warm_meter_reads(
+    hass: HomeAssistant, entry: ConfigEntry, start: date, end: date
+) -> None:
+    """Read every meter the bill reads once, hour by hour, over ``start`` to
+    ``end``, for the reads of the block to come to be answered from.
+
+    The hourly rows answer an hourly read of any window inside them and a
+    daily one too (:func:`_days_from_hours`), so one read per meter serves
+    the yearly volume, the register check, the year and the month to date
+    and both volume projections. Outside a ``memoise_meter_reads`` block it
+    would read for nothing, so it does not read at all.
+    """
+    if _METER_MEMO.get() is None:
+        return
+    sides = (
+        ("consumption", "injection") if _bills_injection(entry) else ("consumption",)
+    )
+    for side in sides:
+        for entity_id in dict.fromkeys(_kwh_sensor_ids(entry, side)):
+            if entity_id:
+                await _recorder_rows(
+                    hass, entity_id, start, end, "hour", {"change", "sum"}
+                )
+
+
+def _held_rows(
+    held: Iterable[tuple[str, date, date, list[Any]]],
+    start: date,
+    end: date,
+    period: str,
+    wanted: frozenset[str],
+) -> list[Any] | None:
+    """The rows the recorder would return for ``start`` to ``end``, taken
+    from a read ``held`` that covers them, or ``None`` when none does.
+
+    Home Assistant seeds a window's first change from the last row before
+    it and every later one from the row before, so the rows of a narrower
+    window are the same rows, change included, as long as the wider read
+    holds everything from its own start. A daily window is rebuilt from the
+    hours where the read can say which row precedes it.
+
+    A daily query runs a day past ``end``: Home Assistant moves its end to
+    the midnight after the one it is handed, which is already the one after
+    ``end`` (:func:`_query_rows`). The hours have to reach that far, which
+    those read up to today do, since no row lies ahead of the clock.
+    """
+    first = dt_util.start_of_local_day(start).timestamp()
+    reach = end + timedelta(days=2 if period == "day" else 1)
+    stop = dt_util.start_of_local_day(reach).timestamp()
+    today = dt_util.now().date()
+    for held_period, held_start, held_end, rows in held:
+        if held_start > start or held_end < end:
+            continue
+        if held_period == period:
+            return [row for row in rows if first <= row["start"] < stop]
+        if (
+            period == "day"
+            and held_period == "hour"
+            and "sum" in wanted
+            and (held_end > end or held_end >= today)
+        ):
+            days = _days_from_hours(rows, first, stop)
+            if days is not None:
+                return days
+    return None
+
+
+def _days_from_hours(rows: list[Any], first: float, stop: float) -> list[Any] | None:
+    """The daily rows Home Assistant builds out of these hours from
+    ``first`` to ``stop``, or ``None`` when they cannot say what it would.
+
+    Its own two steps, done the same way on the same figures: each local
+    day takes the sum of its last hour (``_reduce_statistics``), and its
+    change is that sum less the one before it, the first day's taken from
+    the last row before the window (``_augment_result_with_change``). That
+    row has to be among the hours: one further back, or none at all, is
+    something only the recorder knows. A missing sum is left to it too.
+    """
+    inside = [row for row in rows if first <= row["start"] < stop]
+    if not inside:
+        return []
+    before = [row for row in rows if row["start"] < first]
+    if not before or any(row.get("sum") is None for row in (before[-1], *inside)):
+        return None
+    local = partial(datetime.fromtimestamp, tz=dt_util.get_default_time_zone())
+    days: list[dict[str, Any]] = []
+    for row in inside:
+        midnight = local(row["start"]).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        if not days or days[-1]["start"] != midnight.timestamp():
+            days.append(
+                {
+                    "start": midnight.timestamp(),
+                    "end": (midnight + timedelta(days=1)).timestamp(),
+                }
+            )
+        days[-1]["sum"] = row["sum"]
+    prev = before[-1]["sum"]
+    for day in days:
+        day["change"] = day["sum"] - prev
+        prev = day["sum"]
+    return days
+
+
+async def _query_rows(
+    hass: HomeAssistant,
+    entity_id: str,
+    start: date,
+    end: date,
+    period: str,
+    fields: frozenset[str],
+) -> list[Any] | None:
+    """:func:`_recorder_rows` without the memo: ``None`` when the recorder
+    could not answer, so a failure is not kept as an answer."""
     try:
         # mypy --strict flags both names because the recorder module
         # does not re-export them via __all__; they're public per HA's
@@ -262,7 +399,7 @@ async def _recorder_rows(
             statistics_during_period,
         )
     except ImportError:
-        return []
+        return None
     start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
     # Anchor end_dt on the next local midnight so the bucket containing
     # ``end`` is included. ``start_of_local_day(end).astimezone(UTC) +
@@ -281,10 +418,10 @@ async def _recorder_rows(
             {entity_id},
             period,
             {"energy": "kWh"},
-            fields or {"change"},
+            set(fields),
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
-        return []
+        return None
     rows: list[Any] = list(stats.get(entity_id, []))
     return rows
 

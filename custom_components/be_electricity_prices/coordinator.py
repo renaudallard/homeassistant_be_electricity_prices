@@ -68,6 +68,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .energy_meters import memoise_meter_reads
 from .const import (
     CONF_CONTRACT,
     CONF_REGION,
@@ -429,7 +430,10 @@ class BePricesCoordinator(
         # async_load_persistent guard discards a blob whose stamped
         # tuple disagrees with the current entry.
         try:
-            return await self._update_body()
+            # One recorder read per meter for the whole tick, each window the
+            # tick asks for answered from it (energy_meters._recorder_rows).
+            with memoise_meter_reads({}):
+                return await self._update_body()
         except UpdateFailed as err:
             # Snapshot age is independent of the current tick's
             # success: if the snapshot was already stale and *this*

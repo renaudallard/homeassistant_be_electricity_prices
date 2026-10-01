@@ -329,7 +329,12 @@ async def test_setup_reads_no_meter_and_the_figures_follow(
         assert all(value is None for value in _figures(entry).values())
 
         await _settle(hass, freezer)
-        assert recorder.meter_reads(in_setup=False), "the meters are read after setup"
+        # Once per meter: every window the refresh asks for is answered from
+        # one hourly read of each register.
+        read = recorder.meter_reads(in_setup=False)
+        assert sorted(r["ids"][0] for r in read if r["fn"] == "statistics") == sorted(
+            _METERS
+        )
         assert not entry.runtime_data.meter_reads_pending
         after_setup = _figures(entry)
         assert after_setup["current_year_cost_eur"] is not None

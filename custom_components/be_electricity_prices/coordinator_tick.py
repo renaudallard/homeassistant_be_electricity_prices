@@ -47,6 +47,7 @@ from .const import (
     CONF_SUPPLIER,
     DEFAULT_EV_HOME_CHARGING_RATE,
     DSO_MODE_BI_HORAIRE,
+    MEASURED_FULL_YEAR_DAYS,
     METER_MONO,
     REGION_BRUSSELS,
     REGION_FLANDERS,
@@ -71,7 +72,7 @@ from .pricing import (
     yearly_fixed_fee_for_meter,
 )
 from .snapshot_store import cached_month_card
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
     _compute_injection_price,
@@ -80,6 +81,7 @@ from .injection import (
 from .cohort import (
     _cohort_legs,
     _tariff_card_month,
+    ytd_window_start,
 )
 from .fees import _compute_capacity, _compute_prosumer
 from .contract_periods import (
@@ -102,6 +104,7 @@ from homeassistant.core import HomeAssistant
 import aiohttp
 import logging
 from .coordinator_costs import TickCosts, held_costs_blob
+from .energy_meters import warm_meter_reads
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -215,6 +218,19 @@ class _TickMixin:
         # tranche and the network ceiling against it; _reresolve_snapshot
         # below catches the card that was already in hand.
         if not deferred:
+            # The widest window any read below asks for: the trailing year of
+            # the volume, last year's same days for the projection and the
+            # year to date, each read a day before its first.
+            today = dt_util.now().date()
+            await warm_meter_reads(
+                self.hass,
+                self.entry,
+                min(
+                    today - timedelta(days=MEASURED_FULL_YEAR_DAYS + 3),
+                    ytd_window_start(self.entry, today) - timedelta(days=2),
+                ),
+                today,
+            )
             await self._ensure_annual_volume()
         # Sibelga's power term, for a Brussels entry whose card prints only the
         # metering half of the fixed charge. One small PDF a year, cached for
