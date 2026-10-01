@@ -311,6 +311,34 @@ async def test_listing_resolves_all_cards_without_confusing_dynamic_plus() -> No
     assert all(label == "2026-09" for _, label in resolved.values())
 
 
+async def test_discover_names_registered_products_by_contract_id() -> None:
+    """Every residential card on the October 2026 listing, the gas card and
+    the professional editions left out. A product nobody registered comes
+    back under the name its card is filed by, which is what live_check
+    reports."""
+    from custom_components.be_electricity_prices.providers.trevion import discover
+
+    names = (
+        "Trevion-tariefkaart-Groene-energie-VAST-particulier-202610.pdf",
+        "Trevion-tariefkaart-Groene-energie-VAST-professioneel-202610.pdf",
+        "Tariefkaart-Groene-Stroom-Flex-Particulier-202610.pdf",
+        "Tariefkaart-Groene-Energie-Dynamisch-Particulier-202610.pdf",
+        "Tariefkaart-Groene-Energie-Dynamisch-Plus-Particulier-202610.pdf",
+        "Tariefkaart-LifePowrByTrevion-Particulier-202609.pdf",
+        "Tariefkaart-EnergreenByTrevion-Particulier-202610.pdf",
+        "Tariefkaart-FlexiO-Max-by-Trevion-Particulier-202610.pdf",
+        "Tariefkaart-FlexiO-Max-by-Trevion-Professioneel-202610.pdf",
+        "Tariefkaart-Gas-Flex-Particulier-202610.pdf",
+    )
+    html = "\n".join(
+        f'<a href="https://trevion.be/tariefkaarten/{name}">{name}</a>'
+        for name in names
+    )
+    assert await discover(make_text_session(html)) == set(_BY_ID)
+    newer = html + '\n<a href="/x/Tariefkaart-Zon-Max-Particulier-202611.pdf">'
+    assert await discover(make_text_session(newer)) == set(_BY_ID) | {"Zon-Max"}
+
+
 async def test_listing_entry_that_is_not_a_month_is_skipped_not_raised() -> None:
     """The six digits are read as YYYYMM, and a file named for something else
     matches the pattern just as well. Building a date out of it raised a bare

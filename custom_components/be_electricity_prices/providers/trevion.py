@@ -304,6 +304,44 @@ async def _settle_on_published_indices(
     return replace(snap, **changed) if changed else snap
 
 
+# Every residential card the listing links, by the product its file is named
+# after: "Tariefkaart-<product>-Particulier-YYYYMM.pdf", and the older
+# "Trevion-tariefkaart-<product>-particulier-YYYYMM.pdf" Vast still uses.
+_LISTED_PRODUCT_RE = re.compile(
+    r'href="[^"]*/(?:Trevion-tariefkaart-|Tariefkaart-)([A-Za-z0-9-]+?)'
+    r'-particulier-\d{6}(?:-\d+)?\.pdf"',
+    re.IGNORECASE,
+)
+# Listed beside the electricity cards and not an electricity product.
+_NOT_ELECTRICITY = frozenset({"Gas-Flex"})
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """The residential products on the listing, by contract id where one is
+    registered and by the card's product name where none is, so live_check
+    reports a new product by the name Trevion gives it.
+
+    FlexiO Max was on the listing a day before anything noticed it, because
+    nothing here read the listing for anything but the cards it already knew.
+    """
+    try:
+        html = await fetch_text(session, _LISTING_URL)
+    except ExtractorError:
+        return set()
+    found: set[str] = set()
+    for product in set(_LISTED_PRODUCT_RE.findall(html)) - _NOT_ELECTRICITY:
+        known = next(
+            (
+                contract.id
+                for contract in _CONTRACTS
+                if re.search(contract.card_re, f"-{product}-", re.IGNORECASE)
+            ),
+            None,
+        )
+        found.add(known or product)
+    return found
+
+
 async def probe(
     session: aiohttp.ClientSession, contract_id: str, region: str
 ) -> str | None:
@@ -655,4 +693,11 @@ EXTRACTOR = SupplierExtractor(
     fetch_for_month=fetch_for_month,
 )
 
-__all__ = ["EXTRACTOR", "fetch", "fetch_for_month", "parse_snapshot", "probe"]
+__all__ = [
+    "EXTRACTOR",
+    "discover",
+    "fetch",
+    "fetch_for_month",
+    "parse_snapshot",
+    "probe",
+]

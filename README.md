@@ -1510,7 +1510,7 @@ changed since the morning's archive walk is rendered again:
   out on a different supplier each time stays quiet, and a supplier that
   stays broken is commented on once a week rather than once a day.
 - **Catalog phase** — the `discover()` of every supplier that implements one
-  (all but energie.be, Trevion and the expert custom supplier) is run against its
+  (all but energie.be and the expert custom supplier) is run against its
   public listing page; any product visible at the supplier but missing
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression

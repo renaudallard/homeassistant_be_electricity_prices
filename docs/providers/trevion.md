@@ -95,6 +95,14 @@ a listing where none of the matches names a month fails as a plain
 `ExtractorError` like any other miss, so the Repairs card the user sees is the
 one that fits.
 
+`discover` reads the same listing for every residential card it links, by the
+product the file is named after, and answers the contract id where a
+`card_re` claims the name and the name itself where none does, so live_check
+reports a new product as Trevion names it. The gas card and the professional
+editions are left out. FlexiO Max sat on the listing for a day before anything
+noticed it, because nothing read the listing for more than the cards already
+registered.
+
 ## Parsing
 
 `parse_snapshot` selects one of three commodity parsers and then applies the
