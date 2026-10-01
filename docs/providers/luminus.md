@@ -524,6 +524,7 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_dynamic_w_oct.pdf` | Dynamic, Wallonia, October 2026 | Impact columns printed PIC first |
 | `luminus_smartflex_w_oct.pdf` | SmartFlex (tou), Wallonia, October 2026 | four-figure row with Happy Sunday |
 | `luminus_smartflex_v_oct.pdf` | SmartFlex (tou), Flanders, October 2026 | four-figure row with Happy Sunday |
+| `luminus_comfyflex_w_oct.pdf` | ComfyFlex (variable), Wallonia, October 2026 | campaign gated by the product name |
 
 Note: fixtures for `luminus_comfy_plus`, `luminus_maxxfix`, `luminus_basicfix`
 and `luminus_basicflex` are not present; those contracts share the fixed /

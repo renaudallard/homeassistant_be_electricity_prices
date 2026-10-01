@@ -759,6 +759,24 @@ def test_the_standing_loyalty_discount_is_not_read_as_a_campaign() -> None:
     assert plus.welcome_credit_excludes_night_meter is False
 
 
+def test_a_campaign_naming_its_product_needs_no_signing_phrase() -> None:
+    """October 2026 reworded the ComfyFlex campaign without the signing gate.
+
+    "En tant que nouveau client pour Luminus ComfyFlex Electricite, vous
+    beneficiez pour chaque kWh consomme d'une remise de 27 % sur les couts
+    energetiques ... pendant 12 mois. Cette remise sera repartie au pro rata
+    sur votre (vos) prochain(s) decompte(s)." No "pour la conclusion d'un
+    contrat", so nothing was read: 153,85 EUR at 3500 kWh in Wallonia.
+    """
+    snap = parse_snapshot(
+        "luminus_comfyflex", fixture_text("luminus_comfyflex_w_oct.pdf"), "wallonia"
+    )
+    assert snap.welcome_credit_pct_of_energy == pytest.approx(0.27)
+    assert snap.welcome_credit_kind == "pro_rata"
+    assert snap.welcome_credit_kwh is None
+    assert snap.welcome_credit_excludes_night_meter is False
+
+
 def test_the_campaign_is_read_from_its_own_sentence_not_the_card() -> None:
     """A loyalty clause worded the campaign's way must not be billed as one.
 

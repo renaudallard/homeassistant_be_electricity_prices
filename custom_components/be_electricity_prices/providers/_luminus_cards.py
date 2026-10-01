@@ -442,7 +442,17 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 # gate 11.000 characters later, which is the whole card, pulling both standing
 # loyalty clauses and their exclusive-night exclusion inside it. A card
 # printing this sentence curly read as no campaign at all.
-_PROMO_GATE_RE = re.compile(r"pour la conclusion d['\u2019]un contrat", re.IGNORECASE)
+#
+# The October 2026 ComfyFlex card drops the signing phrase and names the
+# product in the anchor instead: "En tant que nouveau client pour Luminus
+# ComfyFlex Electricite, vous beneficiez pour chaque kWh consomme d'une remise
+# de 27 % ... pendant 12 mois". That is as plainly a new-customer offer, so the
+# product name is a gate of its own. The loyalty clauses open "Si vous etes
+# client ... depuis au moins" and match neither form.
+_PROMO_GATE_RE = re.compile(
+    r"pour la conclusion d['\u2019]un contrat|nouveau\s+client\s+pour\s+Luminus\b",
+    re.IGNORECASE,
+)
 _PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
 _PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
 # A campaign stated as a flat amount: April's Comfy card prints "une remise de

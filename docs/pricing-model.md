@@ -723,7 +723,10 @@ wait the card states.
 Two rules the cards make necessary:
 
 - The campaign is read from **its own sentence**, anchored between *"En tant que nouveau
-  client"* and the signing gate. The same block prints standing loyalty discounts in
+  client"* and the signing gate. The October 2026 ComfyFlex card drops the gate and names
+  the product in the anchor instead (*"En tant que nouveau client pour Luminus ComfyFlex
+  Electricite, vous beneficiez ... d'une remise de 27 %"*), which gates it as plainly, so
+  either form is read. The same block prints standing loyalty discounts in
   nearly the same words, *"12 mois apres la date de debut, une reduction de 5 % sur les
   couts energetiques ... pendant 12 mois ... au pro rata de la consommation de votre 2e
   annee"*, which are a year-2 and year-3 benefit this does not model. They also say
