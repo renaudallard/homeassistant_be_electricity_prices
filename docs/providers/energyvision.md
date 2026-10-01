@@ -136,6 +136,12 @@ ones; and the directory is not anchored because Brusol files each card under the
 uploaded it. The resolved absolute URL is layout-extracted with `fetch_pdf_text_layout`
 (the layout extractor keeps column alignment, important for the DSO table), then parsed.
 
+The page can lag the upload. On 1 October 2026 Brusol's pages still linked the September
+cards while the October ones had sat in its `2026-09` folder since the day before. So when
+the linked file's `EV-<MMYY>` names a month before the running one, `fetch` first asks
+`_archived_card`, the lookup `fetch_for_month` uses, for the running month's card, and
+serves the linked card only when nothing is filed there yet or that lookup fails.
+
 ### Probe
 
 `EXTRACTOR.probe` = `probe` (`providers/energyvision.py`): a cheap `head_freshness_key`

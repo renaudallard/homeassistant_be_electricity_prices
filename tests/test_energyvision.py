@@ -31,6 +31,7 @@ from custom_components.be_electricity_prices import snapshot_resolve
 
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -1037,6 +1038,51 @@ def test_brussels_archive_tries_both_upload_directories() -> None:
         "https://www.energyvision.be/sites/default/files/inline-files/"
         "EV-0526-GS1800V-nl.pdf",
     )
+
+
+@pytest.mark.parametrize(
+    ("linked", "filed", "served"),
+    [
+        # The page still links September on 1 October while October's card
+        # is filed: October's card is served.
+        ("EV-0926-GRS-BXL-nl.pdf", True, "filed"),
+        # Nothing filed for October yet: the linked card, as before.
+        ("EV-0926-GRS-BXL-nl.pdf", False, "linked"),
+        # The page is current: no lookup at all.
+        ("EV-1026-GRS-BXL-nl.pdf", True, "linked"),
+    ],
+)
+async def test_a_page_lagging_the_upload_is_read_past(
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: Any,
+    linked: str,
+    filed: bool,
+    served: str,
+) -> None:
+    """Brusol's page linked the September 2026 cards on 1 October while the
+    October ones had sat in its 2026-09 folder since the day before."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    asked: list[date] = []
+
+    async def resolve(*_args: Any) -> str:
+        return f"https://www.brusol.be/sites/default/files/2026-08/{linked}"
+
+    async def archived(*args: Any) -> Any:
+        asked.append(args[-1])
+        return "filed" if filed else None
+
+    async def text(_session: Any, url: str) -> str:
+        return url
+
+    monkeypatch.setattr(ev, "_resolve_card_url", resolve)
+    monkeypatch.setattr(ev, "_archived_card", archived)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    monkeypatch.setattr(ev, "parse_snapshot", lambda *_a, **_k: "linked")
+    snap = await ev.fetch(None, _GRS, "brussels")  # type: ignore[arg-type]
+    assert snap == served
+    assert asked == ([] if linked.startswith("EV-1026") else [date(2026, 10, 1)])
 
 
 # ---- Brussels (Brusol) card: GRS "Groene stroom" -----------------------------

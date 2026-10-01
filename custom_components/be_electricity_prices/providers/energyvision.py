@@ -86,6 +86,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     REGION_BRUSSELS,
@@ -375,8 +376,38 @@ async def fetch(
             f"published for {sorted(contract.regions)}"
         )
     url = await _resolve_card_url(session, contract, card)
+    # The page can lag the upload: Brusol's still linked the September 2026
+    # cards on 1 October while the October ones had sat in its 2026-09 folder
+    # since the 30th. A card named for a month before this one sends the
+    # fetch to where this month's card would be filed, the archive's own
+    # lookup, and back to the linked card when nothing is there yet or the
+    # lookup fails: the page's card is what the fetch served before.
+    linked = _card_month(url)
+    today = dt_util.now().date()
+    running = date(today.year, today.month, 1)
+    if linked is not None and linked < running:
+        try:
+            newer = await _archived_card(session, contract_id, card, region, running)
+        except ExtractorError:
+            newer = None
+        if newer is not None:
+            return newer
     text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(contract_id, text, url, region=region)
+
+
+# The pricing month every card's file name starts with: "EV-0926-..." is
+# September 2026.
+_CARD_MONTH_RE = re.compile(r"EV-(\d{2})(\d{2})-")
+
+
+def _card_month(url: str) -> date | None:
+    """The month a card's file name says it prices, or None for a name
+    that carries none."""
+    match = _CARD_MONTH_RE.search(url)
+    if match is None or not 1 <= int(match.group(1)) <= 12:
+        return None
+    return date(2000 + int(match.group(2)), int(match.group(1)), 1)
 
 
 async def fetch_for_month(
@@ -412,6 +443,19 @@ async def fetch_for_month(
     if card is None:
         return None
     first = date(year_month.year, year_month.month, 1)
+    return await _archived_card(session, contract_id, card, region, first)
+
+
+async def _archived_card(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    card: _CardDef,
+    region: str,
+    first: date,
+) -> SupplierSnapshot | None:
+    """The card filed for the month starting ``first``, or None when none of
+    the places it could be filed holds it."""
+    contract = _CONTRACTS_BY_ID[contract_id]
     for url in _archive_card_urls(contract, card, first):
         try:
             text = await fetch_pdf_text_layout(session, url)
