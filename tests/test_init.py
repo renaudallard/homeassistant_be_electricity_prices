@@ -4,7 +4,7 @@ time listeners ``async_setup_entry`` registers."""
 from __future__ import annotations
 
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -251,6 +251,48 @@ async def test_the_last_day_of_a_month_ticks_once_more_before_midnight(
     assert refresh.await_count == 1
     await action(datetime(2026, 12, 31, 23, 59, 10, tzinfo=brussels))
     assert refresh.await_count == 2
+
+
+async def test_a_close_still_running_at_midnight_does_not_swallow_the_rebuild(
+    hass: HomeAssistant,
+) -> None:
+    """HA's debouncer drops a refresh asked for while another holds its lock
+    if that lock is still held when its cooldown ends. A month's 23:59 close
+    that ran past midnight therefore swallowed the rebuild, and the 1st was
+    priced for an hour off a table anchored on the month's last day. The
+    rebuild waits for the close, then runs. HA's own coordinator and
+    debouncer, a close that takes two minutes."""
+    import asyncio
+
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    coordinator = BePricesCoordinator(hass, entry)
+    release = asyncio.Event()
+    runs: list[int] = []
+
+    async def _update() -> Any:
+        runs.append(len(runs))
+        if len(runs) == 1:
+            await release.wait()
+        return None
+
+    coordinator._async_update_data = _update  # type: ignore[method-assign]
+    close = hass.async_create_task(coordinator.async_request_refresh())
+    await asyncio.sleep(0)
+    rebuild = hass.async_create_task(coordinator.async_request_refresh_after_tick())
+    # Past the debouncer's ten-second cooldown with the close still running.
+    for _ in range(3):
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=30))
+        await asyncio.sleep(0)
+    release.set()
+    await close
+    await rebuild
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=30))
+    await hass.async_block_till_done()
+    assert runs == [0, 1]
+    await coordinator.async_shutdown()
 
 
 async def test_midnight_rebuild_second_is_stable_and_spread(

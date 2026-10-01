@@ -431,6 +431,19 @@ class BePricesCoordinator(
                 self._sync_stale_issue(stale)
             raise
 
+    async def async_request_refresh_after_tick(self) -> None:
+        """Request a refresh that a tick still running cannot swallow.
+
+        The debouncer drops a call made while a refresh holds its lock if
+        the lock is still held when the cooldown ends, since any call would
+        do. Not for the midnight rebuild: the tick still running is the
+        month's 23:59 close, built on the old day, so the rebuild has to
+        follow it rather than merge into it. Wait for that tick, then ask.
+        """
+        async with self._debounced_refresh.async_lock():
+            pass
+        await self.async_request_refresh()
+
     async def async_force_refresh(self, clear_history: bool = False) -> None:
         """Force the next coordinator tick to re-fetch the supplier.
 

@@ -430,7 +430,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     rollover_second = zlib.crc32(entry.entry_id.encode()) % 60
 
     async def _rebuild_on_local_day_rollover(_now: datetime) -> None:
-        await coordinator.async_request_refresh()
+        await coordinator.async_request_refresh_after_tick()
 
     entry.async_on_unload(
         async_track_time_change(
@@ -446,8 +446,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     # of a month ran at 23:00 and nothing read the month after it: a peak the
     # capacity sensor set in that hour was never banked, and the hour was
     # missing from the month's last cost. One more tick a minute before
-    # midnight on the month's last day closes it. Kept in the first half of
-    # the minute so a slow tick still finishes before midnight.
+    # midnight on the month's last day closes it, in the first half of the
+    # minute. A close still running at midnight does not swallow the rebuild,
+    # which waits for it (async_request_refresh_after_tick).
     async def _close_the_month(now: datetime) -> None:
         if (now + timedelta(days=1)).day == 1:
             await coordinator.async_request_refresh()
