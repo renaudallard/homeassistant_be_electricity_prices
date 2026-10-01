@@ -39,8 +39,10 @@ from custom_components.be_electricity_prices.providers._rates import (
     FixedRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.totalenergies import (
+from custom_components.be_electricity_prices.providers._totalenergies_cards import (
     _extract_injection,
+)
+from custom_components.be_electricity_prices.providers.totalenergies import (
     parse_snapshot,
 )
 
@@ -468,7 +470,7 @@ def test_the_consumption_index_is_not_mistaken_for_the_injection_one() -> None:
     That is a load-profile-weighted index, not the injection one, and the
     only thing keeping them apart is a lookahead. Without it the credit is
     parsed at roughly six times the right coefficient."""
-    from custom_components.be_electricity_prices.providers.totalenergies import (
+    from custom_components.be_electricity_prices.providers._totalenergies_cards import (
         _MONTH_FORMULA_RE,
     )
 
@@ -694,7 +696,7 @@ def test_variable_cards_carry_the_delivery_month_formula() -> None:
     index to within 0,3 EUR/MWh, which four independent columns only do when
     the pairing is right.
     """
-    from custom_components.be_electricity_prices.providers.totalenergies import (
+    from custom_components.be_electricity_prices.providers._totalenergies_cards import (
         _consumption_month_formula,
     )
 

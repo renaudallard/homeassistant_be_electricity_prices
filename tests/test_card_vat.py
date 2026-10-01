@@ -24,6 +24,7 @@ from custom_components.be_electricity_prices.providers import (
     _engie_cards,
     _luminus_cards,
     _mega_cards,
+    _totalenergies_cards,
     bolt,
     cociter,
     ebem,
@@ -256,7 +257,7 @@ _PRINTING = {
         lambda t: totalenergies.parse_snapshot(
             "totalenergies_impact", t, REGION_WALLONIA
         ),
-        (totalenergies._VAT_RE,),
+        (_totalenergies_cards._VAT_RE,),
     ),
     "totalenergies": _Card(
         "totalenergies_dynamic_w.pdf",
@@ -264,7 +265,7 @@ _PRINTING = {
         lambda t: totalenergies.parse_snapshot(
             "totalenergies_mydynamic", t, REGION_WALLONIA
         ),
-        (totalenergies._VAT_RE,),
+        (_totalenergies_cards._VAT_RE,),
     ),
 }
 
@@ -434,9 +435,9 @@ def test_a_brussels_card_whose_text_lost_its_rate_is_assumed() -> None:
     digit is not in the text layer, so their formula is grossed on an
     assumed rate and says so."""
     text = _restated(
-        _layout("totalenergies_dynamic_w.pdf"), (totalenergies._VAT_RE,), ""
+        _layout("totalenergies_dynamic_w.pdf"), (_totalenergies_cards._VAT_RE,), ""
     )
-    assert totalenergies._VAT_RE.search(text) is None
+    assert _totalenergies_cards._VAT_RE.search(text) is None
     snap = totalenergies.parse_snapshot(
         "totalenergies_mydynamic", text, REGION_WALLONIA
     )
