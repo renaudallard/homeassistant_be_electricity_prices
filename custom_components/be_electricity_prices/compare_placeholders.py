@@ -64,7 +64,7 @@ from homeassistant.util import dt as dt_util
 from .providers import get as get_extractor, settlement_answer
 from .compare_engine import _SweepEngine
 from .compare_inputs import (
-    _borrowed_spot_cache,
+    _detached_spot_view,
     _coordinator_rlp_index_weights,
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
@@ -654,21 +654,17 @@ class _PlaceholdersMixin(OptionsFlow):
                 # LOCAL dict for this throwaway quote with the key typed in
                 # compare_api_key (or the entry's own); without it the
                 # credit silently drops and the YTD overstates the
-                # spot-indexed target's cost. Save/restore the coordinator
-                # cache so a read-only comparison doesn't mutate (and have
-                # the next tick persist) live coordinator state.
+                # spot-indexed target's cost. Fetched into a copy of the
+                # coordinator, so a read-only comparison neither mutates live
+                # coordinator state nor has the next tick persist it.
                 borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
                 if borrowed:
                     # Isolated: this wants the target's own year, not whatever
-                    # the entry happens to hold. Copied out before the context
-                    # manager puts the entry's caches back, since it restores
-                    # into the same dicts rather than rebinding them.
-                    with _borrowed_spot_cache(coord, isolate=True):
-                        await coord._ensure_historical_spots(
-                            ytd_from, today_local, borrowed
-                        )
-                        hist_spots = dict(coord._historical_spots)
-                        hist_quarters = dict(coord._historical_spot_quarters)
+                    # the entry happens to hold.
+                    view = _detached_spot_view(coord, isolate=True)
+                    await view._ensure_historical_spots(ytd_from, today_local, borrowed)
+                    hist_spots = view._historical_spots
+                    hist_quarters = view._historical_spot_quarters
             if stale and typed:
                 # Laid over the stale cache rather than in place of it: a fetch
                 # that came back short or empty (ENTSO-E down, or out of quota

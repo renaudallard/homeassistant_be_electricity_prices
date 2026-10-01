@@ -60,13 +60,13 @@ from .spot_stats import (
     _spp_weighting_enabled,
 )
 from .synergrid import RlpWeights, SppWeights
-from collections.abc import Iterator, Mapping
+import copy
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
 from typing import Any, cast
-from contextlib import contextmanager
 
 
 def _label_for_supplier(supplier_id: str) -> str:
@@ -613,59 +613,39 @@ class _HouseholdQuote:
     credit_year: CreditYear | None = None
 
 
-@contextmanager
-def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
-    """Put the coordinator's spot caches back after a compare-only fetch.
+def _detached_spot_view(coord: Any, *, isolate: bool) -> Any:
+    """A copy of the coordinator that a compare-only fetch walks into.
 
-    The compare page borrows ``_ensure_historical_spots`` to price a target,
-    and the next tick persists whatever that leaves behind
-    (``_save_persistent``). A household with no stored key can otherwise seed
-    its own persistent cache by opening this dialog and typing one, and then
-    never refresh it, so a partial month mean gets baked over the card's
-    printed indicative for the rest of the month.
+    The compare page borrows ``_ensure_historical_spots`` to price a target.
+    Walked on the coordinator itself, the fetch wrote into the caches the tick
+    keeps reading and saving: an isolated borrow emptied them for the length
+    of a year of requests, so a tick in that window billed current_year_cost
+    without its per-slot feed-in credit and a save could persist the borrowed
+    year, and putting the saved copies back afterwards threw away the days the
+    coordinator's own walk had added meanwhile. A household with no stored key
+    could also seed its persistent cache by typing one into this dialog, and
+    then never refresh it.
 
-    The two dicts are not all it saves. A day listed in
-    ``_complete_spot_days`` is treated as fully present without consulting
-    the hour dict at all, so that set has to travel with them: emptying the
-    dicts alone leaves the fetch believing every day the coordinator has
-    already walked is covered, and it returns without fetching anything.
+    The view is a shallow copy holding its own copy of every cache the walk
+    reads and writes, so nothing it fetches reaches the coordinator and
+    nothing needs putting back. The rest is shared, ``_spot_fetch_lock``
+    included, so the page still waits for a walk the coordinator has in
+    progress. Five caches, because the walk decides what to fetch from all of
+    them: the hour and slot dicts, ``_complete_spot_days`` (a day listed there
+    is present without the dicts being consulted), ``_quarter_grid_days`` (the
+    product a day came from) and ``_spot_day_retry_at`` (a failed day's
+    back-off, which one dialog's outage must not hand the next).
 
-    Copied and restored in place rather than rebound, because
-    ``_ensure_historical_spots`` merges each chunk into the attribute and
-    re-resolves it after every await.
-
-    ``isolate`` empties the caches first, for a caller that wants only the
-    hours it fetched itself; without it the fetch merges into what is
-    already there, which is what a month mean wants.
-
-    Two more travel with them, for the same reason: the walk writes both and
-    reads both to decide what to fetch. ``_quarter_grid_days`` says which
-    product a day came from and is persisted, so a borrow on the other grid
-    would mark the entry's own days with it. ``_spot_day_retry_at`` backs a
-    failed day off for hours, so one dialog that hit an outage held the next
-    one back from the same days; an isolated borrow starts without either.
+    ``isolate`` starts the view empty, for a caller that wants only the hours
+    it fetched itself; without it the view starts from what the coordinator
+    holds, which is what a month mean wants.
     """
-    saved_spots = dict(coord._historical_spots)
-    saved_quarters = dict(coord._historical_spot_quarters)
-    saved_complete = set(coord._complete_spot_days)
-    saved_grid = set(coord._quarter_grid_days)
-    saved_retry = dict(coord._spot_day_retry_at)
-    if isolate:
-        coord._historical_spots.clear()
-        coord._historical_spot_quarters.clear()
-        coord._complete_spot_days.clear()
-        coord._quarter_grid_days.clear()
-        coord._spot_day_retry_at.clear()
-    try:
-        yield
-    finally:
-        coord._historical_spots.clear()
-        coord._historical_spots.update(saved_spots)
-        coord._historical_spot_quarters.clear()
-        coord._historical_spot_quarters.update(saved_quarters)
-        coord._complete_spot_days.clear()
-        coord._complete_spot_days.update(saved_complete)
-        coord._quarter_grid_days.clear()
-        coord._quarter_grid_days.update(saved_grid)
-        coord._spot_day_retry_at.clear()
-        coord._spot_day_retry_at.update(saved_retry)
+    view = copy.copy(coord)
+    view._historical_spots = {} if isolate else dict(coord._historical_spots)
+    view._historical_spot_quarters = (
+        {} if isolate else dict(coord._historical_spot_quarters)
+    )
+    view._complete_spot_days = set() if isolate else set(coord._complete_spot_days)
+    view._quarter_grid_days = set() if isolate else set(coord._quarter_grid_days)
+    view._spot_day_retry_at = {} if isolate else dict(coord._spot_day_retry_at)
+    return view

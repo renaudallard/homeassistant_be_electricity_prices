@@ -91,7 +91,7 @@ from .providers import get as get_extractor, settlement_answer
 from dataclasses import replace
 from .compare_inputs import (
     _HouseholdQuote,
-    _borrowed_spot_cache,
+    _detached_spot_view,
     _credit_index_for,
     _credit_year,
     _effective_regime,
@@ -335,16 +335,16 @@ class _HouseholdMixin:
             # Merged rather than isolated: a month mean is the same number
             # whoever asks, so whatever the entry has already cached is valid
             # input, and it is what still answers when the fetch fails.
-            with _borrowed_spot_cache(coord, isolate=False):
-                try:
-                    await coord._ensure_historical_spots(
-                        today_local.replace(day=1), today_local, key
-                    )
-                except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
-                    pass
-                resolved = coord._monthly_spot_mean(
-                    today_local.year, today_local.month, spot_dict
+            view = _detached_spot_view(coord, isolate=False)
+            try:
+                await view._ensure_historical_spots(
+                    today_local.replace(day=1), today_local, key
                 )
+            except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
+                pass
+            resolved = view._monthly_spot_mean(
+                today_local.year, today_local.month, spot_dict
+            )
             if resolved is not None:
                 value = resolved
             month_spot_resolved.append(value)

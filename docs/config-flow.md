@@ -828,15 +828,22 @@ inlined at a call site.
 The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic/
 tou/tou_impact all require a smart meter; `flow_schemas.py` comment). The
 compare result never mutates coordinator state: both places that borrow the
-historical spot cache go through `_borrowed_spot_cache` (`compare_inputs.py`),
-which saves and restores `_historical_spots`, `_historical_spot_quarters` and
-`_complete_spot_days` around the fetch — the completeness set travels with the
-two dicts because a day listed there counts as fully present without consulting
-them, so isolating the dicts alone would make the fetch skip every day the
-coordinator had already walked. `_quarter_grid_days` and `_spot_day_retry_at`
-travel with them too: the walk writes both, the grid is persisted, and a retry
-marker left by one dialog's failed fetch would hold the next dialog back from
-the same days; an isolated borrow starts without either. The month-mean borrow merges
+historical spot walk run it on `_detached_spot_view` (`compare_inputs.py`), a
+shallow copy of the coordinator holding its own copies of `_historical_spots`,
+`_historical_spot_quarters`, `_complete_spot_days`, `_quarter_grid_days` and
+`_spot_day_retry_at`, so the tick that runs on the same loop while the page
+fetches a year of day-ahead keeps reading, saving and extending its own caches,
+and nothing the page fetched is persisted. All five go into the copy because
+the walk decides what to fetch from all of them: a day listed in the
+completeness set counts as fully present without consulting the dicts, so an
+isolated view with the coordinator's set would skip every day it had already
+walked, the grid set is persisted, and a retry marker left by one dialog's
+failed fetch would hold the next dialog back from the same days. The lock is
+shared, so the page still waits for a walk the coordinator has in progress.
+Saving the caches, emptying them for the fetch and putting them back after
+it, which this replaced, left a tick in that window billing current_year_cost
+without its per-slot feed-in credit and threw away what the coordinator's own
+walk added meanwhile. The month-mean borrow merges
 (`compare_household.py`); the YTD borrow isolates (`compare_placeholders.py`),
 and runs when the cache is empty or, on a keyless entry where a key was typed
 on the page, stale (`_keyless_stale_spots`), so that key is not ignored over

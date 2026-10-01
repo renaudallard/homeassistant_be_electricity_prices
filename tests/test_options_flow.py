@@ -1308,17 +1308,19 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     )
     calls: list[tuple[Any, Any]] = []
 
-    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None
+    ) -> None:
         calls.append((start, api_key))
         if fetched and api_key:
-            coord._historical_spots.update(fresh)
+            self._historical_spots.update(fresh)
 
     fake = replace(
         EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
     )
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
-        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
         patch(
             "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=123.0),
@@ -1421,9 +1423,11 @@ async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
     )
     fetched = {datetime(2026, 3, 1, 11, tzinfo=UTC): 0.07}
 
-    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None
+    ) -> None:
         if api_key:
-            coord._historical_spots.update(fetched)
+            self._historical_spots.update(fetched)
 
     earlier = AsyncMock(return_value=[])
     fake = replace(
@@ -1431,7 +1435,7 @@ async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
     )
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
-        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
         patch.object(contract_periods, "price_previous_periods", new=earlier),
         patch(
             "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
@@ -1505,12 +1509,14 @@ async def test_compare_does_not_mutate_live_historical_spots(
         publication_label="april 2026",
     )
 
-    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None
+    ) -> None:
         # Simulate a fetch populating the (temporary) caches. Both of them: a
         # fetch fills whichever the borrowing entry replays from, and an
         # assertion against a dict the fake never touches proves nothing.
-        coord._historical_spots[datetime(2026, 1, 1, tzinfo=UTC)] = 0.05
-        coord._historical_spot_quarters[datetime(2026, 1, 1, tzinfo=UTC)] = [
+        self._historical_spots[datetime(2026, 1, 1, tzinfo=UTC)] = 0.05
+        self._historical_spot_quarters[datetime(2026, 1, 1, tzinfo=UTC)] = [
             0.04,
             0.05,
             0.05,
@@ -1522,7 +1528,7 @@ async def test_compare_does_not_mutate_live_historical_spots(
     )
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
-        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
         patch(
             "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=123.0),
@@ -6058,14 +6064,15 @@ def test_chart_labels_fall_back_to_what_actually_differs() -> None:
     assert _chart_labels(own, dict(own)) == ("Your entry", "Quoted")
 
 
-def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
-    """The compare page reads the coordinator's spot caches but must leave
-    nothing behind: the next tick persists them, so a key typed into this
-    dialog could otherwise seed a cache the entry can never refresh."""
+def test_a_detached_spot_view_leaves_the_coordinator_untouched() -> None:
+    """The compare page fetches into a copy of the coordinator, never into
+    the coordinator itself: the next tick persists those caches, so a key
+    typed into this dialog could otherwise seed a cache the entry can never
+    refresh, and the tick reads them while the page is still fetching."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.compare_inputs import (
-        _borrowed_spot_cache,
+        _detached_spot_view,
     )
 
     hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
@@ -6078,85 +6085,90 @@ def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
         _quarter_grid_days={date(2026, 3, 1)},
         _spot_day_retry_at=dict(retry),
     )
+    names = (
+        "_historical_spots",
+        "_historical_spot_quarters",
+        "_complete_spot_days",
+        "_quarter_grid_days",
+        "_spot_day_retry_at",
+    )
+    held = {name: getattr(coord, name) for name in names}
 
-    # Merging: the fetch sees what is already cached, and adds to it.
-    with _borrowed_spot_cache(coord, isolate=False):
-        assert coord._historical_spots == {hour: 0.10}
-        coord._historical_spots[later] = 0.20
-        coord._complete_spot_days.add(date(2026, 3, 2))
-    assert coord._historical_spots == {hour: 0.10}
-    assert coord._complete_spot_days == {date(2026, 3, 1)}
+    # Merging: the fetch sees what is already cached, and adds to its own copy.
+    view = _detached_spot_view(coord, isolate=False)
+    assert view._historical_spots == {hour: 0.10}
+    assert view._complete_spot_days == {date(2026, 3, 1)}
+    view._historical_spots[later] = 0.20
+    view._complete_spot_days.add(date(2026, 3, 2))
 
-    # Isolating: the fetch starts empty, and the entry's cache still returns.
-    with _borrowed_spot_cache(coord, isolate=True):
-        assert coord._historical_spots == {}
-        assert coord._historical_spot_quarters == {}
-        assert coord._complete_spot_days == set()
-        # Nor a day another dialog's failed fetch backed off, nor the grid the
-        # entry's own days came on.
-        assert coord._spot_day_retry_at == {}
-        assert coord._quarter_grid_days == set()
-        coord._historical_spots[later] = 0.20
-        coord._quarter_grid_days.add(date(2026, 3, 2))
-        coord._spot_day_retry_at[date(2026, 3, 2)] = later
+    # Isolating: the fetch starts empty. Nor a day the coordinator found
+    # complete, which the walk would skip without looking at the dicts, nor a
+    # day another fetch backed off, nor the grid the entry's own days came on.
+    view = _detached_spot_view(coord, isolate=True)
+    for name in names:
+        assert not getattr(view, name), name
+    view._historical_spots[later] = 0.20
+    view._quarter_grid_days.add(date(2026, 3, 2))
+    view._spot_day_retry_at[date(2026, 3, 2)] = later
+
+    # The coordinator still holds the same objects with the same contents.
+    for name in names:
+        assert getattr(coord, name) is held[name], name
     assert coord._historical_spots == {hour: 0.10}
     assert coord._historical_spot_quarters == {hour: [0.1, 0.2, 0.3, 0.4]}
     assert coord._complete_spot_days == {date(2026, 3, 1)}
-    # The walk writes both, and the entry persists the grid: what the borrow
-    # marked must not outlive it.
     assert coord._quarter_grid_days == {date(2026, 3, 1)}
     assert coord._spot_day_retry_at == retry
 
 
-def test_borrowed_spot_cache_restores_in_place() -> None:
-    """Restored into the same dicts rather than rebound.
-    ``_ensure_historical_spots`` merges each fetched chunk into the attribute
-    and re-resolves it after every await, so a caller holding the old object
-    must still see the restored contents."""
-    from types import SimpleNamespace
+async def test_a_tick_during_the_compare_fetch_reads_the_coordinators_spots() -> None:
+    """The page's fetch is a year of ENTSO-E requests, and the coordinator
+    tick runs on the same loop meanwhile. Walked on the coordinator, an
+    isolated fetch emptied its caches for that whole time, so a tick billed
+    current_year_cost without its per-slot feed-in credit, and putting the
+    saved copies back afterwards threw away a day the coordinator's own walk
+    had added in between."""
+    import asyncio
 
     from custom_components.be_electricity_prices.compare_inputs import (
-        _borrowed_spot_cache,
+        _detached_spot_view,
     )
 
     hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
-    coord = SimpleNamespace(
-        _historical_spots={hour: 0.10},
-        _historical_spot_quarters={},
-        _complete_spot_days=set(),
-        _quarter_grid_days=set(),
-        _spot_day_retry_at={},
+    own_hour = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    fetched_hour = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    class _Coord:
+        def __init__(self) -> None:
+            self._historical_spots: dict[datetime, float] = {hour: 0.10}
+            self._historical_spot_quarters: dict[datetime, list[float]] = {}
+            self._complete_spot_days: set[date] = set()
+            self._quarter_grid_days: set[date] = set()
+            self._spot_day_retry_at: dict[date, datetime] = {}
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def _ensure_historical_spots(
+            self, start: date, end: date, api_key: str | None = None
+        ) -> None:
+            self.started.set()
+            await self.release.wait()
+            self._historical_spots[fetched_hour] = 0.30
+
+    coord = _Coord()
+    view = _detached_spot_view(coord, isolate=True)
+    fetch = asyncio.ensure_future(
+        view._ensure_historical_spots(date(2026, 1, 1), date(2026, 3, 2), "KEY")
     )
-    held = coord._historical_spots
-    with _borrowed_spot_cache(coord, isolate=True):
-        coord._historical_spots[hour] = 0.99
-    assert held is coord._historical_spots
-    assert held == {hour: 0.10}
-
-
-def test_isolating_the_cache_clears_the_completeness_set() -> None:
-    """A day in ``_complete_spot_days`` is treated as fully present without
-    consulting the hour dict, so it has to be emptied with them. Leaving it
-    behind makes an isolated fetch skip every day the coordinator has already
-    walked and return without fetching anything."""
-    from types import SimpleNamespace
-
-    from custom_components.be_electricity_prices.compare_inputs import (
-        _borrowed_spot_cache,
-    )
-
-    walked = {date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)}
-    coord = SimpleNamespace(
-        _historical_spots={},
-        _historical_spot_quarters={},
-        _complete_spot_days=set(walked),
-        _quarter_grid_days=set(),
-        _spot_day_retry_at={},
-    )
-    with _borrowed_spot_cache(coord, isolate=True):
-        # What _ensure_historical_spots reads to decide whether to fetch.
-        assert coord._complete_spot_days == set()
-    assert coord._complete_spot_days == walked
+    await coord.started.wait()
+    # A tick reading the cache mid-fetch, and the coordinator's own walk
+    # adding a day.
+    assert coord._historical_spots == {hour: 0.10}
+    coord._historical_spots[own_hour] = 0.15
+    coord.release.set()
+    await fetch
+    assert view._historical_spots == {fetched_hour: 0.30}
+    assert coord._historical_spots == {hour: 0.10, own_hour: 0.15}
 
 
 def test_compare_pickers_do_not_cross_the_professional_line() -> None:
