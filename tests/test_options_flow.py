@@ -6471,7 +6471,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # Trevion adds one fixed card and five dynamic/monthly-indexed cards,
         # all residential and Flanders-only. Aspiravi Eco Plus Flex adds one
         # more, a month-indexed variable card that reads in about 1,3 s.
-        ("flanders", "static", False): 55,
+        # Eneco Zon & Wind Fix One adds one fixed card in each of Flanders
+        # and Wallonia, read in the same listing fetch as Vast.
+        ("flanders", "static", False): 56,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -6488,7 +6490,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 51,
+        ("wallonia", "static", False): 52,
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the

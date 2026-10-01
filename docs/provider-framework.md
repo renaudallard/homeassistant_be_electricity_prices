@@ -391,7 +391,7 @@ all hours). A card whose slots are each a monthly formula (Engie Empower Flextim
 sets the three `factor_*` / `base_*` pairs beside the triplet and `month_indexed`;
 the triplet is then last month's figure and the coordinator bakes the pairs on the
 delivery month's mean. Note the related invariant: monthly-indexed injection (EBEM
-Variabel/B@sic+, Eneco Fix/Flex/Flex One, DATS24) must emit `current` only and never an
+Variabel/B@sic+, Eneco Fix/Fix One/Flex/Flex One, DATS24) must emit `current` only and never an
 hourly-spot `factor`/`base`, or a latent mis-price is masked while the
 indicative prints.
 

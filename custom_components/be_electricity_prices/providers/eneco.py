@@ -106,6 +106,7 @@ _NL_MONTHS = NL_MONTHS
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
 _CONTRACT_SLUGS: dict[str, str] = {
     "power_fix": "FIX",
+    "power_fix_one": "FIX_ONE",
     "power_flex": "FLEX",
     "power_flex_one": "FLEX_ONE",
     "power_dynamic": "DYNAMIC",
@@ -442,7 +443,8 @@ def _extract_publication_month(text: str) -> str:
 
 
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
-    if contract_id == "power_fix":
+    if contract_id in ("power_fix", "power_fix_one"):
+        # Fix One is the one-year twin of Fix on the same card layout.
         return _extract_fixed(text)
     if contract_id in ("power_flex", "power_flex_one"):
         # Flex One is the same variable card with a lower base coefficient
@@ -855,6 +857,18 @@ EXTRACTOR = SupplierExtractor(
             regions=_ENECO_REGIONS,
             # Injection indexes on the monthly Belpex-injectie, which needs
             # spots the fixed energy leg never fetches.
+            spot_indexed_injection=True,
+        ),
+        Contract(
+            # A one-year fixed card that appeared on the October 2026
+            # listing ("een contract van bepaalde duur met een looptijd van 1
+            # jaar"), priced apart from Vast: 21,69 against 22,10 c/kWh mono
+            # on the same 65,00 EUR fee. Same layout and the same monthly
+            # Belpex-injectie formula, hence the same flag.
+            id="power_fix_one",
+            label="Eneco Zon & Wind Fix One",
+            kind="fixed",
+            regions=_ENECO_REGIONS,
             spot_indexed_injection=True,
         ),
         Contract(

@@ -416,7 +416,7 @@ to the 7th ran at 136,24, which moves PIC from 19,0079 to 19,7414 c/kWh.
 
 ### Monthly-indexed feed-in credits
 
-The same lag applies to a feed-in credit. Eneco Power Fix, Flex and Flex One
+The same lag applies to a feed-in credit. Eneco Power Fix, Fix One, Flex and Flex One
 print a credit "berekend op basis van de LAATST GEKENDE waarde van Belpex-injectie",
 i.e. the previous month's, while the contract indexes it monthly and settles
 retroactively. `InjectionRates.month_indexed` marks that, and the credit then

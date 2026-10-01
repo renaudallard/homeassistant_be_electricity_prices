@@ -46,7 +46,8 @@ Cards live under a fixed CDN base with a rotating 6-digit issue number
 https://cdn.eneco.be/downloads/nl/general/tk/BC_032_<ISSUE>_NL_ENECO_POWER_<NAME>.pdf
 ```
 
-`<NAME>` is the product slug (`FIX`, `FLEX`, `DYNAMIC`, `eneco.py`).
+`<NAME>` is the product slug (`FIX`, `FIX_ONE`, `FLEX`, `FLEX_ONE`, `DYNAMIC`,
+`eneco.py`).
 `<ISSUE>` is `<VOL><YY><MM>`: a 2-digit volume (usually `01`, higher on re-issues)
 followed by the 2-digit year and month. Stale issues stay served, so the live URL
 is never hardcoded; it is resolved from the listing page (`eneco.py`):
@@ -60,6 +61,7 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 | id | label | kind | regions | source line |
 | --- | --- | --- | --- | --- |
 | `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py` |
+| `power_fix_one` | Eneco Zon & Wind Fix One | `fixed` | flanders, wallonia | `eneco.py` |
 | `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py` |
 | `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py` |
 | `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py` |
@@ -72,6 +74,12 @@ Notes:
 - **Power Fix** is a fixed contract with a single rate plus a bi-hourly (day /
   night) split and a dedicated exclusive-night circuit rate (`_extract_fixed`,
   `eneco.py`).
+- **Power Fix One** is the one-year fixed card, first listed in October 2026
+  ("een contract van bepaalde duur met een looptijd van 1 jaar"). Same layout and
+  the same 65,00 EUR yearly fee as Fix, priced apart from it (21,69 against
+  22,10 c/kWh mono on the October cards), and the same monthly Belpex-injectie
+  credit. It parses on `_extract_fixed`; `_resolve_url` anchors each slug on
+  `.pdf`, so `FIX` never resolves to `FIX_ONE`.
 - **Power Flex** is a variable (monthly-indexed) contract: the card prints the
   current month's effective rate and a monthly Belpex indexation formula
   (`_extract_variable`, `eneco.py`).
@@ -92,7 +100,7 @@ Notes:
   returns a `DynamicRates` without setting it, `eneco.py`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
   to hourly (`_rates.py`).
-- Fix, Flex and Flex One all set `spot_indexed_injection` (`_rates.py`), so the
+- Fix, Fix One, Flex and Flex One all set `spot_indexed_injection` (`_rates.py`), so the
   flow offers them the ENTSO-E key their month-indexed credit needs; Power
   Dynamic leaves it `False` because its energy leg collects the key already.
   This bullet claimed the opposite ("it stays `False` on all three") for as long
@@ -459,7 +467,7 @@ Injection taxonomy (the three-shape rule, `_rates.py`):
   `parse_sign` (`_parse.py`).
 
 No Eneco contract is the spot-indexed-variable shape (Cociter Variable), but
-that is not what the flag means: Fix, Flex and Flex One all set
+that is not what the flag means: Fix, Fix One, Flex and Flex One all set
 `spot_indexed_injection` so the flow offers the key their MONTH-indexed credit
 resolves against. Only Power Dynamic leaves it `False`, and only because its
 energy leg already makes the key mandatory.
@@ -570,6 +578,7 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | fixture | card variant it represents |
 | --- | --- |
 | `eneco_fix.pdf` | Power Fix, April 2026 (fixed energy, full Wallonia 10-column + Fluvius overlay, taxes, monthly injection) |
+| `eneco_fix_one.pdf` | Power Fix One, October 2026 (the one-year fixed card: Fix's layout, so it pins the dispatch and the URL resolver) |
 | `eneco_flex.pdf` | Power Flex, April 2026 (variable energy, monthly indexation, monthly injection) |
 | `eneco_flex_one.pdf` | Power Flex One, September 2026 (the second variable card: same layout and factor as Flex on a lower base, so it pins the dispatch rather than a parser) |
 | `eneco_dyn.pdf` | Power Dynamic, April 2026 (hourly Belpex-H energy and injection formulas) |

@@ -3440,6 +3440,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     # an estimate. Both the coefficients and the flag have to survive: the
     # printed figure alone is the previous month's rate.
     "power_fix": "month",
+    "power_fix_one": "month",
     "power_flex": "month",
     "power_flex_one": "month",
     # Aspiravi Eco Plus Flex indexes its credit on the same plain monthly

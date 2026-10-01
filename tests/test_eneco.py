@@ -276,6 +276,52 @@ def test_flex_one_is_registered_and_sold_in_both_regions() -> None:
     assert eneco_mod._CONTRACT_SLUGS["power_flex_one"] == "FLEX_ONE"
 
 
+def test_fix_one_is_registered_and_sold_in_both_regions() -> None:
+    # A one-year fixed card first listed in October 2026. Without it a Fix
+    # One household had to pick Vast and was billed 22,10 instead of 21,69
+    # c/kWh mono on the same 65,00 EUR fee.
+    regions = {c.id: set(c.regions) for c in eneco_mod.EXTRACTOR.contracts}
+    assert regions["power_fix_one"] == {"flanders", "wallonia"}
+    assert eneco_mod._CONTRACT_SLUGS["power_fix_one"] == "FIX_ONE"
+    kinds = {c.id: c.kind for c in eneco_mod.EXTRACTOR.contracts}
+    assert kinds["power_fix_one"] == "fixed"
+
+
+def test_fix_one_parses_on_the_fix_energy_block() -> None:
+    snap = parse_snapshot(
+        fixture_text("eneco_fix_one.pdf"),
+        "power_fix_one",
+        "test://fixone",
+        REGION_WALLONIA,
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.2169)
+    assert snap.energy.peak == pytest.approx(0.2469)
+    assert snap.energy.offpeak == pytest.approx(0.1908)
+    assert snap.energy.exclusive_night == pytest.approx(0.1908)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    assert snap.valid_until == date(2026, 10, 31)
+    assert "ores" in snap.dsos
+    # "0,077 X BELPEX -3", settled on the monthly Belpex-injectie.
+    inj = snap.injection
+    assert inj is not None
+    assert inj.month_indexed is True
+    assert inj.factor == pytest.approx(0.77)
+    assert inj.base == pytest.approx(-0.03)
+
+
+def test_fix_url_does_not_resolve_to_fix_one() -> None:
+    # Both cards sit on the same listing; Vast's slug is a prefix of Fix
+    # One's, so the resolver must stop at the extension.
+    listing = (
+        "BC_032_012610_NL_ENECO_POWER_FIX_ONE.pdf BC_032_012610_NL_ENECO_POWER_FIX.pdf"
+    )
+    fix = eneco_mod._resolve_url(listing, "power_fix")
+    fix_one = eneco_mod._resolve_url(listing, "power_fix_one")
+    assert fix is not None and fix.endswith("_POWER_FIX.pdf")
+    assert fix_one is not None and fix_one.endswith("_POWER_FIX_ONE.pdf")
+
+
 def test_flex_one_parses_on_the_flex_energy_block() -> None:
     # Same card layout as Flex, same 0,102 factor, lower base (1,462
     # against 3,001), so no parser changes hands: only the dispatch does.

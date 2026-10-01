@@ -1375,6 +1375,7 @@ def test_every_month_indexed_eneco_card_is_pinned_in_the_shape_map() -> None:
 
     for fixture, cid in (
         ("eneco_fix.pdf", "power_fix"),
+        ("eneco_fix_one.pdf", "power_fix_one"),
         ("eneco_flex.pdf", "power_flex"),
         ("eneco_flex_one.pdf", "power_flex_one"),
         ("eneco_dyn.pdf", "power_dynamic"),
