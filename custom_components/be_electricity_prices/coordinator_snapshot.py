@@ -37,7 +37,7 @@ from .brugel import cached_power_term
 from .vat_rates import residential_vat, standard_vat
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
-from .providers._pdf import is_transient_fetch_error
+from .providers._pdf import is_missing_card_error, is_transient_fetch_error
 from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
 
 import logging
@@ -151,6 +151,7 @@ class _SnapshotMixin:
             *,
             transient: bool = False,
             unreadable: bool = False,
+            missing: bool = False,
         ) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
         def _sync_card_read_by_ocr_issue(self, active: bool) -> None: ...
@@ -597,8 +598,8 @@ class _SnapshotMixin:
         # A transient network failure (timeout / reset / 5xx / anti-bot 403)
         # usually recovers on the next tick, so defer its softer "could not
         # reach the supplier" card until it has crossed the threshold. A parse
-        # error / 404 / non-PDF payload will not self-heal, so raise the
-        # actionable "extractor failed" card on the first failure.
+        # error / 404 / non-PDF payload will not self-heal, so raise its card
+        # on the first failure.
         transient = isinstance(err, asyncio.TimeoutError) or is_transient_fetch_error(
             result.error_message
         )
@@ -617,8 +618,14 @@ class _SnapshotMixin:
             # cards to raise.
             self._replay_stale_snapshot("publishes its tariff card as page images")
         if not transient:
+            # A 404 or 410 says the supplier has no card at that address, which
+            # is a late card, a withdrawn product or a moved one, never a
+            # layout to report.
             self._sync_extractor_issue(
-                result.error_message, transient=False, unreadable=unreadable
+                result.error_message,
+                transient=False,
+                unreadable=unreadable,
+                missing=is_missing_card_error(result.error_message),
             )
         elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
             self._sync_extractor_issue(result.error_message, transient=True)

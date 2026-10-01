@@ -483,6 +483,7 @@ class _IssuesMixin:
         *,
         transient: bool = False,
         unreadable: bool = False,
+        missing: bool = False,
     ) -> None:
         """Raise or clear the supplier-extractor repair issue.
 
@@ -504,6 +505,11 @@ class _IssuesMixin:
         readable cards come back. A transient network error still reports as
         transient, because that one clears by itself too.
 
+        ``missing`` takes a fourth: the card's address answered 404 or 410,
+        so the supplier has no card there. That is a card not published yet,
+        a product withdrawn or a card moved, and a layout report fits none of
+        them; the card says so and asks for a report only if it lasts.
+
         Whichever flavour is raised clears the others so the user never sees
         two at once. ``message`` ``None`` means the latest fetch succeeded
         and clears all of them.
@@ -514,7 +520,8 @@ class _IssuesMixin:
         unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
         unreadable_id = f"extractor_unreadable_{self.entry.entry_id}"
         no_prices_id = f"extractor_unreadable_no_prices_{self.entry.entry_id}"
-        all_ids = (failed_id, unreachable_id, unreadable_id, no_prices_id)
+        missing_id = f"extractor_card_missing_{self.entry.entry_id}"
+        all_ids = (failed_id, unreachable_id, unreadable_id, no_prices_id, missing_id)
         # A supplier past its supply end date has stopped publishing, so the
         # fetch failing is the expected outcome and not news. Reporting it
         # stacks an alarming "could not reach the supplier" card on top of
@@ -535,6 +542,8 @@ class _IssuesMixin:
             raise_id, translation_key = no_prices_id, "extractor_unreadable_no_prices"
         elif unreadable:
             raise_id, translation_key = unreadable_id, "extractor_unreadable"
+        elif missing:
+            raise_id, translation_key = missing_id, "extractor_card_missing"
         else:
             raise_id, translation_key = failed_id, "extractor_failed"
         for issue_id in all_ids:

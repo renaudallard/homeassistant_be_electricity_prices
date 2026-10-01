@@ -624,7 +624,8 @@ Repairs issues, all keyed by `entry_id`:
 | Issue | Raised by | When |
 |-------|-----------|------|
 | `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d), and the supplier has not left the market (`_supply_ended`): past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all |
-| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure |
+| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / non-PDF; on the first failure |
+| `extractor_card_missing` | `_sync_extractor_issue(missing=True)` | the card's address answered 404 or 410 (`is_missing_card_error`, `providers/_pdf.py`): a card not out yet, a withdrawn product or moved cards, none of which is a layout to report; on the first failure |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures |
 | `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue |
 | `extractor_unreadable_no_prices` | `_sync_extractor_issue(unreadable=True)` with `_snapshot is None` | the same unreadable card on an entry with nothing cached to serve: a brand-new entry, or one whose blob fell below `_DEGRADED_MIN_SCHEMA_VERSION`. Every sensor reads unavailable, so it names the workaround and says nothing about drift |

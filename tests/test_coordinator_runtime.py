@@ -2298,6 +2298,49 @@ async def test_a_textless_card_fetch_reaches_the_unreadable_repairs_card(
     )
 
 
+async def test_a_card_address_answering_404_is_not_reported_as_a_layout_change(
+    hass: HomeAssistant,
+) -> None:
+    """Luminus took its Comfy cards down on 1 October 2026 while its own
+    product page still linked them: "HTTP 404 fetching .../get-pricelist/
+    ?documentSlug=comfy...". The entry raised the card asking the user to
+    report a layout change, which there was none of. A 404 or 410 means the
+    card is late, the product withdrawn or the cards moved, and has its own
+    card; a parse error after it still gets the ordinary one."""
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _gone(*args: Any, **kwargs: Any) -> None:
+        raise ExtractorError(
+            "HTTP 404 fetching https://www.luminus.be/api-next/get-pricelist/"
+        )
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_gone),
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    registry = ir.async_get(hass)
+    missing_id = f"extractor_card_missing_{entry.entry_id}"
+    failed_id = f"extractor_failed_{entry.entry_id}"
+    issue = registry.async_get_issue(DOMAIN, missing_id)
+    assert issue is not None
+    assert issue.translation_key == "extractor_card_missing"
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+
+    coord._sync_extractor_issue("could not parse energy block")
+    assert registry.async_get_issue(DOMAIN, failed_id) is not None
+    assert registry.async_get_issue(DOMAIN, missing_id) is None
+    coord._sync_extractor_issue(None)
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+
+
 async def _refresh_with_unreadable_card(
     hass: HomeAssistant, entry: Any, archived: Any
 ) -> None:
@@ -2898,6 +2941,7 @@ _REPAIR_ISSUE_KINDS = (
     "extractor_unreachable",
     "extractor_unreadable",
     "extractor_unreadable_no_prices",
+    "extractor_card_missing",
     "card_read_by_ocr",
     "entsoe_auth_failed",
     "supplier_deprecated",

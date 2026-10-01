@@ -764,6 +764,10 @@
       "title": "Could not reach the supplier for {supplier} ({contract})",
       "description": "The integration could not download the tariff card after several attempts: {error}. If a card was parsed before, it keeps serving its prices; otherwise this entry's sensors stay unavailable until a fetch succeeds. This is usually a temporary network or CDN problem that clears on the next refresh; run the be_electricity_prices.refresh service or check your network if it keeps happening."
     },
+    "extractor_card_missing": {
+      "title": "The tariff card for {supplier} ({contract}) is not available",
+      "description": "The supplier's site answered that there is no tariff card at the address the integration reads: {error}. The supplier may not have published this month's card yet, may have withdrawn the product, or may have moved its cards. If a card was parsed before, the integration keeps serving its prices, but they may no longer match what is actually billed; otherwise this entry's sensors stay unavailable until a fetch succeeds. This card clears by itself once the tariff card can be fetched again. If it lasts more than a few days while the supplier still offers the product, please open an issue on GitHub with the supplier and contract so the extractor can be updated."
+    },
     "card_read_by_ocr": {
       "title": "Prices for {supplier} are read from pictures of its card",
       "description": "{supplier} publishes its tariff card as page images with no text layer, so nothing can be read out of the document itself. These prices for {contract} come from the project's own reading of the card's pixels, done once a day and shared by every installation. It reads a figure as the one thing it can be or not at all, so what you see was read whole rather than guessed, but it is a reading, and worth checking against your card before you act on it. This card clears by itself once {supplier} publishes a readable card again."

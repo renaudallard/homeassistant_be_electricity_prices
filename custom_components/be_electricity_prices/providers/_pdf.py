@@ -90,6 +90,21 @@ def is_transient_fetch_error(message: str) -> bool:
     return False
 
 
+def is_missing_card_error(message: str) -> bool:
+    """Whether an ExtractorError message says the card's address answered
+    404 or 410.
+
+    Permanent for :func:`is_transient_fetch_error`, since a retry will not
+    bring the card back, but not a layout change either: the supplier has no
+    card at that address, because it has not published this month's yet,
+    withdrew the product or moved its cards. Read off the same ``HTTP
+    <status>`` prefix the fetch helpers here write.
+    """
+    if not message.startswith("HTTP "):
+        return False
+    return message[len("HTTP ") :].split(None, 1)[0] in ("404", "410")
+
+
 def error_text(err: BaseException) -> str:
     """The exception's message, or its class name when it carries none.
 

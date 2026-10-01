@@ -158,6 +158,7 @@ class _PricesMixin:
             *,
             transient: bool = False,
             unreadable: bool = False,
+            missing: bool = False,
         ) -> None: ...
 
     async def _tick_spot_prices(

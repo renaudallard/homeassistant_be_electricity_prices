@@ -910,7 +910,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Sixteen repair issues surface
+TimeoutError` rather than trailing off after the colon. Seventeen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -925,6 +925,13 @@ successful refresh:
   Raised on the first failure, since a parse error will not self-heal;
   cached prices keep serving, and with no cached card the sensors stay
   unavailable.
+- **`extractor_card_missing_<entry>`** — the supplier's site answered
+  that there is no tariff card at the address the integration reads (HTTP
+  404 or 410): the card for the month is not out yet, the product was
+  withdrawn, or the supplier moved its cards. Raised on the first failure
+  instead of `extractor_failed`, since nothing on the card changed; cached
+  prices keep serving. Worth an issue only if it lasts while the supplier
+  still offers the product.
 - **`extractor_unreachable_<entry>`** — the tariff card could not be
   downloaded (network timeout, reset, a transient server error, or the
   supplier's own file store refusing the download). Raised only after

@@ -764,6 +764,10 @@
       "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
       "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Werd er eerder een kaart ingelezen, dan blijft ze die prijzen tonen; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
     },
+    "extractor_card_missing": {
+      "title": "Tariefkaart voor {supplier} ({contract}) is niet beschikbaar",
+      "description": "De site van de leverancier antwoordt dat er geen tariefkaart staat op het adres dat de integratie leest: {error}. Mogelijk heeft de leverancier de kaart van deze maand nog niet gepubliceerd, het product stopgezet of zijn kaarten verplaatst. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Deze melding verdwijnt vanzelf zodra de tariefkaart weer opgehaald kan worden. Duurt het langer dan enkele dagen terwijl de leverancier het product nog aanbiedt, open dan een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
+    },
     "card_read_by_ocr": {
       "title": "De prijzen van {supplier} worden van foto's van zijn kaart gelezen",
       "description": "{supplier} publiceert zijn tariefkaart als paginafoto's zonder tekstlaag, waardoor er niets uit het document zelf gelezen kan worden. Deze prijzen voor {contract} komen uit de eigen lezing van de kaartpixels door het project, een keer per dag gedaan en gedeeld door elke installatie. Ze leest een getal als het enige dat het kan zijn of helemaal niet, dus wat je ziet is volledig gelezen in plaats van geraden. Het blijft wel een lezing, die het loont om tegen je kaart te controleren voor je erop afgaat. Deze melding verdwijnt vanzelf zodra {supplier} weer een leesbare kaart publiceert."
