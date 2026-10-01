@@ -5108,8 +5108,10 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
 #     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
 #     slow CI day or a slightly larger PDF batch doesn't fire.
-#   * octaplus: ~17.6 MB (8 contracts x 2 regions at ~1 MB each after the
-#     2026 card redesign; fixed_impact is Wallonia-only). Allow 22 MB.
+#   * octaplus: ~32.7 MB measured on 2 October 2026, 27 cards at ~1.2 MB:
+#     the October Boost range plus the withdrawn products, still checked
+#     while their cards are served (the Impact contracts are Wallonia-only).
+#     Allow 40 MB; the figure falls back once the withdrawn cards go.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     # bolt, engie and mega each gained a professional edition of most of
     # their catalogue (August 2026), which roughly doubles the number of
@@ -5121,7 +5123,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "engie": 16_000_000,
     "ecofix": 16_000_000,
     "mega": 14_000_000,
-    "octaplus": 22_000_000,
+    "octaplus": 40_000_000,
 }
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s
