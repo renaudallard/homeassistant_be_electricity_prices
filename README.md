@@ -1568,7 +1568,8 @@ three ids the integration uses, which are the directory names under
    It holds the energy, DSO, tax and injection figures exactly as the
    integration stores them, plus `_seen_on` (the day it was captured),
    `_via` (`live` for a card captured while it was current, `archive`
-   for one mirrored from the supplier's archive) and `_sources`: every
+   for one mirrored from the supplier's archive, or settled there once a
+   month-indexed card's month had closed) and `_sources`: every
    page or document the parse read, each with its text file under
    `texts/` and, for a PDF, the digest of the file.
 2. **The original PDF** is easiest through
@@ -1614,7 +1615,13 @@ The integration reads that archive first for any closed month, one small
 JSON per month straight from `raw.githubusercontent.com` against a PDF
 download and a parse from the supplier; the supplier's own archive answers
 for a month the project's does not hold, and the current card stands in when
-neither has it. The request names the supplier, contract, region and month
+neither has it. A card indexed on its own month (Eneco Flex, EBEM's variable
+cards, Mega's Flex and Impact range, Trevion's monthly contracts and the like)
+prints last month's index while it runs, and the supplier settles the month
+on the card after it. A month the archive caught live on such a card is
+therefore read from the supplier once it has closed, and billed on the
+archive's copy, re-asked daily, until that card is out; the daily run then
+replaces the archive's copy with the settled one. The request names the supplier, contract, region and month
 and nothing else, and it is only made for a month the archive can hold: a
 closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach. A signing month older than

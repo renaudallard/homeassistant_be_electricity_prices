@@ -170,7 +170,12 @@ month at the current rate. Return-value semantics:
   `scripts/archive_cards.py` and mirroring these archives, see
   [ci-and-testing.md](ci-and-testing.md)); `fetch_for_month` answers for a
   month the archive does not hold, and on `None` from both the current
-  snapshot stands in as a proxy.
+  snapshot stands in as a proxy. It is also asked over an archive row caught
+  live on a card indexed on its own month (`_awaits_settlement`), since that
+  row holds the estimate the card printed and the supplier's path is what
+  settles the month on the next card: a settled answer replaces the row, one
+  still provisional or a failure leaves the row billing but provisional, and
+  `None` leaves it as it is.
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
 has no archive at all; its past months come from the repository archive alone.

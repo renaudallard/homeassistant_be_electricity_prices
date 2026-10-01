@@ -484,8 +484,9 @@ touches at most 12 archive fetches. `_snapshot_for_month` asks the
 repository's own card archive first for a closed month (`_archived_card_from_github`, the
 `be_price_cards` tree that `.github/workflows/archive_cards.yml` writes daily and mirrors the supplier
 archives into), then the extractor's `fetch_for_month` archive for a month the project's does not
-hold (see [provider-framework.md](provider-framework.md)), and falls back to the current live
-snapshot only when neither holds the month.
+hold or holds only as the estimate a month-indexed card printed while it ran (see
+[provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
+when neither holds the month.
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`

@@ -58,6 +58,14 @@ here and is not the precedent it looks like. A month the
 supplier answers None for is left absent, as is a card still flagged
 provisional, so a later backfill fills it once it has settled.
 
+The same pass replaces a closed month it holds as caught live when the card
+is indexed on its own month: such a card prints last month's index while it
+runs, and the supplier settles the month on the card after it, so the live
+row is an estimate the integration would otherwise bill for good. The row is
+re-asked through ``fetch_for_month`` until that answers settled, and from then
+on it is the supplier's answer, filed as ``archive``; the live walk does not
+write a card it still serves for such a month back over it.
+
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the
 run goes red without filing anything. The live check already files
@@ -120,6 +128,9 @@ from custom_components.be_electricity_prices.providers.base import (  # noqa: E4
 from custom_components.be_electricity_prices.snapshot_codec import (  # noqa: E402
     _snapshot_from_dict,
     _snapshot_to_dict,
+)
+from custom_components.be_electricity_prices.snapshot_months import (  # noqa: E402
+    _settles_after_its_month,
 )
 from homeassistant.helpers.json import json_dumps  # noqa: E402
 
@@ -221,6 +232,8 @@ class _Summary:
     stored: int = 0
     unchanged: int = 0
     backfilled: int = 0
+    # A month held as caught live, replaced by what the supplier settled it at.
+    settled: int = 0
     absent: int = 0
     rendered: int = 0
     unrendered: int = 0
@@ -888,6 +901,25 @@ def _write_card(
         encoding="utf-8",
     )
     return True
+
+
+def _awaits_settlement(row: dict[str, Any] | None) -> bool:
+    """Whether a held row of a closed month is still the live estimate.
+
+    A card indexed on its own month prints last month's index while it runs,
+    and the supplier settles the month on the card after it. A row the walk
+    caught live holds the printed estimate, and the integration reads this
+    archive first for a closed month, so until the row is replaced by what the
+    supplier's own archive answers for it every installation bills that
+    estimate. A row that no longer decodes is left to the replay.
+    """
+    if row is None or row.get("_via", "live") != "live":
+        return False
+    try:
+        snap = _snapshot_from_dict(row, min_schema_version=0)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return _settles_after_its_month(snap)
 
 
 def _read_row(path: Path) -> dict[str, Any] | None:
@@ -1652,6 +1684,21 @@ async def archive(
                 patience.ok(ex.id)
                 sources = _sources_of(memo, cards, out, seen_month)
                 month_id = _card_month(snap, today)
+                held = _read_row(
+                    out / _ROWS / ex.id / contract / region / f"{month_id}.json"
+                )
+                if (
+                    month_id < seen_month
+                    and held is not None
+                    and held.get("_via") == "archive"
+                ):
+                    # A closed month the supplier's archive has answered for,
+                    # settled where its card settles, while the live card has
+                    # not moved on yet: the estimate it prints must not go
+                    # back over the settled row.
+                    summary.unchanged += 1
+                    cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
+                    continue
                 if _write_card(
                     out,
                     ex.id,
@@ -1677,9 +1724,10 @@ async def archive(
                     if ex.id in patience.given_up:
                         break
                     month_id = _months_before(today, back)
-                    if (
+                    held = _read_row(
                         out / _ROWS / ex.id / contract / region / f"{month_id}.json"
-                    ).exists():
+                    )
+                    if held is not None and not _awaits_settlement(held):
                         continue
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
@@ -1704,8 +1752,10 @@ async def archive(
                     patience.ok(ex.id)
                     if past is None or past.provisional:
                         # Not out yet, past the horizon, or still carrying an
-                        # estimate: leave the month for a later backfill.
-                        summary.absent += 1
+                        # estimate: leave the month for a later backfill. A
+                        # live row stays what the archive holds meanwhile.
+                        if held is None:
+                            summary.absent += 1
                         continue
                     sources = _sources_of(memo, cards, out, seen_month)
                     _write_card(
@@ -1719,7 +1769,10 @@ async def archive(
                         now,
                         "archive",
                     )
-                    summary.backfilled += 1
+                    if held is None:
+                        summary.backfilled += 1
+                    else:
+                        summary.settled += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
         # A fresh archive holds nothing older than this parser, so the first
         # run only stamps it; from then on a changed digest replays the rows
@@ -1763,7 +1816,8 @@ async def archive(
     _write_listings(out, pdf_base_url, archive_base_url)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
-        f"{summary.backfilled} backfilled, {summary.absent} absent, "
+        f"{summary.backfilled} backfilled, {summary.settled} settled, "
+        f"{summary.absent} absent, "
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "

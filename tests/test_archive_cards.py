@@ -32,6 +32,7 @@ from custom_components.be_electricity_prices.providers.base import (
 from custom_components.be_electricity_prices.providers._rates import (
     Contract,
     FixedRates,
+    VariableRates,
 )
 from tests import make_snapshot
 
@@ -399,6 +400,105 @@ async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
     )
     assert asked == [date(2026, 8, 1), date(2026, 5, 1)]
     assert (summary.backfilled, summary.absent) == (0, 2)
+
+
+def _indexed_card(contract: str, label: str, price: float) -> SupplierSnapshot:
+    return make_snapshot(
+        supplier="acme",
+        contract=contract,
+        energy=VariableRates(current=price, month_indexed=True),
+        publication_label=label,
+        source_url=CARD_URL,
+    )
+
+
+async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
+    tmp_path: Path,
+) -> None:
+    """A card indexed on its own month prints last month's index while it
+    runs, and the supplier settles the month on the card after it. The walk
+    caught September 2026 live on every such card and the backfill never asked
+    for a month it held, so the archive served every installation the printed
+    estimate for good: Eneco Flex 0,1761 where it settled 0,2079. Such a row is
+    re-asked until the supplier's own path answers settled, then replaced;
+    a row on a card no month index moves is left alone."""
+    answers: dict[str, SupplierSnapshot | None] = {}
+    asked: list[tuple[str, date]] = []
+
+    async def fetch_for_month(
+        _session: Any, contract: str, _region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.append((contract, month))
+        return answers.get(contract)
+
+    def live(contract: str, label: str, price: float) -> Fetch:
+        async def fetch(_session: Any, c: str, _region: str) -> SupplierSnapshot:
+            await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+            if c == "acme_fix":
+                return make_snapshot(
+                    supplier="acme",
+                    contract=c,
+                    energy=FixedRates(single=0.2),
+                    publication_label=label,
+                    source_url=CARD_URL,
+                )
+            return _indexed_card(c, label, price)
+
+        return fetch
+
+    def extractor(fetch: Fetch) -> SupplierExtractor:
+        return SupplierExtractor(
+            id="acme",
+            label="Acme",
+            contracts=tuple(
+                Contract(
+                    id=c, label=c, kind="variable", regions=frozenset({"wallonia"})
+                )
+                for c in ("acme_flex", "acme_fix")
+            ),
+            fetch=fetch,
+            fetch_for_month=fetch_for_month,
+        )
+
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor(live("acme_flex", "augustus 2026", 0.1761))],
+        now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    assert json.loads(row.read_text())["_via"] == "live"
+
+    # The next card is not out: the live row stays, and is not "absent".
+    answers["acme_flex"] = replace(
+        _indexed_card("acme_flex", "augustus 2026", 0.1761), provisional=True
+    )
+    september = extractor(live("acme_flex", "september 2026", 0.2079))
+    summary = await ac.archive(
+        tmp_path, extractors=[september], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert (summary.settled, summary.absent) == (0, 0)
+    assert json.loads(row.read_text())["energy"]["current"] == 0.1761
+    assert ("acme_flex", date(2026, 8, 1)) in asked
+    assert ("acme_fix", date(2026, 8, 1)) not in asked
+
+    answers["acme_flex"] = _indexed_card("acme_flex", "augustus 2026", 0.2079)
+    summary = await ac.archive(
+        tmp_path, extractors=[september], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert summary.settled == 1
+    settled = json.loads(row.read_text())
+    assert (settled["_via"], settled["energy"]["current"]) == ("archive", 0.2079)
+
+    # Settled, it is not asked again, and a supplier still serving the card
+    # it printed does not write the estimate back over it.
+    asked.clear()
+    still_august = extractor(live("acme_flex", "augustus 2026", 0.1761))
+    summary = await ac.archive(
+        tmp_path, extractors=[still_august], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert ("acme_flex", date(2026, 8, 1)) not in asked
+    assert json.loads(row.read_text())["energy"]["current"] == 0.2079
 
 
 async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:

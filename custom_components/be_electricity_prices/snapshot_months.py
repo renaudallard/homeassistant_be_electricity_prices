@@ -47,7 +47,12 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .providers._pdf import fetch_text, is_transient_fetch_error
-from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
+from .providers.base import (
+    ArchivedSnapshotFetcher,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+)
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
@@ -55,6 +60,7 @@ from .snapshot_codec import (
     _snapshot_to_dict,
 )
 from .snapshot_resolve import _resolve_snapshot
+from .spot_stats import _injection_on_month_mean
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
@@ -275,6 +281,78 @@ class ArchivedCard:
 
     snapshot: SupplierSnapshot
     read_by_ocr: bool
+    # The row is the card as the daily walk caught it while it was current
+    # (``_via: live``), rather than what the supplier's own archive answered
+    # for the month once it had closed (``_via: archive``). For most cards the
+    # two are the same document. For one indexed on its own month they are
+    # not: see ``_awaits_settlement``.
+    captured_live: bool = False
+
+
+def _settles_after_its_month(snap: SupplierSnapshot) -> bool:
+    """Whether a card's figures for its own month are an estimate the month
+    itself settles.
+
+    A leg indexed on the delivery month's mean cannot print that mean while
+    the month runs, so the card prints last month's and the supplier invoices
+    the month on its own once it is known: Eneco and EBEM name it on the next
+    card, Trevion prints both of its indices there, and Mega's next card states
+    the figures it billed "pour le mois de" the one before. The parser marks
+    each such leg, and that mark is the test, so no list of suppliers has to
+    be kept beside it.
+    """
+    return bool(getattr(snap.energy, "month_indexed", False)) or (
+        _injection_on_month_mean(snap)
+    )
+
+
+def _awaits_settlement(archived: ArchivedCard) -> bool:
+    """Whether an archive row for a closed month still carries the estimate.
+
+    A row caught live on a month-indexed card holds what the card printed
+    while the month ran. The archive keeps it as the month's card, which it
+    is, but the month did not bill at it: from September 2026 every closed
+    month is such a row until the daily walk has asked the supplier's own
+    archive for it again, and served as settled it billed a keyless Eneco,
+    EBEM or Mega September 9 to 10 EUR under what was invoiced, for good.
+    """
+    return archived.captured_live and _settles_after_its_month(archived.snapshot)
+
+
+async def _settled_by_supplier(
+    session: aiohttp.ClientSession,
+    fetch_for_month: ArchivedSnapshotFetcher,
+    contract: str,
+    region: str,
+    year_month: date,
+    archived: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """The month as the supplier settled it, or the archive row meanwhile.
+
+    The supplier's own path is what settles a month on the card after it, so
+    it is asked. A settled answer replaces the row. An answer still waiting on
+    that card, or a failure to ask, keeps the row but marks it provisional, so
+    it bills now, is asked again on the provisional TTL and is never written
+    to disk. A supplier that holds no card for the month has nothing better
+    to offer, and the row stands as it is.
+    """
+    try:
+        own = await fetch_for_month(session, contract, region, year_month)
+    except Exception as err:  # noqa: BLE001 - the archive row still bills the month
+        _LOGGER.debug(
+            "settling %s/%s/%04d-%02d failed: %s",
+            contract,
+            region,
+            year_month.year,
+            year_month.month,
+            err,
+        )
+        return replace(archived, provisional=True)
+    if own is None:
+        return archived
+    if own.provisional:
+        return replace(archived, provisional=True)
+    return own
 
 
 async def _archived_card_from_github(
@@ -327,7 +405,11 @@ async def _archived_card_from_github(
         # good, so a fix that reached the archive never reached the entry. A
         # provisional row is re-asked daily and never written.
         snapshot = replace(snapshot, provisional=True)
-    return ArchivedCard(snapshot=snapshot, read_by_ocr=_row_read_by_ocr(row))
+    return ArchivedCard(
+        snapshot=snapshot,
+        read_by_ocr=_row_read_by_ocr(row),
+        captured_live=row.get("_via", "live") == "live",
+    )
 
 
 async def card_for_unreadable_month(
@@ -450,7 +532,10 @@ async def _snapshot_for_month(
     the first year-to-date fill of a Frank or Bolt entry minutes on a
     Raspberry Pi. The supplier's own archive (``fetch_for_month``) answers
     for what the project's archive does not hold: the running month, a
-    month before its horizon, a row it cannot serve. The current snapshot is
+    month before its horizon, a row it cannot serve. It is also asked over a
+    row the archive caught live on a card indexed on its own month, which
+    holds the estimate the card printed rather than what the month settled
+    at (``_awaits_settlement``). The current snapshot is
     the proxy when neither has the month, and it is the running month's card
     by definition, so that month never reaches the repository.
     A blip reading the archive is not "no card": the supplier is still
@@ -556,12 +641,12 @@ async def _snapshot_for_month(
         fetch_failed = False
         archive_failed = False
         snap: SupplierSnapshot | None = None
+        archived: ArchivedCard | None = None
         if _card_archive_may_hold(extractor, year_month, today, entry):
             try:
                 archived = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )
-                snap = archived.snapshot if archived is not None else None
             except Exception as err:  # noqa: BLE001 - a blip on the archive must not cost the supplier tier
                 _LOGGER.debug(
                     "card archive read failed for %s/%s/%s/%s: %s",
@@ -572,6 +657,17 @@ async def _snapshot_for_month(
                     err,
                 )
                 archive_failed = True
+        if archived is not None:
+            snap = archived.snapshot
+            if extractor.fetch_for_month is not None and _awaits_settlement(archived):
+                snap = await _settled_by_supplier(
+                    session,
+                    extractor.fetch_for_month,
+                    contract,
+                    region,
+                    year_month,
+                    snap,
+                )
         if snap is None and extractor.fetch_for_month is not None:
             try:
                 snap = await extractor.fetch_for_month(

@@ -1063,7 +1063,17 @@ only to be deleted, and each answer is stored under
 the month asked for with `_via` set to `archive` (a live capture carries `live`). A month the
 supplier answers None for is left absent, as is a card still flagged provisional (Eneco's
 estimate before the next card prints the settled index), so a later backfill fills it once it has
-settled, and a month already on disk is never asked again. The branch thus mirrors the supplier
+settled, and a month already on disk is not asked again, with one exception. A month held as
+caught live on a card indexed on its own month (`_settles_after_its_month`, `snapshot_months.py`:
+an energy leg flagged `month_indexed`, a `SpotMonthlyRates` leg, or an injection credit on a
+month mean) holds the estimate that card printed while the month ran, from the month before's
+index, and the supplier settles the month on the card after it. Such a row is asked for until
+`fetch_for_month` answers settled, then replaced by that answer under `archive`
+(`_awaits_settlement`, counted as `settled` in the summary); while the answer is still
+provisional or None the live row stays. The live walk never writes a card back over a closed
+month already filed under `archive`, which keeps a supplier still serving last month's card on
+the 1st from undoing the settlement. September 2026 was the first month the archive held live
+for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
 any month a supplier's own path cannot serve. Only for suppliers walked while they were still
 publishing, though: DATS 24 left before the archive existed and holds no rows here at all. The daily schedule runs with `--backfill 12`,
@@ -1085,7 +1095,8 @@ supplier's; it files no issues, the live check already does that.
 label, the shared-page attribution, the no-op repeat run, the digest-keyed render skip and PDF
 retention, the replay on a parser change (and only then), the rows a replay must leave alone, a
 reader that changed variant getting its kept PDF back, the retry split, the skip rules, the
-backfill's absent and provisional months, the retention and the exit code.
+backfill's absent and provisional months, the settlement of a month held live, the retention and
+the exit code.
 
 ## GitHub workflows
 

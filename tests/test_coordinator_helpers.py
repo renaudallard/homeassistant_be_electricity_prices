@@ -110,6 +110,7 @@ from custom_components.be_electricity_prices.injection import (
     _injection_varies_intraday,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
+    _month_row_is_provisional,
     _monthly_failed_fetches,
     _monthly_fetched_at,
     _monthly_snapshots,
@@ -5159,6 +5160,138 @@ async def test_an_archive_row_from_an_older_parser_is_not_kept() -> None:
             _month_row_is_provisional(card.snapshot, date(2026, 1, 1), date(2026, 9, 1))
             is not kept
         )
+
+
+@pytest.mark.parametrize(
+    ("via", "live"),
+    [({"_via": "live"}, True), ({"_via": "archive"}, False), ({}, True)],
+)
+async def test_an_archive_row_says_whether_it_was_caught_live(
+    via: dict[str, str], live: bool
+) -> None:
+    """The archive files a card it caught while current as ``live`` and one
+    the supplier's own archive answered for a closed month as ``archive``. A
+    row with neither is a live one: the walk wrote no mark before it had a
+    second way in."""
+    row = _snapshot_to_dict(_archive_snapshot("2026-09"), dt_util.utcnow())
+    row.update(via)
+
+    async def _body(*_args: object, **_kw: object) -> str:
+        return json.dumps(row)
+
+    with patch.object(snapshot_months, "fetch_text", _body):
+        card = await _archived_card_from_github(
+            MagicMock(), "eneco", "power_flex", "flanders", date(2026, 9, 1)
+        )
+    assert card is not None
+    assert card.captured_live is live
+
+
+def _month_indexed_card(current: float, label: str) -> SupplierSnapshot:
+    return make_snapshot(
+        energy=VariableRates(
+            current=current, formula_factor=1.0, formula_base=0.0, month_indexed=True
+        ),
+        source_url=f"test://{label}",
+        publication_label=label,
+    )
+
+
+async def _september_from_a_live_row(
+    hass: HomeAssistant,
+    caught: SupplierSnapshot,
+    supplier_answer: Any,
+    *,
+    captured_live: bool = True,
+) -> tuple[SupplierSnapshot, int]:
+    """September asked on 1 October, the archive holding ``caught``."""
+    asked = 0
+
+    async def _fetch_for_month(*_a: object) -> SupplierSnapshot | None:
+        nonlocal asked
+        asked += 1
+        if isinstance(supplier_answer, Exception):
+            raise supplier_answer
+        return cast("SupplierSnapshot | None", supplier_answer)
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fetch_for_month,
+    )
+    github = AsyncMock(
+        return_value=ArchivedCard(
+            snapshot=caught, read_by_ocr=False, captured_live=captured_live
+        )
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
+        snap = await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "test",
+            "flanders",
+            date(2026, 9, 1),
+            _month_indexed_card(0.30, "2026-10"),
+        )
+    return snap, asked
+
+
+async def test_a_live_row_of_a_month_indexed_card_is_settled_by_the_supplier(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """From September 2026 the archive holds every closed month as the card
+    the walk caught while it ran. On a card indexed on its own month that is
+    the estimate printed from the month before, and Eneco, EBEM, Trevion and
+    Mega settle the month on the card after it, which only their own archive
+    path reads. Read first and kept as settled, the row billed a keyless
+    September 0,032 to 0,035 EUR/kWh under what was invoiced, for good."""
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    caught = _month_indexed_card(0.1761, "2026-09 as printed")
+    settled = _month_indexed_card(0.2079, "2026-09 settled")
+    snap, asked = await _september_from_a_live_row(hass, caught, settled)
+    assert snap is settled
+    assert asked == 1
+    row = _monthly_snapshots(hass)[("test", "test", "flanders", "2026-09")]
+    assert not _month_row_is_provisional(row, date(2026, 9, 1), date(2026, 10, 1))
+
+    # The next card not out yet: the estimate bills, but only until it is.
+    waiting = replace(caught, provisional=True)
+    snap, _ = await _september_from_a_live_row(hass, caught, waiting)
+    assert snap.energy == caught.energy
+    assert snap.provisional
+
+    # The supplier could not be asked: the same, rather than the current card.
+    snap, _ = await _september_from_a_live_row(hass, caught, ExtractorError("timeout"))
+    assert snap.energy == caught.energy
+    assert snap.provisional
+
+    # Nothing in the supplier's archive for the month: the row is all there is.
+    snap, _ = await _september_from_a_live_row(hass, caught, None)
+    assert snap is caught
+
+
+@pytest.mark.parametrize("captured_live", [True, False])
+async def test_an_archive_row_needing_no_settlement_does_not_ask_the_supplier(
+    hass: HomeAssistant, freezer: Any, captured_live: bool
+) -> None:
+    """A card priced on no monthly index bills the month at what it printed,
+    and a row the supplier's archive already answered is the settled one: the
+    archive's row is the month, at no PDF download."""
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    fixed = _archive_snapshot("2026-09")
+    snap, asked = await _september_from_a_live_row(hass, fixed, None)
+    assert snap is fixed
+    assert asked == 0
+    settled = _month_indexed_card(0.2079, "2026-09 settled")
+    snap, asked = await _september_from_a_live_row(
+        hass, settled, None, captured_live=captured_live
+    )
+    assert asked == (1 if captured_live else 0)
 
 
 async def test_snapshot_for_month_uses_archive_when_available(
