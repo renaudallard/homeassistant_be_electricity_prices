@@ -2157,6 +2157,142 @@ def test_the_ristourne_wait_is_read_off_the_card() -> None:
     assert ristourne_wait_months("La ristourne est accordee apres trente mois") == 12
 
 
+def test_october_2026_ristourne_is_read_and_paid_from_the_first_invoice() -> None:
+    """Mega reworded every residential ristourne for October 2026: "ristourne
+    (*) comprenant un avantage de 4.77 (TVA de 6 % incluse) sur le prix
+    unitaire de l'energie consommee ... et d'une reduction (*) de 20 EUR",
+    the bonus "sur le prix unitaire de l'energie injectee", and the payout
+    "des la premiere facture d'acompte durant la premiere annee du contrat
+    ... au prorata des jours de fourniture". None of the patterns matched, so
+    all 30 residential October rows lost the whole credit, and the payout was
+    still placed at the anniversary.
+    """
+    from datetime import date
+
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_PRO_RATA,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _year_ahead_welcome_credit,
+    )
+
+    snap = parse_snapshot(
+        "mega_cosy_flex",
+        fixture_text("mega_cosy_flex_v_2026-10.pdf"),
+        "flanders",
+    )
+    assert snap.welcome_credit_eur == pytest.approx(20.0)
+    # Printed with no unit on this card; the clause after it says per kWh.
+    assert snap.welcome_credit_eur_per_kwh == pytest.approx(0.0477)
+    assert snap.welcome_credit_injection_eur_per_kwh == pytest.approx(0.0053)
+    assert snap.welcome_credit_cap_eur is None
+    assert snap.welcome_credit_direct_debit_eur is None
+    assert snap.welcome_credit_requires_direct_debit is False
+    assert snap.welcome_credit_kind == WELCOME_CREDIT_PRO_RATA
+    # A fresh signing at 3500 kWh is credited the card's whole first year.
+    today = date(2026, 10, 1)
+    assert _year_ahead_welcome_credit(
+        snap, today, today, 10_000.0, first_year_kwh=3500.0
+    ) == pytest.approx(20.0 + 0.0477 * 3500.0)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "per_kwh", "flat"),
+    [
+        (
+            "vous beneficiez d'une ristourne (*) comprenant un avantage de "
+            "1.484 c\u20ac/kWh (TVA de 6 % incluse) sur le prix unitaire de "
+            "l'energie consommee mentionne sur cette carte tarifaire et d'une "
+            "reduction (*) de 145 \u20ac (TVA de 6 % incluse) sur la redevance "
+            "fixe mentionnee sur cette carte tarifaire.",
+            0.01484,
+            145.0,
+        ),
+        (
+            "vous beneficiez d'une ristourne (*) de 5.3 c\u20ac/kWh (TVA de 6 % "
+            "incluse) sur le prix unitaire de l'energie consommee.",
+            0.053,
+            None,
+        ),
+        (
+            "vous beneficiez d'une ristourne (*) de 4.982 (TVA de 6 % incluse) "
+            "sur le prix unitaire de l'\u00e9nergie consomm\u00e9e.",
+            0.04982,
+            None,
+        ),
+        (
+            "vous beneficiez d'une reduction (*) de 32 \u20ac (TVA de 6 % "
+            "incluse) sur la redevance fixe mentionnee sur cette carte.",
+            None,
+            32.0,
+        ),
+    ],
+)
+def test_october_2026_ristourne_wordings(
+    sentence: str, per_kwh: float | None, flat: float | None
+) -> None:
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        extract_ristourne,
+    )
+
+    got = extract_ristourne(sentence)
+    if per_kwh is None:
+        assert got["welcome_credit_eur_per_kwh"] is None
+    else:
+        assert got["welcome_credit_eur_per_kwh"] == pytest.approx(per_kwh)
+    if flat is None:
+        assert got["welcome_credit_eur"] is None
+    else:
+        assert got["welcome_credit_eur"] == pytest.approx(flat)
+
+
+def test_a_flat_ristourne_in_euros_is_not_read_per_kwh() -> None:
+    """The unit may go missing on the October cards, so a bare figure is read
+    per kWh only when "sur le prix unitaire de l'energie consommee" follows
+    it, never off a figure in euros."""
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        extract_injection_bonus,
+        extract_ristourne,
+    )
+
+    got = extract_ristourne(
+        "vous beneficiez d'une ristourne de 100,7 \u20ac (TVA de 6% incluse) "
+        "pour votre premiere annee de souscription a ce produit."
+    )
+    assert got["welcome_credit_eur_per_kwh"] is None
+    assert extract_injection_bonus(
+        "un bonus (**) de 0.53 (TVA de 6 % incluse) sur le prix unitaire de "
+        "l'\u00e9nergie inject\u00e9e mentionn\u00e9 sur cette carte tarifaire."
+    ) == pytest.approx(0.0053)
+
+
+def test_ristourne_kind_follows_the_card() -> None:
+    """Both payouts sit in the archive for the same product, so the kind is
+    read per card: the anniversary until September 2026, pro rata from the
+    first advance invoice on the October residential cards."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+        WELCOME_CREDIT_PRO_RATA,
+    )
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        ristourne_kind,
+    )
+
+    assert (
+        ristourne_kind(fixture_text("mega_smart_flex_w.pdf"))
+        == WELCOME_CREDIT_ANNIVERSARY
+    )
+    assert (
+        ristourne_kind(
+            "(*) Cette ristourne est accord\u00e9e durant la premi\u00e8re "
+            "ann\u00e9e du contrat a tout client qui choisit le produit "
+            "Off-peak.La ristourne est octroy\u00e9e, d\u00e8s la premi\u00e8re "
+            "facture d'acompte, au prorata des jours de fourniture d'\u00e9nergie."
+        )
+        == WELCOME_CREDIT_PRO_RATA
+    )
+
+
 def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> None:
     """The dependence is parsed off the card; the flow asks off the registry.
 

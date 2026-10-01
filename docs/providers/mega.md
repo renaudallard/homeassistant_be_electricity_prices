@@ -598,6 +598,28 @@ set `spot_indexed_injection`, because a monthly-mean credit needs spots the ener
 leg never fetches. `_extract_injection` returns `None` only
 when both `current` and `factor` are absent (`_mega_cards.py`).
 
+### First-year ristourne
+
+`extract_ristourne` (`_mega_overlays.py`) reads the ristourne paragraph under the tariff
+table into the `welcome_credit_*` fields, and how the five cost paths credit it is in
+[../pricing-model.md](../pricing-model.md). Up to September 2026 every card granted it
+*"apres douze mois ininterrompus"* (fourteen on some) on the regularisation invoice, the
+anniversary shape. The October 2026 residential cards reworded the paragraph and the
+payout together:
+
+- the per-kWh half is *"un avantage de 1.484 c€/kWh"* or *"une ristourne (\*) de 5.3
+  c€/kWh"*, and Cosy Flex and Smart Flex print it with no unit at all (*"ristourne (\*) de
+  4.982 (TVA de 6 % incluse) sur le prix unitaire de l'energie consommee"*), read per kWh
+  only when that clause follows the figure;
+- the flat half is *"une reduction (\*) de 145 € ... sur la redevance fixe"*;
+- the feed-in bonus is *"sur le prix unitaire de l'energie injectee"*, 0,53 c€/kWh where
+  September printed 1,06;
+- the footnote grants it *"des la premiere facture d'acompte durant la premiere annee du
+  contrat"*, by the day, with no ceiling and no direct-debit condition.
+
+`ristourne_kind` turns that footnote into `welcome_credit_kind` pro rata; a card without
+it keeps the anniversary. The professional cards kept the old wording and the old payout.
+
 ### First-year feed-in bonus
 
 Every card with a feed-in formula prints a bonus on the first year's export beside the
@@ -613,8 +635,9 @@ Smart cards write "visant votre injection"; the pattern takes both.
 "Commercialisation" is the export being SOLD to the supplier, which is the injection
 regime: under compensation the meter nets it and the card prints no feed-in price to add
 a bonus to. So it is credited on the injection regime only, on a full measured year of
-export, at the anniversary with the ristourne (the two footnotes state the same wait on
-every archived card) and outside the ristourne's ceiling. The Smart cards' "puissance de
+export, when and how the ristourne is paid (at the anniversary, the two footnotes stating
+the same wait on every card that has one, or pro rata from the first advance invoice on the
+October 2026 residential cards) and outside the ristourne's ceiling. The Smart cards' "puissance de
 raccordement inferieure ou egale a 10 kVA" is not checked: the flow asks no connection
 power on the injection regime. How the five cost paths credit it is in
 [../pricing-model.md](../pricing-model.md).

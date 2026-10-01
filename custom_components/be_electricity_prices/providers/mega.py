@@ -79,7 +79,6 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
-    WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
     fetch_pdf_text,
@@ -111,6 +110,7 @@ from ._mega_overlays import (
     _extract_wallonia_dsos,
     extract_injection_bonus,
     extract_ristourne,
+    ristourne_kind,
     ristourne_requires_direct_debit,
     ristourne_wait_months,
 )
@@ -921,10 +921,11 @@ def parse_snapshot(
         dsos = _extract_brussels_dsos(text)
 
     # Mega grants a first-year ristourne on most of its range and states it in
-    # prose under the tariff table. It is granted "apres douze mois
-    # ininterrompus", or fourteen on Zen Fixed and Smart Flex, and paid on the
-    # first regularisation invoice after that, which is the anniversary shape
-    # rather than a daily accrual.
+    # prose under the tariff table. Until October 2026 it was granted "apres
+    # douze mois ininterrompus", or fourteen on Zen Fixed and Smart Flex, and
+    # paid on the first regularisation invoice after that, the anniversary
+    # shape; the October residential cards pay it pro rata from the first
+    # advance invoice. ristourne_kind reads which.
     ristourne = extract_ristourne(text)
     return with_vat_basis(
         SupplierSnapshot(
@@ -963,7 +964,7 @@ def parse_snapshot(
             ],
             welcome_credit_requires_direct_debit=ristourne_requires_direct_debit(text),
             welcome_credit_after_months=ristourne_wait_months(text),
-            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+            welcome_credit_kind=ristourne_kind(text),
         ),
         None if professional else printed_vat_rate(text, *_VAT_PATTERNS),
         professional=professional,

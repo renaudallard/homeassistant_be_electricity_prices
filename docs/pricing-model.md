@@ -582,11 +582,16 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
-| `pro_rata` | EnergyVision, four cards | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
-| `anniversary` | Frank Energie, three tiers · Mega, 17 of 21 contracts | the whole amount, in the window the first anniversary falls in and no other | Frank's card states none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
+| `pro_rata` | EnergyVision, four cards · Mega's residential cards from October 2026 | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
+| `anniversary` | Frank Energie, three tiers · Mega, 17 of 21 contracts up to September 2026, and its professional cards since | the whole amount, in the window the first anniversary falls in and no other | Frank's card states none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
 
 The two rules travel together on one field because each card states one complete rule
-rather than two independent ones.
+rather than two independent ones. Mega changed rule between two months of the same
+products: its October 2026 residential cards grant the ristourne *"des la premiere facture
+d'acompte durant la premiere annee du contrat ... au prorata des jours de fourniture
+d'energie"* and state no ceiling and no direct-debit condition, where every earlier card
+paid at the anniversary. `ristourne_kind` (`_mega_overlays.py`) reads which per card, so a
+September signing keeps the lump its card promised and an October one accrues.
 
 How long an anniversary card makes the household wait is its own, and not always a year:
 Mega's Zen Fixed and Smart Flex, and their pro twins, grant the ristourne *"apres QUATORZE

@@ -54,6 +54,8 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_BRUSSELS,
     REGION_FLANDERS,
+    WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._parse import (
     parse_brussels_osp,
@@ -236,8 +238,29 @@ def _extract_federal_excise(
 #
 # which is the ANNIVERSARY shape, not a daily accrual. The numbers print with
 # dot decimals here where the tariff rows use commas; to_float reads both.
+#
+# The October 2026 residential cards reworded the whole paragraph and changed
+# when it is paid:
+#
+#   "vous beneficiez d'une ristourne (*) comprenant un avantage de 1.484
+#    c EUR/kWh (TVA de 6 % incluse) sur le prix unitaire de l'energie
+#    consommee ... et d'une reduction (*) de 145 EUR (TVA de 6 % incluse) sur
+#    la redevance fixe"
+#
+# with "ristourne (*) de 5.3 c EUR/kWh" on the cards that grant the per-kWh
+# half alone, and two cards (Cosy Flex, Smart Flex) dropping the unit:
+# "ristourne (*) de 4.982 (TVA de 6 % incluse) sur le prix unitaire de
+# l'energie consommee". A figure with no unit is read as per kWh only when
+# that clause follows it. The professional cards kept the older wording.
+_PER_KWH_UNIT = (
+    r"(?:c€?\s*/?\s*kWh"
+    r"|(?=\s*\((?:H?TVA|TVAC)[^)]*\)\s*sur\s+le\s+prix\s+unitaire\s+de\s+"
+    r"l.[ée]nergie\s+consomm))"
+)
 _RISTOURNE_PER_KWH_RE = re.compile(
-    r"ristourne[\s\S]{0,200}?r[ée]duction\s+de\s+([\d.,]+)\s*c€?\s*/?\s*kWh",
+    r"ristourne(?:\s*\(\*+\))?\s+de\s+([\d.,]+)\s*" + _PER_KWH_UNIT + r"|"
+    r"ristourne[\s\S]{0,200}?(?:r[ée]duction|avantage)\s+de\s+([\d.,]+)\s*"
+    + _PER_KWH_UNIT,
     re.IGNORECASE,
 )
 _RISTOURNE_BASE_RE = re.compile(
@@ -256,7 +279,8 @@ _RISTOURNE_BASE_RE = re.compile(
 # A and C carry the split and are read by _RISTOURNE_BASE_RE above; B does not,
 # and reading only the split dropped its whole flat half, 159 EUR on Cosy Flex.
 _RISTOURNE_FIXED_RE = re.compile(
-    r"r[ée]duction\s+de\s+([\d.,]+)\s*€[^.]{0,120}?sur\s+la\s+redevance\s+fixe",
+    r"r[ée]duction\s*(?:\(\*+\)\s*)?de\s+([\d.,]+)\s*€[^.]{0,120}?"
+    r"sur\s+la\s+redevance\s+fixe",
     re.IGNORECASE,
 )
 _RISTOURNE_DIRECT_DEBIT_RE = re.compile(
@@ -276,6 +300,36 @@ _RISTOURNE_CONDITIONAL_RE = re.compile(
     r"souscrivez[^.]{0,160}?optez\s+pour\s+la\s+domiciliation[^.]{0,160}?ristourne",
     re.IGNORECASE,
 )
+
+
+# When it is paid. Every card before October 2026 granted the ristourne "apres
+# douze mois ininterrompus" on the regularisation invoice, the anniversary
+# shape. The October residential cards grant it from the first advance
+# invoice instead, over the first year and by the day: "(*) Cette ristourne
+# est accordee des la premiere facture d'acompte durant la premiere annee du
+# contrat ... La reduction sur la redevance fixe est octroyee au prorata des
+# jours de fourniture d'energie", or "La ristourne est octroyee, des la
+# premiere facture d'acompte, au prorata des jours de fourniture d'energie".
+_RISTOURNE_UPFRONT_RE = re.compile(
+    r"ristourne\s+est\s+(?:accord|octroy)[ée]+e?[^.]{0,80}?"
+    r"d[èe]s\s+la\s+premi[èe]re\s+facture\s+d.acompte",
+    re.IGNORECASE,
+)
+
+
+def ristourne_kind(text: str) -> str:
+    """How the card pays its ristourne: pro rata from the first advance
+    invoice, or as a lump at the anniversary.
+
+    Read per card because both shapes sit in the archive for the same
+    product: a September 2026 Cosy Fixed signing waits twelve months for its
+    credit, an October one has it accrue from the first invoice. A card
+    stating neither keeps the anniversary, which is what every card said
+    until then.
+    """
+    if _RISTOURNE_UPFRONT_RE.search(re.sub(r"\s+", " ", text)):
+        return WELCOME_CREDIT_PRO_RATA
+    return WELCOME_CREDIT_ANNIVERSARY
 
 
 def extract_ristourne(text: str) -> dict[str, float | None]:
@@ -315,7 +369,7 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
             else (to_float(fixed.group(1)) if fixed else None)
         ),
         "welcome_credit_eur_per_kwh": (
-            to_float(per_kwh.group(1)) / 100.0 if per_kwh else None
+            to_float(per_kwh.group(1) or per_kwh.group(2)) / 100.0 if per_kwh else None
         ),
         "welcome_credit_cap_eur": to_float(cap.group(1)) if cap else None,
         "welcome_credit_direct_debit_eur": (
@@ -344,9 +398,14 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
 # Paid on the ristourne's wait. The bonus footnote states its own ("Le bonus
 # vous est uniquement accorde apres douze mois ininterrompus d'injection")
 # and it equals the ristourne's on every archived card, fourteen included.
+#
+# The October 2026 residential cards say "bonus (**) de 0.53 c EUR/kWh (TVA de
+# 6 % incluse) sur le prix unitaire de l'energie injectee", and Smart Flex
+# drops the unit there too.
 _INJECTION_BONUS_RE = re.compile(
-    r"bonus\s*(?:\(\*+\)\s*)?de\s+([\d.,]+)\s*c€\s*/\s*kWh[^.]{0,200}?"
-    r"(?:pour|visant)\s+votre\s+injection",
+    r"bonus\s*(?:\(\*+\)\s*)?de\s+([\d.,]+)\s*"
+    r"(?:c€\s*/\s*kWh|(?=\s*\((?:H?TVA|TVAC)))[^.]{0,200}?"
+    r"(?:(?:pour|visant)\s+votre\s+injection|l.[ée]nergie\s+inject[ée]e)",
     re.IGNORECASE,
 )
 
