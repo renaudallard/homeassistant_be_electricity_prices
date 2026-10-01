@@ -36,7 +36,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 
@@ -7658,6 +7658,83 @@ async def test_a_withdrawn_supplier_is_neither_asked_nor_flagged_stale(
         )
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"snapshot_stale_{entry.entry_id}") is None
+
+
+async def test_a_withdrawn_products_card_gone_keeps_the_entry_priced(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """OCTA+ withdrew Fixed on 1 October 2026 and its entries stay on its last
+    card. Once OCTA+ takes the file down, an entry holding no card (a restart
+    past a schema bump refused the stored one) went unavailable with two
+    Repairs cards saying opposite things. The archive's copy of the last
+    month it was sold stands in, then the refused blob, and the 404 raises
+    nothing beside contract_withdrawn."""
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _snapshot_to_dict,
+    )
+
+    freezer.move_to("2026-11-03 10:00:00+01:00")
+    url = "https://files.octaplus.be/tariffs/E_OCTA_FIXED_RE_WL_FR.pdf"
+
+    async def _gone(*_args: Any) -> Any:
+        raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    octaplus = replace(get("octaplus"), fetch=_gone, probe=_gone)
+    last = make_snapshot(
+        supplier="octaplus", contract="octaplus_fixed", publication_label="09/2026"
+    )
+    registry = ir.async_get(hass)
+
+    async def _tick(archived: snapshot_months.ArchivedCard | None, region: str) -> Any:
+        entry = make_entry(
+            supplier="octaplus", contract="octaplus_fixed", region=region
+        )
+        entry.add_to_hass(hass)
+        coord = BePricesCoordinator(hass, entry)
+        payload = _snapshot_to_dict(
+            last, dt_util.utcnow() - timedelta(days=40), probe_key=url
+        )
+        blob = {
+            "entry_supplier": "octaplus",
+            "entry_contract": "octaplus_fixed",
+            "entry_region": region,
+            "snapshot": {**payload, "_schema_version": 73},
+        }
+        with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+            await coord.async_load_persistent()
+        assert coord._snapshot is None
+        read = AsyncMock(return_value=archived)
+        with (
+            patch(
+                "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+                return_value=octaplus,
+            ),
+            patch(
+                "custom_components.be_electricity_prices.coordinator_issues.get_extractor",
+                return_value=octaplus,
+            ),
+            patch.object(snapshot_months, "_archived_card_from_github", read),
+        ):
+            await coord._maybe_refresh_snapshot()
+        read.assert_awaited_once_with(
+            ANY, "octaplus", "octaplus_fixed", region, date(2026, 9, 1)
+        )
+        for kind in ("extractor_card_missing", "extractor_failed"):
+            assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is None
+        return coord
+
+    archived = snapshot_months.ArchivedCard(snapshot=last, read_by_ocr=False)
+    coord = await _tick(archived, "wallonia")
+    assert coord._snapshot is not None
+    assert coord._snapshot.publication_label == "09/2026"
+    assert coord._last_error == ""
+    # No archive to read: the blob the schema gate refused is the last card.
+    # Another region, since the first tick's failure holds its own tuple off.
+    coord = await _tick(None, "flanders")
+    assert coord._snapshot is not None
+    assert coord._snapshot_schema_version == 73
 
 
 async def test_a_withdrawn_suppliers_refused_blob_is_replayed(

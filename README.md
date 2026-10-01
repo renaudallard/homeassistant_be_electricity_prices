@@ -972,7 +972,10 @@ successful refresh:
   Eco Flux since 2026-10-01). The entry keeps pricing on the last card the
   supplier published for it, which is right for as long as your contract
   runs on those terms, but that card never changes again, so nothing else
-  would tell it apart from prices that simply did not move. If your
+  would tell it apart from prices that simply did not move. Once the
+  supplier takes that card down, the entry keeps the copy it holds, or
+  reads the project's card archive for the last month the product was
+  sold, and raises no card of its own about the missing file. If your
   supplier moves you to another product, record it with **Record a
   supplier switch**, dated the first day of the new product. The product
   is no longer offered when setting up an entry or as a comparison target.

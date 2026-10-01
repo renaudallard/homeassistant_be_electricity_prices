@@ -38,6 +38,7 @@ from .vat_rates import residential_vat, standard_vat
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_missing_card_error, is_transient_fetch_error
+from .providers._rates import Contract
 from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
 
 import logging
@@ -63,7 +64,11 @@ from .energy_meters import (
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
 from .cohort import ytd_window_start
-from .snapshot_months import card_for_unreadable_month
+from .snapshot_months import (
+    ArchivedCard,
+    card_for_unreadable_month,
+    last_card_of_withdrawn,
+)
 from .snapshot_resolve import (
     _resolve_snapshot,
     entry_annual_kwh,
@@ -144,6 +149,7 @@ class _SnapshotMixin:
         hass: HomeAssistant
 
         def _supply_ended(self) -> bool: ...
+        def _entry_contract(self) -> Contract | None: ...
 
         def _sync_extractor_issue(
             self,
@@ -611,6 +617,11 @@ class _SnapshotMixin:
         self._card_unreadable = unreadable
         if unreadable and await self._serve_card_read_by_ocr():
             return
+        missing = is_missing_card_error(result.error_message)
+        contract = self._entry_contract()
+        if missing and contract is not None and contract.withdrawn is not None:
+            await self._keep_withdrawn_card(contract.withdrawn, result.error_message)
+            return
         if unreadable and self._snapshot is None:
             # Nothing left to keep serving. The blob the schema gate rejected
             # on load is the only card this entry will ever have, so replay it
@@ -625,7 +636,7 @@ class _SnapshotMixin:
                 result.error_message,
                 transient=False,
                 unreadable=unreadable,
-                missing=is_missing_card_error(result.error_message),
+                missing=missing,
             )
         elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
             self._sync_extractor_issue(result.error_message, transient=True)
@@ -667,18 +678,54 @@ class _SnapshotMixin:
             return False
         if archived is None:
             return False
+        # The card is still one no reader here can read, so the Repairs card
+        # that says so would be true, but the entry is being priced, which
+        # is the opposite of what it says. This one replaces it, and says
+        # where the figures came from instead.
+        self._adopt_archived_card(archived)
+        return True
+
+    async def _keep_withdrawn_card(self, withdrawn: date, error: str) -> None:
+        """Keep a withdrawn product priced once its card's address is gone.
+
+        The contract_withdrawn card already says the entry stays on the
+        product's last card, so a file the supplier took down is expected
+        rather than a card gone missing, and raises nothing of its own. With
+        a card in hand that is all. With none, after a restart or a schema
+        bump that refused the stored one, the archive's copy of the last
+        month the product was sold stands in, and failing that the refused
+        blob, as for a supplier that has left the market.
+        """
+        self._sync_extractor_issue(None)
+        if self._snapshot is not None:
+            return
+        try:
+            archived = await last_card_of_withdrawn(
+                self._session,
+                self.entry.data[CONF_SUPPLIER],
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data[CONF_REGION],
+                withdrawn,
+                self.entry,
+            )
+        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+            _LOGGER.debug("card archive read failed for a withdrawn product: %s", err)
+            archived = None
+        if archived is not None:
+            self._adopt_archived_card(archived)
+            return
+        self._replay_stale_snapshot(f"no longer sells this product ({error})")
+
+    def _adopt_archived_card(self, archived: ArchivedCard) -> None:
+        """Price the entry off a row of the repository's card archive, as a
+        fallback rather than a card this entry fetched."""
         self._set_snapshot(archived.snapshot)
         self._snapshot_fetched_at = dt_util.utcnow()
         self._snapshot_probe_key = None
         self._last_error = ""
         self._card_read_by_ocr = archived.read_by_ocr
-        # The card is still one no reader here can read, so the Repairs card
-        # that says so would be true, but the entry is being priced, which
-        # is the opposite of what it says. This one replaces it, and says
-        # where the figures came from instead.
         self._sync_extractor_issue(None)
         self._sync_card_read_by_ocr_issue(archived.read_by_ocr)
-        return True
 
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:

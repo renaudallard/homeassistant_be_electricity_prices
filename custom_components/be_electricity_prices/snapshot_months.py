@@ -63,7 +63,7 @@ from .snapshot_resolve import _resolve_snapshot
 from .spot_stats import _injection_on_month_mean
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -470,12 +470,41 @@ async def card_for_unreadable_month(
     Honours the entry's card-archive box, which exists so a household can
     keep the integration from contacting GitHub at all.
     """
-    if entry is not None and not entry.data.get(
-        CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE
-    ):
+    if not _archive_allowed(entry):
         return None
     return await _archived_card_from_github(
         session, supplier, contract, region, today.replace(day=1)
+    )
+
+
+async def last_card_of_withdrawn(
+    session: aiohttp.ClientSession,
+    supplier: str,
+    contract: str,
+    region: str,
+    withdrawn: date,
+    entry: ConfigEntry | None,
+) -> ArchivedCard | None:
+    """The archive's row for the last month a withdrawn product was sold.
+
+    The supplier keeps a withdrawn product's last card up for a while, and
+    an entry left on the product is priced off it. Once the file is taken
+    down, and with no card held (a fresh start, or one the schema gate
+    refused), the archive's copy is the only one left: the month before
+    ``withdrawn``. Honours the card-archive box like the reader above.
+    """
+    if not _archive_allowed(entry):
+        return None
+    last = (withdrawn.replace(day=1) - timedelta(days=1)).replace(day=1)
+    return await _archived_card_from_github(session, supplier, contract, region, last)
+
+
+def _archive_allowed(entry: ConfigEntry | None) -> bool:
+    """Whether the entry lets the integration read the repository's card
+    archive. The box exists so a household can keep it from contacting
+    GitHub at all; a caller with no entry in hand keeps the default."""
+    return entry is None or bool(
+        entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE)
     )
 
 
@@ -497,9 +526,7 @@ def _card_archive_may_hold(
     ``CARD_ARCHIVE_FIRST_MONTH``: a backfill only mirrors a supplier's own
     archive, so asking for an earlier month is a 404 a day for nothing.
     """
-    if entry is not None and not entry.data.get(
-        CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE
-    ):
+    if not _archive_allowed(entry):
         return False
     month = (year_month.year, year_month.month)
     if month >= (today.year, today.month):
