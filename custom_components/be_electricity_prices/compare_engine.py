@@ -40,6 +40,7 @@ from .compare_inputs import (
     _coordinator_rlp_index_weights,
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
+    _keyless_stale_spots,
     _needs_missing_spots,
 )
 from .compare_table import DailyCompare, RankedRow
@@ -178,6 +179,8 @@ class _SweepEngine(_HouseholdMixin):
         # that from printing an uncredited figure.
         hist_spots = dict(getattr(coord, "_historical_spots", {}) or {})
         hist_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
+        if _keyless_stale_spots(current, hist_spots, hh.ytd_from, today):
+            hist_spots, hist_quarters = {}, {}
         own_ytd: float | None = None
         own_start = current_period_start(current, hh.ytd_from)
         # Judged on the same raw card the walk below is handed, so the guard

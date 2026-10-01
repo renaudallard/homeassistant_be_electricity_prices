@@ -1235,6 +1235,124 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("typed", "fetched", "borrowed"),
+    [
+        # A key typed and the fetch answering: the window is borrowed fresh.
+        ("TESTKEY", True, True),
+        # A key typed but nothing came back: the stale cache is kept.
+        ("TESTKEY", False, False),
+        # No key typed: the stale cache is kept.
+        ("", False, False),
+    ],
+)
+async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
+    hass: HomeAssistant, freezer: Any, typed: str, fetched: bool, borrowed: bool
+) -> None:
+    """An entry whose key was removed keeps the spots it collected while it
+    had one, and nothing brings them up to date. Read as present, they made
+    the quote skip the key typed on the page and credit the target's per-slot
+    feed-in only up to the day the key went. A stale cache on a keyless entry
+    now counts as none when a key was typed, so that key is borrowed for the
+    window. With none typed the cache is kept: dropping it would zero the
+    household's own credit below its current_year_cost sensor."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "mega",
+            "contract": "mega_online_fixed",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Mega injection, key removed",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(
+        hass, entry, _stub_snapshot("mega", "mega_online_fixed", 0.18)
+    )
+    # What an earlier key left behind: the first day of the year and nothing
+    # since.
+    stale = {datetime(2026, 1, 1, 11, tzinfo=UTC): 0.05}
+    # What a fetch that ran short brings back: a later hour, not the window,
+    # and a new figure for an hour the stale cache also holds, which wins.
+    fresh = {
+        datetime(2026, 1, 1, 11, tzinfo=UTC): 0.06,
+        datetime(2026, 6, 1, 11, tzinfo=UTC): 0.07,
+    }
+    coord._historical_spots = dict(stale)
+    entry.runtime_data = coord
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    calls: list[tuple[Any, Any]] = []
+
+    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+        calls.append((start, api_key))
+        if fetched and api_key:
+            coord._historical_spots.update(fresh)
+
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ) as engine,
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": typed}
+        )
+        assert result["step_id"] == "compare_result"
+
+    year_start = date(dt_util.now().year, 1, 1)
+    window_fetches = [call for call in calls if call[0] == year_start]
+    assert window_fetches == ([(year_start, typed)] if typed else [])
+    # What was fetched is laid over the stale cache, never in place of it, so
+    # a short fetch keeps every hour the cache covered.
+    handed = [c.kwargs.get("historical_spots") for c in engine.call_args_list]
+    assert handed
+    expected = {**stale, **fresh} if borrowed else stale
+    assert all(spots == expected for spots in handed)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_does_not_mutate_live_historical_spots(
     hass: HomeAssistant,
 ) -> None:

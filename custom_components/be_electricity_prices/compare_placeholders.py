@@ -68,6 +68,7 @@ from .compare_inputs import (
     _coordinator_rlp_index_weights,
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
+    _keyless_stale_spots,
     _kva,
     _label_for_contract,
     _label_for_supplier,
@@ -624,6 +625,14 @@ class _PlaceholdersMixin(OptionsFlow):
             # that floors exposes no archive, and threaded so it stays
             # unreachable rather than latent.
             hist_quarters = coord._historical_spot_quarters
+            # Only when there is a typed key to borrow in its place: with none,
+            # dropping the cache would zero the household's own feed-in credit
+            # below the current_year_cost sensor that reads the same cache.
+            stale = bool(self._compare.get(CONF_API_KEY)) and _keyless_stale_spots(
+                current, hist_spots, ytd_from, today_local
+            )
+            if stale:
+                hist_spots, hist_quarters = {}, {}
             if compare_spot_injection and not hist_spots:
                 # The user's own entry isn't spot-needing, so the live
                 # coordinator never backfilled its cache. Fetch into a
@@ -645,6 +654,13 @@ class _PlaceholdersMixin(OptionsFlow):
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)
+            if stale:
+                # Laid over the stale cache rather than in place of it: a fetch
+                # that came back short or empty (ENTSO-E down, or out of quota
+                # partway through the window) still leaves every hour the
+                # stale cache covers, and a full one wins wherever both hold.
+                hist_spots = {**coord._historical_spots, **hist_spots}
+                hist_quarters = {**coord._historical_spot_quarters, **hist_quarters}
             if spot_priced and not _spots_cover(hist_spots, ytd_from, today_local):
                 archive_capable = False
         if archive_capable and other_snap is not None and current_snapshot is not None:

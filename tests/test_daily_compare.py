@@ -28,10 +28,12 @@
 from __future__ import annotations
 
 import inspect
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.core import HomeAssistant
@@ -671,8 +673,31 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     assert [r.ytd for r in rows] == [1250.0, None]
 
 
+def _one_hour_a_day(first: date, last: date) -> dict[datetime, float]:
+    """A spot cache holding one hour of every local day in [first, last]."""
+    out: dict[datetime, float] = {}
+    day = first
+    while day <= last:
+        out[dt_util.start_of_local_day(day) + timedelta(hours=12)] = 0.08
+        day += timedelta(days=1)
+    return out
+
+
+@pytest.mark.parametrize(
+    ("key", "covering", "handed"),
+    [
+        # An entry with a key keeps its cache current: handed as held, even
+        # when ENTSO-E left a day out.
+        ("k", False, True),
+        # A keyless entry holding what an earlier key left: stale, and read as
+        # no cache, the state a never-keyed entry is priced in.
+        (None, False, False),
+        # Keyless, but the cache still reaches yesterday: still good.
+        (None, True, True),
+    ],
+)
 async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any, key: str | None, covering: bool, handed: bool
 ) -> None:
     """A spot-indexed feed-in is dropped whole, not approximated, without them.
 
@@ -683,14 +708,23 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     """
     from custom_components.be_electricity_prices import compare_engine
 
-    spots = {datetime(2026, 1, 1, 5, tzinfo=dt_util.UTC): 0.08}
+    # Mid-year, so a cache holding 1 January alone is short of the window: on
+    # 1 or 2 January that window is a day or less and the same cache covers it.
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    ytd_from = date(today.year, 1, 1)
+    last = today - timedelta(days=1) if covering else ytd_from
+    spots = _one_hour_a_day(ytd_from, last)
     seen: dict[str, Any] = {}
 
     async def _capture(*args: Any, **kw: Any) -> float:
         seen.update(kw)
         return 708.11
 
-    entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
+    data = {"supplier": "eneco", "contract": "x"}
+    if key is not None:
+        data["api_key"] = key
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
     entry.add_to_hass(hass)
     engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     sweep = {
@@ -698,8 +732,8 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
         "rows": [RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)],
         "labels": {},
         "household": SimpleNamespace(
-            today_local=dt_util.now().date(),
-            ytd_from=date(dt_util.now().year, 1, 1),
+            today_local=today,
+            ytd_from=ytd_from,
             current_snapshot=object(),
             raw_snapshot=object(),
             quote_entry=entry,
@@ -722,7 +756,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     ):
         await engine.fill_ytd_column(sweep, _coord_with_spots(spots))
 
-    assert seen["historical_spots"] == spots
+    assert seen["historical_spots"] == (spots if handed else {})
     assert seen["spot_quarters"] == {}
 
 

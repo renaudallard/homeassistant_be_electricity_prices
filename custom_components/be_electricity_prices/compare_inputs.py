@@ -36,6 +36,7 @@ from __future__ import annotations
 from .compare_table import _row_label
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_API_KEY,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_QUARTER_HOURLY,
@@ -465,6 +466,33 @@ def _spots_cover(spots: Mapping[datetime, float], start: date, today: date) -> b
             return False
         day += timedelta(days=1)
     return True
+
+
+def _keyless_stale_spots(
+    data: Mapping[str, Any],
+    spots: Mapping[datetime, float],
+    start: date,
+    today: date,
+) -> bool:
+    """Whether this entry holds day-ahead it can no longer bring up to date.
+
+    An entry whose key was removed keeps the cache it built while it had one,
+    and nothing refreshes it after that, so it stops at the day the key went.
+    The compare pages read such a cache as present: the quote then never
+    borrows the key typed on the page, and the ranking prints a year-to-date
+    figure whose spot-indexed feed-in is credited only up to that day. Read
+    as no cache at all, it is the state a never-keyed entry is already
+    priced in. Stale means it misses some day of the window, which for a
+    keyless entry is the days since its key was removed.
+
+    Only a keyless entry. One with a key keeps its cache current, and a day
+    or two ENTSO-E never published must not cost it its figures.
+    """
+    return (
+        not data.get(CONF_API_KEY)
+        and bool(spots)
+        and not _spots_cover(spots, start, today)
+    )
 
 
 @dataclass(frozen=True)
