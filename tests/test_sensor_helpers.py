@@ -412,6 +412,24 @@ def test_the_tomorrow_arrays_stop_at_the_card_validity() -> None:
     assert len(today) == 24 and tomorrow == []
 
 
+def test_a_withdrawn_products_last_card_keeps_tomorrow() -> None:
+    """OCTA+ Fixed was withdrawn on 1 October 2026 and its entries stay on
+    the September card, which is dated only by its "09/2026" label. The
+    validity gate turned that into no tomorrow for good, on a fixed price
+    every tomorrow of which is known. The final card covers every day."""
+    base = _today_and_tomorrow_data([0.10] * 24, [0.10] * 24)
+    for stated in (
+        {"snapshot_publication": "04/2026"},
+        {"snapshot_valid_until": _fixed_today_local().date() - timedelta(days=1)},
+    ):
+        expired = replace(base, **stated)  # type: ignore[arg-type]
+        assert _has_tomorrow(expired) is False
+        final = replace(expired, card_is_final=True)
+        assert _has_tomorrow(final) is True
+        assert _tomorrow_avg(final) == pytest.approx(0.10)
+        assert len(_split_today_tomorrow(final)[1]) == 24
+
+
 def test_a_card_dated_only_by_its_title_expires_with_its_month() -> None:
     """Bolt and TotalEnergies print no validity sentence, only the month in
     the title, so a September card went on advertising tomorrow through

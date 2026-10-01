@@ -37,6 +37,7 @@ from __future__ import annotations
 from .brugel import any_cached_power_term, cached_power_term
 from .providers import get as get_extractor, offers_direct_debit
 
+from .providers._rates import Contract
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .providers._resolve import omits_brussels_power_term
 
@@ -590,6 +591,20 @@ class _IssuesMixin:
             severity=ir.IssueSeverity.ERROR,
         )
 
+    def _entry_contract(self) -> Contract | None:
+        """This entry's registry contract, or None if this build drops it."""
+        extractor = self._entry_extractor()
+        if extractor is None:
+            return None
+        contract_id = self.entry.data.get(CONF_CONTRACT)
+        return next((c for c in extractor.contracts if c.id == contract_id), None)
+
+    def _card_is_final(self) -> bool:
+        """Whether the entry's product is withdrawn, so the card it holds is
+        the last one there will be (``Contract.withdrawn``)."""
+        contract = self._entry_contract()
+        return contract is not None and contract.withdrawn is not None
+
     def _sync_withdrawn_contract_issue(self) -> None:
         """Raise or clear the 'this product is no longer sold' issue.
 
@@ -603,12 +618,7 @@ class _IssuesMixin:
         that simply has not changed its prices.
         """
         extractor = self._entry_extractor()
-        contract_id = self.entry.data.get(CONF_CONTRACT)
-        contract = None
-        if extractor is not None:
-            contract = next(
-                (c for c in extractor.contracts if c.id == contract_id), None
-            )
+        contract = self._entry_contract()
         if extractor is None or contract is None or contract.withdrawn is None:
             self._sync_issue("contract_withdrawn", False)
             return

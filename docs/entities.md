@@ -477,6 +477,8 @@ only when both gates hold:
 2. The card still covers tomorrow (`_card_covers_tomorrow`): its validity end,
    or when it states none the end of the month its title names
    (`card_valid_until`, `providers/_validity.py`), is not before tomorrow.
+   A withdrawn product's last card always does (`card_is_final`): no other
+   will come, and every day from here is priced off it.
 
 ```python
 if not data.hourly or not _card_covers_tomorrow(data):

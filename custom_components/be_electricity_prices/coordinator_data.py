@@ -80,6 +80,10 @@ class CoordinatorData:
     # the extractor couldn't parse a validity end: callers should
     # fall back to "treat as valid".
     snapshot_valid_until: date | None = None
+    # True when the entry's product is no longer sold: the card in hand is
+    # the last it will ever have and the one every day from here bills on,
+    # tomorrow included, whatever date it states.
+    card_is_final: bool = False
     last_error: str = ""
     # True while these prices come from a card that had no text layer and was
     # read off its pixels by the repository's archive walk. Not an error: the

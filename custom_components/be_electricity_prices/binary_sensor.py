@@ -75,7 +75,13 @@ def _has_tomorrow(data: CoordinatorData) -> bool:
 
 
 def _card_covers_tomorrow(data: CoordinatorData) -> bool:
-    """Whether the card in hand is still good tomorrow, or cannot be dated."""
+    """Whether the card in hand is still good tomorrow, or cannot be dated.
+
+    A withdrawn product's card is good for as long as the entry stays on it:
+    no other will come, and today is priced off it past its date too.
+    """
+    if data.card_is_final:
+        return True
     valid_until = card_valid_until(data.snapshot_valid_until, data.snapshot_publication)
     return valid_until is None or dt_util.now().date() < valid_until
 

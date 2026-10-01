@@ -2006,12 +2006,15 @@ async def test_sync_withdrawn_contract_issue_creates_and_clears(
         "since": "2026-10-01",
     }
 
+    assert coord._card_is_final()
+
     # Moving the entry to a product still on sale clears it.
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, "contract": "octaplus_boostflex"}
     )
     coord._sync_withdrawn_contract_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+    assert not coord._card_is_final()
 
 
 async def test_sync_deprecated_supplier_issue_creates_and_clears(
