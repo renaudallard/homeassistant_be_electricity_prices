@@ -68,18 +68,27 @@ hourly formula; the household's own answer flips it, and every tier carries
 | contract id | label | TariffKind | regions | filename suffix | quarter-hour choice | note |
 | --- | --- | --- | --- | --- | --- | --- |
 | `frank_dynamic` | Frank Energie Dynamisch | dynamic | flanders | none (bare month) | offered | standard tier |
-| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | higher subscription, lower per-kWh margin; 115 EUR cashback after 1 year |
-| `frank_dynamic_korting` | Frank Energie Dynamisch Korting | dynamic | flanders | `VT` | offered | 120 EUR cashback after 1 year |
+| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | since October 2026 the same formula and subscription as VT; until September a higher subscription, a lower per-kWh margin and a 115 EUR cashback after 1 year |
+| `frank_dynamic_korting` | Frank Energie Dynamisch VT (Korting) | dynamic | flanders | `VT` | offered | titled "VT" since October 2026, HV's card billed on a double advance; until September titled "Korting", with a 120 EUR cashback after 1 year |
 | `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base; 35 EUR cashback after 1 year |
+
+The October 2026 VT card is HV's card under another title: diffed line by line, the two
+differ in the title, in the validity sentence (the VT card still says *"getekend in
+september 2026"*, which `_valid_until` does not read because the title names the month) and
+in the billing paragraph, where VT charges a *"dubbel voorschot"*, an advance for the next
+two months at once. Nothing priced differs. The contract id keeps the old name so an entry
+on it stays on it; only the label follows the card.
 | `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
 
 ### Cashback
 
-Three of the five tiers print `Korting <amount> EUR (incl. btw)` and they disagree on the
-figure: 120 on Korting, 115 on HV, 35 on JN, nothing on the standard and Slim tiers. It is
-the entire reason the Korting tier exists, since its formula and its subscription are both
-worse than JN's; without the credit the ranking page called it the cheaper tier's loser
-while in year one it is about 93 EUR better. The ranking and the one-off quote now credit a
+Until September 2026 three of the five tiers printed `Korting <amount> EUR (incl. btw)` and
+they disagreed on the figure: 120 on Korting, 115 on HV, 35 on JN, nothing on the standard
+and Slim tiers. From October only JN prints one. A contract signed on an earlier card keeps
+its credit, read off its own month's card (`signing_month_snapshot`). The credit was the
+whole reason the Korting tier existed, since its formula and its subscription were both
+worse than JN's; without it the ranking page called it the cheaper tier's loser while in
+year one it was about 93 EUR better. The ranking and the one-off quote now credit a
 tier being quoted its cashback over the coming year (`_annual_welcome_credit`), and the
 year-to-date column credits it as if signed on the household's own start date, so the
 tier ranks on the year it would actually cost.
@@ -148,7 +157,7 @@ the assumption that Frank settles both on whichever grid the account is on.
 
 The tier descriptions come from the module docstring (`providers/frank.py`). Note the
 suffix mapping is not identity: the Korting tier's PDF filename token is `VT`, not
-`Korting`, and the Slim tier's token alternates between `SL` and the full word `Slim` from
+`Korting` (the card itself took that title in October 2026), and the Slim tier's token alternates between `SL` and the full word `Slim` from
 month to month (both live in the CMS at once), so `_SUFFIX_ALIASES` treats them as aliases
 (`providers/frank.py`). `test_matches_suffix_slim_accepts_both_sl_and_full_word`
 (`tests/test_frank.py`) pins this behaviour.

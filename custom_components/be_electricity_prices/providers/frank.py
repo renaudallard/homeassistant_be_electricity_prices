@@ -30,10 +30,15 @@ Sanity CMS CDN.  Five dynamic contract tiers share the same PDF layout
 with different formula parameters (factor, base, monthly fee):
 
   - Dynamisch (standard)
-  - Dynamisch HV (higher subscription, lower per-kWh margin)
-  - Dynamisch Korting (120 EUR cashback after 1 year)
+  - Dynamisch HV
+  - Dynamisch VT (titled "Korting" until September 2026)
   - Dynamisch JN (lower subscription, different formula)
   - Dynamisch Slim (requires smart devices: solar, EV, battery, heat pump)
+
+Since October 2026 HV and VT print the same formula and subscription and
+neither grants a cashback: the VT card differs only in billing a "dubbel
+voorschot". Until September HV had the higher subscription and the lower
+margin, and the Korting card the 120 EUR cashback that gave it its name.
 
 Every tier prices "BELPEX per uur" and carries the same footnote offering
 the 15-minute grid instead:
@@ -139,7 +144,9 @@ _NL_MONTHS_LOWER: frozenset[str] = frozenset(NL_MONTHS)
 _TIERS: tuple[tuple[str, str, str | None], ...] = (
     ("frank_dynamic", "Frank Energie Dynamisch", None),
     ("frank_dynamic_hv", "Frank Energie Dynamisch HV", "HV"),
-    ("frank_dynamic_korting", "Frank Energie Dynamisch Korting", "VT"),
+    # The id keeps the tier's old name so existing entries stay on it; the card
+    # has been titled "VT" since October 2026.
+    ("frank_dynamic_korting", "Frank Energie Dynamisch VT (Korting)", "VT"),
     ("frank_dynamic_jn", "Frank Energie Dynamisch JN", "JN"),
     ("frank_dynamic_slim", "Frank Energie Dynamisch Slim", "SL"),
 )
@@ -399,17 +406,19 @@ def _valid_until(text: str) -> date | None:
 # collapsing to 1 - instead of failing loud.
 _NUM = NUM_NO_THOUSANDS
 
-# "Korting 120 EUR (incl. btw)". Three of the five tiers grant one and they do
-# not agree on the amount: 120 on Korting, 115 on HV, 35 on JN, and nothing at
-# all on the standard and Slim tiers. The "(incl. btw)" suffix is part of the
-# anchor because "Korting" on its own is also the Korting tier's TITLE ("Frank
-# Energie Dynamisch - Korting - juni 2026"), and the two sentences under the
-# amount open with it as well: four occurrences, one figure.
+# "Korting 120 EUR (incl. btw)". Until September 2026 three of the five tiers
+# granted one and they did not agree on the amount: 120 on Korting, 115 on HV,
+# 35 on JN, and nothing on the standard and Slim tiers. From October only JN
+# does. The "(incl. btw)" suffix is part of the anchor because "Korting" on its
+# own was also the Korting tier's TITLE ("Frank Energie Dynamisch - Korting -
+# juni 2026"), and the two sentences under the amount open with it as well:
+# four occurrences, one figure.
 #
-# It is the entire reason the Korting tier exists: its formula and its
-# subscription are both worse than JN's, so without the credit the ranking
-# calls it the cheaper tier's loser while in year one it is about 93 EUR
-# better.
+# A cohort signed on one of those cards keeps its credit, read off its own
+# month's card. It was the whole reason the Korting tier existed: its formula
+# and its subscription were both worse than JN's, so without the credit the
+# ranking called it the cheaper tier's loser while in year one it was about 93
+# EUR better.
 _WELCOME_RE = re.compile(
     rf"Korting\s+{_NUM}\s*EUR\s*\(\s*incl\.?\s*btw\s*\)", re.IGNORECASE
 )
