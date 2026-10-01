@@ -49,7 +49,7 @@ pattern as Engie/Luminus.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 
 import aiohttp
 
@@ -85,6 +85,7 @@ from ._rates import (
     fixed_or_variable_rates,
 )
 from ._totalenergies_overlays import (
+    CONSUMPTION_WITH_FEE_RE,
     _energy_contribution_from_table,
     _extract_brussels_dsos,
     _extract_energy_contribution,
@@ -94,6 +95,7 @@ from ._totalenergies_overlays import (
     _extract_flanders_dsos,
     _extract_renewables,
     _extract_wallonia_dsos,
+    cev_included,
 )
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
@@ -260,6 +262,9 @@ def parse_snapshot(
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
 
     energy = _extract_energy(text, contract.kind)
+    included = cev_included(text)
+    if included is not None:
+        energy = _without_renewables(energy, included)
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
     federal_excise = _extract_federal_excise(text)
@@ -420,17 +425,22 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # fail loud here rather than spanning the newline to grab the yearly
     # fee as exclusive_night. For fixed this is the actual fixed price; for
     # a variable card without a realized block it is the V-test fallback.
+    #
+    # The October 2026 fixed cards print the yearly fee as the row's first
+    # figure and the header after the four rates, which the second pattern
+    # reads; the first cannot match that row, since it ends at the fourth.
     consumption_match = re.search(
         r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?[ \t]*"
         r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]*(?:\n|$)",
         text,
     )
-    if not consumption_match:
+    if consumption_match:
+        columns = consumption_match.groups()
+    elif fee_row := CONSUMPTION_WITH_FEE_RE.search(text):
+        columns = fee_row.groups()[1:]
+    else:
         raise ExtractorError(f"could not parse TotalEnergies {kind} consumption block")
-    mono = to_float(consumption_match.group(1)) / 100.0
-    peak = to_float(consumption_match.group(2)) / 100.0
-    offpeak = to_float(consumption_match.group(3)) / 100.0
-    excl_night = to_float(consumption_match.group(4)) / 100.0
+    mono, peak, offpeak, excl_night = (to_float(c) / 100.0 for c in columns)
     rates = fixed_or_variable_rates(
         kind,
         single=mono,
@@ -570,14 +580,57 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     )
 
 
+# The per-kWh fields of an energy leg that carry the contribution when a card
+# folds it in: every printed rate and every formula's base. A factor scales the
+# index and carries none of it.
+_RENEWABLES_CARRIERS = frozenset(
+    {
+        "single",
+        "current",
+        "peak",
+        "offpeak",
+        "exclusive_night",
+        "base",
+        "formula_base",
+        "formula_base_peak",
+        "formula_base_offpeak",
+        "formula_base_exclusive_night",
+    }
+)
+
+
+def _without_renewables(energy: EnergyRates, included: float) -> EnergyRates:
+    """``energy`` with the green energy contribution taken back out.
+
+    A card that says its prices and formulas include the contribution bills
+    it inside every kWh, while the snapshot holds it apart in
+    ``TaxOverlay`` like every other card. Leaving it in both places would
+    bill it twice; taking it out keeps it in the tax leg, where a change in
+    the law reaches a fixed contract the way the card says it does. The
+    figures are all VAT-inclusive EUR/kWh by then, the basis the footnote
+    states it on.
+    """
+    return replace(
+        energy,
+        **{
+            f.name: getattr(energy, f.name) - included
+            for f in fields(energy)
+            if f.name in _RENEWABLES_CARRIERS and getattr(energy, f.name) is not None
+        },
+    )
+
+
 def _extract_yearly_fee(text: str) -> float:
     fee, _ = _extract_fee_and_renewables(text)
     return fee
 
 
 def _extract_publication_month(text: str) -> str:
+    # The October 2026 myComfort Fixe card in Flanders spells the brand
+    # "Total Energies" in its title.
     match = re.search(
-        r"TotalEnergies\s+(?:my\w+|Electricit[eé]\w*|Impact)[^\n]*\n([a-zéûÉ]+\s+\d{4})",
+        r"Total\s?Energies\s+(?:my\w+|Electricit[eé]\w*|Impact)[^\n]*\n"
+        r"([a-zéûÉ]+\s+\d{4})",
         text,
     )
     return match.group(1) if match else ""

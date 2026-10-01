@@ -149,6 +149,57 @@ def test_mycomfort_fixed_wallonia_extracts_bihourly_rates() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
+def test_october_2026_fixed_card_folds_the_green_contribution_in() -> None:
+    """The October 2026 fixed cards print the yearly fee as the first figure
+    of the consumption row and say in footnote 0 that their prices include
+    the green energy contribution, 1,57 c€/kWh in Flanders.
+
+    The contribution stays in the tax leg and comes back out of the energy
+    leg, so the card's 22,74 is billed once: as energy plus contribution,
+    never as 22,74 plus 1,57.
+    """
+    text = fixture_text("totalenergies_electricite_fixe_v_2026-10.pdf", layout=True)
+    assert "100,00 22,74 24,52 21,19 21,70 Tarif annuel" in text
+    snap = parse_snapshot("totalenergies_electricite_fixe", text, "flanders")
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(100.0)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0157)
+    for rate, printed in (
+        (snap.energy.single, 0.2274),
+        (snap.energy.peak, 0.2452),
+        (snap.energy.offpeak, 0.2119),
+        (snap.energy.exclusive_night, 0.2170),
+    ):
+        assert rate is not None
+        assert rate + snap.taxes.flanders_renewables == pytest.approx(printed)
+    assert snap.publication_label == "octobre 2026"
+
+
+def test_october_2026_fixed_cards_offer_no_feed_in() -> None:
+    """The injection block and the page of feed-in conditions are both gone
+    from the October 2026 fixed cards: nothing to credit, so no rate is made
+    up. Wallonia reads its own contribution, 3,36 c€/kWh."""
+    text = fixture_text("totalenergies_myessential_fixed_w_2026-10.pdf", layout=True)
+    assert "injection" not in text.lower()
+    snap = parse_snapshot("totalenergies_myessential_fixed", text, "wallonia")
+    assert snap.injection is None
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(35.0)
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.0336)
+    assert snap.energy.single + snap.taxes.wallonia_renewables == pytest.approx(0.2390)
+
+
+def test_a_card_billing_the_contribution_apart_keeps_its_rates() -> None:
+    """Without the footnote nothing is taken out of the energy leg: the
+    April 2026 card prints the contribution in a column of its own."""
+    text = fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True)
+    assert "comprennent la Contribution" not in text
+    snap = parse_snapshot("totalenergies_mycomfort_fixed", text, "wallonia")
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1841)
+    assert snap.taxes.wallonia_renewables > 0
+
+
 def test_three_column_consumption_card_fails_loud() -> None:
     # A 3-column static card prints only mono / jour / nuit. The old
     # 4-value regex used \s+ between groups, so it spanned the line break

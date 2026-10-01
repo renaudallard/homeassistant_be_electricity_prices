@@ -3508,17 +3508,19 @@ _INJECTION_SHAPE: dict[str, str] = {
     "engie_pro_empower_variable": "month",
     "engie_pro_flow": "month",
     "engie_pro_empty_house": "month",
-    # Every non-dynamic TotalEnergies card prints "f * BELPEXM - b" beside a
+    # Every variable TotalEnergies card prints "f * BELPEXM - b" beside a
     # figure the card says is computed from "la derniere valeur connue du
-    # Belpex_M". myDynamic indexes per hour on BELPEXH and stays derived.
-    "totalenergies_electricite_fixe": "month",
+    # Belpex_M". myDynamic indexes per hour on BELPEXH and stays derived. The
+    # fixed cards printed the same until September 2026 and offer no feed-in
+    # price at all since October.
+    "totalenergies_electricite_fixe": "none",
     "totalenergies_electricite_variable": "month",
     "totalenergies_impact": "month",
     "totalenergies_mycomfort": "month",
-    "totalenergies_mycomfort_fixed": "month",
+    "totalenergies_mycomfort_fixed": "none",
     "totalenergies_mydrive": "month",
     "totalenergies_myessential": "month",
-    "totalenergies_myessential_fixed": "month",
+    "totalenergies_myessential_fixed": "none",
     # Every Mega variable ("Flex") and Impact card states "le prix de
     # rachat ... est indexe mensuellement ... pondere par le SPP (publie par
     # Synergrid), sur le mois de fourniture ... : Epex SPP * 0,85 - 2,2

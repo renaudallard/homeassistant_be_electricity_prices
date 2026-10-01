@@ -228,6 +228,37 @@ The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
 `_extract_fee_and_renewables` (`_totalenergies_overlays.py`) and is shared across all
 kinds (`totalenergies.py`).
 
+### The October 2026 fixed cards
+
+From October 2026 the three fixed cards print the yearly fee as the first figure of
+the consumption row, with the header after the four rates:
+
+```
+Consommation
+100,00 22,74 24,52 21,19 21,70 Tarif annuel
+```
+
+and no longer print the green energy contribution (CEV) beside it. Footnote 0 says
+instead that "les prix de l'énergie et les formules tarifaires ... comprennent la
+Contribution Énergie Verte (CEV), dont le montant est fixé à : 1,57 € cent/kWh"
+(2,85 in Brussels, 3,36 in Wallonia). `cev_included` reads that figure,
+`CONSUMPTION_WITH_FEE_RE` reads the row (`_totalenergies_overlays.py`), and
+`_without_renewables` (`totalenergies.py`) takes the contribution back out of every
+printed rate and formula base, so it stays in `TaxOverlay` like every other card's
+and the card's 22,74 is billed once, as 21,17 of energy plus 1,57 of contribution.
+Adding the footnote's figure on top of the printed rate would bill it twice. Keeping
+it in the tax leg is also what the card's footnote 4 asks for, since a change in the
+law reaches a fixed contract. The figure is the one the earlier cards printed in a
+column of their own (1,57 and 2,85 on both), on the same VAT-inclusive basis. A card
+without the footnote takes the old path unchanged.
+
+The same cards dropped the injection block and the page of feed-in conditions, so
+their snapshot carries no injection leg and an export is measured but not credited.
+The registry keeps `spot_indexed_injection` on them, because a contract start date
+names a card from before October, whose feed-in is a `BELPEXM` formula. The
+October myComfort Fixe card in Flanders spells the brand "Total Energies" in its
+title, which `_extract_publication_month` allows.
+
 ### Month-indexed energy on the variable cards
 
 Electricité Variable, myComfort, myDrive and myEssential print a
@@ -400,7 +431,7 @@ The land mines a future maintainer must know, each traceable to a source comment
 
 ## Test fixtures
 
-The tests exercise six real April 2026 fixture PDFs under `tests/fixtures/`
+The tests exercise six real April 2026 fixture PDFs and two of October 2026 under `tests/fixtures/`
 (all read with `layout=True`, i.e. pdfplumber):
 
 | Fixture | Card variant |
@@ -411,6 +442,8 @@ The tests exercise six real April 2026 fixture PDFs under `tests/fixtures/`
 | `totalenergies_impact_w.pdf` | Impact, Wallonia (flat supplier energy, CWaPE DSO bands) |
 | `totalenergies_mycomfort_fixed_w.pdf` | myComfort Fixe, Wallonia (bi-hourly fixed rates) |
 | `totalenergies_mycomfort_v.pdf` | myComfort, Flanders (realized monthly indicative vs annual estimate) |
+| `totalenergies_electricite_fixe_v_2026-10.pdf` | Electricité Fixe, Flanders, October 2026 (fee on the consumption row, CEV in the price) |
+| `totalenergies_myessential_fixed_w_2026-10.pdf` | myEssential Fixe, Wallonia, October 2026 (the same layout, no feed-in offer) |
 
 ## When the card changes, look here
 
@@ -433,7 +466,9 @@ Ordered by how likely a card change is to break them:
    split-line Brussels path too.
 5. **Fee + renewables line**: `_extract_fee_and_renewables` (`_totalenergies_overlays.py`).
    Both numbers are mandatory; a moved or reshaped `Tarif (mensuel|annuel)` anchor
-   raises.
+   raises. On a card whose footnote 0 says its prices include the CEV, the fee comes
+   from the consumption row and the contribution from the footnote, so a reworded
+   footnote sends the card back to the old path, which then raises.
 6. **Tax anchors**: `_extract_federal_excise` ("Consommation entre 0 et 3.000 kWh"),
    `_extract_energy_contribution` + `_energy_contribution_from_table`,
    `_extract_connection_fee` (`totalenergies.py`), `_extract_energy_fund`

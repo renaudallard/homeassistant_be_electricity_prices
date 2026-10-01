@@ -54,23 +54,67 @@ from .base import (
 import re
 
 
+# Since October 2026 the fixed cards fold the green energy contribution into
+# their energy prices and state it once, in footnote 0:
+#
+#   0 Les prix de l'énergie et les formules tarifaires indiqués sur la présente
+#   carte tarifaire comprennent la Contribution Énergie Verte (CEV), dont le
+#   montant est fixé à : 1,57 € cent/kWh
+#
+# The figure is the one the earlier cards printed in a column of its own, 1,57
+# in Flanders and 2,85 in Brussels on both, on the same VAT-inclusive basis.
+_CEV_INCLUDED_RE = re.compile(
+    r"comprennent\s+la\s+Contribution\s+[ÉE]nergie\s+Verte\s*\(CEV\)"
+    r"[^:\n]{0,80}:\s*([\d.,]+)"
+)
+
+# The same cards moved the yearly fee onto the consumption row, as its first
+# figure, with the four meter rates after it and the header at the end:
+#
+#   Consommation
+#   100,00 22,74 24,52 21,19 21,70 Tarif annuel
+CONSUMPTION_WITH_FEE_RE = re.compile(
+    r"Consommation\*{0,5}\s*\n[ \t]*(\d{2,3}[.,]\d{2})[ \t]+([\d.,]+)[ \t]+"
+    r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+Tarif\s+(?:annuel|mensuel)"
+)
+
+
+def cev_included(text: str) -> float | None:
+    """The green energy contribution the card says its prices include, in
+    EUR/kWh, or None on a card that bills it apart."""
+    match = _CEV_INCLUDED_RE.search(text)
+    return to_float(match.group(1)) / 100.0 if match else None
+
+
 def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
     """Pull the (yearly_fee_eur, renewables_eur_per_kwh) pair.
 
-    TotalEnergies prints them on a dedicated 2-number line in the energy
-    block: ``90,00 1,57``. The position varies per contract (after the
-    consumption row for variable/dynamic, between Tarif annuel and
-    Injection for static), but every layout precedes the line with a
-    ``Tarif (mensuel|annuel)`` header. Anchor on that header and require
-    the following 2-number line; this rejects unrelated value pairs that
-    happen to share the shape (e.g. footer rows).
+    Until September 2026 TotalEnergies printed them on a dedicated 2-number
+    line in the energy block: ``90,00 1,57``. The position varies per
+    contract (after the consumption row for variable/dynamic, between Tarif
+    annuel and Injection for static), but every layout precedes the line
+    with a ``Tarif (mensuel|annuel)`` header. Anchor on that header and
+    require the following 2-number line; this rejects unrelated value pairs
+    that happen to share the shape (e.g. footer rows).
+
+    A card stating that its prices include the contribution prints neither
+    there: the fee is the first figure of the consumption row and the
+    contribution is the footnote's (:func:`cev_included`).
 
     Both numbers are mandatory on every TE residential card (~90 EUR/yr
-    yearly fee; regional renewables surcharge between 1.6 and 3.2
+    yearly fee; regional renewables surcharge between 1.6 and 3.4
     c€/kWh). Raise on miss so a layout drift surfaces as an extractor
     failure instead of silently dropping ~90 EUR/year and the regional
     renewables levy from the bill.
     """
+    included = cev_included(text)
+    if included is not None:
+        row = CONSUMPTION_WITH_FEE_RE.search(text)
+        if row is None:
+            raise ExtractorError(
+                "TotalEnergies: yearly fee not found on the consumption row"
+            )
+        return to_float(row.group(1)), included
     match = re.search(
         r"Tarif\s+(?:mensuel|annuel)[\s\S]{0,400}?"
         r"^(\d{2,3}[.,]\d{2})\s+(\d[.,]\d{1,3})\s*$",
