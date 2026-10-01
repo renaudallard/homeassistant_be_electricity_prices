@@ -2288,6 +2288,60 @@ def test_main_fails_the_run_only_when_nothing_was_archived(
     assert ac.main() == 0
 
 
+async def test_a_row_priced_on_a_sibling_card_replays_from_the_siblings_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bolt Plenty Online came to be priced at the index the Online card
+    implies, and its rows, captured before, named only its own card. The
+    replay asked for the Online card, which the offline session refuses, and
+    every month of the contract stayed on the old price for good. The
+    supplier's other rows of the same month hold that card."""
+    base_url, plus_url = "https://acme.test/base", "https://acme.test/plus"
+    session = _Session(
+        {base_url: "price=0.2 month=augustus 2026", plus_url: "month=augustus 2026"}
+    )
+    parser = {"reads_base": ""}
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        url = plus_url if contract == "acme_plus" else base_url
+        own = await fetch_text(session, url)  # type: ignore[arg-type]
+        price = 0.1
+        if contract == "acme_base" or parser["reads_base"]:
+            base = await fetch_text(session, base_url)  # type: ignore[arg-type]
+            price = float(base.split(" ")[0].split("=")[1])
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price),
+            publication_label=own.split("month=")[1],
+            source_url=plus_url,
+        )
+
+    extractor = _extractor(fetch, contracts=("acme_base", "acme_plus"))
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+    row = tmp_path / "cards/acme/acme_plus/wallonia/2026-08.json"
+    assert json.loads(row.read_text())["energy"]["single"] == 0.1
+
+    session.pages[base_url] = "price=0.3 month=september 2026"
+    session.pages[plus_url] = "month=september 2026"
+    parser["reads_base"] = "yes"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    hits_before = session.hits
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW.replace(day=18), sleep=_no_sleep
+    )
+    assert summary.unreplayable == []
+    card = json.loads(row.read_text())
+    # August's own base card, not September's live one.
+    assert card["energy"]["single"] == 0.2
+    assert card["publication_label"] == "augustus 2026"
+    # The row now names the card it read, so the next replay needs no help.
+    assert len(card["_sources"]) == 2
+    assert session.hits == hits_before + 2  # the live walk, one read a card
+
+
 async def test_the_next_months_text_never_shadows_a_rows_own_card(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

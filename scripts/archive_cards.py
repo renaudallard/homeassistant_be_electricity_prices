@@ -1361,6 +1361,29 @@ def _follower_sources(path: Path) -> list[dict[str, str]]:
     return [s for s in sources if isinstance(s, dict) and "text" in s]
 
 
+def _sibling_sources(path: Path) -> list[dict[str, str]]:
+    """The sources of the supplier's other rows for the same region and month.
+
+    Bolt Plenty Online is priced at the index the Online card implies, so its
+    parse reads that card too, and a row captured before it did names only
+    its own. The Online row of the same month holds the card it needs.
+    """
+    sources: list[dict[str, str]] = []
+    for sibling in sorted(
+        path.parent.parent.parent.glob(f"*/{path.parent.name}/{path.name}")
+    ):
+        if sibling == path:
+            continue
+        try:
+            row = json.loads(sibling.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        sources.extend(
+            s for s in row.get("_sources", []) if isinstance(s, dict) and "text" in s
+        )
+    return sources
+
+
 async def _replay_row(
     path: Path,
     extractors: dict[str, SupplierExtractor],
@@ -1423,8 +1446,11 @@ async def _replay_row(
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 return
         dict.__setitem__(memo, key, stored)
+    # The supplier's other rows of the same month come before the follower,
+    # for a card priced on another product's card: where both hold one
+    # address, a sibling read it this month and the follower next month.
     # Best effort: the newest month has no follower and must still replay.
-    for source in _follower_sources(path):
+    for source in [*_sibling_sources(path), *_follower_sources(path)]:
         text_path = out / source["text"]
         key = _memo_key(source)
         if key in memo or not text_path.exists():

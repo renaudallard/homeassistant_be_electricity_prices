@@ -960,7 +960,11 @@ did, and without it the settlement reaches the offline session, is refused as a 
 comes back provisional, which the replay reports as no longer settling: 16 EBEM rows and 9
 Trevion ones. Behind, because the memo is keyed by URL and several suppliers publish every month
 at one unchanging address: seeded first, the follower replayed Ecofix's six August 2026 rows as
-September cards, label, validity and price alike. The clock is pinned with freezegun to the row's
+September cards, label, validity and price alike. Between the two come the texts the supplier's
+other rows of the same region and month name (`_sibling_sources`), for a card priced on another
+product's card: Bolt Plenty Online reads the Online card for its index, its rows captured before
+it did named only their own, and all six were unreplayable. A sibling read its card in the row's
+own month, so it goes ahead of the follower where both hold one address. The clock is pinned with freezegun to the row's
 `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
