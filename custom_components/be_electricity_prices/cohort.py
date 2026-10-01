@@ -62,6 +62,7 @@ from .providers.base import (
 )
 from .providers._resolve import card_residential_vat, without_welcome_credit
 from .providers._rates import (
+    DynamicRates,
     EnergyRates,
     InjectionRates,
     SpotMonthlyRates,
@@ -169,21 +170,36 @@ class _CohortLegs(NamedTuple):
     def energy_on(
         self, snapshot: "SupplierSnapshot", delivery_month: date
     ) -> EnergyRates | None:
-        """The energy leg put onto ``snapshot``'s VAT basis for
-        ``delivery_month``.
+        """The energy leg put onto ``snapshot``'s VAT basis and settlement
+        grid for ``delivery_month``.
 
         A cohort keeps the coefficients it signed for, not the VAT of the
         month it signed in: VAT is owed at the rate of the month delivered,
         so a leg read off an earlier card is moved onto that one's rate.
         Identity while the two rates agree, which is every month today.
+
+        Nor does it keep the market's settlement grid. Ecopower settled per
+        hour until September 2025 and per quarter-hour since, and every
+        signing month before the switch reads the January 2025 card, so a
+        dynamic leg carried its grid across and priced today on the hour.
         """
-        if self.energy is None or self.vat_rate is None:
-            return self.energy
+        energy = self.energy
+        if energy is None:
+            return None
+        card = snapshot.energy
+        if (
+            isinstance(energy, DynamicRates)
+            and isinstance(card, DynamicRates)
+            and energy.quarter_hourly != card.quarter_hourly
+        ):
+            energy = replace(energy, quarter_hourly=card.quarter_hourly)
+        if self.vat_rate is None:
+            return energy
         taxes = snapshot.taxes
         if taxes.published_vat_rate or taxes.vat_rate:
-            return self.energy
+            return energy
         rate = card_residential_vat(snapshot, delivery_month)
-        return rescale_vat(self.energy, (1.0 + rate) / (1.0 + self.vat_rate))
+        return rescale_vat(energy, (1.0 + rate) / (1.0 + self.vat_rate))
 
     def splice(
         self, snapshot: "SupplierSnapshot", delivery_month: date | None = None

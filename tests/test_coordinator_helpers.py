@@ -9202,6 +9202,55 @@ async def test_cohort_energy_leg_dynamic_uses_signing_month(
     assert leg == DynamicRates(factor=1.02, base=0.01)
 
 
+async def test_a_dynamic_cohort_settles_on_the_grid_of_the_month_billed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Ecopower settled Dynamische burgerstroom per hour until September 2025
+    and per quarter-hour since. Every signing month before the switch reads
+    the January 2025 card, which says "elk uur", and the leg carried that
+    grid onto today's card: 24 slots a day instead of 96. The cohort locks
+    the coefficients; the grid is the delivery month's."""
+    from tests import fixture_text
+
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.providers.ecopower import (
+        parse_dbs_snapshot,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    hourly = parse_dbs_snapshot(
+        fixture_text("ecopower_dynamische_burgerstroom_2025-09.pdf", layout=True),
+        "t://202501b",
+        "2025-01",
+    )
+    quarters = parse_dbs_snapshot(
+        fixture_text("ecopower_dynamische_burgerstroom_jan.pdf", layout=True),
+        "t://202601",
+        "2026-01",
+    )
+    assert isinstance(hourly.energy, DynamicRates)
+    assert isinstance(quarters.energy, DynamicRates)
+    assert not hourly.energy.quarter_hourly and quarters.energy.quarter_hourly
+    # A signing card with other coefficients, to see them locked.
+    signed = replace(hourly, energy=replace(hourly.energy, factor=1.11))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signed
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-03-01")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, quarters
+    )
+    priced = legs.splice(quarters).energy
+    assert isinstance(priced, DynamicRates)
+    assert priced.factor == pytest.approx(1.11)
+    assert priced.quarter_hourly is True
+    # A month still settled per hour is billed on the hour.
+    old = legs.energy_on(hourly, date(2025, 6, 1))
+    assert isinstance(old, DynamicRates) and old.quarter_hourly is False
+
+
 async def test_cohort_freezes_the_feed_in_coefficients(
     hass: HomeAssistant, freezer: Any
 ) -> None:
