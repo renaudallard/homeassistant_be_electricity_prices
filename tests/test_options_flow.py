@@ -6496,8 +6496,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # all residential and Flanders-only. Aspiravi Eco Plus Flex adds one
         # more, a month-indexed variable card that reads in about 1,3 s.
         # Eneco Zon & Wind Fix One adds one fixed card in each of Flanders
-        # and Wallonia, read in the same listing fetch as Vast.
-        ("flanders", "static", False): 56,
+        # and Wallonia, read in the same listing fetch as Vast, and OCTA+'s
+        # October 2026 range adds five in each region, at the 2,2 s an OCTA+
+        # card already costs.
+        ("flanders", "static", False): 61,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -6514,7 +6516,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 52,
+        ("wallonia", "static", False): 57,
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
@@ -6523,7 +6525,8 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # as Eneco's other Walloon cards.
         ("wallonia", "spot", False): 15,
         ("wallonia", "spot", True): 6,
-        ("wallonia", "slot", False): 5,
+        # Two more for the Impact twins of OCTA+'s Boost Fix and Eco Boost Fix.
+        ("wallonia", "slot", False): 7,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 29,
         ("brussels", "static", True): 21,

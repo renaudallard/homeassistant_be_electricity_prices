@@ -63,13 +63,16 @@ def test_octaplus_is_registered() -> None:
     assert "octaplus_fixed" in contract_ids
     assert "octaplus_dynamic" in contract_ids
     assert "octaplus_fixed_impact" in contract_ids
-    assert len(contract_ids) == 8
-    # Impact comptage is a Walloon CWaPE concept; the Flanders Fixed card
-    # carries no Impact block, so the variant must not be offered there.
-    impact = next(
-        c for c in EXTRACTORS["octaplus"].contracts if c.id == "octaplus_fixed_impact"
-    )
-    assert impact.regions == frozenset({"wallonia"})
+    assert len(contract_ids) == 15
+    # Impact comptage is a Walloon CWaPE concept; the Flanders fixed cards
+    # carry no Impact block, so the variants must not be offered there.
+    for impact_id in (
+        "octaplus_fixed_impact",
+        "octaplus_boostfix_impact",
+        "octaplus_ecoboostfix_impact",
+    ):
+        impact = next(c for c in EXTRACTORS["octaplus"].contracts if c.id == impact_id)
+        assert impact.regions == frozenset({"wallonia"})
 
 
 def test_fixed_wallonia_extracts_meter_rates() -> None:
@@ -306,6 +309,50 @@ def test_fixed_impact_extracts_three_cwape_bands() -> None:
     ores = snap.dsos["ores"]
     assert ores.distribution_pic is not None
     assert ores.distribution_eco is not None
+
+
+def test_the_october_2026_range_parses_on_the_same_template() -> None:
+    """OCTA+ replaced Fixed, Flux, Eco Fixed and Eco Flux with the Boost range
+    on its October 2026 cards. They keep the August template, so the fixed card
+    reads its printed rates and Impact bands and the variable one its monthly
+    formula, with the feed-in on the Epex SPP M like every other static card."""
+    from custom_components.be_electricity_prices.providers._rates import ImpactRates
+
+    fixed = parse_snapshot(
+        "octaplus_boostfix", _text("octaplus_boostfix_w_oct.pdf"), "wallonia"
+    )
+    assert isinstance(fixed.energy, FixedRates)
+    assert fixed.publication_label == "10/2026"
+    assert fixed.energy.single == pytest.approx(0.2027)
+    assert fixed.energy.peak == pytest.approx(0.2372)
+    assert fixed.energy.offpeak == pytest.approx(0.1772)
+    assert fixed.energy.exclusive_night == pytest.approx(0.1904)
+    assert fixed.energy.yearly_fixed_fee == pytest.approx(110.0)
+    assert fixed.injection is not None
+    assert fixed.injection.spp_indexed is True
+    assert fixed.injection.factor == pytest.approx(0.879)
+    assert fixed.injection.base == pytest.approx(-0.01615)
+
+    impact = parse_snapshot(
+        "octaplus_boostfix_impact", _text("octaplus_boostfix_w_oct.pdf"), "wallonia"
+    )
+    assert isinstance(impact.energy, ImpactRates)
+    assert impact.energy.pic == pytest.approx(0.2499)
+    assert impact.energy.medium == pytest.approx(0.2146)
+    assert impact.energy.eco == pytest.approx(0.1658)
+
+    flex = parse_snapshot(
+        "octaplus_ecoboostflex", _text("octaplus_ecoboostflex_v_oct.pdf"), "flanders"
+    )
+    assert isinstance(flex.energy, VariableRates)
+    assert flex.energy.month_indexed is True
+    assert flex.energy.formula_factor == pytest.approx(1.056 * 1.06)
+    assert flex.energy.formula_base == pytest.approx(33.45 / 1000.0 * 1.06)
+    assert flex.energy.formula_factor_peak == pytest.approx(1.194 * 1.06)
+    assert flex.energy.formula_factor_offpeak == pytest.approx(0.932 * 1.06)
+    assert flex.energy.formula_factor_exclusive_night == pytest.approx(0.974 * 1.06)
+    assert flex.energy.yearly_fixed_fee == pytest.approx(150.0)
+    assert flex.valid_until == date(2026, 10, 31)
 
 
 def test_missing_regional_renewables_raises() -> None:

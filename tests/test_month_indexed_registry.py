@@ -257,6 +257,24 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         ),
     ),
     (
+        "octaplus",
+        "octaplus_ecoboostflex",
+        lambda: octaplus.parse_snapshot(
+            "octaplus_ecoboostflex",
+            _aligned("octaplus_ecoboostflex_v_oct.pdf"),
+            REGION_FLANDERS,
+        ),
+    ),
+    (
+        "octaplus",
+        "octaplus_boostfix_impact",
+        lambda: octaplus.parse_snapshot(
+            "octaplus_boostfix_impact",
+            _aligned("octaplus_boostfix_w_oct.pdf"),
+            REGION_WALLONIA,
+        ),
+    ),
+    (
         "mega",
         "mega_smart_flex",
         lambda: mega.parse_snapshot(

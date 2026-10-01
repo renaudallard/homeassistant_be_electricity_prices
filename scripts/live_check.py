@@ -1831,8 +1831,8 @@ async def _check_octaplus(
     # OCTA+ only sells residential electricity in Flanders and Wallonia
     # (Brussels offerings are professional-only). One PDF per (contract,
     # region) at https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
-    # octaplus_fixed_impact is Wallonia-only (CWaPE bands); the shared
-    # loop's region guard keeps the Flanders Fixed card out of it.
+    # The Impact contracts are Wallonia-only (CWaPE bands); the shared
+    # loop's region guard keeps the Flanders fixed cards out of them.
     await _check_two_region_supplier(session, octaplus, "octaplus")
 
 
@@ -3616,6 +3616,13 @@ _INJECTION_SHAPE: dict[str, str] = {
     "octaplus_smartvariable": "spp",
     "octaplus_flux": "spp",
     "octaplus_ecoflux": "spp",
+    "octaplus_boostfix": "spp",
+    "octaplus_boostfix_impact": "spp",
+    "octaplus_ecoboostfix": "spp",
+    "octaplus_ecoboostfix_impact": "spp",
+    "octaplus_boostflex": "spp",
+    "octaplus_ecoboostflex": "spp",
+    "octaplus_basiconline": "spp",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so

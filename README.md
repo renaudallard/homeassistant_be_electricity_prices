@@ -111,7 +111,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch VT *(titled Korting until September 2026)* · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU, with a Happy Sunday band on summer Sundays from October 2026)* · Dynamic · most months run a new-customer campaign tied to the month you sign, either a share of the energy cost (33% on the September 2026 Comfy card) or a volume of free energy (750 kWh as a cashback after 12 months, valued at the mono-hourly rate the card's terms name: its printed rate, or from October 2026 on MaxxFlex and ComfyFlex+ the card's own annual estimate), and it is billed from the card of your contract start month, which the archive can only supply from September 2026 on: Luminus's own tariff archive serves a past month without its campaign, so a contract signed before then is priced with no campaign at all | Flanders + Wallonia only · [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin, and on Smart Flex and its pro twin in the months their card says so), or by the day from the first invoice on the residential cards since October 2026, and nineteen cards price it on whether the household pays by direct debit; every card that grants the ristourne adds a first-year bonus on the export, credited with the ristourne to a household on the injection regime once a year of its feed-in is measured · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
-| **OCTA+** | Fixed · Fixed Impact *(Wallonia, CWaPE 3-band)* · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
+| **OCTA+** | Boost Fix · Boost Fix Impact *(Wallonia, CWaPE 3-band)* · Eco Boost Fix · Eco Boost Fix Impact *(Wallonia)* · Boost Flex · Eco Boost Flex · Basic Online · Smart Variable · Dynamic · Eco Dynamic · Fixed · Fixed Impact *(Wallonia)* · Eco Fixed · Flux · Eco Flux | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
 | **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe · the three fixed cards print no feed-in price since October 2026, so an export is measured but not credited unless a contract start date names an earlier card | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before)* · Energreen · FlexiO Max *(monthly Belpex_RLP_VL, for a FlexiO EMS+; the flexibility fee the EMS+ earns is not modelled)* | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | All three regions; the tax step shows only the boxes your region bills: the green levy box takes GSC + WKK in Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
@@ -437,7 +437,8 @@ different, as long as the edit keeps the same supplier, contract and region
    *dynamic* (smart meter), or *exclusive-night circuit* (a separate
    meter; see the section below). Dynamic, TOU (Engie Empower Flextime,
    Luminus SmartFlex) and Impact contracts (Cociter Tarif Variable
-   Trihoraire, Mega Off-peak Impact, OCTA+ Fixed Impact) lock the picker to
+   Trihoraire, Mega Off-peak Impact, OCTA+ Fixed Impact, Boost Fix Impact and
+   Eco Boost Fix Impact) lock the picker to
    *dynamic* — the SMR3 meter is required to bill by hour-of-day.
 5. **Professional contract** *(pro contracts only)* — **Prices include VAT
    (21%)** and **Estimated yearly consumption**; see *Professional (B2B)
@@ -454,7 +455,7 @@ different, as long as the edit keeps the same supplier, contract and region
    every contract whose card grants none, and an answer given on one
    contract is dropped when you switch to a contract that does not ask for
    it, so it cannot come back into force later.
-7. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-hourly* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
+7. **DSO billing mode** *(Wallonia only, and skipped for the contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, Boost Fix Impact and Eco Boost Fix Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-hourly* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-hourly follow the existing
    meter convention.
 8. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
@@ -463,7 +464,8 @@ different, as long as the edit keeps the same supplier, contract and region
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Aspiravi Eco Plus
    Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
-   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One, EBEM
+   OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic
+   Online, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
    myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
    card — and on
@@ -615,11 +617,12 @@ It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
 card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
-other static cards), 67 contracts across 15 suppliers between them, and the
+other static cards), 74 contracts across 15 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
 Eco Plus Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards,
-Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex
+Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost
+Flex and Basic Online, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, TotalEnergies Electricité Variable,
 Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
 card). Both stay off without a key rather than failing the entry: a feed-in

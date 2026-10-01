@@ -140,6 +140,32 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("octaplus_ecoflux", "OCTA+ Eco Flux", "variable", "ECOFLUX"),
     _ContractDef("octaplus_dynamic", "OCTA+ Dynamic", "dynamic", "DYNAMIC"),
     _ContractDef("octaplus_ecodynamic", "OCTA+ Eco Dynamic", "dynamic", "ECODYNAMIC"),
+    # The range OCTA+ launched with the October 2026 cards. Same template as
+    # the products they replaced, so the same parsers read them; both fixed
+    # cards print the Impact block in Wallonia, Eco Boost Fix included.
+    _ContractDef("octaplus_boostfix", "OCTA+ Boost Fix", "fixed", "BOOSTFIX"),
+    _ContractDef(
+        "octaplus_boostfix_impact",
+        "OCTA+ Boost Fix Impact",
+        "tou_impact",
+        "BOOSTFIX",
+        regions=frozenset({REGION_WALLONIA}),
+    ),
+    _ContractDef("octaplus_ecoboostfix", "OCTA+ Eco Boost Fix", "fixed", "ECOBOOSTFIX"),
+    _ContractDef(
+        "octaplus_ecoboostfix_impact",
+        "OCTA+ Eco Boost Fix Impact",
+        "tou_impact",
+        "ECOBOOSTFIX",
+        regions=frozenset({REGION_WALLONIA}),
+    ),
+    _ContractDef("octaplus_boostflex", "OCTA+ Boost Flex", "variable", "BOOSTFLEX"),
+    _ContractDef(
+        "octaplus_ecoboostflex", "OCTA+ Eco Boost Flex", "variable", "ECOBOOSTFLEX"
+    ),
+    _ContractDef(
+        "octaplus_basiconline", "OCTA+ Basic Online", "variable", "BASICONLINE"
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -778,9 +804,17 @@ _OCTAPLUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 # the dynamic pair indexes per quarter-hour through its energy formula.
 
 # The variable cards print one "Epex RLP M" formula per meter and settle on the
-# delivery month; Fixed, Eco Fixed and Fixed Impact print the rate they bill.
+# delivery month; the fixed cards and their Impact twins print the rate they
+# bill.
 _MONTHLY_ENERGY_CONTRACTS: frozenset[str] = frozenset(
-    {"octaplus_smartvariable", "octaplus_flux", "octaplus_ecoflux"}
+    {
+        "octaplus_smartvariable",
+        "octaplus_flux",
+        "octaplus_ecoflux",
+        "octaplus_boostflex",
+        "octaplus_ecoboostflex",
+        "octaplus_basiconline",
+    }
 )
 
 EXTRACTOR = SupplierExtractor(

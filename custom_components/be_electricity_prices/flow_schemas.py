@@ -345,7 +345,7 @@ def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
     the mode from the one product the pre-selection is for, landing a TE
     Impact entry on bi_horaire, which that card costs EUR 113 a year at
     3500 kWh, the figure the comment above measures. The products that truly
-    cannot take another meter, Mega Off-peak Impact and OCTA+ Fixed Impact,
+    cannot take another meter, Mega Off-peak Impact and the OCTA+ Impact cards,
     register as ``tou_impact`` and ``_meter_schema`` already offers them the
     dynamic meter alone.
     """

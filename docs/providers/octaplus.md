@@ -47,9 +47,9 @@ for Wallonia. The live card overwrites in place under the same filename
 
 ## Contracts
 
-Eight products are declared in `_CONTRACTS` (`octaplus.py`). The
+Fifteen products are declared in `_CONTRACTS` (`octaplus.py`). The
 `_ContractDef` `slug` field is the URL token; `regions=None` means "every region
-OCTA+ serves" (both), overridden only for the Impact variant.
+OCTA+ serves" (both), overridden only for the Impact variants.
 
 | contract id | label | TariffKind | slug | regions | notes |
 | --- | --- | --- | --- | --- | --- |
@@ -61,17 +61,27 @@ OCTA+ serves" (both), overridden only for the Impact variant.
 | `octaplus_ecoflux` | OCTA+ Eco Flux | `variable` | `ECOFLUX` | FL + WL | Green variable variant. |
 | `octaplus_dynamic` | OCTA+ Dynamic | `dynamic` | `DYNAMIC` | FL + WL | `Epex 15'` spot formula, quarter-hourly. |
 | `octaplus_ecodynamic` | OCTA+ Eco Dynamic | `dynamic` | `ECODYNAMIC` | FL + WL | Green dynamic variant. |
+| `octaplus_boostfix` | OCTA+ Boost Fix | `fixed` | `BOOSTFIX` | FL + WL | Fixed card of the October 2026 range. |
+| `octaplus_boostfix_impact` | OCTA+ Boost Fix Impact | `tou_impact` | `BOOSTFIX` | WL only | Impact comptage on the `BOOSTFIX` card. |
+| `octaplus_ecoboostfix` | OCTA+ Eco Boost Fix | `fixed` | `ECOBOOSTFIX` | FL + WL | Green fixed variant of the October 2026 range. |
+| `octaplus_ecoboostfix_impact` | OCTA+ Eco Boost Fix Impact | `tou_impact` | `ECOBOOSTFIX` | WL only | Impact comptage on the `ECOBOOSTFIX` card. |
+| `octaplus_boostflex` | OCTA+ Boost Flex | `variable` | `BOOSTFLEX` | FL + WL | Monthly-indexed variable of the October 2026 range. |
+| `octaplus_ecoboostflex` | OCTA+ Eco Boost Flex | `variable` | `ECOBOOSTFLEX` | FL + WL | Green variable variant of the October 2026 range. |
+| `octaplus_basiconline` | OCTA+ Basic Online | `variable` | `BASICONLINE` | FL + WL | Online-only variable, 40 EUR standing charge on the October 2026 card. |
 
 Notes:
 
-- Smart Variable, Flux and Eco Flux carry `month_indexed_energy`, the registry twin
+- Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic Online carry
+  `month_indexed_energy`, the registry twin
   of the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar
   regime.
-- `octaplus_fixed_impact` is the only region-limited product. It sets
+- The three Impact contracts are the only region-limited products. Each sets
   `regions=frozenset({REGION_WALLONIA})` (`octaplus.py`) because
-  Impact comptage is a Walloon CWaPE concept and the Flanders `FIXED` card
-  carries no Impact block. `test_octaplus_is_registered` pins this: eight
-  contract ids, and `impact.regions == frozenset({"wallonia"})`.
+  Impact comptage is a Walloon CWaPE concept and the Flanders fixed cards
+  carry no Impact block. `test_octaplus_is_registered` pins this: fifteen
+  contract ids, and `impact.regions == frozenset({"wallonia"})` for each.
+  The variable cards print per-band Impact formulas in Wallonia too; no
+  variable Impact contract is registered, as before the October range.
 - Both dynamic products set `quarter_hourly=True` on every card from 2026
   (`octaplus.py`), because OCTA+ indexes on the 15-minute EPEX spot (`Epex 15'`);
   a card from before 2026 names `Belpex Hourly` and sets `False`. Billing thus
@@ -80,7 +90,7 @@ Notes:
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
   long-term statistics). See `DynamicRates` docs in `_rates.py`.
-- 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
+- 13 of the 15 products carry `spot_indexed_injection=True`. The flag does not
   mean a per-hour index, which is what this said: it means the injection needs
   spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them
   just as much as an hourly one. The two dynamic products leave it False,
@@ -491,6 +501,8 @@ cards unless the row names another month):
 | `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
+| `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
+| `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
 in the test helper `_text` (`test_octaplus.py`), matching the production
