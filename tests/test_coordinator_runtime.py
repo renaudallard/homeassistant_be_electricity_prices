@@ -3044,6 +3044,9 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     with (
         patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
         patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
+        patch.object(
+            coordinator_snapshot, "_metered_sides", AsyncMock(return_value=None)
+        ),
     ):
         await coord._ensure_annual_volume()
     assert coord._register_pair_fault == "sensor.night_cons, sensor.night_inj"
@@ -3069,6 +3072,9 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
             coordinator_snapshot,
             "_measured_kwh",
             AsyncMock(return_value=MeasuredKwh(900.0, 263)),
+        ),
+        patch.object(
+            coordinator_snapshot, "_metered_sides", AsyncMock(return_value=None)
         ),
     ):
         await coord._ensure_annual_volume()
@@ -3132,11 +3138,14 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
         return (
             patch.object(compare_quote, "_annual_volume", new=_volume),
             patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
+            patch.object(
+                coordinator_snapshot, "_metered_sides", AsyncMock(return_value=None)
+            ),
         )
 
     coord = BePricesCoordinator(hass, entry)
-    first, second = _reads_patched()
-    with first, second:
+    first, second, third = _reads_patched()
+    with first, second, third:
         await coord._ensure_annual_volume()
     assert reads
     saved: dict[str, Any] = {}
@@ -3159,8 +3168,8 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
 
     restored = await _restarted()
     reads.clear()
-    first, second = _reads_patched()
-    with first, second:
+    first, second, third = _reads_patched()
+    with first, second, third:
         await restored._ensure_annual_volume()
     assert reads == [], "a restart the same day reads no meter"
     assert restored._annual_kwh == 4200.0
@@ -3173,8 +3182,8 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
     restored = await _restarted()
     assert restored._annual_kwh == 4200.0
     reads.clear()
-    first, second = _reads_patched()
-    with first, second:
+    first, second, third = _reads_patched()
+    with first, second, third:
         await restored._ensure_annual_volume()
     assert "volume" in reads
 
@@ -3187,8 +3196,8 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
     assert restored._annual_kwh is None
     assert restored._register_pair_fault == ""
     reads.clear()
-    first, second = _reads_patched()
-    with first, second:
+    first, second, third = _reads_patched()
+    with first, second, third:
         await restored._ensure_annual_volume()
     assert "volume" in reads
 
@@ -3257,6 +3266,71 @@ async def test_yesterdays_meter_results_outlive_a_second_restart(
         await again._save_persistent()
     assert saved["meter_day"]["day"] == "2026-09-20"
     assert saved["meter_day"]["annual_kwh"] == 6000.0
+
+
+async def test_a_recorder_that_does_not_answer_keeps_the_day_results(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A busy or locked database does not raise out of the meter reads: each
+    read answers it with no rows, the same as a meter that measured nothing.
+    The day was stamped on that, with no yearly volume and the register card
+    cleared, and stored, so neither a later tick nor a restart the same day
+    read it again."""
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.cons_day",
+            "night_consumption_kwh": "sensor.cons_night",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._annual_kwh_day = date(2026, 9, 20)
+    coord._annual_kwh = 6000.0
+    coord._annual_kwh_full_year = True
+    coord._register_pair_fault = "sensor.cons_night"
+    saved: dict[str, Any] = {}
+
+    async def _save(payload: dict[str, Any]) -> None:
+        saved.clear()
+        saved.update(payload)
+
+    async def _load() -> dict[str, Any]:
+        return dict(saved)
+
+    with patch.object(coord._store, "async_save", new=_save):
+        await coord._save_persistent()
+    freezer.move_to("2026-09-21 08:00:00+02:00")
+    again = BePricesCoordinator(hass, entry, defer_meter_reads=True)
+    with patch.object(again._store, "async_load", new=_load):
+        await again.async_load_persistent()
+    calls: list[int] = []
+
+    def _locked(*_a: Any, **_k: Any) -> Any:
+        calls.append(1)
+        raise RuntimeError("database is locked")
+
+    with patch("homeassistant.components.recorder.get_instance", _locked):
+        await again._ensure_annual_volume()
+    assert calls, "the recorder was asked"
+    assert again._annual_kwh == 6000.0
+    assert again._annual_kwh_full_year
+    assert again._register_pair_fault == "sensor.cons_night"
+    assert again._annual_kwh_day is None, "the day is read again"
+    with patch.object(again._store, "async_save", new=_save):
+        await again._save_persistent()
+    assert saved["meter_day"]["day"] == "2026-09-20"
+    assert saved["meter_day"]["annual_kwh"] == 6000.0
+    calls.clear()
+    with patch("homeassistant.components.recorder.get_instance", _locked):
+        await again._ensure_annual_volume()
+    assert calls, "the next tick asks again"
 
 
 async def test_a_register_a_total_bills_for_has_its_own_wording(
@@ -3445,6 +3519,7 @@ async def test_a_silent_meter_side_is_named_in_repairs(
     The daily volume read names it on the same card as a stopped register."""
     from custom_components.be_electricity_prices import compare_quote
     from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.meter_hourly import (
         MeteredHours,
         MeteredSides,
@@ -3474,6 +3549,11 @@ async def test_a_silent_meter_side_is_named_in_repairs(
     )
     with (
         patch.object(compare_quote, "_annual_volume", AsyncMock(return_value=volume)),
+        patch.object(
+            coordinator_snapshot,
+            "_measured_kwh",
+            AsyncMock(return_value=MeasuredKwh(3500.0, 365)),
+        ),
         patch.object(
             coordinator_snapshot, "_metered_sides", AsyncMock(return_value=silent)
         ),

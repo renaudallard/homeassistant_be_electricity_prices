@@ -917,8 +917,9 @@ back a contract you left before the year began.
   that has ended since, or after a setting was edited, reads unknown until
   then, as every cost does on a new entry. The yearly volume and the meter
   check behind the register Repairs card are read once a day and kept
-  across restarts, and every refresh reads each meter once, where it used
-  to ask for each figure's window apart.
+  across restarts; a database too busy to answer leaves the day's figures
+  as they were and is asked again on the next refresh. Every refresh reads
+  each meter once, where it used to ask for each figure's window apart.
 
 ### Failure mode
 

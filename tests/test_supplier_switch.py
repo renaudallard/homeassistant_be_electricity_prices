@@ -2171,6 +2171,7 @@ async def test_an_earlier_contracts_dead_meters_raise_the_register_card(
 
     with (
         patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
+        patch.object(contract_periods, "_recorder_daily_kwh", new=daily),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=hourly),
     ):
         faults = await contract_periods.previous_meter_faults(

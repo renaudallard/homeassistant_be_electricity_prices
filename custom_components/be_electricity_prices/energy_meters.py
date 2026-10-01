@@ -272,6 +272,7 @@ async def _recorder_rows(
             return held
     rows = await _query_rows(hass, entity_id, start, end, period, wanted)
     if rows is None:
+        _note_failed_read(entity_id)
         return []
     if memo is not None:
         memo.setdefault(key, []).append((period, start, end, rows))
@@ -557,6 +558,7 @@ async def _read_live_today_kwh(
             )
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
+        _note_failed_read(entity_id)
         return None
     rows = history.get(entity_id, [])
     if not rows or not isinstance(rows[0], State):
@@ -662,6 +664,34 @@ async def _recorder_hourly_kwh(
 _MEMO_METER_KEYS: tuple[str, ...] = METER_SENSOR_KEYS
 
 _METER_MEMO: ContextVar[dict[Any, Any] | None] = ContextVar("_METER_MEMO", default=None)
+
+# The meters the recorder could not answer for inside a noting_failed_reads
+# block. Every read collapses a failure to "no rows", which a bill can stand
+# but a result kept for the rest of the day cannot.
+_FAILED_READS: ContextVar[set[str] | None] = ContextVar("_FAILED_READS", default=None)
+
+
+@contextmanager
+def noting_failed_reads() -> Iterator[set[str]]:
+    """Collect the meters whose recorder read failed inside this block.
+
+    A busy or locked database answers every read with nothing, which reads
+    exactly like a meter that measured nothing. The day's meter results are
+    kept, and stored, until the next day, so they must not be taken from such
+    a read: the caller keeps what it had and asks again on the next tick.
+    """
+    failed: set[str] = set()
+    token = _FAILED_READS.set(failed)
+    try:
+        yield failed
+    finally:
+        _FAILED_READS.reset(token)
+
+
+def _note_failed_read(entity_id: str) -> None:
+    failed = _FAILED_READS.get()
+    if failed is not None:
+        failed.add(entity_id)
 
 
 def _bills_injection(entry: ConfigEntry) -> bool:

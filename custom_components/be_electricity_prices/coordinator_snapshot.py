@@ -60,6 +60,7 @@ from .snapshot_store import (
 from .energy_meters import (
     _bills_injection,
     _kwh_sensor_ids,
+    noting_failed_reads,
 )
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
@@ -217,44 +218,60 @@ class _SnapshotMixin:
         today = dt_util.now().date()
         if self._annual_kwh_day == today:
             return
-        try:
-            volume = await _annual_volume(
-                self.hass,
-                self.entry,
-                today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
-                today,
-            )
-        except Exception as err:  # noqa: BLE001 - never fail a tick over this
-            # Stamped on success only, so a recorder that was busy this tick is
-            # asked again on the next one rather than leaving the entry on the
-            # default for the rest of the day.
-            _LOGGER.debug("%s: annual volume unavailable: %s", self.entry.entry_id, err)
-            return
-        self._annual_kwh_day = today
-        self._annual_kwh = volume.kwh if volume.measured else None
-        self._annual_kwh_full_year = volume.measured and _covers_a_year(
-            volume.days_with_data
-        )
-        # The same trailing year read for the injection side where the export
-        # is SOLD, which is what a first-year feed-in bonus multiplies
-        # (entry_annual_injection_kwh). Every other entry pays nothing for it.
-        self._annual_injection_kwh = None
-        if self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
-            with contextlib.suppress(Exception):
-                injected = await _measured_kwh(
+        # Stamped on success only, so a recorder that was busy this tick is
+        # asked again on the next one rather than leaving the entry on the
+        # default, or on nothing measured, for the rest of the day. A busy
+        # recorder seldom raises: every read answers it with no rows, which
+        # is why the failed reads are collected.
+        with noting_failed_reads() as failed:
+            try:
+                volume = await _annual_volume(
                     self.hass,
                     self.entry,
                     today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
                     today,
-                    side="injection",
                 )
-                if injected.kwh > 0 and _covers_a_year(injected.days_with_data):
-                    self._annual_injection_kwh = (
-                        injected.kwh * MEASURED_FULL_YEAR_DAYS / injected.days_with_data
+            except Exception as err:  # noqa: BLE001 - never fail a tick over this
+                _LOGGER.debug(
+                    "%s: annual volume unavailable: %s", self.entry.entry_id, err
+                )
+                return
+            # The same trailing year read for the injection side where the
+            # export is SOLD, which is what a first-year feed-in bonus
+            # multiplies (entry_annual_injection_kwh). Every other entry pays
+            # nothing for it.
+            injection: float | None = None
+            if self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
+                with contextlib.suppress(Exception):
+                    injected = await _measured_kwh(
+                        self.hass,
+                        self.entry,
+                        today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
+                        today,
+                        side="injection",
                     )
-        await self._find_meter_faults(today)
+                    if injected.kwh > 0 and _covers_a_year(injected.days_with_data):
+                        injection = (
+                            injected.kwh
+                            * MEASURED_FULL_YEAR_DAYS
+                            / injected.days_with_data
+                        )
+        if failed:
+            _LOGGER.debug(
+                "%s: annual volume unavailable, the recorder did not answer for %s",
+                self.entry.entry_id,
+                ", ".join(sorted(failed)),
+            )
+            return
+        self._annual_kwh = volume.kwh if volume.measured else None
+        self._annual_kwh_full_year = volume.measured and _covers_a_year(
+            volume.days_with_data
+        )
+        self._annual_injection_kwh = injection
+        if await self._find_meter_faults(today):
+            self._annual_kwh_day = today
 
-    async def _find_meter_faults(self, today: date) -> None:
+    async def _find_meter_faults(self, today: date) -> bool:
         """Name the meters the bill is short of, for the Repairs card.
 
         Read over the window the bill reads, not the trailing year of the
@@ -268,6 +285,11 @@ class _SnapshotMixin:
         days before the switch were billed on the earlier contract's wiring,
         which ``previous_meter_faults`` checks. Reading the current sensors
         over them named a register rewired at the switch.
+
+        False, with the verdict left as it was, when the recorder did not
+        answer for some meter: a read it failed looks like a register that
+        reported nothing, and the card would name, or stop naming, the wrong
+        sensors until the next day.
         """
         from .contract_periods import current_period_start, previous_meter_faults
 
@@ -278,7 +300,7 @@ class _SnapshotMixin:
         # Registers whose side the totals sensor bills in full: named, but
         # on their own wording, since the cost does not move.
         covered: list[str] = []
-        with contextlib.suppress(Exception):
+        with noting_failed_reads() as failed, contextlib.suppress(Exception):
             measured = await _measured_kwh(
                 self.hass, self.entry, start, today, warn=True
             )
@@ -311,11 +333,14 @@ class _SnapshotMixin:
         # And the meters each contract held earlier in the year kept, each
         # entry already naming its contract, so it is not split like the rest.
         previous: list[str] = []
-        with contextlib.suppress(Exception):
+        with noting_failed_reads() as failed_before, contextlib.suppress(Exception):
             previous = await previous_meter_faults(self.hass, self.entry, today)
+        if failed or failed_before:
+            return False
         names = _names(faults) + previous
         self._register_pair_covered = not names
         self._register_pair_fault = ", ".join(dict.fromkeys(names or _names(covered)))
+        return True
 
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.
