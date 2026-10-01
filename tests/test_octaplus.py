@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from dataclasses import fields
 from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
@@ -376,6 +377,27 @@ def test_the_year_one_credit_note_is_read_as_an_anniversary_lump() -> None:
         "octaplus_boostfix", _text("octaplus_boostfix_w_oct.pdf"), "wallonia"
     )
     assert october.welcome_credit_eur is None
+
+
+def test_a_card_granting_no_note_keeps_the_default_credit_kind() -> None:
+    """Every card was marked "anniversary", grant or not, which billed
+    nothing differently and rewrote 175 archive rows that grant nothing."""
+    from custom_components.be_electricity_prices.const import WELCOME_CREDIT_PRO_RATA
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierSnapshot,
+    )
+
+    default = next(
+        f.default for f in fields(SupplierSnapshot) if f.name == "welcome_credit_kind"
+    )
+    assert default == WELCOME_CREDIT_PRO_RATA
+    for contract, fixture in (
+        ("octaplus_fixed", "octaplus_fixed_w.pdf"),
+        ("octaplus_boostfix", "octaplus_boostfix_w_oct.pdf"),
+    ):
+        snap = parse_snapshot(contract, _text(fixture), "wallonia")
+        assert snap.welcome_credit_eur is None
+        assert snap.welcome_credit_kind == default
 
 
 def test_missing_regional_renewables_raises() -> None:

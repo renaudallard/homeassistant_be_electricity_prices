@@ -352,7 +352,9 @@ customer who signed before June has no card granting it, and is not credited.
 The cards before June word a different promotion, *"une réduction (*) de 60 € TVA
 incluse"* for a contract signed within a window of a few days the card states
 (*"Proposition valable du 01/03/2026 au 06/03/2026"*). A signing month cannot tell
-those days apart, so it is not read. The October 2026 cards grant nothing.
+those days apart, so it is not read. The October 2026 cards grant nothing. A card
+granting no note keeps the snapshot's default `welcome_credit_kind`: marking it
+`anniversary` billed nothing differently and rewrote 175 archive rows that grant nothing.
 
 ### Supplier PV forfait (`_extract_supplier_prosumer`, `_octaplus_overlays.py`)
 

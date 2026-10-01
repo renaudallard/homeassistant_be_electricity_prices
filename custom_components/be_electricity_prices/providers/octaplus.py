@@ -56,6 +56,7 @@ from ..const import (
     REGION_WALLONIA,
     VAT_RATE_REDUCED,
     WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -438,6 +439,7 @@ def parse_snapshot(
     # Only a formula is grossed by the card's rate; the printed rates of a
     # fixed or Impact card are already VAT-inclusive whatever the header says.
     card_vat, assumed_vat = vat_basis(printed_vat_rate(text, _VAT_RE), energy)
+    credit_note = _extract_credit_note(text)
     return SupplierSnapshot(
         supplier="octaplus",
         contract=contract_id,
@@ -461,8 +463,15 @@ def parse_snapshot(
         supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
             text, contract.kind
         ),
-        welcome_credit_eur=_extract_credit_note(text),
-        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_eur=credit_note,
+        # A card granting no note keeps the field's default. Marking it
+        # anniversary as well billed nothing differently and rewrote 175
+        # archive rows that grant nothing.
+        welcome_credit_kind=(
+            WELCOME_CREDIT_ANNIVERSARY
+            if credit_note is not None
+            else WELCOME_CREDIT_PRO_RATA
+        ),
     )
 
 
