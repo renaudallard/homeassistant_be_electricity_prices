@@ -231,12 +231,14 @@ and `yearly_fixed_fee_exclusive_night` from `_extract_excl_night_fee`.
 
 ### tou (SmartFlex)
 
-Parses the three-rate `Énergie fournie (c€/kWh)` row (peak / transition /
-offpeak) by asking `numeric_row` for a row exactly three figures wide, which is
-what tells it from the four-figure row the other products print
-(`_luminus_cards.py`). The second occurrence later in the PDF is the bi-horaire
-fallback for non-SMR3 customers (`_luminus_cards.py`); it is also three wide,
-and the first match wins. Returns `TimeOfUseRates(peak, transition, offpeak,
+Parses the `Énergie fournie (c€/kWh)` row (peak / transition / offpeak) by
+asking `numeric_row` for a row four figures wide, then three. The October 2026
+cards print a fourth column, Happy Sunday; earlier ones print three. The
+lookup stops at "Informations sur le prix transitoire": below it the same
+label carries the transitional MaxxFlex rates (mono / jour / nuit) billed to a
+customer whose SMR3 conditions are not met, three wide, which the three-figure
+search reached as soon as the real row grew a fourth column
+(`_luminus_cards.py`). Returns `TimeOfUseRates(peak, transition, offpeak,
 yearly_fixed_fee, weekend_rule="smartflex_seasonal")` (`_luminus_cards.py`).
 
 SmartFlex uses seasonal windows, not the generic CWaPE schedule: peak (pleines)
@@ -495,9 +497,12 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   digit-anchored `_NUM` (`_luminus_overlays.py`).
 - **Padded publication parens** on the May 2026 cards (`(mai 2026 )`),
   tolerated by optional whitespace (`luminus.py`).
-- **Numeric-token double-occurrence in the TOU row**: the three-figure width
-  picks the SMR3 three-band row over the four-figure rows around it, and the
-  first match wins over the bi-horaire fallback below (`_luminus_cards.py`).
+- **Numeric-token double-occurrence in the TOU row**: the SmartFlex row is
+  read at four figures (three bands plus Happy Sunday, October 2026 on) or
+  three (earlier cards), and only above "Informations sur le prix
+  transitoire": the same label returns there with the MaxxFlex mono / jour /
+  nuit rates, which a four-figure October row once let the three-figure
+  search reach (`_luminus_cards.py`).
 - **Fail-loud policy**: yearly fee, injection, per-kWh taxes, and both regional
   renewables all raise on a miss rather than defaulting to 0 and silently
   mispricing (`_luminus_cards.py`, `_luminus_overlays.py`).
@@ -517,6 +522,8 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_dynamic_w.pdf` | Dynamic, Wallonia | consumption + injection formula, taxes |
 | `luminus_dynamic_v.pdf` | Dynamic, Flanders | region-specific base, narrow SMR3 DSO table |
 | `luminus_dynamic_w_oct.pdf` | Dynamic, Wallonia, October 2026 | Impact columns printed PIC first |
+| `luminus_smartflex_w_oct.pdf` | SmartFlex (tou), Wallonia, October 2026 | four-figure row with Happy Sunday |
+| `luminus_smartflex_v_oct.pdf` | SmartFlex (tou), Flanders, October 2026 | four-figure row with Happy Sunday |
 
 Note: fixtures for `luminus_comfy_plus`, `luminus_maxxfix`, `luminus_basicfix`
 and `luminus_basicflex` are not present; those contracts share the fixed /

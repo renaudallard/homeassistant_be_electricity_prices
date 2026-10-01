@@ -300,6 +300,27 @@ def test_smartflex_parses_as_time_of_use() -> None:
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
 
 
+@pytest.mark.parametrize(
+    ("fixture", "region", "peak", "transition", "offpeak"),
+    [
+        # "Énergie fournie (c€/kWh) 20,95 17,85 8,67 0,00": the October 2026
+        # row gained a Happy Sunday column, and the three-figure row of the
+        # same label further down is the transitional MaxxFlex price
+        # "18,87 21,96 16,42", which must never be read as the TOU bands.
+        ("luminus_smartflex_w_oct.pdf", "wallonia", 0.2095, 0.1785, 0.0867),
+        ("luminus_smartflex_v_oct.pdf", "flanders", 0.2042, 0.1732, 0.0814),
+    ],
+)
+def test_smartflex_reads_its_own_row_beside_happy_sunday(
+    fixture: str, region: str, peak: float, transition: float, offpeak: float
+) -> None:
+    snap = parse_snapshot("luminus_smartflex", fixture_text(fixture), region)
+    assert isinstance(snap.energy, TimeOfUseRates)
+    assert snap.energy.peak == pytest.approx(peak)
+    assert snap.energy.transition == pytest.approx(transition)
+    assert snap.energy.offpeak == pytest.approx(offpeak)
+
+
 def test_maxxflex_energy_carries_the_monthly_formula() -> None:
     """MaxxFlex indexes the COMMODITY on the delivery month too: "Le parametre
     d'indexation est base sur la moyenne arithmetique des cotations

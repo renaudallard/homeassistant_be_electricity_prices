@@ -156,6 +156,9 @@ def _extract_promo(text: str) -> dict[str, object]:
     return out
 
 
+_TRANSITIONAL_HEADING = "Informations sur le prix transitoire"
+
+
 def _band_formula_re(label: str) -> re.Pattern[str]:
     """One per-meter row inside the energy block.
 
@@ -175,11 +178,19 @@ def _band_formula_re(label: str) -> re.Pattern[str]:
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     fee = _extract_yearly_fee(text)
     if kind == "tou":
-        # SmartFlex's TOU table prints exactly three rates on the first
-        # "Énergie fournie" row, e.g. "(c€/kWh) 15,54 13,29 6,72". The
-        # second occurrence later in the PDF is the bi-horaire fallback
-        # for non-SMR3 customers; we anchor on the first match.
-        tou_row = numeric_row(text, "Énergie fournie (c€/kWh)", 3)
+        # SmartFlex's TOU table prints the three band rates on its
+        # "Énergie fournie" row, e.g. "(c€/kWh) 15,54 13,29 6,72", and
+        # since October 2026 a fourth, Happy Sunday. The same label comes
+        # back under "Informations sur le prix transitoire" with the
+        # MaxxFlex mono / jour / nuit rates billed while the SMR3
+        # conditions are not met, so the lookup stops at that heading:
+        # left unbounded, a four-figure TOU row sent the three-figure
+        # search there.
+        tou_row = numeric_row(
+            text, "Énergie fournie (c€/kWh)", 4, before=_TRANSITIONAL_HEADING
+        ) or numeric_row(
+            text, "Énergie fournie (c€/kWh)", 3, before=_TRANSITIONAL_HEADING
+        )
         if not tou_row:
             raise ExtractorError("could not parse Luminus TOU energy block")
         peak = to_float(tou_row[0]) / 100.0
