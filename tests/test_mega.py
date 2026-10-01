@@ -2293,13 +2293,46 @@ def test_ristourne_kind_follows_the_card() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("contract", "fixture", "base", "supplement"),
+    [
+        ("mega_dynamic", "mega_dynamic_w.pdf", 79.5, 21.2),
+        ("mega_pro_dynamic", "mega_pro_dynamic_w.pdf", 75.0, 20.0),
+    ],
+)
+def test_dynamic_ristourne_is_its_total_less_what_other_payers_lose(
+    contract: str, fixture: str, base: float, supplement: float
+) -> None:
+    """ "vous beneficiez d'une ristourne de 100,7 EUR (TVA de 6% incluse) pour
+    votre premiere annee de souscription ... Si vos paiements ne sont pas
+    effectues par domiciliation bancaire, la ristourne sur la redevance fixe
+    sera diminuee de 21,2 euros (TVAC)". None of the other wordings, so every
+    Dynamic card up to September 2026 and every pro Dynamic card was read as
+    granting nothing."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    snap = parse_snapshot(contract, fixture_text(fixture), "wallonia")
+    assert snap.welcome_credit_eur == pytest.approx(base)
+    assert snap.welcome_credit_direct_debit_eur == pytest.approx(supplement)
+    assert snap.welcome_credit_eur_per_kwh is None
+    assert snap.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY
+    assert snap.welcome_credit_after_months == 12
+    paying = resolve_direct_debit(snap, direct_debit=True)
+    assert paying.welcome_credit_eur == pytest.approx(base + supplement)
+    other = resolve_direct_debit(snap, direct_debit=False)
+    assert other.welcome_credit_eur == pytest.approx(base)
+
+
 def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> None:
     """The dependence is parsed off the card; the flow asks off the registry.
 
-    Seventeen Mega cards make the ristourne depend on how the household
+    Nineteen Mega cards make the ristourne depend on how the household
     pays, two ways. Fourteen state "soit une reduction de base de 37.1 EUR +
     5.3 EUR supplementaires en cas de paiement par domiciliation bancaire",
-    and four grant the whole thing to a direct-debit payer and nobody else
+    the two Dynamic cards what a household paying another way loses, and
+    four grant the whole thing to a direct-debit payer and nobody else
     (pro Cosy Flex has printed each wording in different months, so it is on
     both counts). The amounts reached the snapshot and a schema bump, but no
     Mega contract carried ``direct_debit_discount``, so the flow never asked
@@ -2321,7 +2354,7 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
 
     flagged = {c.id for c in EXTRACTORS["mega"].contracts if c.direct_debit_discount}
     assert flagged == _DIRECT_DEBIT_RISTOURNE
-    assert len(flagged) == 17
+    assert len(flagged) == 19
 
     # Every id on the list is a real contract, so a rename cannot leave a
     # product silently unflagged.
@@ -2340,5 +2373,5 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
         "mega_pro_smart_fixed",
     ):
         assert offers_direct_debit("mega", conditional) is True
-    # Dynamic grants no ristourne at all, so nothing turns on the answer.
-    assert offers_direct_debit("mega", "mega_dynamic") is False
+    # Dynamic's card takes 21,2 EUR off its ristourne for any other payer.
+    assert offers_direct_debit("mega", "mega_dynamic") is True

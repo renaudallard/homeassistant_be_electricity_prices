@@ -283,6 +283,23 @@ _RISTOURNE_FIXED_RE = re.compile(
     r"sur\s+la\s+redevance\s+fixe",
     re.IGNORECASE,
 )
+# Shape E, Dynamic and pro Dynamic: a flat total for the first year with the
+# direct-debit share stated as what a household paying another way LOSES.
+# "vous beneficiez d'une ristourne de 100,7 EUR (TVA de 6% incluse) pour votre
+# premiere annee de souscription a ce produit ... Si vos paiements ne sont pas
+# effectues par domiciliation bancaire, la ristourne sur la redevance fixe sera
+# diminuee de 21,2 euros (TVAC)". No "reduction ... sur la redevance fixe", so
+# none of the patterns above read it, and every Dynamic card up to September
+# 2026 and every pro Dynamic card was taken to grant nothing.
+_RISTOURNE_TOTAL_RE = re.compile(
+    r"ristourne\s*(?:\(\*+\)\s*)?de\s+([\d.,]+)\s*€[^.]{0,40}?"
+    r"pour\s+votre\s+premi[èe]re\s+ann[ée]e",
+    re.IGNORECASE,
+)
+_RISTOURNE_DIMINISHED_RE = re.compile(
+    r"ristourne[^.]{0,80}?diminu[ée]e\s+de\s+([\d.,]+)\s*(?:€|euros?)",
+    re.IGNORECASE,
+)
 _RISTOURNE_DIRECT_DEBIT_RE = re.compile(
     r"\+\s*([\d.,]+)\s*€\s*suppl[ée]mentaires?\s+en\s+cas\s+de\s+paiement"
     r"\s+par\s+domiciliation",
@@ -351,30 +368,42 @@ def extract_ristourne(text: str) -> dict[str, float | None]:
     base = _RISTOURNE_BASE_RE.search(flat)
     supplement = _RISTOURNE_DIRECT_DEBIT_RE.search(flat)
     cap = _RISTOURNE_CAP_RE.search(flat)
-    if per_kwh is None and base is None and _RISTOURNE_FIXED_RE.search(flat) is None:
+    fixed = _RISTOURNE_FIXED_RE.search(flat)
+    total = _RISTOURNE_TOTAL_RE.search(flat)
+    if per_kwh is None and base is None and fixed is None and total is None:
         return {
             "welcome_credit_eur": None,
             "welcome_credit_eur_per_kwh": None,
             "welcome_credit_cap_eur": None,
             "welcome_credit_direct_debit_eur": None,
         }
-    fixed = _RISTOURNE_FIXED_RE.search(flat)
+    # The split when the card prints one, the whole figure when it does not.
+    # A card stating both agrees with itself: base + supplement is the total,
+    # which is how the two readings were checked.
+    flat_eur: float | None = None
+    direct_debit_eur = to_float(supplement.group(1)) if supplement else None
+    if base:
+        flat_eur = to_float(base.group(1))
+    elif fixed:
+        flat_eur = to_float(fixed.group(1))
+    elif total:
+        flat_eur = to_float(total.group(1))
+        # Shape E states what a direct-debit payer gets and what anyone else
+        # loses, so the base is the difference and the loss the supplement:
+        # the split shape A prints outright.
+        diminished = _RISTOURNE_DIMINISHED_RE.search(flat)
+        if diminished and direct_debit_eur is None:
+            loss = to_float(diminished.group(1))
+            if 0.0 < loss <= flat_eur:
+                flat_eur -= loss
+                direct_debit_eur = loss
     return {
-        # The split when the card prints one, the whole figure when it does
-        # not. A card stating both agrees with itself: base + supplement is
-        # the total, which is how the two readings were checked.
-        "welcome_credit_eur": (
-            to_float(base.group(1))
-            if base
-            else (to_float(fixed.group(1)) if fixed else None)
-        ),
+        "welcome_credit_eur": flat_eur,
         "welcome_credit_eur_per_kwh": (
             to_float(per_kwh.group(1) or per_kwh.group(2)) / 100.0 if per_kwh else None
         ),
         "welcome_credit_cap_eur": to_float(cap.group(1)) if cap else None,
-        "welcome_credit_direct_debit_eur": (
-            to_float(supplement.group(1)) if supplement else None
-        ),
+        "welcome_credit_direct_debit_eur": direct_debit_eur,
     }
 
 

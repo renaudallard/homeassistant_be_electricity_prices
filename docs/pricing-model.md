@@ -583,7 +583,7 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
 | `pro_rata` | EnergyVision, four cards · Mega's residential cards from October 2026 | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
-| `anniversary` | Frank Energie, three tiers · Mega, 17 of 21 contracts up to September 2026, and its professional cards since | the whole amount, in the window the first anniversary falls in and no other | Frank's card states none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
+| `anniversary` | Frank Energie, three tiers · Mega, 19 of 21 contracts up to September 2026, and its professional cards since | the whole amount, in the window the first anniversary falls in and no other | Frank's card states none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
 
 The two rules travel together on one field because each card states one complete rule
 rather than two independent ones. Mega changed rule between two months of the same
@@ -633,10 +633,14 @@ The flat half may also depend on how the household pays: *"une reduction de base
 `welcome_credit_direct_debit_eur` holds and `resolve_direct_debit` settles once onto the
 credit, the way it already settles the standing charge's own direct-debit cut.
 
-The cards state the flat half three ways, and all three are read: the total with the split
-beside it, the total alone where there is no split, and a flat-only ristourne with no
-per-kWh term at all. Where a card prints both a total and the split, the two agree, which
-is how the reading was checked across the range.
+The cards state the flat half four ways, and all four are read: the total with the split
+beside it, the total alone where there is no split, a flat-only ristourne with no
+per-kWh term at all, and on Dynamic and pro Dynamic a total with what a household paying
+another way loses (*"une ristourne de 100,7 EUR ... pour votre premiere annee ... Si vos
+paiements ne sont pas effectues par domiciliation bancaire, la ristourne sur la redevance
+fixe sera diminuee de 21,2 euros"*), read as a base of the difference and a supplement of
+the loss. Where a card prints both a total and the split, the two agree, which is how the
+reading was checked across the range.
 
 A fourth shape makes the payment method decide the whole offer instead of a share of it:
 *"Si vous souscrivez a un nouveau contrat Cosy Flex **et optez pour la domiciliation**,
@@ -673,7 +677,7 @@ The Smart cards add "et disposez d'une puissance de raccordement inferieure ou e
 10 kVA", which the entry cannot answer: the flow asks no connection power on the
 injection regime, so the bonus is credited as printed.
 
-Seventeen products therefore depend on how the household pays, and the flow asks only
+Nineteen products therefore depend on how the household pays, and the flow asks only
 where `direct_debit_discount` is set in the registry (`_DIRECT_DEBIT_RISTOURNE`,
 `mega.py`). A product whose card states either dependence and which is missing from that
 set is never asked, so the resolver is handed a default and the card's wording never

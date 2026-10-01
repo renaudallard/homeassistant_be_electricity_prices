@@ -988,16 +988,18 @@ def parse_snapshot(
 # registry; a product dropping the difference drops off this list and the
 # flow stops asking. Measured across every archived month of each card.
 #
-# Two ways a card can depend on it, and the list is the union: fourteen
-# grant a direct-debit payer a LARGER credit and print the supplement, and
-# four grant the whole thing to nobody else (Cosy Flex, Smart Fixed and
-# their pro twins). Pro Cosy Flex has printed both wordings in different
-# months, which is why which one applies is parsed off the card and only
-# whether to ask is listed here.
+# Two ways a card can depend on it, and the list is the union: sixteen
+# grant a direct-debit payer a LARGER credit, fourteen printing the
+# supplement and the two Dynamic cards what anyone else loses, and four
+# grant the whole thing to nobody else (Cosy Flex, Smart Fixed and their pro
+# twins). Pro Cosy Flex has printed both wordings in different months, which
+# is why which one applies is parsed off the card and only whether to ask is
+# listed here.
 _DIRECT_DEBIT_RISTOURNE: frozenset[str] = frozenset(
     {
         "mega_cosy_fixed",
         "mega_cosy_flex",
+        "mega_dynamic",
         "mega_offpeak_fixed",
         "mega_offpeak_flex",
         "mega_offpeak_impact_var",
@@ -1008,6 +1010,7 @@ _DIRECT_DEBIT_RISTOURNE: frozenset[str] = frozenset(
         "mega_zen_fixed",
         "mega_pro_cosy_fixed",
         "mega_pro_cosy_flex",
+        "mega_pro_dynamic",
         "mega_pro_offpeak_fixed",
         "mega_pro_online_fixed",
         "mega_pro_smart_fixed",
@@ -1042,7 +1045,7 @@ EXTRACTOR = SupplierExtractor(
             # Billing that figure bills last month's index, so the re-price
             # needs the optional key step on every solar regime.
             month_indexed_energy=c.kind in ("variable", "tou_impact"),
-            # Seventeen of the cards price a direct-debit payer differently,
+            # Nineteen of the cards price a direct-debit payer differently,
             # and say so in the ristourne paragraph: "soit une reduction de
             # base de 37.1 EUR + 5.3 EUR supplementaires en cas de paiement
             # par domiciliation bancaire", or, on four of them, by granting
