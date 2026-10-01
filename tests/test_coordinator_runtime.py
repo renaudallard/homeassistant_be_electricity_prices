@@ -3193,6 +3193,72 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
     assert "volume" in reads
 
 
+async def test_yesterdays_meter_results_outlive_a_second_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A restart on a later day takes the stored figures without the day's
+    stamp, so the day is read again. The first refresh after it reads no
+    meter but still saves, and that save dropped the figures: a second
+    restart before the day's read landed, or a read that failed, started with
+    no yearly volume and cleared the register card they named."""
+    from custom_components.be_electricity_prices import compare_quote
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._annual_kwh_day = date(2026, 9, 20)
+    coord._annual_kwh = 6000.0
+    coord._annual_kwh_full_year = True
+    coord._register_pair_fault = "sensor.cons_night"
+    saved: dict[str, Any] = {}
+
+    async def _save(payload: dict[str, Any]) -> None:
+        saved.clear()
+        saved.update(payload)
+
+    async def _load() -> dict[str, Any]:
+        return dict(saved)
+
+    async def _restart_and_save() -> BePricesCoordinator:
+        restored = BePricesCoordinator(hass, entry)
+        with patch.object(restored._store, "async_load", new=_load):
+            await restored.async_load_persistent()
+        with patch.object(restored._store, "async_save", new=_save):
+            await restored._save_persistent()
+        return restored
+
+    with patch.object(coord._store, "async_save", new=_save):
+        await coord._save_persistent()
+    freezer.move_to("2026-09-21 08:00:00+02:00")
+    await _restart_and_save()
+    again = await _restart_and_save()
+    assert again._annual_kwh == 6000.0
+    assert again._annual_kwh_full_year
+    assert again._register_pair_fault == "sensor.cons_night"
+    assert again._annual_kwh_day is None, "the day is still read"
+
+    async def _busy(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("recorder busy")
+
+    with patch.object(compare_quote, "_annual_volume", new=_busy):
+        await again._ensure_annual_volume()
+    with patch.object(again._store, "async_save", new=_save):
+        await again._save_persistent()
+    assert saved["meter_day"]["day"] == "2026-09-20"
+    assert saved["meter_day"]["annual_kwh"] == 6000.0
+
+
 async def test_a_register_a_total_bills_for_has_its_own_wording(
     hass: HomeAssistant, freezer: Any
 ) -> None:

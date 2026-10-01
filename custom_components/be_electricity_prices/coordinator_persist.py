@@ -78,6 +78,7 @@ class _PersistMixin:
     _held_costs: dict[str, Any] | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
+    _meter_results_day: date | None
     _peak_history: dict[str, float]
     _peak_kw: float
     _peak_month: date | None
@@ -582,11 +583,17 @@ class _PersistMixin:
         day. Kept in memory only, they were read again inside the setup of
         every restart: on a MariaDB on a NAS that was most of a 287 s start
         (issue #107).
+
+        Figures adopted from an earlier day go back under that day until the
+        day's own read replaces them. Dropped instead, a second restart before
+        that read, or a read that failed, started with no yearly volume and
+        cleared the register card the figures named.
         """
-        if self._annual_kwh_day is None:
+        day = self._annual_kwh_day or self._meter_results_day
+        if day is None:
             return None
         return {
-            "day": self._annual_kwh_day.isoformat(),
+            "day": day.isoformat(),
             "inputs": settings_digest(self.entry),
             "annual_kwh": self._annual_kwh,
             "full_year": self._annual_kwh_full_year,
@@ -627,6 +634,7 @@ class _PersistMixin:
         self._annual_injection_kwh = None if injection is None else float(injection)
         self._register_pair_fault = fault
         self._register_pair_covered = blob.get("pair_covered") is True
+        self._meter_results_day = day
         if day == dt_util.now().date():
             self._annual_kwh_day = day
 

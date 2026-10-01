@@ -224,6 +224,10 @@ class BePricesCoordinator(
         # scaled up to one. Only the first outranks a volume a business typed.
         self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
+        # The day the figures in hand were read, which is an earlier one than
+        # _annual_kwh_day after a restart adopted them from the store: what is
+        # stored again until the day's own read replaces them.
+        self._meter_results_day: date | None = None
         # A full trailing year of the export on the injection regime, read the
         # same day; None otherwise. A first-year feed-in bonus multiplies it.
         self._annual_injection_kwh: float | None = None
