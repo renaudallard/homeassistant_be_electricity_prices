@@ -596,6 +596,7 @@ contribution 0), so the pair covers both sides of that change.
 | Solar credit roughly double on the variable contract | `spp_indexed` / `_spp_weighting_enabled` | the flag was dropped, or the Synergrid profile silently stopped being fetched, so the formula resolves against the energy leg's Belpex_RLP mean instead of Belpex_SPP |
 | Solar credit slightly off (a few tenths of a cent) on the variable contract | expected while the Synergrid profile is unavailable | the card's printed indicative is a VNR forecast; it is the deliberate fallback, and the credit firms up once the profile loads |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (-221) | a levy row label or unit changed; energy fund is the only optional one |
-| Professional rows leaking into the snapshot | `_PROF_MARKER` / `_residential` () | the professional section header wording changed |
+| Professional rows leaking into the snapshot | `_PROF_HEADER_RE` / `_residential` () | the professional section header wording changed |
+| Empty publication label, live check flags the month | `_LABEL_RE` | the residential card title was reworded again |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
 | Coordinator never refreshes | none - there is no probe; the time-based TTL drives refetch | expected for this supplier |
