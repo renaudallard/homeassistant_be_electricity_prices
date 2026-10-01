@@ -1907,7 +1907,8 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "luminus": lambda m: {c.slug for c in m._CONTRACTS},
     "eneco": lambda m: set(m._CONTRACT_SLUGS),
     "totalenergies": lambda m: {c.slug for c in m._CONTRACTS},
-    "octaplus": lambda m: {c.slug for c in m._CONTRACTS},
+    # A withdrawn product is left out, so its slug coming back reads as new.
+    "octaplus": lambda m: {c.slug for c in m._CONTRACTS if c.withdrawn is None},
     "cociter": lambda m: set(m._DISCOVER_FAMILIES.values()),
     "ebem": lambda m: {c.contract_id for c in m._CONTRACTS},
     "ecofix": lambda m: {c.contract_id for c in m._CONTRACTS},
@@ -1921,10 +1922,23 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
 }
 
 
+# Suppliers whose discovery surface does not list every product it sells, so
+# a registered product missing from it says nothing. Engie's is its public
+# sitemap, which on 2026-10-01 named no page for Basic Online, Direct Online
+# or Empty House while all three cards were current.
+_CATALOG_PARTIAL: frozenset[str] = frozenset({"engie"})
+
+
 async def _check_catalogs(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
-    """Run each supplier's ``discover()`` and surface any new product ids."""
+    """Run each supplier's ``discover()`` and surface any new product ids,
+    and any registered product its listing no longer names.
+
+    The second half is what a supplier withdrawing a product looks like from
+    here. OCTA+ replaced four products with its October 2026 cards and left
+    their files up, serving the August cards with a clean parse, so nothing
+    else in this script failed: only the listing had stopped naming them."""
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
         if discover is None:
@@ -1967,11 +1981,21 @@ async def _check_catalogs(
                 kind="catalog",
             )
             continue
-        new_ids = sorted(discovered - baseline(mod))
+        registered = baseline(mod)
+        new_ids = sorted(discovered - registered)
         _record(
             f"{name}/catalog: no new products at supplier",
             not new_ids,
             detail=", ".join(new_ids) if new_ids else "",
+            kind="catalog",
+        )
+        if name in _CATALOG_PARTIAL:
+            continue
+        gone = sorted(registered - discovered)
+        _record(
+            f"{name}/catalog: no products gone from supplier",
+            not gone,
+            detail=", ".join(gone) if gone else "",
             kind="catalog",
         )
 

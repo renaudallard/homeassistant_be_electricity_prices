@@ -3111,6 +3111,41 @@ def test_a_discovery_that_sees_nothing_fails(monkeypatch: pytest.MonkeyPatch) ->
     assert lc._catalog_gates_ci(lc.CHECKS) is True
 
 
+def test_a_product_the_listing_no_longer_names_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OCTA+ withdrew four products in October 2026 and left their files up,
+    serving the August cards with a clean parse; only the listing had stopped
+    naming them. A registered product missing from the listing is reported,
+    except where the discovery surface is known not to list everything."""
+
+    async def _two(_session: Any) -> set[str]:
+        return {"A", "B"}
+
+    monkeypatch.setitem(lc._CATALOG_BASELINES, "octaplus", lambda _m: {"A", "B", "C"})
+    monkeypatch.setitem(lc._CATALOG_BASELINES, "engie", lambda _m: {"A", "B", "C"})
+    modules = {
+        "octaplus": SimpleNamespace(discover=_two),
+        "engie": SimpleNamespace(discover=_two),
+    }
+    asyncio.run(lc._check_catalogs(None, modules))  # type: ignore[arg-type]
+    gone = [c for c in lc.CHECKS if c.label.endswith("no products gone from supplier")]
+    assert [(c.label, c.ok, c.detail) for c in gone] == [
+        ("octaplus/catalog: no products gone from supplier", False, "C")
+    ]
+    assert lc._catalog_gates_ci(lc.CHECKS) is True
+
+
+def test_a_withdrawn_product_is_not_in_the_catalog_baseline() -> None:
+    """Otherwise it would be reported gone every night, and its slug coming
+    back would never read as new."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    baseline = lc._CATALOG_BASELINES["octaplus"](octaplus)  # type: ignore[arg-type]
+    assert "FLUX" not in baseline
+    assert "BOOSTFLEX" in baseline
+
+
 def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> None:
     """A floor at zero sized the bound on tariff economics rather than on the
     unit slip it exists to catch. The row that lowered it, OCTA+ Dynamic's

@@ -258,7 +258,7 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights)
-    _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new product ids
+    _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff
     _validate_snapshot(...)  scripts/live_check.py  energy + injection shape gates
@@ -773,6 +773,16 @@ the only sign that a supplier's new products have gone unseen. It used to pass w
 a warning on stderr, and Luminus's sitemap turning into an index kept its products unseen for at
 least the first three weeks of September 2026. A withdrawn supplier's empty discovery is marked
 expected and files nothing (`test_a_discovery_that_sees_nothing_fails`).
+
+The diff runs both ways. A registered product the listing no longer names fails
+`<supplier>/catalog: no products gone from supplier`, because that is what a withdrawal looks
+like from here: OCTA+ replaced Fixed, Flux, Eco Fixed and Eco Flux with its October 2026 cards
+and left their files up, serving the August cards with a clean parse, so every other check stayed
+green. A product the registry already marks withdrawn (`Contract.withdrawn`) is left out of the
+OCTA+ baseline, so it is not reported gone every night and its slug coming back reads as new.
+Suppliers in `_CATALOG_PARTIAL` skip this half: Engie's sitemap names no page for Basic Online,
+Direct Online or Empty House while all three cards are current
+(`test_a_product_the_listing_no_longer_names_is_reported`).
 
 ### Exit codes and the two report side-channels
 
