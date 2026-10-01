@@ -150,7 +150,8 @@ Eight of them carry their card readers in sibling modules, named
 `_<supplier>_cards.py` for the product legs the supplier prices and
 `_<supplier>_overlays.py` for the regulated ones it only reprints. EnergyVision
 also has `_energyvision_wallonia.py`, because its Walloon card is a different
-document in a different language rather than a variant of the Dutch one. The
+document in a different language rather than a variant of the Dutch one, and
+Mega has `_mega_contracts.py`, which holds its contract registry. The
 supplier module keeps the urls, the archive and `parse_snapshot`, which calls
 into them.
 

@@ -679,7 +679,7 @@ injection regime, so the bonus is credited as printed.
 
 Nineteen products therefore depend on how the household pays, and the flow asks only
 where `direct_debit_discount` is set in the registry (`_DIRECT_DEBIT_RISTOURNE`,
-`mega.py`). A product whose card states either dependence and which is missing from that
+`_mega_contracts.py`). A product whose card states either dependence and which is missing from that
 set is never asked, so the resolver is handed a default and the card's wording never
 reaches the bill.
 

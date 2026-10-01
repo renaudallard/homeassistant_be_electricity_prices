@@ -68,7 +68,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date, timedelta
 
 import aiohttp
@@ -114,6 +114,13 @@ from ._mega_overlays import (
     ristourne_requires_direct_debit,
     ristourne_wait_months,
 )
+from ._mega_contracts import (
+    _CONTRACTS,
+    _CONTRACTS_BY_ID,
+    _ContractDef,
+    _DIRECT_DEBIT_RISTOURNE,
+    _KNOWN_UNSUPPORTED_PRODUCTS,
+)
 from ._mega_cards import (
     _FR_MONTH_NAMES,
     _extract_energy,
@@ -133,11 +140,9 @@ from .base import (
     with_vat_basis,
 )
 from ._rates import (
-    ALL_REGIONS,
     Contract,
     DynamicRates,
     ImpactRates,
-    TariffKind,
     VariableRates,
 )
 
@@ -167,207 +172,6 @@ _REGION_CARD_LABELS: dict[str, str] = {
 # -B2C-<CODE>-<MMYYYY>- shape, the same grammar fetch_for_month's month
 # rewrite relies on.
 _REGION_SEGMENT_RE = re.compile(r"(?<=-B2C-)(?:BX|VL|WL)(?=-\d{6}-)")
-
-
-@dataclass(frozen=True)
-class _ContractDef:
-    contract_id: str
-    label: str
-    kind: TariffKind
-    product_name: str  # the data-product-element value Mega uses on its site
-    # Regions the product is actually published in. Defaults to all
-    # three; Off-peak Impact is Wallonia-only because it requires the
-    # CWaPE IMPACT DSO tariff (Wallonia-specific).
-    regions: frozenset[str] = ALL_REGIONS
-    # B2C (residential) or B2B (professional), the segment in the card's
-    # filename. The professional cards are absent from the public listing,
-    # so a B2B contract also carries the filename tokens needed to build
-    # its URL directly; see _pro_pdf_url.
-    segment: str = "B2C"
-    file_family: str = ""  # "Smart", "Cosy", "Dynamic", ...
-    file_variant: str = ""  # "-Fixed" or empty
-    # True for a professional card Mega DOES link from the public listing,
-    # which the SME pair is and no other B2B card is. It only affects
-    # discovery: the catalog baseline counts advertised products, so an
-    # unlisted B2B edition cannot vouch for a product name the listing shows
-    # (that is what hid Zen Fixed's return), while a listed one has to, or it
-    # is reported as new every day.
-    b2b_listed: bool = False
-
-    @property
-    def professional(self) -> bool:
-        return self.segment == "B2B"
-
-    @property
-    def advertised(self) -> bool:
-        """Whether Mega's public listing links this product's card."""
-        return not self.professional or self.b2b_listed
-
-
-_CONTRACTS: tuple[_ContractDef, ...] = (
-    _ContractDef(
-        "mega_smart_fixed", "Mega Smart Fixed (2 years)", "fixed", "Smart Fixed"
-    ),
-    _ContractDef(
-        "mega_smart_flex", "Mega Smart Flex (2 years)", "variable", "Smart Flex"
-    ),
-    # Mega dropped "Zen Fixed" from the residential listing for the August
-    # 2026 card and put it back for September, in all three regions, on the
-    # ordinary fixed path with no parser change. Its B2B edition never went
-    # away, which is why the catalog diff stayed quiet through the gap: the
-    # professional contract carries the same product_name and covered the
-    # listing entry for it.
-    _ContractDef("mega_zen_fixed", "Mega Zen Fixed (3 years)", "fixed", "Zen Fixed"),
-    _ContractDef("mega_online_fixed", "Mega Online Fixed", "fixed", "Online Fixed"),
-    _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
-    _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
-    _ContractDef("mega_cosy_flex", "Mega Cosy Flex", "variable", "Cosy Flex"),
-    # Mega pulled "Off-peak Fixed" in July 2026 and brought it back for the
-    # August 2026 card, in all three regions and with a B2B edition, which is
-    # the catalog check doing exactly what it exists for. The card parses on
-    # the existing fixed path with no parser change.
-    _ContractDef(
-        "mega_offpeak_fixed", "Mega Off-peak Fixed", "fixed", "Off-peak Fixed"
-    ),
-    _ContractDef(
-        "mega_offpeak_flex", "Mega Off-peak Flex", "variable", "Off-peak Flex"
-    ),
-    _ContractDef(
-        "mega_offpeak_impact_var",
-        "Mega Off-peak Impact",
-        "tou_impact",
-        "Off-peak Impact",
-        regions=frozenset({REGION_WALLONIA}),
-    ),
-    _ContractDef("mega_dynamic", "Mega Dynamic", "dynamic", "Dynamic"),
-    # Mega discontinued "Mega Cap" (the "prix variable plafonne" product)
-    # with the September 2026 cards, residential and B2B together: the
-    # listing dropped the product block in all three regions and the CDN
-    # answers its September filename with the HTML stub it serves for a card
-    # it never published, while August's is still there. Only the tariff-type
-    # filter button is left on the listing, with no product behind it. Same
-    # treatment as Zen Fixed above; discover() re-surfaces it if Mega revives
-    # the product.
-    # The professional editions. Mega publishes these to the same CDN but
-    # never links them from the public listing, so they are addressed by
-    # building the filename. Online Flex, Off-peak Flex and Off-peak Impact
-    # have no B2B card; Off-peak Fixed gained one when it returned in August
-    # 2026, and Zen Fixed kept its own through the month its residential
-    # edition was off the listing.
-    _ContractDef(
-        "mega_pro_offpeak_fixed",
-        "Mega Off-peak Fixed (pro)",
-        "fixed",
-        "Off-peak Fixed",
-        segment="B2B",
-        file_family="Offpeak-Bi",
-        file_variant="-Fix",
-    ),
-    _ContractDef(
-        "mega_pro_smart_fixed",
-        "Mega Smart Fixed (pro)",
-        "fixed",
-        "Smart Fixed",
-        segment="B2B",
-        file_family="Smart",
-        file_variant="-Fixed",
-    ),
-    _ContractDef(
-        "mega_pro_smart_flex",
-        "Mega Smart Flex (pro)",
-        "variable",
-        "Smart Flex",
-        segment="B2B",
-        file_family="Smart",
-    ),
-    _ContractDef(
-        "mega_pro_online_fixed",
-        "Mega Online Fixed (pro)",
-        "fixed",
-        "Online Fixed",
-        segment="B2B",
-        file_family="Online",
-        file_variant="-Fixed",
-    ),
-    _ContractDef(
-        "mega_pro_cosy_fixed",
-        "Mega Cosy Fixed (pro)",
-        "fixed",
-        "Cosy Fixed",
-        segment="B2B",
-        file_family="Cosy",
-        file_variant="-Fixed",
-    ),
-    _ContractDef(
-        "mega_pro_cosy_flex",
-        "Mega Cosy Flex (pro)",
-        "variable",
-        "Cosy Flex",
-        segment="B2B",
-        file_family="Cosy",
-    ),
-    _ContractDef(
-        "mega_pro_dynamic",
-        "Mega Dynamic (pro)",
-        "dynamic",
-        "Dynamic",
-        segment="B2B",
-        file_family="Dynamic",
-    ),
-    _ContractDef(
-        "mega_pro_zen_fixed",
-        "Mega Zen Fixed (pro)",
-        "fixed",
-        "Zen Fixed",
-        segment="B2B",
-        file_family="Zen",
-        file_variant="-Fixed",
-    ),
-    # "Carte tarifaire PME", the small-business pair Mega added for the
-    # September 2026 cards. They are the only professional cards it links
-    # from the public listing, hence b2b_listed, and they have no
-    # residential edition at all. The filenames follow the same grammar as
-    # every other B2B card, with -ND on both variants.
-    _ContractDef(
-        "mega_pro_sme_fixed",
-        "Mega SME Fixed (pro)",
-        "fixed",
-        "SME Fixed",
-        segment="B2B",
-        file_family="SME",
-        file_variant="-ND-Fixed",
-        b2b_listed=True,
-    ),
-    _ContractDef(
-        "mega_pro_sme_flex",
-        "Mega SME Flex (pro)",
-        "variable",
-        "SME Flex",
-        segment="B2B",
-        file_family="SME",
-        file_variant="-ND",
-        b2b_listed=True,
-    ),
-)
-
-_CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
-
-# Product names Mega lists on the public catalog page that this
-# integration intentionally does not model. The daily live-check
-# subtracts both _CONTRACTS and this set from the discovered list, so
-# truly new residential electricity products surface as actionable
-# signal while these stay quiet.
-#
-#   * Prepaid Fixed / Prepaid Flex: topup-card products with a
-#     different billing model (no monthly invoice, no recorder-backed
-#     consumption sensors), out of scope for the Energy-dashboard
-#     integration.
-_KNOWN_UNSUPPORTED_PRODUCTS: frozenset[str] = frozenset(
-    {
-        "Prepaid Fixed",
-        "Prepaid Flex",
-    }
-)
 
 
 # ---- listing HTML -> PDF URL --------------------------------------------------
@@ -980,44 +784,6 @@ def parse_snapshot(
 
 
 # ---- DSO row parsers ----------------------------------------------------------
-
-
-# The products whose ristourne depends on how the household pays. Listed
-# rather than derived because the flow has to know before any card is
-# fetched, which is the same reason offers_quarter_hourly reads the
-# registry; a product dropping the difference drops off this list and the
-# flow stops asking. Measured across every archived month of each card.
-#
-# Two ways a card can depend on it, and the list is the union: sixteen
-# grant a direct-debit payer a LARGER credit, fourteen printing the
-# supplement and the two Dynamic cards what anyone else loses, and four
-# grant the whole thing to nobody else (Cosy Flex, Smart Fixed and their pro
-# twins). Pro Cosy Flex has printed both wordings in different months, which
-# is why which one applies is parsed off the card and only whether to ask is
-# listed here.
-_DIRECT_DEBIT_RISTOURNE: frozenset[str] = frozenset(
-    {
-        "mega_cosy_fixed",
-        "mega_cosy_flex",
-        "mega_dynamic",
-        "mega_offpeak_fixed",
-        "mega_offpeak_flex",
-        "mega_offpeak_impact_var",
-        "mega_online_fixed",
-        "mega_online_flex",
-        "mega_smart_fixed",
-        "mega_smart_flex",
-        "mega_zen_fixed",
-        "mega_pro_cosy_fixed",
-        "mega_pro_cosy_flex",
-        "mega_pro_dynamic",
-        "mega_pro_offpeak_fixed",
-        "mega_pro_online_fixed",
-        "mega_pro_smart_fixed",
-        "mega_pro_smart_flex",
-        "mega_pro_zen_fixed",
-    }
-)
 
 
 EXTRACTOR = SupplierExtractor(

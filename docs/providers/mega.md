@@ -54,7 +54,7 @@ when called without one (`mega.py`).
 ## Contracts
 
 Eleven residential electricity products are registered, plus ten professional
-editions (`_CONTRACTS`, `mega.py`; the test pins
+editions (`_CONTRACTS`, `_mega_contracts.py`; the test pins
 `len(contract_ids) == 21` at `test_mega.py`). Zen Fixed's residential edition
 was off the listing for the August 2026 card only and came back for September
 (its professional one never went away). Off-peak Fixed was
@@ -79,10 +79,10 @@ September 2026 cards, residential and professional together (issue #81).
 Notes on the enumeration:
 
 - Off-peak Impact is Wallonia-only (`regions=frozenset({REGION_WALLONIA})`,
-  `mega.py`) because it needs the CWaPE Tarif réseau IMPACT plus an SMR3 smart
+  `_mega_contracts.py`) because it needs the CWaPE Tarif réseau IMPACT plus an SMR3 smart
   meter, both Wallonia-specific. The test `test_offpeak_impact_contract_is_wallonia_only`
   (`test_mega.py`) enforces this. Every other product keeps the default,
-  `ALL_REGIONS` (`mega.py`).
+  `ALL_REGIONS` (`_mega_contracts.py`).
 - Mega Cap ("prix variable plafonne") was discontinued with the September 2026
   cards. The listing dropped the product block in all three regions at once and
   the CDN answers the September filename of both the residential and the B2B
@@ -116,7 +116,7 @@ Notes on the enumeration:
 The catalog also carries `Prepaid Fixed` / `Prepaid Flex`, which are topup-card
 products with a different billing model (no monthly invoice, no recorder-backed
 consumption sensors), out of scope for the Energy-dashboard integration
-(`_KNOWN_UNSUPPORTED_PRODUCTS`, `mega.py`).
+(`_KNOWN_UNSUPPORTED_PRODUCTS`, `_mega_contracts.py`).
 
 ### The professional editions
 
@@ -161,7 +161,7 @@ Consequences of having no listing:
   to the resolver anyway.
 - **`discover()` cannot see them**, so a new professional product will not
   surface in the daily catalog diff -- with the SME pair the exception, since
-  Mega does advertise those two. `_ContractDef.advertised` (`mega.py`) is
+  Mega does advertise those two. `_ContractDef.advertised` (`_mega_contracts.py`) is
   which side a contract is on, and the live check's catalog baseline counts
   advertised products only: an unlisted B2B edition must not vouch for a
   product name the listing shows (that is what hid Zen Fixed's return), and a
