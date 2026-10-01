@@ -56,14 +56,34 @@ from tests import fixture_text
 _T = TypeVar("_T")
 
 
-def test_power_dynamic_offered_in_flanders_only() -> None:
-    # The Dynamic card is "voor Vlaanderen" and needs a Flemish SMR3
-    # digital meter; Fix and Flex cover both regions. Dynamic must not be
-    # offered to Wallonia users.
+def test_every_contract_is_offered_in_both_regions() -> None:
+    # The Dynamic card was "voor Vlaanderen" until September 2026; from the
+    # October card it is "enkel beschikbaar in Vlaanderen en Wallonie", like
+    # Fix, Flex and Flex One. Never Brussels.
     regions = {c.id: set(c.regions) for c in eneco_mod.EXTRACTOR.contracts}
-    assert regions["power_dynamic"] == {"flanders"}
-    assert "wallonia" in regions["power_fix"]
-    assert "wallonia" in regions["power_flex"]
+    for cid in (
+        "power_dynamic",
+        "power_fix",
+        "power_fix_one",
+        "power_flex",
+        "power_flex_one",
+    ):
+        assert regions[cid] == {"flanders", "wallonia"}, cid
+
+
+def test_power_dynamic_parses_a_walloon_overlay() -> None:
+    # The Walloon rows on the Dynamic card print seven figures, without the
+    # Tarif Impact triplet the Fix card carries, so the bands stay unset and
+    # the Impact mode falls back to the bi-horaire rates, disclosed by the
+    # impact_rates_missing repair.
+    snap = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_WALLONIA
+    )
+    ores = snap.dsos["ores"]
+    assert ores.distribution_single is not None and ores.distribution_single > 0
+    assert ores.transport is not None and ores.transport > 0
+    assert ores.distribution_pic is None
+    assert snap.taxes.wallonia_renewables > 0
 
 
 def test_fix_extracts_energy_block() -> None:

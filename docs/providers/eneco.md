@@ -33,8 +33,8 @@ Related reading:
 | Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py` |
 
 `EXTRACTOR.regions()` (the union over its contracts, `base.py`) is
-`{flanders, wallonia}`. Power Fix and Power Flex cover both regions; Power Dynamic
-is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, so
+`{flanders, wallonia}`, and every contract covers both regions (see the contracts table).
+Brussels (Sibelga) is never served, so
 `TaxOverlay.brussels_renewables` stays 0 and no Sibelga overlay is emitted.
 
 ### Source URL pattern
@@ -64,7 +64,7 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 | `power_fix_one` | Eneco Zon & Wind Fix One | `fixed` | flanders, wallonia | `eneco.py` |
 | `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py` |
 | `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py` |
-| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py` |
+| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders, wallonia | `eneco.py` |
 
 Flex and Flex One carry `month_indexed_energy`, the registry twin of the parsed
 `month_indexed`, which offers the optional ENTSO-E key on every solar regime.
@@ -91,11 +91,15 @@ Notes:
   billed on Flex overpays 57,05 EUR a year at 3500 kWh. It parses on Flex's own
   energy block, so only the dispatch in `_extract_energy` knows the difference.
 - **Power Dynamic** is an hourly dynamic contract indexed on the hourly spot
-  (Belpex-H). It is Flanders-only: the card reads "voor Vlaanderen" / "in
-  Vlaanderen" and requires a Flemish SMR3 digital meter, whereas Fix, Flex and Flex
-  One cover both regions. The Walloon DSO rows on the Dynamic card are vestigial
-  reference and must not be offered in Wallonia (`eneco.py`, enforced by
-  `test_power_dynamic_offered_in_flanders_only`, `tests/test_eneco.py`).
+  (Belpex-H). Until September 2026 it was sold in Flanders only (*"beschikbaar in
+  Vlaanderen"*) and its Walloon DSO rows were reference only. The October 2026 card
+  sells it in both regions, *"enkel beschikbaar in Vlaanderen en Wallonië, en enkel
+  indien u beschikt over een digitale meter en meetregime SMR3"*, and the French card
+  says the same (*"uniquement disponible en Flandre et en Wallonie"*), so it is offered
+  in Wallonia too (`test_every_contract_is_offered_in_both_regions`,
+  `tests/test_eneco.py`). Its Walloon rows print seven figures with no Tarif Impact
+  triplet, so a Walloon entry on the Impact network mode is billed the bi-horaire
+  distribution rates, and the `impact_rates_missing` repair says so.
 - `DynamicRates.quarter_hourly` is left at its default `False` (`_extract_dynamic`
   returns a `DynamicRates` without setting it, `eneco.py`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
@@ -567,8 +571,8 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
   not silently drop the formula or the base (`eneco.py`).
-- **Power Dynamic is Flanders-only**: its Walloon DSO rows are vestigial reference;
-  do not offer the product in Wallonia (`eneco.py`,
+- **Power Dynamic was Flanders-only until September 2026**: the October card sells it in
+  Wallonia too, and its Walloon rows carry no Tarif Impact columns (`eneco.py`,
   `tests/test_eneco.py`).
 
 ## Test fixtures

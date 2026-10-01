@@ -6494,8 +6494,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
-        # spot cell.
-        ("wallonia", "spot", False): 14,
+        # spot cell. 14 before Eneco Zon & Wind Dynamisch was sold in
+        # Wallonia from its October 2026 card, read in the same listing fetch
+        # as Eneco's other Walloon cards.
+        ("wallonia", "spot", False): 15,
         ("wallonia", "spot", True): 6,
         ("wallonia", "slot", False): 5,
         ("wallonia", "slot", True): 1,

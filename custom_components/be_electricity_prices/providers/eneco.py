@@ -897,16 +897,18 @@ EXTRACTOR = SupplierExtractor(
             month_indexed_energy=True,
         ),
         Contract(
-            # Power Dynamic is sold in Flanders only: its card reads
-            # "voor Vlaanderen" / "in Vlaanderen" and requires a Flemish
-            # SMR3 digital meter, unlike Fix, Flex and Flex One, which all
-            # cover both regions
-            # ("voor Vlaanderen en Wallonie"). The Walloon DSO rows on the
-            # card are vestigial reference, so don't offer it in Wallonia.
+            # Sold in both regions since the October 2026 card: "enkel
+            # beschikbaar in Vlaanderen en Wallonie, en enkel indien u
+            # beschikt over een digitale meter en meetregime SMR3". Until
+            # September it read "beschikbaar in Vlaanderen" and the Walloon
+            # rows it printed were reference only. Those rows carry no Tarif
+            # Impact columns, so a Walloon entry on the Impact mode is billed
+            # the bi-horaire network rates and told so by the
+            # impact_rates_missing repair.
             id="power_dynamic",
             label="Eneco Zon & Wind Dynamisch",
             kind="dynamic",
-            regions=frozenset({REGION_FLANDERS}),
+            regions=_ENECO_REGIONS,
         ),
     ),
     fetch=fetch,
