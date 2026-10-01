@@ -177,8 +177,9 @@ Notable parsing hurdles:
   realized monthly indicative ("prix mensuels calcules sur base de la derniere
   valeur connue du BELPEX_M_RLP"). The billed price is the realized block, so the
   extractor prefers it and only falls back to the table estimate when the block is
-  absent, or holds only the formula's bases as on the October 2026 cards
-  (`totalenergies.py`, `_realized_monthly_consumption`, `_priced_at_no_index`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
+  absent, or holds figures the card's formula cannot price as on the morning
+  October 2026 cards (`totalenergies.py`, `_realized_monthly_consumption`,
+  `_priced_on_formula`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
   over estimate (15,62 / ...) values as illustrative
   (`tests/test_totalenergies.py`).
 - **Per-contract table drift.** The `Consommation` row has 0 to 5 trailing
@@ -280,15 +281,23 @@ three bands. The October myDrive card in Wallonia is the first case and is
 refused rather than read as the second. Impact prints its one energy rate in
 each band, and a card whose bands differed would be refused too.
 
-Their "A titre indicatif" block is broken: every figure in it equals a formula
-base (`Compteur Simple : 3.87`), the formula at an index of zero.
-`_priced_at_no_index` (`totalenergies.py`) recognises it, comparing the figures
-as a set because the Wallonia card lists its off-peak and exclusive-night bases
-in the other order, and the card's own monthly row is billed instead: in
-Wallonia and Brussels that row is the formula at the last known index, to the
-digit, and in Flanders it is the Vlaamse Nutsregulator estimate the table has
-always carried. Read as the price, the block billed 2,30 c/kWh in Flanders where
-the card prints 22,87. The block also no longer has an injection column, and
+The first October cards printed their "A titre indicatif" block broken: every
+figure in it was a formula base (`Compteur Simple : 3.87`), the formula with
+its index term left out. The myComfort card in Brussels printed 7.01 under every
+meter where its exclusive-night base is 6.91, so no comparison of figures with
+bases catches every variant. `_priced_on_formula` (`totalenergies.py`) solves
+each billed figure for the index instead, VAT off and against its own column's
+`factor * BELPEXM_RLP + base`, and a figure counts as a price only when every
+column solves to at least 1 EUR/MWh: the broken blocks solve to between -4 and
+-2. A card that fails it has its row billed instead, the Vlaamse Nutsregulator
+estimate the table has always carried, and the row has to pass the same test or
+the card is refused. Read as the price, the broken block billed 2,30 c/kWh in
+Flanders where the card prints 22,87, and 4,16 c/kWh on myComfort in Brussels
+where it prints 24,83. TotalEnergies filled the blocks in on its afternoon
+republications (26,43 under "Compteur Simple" on the Brussels Electricité
+Variable card, the formula at 158,6 EUR/MWh), and those are billed again. A
+card stating its contribution in a footnote always prints the formula, so one
+that does not is refused rather than billed unchecked. The block also no longer has an injection column, and
 `_realized_monthly_injection` only reads a block headed `Injection`: the last
 `Compteur Simple` of a consumption-only block credited 3,87 c/kWh of feed-in on
 a card that offers none. Like the fixed cards, these print no feed-in offer, so
@@ -472,7 +481,7 @@ The land mines a future maintainer must know, each traceable to a source comment
 
 ## Test fixtures
 
-The tests exercise six real April 2026 fixture PDFs and two of October 2026 under `tests/fixtures/`
+The tests exercise six real April 2026 fixture PDFs and the October 2026 cards listed below under `tests/fixtures/`
 (all read with `layout=True`, i.e. pdfplumber):
 
 | Fixture | Card variant |
@@ -489,6 +498,8 @@ The tests exercise six real April 2026 fixture PDFs and two of October 2026 unde
 | `totalenergies_electricite_variable_b_2026-10.pdf` | Electricité Variable, Brussels, October 2026 (fee on the line below the rates) |
 | `totalenergies_impact_w_2026-10.pdf` | Impact, Wallonia, October 2026 (three bands, fee below) |
 | `totalenergies_mydrive_w_2026-10.pdf` | myDrive, Wallonia, October 2026 (no yearly fee printed: refused) |
+| `totalenergies_mycomfort_b_2026-10.pdf` | myComfort, Brussels, October 2026 (block at no index, 7.01 against a 6.91 base) |
+| `totalenergies_electricite_variable_b_2026-10_filled.pdf` | Electricité Variable, Brussels, October 2026 afternoon (block filled in, billed) |
 
 ## When the card changes, look here
 

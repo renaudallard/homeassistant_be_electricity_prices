@@ -404,9 +404,14 @@ def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRate
     # the flat supplier energy of the 3-band Impact card (printed as Heures
     # PIC/MEDIUM/ECO), which the standard 4-column table layout does not
     # expose. Prefer it; fall back to the table estimate only when absent.
+    pairs = _consumption_month_formula(text) if kind == "variable" else None
     if kind == "variable":
+        if pairs is None and cev_included(text) is not None:
+            # Every card stating the contribution in its footnote prints the
+            # formula too, and without it no figure can be checked below.
+            raise ExtractorError("TotalEnergies: variable formula not found")
         realized = _realized_monthly_consumption(text)
-        if realized is not None and not _priced_at_no_index(realized, text):
+        if realized is not None and _priced_on_formula(realized, pairs, text):
             # The realized row is that indicative, so it is what a keyless
             # entry keeps; the formula beside it is what re-prices the
             # delivery month for one carrying an ENTSO-E key.
@@ -456,6 +461,12 @@ def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRate
             mono, peak, offpeak, excl_night = (rate / 100.0 for rate in row[1])
     else:
         raise ExtractorError(f"could not parse TotalEnergies {kind} consumption block")
+    if kind == "variable" and not _priced_on_formula(
+        (mono, peak, offpeak, excl_night), pairs, text
+    ):
+        raise ExtractorError(
+            "TotalEnergies: the printed rates are not the card's formula at any index"
+        )
     rates = fixed_or_variable_rates(
         kind,
         single=mono,
@@ -692,24 +703,47 @@ def _realized_monthly_consumption(
     return None
 
 
-def _priced_at_no_index(
-    realized: tuple[float, float | None, float | None, float | None], text: str
-) -> bool:
-    """Whether the realized block is the formula at an index of zero.
+# The lowest index a printed figure may solve to, in EUR/MWh. A figure is a
+# price only when the card's formula yields it at a real index, and no month
+# of the day-ahead market has averaged anywhere near zero; a figure printed
+# at no index at all solves to zero give or take the rounding of its last
+# digit, which is a few hundredths.
+_MIN_INDEX = 1.0
 
-    The October 2026 variable cards print the block with every figure equal
-    to a formula base (3,87 under "Compteur Simple" beside "0.1098 *
-    BELPEXM_RLP + 3.87"): the index term is missing, so the figure is no
-    price at all. Read as one it billed 2,30 c/kWh where the card's own
-    monthly rate is 22,87. Compared as sets of figures, not column by
-    column: the Wallonia card prints its off-peak and exclusive-night bases
-    in the block in the other order from its formula row.
+
+def _priced_on_formula(
+    rates: tuple[float | None, ...],
+    pairs: list[tuple[float, float]] | None,
+    text: str,
+) -> bool:
+    """Whether every one of ``rates`` is the card's formula at an index.
+
+    ``rates`` are EUR/kWh as printed, VAT included; ``pairs`` are the
+    ``factor * BELPEXM_RLP + base`` the card prints beside them, HTVA, in
+    the same column order (one pair for Impact). Solving each rate for the
+    index must give a positive one: a figure at or below its formula's base
+    is no price at any index.
+
+    The October 2026 cards printed their "A titre indicatif" block with the
+    index term left out, the formula's base standing where the price should
+    be (3,87 under "Compteur Simple" beside "0.1098 * BELPEXM_RLP + 3.87").
+    Read as the price it billed 2,30 c/kWh where the card's own monthly rate
+    is 22,87. The myComfort card in Brussels printed 7.01 under every meter
+    where its exclusive-night base is 6.91, so no comparison of figures with
+    bases could catch every variant; solving for the index does, since each
+    of those figures is below its base once the VAT comes off.
+
+    A card without a readable formula cannot be checked, and passes.
     """
-    pairs = _consumption_month_formula(text)
     if pairs is None:
-        return False
-    printed = sorted(round(value, 6) for value in realized if value is not None)
-    return printed == sorted(round(base / 100.0, 6) for _, base in pairs)
+        return True
+    vat = _vat_multiplier(text)
+    indices = [
+        (rate * 100.0 / vat - base) / factor
+        for rate, (factor, base) in zip(rates, pairs, strict=False)
+        if rate is not None
+    ]
+    return bool(indices) and min(indices) >= _MIN_INDEX
 
 
 def _realized_monthly_injection(text: str) -> float | None:

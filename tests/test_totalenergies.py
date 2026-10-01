@@ -221,6 +221,65 @@ def test_october_2026_variable_card_bills_its_monthly_rate() -> None:
     assert snap.injection is None
 
 
+def test_a_block_below_its_formula_base_is_no_price() -> None:
+    """The myComfort card in Brussels printed 7.01 under every meter where its
+    exclusive-night formula base is 6.91, so its block is no longer exactly
+    the set of bases, and it billed 4,16 c/kWh where the card means 24,83.
+    Solved for the index, every figure of it is negative: the card's monthly
+    row is billed instead."""
+    text = fixture_text("totalenergies_mycomfort_b_2026-10.pdf", layout=True)
+    assert "Compteur Excl. Nuit : 7.01" in text
+    assert "+ 7.01 + 7.01 7.01 + 6.91 Formule tarifaire" in text
+    assert "24,83 26,83 23,09 23,70 Tarif mensuel\n84,91" in text
+    snap = parse_snapshot("totalenergies_mycomfort", text, "brussels")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    for rate, printed in (
+        (energy.current, 0.2483),
+        (energy.peak, 0.2683),
+        (energy.offpeak, 0.2309),
+        (energy.exclusive_night, 0.2370),
+    ):
+        assert rate is not None
+        assert rate + snap.taxes.brussels_renewables == pytest.approx(printed)
+
+
+def test_a_filled_block_is_billed_over_the_estimate() -> None:
+    """TotalEnergies filled the block in on its afternoon republication: the
+    Brussels card prints 26,43 under "Compteur Simple", the formula at 158,6
+    EUR/MWh, beside the 25,34 estimate of its row. The block is the month's
+    price and is billed."""
+    text = fixture_text(
+        "totalenergies_electricite_variable_b_2026-10_filled.pdf", layout=True
+    )
+    assert "Compteur Simple : 26,43" in text
+    assert "25,34 27,34 23,60 24,21 Tarif mensuel" in text
+    snap = parse_snapshot("totalenergies_electricite_variable", text, "brussels")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    for rate, printed in (
+        (energy.current, 0.2643),
+        (energy.peak, 0.2861),
+        (energy.offpeak, 0.2453),
+        (energy.exclusive_night, 0.2521),
+    ):
+        assert rate is not None
+        assert rate + snap.taxes.brussels_renewables == pytest.approx(printed)
+
+
+def test_a_row_no_index_can_price_is_refused() -> None:
+    """When neither the block nor the row is the formula at a real index the
+    card is refused rather than billed: here the row of the Brussels card is
+    put below its bases, as a misprint would."""
+    text = fixture_text("totalenergies_mycomfort_b_2026-10.pdf", layout=True)
+    broken = text.replace(
+        "24,83 26,83 23,09 23,70 Tarif mensuel", "7,01 7,01 7,01 6,91 Tarif mensuel"
+    )
+    assert broken != text
+    with pytest.raises(ExtractorError, match="formula at any index"):
+        parse_snapshot("totalenergies_mycomfort", broken, "brussels")
+
+
 def test_october_2026_variable_card_with_the_fee_below_the_rates() -> None:
     """Brussels prints the four rates on the row and the yearly fee alone on
     the next line. Wallonia's Impact does the same with its three bands, one
