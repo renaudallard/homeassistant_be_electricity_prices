@@ -24,6 +24,10 @@ jobs:
   # sync; calling it removes the chance to forget.
   verify:
     uses: ./.github/workflows/test.yml
+    # The test suite installs and runs third-party packages; it needs no
+    # write token, and a reusable workflow gets the caller's.
+    permissions:
+      contents: read
 
   hacs:
     runs-on: ubuntu-latest
