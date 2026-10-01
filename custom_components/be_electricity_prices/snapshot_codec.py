@@ -531,6 +531,11 @@ def _snapshot_to_dict(
             snap.welcome_credit_excludes_night_meter
         ),
         "welcome_credit_kind": snap.welcome_credit_kind,
+        "welcome_credit_signing_month": (
+            snap.welcome_credit_signing_month.isoformat()
+            if snap.welcome_credit_signing_month
+            else None
+        ),
     }
 
 
@@ -589,13 +594,7 @@ def _snapshot_from_dict(
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
     injection_data = data.get("injection")
-    valid_until_iso = data.get("valid_until")
-    valid_until: date | None = None
-    if isinstance(valid_until_iso, str):
-        try:
-            valid_until = date.fromisoformat(valid_until_iso)
-        except ValueError:
-            valid_until = None
+    valid_until = _iso_date(data.get("valid_until"))
     return SupplierSnapshot(
         supplier=data["supplier"],
         contract=data["contract"],
@@ -630,7 +629,20 @@ def _snapshot_from_dict(
             data.get("welcome_credit_excludes_night_meter")
         ),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
+        welcome_credit_signing_month=_iso_date(
+            data.get("welcome_credit_signing_month")
+        ),
     )
+
+
+def _iso_date(value: Any) -> date | None:
+    """An ISO date a row stores, or ``None`` for a missing or unreadable one."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _energy_kind(energy: EnergyRates) -> str:

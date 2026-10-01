@@ -68,6 +68,8 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -108,6 +110,7 @@ from ._bolt_cards import (
     _VAT_PHRASE_RE,
     _extract_energy,
     _extract_injection,
+    _extract_promotion,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -541,6 +544,7 @@ def parse_snapshot(
     card_vat, assumed_vat = vat_basis(
         printed_vat_rate(text, _VAT_PHRASE_RE), energy, professional=professional
     )
+    promotion = _extract_promotion(text, region, professional=professional)
     return SupplierSnapshot(
         supplier="bolt",
         contract=contract_id,
@@ -566,6 +570,18 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=injection,
+        # Paid "via la facture de regularisation apres une annee de
+        # consommation ininterrompue", later "lors de la facture de decompte
+        # annuelle": a lump at the first year's settlement either way.
+        welcome_credit_eur=promotion.flat_eur if promotion else None,
+        welcome_credit_eur_per_kwh=promotion.per_kwh if promotion else None,
+        welcome_credit_injection_eur_per_kwh=(
+            promotion.injection_per_kwh if promotion else None
+        ),
+        welcome_credit_kind=(
+            WELCOME_CREDIT_ANNIVERSARY if promotion else WELCOME_CREDIT_PRO_RATA
+        ),
+        welcome_credit_signing_month=promotion.month if promotion else None,
     )
 
 

@@ -13481,6 +13481,73 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     assert own is snap
 
 
+async def test_a_credit_tied_to_a_signing_month_reaches_that_cohort_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Bolt's October Plenty offer is for "un nouveau contrat ... au cours du
+    mois d'octobre 2026". Its variable cards are addressed by version, so for
+    a Plenty Online contract signed in March no card of March can be had and
+    October's stands in, which handed that contract a 9 c/kWh cut, about 315
+    EUR at 3500 kWh, it was never offered. A compare candidate is credited as
+    if signed when the household signed its own, so it follows the same rule.
+    """
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    freezer.move_to("2026-10-10 12:00:00+02:00")
+    october = replace(
+        _snapshot(prosumer=None, capacity=None),
+        welcome_credit_eur_per_kwh=0.09,
+        welcome_credit_injection_eur_per_kwh=0.01,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_signing_month=date(2026, 10, 1),
+    )
+
+    async def _no_month_card(*args: Any, **_kw: Any) -> Any:
+        return args[6]
+
+    extractor = SimpleNamespace(fetch_for_month=object(), id="x")
+
+    async def _signed(contract: str, start: str) -> SupplierSnapshot:
+        return await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            contract,
+            "flanders",
+            _entry(contract="mine", contract_start_date=start),
+            october,
+        )
+
+    with patch.object(cohort, "_snapshot_for_month", new=_no_month_card):
+        march = await _signed("mine", "2026-03-15")
+        signed_now = await _signed("mine", "2026-10-02")
+        candidate = await _signed("someone_elses", "2026-03-15")
+        candidate_now = await _signed("someone_elses", "2026-10-02")
+
+    assert march.welcome_credit_eur_per_kwh is None
+    assert march.welcome_credit_injection_eur_per_kwh is None
+    assert candidate.welcome_credit_eur_per_kwh is None
+    assert signed_now is october
+    assert candidate_now is october
+
+
+def test_the_signing_month_of_a_credit_round_trips() -> None:
+    snap = replace(
+        make_snapshot(welcome_credit_eur=300.0),
+        welcome_credit_signing_month=date(2026, 9, 1),
+    )
+    payload = snapshot_codec._snapshot_to_dict(
+        snap, datetime(2026, 10, 1, tzinfo=UTC), probe_key="k"
+    )
+    restored = snapshot_codec._snapshot_from_dict(payload)
+    assert restored.welcome_credit_signing_month == date(2026, 9, 1)
+    # A row written before the field existed reads as tied to no month.
+    old = {k: v for k, v in payload.items() if k != "welcome_credit_signing_month"}
+    assert snapshot_codec._snapshot_from_dict(old).welcome_credit_signing_month is None
+
+
 def test_a_year_ahead_quote_reaches_the_wait_the_card_states() -> None:
     """Four Mega cards pay the ristourne after fourteen months, 426 days out,
     so a strict 365-day window quoted Zen Fixed and its pro twin at zero while

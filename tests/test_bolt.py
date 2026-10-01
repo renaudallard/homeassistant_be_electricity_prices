@@ -1227,3 +1227,75 @@ def test_residential_cards_print_no_vat_phrase_so_the_fallback_is_the_rate() -> 
             )
             == 1.06
         )
+
+
+def test_the_october_plenty_offer_is_a_cut_per_kwh_in_flanders_only() -> None:
+    """ "Si vous souscrivez a un nouveau contrat Plenty Fixe en Flandre au cours
+    du mois d'octobre 2026, vous beneficiez d'une reduction de 9,0 c€/kWh (TVA
+    comprise), ainsi que d'une compensation d'injection supplementaire de 1,0
+    c€/kWh (hors TVA)". About 315 EUR a year at 3500 kWh that no Bolt row
+    carried, granted at the yearly settlement and to that month's signings
+    alone."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    text = fixture_text("bolt_plenty_fix_oct.pdf", layout=True)
+    snap = parse_snapshot("bolt_plenty_fix", text, "flanders")
+    assert snap.welcome_credit_eur is None
+    assert snap.welcome_credit_eur_per_kwh == pytest.approx(0.09)
+    assert snap.welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+    assert snap.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY
+    assert snap.welcome_credit_signing_month == date(2026, 10, 1)
+    for region in ("wallonia", "brussels"):
+        other = parse_snapshot("bolt_plenty_fix", text, region)
+        assert other.welcome_credit_eur_per_kwh is None, region
+        assert other.welcome_credit_injection_eur_per_kwh is None, region
+
+
+def test_the_september_plenty_offer_is_a_lump_and_a_feed_in_bonus() -> None:
+    """The shape before October: "une reduction de €300 (TVA incluse), ainsi
+    que d'une indemnite d'injection supplementaire de 1,0 c€/kWh (hors TVA),
+    valable durant votre premiere annee de contrat". The column beside it
+    lands between "reduction de" and "€300", which is why a figure only counts
+    with its currency."""
+    text = fixture_text("bolt_plenty_fix_sep.pdf", layout=True)
+    snap = parse_snapshot("bolt_plenty_fix", text, "flanders")
+    assert snap.welcome_credit_eur == pytest.approx(300.0)
+    assert snap.welcome_credit_eur_per_kwh is None
+    assert snap.welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+    assert snap.welcome_credit_signing_month == date(2026, 9, 1)
+
+
+def test_cards_without_an_offer_grant_nothing() -> None:
+    for name, cid in (
+        ("bolt_fix.pdf", "bolt_fix"),
+        ("bolt_variable.pdf", "bolt_variable"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(name, layout=True), "flanders")
+        assert snap.welcome_credit_eur is None, name
+        assert snap.welcome_credit_eur_per_kwh is None, name
+        assert snap.welcome_credit_injection_eur_per_kwh is None, name
+        assert snap.welcome_credit_signing_month is None, name
+
+
+def test_an_offer_is_carried_on_the_cards_own_basis() -> None:
+    """A professional card prices excluding VAT, and the French professional
+    Plenty Fixe card states its cut "TVA comprise", so it comes off the
+    figure before apply_vat puts it back for a business that pays VAT. A
+    residential card stating a figure "hors TVA" goes the other way."""
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        _extract_promotion,
+        _promotion_basis,
+    )
+
+    text = fixture_text("bolt_plenty_fix_oct.pdf", layout=True)
+    pro = _extract_promotion(text, "flanders", professional=True)
+    assert pro is not None and pro.per_kwh == pytest.approx(0.09 / 1.21)
+    # The feed-in bonus is "hors TVA" on every card and stays as printed.
+    assert pro.injection_per_kwh == pytest.approx(0.01)
+    # The professional Plenty Online card: "10,0 c€/kWh (hors TVA)".
+    assert _promotion_basis(" (hors\nTVA), ainsi que", professional=True) == 1.0
+    assert _promotion_basis(" (hors TVA), ainsi", professional=False) == pytest.approx(
+        1.06
+    )

@@ -3967,7 +3967,9 @@ def _expect_feed_in_fixed_for_term(prefix: str, contract_id: str, snap: object) 
 # exactly ten times out, and the comparison includes the fence, so that very
 # slip passed. A share above 1 is a percentage that was never divided by a
 # hundred, the slip that turns 33% into 3.300%.
-_MAX_WELCOME_CREDIT_EUR: float = 1500.0  # EnergyVision's 300,00
+# Bolt's professional Plenty Fixe offer of July 2026, 470 EUR "TVA incluse",
+# carried at 388,43 on that card's ex-VAT basis.
+_MAX_WELCOME_CREDIT_EUR: float = 1942.15
 _MAX_WELCOME_CREDIT_PER_KWH: float = 0.5194  # Mega's 0,10388
 _MAX_WELCOME_CREDIT_KWH: float = 3750.0  # Luminus's 750 kWh
 # Not a unit slip: the longest wait the year-ahead quote reaches, filled from
@@ -4003,9 +4005,10 @@ _MIN_WELCOME_CREDIT_SHARE: float = 0.058
 # largest real value is 42,40, a thirty-fifth of the flat fence, so a x10 slip
 # would pass there. Five times its own largest.
 _MAX_WELCOME_SUPPLEMENT_EUR: float = 212.0
-# Mega's first-year feed-in bonus, fenced on its own figures for the same
-# reason: 1 c/kWh on the pro cards to 5,32 on residential Smart Flex.
-_MIN_WELCOME_INJECTION_BONUS: float = 0.002
+# The first-year feed-in bonus, fenced on its own figures for the same
+# reason: 0,5 c/kWh on Bolt's spring Plenty cards to 5,32 on Mega's residential
+# Smart Flex.
+_MIN_WELCOME_INJECTION_BONUS: float = 0.001
 _MAX_WELCOME_INJECTION_BONUS: float = 0.266
 
 

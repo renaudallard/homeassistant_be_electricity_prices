@@ -32,9 +32,13 @@ for power, as opposed to what it collects on someone else's behalf.
 
 from __future__ import annotations
 
-from ..const import VAT_RATE_REDUCED
+import unicodedata
+from dataclasses import dataclass
+from datetime import date
+
+from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
 from ._parse import SIGN_CHARS, parse_sign, to_float
-from ._pdf import vat_multiplier
+from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
 from .base import ExtractorError
 import re
@@ -408,6 +412,144 @@ _IMPACT_ROW_RE = re.compile(
 # would not look for it.
 _RESIDENTIAL_VAT = 1.0 + VAT_RATE_REDUCED
 _VAT_PHRASE_RE = re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Promotion:
+    """What a Plenty card grants a contract signed in its month.
+
+    Every figure is on the card's own basis: TVAC on a residential card and
+    excluding VAT on a professional one, which is the basis the snapshot
+    carries its welcome credit on and ``apply_vat`` moves.
+    """
+
+    month: date | None
+    flat_eur: float | None
+    per_kwh: float | None
+    injection_per_kwh: float | None
+
+
+# The Plenty cards print a new-signing offer under a "Reduction" heading, and
+# have stated it two ways. Until September 2026 it was a lump and a feed-in
+# bonus for the first year:
+#
+#   "Lorsque vous concluez un nouveau contrat Plenty Fixe en Flandre au cours
+#    du mois de septembre 2026 (...), vous beneficiez d'une reduction de €300
+#    (TVA incluse), ainsi que d'une indemnite d'injection supplementaire de
+#    1,0 c€/kWh (hors TVA), valable durant votre premiere annee de contrat."
+#
+# From October it is a cut in the energy price instead of the lump:
+#
+#   "Si vous souscrivez a un nouveau contrat Plenty Fixe en Flandre au cours du
+#    mois d'octobre 2026, vous beneficiez d'une reduction de 9,0 c€/kWh (TVA
+#    comprise), ainsi que d'une compensation d'injection supplementaire de
+#    1,0 c€/kWh (hors TVA) pendant toute la duree du contrat."
+#
+# The block shares its lines with another column, and pdfplumber interleaves
+# that column into the sentence, even between a figure and its unit:
+# "reduction de du lundi au vendredi, de 9 h a 17 h. / €300", "reduction de
+# 350 / <the payment terms> € (TVA incluse)", "de 0,5 / bonjour@boltenergie.be
+# / c€/kWh". So each part is searched for on its own past the anchor, bounded,
+# and a figure only counts with its currency at most two line breaks on, where
+# nothing between carries a currency sign of its own.
+_PROMO_ANCHOR_RE = re.compile(r"nouveau\s+contrat\s+Plenty", re.IGNORECASE)
+_PROMO_SPAN = 900
+# "au cours du mois de juillet 2026", "du mois d'octobre 2026". Only the tail
+# is matched, since the column break lands anywhere in the phrase, and a match
+# counts only on a real month name.
+_PROMO_MONTH_RE = re.compile(
+    r"\bmois\s+d(?:e\s+|['’]\s*)([^\W\d_]+)\s+(\d{4})", re.IGNORECASE
+)
+_PROMO_FLANDERS_RE = re.compile(r"\ben\s+Flandre\b", re.IGNORECASE)
+_PROMO_UNIT = r"(?:\s*\n[^\n€]*){0,2}?\s*"
+_PROMO_AMOUNT_RE = re.compile(
+    r"r[ée]duction\s+de\b.{0,120}?"
+    r"(?:€\s*(?P<lead>\d+(?:,\d+)?)"
+    rf"|(?P<amount>\d+(?:,\d+)?){_PROMO_UNIT}(?P<cent>c?)€)",
+    re.IGNORECASE | re.DOTALL,
+)
+_PROMO_INJECTION_RE = re.compile(
+    r"injection\b.{0,80}?suppl[ée]mentaire\b.{0,120}?"
+    rf"(\d+(?:,\d+)?){_PROMO_UNIT}c€",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_promotion(
+    text: str, region: str, *, professional: bool = False
+) -> Promotion | None:
+    """The card's new-signing offer, or ``None`` where it prints none.
+
+    ``None`` too when it is limited to another region: the October Plenty Fixe
+    cards sell it "en Flandre" only, as the Dutch cards ("in Vlaanderen") have
+    since the summer.
+
+    Granted at the yearly settlement, after a year of supply, so it is an
+    anniversary credit. The October wording runs it "pendant toute la duree du
+    contrat", whose conditions the same card fixes at one year in Flanders and
+    Wallonia, so it is carried as the first year's, the way the lump before it
+    was. The September cards cap the feed-in bonus at 12 MWh of export a year,
+    which only an installation far above a household's binds, and that cap is
+    not modelled.
+
+    The basis is read per figure, since the cards mix them: the consumption cut
+    is "TVA comprise" on the residential card and on the French professional
+    Plenty Fixe one, while the Dutch edition of that same professional card
+    says "excl. btw". The French card is the one read here, and its words are
+    taken as printed.
+    """
+    anchor = _PROMO_ANCHOR_RE.search(text)
+    if anchor is None:
+        return None
+    span = text[anchor.start() : anchor.start() + _PROMO_SPAN]
+    month = None
+    head = span[:120]
+    for match in _PROMO_MONTH_RE.finditer(span):
+        # Accents folded: the August 2026 card spells it "aôut".
+        name = unicodedata.normalize("NFKD", match.group(1).lower())
+        number = _MONTH_NAMES.get("".join(c for c in name if c.isascii()))
+        if number is not None:
+            month = date(int(match.group(2)), number, 1)
+            head = span[: match.start()]
+            break
+    if _PROMO_FLANDERS_RE.search(head) and region != REGION_FLANDERS:
+        return None
+    amount = _PROMO_AMOUNT_RE.search(span)
+    injection = _PROMO_INJECTION_RE.search(span)
+    if amount is None and injection is None:
+        return None
+    flat = per_kwh = None
+    if amount is not None:
+        figure = to_float(amount.group("lead") or amount.group("amount"))
+        # What lies between the figure and the feed-in clause says which
+        # basis the figure is on, interleaved column or not.
+        tail = span[amount.end() : injection.start() if injection else None]
+        figure *= _promotion_basis(tail, professional=professional)
+        if amount.group("cent"):
+            per_kwh = figure / 100.0
+        else:
+            flat = figure
+    # "(hors TVA)" on every card: a residential feed-in carries no VAT, and a
+    # professional one is grossed by apply_vat with the rest of the feed-in.
+    bonus = None if injection is None else to_float(injection.group(1)) / 100.0
+    return Promotion(
+        month=month, flat_eur=flat, per_kwh=per_kwh, injection_per_kwh=bonus
+    )
+
+
+def _promotion_basis(tail: str, *, professional: bool) -> float:
+    """What brings a consumption figure onto the card's own basis.
+
+    1.0 when the card states the figure on that basis already, otherwise the
+    VAT factor between the two. A figure stating neither is taken as printed.
+    """
+    excluded = re.search(r"\bhors\b", tail, re.IGNORECASE) is not None
+    included = re.search(r"\b(?:compris|inclus)e?\b", tail, re.IGNORECASE) is not None
+    if professional and included and not excluded:
+        return 1.0 / (1.0 + VAT_RATE_STANDARD)
+    if not professional and excluded and not included:
+        return _RESIDENTIAL_VAT
+    return 1.0
 
 
 def _extract_yearly_fee(text: str) -> float:

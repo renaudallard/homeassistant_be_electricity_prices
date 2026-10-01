@@ -437,6 +437,17 @@ class SupplierSnapshot:
     # wait ("apres douze mois ininterrompus d'injection"), and outside its
     # ceiling, which the card states for the ristourne alone.
     welcome_credit_injection_eur_per_kwh: float | None = None
+    # The month a contract has to be SIGNED in to earn the credit, where the
+    # card names one: Bolt's Plenty offer is for "un nouveau contrat Plenty
+    # Fixe ... au cours du mois d'octobre 2026" and no other. None where the
+    # card ties it to no month.
+    #
+    # A card standing in for a signing month nothing can retrieve (a variable
+    # folder with no month archive, a signing before the repository's first
+    # month) would otherwise hand its own month's campaign to that contract;
+    # ``signing_month_snapshot`` withholds such a credit from any contract
+    # whose card month is not this one.
+    welcome_credit_signing_month: date | None = None
 
 
 SnapshotFetcher = Callable[

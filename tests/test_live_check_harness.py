@@ -3579,12 +3579,15 @@ def test_a_welcome_credit_is_gated_at_all() -> None:
     # 135,95 EUR a year from a Mega Online Fixed quote, and a share had no
     # floor at all.
     extremes = {
-        "welcome_credit_eur": (15.0, 300.0),
+        # Bolt's professional Plenty Fixe offer of July 2026, 470 EUR TVAC,
+        # is the largest flat credit, carried at 388,43 ex-VAT.
+        "welcome_credit_eur": (15.0, 388.43),
         "welcome_credit_eur_per_kwh": (0.003, 0.10388),
         "welcome_credit_direct_debit_eur": (5.0, 42.4),
         "welcome_credit_cap_eur": (800.0, 848.0),
         "welcome_credit_kwh": (750.0, 750.0),
-        "welcome_credit_injection_eur_per_kwh": (0.01, 0.0532),
+        # Bolt's spring Plenty cards grant 0,5 c/kWh on the export.
+        "welcome_credit_injection_eur_per_kwh": (0.005, 0.0532),
     }
     for field, (smallest, largest) in extremes.items():
         assert not _fails(**{field: smallest}), field

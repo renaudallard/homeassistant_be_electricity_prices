@@ -499,17 +499,17 @@ async def signing_month_snapshot(
     lookups is discarded: a card fetch per candidate, off the sweep's budget,
     for an answer nothing reads.
     """
-    if contract != entry.data.get(CONF_CONTRACT):
-        return current_snapshot
     start = _tariff_card_month(entry)
+    if contract != entry.data.get(CONF_CONTRACT):
+        return _signed_in(current_snapshot, start)
     if start is None:
         return current_snapshot
     now = dt_util.now()
     if start >= date(now.year, now.month, 1):
         # The current card IS the signing-month card.
-        return current_snapshot
+        return _signed_in(current_snapshot, start)
     if not _month_card_retrievable(extractor, start, now.date(), entry):
-        return current_snapshot
+        return _signed_in(current_snapshot, start)
     resolved = await _snapshot_for_month(
         hass,
         session,
@@ -538,7 +538,30 @@ async def signing_month_snapshot(
         # signing month inside the running one all return above, so they keep
         # reading the credit off the card they already had.
         return without_welcome_credit(resolved)
-    return resolved
+    return _signed_in(resolved, start)
+
+
+def _signed_in(
+    snapshot: "SupplierSnapshot", card_month: date | None
+) -> "SupplierSnapshot":
+    """``snapshot``, less a welcome credit its card ties to another month.
+
+    A card that names the month a contract must be signed in grants nothing
+    to one signed in any other, whichever card ends up standing in for it.
+    That stand-in is the current card wherever the signing month's own cannot
+    be had: a Bolt variable card is addressed by version rather than by month,
+    so a Plenty Online contract signed in March read October's "reduction de
+    9,0 c€/kWh ... au cours du mois d'octobre 2026", about 315 EUR it was never
+    offered. A candidate on the compare page is credited as if signed when the
+    household signed its own, so the same rule holds for it.
+
+    No card month means no start date either, and the credit needs one, so
+    there is nothing to withhold.
+    """
+    month = snapshot.welcome_credit_signing_month
+    if month is None or card_month is None or month == card_month:
+        return snapshot
+    return without_welcome_credit(snapshot)
 
 
 async def _effective_snapshot_for_month(

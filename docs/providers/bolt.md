@@ -97,6 +97,56 @@ it. The bill does not change: same coefficients, same standing charge, same feed
 card. The unique id stays put in the one case where the target is already taken, which is a
 household that deliberately ran both readings as two entries.
 
+### Plenty offers
+
+The Plenty cards print a new-signing offer under a `Réduction` heading, read by
+`_extract_promotion` (`_bolt_cards.py`) into the snapshot's welcome-credit fields. It
+has taken two shapes:
+
+- **Until September 2026, a lump and a feed-in bonus for the first year:** *"Lorsque vous
+  concluez un nouveau contrat Plenty Fixe en Flandre au cours du mois de septembre 2026 (...),
+  vous bénéficiez d'une réduction de €300 (TVA incluse), ainsi que d'une indemnité d'injection
+  supplémentaire de 1,0 c€/kWh (hors TVA), valable durant votre première année de contrat."*
+  The lump goes to `welcome_credit_eur`, the bonus to `welcome_credit_injection_eur_per_kwh`.
+  The bonus is capped at 12 MWh of export a year, which binds only an installation far
+  above a household's; the cap is not modelled.
+- **From October 2026, a cut in the energy price:** *"Si vous souscrivez à un nouveau contrat
+  Plenty Fixe en Flandre au cours du mois d'octobre 2026, vous bénéficiez d'une réduction de
+  9,0 c€/kWh (TVA comprise), ainsi que d'une compensation d'injection supplémentaire de 1,0
+  c€/kWh (hors TVA) pendant toute la durée du contrat."* The cut goes to
+  `welcome_credit_eur_per_kwh`, measured on the first year's volume like Mega's ristourne.
+  At 3500 kWh it is worth 315 EUR, more than the card's whole margin over Belpex.
+
+Both are paid at the yearly settlement (*"octroyée via la facture de régularisation après une
+année de consommation ininterrompue"*, later *"lors de la facture de décompte annuelle"*), so
+`welcome_credit_kind` is `anniversary`. The October wording runs *"pendant toute la durée du
+contrat"*, and the same card fixes the contract's conditions at one year in Flanders and
+Wallonia, so it is carried as the first year's, the way the lump before it was. A renewal is a
+new year on whatever card is current then.
+
+**Region.** The Plenty Fixe offer has said *"en Flandre"* since June 2026 (the Dutch cards say
+*"in Vlaanderen"*), and a snapshot for another region carries no offer. Bolt republished the
+October cards during 1 October to add those words: the first render of the day had none.
+
+**Basis.** Each figure is read on the basis its card states and brought onto the card's own:
+TVAC on a residential card, excluding VAT on a professional one, which `apply_vat` then
+grosses for a business that pays VAT. The October French professional Plenty Fixe card states
+its 10,0 c€/kWh *"TVA comprise"* where its Dutch edition says *"excl. btw"*; the French card is
+the one read, so its words stand (8,26 c€/kWh ex-VAT). The feed-in bonus is *"hors TVA"*
+everywhere and is carried as printed.
+
+**Signing month.** The offer is for contracts signed in the month the sentence names, held in
+`welcome_credit_signing_month`. The variable cards are addressed by version, so a Plenty Online
+contract signed in a month no archive holds is billed on today's card as a stand-in, and
+without that month `signing_month_snapshot` (`cohort.py`) would hand it today's campaign.
+It withholds a credit whose month is not the contract's card month, and a compare candidate is
+held to the household's own signing month the same way.
+
+The column beside the block is interleaved into the sentence by `pdfplumber`, even between a
+figure and its unit (*"réduction de du lundi au vendredi, de 9 h à 17 h. €300"*). Each part is
+therefore searched for on its own past the anchor, and a figure only counts with its currency at
+most two line breaks on.
+
 ### The professional editions
 
 Bolt publishes each product twice at the same path, with `_res_` or `_pro_` in the filename, so the
@@ -577,12 +627,14 @@ case-insensitive helper handles. A missing Sibelga row returns an empty dict (pe
 
 ## Test fixtures
 
-Under `tests/fixtures/` (both around 5 MB, April 2026 cards, French-language, all three regions):
+Under `tests/fixtures/` (2,5 to 5 MB each, French-language, all three regions):
 
 | Fixture | Card variant | Exercised by |
 | --- | --- | --- |
 | `bolt_fix.pdf` | Bolt Fixe (fixed) April 2026 | most tests: yearly fee, consumption rates, injection, per-region taxes, Wallonia/Flanders/Brussels DSOs, RESA/REW swap, `fetch_for_month` accept/reject |
 | `bolt_variable.pdf` | Bolt Variable April 2026 | injection parity with fix, current-vs-annual bi-horaire selection, loud failure on missing Jour/Nuit |
+| `bolt_plenty_fix_sep.pdf` | Bolt Plenty Fixe September 2026 | the lump-and-bonus offer, its figure split from its currency by the other column |
+| `bolt_plenty_fix_oct.pdf` | Bolt Plenty Fixe October 2026, as republished on 1 October | the per-kWh offer, its Flanders gate and its basis |
 
 Fixtures are loaded via `fixture_text("bolt_fix.pdf", layout=True)` (`tests/test_bolt.py`), which
 routes through the `pdfplumber` layout extractor so tests see the same text the live path parses.

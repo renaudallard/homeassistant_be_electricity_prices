@@ -200,6 +200,7 @@ def test_every_snapshot_field_survives_the_round_trip() -> None:
         "welcome_credit_excludes_night_meter": True,
         "welcome_credit_after_months": 14,
         "welcome_credit_injection_eur_per_kwh": 0.0106,
+        "welcome_credit_signing_month": date(2026, 10, 1),
     }
     defaulted = {
         f.name
