@@ -3448,10 +3448,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
     # Trevion Vast publishes a day/night feed-in pair beside its fixed
-    # commodity rates. Flex and LifePowr settle feed-in on Belpex_SPP_BE.
+    # commodity rates. Flex, LifePowr and FlexiO Max settle feed-in on
+    # Belpex_SPP_BE.
     "groene_energie_vast": "bihourly",
     "groene_stroom_flex": "spp",
     "lifepowr": "spp",
+    "flexio_max": "spp",
     # Ecofix Flexy states "Injectie: (BELPEX-SPP-M * 0,0884) - 0,5000" and
     # settles on the billed period's index. Its printed Maandprijs runs two
     # months behind: the Mei 2026 card's 4,32 inverts to an index of 54,52,

@@ -129,6 +129,16 @@ _CONTRACTS = (
         "LifePowrByTrevion",
     ),
     _ContractDef("energreen", "Energreen by Trevion", "dynamic", "EnergreenByTrevion"),
+    # Launched in October 2026 for households steering their installations
+    # through a FlexiO EMS+. Priced like Groene Stroom Flex on its own
+    # coefficients; the flexibility fee the EMS+ earns is paid apart from the
+    # energy and feed-in prices, depends on the market, and is not modelled.
+    _ContractDef(
+        "flexio_max",
+        "FlexiO Max by Trevion",
+        "spot_monthly",
+        "FlexiO-Max-by-Trevion",
+    ),
 )
 _BY_ID = {item.id: item for item in _CONTRACTS}
 
@@ -575,8 +585,8 @@ def _extract_taxes(text: str) -> TaxOverlay:
     # August 2026 and are optional, the policy flanders_tax_overlay holds for
     # every other Flemish card: the levy was abolished on 2026-08-01 and the
     # other suppliers answered by deleting the row, so a card without it is
-    # the abolished levy, not a layout drift, and must not take all six
-    # contracts offline the day Trevion does the same.
+    # the abolished levy, not a layout drift, and must not take every
+    # contract offline the day Trevion does the same.
     return TaxOverlay(
         federal_excise=_number(excise_value) / 100.0,
         energy_contribution=(

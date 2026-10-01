@@ -6482,8 +6482,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # when Bolt's Plenty, Online and Plenty Online cards each got their
         # dynamic settlement, in all three regions. Cheap to re-cost: a
         # sibling reads the same document as the variable contract beside it,
-        # so the pair is one download and one parse.
-        ("flanders", "spot", False): 37,
+        # so the pair is one download and one parse. Trevion's FlexiO Max
+        # adds one more, a monthly card like Groene Stroom Flex.
+        ("flanders", "spot", False): 38,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

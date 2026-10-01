@@ -2,7 +2,7 @@
 
 This document is the maintainer reference for the Trevion tariff-card extractor
 (`providers/trevion.py`). Trevion publishes one residential PDF per product and
-month on a public listing page. All six products are Flemish and every card
+month on a public listing page. All seven products are Flemish and every card
 contains the commodity formula, feed-in rate, eight Fluvius rows, and regulated
 taxes needed for a complete snapshot.
 
@@ -62,8 +62,16 @@ are settled on it.
 | `groene_energie_dynamisch_plus` | Groene Energie Dynamisch Plus | `dynamic` | Belpex 15 MTU | Belpex 15 MTU |
 | `lifepowr` | LifePowr by Trevion | `spot_monthly` | Belpex_RLP_VL (Belpex 15 MTU until May 2026) | Belpex_SPP_BE (Belpex 15 MTU until May 2026) |
 | `energreen` | Energreen by Trevion | `dynamic` | Belpex 15 MTU | Belpex 15 MTU |
+| `flexio_max` | FlexiO Max by Trevion | `spot_monthly` | Belpex_RLP_VL | Belpex_SPP_BE |
 
-The two RLP products use `SpotMonthlyRates` with `rlp_indexed=True` and
+FlexiO Max arrived in October 2026, for households that steer their
+installations through a FlexiO EMS+. Its card is Groene Stroom Flex's with its
+own coefficients and only the SMR3 meter row. The flexibility fee the EMS+ earns
+is "los van de energieprijzen en terugleveringsvergoedingen", depends on the
+imbalance market and on what the household makes available, and is settled
+monthly, so it is not modelled.
+
+The three RLP products use `SpotMonthlyRates` with `rlp_indexed=True` and
 `rlp_blend="flanders"`; their contract kind already makes the setup flow require
 an ENTSO-E key. Their feed-in formulas set `spp_indexed=True`, because the
 consumption and injection indices use different Synergrid profiles. The three
@@ -77,7 +85,7 @@ formula needs.
 `_archive_re` matches a product fragment before the common `Particulier`
 suffix. The base Dynamic expression has a `(?!-Plus)` guard; without it the
 base product can bind the Dynamic Plus PDF when both have the same month.
-Tests construct a listing containing all six real filename shapes and assert
+Tests construct a listing containing all seven real filename shapes and assert
 that every contract resolves its own card.
 
 The six digits the expression captures are read as `YYYYMM`, and nothing on the
@@ -168,7 +176,7 @@ column already represents the network rate surfaced by Trevion.
 
 - `Bijdrage op de energie` as EUR/kWh after conversion from cents, 0 when the
   row is gone (the levy was abolished on 2026-08-01 and every other Flemish
-  card may drop the row; requiring it would take all six contracts offline);
+  card may drop the row; requiring it would take every contract offline);
 - the flat `Bijzondere accijns` on current cards;
 - the `0-3 MWh` row of the degressive block on older tiered cards, the tier a
   household pays and the one every sibling extractor reads, under either reader's
@@ -202,4 +210,5 @@ different month from the requested filename.
 | `trevion_dynamic_plus_2026-09.pdf` | Dynamic Plus catalog disambiguation |
 | `trevion_lifepowr_2026-05.pdf` | LifePowr while it was a quarter-hourly Belpex 15 MTU product |
 | `trevion_lifepowr_2026-09.pdf` | LifePowr monthly product |
+| `trevion_flexio_max_2026-10.pdf` | FlexiO Max monthly product |
 | `trevion_energreen_2026-09.pdf` | Energreen dynamic coefficients |

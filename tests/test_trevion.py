@@ -62,7 +62,7 @@ def _layout(name: str) -> str:
     return fixture_text(name, layout=True)
 
 
-def test_trevion_is_registered_with_six_flemish_contracts() -> None:
+def test_trevion_is_registered_with_seven_flemish_contracts() -> None:
     extractor = EXTRACTORS["trevion"]
     assert extractor.label == "Trevion"
     assert {contract.id for contract in extractor.contracts} == {
@@ -72,6 +72,7 @@ def test_trevion_is_registered_with_six_flemish_contracts() -> None:
         "groene_energie_dynamisch_plus",
         "lifepowr",
         "energreen",
+        "flexio_max",
     }
     assert all(
         contract.regions == frozenset({REGION_FLANDERS})
@@ -146,6 +147,18 @@ def test_april_fixed_card_reads_the_residential_excise_tier(layout: bool) -> Non
             0.0159,
             26.5,
             0.056199,
+            0.90,
+            -0.015,
+        ),
+        # "(0,107* Belpex_RLP_VL+1,5) *1,06" and "0,090 * Belpex_SPP_BE - 1,5"
+        # at September's 100,53 EUR/MWh, printed 7,55 c€/kWh.
+        (
+            "flexio_max",
+            "trevion_flexio_max_2026-10.pdf",
+            1.1342,
+            0.0159,
+            26.5,
+            0.075477,
             0.90,
             -0.015,
         ),
@@ -246,6 +259,7 @@ def test_the_october_2026_name_of_the_quarter_hour_index_is_read() -> None:
         "trevion_dynamic_plus_2026-09.pdf",
         "trevion_lifepowr_2026-09.pdf",
         "trevion_energreen_2026-09.pdf",
+        "trevion_flexio_max_2026-10.pdf",
     ],
 )
 def test_every_card_parses_regulated_flemish_costs(fixture: str) -> None:
@@ -256,6 +270,7 @@ def test_every_card_parses_regulated_flemish_costs(fixture: str) -> None:
         "trevion_dynamic_plus_2026-09.pdf": "groene_energie_dynamisch_plus",
         "trevion_lifepowr_2026-09.pdf": "lifepowr",
         "trevion_energreen_2026-09.pdf": "energreen",
+        "trevion_flexio_max_2026-10.pdf": "flexio_max",
     }[fixture]
     snap = parse_snapshot(contract_id, _layout(fixture))
     assert set(snap.dsos) == FLUVIUS_KEYS
@@ -283,6 +298,7 @@ async def test_listing_resolves_all_cards_without_confusing_dynamic_plus() -> No
             "Tariefkaart-Groene-Energie-Dynamisch-Plus-Particulier-202609-1.pdf",
             "Tariefkaart-LifePowrByTrevion-Particulier-202609.pdf",
             "Tariefkaart-EnergreenByTrevion-Particulier-202609.pdf",
+            "Tariefkaart-FlexiO-Max-by-Trevion-Particulier-202609.pdf",
         )
     )
     session = make_text_session(html)
