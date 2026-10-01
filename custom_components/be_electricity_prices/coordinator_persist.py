@@ -35,6 +35,9 @@ longer settled has to be re-fetched rather than believed.
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from typing import TYPE_CHECKING, Any
 
 from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
@@ -67,6 +70,10 @@ class _PersistMixin:
     # State the concrete class owns, declared as BARE annotations with no
     # value: a valued class attribute would change hasattr() and instance-dict
     # behaviour. __init__ over there is what actually creates these.
+    _annual_injection_kwh: float | None
+    _annual_kwh: float | None
+    _annual_kwh_day: date | None
+    _annual_kwh_full_year: bool
     _backfill_retry_from: date | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
@@ -75,6 +82,8 @@ class _PersistMixin:
     _peak_month: date | None
     _previous_priced: PricedPeriods | None
     _quarter_grid_days: set[date]
+    _register_pair_covered: bool
+    _register_pair_fault: str
     _saved_payload: dict[str, Any] | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
@@ -111,6 +120,8 @@ class _PersistMixin:
         stored = await self._store.async_load()
         if not stored:
             return
+        # Before the card below is resolved, which reads the yearly volume.
+        self._restore_meter_day(stored.get("meter_day"))
         # Before the stored card is resolved below, which reads it.
         vat_table = stored.get("vat_rates")
         if isinstance(vat_table, dict):
@@ -527,6 +538,9 @@ class _PersistMixin:
             payload["previous_contracts"] = priced_to_dict(self._previous_priced)
         if self._backfill_retry_from is not None:
             payload["backfill_retry_from"] = self._backfill_retry_from.isoformat()
+        meter_day = self._meter_day_to_store()
+        if meter_day is not None:
+            payload["meter_day"] = meter_day
         # The VAT table this process holds, so a restart without the network
         # still bills the last month the cards agreed on.
         payload["vat_rates"] = held_vat_table()
@@ -545,6 +559,73 @@ class _PersistMixin:
             return
         await self._store.async_save(payload)
         self._saved_payload = payload
+
+    def _meter_day_to_store(self) -> dict[str, Any] | None:
+        """The day's meter results, as ``_restore_meter_day`` reads them back.
+
+        The yearly volume, the yearly feed-in and the register check each read
+        a year of every meter, and a day's answer does not move within the
+        day. Kept in memory only, they were read again inside the setup of
+        every restart: on a MariaDB on a NAS that was most of a 287 s start
+        (issue #107).
+        """
+        if self._annual_kwh_day is None:
+            return None
+        return {
+            "day": self._annual_kwh_day.isoformat(),
+            "inputs": settings_digest(self.entry),
+            "annual_kwh": self._annual_kwh,
+            "full_year": self._annual_kwh_full_year,
+            "annual_injection_kwh": self._annual_injection_kwh,
+            "pair_fault": self._register_pair_fault,
+            "pair_covered": self._register_pair_covered,
+        }
+
+    def _restore_meter_day(self, blob: Any) -> None:
+        """Adopt the day's meter results a run before the restart stored.
+
+        Only for the settings they were measured under: a meter, a regime or
+        a switch edited since reloads the entry, and the results of the old
+        wiring would name the wrong registers and bill the wrong volume until
+        the next day. A blob of another day is adopted too, as yesterday's
+        figures are closer than the household default, but without its stamp,
+        so the day's read still runs.
+        """
+        if not isinstance(blob, dict) or blob.get("inputs") != settings_digest(
+            self.entry
+        ):
+            return
+        try:
+            day = date.fromisoformat(blob["day"])
+            annual = blob.get("annual_kwh")
+            injection = blob.get("annual_injection_kwh")
+            fault = blob.get("pair_fault", "")
+            if not (
+                (annual is None or isinstance(annual, (int, float)))
+                and (injection is None or isinstance(injection, (int, float)))
+                and isinstance(fault, str)
+            ):
+                return
+        except (KeyError, TypeError, ValueError):
+            return
+        self._annual_kwh = None if annual is None else float(annual)
+        self._annual_kwh_full_year = blob.get("full_year") is True
+        self._annual_injection_kwh = None if injection is None else float(injection)
+        self._register_pair_fault = fault
+        self._register_pair_covered = blob.get("pair_covered") is True
+        if day == dt_util.now().date():
+            self._annual_kwh_day = day
+
+
+def settings_digest(entry: ConfigEntry) -> str:
+    """The entry's settings, as a figure stored with the entry was read under.
+
+    All of them rather than the meter keys alone: the register check reads
+    over the contract's own window and the switch records, and an edit of any
+    setting reloads the entry anyway, so the next read is a day's at most.
+    """
+    blob = json.dumps(dict(entry.data), sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
 def _daily_compare_to_dict(result: Any) -> dict[str, Any]:

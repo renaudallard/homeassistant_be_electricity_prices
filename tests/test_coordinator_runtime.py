@@ -3077,6 +3077,122 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The yearly volume, the yearly feed-in and the register check each read
+    a year of every meter, once a day, and were kept in memory only: every
+    restart read them again inside setup, which on a MariaDB on a NAS took
+    most of a 287 s start (issue #107). The day's results are kept with the
+    entry. A restart the same day reads nothing and keeps them; a setting
+    edited since, or another day, reads again."""
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "day_injection_kwh": "sensor.day_inj",
+            "night_injection_kwh": "sensor.night_inj",
+            "solar_regime": "injection",
+        },
+    )
+    entry.add_to_hass(hass)
+    volume = compare_quote._AnnualVolume(4200.0, 365, "measured", measured=True)
+    reads: list[str] = []
+
+    async def _volume(*_a: Any, **_k: Any) -> Any:
+        reads.append("volume")
+        return volume
+
+    async def _measured(
+        _hass: object,
+        _entry: object,
+        _start: date,
+        _end: date,
+        *,
+        side: str = "consumption",
+        warn: bool = False,
+    ) -> MeasuredKwh:
+        reads.append(side)
+        if side == "injection":
+            return MeasuredKwh(1800.0, 365, "sensor.night_inj")
+        return MeasuredKwh(4200.0, 365)
+
+    def _reads_patched() -> Any:
+        return (
+            patch.object(compare_quote, "_annual_volume", new=_volume),
+            patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
+        )
+
+    coord = BePricesCoordinator(hass, entry)
+    first, second = _reads_patched()
+    with first, second:
+        await coord._ensure_annual_volume()
+    assert reads
+    saved: dict[str, Any] = {}
+
+    async def _save(payload: dict[str, Any]) -> None:
+        saved.clear()
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_save):
+        await coord._save_persistent()
+
+    async def _load() -> dict[str, Any]:
+        return saved
+
+    async def _restarted() -> BePricesCoordinator:
+        restored = BePricesCoordinator(hass, entry)
+        with patch.object(restored._store, "async_load", new=_load):
+            await restored.async_load_persistent()
+        return restored
+
+    restored = await _restarted()
+    reads.clear()
+    first, second = _reads_patched()
+    with first, second:
+        await restored._ensure_annual_volume()
+    assert reads == [], "a restart the same day reads no meter"
+    assert restored._annual_kwh == 4200.0
+    assert restored._annual_kwh_full_year
+    assert restored._annual_injection_kwh == coord._annual_injection_kwh
+    assert restored._register_pair_fault == "sensor.night_inj"
+
+    # The next day the figures stand in until the day's read replaces them.
+    freezer.move_to("2026-09-21 08:00:00+02:00")
+    restored = await _restarted()
+    assert restored._annual_kwh == 4200.0
+    reads.clear()
+    first, second = _reads_patched()
+    with first, second:
+        await restored._ensure_annual_volume()
+    assert "volume" in reads
+
+    # A meter rewired since: nothing measured on the old wiring is kept.
+    freezer.move_to("2026-09-20 18:00:00+02:00")
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "night_injection_kwh": "sensor.new_night_inj"}
+    )
+    restored = await _restarted()
+    assert restored._annual_kwh is None
+    assert restored._register_pair_fault == ""
+    reads.clear()
+    first, second = _reads_patched()
+    with first, second:
+        await restored._ensure_annual_volume()
+    assert "volume" in reads
+
+
 async def test_a_register_a_total_bills_for_has_its_own_wording(
     hass: HomeAssistant, freezer: Any
 ) -> None:
