@@ -155,8 +155,17 @@ _VAT_MULT = 1.0 + VAT_RATE_REDUCED
 
 # Only the residential block is priced; the card appends a professional block
 # whose GSC/WKK, taxes and DSO rows differ. Cut at the professional section
-# header so no professional row leaks into a residential snapshot.
-_PROF_MARKER = "dynamisch tarief professioneel"
+# header so no professional row leaks into a residential snapshot. The header
+# is "Elektriciteit dynamisch tarief professioneel online - september 2026"
+# until September 2026 and drops "tarief" from October. It is matched with
+# its month: the residential page's list of current products also names
+# "Elektriciteit dynamisch professioneel online", and cutting there would
+# lose nothing today but would hang on a list nobody keeps in order.
+_PROF_HEADER_RE = re.compile(
+    r"Elektriciteit\s+dynamisch\s+(?:tarief\s+)?professioneel(?:\s+online)?"
+    r"\s*[–\-]\s*[A-Za-z]+\s*20\d{2}",
+    re.IGNORECASE,
+)
 
 # Row label prefix (regex-safe, unique) -> DSO key. The card wraps two long
 # labels across the number row ("Fluvius (Halle-\n<numbers>\nVilvoorde)" and
@@ -432,8 +441,8 @@ def parse_snapshot(
 
 def _residential(text: str) -> str:
     """Return the residential slice, dropping the professional block."""
-    cut = text.find(_PROF_MARKER)
-    return text[:cut] if cut > 0 else text
+    m = _PROF_HEADER_RE.search(text)
+    return text[: m.start()] if m and m.start() > 0 else text
 
 
 def _publication_label(text: str) -> str:

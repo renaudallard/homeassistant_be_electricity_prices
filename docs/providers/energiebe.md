@@ -192,14 +192,16 @@ The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a prof
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
 EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py`) slices the
-text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
-(`providers/energiebe.py`) so no professional row can leak into a residential snapshot.
+text at the professional section header (`_PROF_HEADER_RE`, `providers/energiebe.py`) so no
+professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
 renewables and every DSO databeheer come from the residential rows.
 
-The marker is the section header only ("Elektriciteit dynamisch tarief professioneel"); the
-residential page's "Overzicht actief aanbod" list mentions "Elektriciteit dynamisch
-professioneel" without "tarief", so it does not trip the slice.
+The header read "Elektriciteit dynamisch tarief professioneel online - september 2026" until
+September 2026 and "Elektriciteit dynamisch professioneel online - oktober 2026" from October;
+the pattern takes both, with or without "online". It is matched with the month that follows it,
+because the residential page's "Overzicht actief aanbod" list also mentions "Elektriciteit
+dynamisch professioneel online", with no month, and must not trip the slice.
 
 ## Parsing
 

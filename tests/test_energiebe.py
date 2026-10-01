@@ -212,6 +212,27 @@ def test_only_residential_block_is_parsed() -> None:
         assert overlay.data_management_per_year == pytest.approx(18.92)
 
 
+def test_the_october_2026_professional_block_is_cut_off() -> None:
+    """The October 2026 card titles its professional block "Elektriciteit
+    dynamisch professioneel online", without the "tarief" the cut was
+    anchored on, so the whole professional block stayed in the residential
+    text. The cut lands on that header, after the residential page's list of
+    current products, which names the same product without a month."""
+    from custom_components.be_electricity_prices.providers.energiebe import (
+        _residential,
+    )
+
+    text = fixture_text("energiebe_dynamic_oct.pdf", layout=True)
+    section = _residential(text)
+    assert "professioneel online – oktober 2026" not in section
+    assert "Elektriciteit dynamisch professioneel online\n" in section
+    assert "17,85" not in section
+    # The July card's header still cuts where it did.
+    july = _text()
+    cut = july.index("Elektriciteit dynamisch tarief professioneel")
+    assert _residential(july) == july[:cut]
+
+
 def test_dot_decimal_render_matches_comma() -> None:
     # A dot-decimal PDF re-render must extract identical values, not truncate a
     # mandatory value to its integer part as a comma-only regex would.
