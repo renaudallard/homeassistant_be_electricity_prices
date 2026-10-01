@@ -2627,6 +2627,46 @@ def test_a_known_tax_block_reports_without_filing_until_it_expires(
     assert not check.expected
 
 
+def test_an_allowance_covers_only_the_supplier_it_was_granted_to(
+    tmp_path: Path,
+) -> None:
+    """Aspiravi's allowance is keyed on the July block it still prints. A
+    second supplier printing the same stale pair is news, and it was filed
+    under Aspiravi's row and silenced by Aspiravi's allowance. The detail
+    also named the minority where it says "on N other suppliers", which reads
+    as the majority."""
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "c_fixed": SimpleNamespace(professional=False),
+            "d_fixed": SimpleNamespace(professional=False),
+            "aspiravi_eco_plus_flex": SimpleNamespace(professional=False),
+            "bolt_fix": SimpleNamespace(professional=False),
+        }
+    )
+    stale = (0.0503288, 0.002042)
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+            ("c", "c_fixed", "flanders"): (0.04876, 0.0),
+            ("d", "d_fixed", "flanders"): (0.04876, 0.0),
+            ("aspiravi", "aspiravi_eco_plus_flex", "flanders"): stale,
+            ("bolt", "bolt_fix", "flanders"): stale,
+        },
+    )
+    lc._check_federal_tax_consensus(archive, date(2026, 9, 17))
+    by_supplier = {c.label.split("/")[0]: c for c in lc.CHECKS}
+    assert set(by_supplier) == {"aspiravi", "bolt"}
+    assert by_supplier["aspiravi"].expected
+    assert not by_supplier["bolt"].expected
+    assert "on 4 other suppliers (a, b, c, d)" in by_supplier["bolt"].detail
+
+
 def test_a_tax_disagreement_is_reported_apart_from_the_product_catalogue(
     tmp_path: Path,
 ) -> None:

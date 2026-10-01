@@ -1237,7 +1237,10 @@ none. Two properties keep the allowance from becoming a mute button. It is keyed
 (supplier, excise, contribution) triple, so a card that moves either figure by a digit files
 again, which is how Bolt and Trevion were seen correcting themselves between August and
 September. And each entry carries an expiry, all of them 2027-01-01, when the excise steps down
-and every card in the country has to be reprinted anyway.
+and every card in the country has to be reprinted anyway. Each disagreeing supplier gets a row
+of its own, judged on its own allowance: two suppliers printing the same stale pair used to share
+one row named after the first of them, so an allowance granted to Aspiravi would have silenced
+any other card printing its July block.
 
 `_KNOWN_VREG_CEILINGS` is the same mechanism for the same reason, and shipped a day later than
 the check it quiets: Bolt prints 0,2035480 where the three other suppliers whose cards the

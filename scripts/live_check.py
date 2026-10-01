@@ -2644,21 +2644,25 @@ def _check_federal_tax_consensus(
         (top_pair, top_suppliers), (_, runner_up) = ranked[0], ranked[1]
         if len(top_suppliers) == len(runner_up):
             continue
+        # One row per supplier, each judged on its own allowance: several
+        # suppliers can print the same stale pair, and naming the row after the
+        # first of them let an allowance granted to one cover the others.
         for pair, suppliers in ranked[1:]:
-            detail = (
-                f"{region}: excise {pair[0]} + contribution {pair[1]} against "
-                f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
-                f"suppliers ({', '.join(sorted(suppliers))})"
-            )
-            allowed = _tax_block_allowance(suppliers[0], pair[0], pair[1], today)
-            if allowed is not None:
-                detail = f"{_ALLOWED_TAX_MARKER}: {detail}; {allowed}"
-            _record(
-                f"{suppliers[0]}/federal tax block disagrees for {month}",
-                False,
-                detail,
-                kind="tax",
-            )
+            for supplier in sorted(suppliers):
+                detail = (
+                    f"{region}: excise {pair[0]} + contribution {pair[1]} against "
+                    f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
+                    f"suppliers ({', '.join(sorted(top_suppliers))})"
+                )
+                allowed = _tax_block_allowance(supplier, pair[0], pair[1], today)
+                if allowed is not None:
+                    detail = f"{_ALLOWED_TAX_MARKER}: {detail}; {allowed}"
+                _record(
+                    f"{supplier}/federal tax block disagrees for {month}",
+                    False,
+                    detail,
+                    kind="tax",
+                )
 
 
 def _check_vat_consensus(archive: Path | None) -> None:
