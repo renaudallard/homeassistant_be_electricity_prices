@@ -1298,10 +1298,12 @@ runs with a 12-month backfill and neither boolean, inside the usual hour. A disp
 a backfill or a re-render gets a six-hour job timeout instead, since either is far more work than the daily walk: a
 backfill is one archived card per supplier, contract, region and month, a re-render downloads
 and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and
-clones `be_price_cards` shallow under `tmp/cards`, which `.gitignore` covers, using the
-`BE_ELECTRICITY_CARDS` token since this clone is written back to
-(`.github/workflows/archive_cards.yml`). It then runs `scripts/archive_cards.py --out
-tmp/cards/electricity`, and commits and pushes to that repository only when its tree changed.
+clones `be_price_cards` shallow under `tmp/cards`, which `.gitignore` covers, without
+credentials: the repository is public, and the walk runs third-party code that must not find a
+token able to write to it on disk (`.github/workflows/archive_cards.yml`). It then runs
+`scripts/archive_cards.py --out tmp/cards/electricity`, and commits and pushes to that
+repository only when its tree changed, the push and its rebase getting the
+`BE_ELECTRICITY_CARDS` token as an authorization header on their own command line.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
