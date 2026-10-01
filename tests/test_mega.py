@@ -1543,6 +1543,17 @@ async def test_pro_transient_error_is_not_rolled_back_to_last_month() -> None:
     assert "-092026-" in served[-1]
     assert snap.supplier == "mega"
 
+    # The next hour asks for this month's card again, but last month's,
+    # superseded and unchanging, is not downloaded a second time.
+    served.clear()
+    with (
+        patch.object(mega_mod, "fetch_pdf_text", new=_not_there_yet),
+        patch.object(mega_mod.dt_util, "now", new=_on(date(2026, 10, 2))),
+    ):
+        again = await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    assert all("-102026-" in u for u in served) and len(served) == 2
+    assert again.source_url == snap.source_url
+
 
 def _on(day: date) -> Callable[..., datetime]:
     """A stand-in for dt_util.now pinned to noon on ``day``."""

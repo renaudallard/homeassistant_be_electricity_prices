@@ -105,6 +105,16 @@ def _forget_read_daily_shapes() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _forget_rolled_back_mega_cards() -> None:
+    """Mega keeps last month's professional cards read during a publication
+    grace for the rest of it, keyed on the contract and month, and tests serve
+    other text under the same keys."""
+    from custom_components.be_electricity_prices.providers import mega
+
+    mega._ROLLED_BACK.clear()
+
+
+@pytest.fixture(autouse=True)
 def _card_archive_holds_nothing() -> Iterator[None]:
     """The month cache asks the repository's card archive first for every
     closed month, over the network. Tests that are not about that tier get a

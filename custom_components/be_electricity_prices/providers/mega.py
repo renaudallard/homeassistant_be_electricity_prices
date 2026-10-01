@@ -268,6 +268,13 @@ _CDN_BASE = "https://my.mega.be/resources/tarif/"
 # The live check reads the same figure.
 _PRO_PUBLICATION_GRACE_DAYS = 5
 
+# Last month's professional cards read during that grace, as (text, url) by
+# contract, region and month. Superseded, so they cannot change, and a card
+# fetched already expired is asked for again every hour to notice this
+# month's: without this each of those asks downloaded last month's whole card
+# again. Only the latest month is kept.
+_ROLLED_BACK: dict[tuple[str, str, date], tuple[str, str]] = {}
+
 
 def _pro_pdf_url(
     c: _ContractDef, region_code: str, year_month: date, variant: str | None = None
@@ -402,9 +409,16 @@ async def fetch(
             if today.day > _PRO_PUBLICATION_GRACE_DAYS:
                 raise
             previous = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-            text, pdf_url = await _fetch_first_card(
-                session, _pro_pdf_urls(contract, region_code, previous)
-            )
+            key = (contract_id, region_code, previous)
+            held = _ROLLED_BACK.get(key)
+            if held is None:
+                held = await _fetch_first_card(
+                    session, _pro_pdf_urls(contract, region_code, previous)
+                )
+                for older in [k for k in _ROLLED_BACK if k[2] != previous]:
+                    del _ROLLED_BACK[older]
+                _ROLLED_BACK[key] = held
+            text, pdf_url = held
         return parse_snapshot(contract_id, text, region, pdf_url)
 
     listing = await _fetch_listing_html(session)

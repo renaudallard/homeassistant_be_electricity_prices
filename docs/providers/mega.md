@@ -149,7 +149,10 @@ back on it served last month's index, overlays and taxes as this month's for the
 has moved rather than lagged, and rolling back served the September pro Zen Fixed
 card for all of October. Past the grace the fetch raises, so the entry keeps the card
 it holds and says why. The live check's publication row reads the same grace and the
-same two spellings.
+same two spellings. Last month's card, once read for the fallback, is kept for the
+rest of the grace (`_ROLLED_BACK`): a card already expired when fetched is asked for
+again every hour to notice this month's, and each ask downloaded last month's whole
+card again, which is superseded and cannot change.
 
 Consequences of having no listing:
 
