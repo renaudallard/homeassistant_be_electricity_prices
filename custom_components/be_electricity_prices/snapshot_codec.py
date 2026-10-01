@@ -427,6 +427,16 @@ _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
 _TAXES_OPTIONAL_KEYS = ("card_vat_rate", "assumed_vat_rate")
 _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
+# And for the energy leg: SmartFlex's Happy Sunday band, on the card's
+# TimeOfUseRates and on the monthly leg it re-prices through. Every one
+# defaults to None, so a row carries them only when its card prints the band.
+_ENERGY_OPTIONAL_KEYS = (
+    "sunday",
+    "formula_factor_sunday",
+    "formula_base_sunday",
+    "factor_sunday",
+    "base_sunday",
+)
 
 
 def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
@@ -442,6 +452,16 @@ def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
     for key in _INJECTION_OPTIONAL_KEYS:
         if data.get(key) == _INJECTION_DEFAULTS[key]:
             data.pop(key, None)
+    return data
+
+
+def _energy_to_dict(energy: EnergyRates) -> dict[str, Any]:
+    """The energy leg as a row, without the optional fields it does not use
+    (see ``_INJECTION_OPTIONAL_KEYS`` for why)."""
+    data = dict(energy.__dict__)
+    for key in _ENERGY_OPTIONAL_KEYS:
+        if key in data and data[key] is None:
+            del data[key]
     return data
 
 
@@ -505,7 +525,7 @@ def _snapshot_to_dict(
         "supplier": snap.supplier,
         "contract": snap.contract,
         "energy_kind": _energy_kind(snap.energy),
-        "energy": snap.energy.__dict__,
+        "energy": _energy_to_dict(snap.energy),
         "dsos": {k: v.__dict__ for k, v in snap.dsos.items()},
         "taxes": _taxes_to_dict(snap.taxes),
         "source_url": snap.source_url,

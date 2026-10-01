@@ -209,14 +209,18 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # SEASONAL windows: peak (pleines) is 07-11 + 17-22 all year, the
         # cheapest super-creuses band applies 11-17 only in spring/summer
         # (21/03-20/09), and 22-07 is always creuses. The weekend_rule
-        # "smartflex_seasonal" tells pricing.tou_slot to bill those windows
-        # (the "free Sundays" first-year promo is not modelled).
+        # "smartflex_seasonal" tells pricing.tou_slot to bill those windows.
+        # The October 2026 card adds Happy Sunday, Sundays 11-17 of the same
+        # season "Du lundi au samedi" leaves out of super-creuses, priced
+        # "0 x Belpex + 0" where the earlier cards ran it as a first-year
+        # promotion. It is a rate of its own, not a credit.
         tou_rates = TimeOfUseRates(
             peak=peak,
             transition=transition,
             offpeak=offpeak,
             yearly_fixed_fee=fee,
             weekend_rule="smartflex_seasonal",
+            sunday=to_float(tou_row[3]) / 100.0 if len(tou_row) == 4 else None,
         )
         # SmartFlex indexes each band on the delivery month, same sentence as
         # its bi-hourly siblings: "Votre tarif sera indexe tous les mois. La
@@ -234,6 +238,8 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             formula_base_transition=coefs["transition"][1],
             formula_factor_offpeak=coefs["offpeak"][0],
             formula_base_offpeak=coefs["offpeak"][1],
+            formula_factor_sunday=coefs["sunday"][0] if "sunday" in coefs else None,
+            formula_base_sunday=coefs["sunday"][1] if "sunday" in coefs else None,
         )
 
     if kind == "dynamic":
@@ -298,7 +304,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
 
 
 def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
-    """The three SmartFlex per-slot monthly coefficients, or ``{}``.
+    """The SmartFlex per-slot monthly coefficients, or ``{}``.
 
     Gated on the energy block attributing its index to a MONTH, which is what
     separates this card from ComfyFlex's quarterly one, and scoped to that
@@ -307,6 +313,7 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
 
     All three bands are required. A partial match would leave one slot on the
     printed rate and the others on the index, which is worse than either.
+    Happy Sunday's formula joins them as ``sunday`` on a card printing one.
     """
     block = _ENERGY_FORMULA_BLOCK_RE.search(text)
     if block is None:
@@ -315,7 +322,7 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
         return {}
     vat = _vat_multiplier(text)
     out: dict[str, tuple[float, float]] = {}
-    for key, label in _TOU_BANDS:
+    for key, label in (*_TOU_BANDS, ("sunday", _HAPPY_SUNDAY_LABEL)):
         match = _band_formula_re(label).search(block.group(0))
         if match is None:
             continue
@@ -323,7 +330,7 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
             to_float(match.group(1)) * 10.0 * vat,
             parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
         )
-    return out if len(out) == len(_TOU_BANDS) else {}
+    return out if all(key in out for key, _ in _TOU_BANDS) else {}
 
 
 def _monthly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
@@ -580,6 +587,7 @@ _TOU_BANDS: tuple[tuple[str, str], ...] = (
     ("transition", r"Pr[ée]l[èe]vement\s+Heures\s+creuses"),
     ("offpeak", r"Pr[ée]l[èe]vement\s+Heures\s+super[\s-]*creuses"),
 )
+_HAPPY_SUNDAY_LABEL = r"Pr[ée]l[èe]vement\s+Happy\s+Sunday"
 # "(valeur de l'indice de mars 2026)" against ComfyFlex's "(valeur de l'indice
 # du 1re trimestre 2026)". A MONTH attribution is the discriminator that works
 # on the SmartFlex card, whose energy block carries no cadence sentence of its

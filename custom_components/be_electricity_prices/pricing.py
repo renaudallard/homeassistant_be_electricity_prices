@@ -194,6 +194,17 @@ def _is_smartflex_summer(d: date) -> bool:
     return (3, 21) <= (d.month, d.day) <= (9, 20)
 
 
+def is_happy_sunday(when: datetime) -> bool:
+    """SmartFlex's Happy Sunday: Sundays 11:00-17:00 of its spring/summer
+    season, which the October 2026 card prices on a column of its own. Only
+    Sundays; the card names no public holiday."""
+    return (
+        when.weekday() == 6
+        and 11 <= when.hour < 17
+        and _is_smartflex_summer(when.date())
+    )
+
+
 def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     """Map a local datetime to its Belgian TOU slot.
 
@@ -213,8 +224,9 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
         transition 07:00-11:00 + 17:00-01:00,
         offpeak    01:00-07:00 + 11:00-17:00.
       smartflex_seasonal  Luminus SmartFlex: seasonal bands applied
-        every day (the card lists no weekend exception; the "free
-        Sundays" promo is a first-year discount, out of scope):
+        every day (the card lists no weekend exception; its Happy Sunday
+        column is a fourth rate the energy price picks before this rule,
+        see ``is_happy_sunday``):
         peak 07:00-11:00 + 17:00-22:00 both seasons; the 11:00-17:00
         midday window is super-creuses (offpeak) only in spring/summer
         (21/03-20/09) and creuses (transition) otherwise; 22:00-07:00
@@ -395,6 +407,10 @@ def energy_eur_per_kwh(
             # by the contract's own slot rule. Decided before every other
             # branch, because a TOU card has no mono/peak/offpeak split to
             # fall back on.
+            if energy.factor_sunday is not None and is_happy_sunday(when):
+                return energy.factor_sunday * spot_eur_per_kwh + (
+                    energy.base_sunday or 0.0
+                )
             slot = tou_slot(when, energy.weekend_rule)
             if slot == "peak":
                 factor = (
@@ -465,6 +481,8 @@ def energy_eur_per_kwh(
             ),
         )
     if isinstance(energy, TimeOfUseRates):
+        if energy.sunday is not None and is_happy_sunday(when):
+            return energy.sunday
         slot = tou_slot(when, energy.weekend_rule)
         if slot == "peak":
             return energy.peak

@@ -43,6 +43,49 @@ def test_a_register_pair_flag_is_written_only_when_set() -> None:
     assert _snapshot_from_dict(row).injection == pair.injection
 
 
+def test_a_happy_sunday_band_is_written_only_when_set() -> None:
+    """The same rule for SmartFlex's fourth band, on both energy kinds that
+    carry it: every other TOU and monthly row keeps the shape it had."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+        TimeOfUseRates,
+    )
+
+    plain = make_snapshot(
+        energy=TimeOfUseRates(peak=0.2, transition=0.18, offpeak=0.09)
+    )
+    row = _snapshot_to_dict(plain, NOW)
+    assert not {"sunday", "formula_factor_sunday"} & set(row["energy"])
+    assert _snapshot_from_dict(row).energy == plain.energy
+    sunday = make_snapshot(
+        energy=TimeOfUseRates(
+            peak=0.2,
+            transition=0.18,
+            offpeak=0.09,
+            sunday=0.0,
+            formula_factor_sunday=0.0,
+            formula_base_sunday=0.0,
+        )
+    )
+    row = _snapshot_to_dict(sunday, NOW)
+    assert row["energy"]["sunday"] == 0.0
+    assert _snapshot_from_dict(row).energy == sunday.energy
+    leg = make_snapshot(
+        energy=SpotMonthlyRates(
+            factor=1.0, base=0.0, factor_sunday=0.0, base_sunday=0.0
+        )
+    )
+    row = _snapshot_to_dict(leg, NOW)
+    assert row["energy"]["factor_sunday"] == 0.0
+    assert _snapshot_from_dict(row).energy == leg.energy
+    assert (
+        "factor_sunday"
+        not in _snapshot_to_dict(
+            make_snapshot(energy=SpotMonthlyRates(factor=1.0, base=0.0)), NOW
+        )["energy"]
+    )
+
+
 def test_a_card_vat_basis_is_written_only_when_set() -> None:
     """The same rule for the tax overlay's two VAT fields: a card stating no
     rate and assuming none keeps the row shape every earlier version reads."""

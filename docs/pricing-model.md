@@ -974,8 +974,10 @@ The `smartflex_seasonal` rule ignores weekday/weekend entirely and keys on seaso
 (`pricing.py`): peak 07:00-11:00 + 17:00-22:00 both seasons; the
 11:00-17:00 midday window is off-peak in spring/summer (21 March to 20 September
 inclusive, `_is_smartflex_summer`, `pricing.py`) and transition otherwise;
-22:00-07:00 is always transition. The "free Sundays" promo is a first-year
-discount and is out of scope (`pricing.py`).
+22:00-07:00 is always transition. A card printing a Happy Sunday rate (Luminus SmartFlex
+from October 2026, `TimeOfUseRates.sunday` and its monthly formula) bills it instead on
+Sundays 11:00-17:00 of the spring/summer season (`is_happy_sunday`, `pricing.py`),
+ahead of the slot rule; the card names no public holiday, so only Sundays take it.
 
 ### Impact: `dso_impact_band`
 

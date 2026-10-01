@@ -542,6 +542,64 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
     assert at(8) < printed.peak
 
 
+def test_happy_sunday_is_a_band_of_its_own() -> None:
+    """The October 2026 SmartFlex card prints a fourth column, Happy Sunday:
+    Sundays 11h-17h from 21/03 to 20/09, "Prelevement Happy Sunday = 0 x
+    Belpex + 0", the super-creuses band now reading "Du lundi au samedi".
+    Billed at super-creuses until now, 8,67 c/kWh on every such hour. Printed
+    rate and month leg both take it; any other hour keeps its slot."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    snap = parse_snapshot(
+        "luminus_smartflex", fixture_text("luminus_smartflex_w_oct.pdf"), "wallonia"
+    )
+    printed = snap.energy
+    assert isinstance(printed, TimeOfUseRates)
+    assert printed.sunday == pytest.approx(0.0)
+    assert printed.formula_factor_sunday == pytest.approx(0.0)
+    assert printed.formula_base_sunday == pytest.approx(0.0)
+    leg = _cohort_energy_from_archived(snap)
+    assert leg is not None
+    mean = 0.12932  # the card's August 2026 Belpex, EUR/kWh
+
+    def at(rates: object, year: int, month: int, day: int, hour: int) -> float:
+        moment = datetime(year, month, day, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(
+            rates,  # type: ignore[arg-type]
+            moment,
+            mean,
+            meter="dynamic",
+            region="wallonia",
+        )
+
+    for rates in (printed, leg):
+        # Sunday 6 June 2027, 13h: Happy Sunday.
+        assert at(rates, 2027, 6, 6, 13) == pytest.approx(0.0)
+        # Saturday the day before, same hour: super-creuses.
+        assert at(rates, 2027, 6, 5, 13) > 0.05
+        # Sunday 6 June at 18h, and Sunday 4 October 2026 at 13h (autumn,
+        # the card prints "-"): their own slots, never zero.
+        assert at(rates, 2027, 6, 6, 18) > 0.15
+        assert at(rates, 2026, 10, 4, 13) > 0.15
+    assert at(printed, 2027, 6, 5, 13) == pytest.approx(0.0867)
+    assert at(printed, 2026, 10, 4, 13) == pytest.approx(0.1785)
+
+    # The April card had no such column: nothing changes on it.
+    april = parse_snapshot(
+        "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
+    ).energy
+    assert isinstance(april, TimeOfUseRates)
+    assert april.sunday is None
+    assert april.formula_factor_sunday is None
+
+
 async def test_smartflex_takes_the_prosumer_rate_its_card_bills_from_a_sibling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -385,7 +385,7 @@ average potential rebate for shopping through the supplier's platform, and footn
 settles it on the ex-VAT amount. On the Agilior card it is numerically equal to the
 abonnement, so netting it would report a zero standing charge to every user including
 those who never use the platform, on a different VAT basis from every stored value.
-Same treatment as Luminus' free Sundays and Frank's cashback. `Lid van
+Same treatment as Frank's cashback. `Lid van
 energiegemeenschap (€/jaar) 0,00` is likewise not modelled.
 
 **Only the Dutch card parses.** All three languages carry identical numbers, but the

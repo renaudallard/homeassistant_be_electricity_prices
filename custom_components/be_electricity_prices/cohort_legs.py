@@ -251,6 +251,8 @@ def _cohort_energy_from_archived(
             base_transition=energy.formula_base_transition,
             factor_offpeak=energy.formula_factor_offpeak,
             base_offpeak=energy.formula_base_offpeak,
+            factor_sunday=energy.formula_factor_sunday,
+            base_sunday=energy.formula_base_sunday,
             weekend_rule=energy.weekend_rule,
             yearly_fixed_fee=energy.yearly_fixed_fee,
         )

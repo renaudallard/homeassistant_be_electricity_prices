@@ -244,8 +244,15 @@ yearly_fixed_fee, weekend_rule="smartflex_seasonal")` (`_luminus_cards.py`).
 SmartFlex uses seasonal windows, not the generic CWaPE schedule: peak (pleines)
 07-11 + 17-22 all year, the cheapest super-creuses band 11-17 only in spring/
 summer (21/03-20/09), 22-07 always creuses. The `weekend_rule`
-`"smartflex_seasonal"` tells `pricing.tou_slot` to bill those windows; the
-first-year "free Sundays" promo is not modelled (`_luminus_cards.py`).
+`"smartflex_seasonal"` tells `pricing.tou_slot` to bill those windows. The
+October 2026 card adds a fourth band, Happy Sunday: Sundays 11-17 of the
+spring/summer season, which super-creuses now leaves out ("Du lundi au
+samedi"), priced *"Prelevement Happy Sunday = 0 x Belpex + 0"*. Earlier cards
+ran free Sundays as a first-year promotion, which was never modelled; this
+one is a rate. Its printed figure lands in `TimeOfUseRates.sunday` and its
+formula in `formula_factor_sunday` / `formula_base_sunday` (`_luminus_cards.py`),
+and both the printed rate and the monthly leg bill it ahead of the slot rule
+(`is_happy_sunday`, `pricing.py`).
 Illustrative (`test_smartflex_parses_as_time_of_use`): peak `0.1554`, transition
 `0.1329`, offpeak `0.0672` from `luminus_smartflex_w.pdf`.
 

@@ -349,6 +349,11 @@ class SpotMonthlyRates:
     # with ``weekend_rule``, not by the bi-hourly day/night split.
     factor_transition: float | None = None
     base_transition: float | None = None
+    # SmartFlex's Happy Sunday formula, carried from
+    # ``TimeOfUseRates.formula_factor_sunday`` / ``_base_sunday``: billed
+    # instead of the slot ``tou_slot`` picks when ``pricing.is_happy_sunday``.
+    factor_sunday: float | None = None
+    base_sunday: float | None = None
     # The three CWaPE Impact bands, for a Tarif Impact card that indexes each
     # band monthly. Cociter Tarif Variable Trihoraire is the case: one BELIX
     # formula per band and printed rates that are the previous month's, the
@@ -428,7 +433,9 @@ class TimeOfUseRates:
         Seasonal bands applied every day, no weekend exception. The
         11:00-17:00 midday window is off-peak in spring/summer
         (21/03-20/09) and transition otherwise; 22:00-07:00 is always
-        transition. See ``pricing.tou_slot``.
+        transition. See ``pricing.tou_slot``. A card printing a Happy
+        Sunday rate (``sunday``) bills it instead on Sundays 11:00-17:00
+        of the spring/summer season (``pricing.is_happy_sunday``).
 
     Requires a smart meter (SMR3). Like ``VariableRates``, the rates
     can be re-published monthly; the formula field carries the
@@ -451,6 +458,13 @@ class TimeOfUseRates:
     formula_base_transition: float | None = None
     formula_factor_offpeak: float | None = None
     formula_base_offpeak: float | None = None
+    # A fourth band, printed by Luminus SmartFlex from October 2026: "Happy
+    # Sunday", Sundays 11:00-17:00 from 21 March to 20 September, priced
+    # "Prelevement Happy Sunday = 0 x Belpex + 0". The rate and its monthly
+    # formula, None on every card that prints no such column.
+    sunday: float | None = None
+    formula_factor_sunday: float | None = None
+    formula_base_sunday: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
