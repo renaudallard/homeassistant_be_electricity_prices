@@ -89,7 +89,6 @@ import hashlib
 import importlib.metadata
 import json
 import re
-import shutil
 import sys
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable
@@ -934,16 +933,20 @@ def _read_row(path: Path) -> dict[str, Any] | None:
 
 
 def _prune(out: Path, keep_months: int, today: date) -> int:
-    """Remove months more than ``keep_months`` before today's; count them."""
+    """Remove months more than ``keep_months`` before today's; count them.
+
+    Only the rows go by their month. A text is filed under the month it was
+    stored in, which is the month before for a card published ahead of its
+    own (EBEM's October 2026 rows read texts kept under September), so pruning
+    the text directories on the same cutoff took texts a kept row still names,
+    and that row could no longer be replayed after a parser change. The texts
+    of the rows removed here are left to ``_drop_unnamed_texts``.
+    """
     cutoff = _months_before(today, keep_months)
     removed = 0
     for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
         if path.stem < cutoff:
             path.unlink()
-            removed += 1
-    for path in out.glob("texts/????-??"):
-        if path.is_dir() and path.name < cutoff:
-            shutil.rmtree(path)
             removed += 1
     # Deepest first, so a contract directory emptied above goes too.
     for folder in sorted(

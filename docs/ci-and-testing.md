@@ -902,8 +902,11 @@ Three design points:
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the archive gains a commit only when a card changed. Months older than `--keep-months`
   (12) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
-  row names (`_drop_unnamed_texts`): the day's copy of a listing page that carries a nonce, or
-  the text a rewritten row no longer reads. Nothing reaches a text except through a row, and on
+  row names (`_drop_unnamed_texts`): the day's copy of a listing page that carries a nonce, the
+  text a rewritten row no longer reads, or the texts of a row pruned. Texts never go by the
+  month they were stored in: a card published ahead of its month is stored the month before
+  (EBEM's October 2026 rows read texts kept under September), and pruning those directories on
+  the rows' cutoff took texts a kept row still named, so the row could not be replayed. Nothing reaches a text except through a row, and on
   22 September 2026 such copies were 84 of the store's 1732 texts, 10,2 MB of 29,3.
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.

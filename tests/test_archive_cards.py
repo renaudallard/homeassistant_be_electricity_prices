@@ -2230,19 +2230,41 @@ def test_prune_removes_months_older_than_the_retention(tmp_path: Path) -> None:
     for month in ("2023-08", "2023-09", "2026-09"):
         card = tmp_path / "cards/acme/acme_fix/wallonia" / f"{month}.json"
         card.parent.mkdir(parents=True, exist_ok=True)
-        card.write_text("{}")
+        card.write_text(json.dumps({"_sources": [{"text": f"texts/{month}/abc.txt"}]}))
         text = tmp_path / "texts" / month / "abc.txt"
         text.parent.mkdir(parents=True, exist_ok=True)
         text.write_text("x")
     old = tmp_path / "cards/old/old_fix/wallonia/2023-01.json"
     old.parent.mkdir(parents=True)
     old.write_text("{}")
-    assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 3
+    assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 2
     assert not (tmp_path / "old").exists()
     assert not (tmp_path / "cards/acme/acme_fix/wallonia/2023-08.json").exists()
     assert (tmp_path / "cards/acme/acme_fix/wallonia/2023-09.json").exists()
+    # The removed row's text goes with the texts no row names.
+    assert ac._drop_unnamed_texts(tmp_path) == 1
     assert not (tmp_path / "texts/2023-08").exists()
     assert (tmp_path / "texts/2023-09/abc.txt").exists()
+
+
+def test_prune_keeps_a_text_a_kept_row_reads_from_an_older_month(
+    tmp_path: Path,
+) -> None:
+    """A card published ahead of its month is stored in the month before:
+    EBEM's October 2026 rows read texts kept under September. Pruned by the
+    month it was stored in, that text went while its row stayed, and the row
+    could not be replayed after the next parser change."""
+    row = tmp_path / "cards/ebem/ebem_variable/flanders/2026-10.json"
+    row.parent.mkdir(parents=True)
+    row.write_text(json.dumps({"_sources": [{"text": "texts/2026-09/abc.txt"}]}))
+    text = tmp_path / "texts/2026-09/abc.txt"
+    text.parent.mkdir(parents=True)
+    text.write_text("x")
+    # The run whose cutoff is October 2026, a year later.
+    ac._prune(tmp_path, 12, date(2027, 10, 5))
+    ac._drop_unnamed_texts(tmp_path)
+    assert row.exists()
+    assert text.exists()
 
 
 def test_months_before() -> None:
