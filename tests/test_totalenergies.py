@@ -332,6 +332,40 @@ def test_october_2026_dynamic_card_prints_three_meter_columns(
     assert f"{printed * 100:.2f}".replace(".", ",") in text
 
 
+def test_a_formula_printed_without_the_contribution_keeps_it_out() -> None:
+    """The myEssential card in Brussels says its formulas include the 2,85
+    contribution and prints bases without it: its columns solve to one index,
+    165 EUR/MWh, only with the contribution left out of the bases, where the
+    rest of the range agrees with it in. Taking it out again billed an entry
+    with a key 2,85 c/kWh short. The billed rates still lose it."""
+    text = fixture_text("totalenergies_myessential_b_2026-10.pdf", layout=True)
+    assert "0.11 * BELPEXM_RLP + 3.65" in text
+    assert "Compteur Simple : 25,96" in text
+    snap = parse_snapshot("totalenergies_myessential", text, "brussels")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    contribution = snap.taxes.brussels_renewables
+    assert contribution == pytest.approx(0.0285)
+    assert energy.formula_base == pytest.approx(0.0365 * 1.06)
+    assert energy.current + contribution == pytest.approx(0.2596)
+    columns = (
+        (energy.current, energy.formula_factor, energy.formula_base),
+        (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.offpeak, energy.formula_factor_offpeak, energy.formula_base_offpeak),
+        (
+            energy.exclusive_night,
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+        ),
+    )
+    indices = []
+    for rate, factor, base in columns:
+        assert rate is not None and factor is not None and base is not None
+        indices.append((rate - base) / factor)
+    assert max(indices) - min(indices) < 0.001
+    assert min(indices) == pytest.approx(0.165, abs=0.001)
+
+
 def test_an_unfilled_card_is_refused() -> None:
     """The Impact card TotalEnergies served on the morning of 1 October 2026
     was a template repeating its 94,34 yearly fee in all three rate columns,

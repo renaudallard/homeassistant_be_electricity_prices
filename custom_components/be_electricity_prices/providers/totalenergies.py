@@ -636,12 +636,63 @@ _RENEWABLES_CARRIERS = frozenset(
         "offpeak",
         "exclusive_night",
         "base",
+    }
+)
+_FORMULA_CARRIERS = frozenset(
+    {
         "formula_base",
         "formula_base_peak",
         "formula_base_offpeak",
         "formula_base_exclusive_night",
     }
 )
+
+# How far apart, in EUR/kWh of index, the columns of one card solve. A card
+# read the right way agrees to within 1,25 EUR/MWh on every TotalEnergies card
+# of 1 October 2026, the figures being rounded to a hundredth of a cent; read
+# the wrong way, with or without the contribution in its bases, the same cards
+# miss by 3,04 EUR/MWh and more. A row the card prints as an estimate rather
+# than at one index (the morning Electricité Variable card in Flanders, 1,77
+# and 3,14) fits neither, and settles nothing.
+_INDEX_FIT = 0.0013
+_INDEX_MISFIT = 0.003
+
+
+def _formulas_hold_contribution(rates: VariableRates, included: float) -> bool:
+    """Whether the card's formula bases carry the contribution its footnote
+    says they do.
+
+    Every column of a card bills the formula at the same index, so the
+    printed rates solve to one index under the right reading. The myEssential
+    card in Brussels of 1 October 2026 says its formulas include the
+    contribution and prints bases without it: its four columns solve to
+    186,7 to 191,7 EUR/MWh with the contribution in the bases and to 164,7 to
+    165,0 without, where every other card of the range agrees to within 1,3
+    EUR/MWh with it in. The footnote stands unless the figures settle it the
+    other way, and a card with one column cannot say.
+    """
+    columns = [
+        (rate, factor, base)
+        for rate, factor, base in (
+            (rates.current, rates.formula_factor, rates.formula_base),
+            (rates.peak, rates.formula_factor_peak, rates.formula_base_peak),
+            (rates.offpeak, rates.formula_factor_offpeak, rates.formula_base_offpeak),
+            (
+                rates.exclusive_night,
+                rates.formula_factor_exclusive_night,
+                rates.formula_base_exclusive_night,
+            ),
+        )
+        if rate is not None and factor and base is not None
+    ]
+    if len(columns) < 2:
+        return True
+
+    def spread(shift: float) -> float:
+        indices = [(rate - shift - base) / factor for rate, factor, base in columns]
+        return max(indices) - min(indices)
+
+    return not (spread(0.0) >= _INDEX_MISFIT and spread(included) <= _INDEX_FIT)
 
 
 def _without_renewables(energy: EnergyRates, included: float) -> EnergyRates:
@@ -653,14 +704,20 @@ def _without_renewables(energy: EnergyRates, included: float) -> EnergyRates:
     bill it twice; taking it out keeps it in the tax leg, where a change in
     the law reaches a fixed contract the way the card says it does. The
     figures are all VAT-inclusive EUR/kWh by then, the basis the footnote
-    states it on.
+    states it on. A formula printed without it, against its own footnote,
+    is left as printed (:func:`_formulas_hold_contribution`).
     """
+    carriers = _RENEWABLES_CARRIERS
+    if not isinstance(energy, VariableRates) or _formulas_hold_contribution(
+        energy, included
+    ):
+        carriers = carriers | _FORMULA_CARRIERS
     return replace(
         energy,
         **{
             f.name: getattr(energy, f.name) - included
             for f in fields(energy)
-            if f.name in _RENEWABLES_CARRIERS and getattr(energy, f.name) is not None
+            if f.name in carriers and getattr(energy, f.name) is not None
         },
     )
 

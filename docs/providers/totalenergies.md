@@ -308,6 +308,17 @@ their snapshot carries no injection leg. The live check expects none of a
 non-dynamic card from October 2026 on, by the card's month, since
 TotalEnergies republishes product by product.
 
+The footnote says the formulas include the contribution as well, and on every
+card of the range but one they do. The myEssential card in Brussels of 1 October
+2026 prints `0.11 * BELPEXM_RLP + 3.65` where the other Brussels cards print
+bases of 7 and more: its four columns solve to one index, 165 EUR/MWh, only with
+the contribution left out of the bases, and to 186,7 to 191,7 with it in, where
+the rest of the range agrees to within 1,3 EUR/MWh with it in.
+`_formulas_hold_contribution` (`totalenergies.py`) solves the billed rates both
+ways and leaves the bases as printed only when the figures settle it that way;
+the rates themselves still lose the contribution, which the tax leg bills. A
+card with a single column, Impact, cannot say, and the footnote stands.
+
 The October myDynamic cards drop the exclusive-night column: the header ends on
 `Heures creuses` and the row prints three figures, `19,37 19,37 19,37 Tarif
 mensuel`, with the yearly fee alone on the next line. `_meter_columns`
@@ -515,6 +526,7 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_impact_w_2026-10_template.pdf` | Impact, Wallonia, October 2026 morning (unfilled, the fee in every rate column: refused) |
 | `totalenergies_mydynamic_v_2026-10.pdf` | myDynamic, Flanders, October 2026 (three meter columns, fee below, no feed-in) |
 | `totalenergies_mydynamic_w_2026-10.pdf` | myDynamic, Wallonia, October 2026 (the same, base printed `5,40`) |
+| `totalenergies_myessential_b_2026-10.pdf` | myEssential, Brussels, October 2026 (formula bases printed without the contribution its footnote names) |
 
 ## When the card changes, look here
 
