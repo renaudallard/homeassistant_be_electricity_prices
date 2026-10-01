@@ -517,7 +517,7 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.ytd_cost."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),

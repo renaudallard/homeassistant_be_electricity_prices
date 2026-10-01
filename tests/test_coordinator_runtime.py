@@ -1105,7 +1105,7 @@ async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
             new=_cohort,
         ),
         patch(
-            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -2580,7 +2580,7 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+        "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
         AsyncMock(return_value=0.0),
     ):
         await coord._async_update_data()
@@ -2629,7 +2629,7 @@ async def test_a_rejected_key_for_a_spot_indexed_credit_raises_the_notice(
     coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
 
     with patch(
-        "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+        "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
         AsyncMock(return_value=0.0),
     ):
         data = await coord._async_update_data()
@@ -2683,7 +2683,7 @@ async def test_the_projection_is_handed_the_day_ahead_history(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.ytd_cost."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
@@ -4444,7 +4444,7 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
             new=_cohort,
         ),
         patch(
-            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -4518,7 +4518,7 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
             new=_archived,
         ),
         patch(
-            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -5734,7 +5734,7 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -5978,7 +5978,7 @@ async def test_the_resolved_signing_card_reaches_the_coordinator(
     with (
         patch.object(coord._store, "async_save", AsyncMock()),
         patch(
-            "custom_components.be_electricity_prices.ytd_cost."
+            "custom_components.be_electricity_prices.coordinator_costs."
             "_compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
@@ -6497,7 +6497,7 @@ async def test_the_first_tick_fetches_the_month_not_the_year(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.ytd_cost"
+            "custom_components.be_electricity_prices.coordinator_costs"
             "._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
@@ -7496,7 +7496,7 @@ async def test_a_cleared_entsoe_blip_leaves_last_error(
         coord._last_error = message
         with (
             patch(
-                "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+                "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
                 AsyncMock(return_value=0.0),
             ),
             patch.object(coord, "_save_persistent", AsyncMock()),
