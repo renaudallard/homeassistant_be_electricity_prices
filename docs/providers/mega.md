@@ -22,8 +22,8 @@ Related reading:
 
 | Property | Value |
 | --- | --- |
-| Registry id | `mega` (`_mega_cards.py`) |
-| Label | `Mega` (`_mega_cards.py`) |
+| Registry id | `mega` (`mega.py`) |
+| Label | `Mega` (`mega.py`) |
 | Regions served | Flanders, Wallonia, Brussels (union across contracts, `base.py`) |
 | Publication | Monthly per-region PDF cards, one file per (product, region) |
 | Discovery | Scrape the public listing page, regex the `data-product-element` anchor to its PDF URL |
