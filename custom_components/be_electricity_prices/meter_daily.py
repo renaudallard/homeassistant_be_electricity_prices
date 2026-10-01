@@ -306,7 +306,7 @@ async def _resolve_daily_kwh(
             per_day = await energy_meters._recorder_daily_kwh(
                 hass, total_id, window_start, today
             )
-        reported[slot_day] = set(per_day) - {today}
+        reported[slot_day] = set(_without_today(per_day, today))
         if meter in ("bi", "dynamic"):
             ratios = await _recorder_daily_band_ratio(
                 hass, total_id, window_start, today, region

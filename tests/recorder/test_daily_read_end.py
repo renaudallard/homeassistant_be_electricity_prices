@@ -57,6 +57,10 @@ from custom_components.be_electricity_prices.meter_daily import _resolve_daily_k
 
 CONSUMPTION = "sensor.grid_import"
 INJECTION = "sensor.grid_export"
+DAY_CONSUMPTION = "sensor.grid_import_day"
+NIGHT_CONSUMPTION = "sensor.grid_import_night"
+DAY_INJECTION = "sensor.grid_export_day"
+NIGHT_INJECTION = "sensor.grid_export_night"
 FIRST = date(2026, 6, 20)
 LAST = date(2026, 7, 10)
 END = date(2026, 6, 30)
@@ -99,6 +103,10 @@ async def _setup(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
     await _import(hass, CONSUMPTION, 0.5)
     await _import(hass, INJECTION, 0.25)
+    await _import(hass, DAY_CONSUMPTION, 0.3)
+    await _import(hass, NIGHT_CONSUMPTION, 0.2)
+    await _import(hass, DAY_INJECTION, 0.15)
+    await _import(hass, NIGHT_INJECTION, 0.1)
 
 
 async def test_a_daily_read_ends_on_its_last_day(
@@ -143,3 +151,47 @@ async def test_an_earlier_contract_bills_its_last_day(
     assert days is not None
     assert sorted(days) == [start + timedelta(days=n) for n in range(5)]
     assert days[END] == (12.0, 0.0, 6.0, 0.0)
+
+
+async def test_a_one_day_earlier_contract_on_mixed_wiring_is_billed(
+    recorder_mock: Any, hass: HomeAssistant
+) -> None:
+    """An earlier contract that lasted one day, a register pair on one side
+    and a totals sensor on the other. The day was taken out of the totals
+    side's reported days as if it were today, which left that side reporting
+    nothing: its feed-in was dropped, or the day was billed on its fees
+    alone, while the backfill billed it whole."""
+    await _setup(hass)
+    wirings = {
+        "consumption pair": {
+            "day_consumption_kwh": DAY_CONSUMPTION,
+            "night_consumption_kwh": NIGHT_CONSUMPTION,
+            "injection_kwh": INJECTION,
+        },
+        "injection pair": {
+            "consumption_kwh": CONSUMPTION,
+            "day_injection_kwh": DAY_INJECTION,
+            "night_injection_kwh": NIGHT_INJECTION,
+        },
+    }
+    for name, meters in wirings.items():
+        entry = SimpleNamespace(
+            entry_id=name,
+            data={
+                "region": "wallonia",
+                "meter": "bi",
+                "solar_regime": "compensation",
+                **meters,
+            },
+        )
+        days = await _resolve_daily_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            END,
+            END,
+        )
+        assert days is not None, name
+        assert sorted(days) == [END], name
+        day_cons, night_cons, day_inj, night_inj = days[END]
+        assert round(day_cons + night_cons, 6) == 12.0, name
+        assert round(day_inj + night_inj, 6) == 6.0, name
