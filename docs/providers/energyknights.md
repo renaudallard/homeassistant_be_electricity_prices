@@ -24,8 +24,9 @@ Related reading:
 ## Overview
 
 Energy Knights BV (Mechelen) sells residential electricity in Flanders only. It
-publishes eight products, four base and a "green" twin of each. The integration
-tracks six:
+publishes six products, three base and a "green" twin of each, since Optima
+Online and its twin were withdrawn in October 2026. The integration tracks all
+six:
 
 | Contract id | Card product | Kind | Settles on |
 | --- | --- | --- | --- |

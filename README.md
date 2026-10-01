@@ -934,11 +934,11 @@ successful refresh:
   unavailable.
 - **`extractor_card_missing_<entry>`** — the supplier's site answered
   that there is no tariff card at the address the integration reads (HTTP
-  404 or 410, or a web page where the card should be): the card for the month is not out yet, the product was
-  withdrawn, or the supplier moved its cards. Raised on the first failure
-  instead of `extractor_failed`, since nothing on the card changed; cached
-  prices keep serving. Worth an issue only if it lasts while the supplier
-  still offers the product.
+  404 or 410, or a web page where the card should be): the card for the
+  month is not out yet, the product was withdrawn, or the supplier moved its
+  cards. Raised on the first failure instead of `extractor_failed`, since
+  nothing on the card changed; cached prices keep serving. Worth an issue
+  only if it lasts while the supplier still offers the product.
 - **`extractor_unreachable_<entry>`** — the tariff card could not be
   downloaded (network timeout, reset, a transient server error, or the
   supplier's own file store refusing the download). Raised only after

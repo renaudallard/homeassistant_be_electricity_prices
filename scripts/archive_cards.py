@@ -59,12 +59,14 @@ supplier answers None for is left absent, as is a card still flagged
 provisional, so a later backfill fills it once it has settled.
 
 The same pass replaces a closed month it holds as caught live when the card
-is indexed on its own month: such a card prints last month's index while it
-runs, and the supplier settles the month on the card after it, so the live
-row is an estimate the integration would otherwise bill for good. The row is
-re-asked through ``fetch_for_month`` until that answers settled, and from then
-on it is the supplier's answer, filed as ``archive``; the live walk does not
-write a card it still serves for such a month back over it.
+is indexed on its own month at a supplier flagged ``settles_on_next_card``:
+such a card prints last month's index while it runs, and the supplier settles
+the month on the card after it, so the live row is an estimate the
+integration would otherwise bill for good. The row is re-asked through
+``fetch_for_month`` until that answers settled, and from then on it is the
+supplier's answer, filed as ``archive``; the live walk does not write a card
+it still serves for such a month back over it. Any other supplier answers
+with the card the row already holds, so it is not asked.
 
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the
@@ -928,7 +930,9 @@ def _awaits_settlement(row: dict[str, Any] | None) -> bool:
     caught live holds the printed estimate, and the integration reads this
     archive first for a closed month, so until the row is replaced by what the
     supplier's own archive answers for it every installation bills that
-    estimate. A row that no longer decodes is left to the replay.
+    estimate. A row that no longer decodes is left to the replay. Only a
+    supplier flagged ``settles_on_next_card`` is asked again about such a
+    row; the backfill checks that before calling this.
     """
     if row is None or row.get("_via", "live") != "live":
         return False

@@ -41,7 +41,7 @@ aiohttp follows, so a typo yields 480 KB of HTML rather than an error status.
 _fetch_validated_pdf_bytes catches that on the magic bytes and raises, which
 is why nothing here inspects the payload itself.
 
-Six of the eight published products are modelled. Agilior Online prices each
+All six published products are modelled. Agilior Online prices each
 quarter hour off Belpex_15 and Agilis Online each hour off Belpex_h; they are
 the same card with a different index token, and the only thing separating them
 in the snapshot is DynamicRates.quarter_hourly. Essentia Online is indexed
