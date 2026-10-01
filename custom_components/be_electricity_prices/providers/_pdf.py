@@ -90,19 +90,30 @@ def is_transient_fetch_error(message: str) -> bool:
     return False
 
 
+# The "expected a PDF" message _fetch_validated_pdf_bytes writes when the
+# address served a web page: the repr of a payload whose first byte, past any
+# leading whitespace, opens a tag.
+_WEB_PAGE_INSTEAD_OF_CARD = re.compile(
+    r"expected a PDF at .*, payload starts with b['\"](?:\\[nrt]|\s)*<"
+)
+
+
 def is_missing_card_error(message: str) -> bool:
-    """Whether an ExtractorError message says the card's address answered
-    404 or 410.
+    """Whether an ExtractorError message says there is no card at the
+    address.
 
     Permanent for :func:`is_transient_fetch_error`, since a retry will not
     bring the card back, but not a layout change either: the supplier has no
     card at that address, because it has not published this month's yet,
-    withdrew the product or moved its cards. Read off the same ``HTTP
-    <status>`` prefix the fetch helpers here write.
+    withdrew the product or moved its cards. That is a 404 or a 410, read
+    off the same ``HTTP <status>`` prefix the fetch helpers here write, or a
+    web page served in the card's place: Mega's CDN answers an unpublished
+    card with 200 and an HTML page, and a redirect to a homepage lands on
+    one too.
     """
-    if not message.startswith("HTTP "):
-        return False
-    return message[len("HTTP ") :].split(None, 1)[0] in ("404", "410")
+    if message.startswith("HTTP "):
+        return message[len("HTTP ") :].split(None, 1)[0] in ("404", "410")
+    return _WEB_PAGE_INSTEAD_OF_CARD.match(message) is not None
 
 
 def error_text(err: BaseException) -> str:

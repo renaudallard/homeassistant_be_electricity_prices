@@ -50,6 +50,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
+    is_missing_card_error,
     is_transient_fetch_error,
     vat_multiplier,
 )
@@ -423,6 +424,29 @@ async def test_a_disguised_404_page_is_still_a_permanent_parse_failure() -> None
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
     assert str(excinfo.value).startswith("expected a PDF at https://x/card.pdf")
     assert not is_transient_fetch_error(str(excinfo.value))
+
+
+@pytest.mark.parametrize(
+    ("body", "missing"),
+    [
+        # Mega's CDN past a professional card's grace days, 2026-10-06.
+        (b'<!DOCTYPE html>\n<html lang="fr"><head>', True),
+        (b"\n\n  <html><body>Page not found</body></html>", True),
+        # Not a page: a broken download is not an absent card.
+        (b"GIF89a\x01\x00\x01\x00", False),
+    ],
+)
+async def test_a_web_page_where_the_card_should_be_is_a_missing_card(
+    body: bytes, missing: bool
+) -> None:
+    """Mega answers an unpublished card with 200 and an HTML page rather than
+    a 404. Read as a layout change it raised the card asking the user to
+    report one, where the card was simply not there.
+    """
+    session = _FakeBodySession(body)
+    with pytest.raises(ExtractorError) as excinfo:
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert is_missing_card_error(str(excinfo.value)) is missing
 
 
 async def test_an_error_element_inside_an_html_page_is_not_a_storage_error() -> None:

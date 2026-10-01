@@ -618,9 +618,9 @@ class _SnapshotMixin:
             # cards to raise.
             self._replay_stale_snapshot("publishes its tariff card as page images")
         if not transient:
-            # A 404 or 410 says the supplier has no card at that address, which
-            # is a late card, a withdrawn product or a moved one, never a
-            # layout to report.
+            # A 404 or 410, or a web page where the card should be, says the
+            # supplier has no card at that address, which is a late card, a
+            # withdrawn product or a moved one, never a layout to report.
             self._sync_extractor_issue(
                 result.error_message,
                 transient=False,
