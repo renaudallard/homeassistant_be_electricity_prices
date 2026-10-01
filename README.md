@@ -1647,7 +1647,13 @@ show) just misses that day's capture; and a card no parser can read
 (Ecofix's page images) is read by an OCR engine built for those cards and
 stored as an ordinary row, flagged so an entry served one says where the
 figures came from. One that even the OCR refuses is kept as a PDF and named
-on the coverage sheet with no JSON beside it.
+on the coverage sheet with no JSON beside it. The OCR reads a font only
+through the glyphs it has learnt, and no Ecofix card it learnt from sets a
+bold 4, 7, 8, 9, Q, X, Y or Z; a card published as page images still embeds
+the fonts of the text set over its picture, so each run looks at the cards
+it stored and files `[archive-cards] a card embeds glyphs the OCR library
+has not learnt` when one carries such a glyph, naming the card to learn it
+from.
 
 ## License
 
