@@ -645,19 +645,20 @@ def test_no_contract_asks_for_a_second_key() -> None:
 
 
 def test_discover_ids_cover_the_published_catalogue() -> None:
-    # Every slug the listing publishes, including the four "green" twins and
-    # Optima Online, so live_check flags only a genuinely new product.
-    assert len(DISCOVER_IDS) == 8
-    # Every slug we sell has to be catalogued, or the nightly check reports
-    # our own products as new ones. The module asserts this too.
+    # Every slug the listing publishes, the three "green" twins included, so
+    # live_check flags only a genuinely new product. Every slug we sell has to
+    # be catalogued, or the nightly check reports our own products as new
+    # ones. The module asserts this too.
     from custom_components.be_electricity_prices.providers.energyknights import (
         _CONTRACTS,
     )
 
-    assert {c.slug for c in _CONTRACTS} < DISCOVER_IDS
-    # Optima and its twin are published but out of scope; they stay listed so
-    # discover() does not report them as new.
-    assert {"optimaonline", "optimaonlinegreen"} < DISCOVER_IDS
+    assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
+    # Optima Online and its twin were never modelled, and Energy Knights
+    # stopped publishing them in October 2026: kept here, the check that a
+    # product left the listing failed on them every day.
+    assert len(DISCOVER_IDS) == 6
+    assert not {"optimaonline", "optimaonlinegreen"} & DISCOVER_IDS
 
 
 # ---- the archive -------------------------------------------------------------

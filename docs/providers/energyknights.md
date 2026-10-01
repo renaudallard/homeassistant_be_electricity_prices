@@ -54,13 +54,14 @@ is also the contractual fallback for both: page 3 of every dynamic card says tha
 consumption Fluvius cannot deliver quarter values for is billed "volgens het variabele
 tarief (Essentia Online) dat van toepassing is in dezelfde tariefmaand".
 
-**Optima Online is out of scope.** Its energy block was byte-identical to Agilior's in
+**Optima Online was out of scope, and is no longer sold.** Its energy block was byte-identical to Agilior's in
 August 2026, but its card carries a `Service fee onbalans handelen (€/jaar)` whose
 amount depends on which home energy management system the customer runs. It printed
 10,00 EUR/jaar for Flexio by Lifepowr on the December 2025 card and printed with no
 value at all in August 2026. No field in `SupplierSnapshot` can hold a fee keyed on the
 customer's own hardware, and shipping the product would price it at zero and silently
-under-bill whenever Energy Knights re-prints it.
+under-bill whenever Energy Knights re-prints it. The October 2026 listing names neither
+Optima Online nor its twin, and their cards redirect to the homepage.
 
 **The green twins are the same card plus one row.** `Groene stroom (c€/kWh)`, no formula
 and no footnote, so it is on the same VAT-inclusive basis as the printed rate columns and
@@ -70,9 +71,11 @@ it on every kWh too, so putting it on the mono offset alone would under-bill the
 hardcoded adder would have been a third light that month. It is mandatory on a green
 card, since the row is what the customer is paying the premium for.
 
-`DISCOVER_IDS` lists all eight published slugs so `discover()` only flags a genuinely new
+`DISCOVER_IDS` lists the six published slugs so `discover()` only flags a genuinely new
 product, and the module asserts that every slug it sells is in that set - otherwise the
-nightly catalogue check would report our own products as new.
+nightly catalogue check would report our own products as new. The same check reports a
+slug the listing stops naming, which is why Optima Online and its twin left the set when
+Energy Knights withdrew them: kept, they failed it every day.
 
 ## Fetching
 
@@ -106,8 +109,8 @@ coordinator does not need the 24 h TTL fallback.
 
 `discover` scrapes `https://www.energyknights.be/par/tariffcharts` for
 `getCurrentTariffchart/par/<slug>/` hrefs. The October 2026 listing no longer links
-Optima Online or its twin; both stay in `DISCOVER_IDS`, so their return is not reported as
-a new product.
+Optima Online or its twin, which have left `DISCOVER_IDS`, so their return would be reported
+as a new product.
 
 ### The 302 that is not an error
 

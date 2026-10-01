@@ -3941,3 +3941,29 @@ def test_a_totalenergies_card_from_october_2026_expects_no_feed_in() -> None:
     rows = _rows("totalenergies/totalenergies_electricite_variable/flanders")
     (absent,) = [r for r in rows if "injection" in r.label]
     assert absent.ok and "injection absent" in absent.label
+
+
+def test_energy_knights_catalog_names_no_product_gone() -> None:
+    """The listing of 1 October 2026 links six cards. Optima Online and its
+    twin had left it, and as part of the baseline they failed "no products
+    gone" every day although neither was ever modelled."""
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    listed = {
+        "agilioronline",
+        "agilioronlinegreen",
+        "agilisonline",
+        "agilisonlinegreen",
+        "essentiaonline",
+        "essentiaonlinegreen",
+    }
+
+    async def discover(_session: object) -> set[str]:
+        return listed
+
+    module = SimpleNamespace(discover=discover, DISCOVER_IDS=energyknights.DISCOVER_IDS)
+    asyncio.run(lc._check_catalogs(None, {"energyknights": module}))  # type: ignore[arg-type]
+    assert [(c.label, c.ok) for c in lc.CHECKS] == [
+        ("energyknights/catalog: no new products at supplier", True),
+        ("energyknights/catalog: no products gone from supplier", True),
+    ]

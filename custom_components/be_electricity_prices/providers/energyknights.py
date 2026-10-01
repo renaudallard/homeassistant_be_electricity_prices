@@ -54,11 +54,12 @@ Each also has a "green" twin, which is the same card plus one flat
 That row is not a constant: it printed 0,42 c€/kWh in September 2025 against
 0,32 everywhere else.
 
-Optima Online and its twin are the two products left out. Optima carries a
+Optima Online and its twin were the two products left out. Optima carries a
 "Service fee onbalans handelen" whose amount depends on which home energy
 management system the customer runs: 10,00 EUR/jaar in December 2025, printed
-without a value in August 2026, and no field here can hold it. Both stay in
-DISCOVER_IDS so discover() flags only a genuinely new product.
+without a value in August 2026, and no field here can hold it. Energy Knights
+stopped publishing both in October 2026, so they left DISCOVER_IDS too, and
+discover() would report their return as a new product.
 
 Two things on these cards are easy to get wrong.
 
@@ -310,8 +311,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 # Every residential electricity slug on the tariff card listing, so discover()
-# flags only a genuinely new product. The four "green" twins and Optima Online
-# are catalogued but not modelled; see the module docstring.
+# flags only a genuinely new product, and the live check flags one that the
+# listing stops naming.
 DISCOVER_IDS: frozenset[str] = frozenset(
     {
         "agilioronline",
@@ -320,8 +321,6 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "agilisonlinegreen",
         "essentiaonline",
         "essentiaonlinegreen",
-        "optimaonline",
-        "optimaonlinegreen",
     }
 )
 assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
