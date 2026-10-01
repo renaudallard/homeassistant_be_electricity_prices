@@ -7735,6 +7735,52 @@ async def test_a_withdrawn_products_card_gone_keeps_the_entry_priced(
     assert coord._snapshot_schema_version == 73
 
 
+async def test_a_withdrawn_product_with_no_card_left_says_why(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """With nothing stored, the archive box unticked and the file gone, a
+    withdrawn product has no card to keep and the sensors go unavailable.
+    The missing-card card used to be cleared there too, leaving only the
+    withdrawn-product card, which says the entry keeps pricing."""
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.providers import get
+
+    freezer.move_to("2026-11-03 10:00:00+01:00")
+    url = "https://files.octaplus.be/tariffs/E_OCTA_FIXED_RE_WL_FR.pdf"
+
+    async def _gone(*_args: Any) -> Any:
+        raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    octaplus = replace(get("octaplus"), fetch=_gone, probe=_gone)
+    entry = make_entry(
+        supplier="octaplus",
+        contract="octaplus_fixed",
+        region="wallonia",
+        card_archive=False,
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    read = AsyncMock(return_value=None)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=octaplus,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_issues.get_extractor",
+            return_value=octaplus,
+        ),
+        patch.object(snapshot_months, "_archived_card_from_github", read),
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert coord._snapshot is None
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"extractor_card_missing_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert url in issue.translation_placeholders["error"]
+
+
 async def test_a_withdrawn_products_last_card_is_never_called_stale(
     hass: HomeAssistant, freezer: Any
 ) -> None:

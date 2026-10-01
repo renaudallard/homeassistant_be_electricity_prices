@@ -694,27 +694,34 @@ class _SnapshotMixin:
         a card in hand that is all. With none, after a restart or a schema
         bump that refused the stored one, the archive's copy of the last
         month the product was sold stands in, and failing that the refused
-        blob, as for a supplier that has left the market.
+        blob, as for a supplier that has left the market. With neither (the
+        archive box unticked or the archive out of reach, and nothing stored)
+        the sensors are unavailable whatever the withdrawn-product card says,
+        so the missing-card card is raised to say why, and clears by itself
+        once a card is found.
         """
-        self._sync_extractor_issue(None)
-        if self._snapshot is not None:
-            return
-        try:
-            archived = await last_card_of_withdrawn(
-                self._session,
-                self.entry.data[CONF_SUPPLIER],
-                self.entry.data[CONF_CONTRACT],
-                self.entry.data[CONF_REGION],
-                withdrawn,
-                self.entry,
-            )
-        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
-            _LOGGER.debug("card archive read failed for a withdrawn product: %s", err)
-            archived = None
-        if archived is not None:
-            self._adopt_archived_card(archived)
-            return
-        self._replay_stale_snapshot(f"no longer sells this product ({error})")
+        if self._snapshot is None:
+            try:
+                archived = await last_card_of_withdrawn(
+                    self._session,
+                    self.entry.data[CONF_SUPPLIER],
+                    self.entry.data[CONF_CONTRACT],
+                    self.entry.data[CONF_REGION],
+                    withdrawn,
+                    self.entry,
+                )
+            except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+                _LOGGER.debug(
+                    "card archive read failed for a withdrawn product: %s", err
+                )
+                archived = None
+            if archived is not None:
+                self._adopt_archived_card(archived)
+            else:
+                self._replay_stale_snapshot(f"no longer sells this product ({error})")
+        self._sync_extractor_issue(
+            error if self._snapshot is None else None, missing=True
+        )
 
     def _adopt_archived_card(self, archived: ArchivedCard) -> None:
         """Price the entry off a row of the repository's card archive, as a
