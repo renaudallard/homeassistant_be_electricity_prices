@@ -527,6 +527,7 @@ def _snapshot_to_dict(
         "welcome_credit_after_months": snap.welcome_credit_after_months,
         "welcome_credit_pct_of_energy": snap.welcome_credit_pct_of_energy,
         "welcome_credit_kwh": snap.welcome_credit_kwh,
+        "welcome_credit_kwh_rate": snap.welcome_credit_kwh_rate,
         "welcome_credit_excludes_night_meter": (
             snap.welcome_credit_excludes_night_meter
         ),
@@ -625,6 +626,7 @@ def _snapshot_from_dict(
         welcome_credit_after_months=int(data.get("welcome_credit_after_months") or 12),
         welcome_credit_pct_of_energy=data.get("welcome_credit_pct_of_energy"),
         welcome_credit_kwh=data.get("welcome_credit_kwh"),
+        welcome_credit_kwh_rate=data.get("welcome_credit_kwh_rate"),
         welcome_credit_excludes_night_meter=bool(
             data.get("welcome_credit_excludes_night_meter")
         ),

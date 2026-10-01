@@ -12982,6 +12982,23 @@ def test_the_feed_in_bonus_rides_the_first_years_export_outside_the_cap() -> Non
     ) == pytest.approx(31.8)
 
 
+def test_the_rate_a_free_volume_is_valued_at_takes_the_energy_vat() -> None:
+    """A card naming the rate its free volume is valued at prints an energy
+    price, so a professional card's HTVA figure is grossed like the rest."""
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+
+    card = make_snapshot(welcome_credit_kwh=675.0)
+    card = replace(
+        card, welcome_credit_kwh_rate=0.2, taxes=replace(card.taxes, vat_rate=0.21)
+    )
+    assert apply_vat(card, include_vat=True).welcome_credit_kwh_rate == pytest.approx(
+        0.242
+    )
+    assert apply_vat(card, include_vat=False).welcome_credit_kwh_rate == pytest.approx(
+        0.2
+    )
+
+
 def test_the_feed_in_bonus_takes_the_feed_in_price_vat() -> None:
     """A professional card prints the bonus HTVA ("1 c EUR/kWh (HTVA)"). It is
     a bonus on the feed-in price, so it is grossed where the card taxes its

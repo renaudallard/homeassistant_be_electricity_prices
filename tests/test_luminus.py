@@ -759,6 +759,42 @@ def test_the_standing_loyalty_discount_is_not_read_as_a_campaign() -> None:
     assert plus.welcome_credit_excludes_night_meter is False
 
 
+@pytest.mark.parametrize(
+    ("fixture", "contract", "rate"),
+    [
+        # "le prix unitaire en EUR/kWh TVAC de l'estimation annuelle de
+        # l'energie fournie applicable aux compteurs mono-horaires": the
+        # "Estimation annuelle" row, 20,70 where the card prints 18,87.
+        ("luminus_maxxflex_w_oct.pdf", "luminus_maxxflex", 0.2070),
+        # 23,85 against a printed 18,00.
+        ("luminus_comfyflex_plus_w_oct.pdf", "luminus_comfyflex_plus", 0.2385),
+        # "des couts energetiques": MaxxFix's own printed rate, as before.
+        ("luminus_maxxfix_w_oct.pdf", "luminus_maxxfix", None),
+    ],
+)
+def test_a_free_volume_is_valued_at_the_rate_its_card_names(
+    fixture: str, contract: str, rate: float | None
+) -> None:
+    from custom_components.be_electricity_prices.fees import (
+        _year_ahead_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        static_energy_eur_per_kwh,
+    )
+
+    snap = parse_snapshot(contract, fixture_text(fixture), "wallonia")
+    assert snap.welcome_credit_kwh == pytest.approx(675.0)
+    if rate is None:
+        assert snap.welcome_credit_kwh_rate is None
+        rate = static_energy_eur_per_kwh(snap.energy, "single")
+        assert rate is not None
+    else:
+        assert snap.welcome_credit_kwh_rate == pytest.approx(rate)
+    signed = date(2026, 10, 1)
+    credit = _year_ahead_welcome_credit(snap, signed, signed, 99_999.0, 3500.0, 0.2)
+    assert credit == pytest.approx(675.0 * rate)
+
+
 def test_a_campaign_naming_its_product_needs_no_signing_phrase() -> None:
     """October 2026 reworded the ComfyFlex campaign without the signing gate.
 

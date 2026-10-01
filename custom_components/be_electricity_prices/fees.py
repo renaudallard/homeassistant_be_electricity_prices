@@ -694,13 +694,17 @@ def _welcome_credit_eur(
     #
     # The percentage leg above keeps the realised rate, because its own
     # sentence names both registers ("en heures pleines et creuses").
+    #
+    # A card may name another single rate: Luminus's October 2026 variable
+    # cards value the volume at their "estimation annuelle", which the
+    # parser carries as welcome_credit_kwh_rate.
     if snapshot.welcome_credit_kwh:
         # getattr for the reason grants_a_welcome_credit uses it: the compare
         # page hands this the card it read the amount off, typed Any, and a
         # caller holding one without rates still has to get the realised-rate
         # fallback rather than an AttributeError out of a fee helper.
         card_energy = getattr(snapshot, "energy", None)
-        volume_rate = (
+        volume_rate = getattr(snapshot, "welcome_credit_kwh_rate", None) or (
             static_energy_eur_per_kwh(card_energy, "single")
             if card_energy is not None
             else None

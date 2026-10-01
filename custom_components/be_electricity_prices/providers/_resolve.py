@@ -236,6 +236,13 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             if snapshot.welcome_credit_direct_debit_eur is None
             else snapshot.welcome_credit_direct_debit_eur * factor
         ),
+        # The rate a free volume is valued at is an energy price like the
+        # ones grossed above, so it takes the same basis.
+        welcome_credit_kwh_rate=(
+            None
+            if snapshot.welcome_credit_kwh_rate is None
+            else snapshot.welcome_credit_kwh_rate * factor
+        ),
         # A bonus on the feed-in price, so it takes that price's VAT
         # treatment rather than the consumption credit's: grossed where the
         # card taxes its feed-in, left as printed where it does not.

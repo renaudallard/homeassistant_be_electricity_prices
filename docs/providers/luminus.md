@@ -525,6 +525,9 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_smartflex_w_oct.pdf` | SmartFlex (tou), Wallonia, October 2026 | four-figure row with Happy Sunday |
 | `luminus_smartflex_v_oct.pdf` | SmartFlex (tou), Flanders, October 2026 | four-figure row with Happy Sunday |
 | `luminus_comfyflex_w_oct.pdf` | ComfyFlex (variable), Wallonia, October 2026 | campaign gated by the product name |
+| `luminus_maxxflex_w_oct.pdf` | MaxxFlex (variable), Wallonia, October 2026 | cashback valued at the annual estimate |
+| `luminus_comfyflex_plus_w_oct.pdf` | ComfyFlex+ (variable), Wallonia, October 2026 | cashback valued at the annual estimate |
+| `luminus_maxxfix_w_oct.pdf` | MaxxFix (fixed), Wallonia, October 2026 | cashback valued at the printed rate |
 
 Note: fixtures for `luminus_comfy_plus`, `luminus_maxxfix`, `luminus_basicfix`
 and `luminus_basicflex` are not present; those contracts share the fixed /

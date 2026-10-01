@@ -112,7 +112,7 @@ def _extract_promo(text: str) -> dict[str, object]:
         start = before[-1]
         spans.append((start, flat[start : flat.find(".", gate_at.start()) + 1]))
 
-    sentence = payout = ""
+    sentence = payout = valuation = ""
     pct = kwh = eur = None
     for want_flat in (False, True):
         for start, span in spans:
@@ -127,6 +127,7 @@ def _extract_promo(text: str) -> dict[str, object]:
             pct, kwh, eur = found_pct, found_kwh, found_eur
             sentence = span
             payout = flat[start + len(span) :][:240]
+            valuation = flat[start + len(span) :][:600]
             break
         if sentence:
             break
@@ -136,6 +137,14 @@ def _extract_promo(text: str) -> dict[str, object]:
         out["welcome_credit_pct_of_energy"] = to_float(pct.group(1)) / 100.0
     if kwh is not None:
         out["welcome_credit_kwh"] = tier_bound_kwh(kwh.group(1))
+        # The rate the volume is valued at, when the clause after the
+        # campaign names the card's yearly estimate rather than its printed
+        # single rate. Left unset if the row is missing, which values the
+        # volume at the printed rate as every earlier card asked.
+        valued = _PROMO_VALUED_AT_ESTIMATE_RE.search(valuation)
+        estimate = _ANNUAL_ESTIMATE_RE.search(flat) if valued is not None else None
+        if estimate is not None:
+            out["welcome_credit_kwh_rate"] = to_float(estimate.group(1)) / 100.0
     if eur is not None:
         # to_float, not tier_bound_kwh: this is money with a decimal comma
         # ("60,00"), where a volume bound is an integer with a thousands dot
@@ -472,6 +481,20 @@ _PROMO_EUR_RE = re.compile(r"remise\s+de\s+(\d{1,4}(?:,\d{1,2})?)\s*EUR", re.IGN
 # read gives 1,0 kWh. tier_bound_kwh is the shared reader for exactly
 # that, written for the excise tranche bounds ("20.000 kWh").
 _PROMO_KWH_RE = re.compile(r"remise\s+de\s+(\d[\d\s.,]*\d|\d)\s*kWh", re.IGNORECASE)
+# "Ce montant est calcule en multipliant par 675 kWh le prix unitaire en
+# EUR/kWh TVAC de l'estimation annuelle de l'energie fournie applicable aux
+# compteurs mono-horaires" (October 2026 MaxxFlex and ComfyFlex+). MaxxFix
+# says "des couts energetiques" there, its printed rate, and earlier cards
+# "du cout de l'energie".
+_PROMO_VALUED_AT_ESTIMATE_RE = re.compile(
+    r"Ce\s+montant\s+est\s+calcul[ée][^.]*?estimation\s+annuelle\s+de\s+l['\u2019]",
+    re.IGNORECASE,
+)
+# Its mono-hourly figure, the first on the row; the label wraps and a footnote
+# marker may sit against the closing parenthesis ("(c€/kWh)3 20,70 24,11").
+_ANNUAL_ESTIMATE_RE = re.compile(
+    r"Estimation\s+annuelle\s+de\s+l['\u2019]énergie\s+fournie\s*\(c€/kWh\)\d?\s+(\d+,\d+)"
+)
 _PROMO_NIGHT_RE = re.compile(
     r"non[-\s]valable\s+sur\s+un\s+compteur\s+exclusif\s+nuit", re.IGNORECASE
 )

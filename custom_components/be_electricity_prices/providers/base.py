@@ -406,6 +406,13 @@ class SupplierSnapshot:
     # "3 mois d'electricite gratuite, Cashback de 750 kWh apres 12 mois" on
     # MaxxFix and MaxxFlex. In kWh, so not VAT-scaled either.
     welcome_credit_kwh: float | None = None
+    # The rate that volume is valued at, in EUR/kWh, when the card names one
+    # other than its printed single rate. Luminus's October 2026 MaxxFlex and
+    # ComfyFlex+ cards say "le prix unitaire en EUR/kWh TVAC de l'estimation
+    # annuelle de l'energie fournie applicable aux compteurs mono-horaires",
+    # the card's own yearly estimate, which sat 1,83 to 5,85 c/kWh above the
+    # printed rate on those cards. None means the printed single rate.
+    welcome_credit_kwh_rate: float | None = None
     # True when the card excludes an exclusive-night-only connection from the
     # credit: "non-valable sur un compteur exclusif nuit", which Luminus's
     # own conditions repeat ("ne s'applique pas si vous consommez uniquement

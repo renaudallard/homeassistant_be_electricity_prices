@@ -197,6 +197,7 @@ def test_every_snapshot_field_survives_the_round_trip() -> None:
         "welcome_credit_requires_direct_debit": True,
         "welcome_credit_pct_of_energy": 0.33,
         "welcome_credit_kwh": 750.0,
+        "welcome_credit_kwh_rate": 0.207,
         "welcome_credit_excludes_night_meter": True,
         "welcome_credit_after_months": 14,
         "welcome_credit_injection_eur_per_kwh": 0.0106,
