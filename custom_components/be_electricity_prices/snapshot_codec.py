@@ -396,7 +396,17 @@ class _MigratingStore(Store[dict[str, Any]]):
 # card states and the one a parser grossed an unstated formula by. The
 # residential rate is read from the cards and the month's consensus rather
 # than assumed, and a v72 row cannot say which of its figures were a guess.
-_SNAPSHOT_SCHEMA_VERSION = 73
+# v74: a closed month the card archive only caught live is settled on the
+# supplier's following card, and Mega keeps a month provisional until that
+# card is out; a v73 store holds September 2026 for Eneco, EBEM, Mega and
+# Trevion as settled on the estimate the card printed. The October 2026
+# cards also moved what several parsers read: Luminus' Impact columns and
+# SmartFlex rates, Mega's ristourne and its Dynamic ristourne, TotalEnergies'
+# fixed cards, Bolt's Plenty offers and Plenty Online's own formula,
+# Aspiravi's printed rates, OCTA+'s year-one note and the Brusol cards. v74
+# also carries welcome_credit_kwh_rate, welcome_credit_signing_month and the
+# Happy Sunday band of the SmartFlex rates, which a v73 row cannot hold.
+_SNAPSHOT_SCHEMA_VERSION = 74
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
