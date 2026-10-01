@@ -1586,11 +1586,19 @@ async def _retry_unparsed(
     the way a row's replay is pinned to its capture day: a parse that reads
     "valid until" against today must not decide a card from two months ago
     is expired.
+
+    A month that has a row is left alone. ``_write_unparsed`` keeps no entry
+    for such a month, so the row was filed by this run's walk, from a card
+    that parsed and was captured later than the one held here: on
+    1 October 2026 TotalEnergies' morning template would have gone over the
+    afternoon's card, dated the 15th.
     """
     entries = {key: _as_sources(value) for key, value in _read_unparsed(out).items()}
     for key, sources in sorted(entries.items()):
         supplier, contract, region, month = key.split("/")
         label = f"{supplier}/{contract}/{region}/{month}"
+        if (out / _ROWS / supplier / contract / region / f"{month}.json").exists():
+            continue
         extractor = extractors.get(supplier)
         if extractor is None:
             continue

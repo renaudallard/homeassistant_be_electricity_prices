@@ -1083,7 +1083,9 @@ copy there will ever be and the reader is the one thing that can change the answ
 reader learns to read them they become rows and their entries disappear. The clock is pinned to
 the middle of the month the card was captured in, the way a row's replay is pinned to its
 capture day, so a parse that reads "valid until" against today does not decide a card from two
-months ago is expired.
+months ago is expired. A month that already has a row is not retried: `unparsed.json` keeps no
+entry for such a month, so the row was filed by the same run's walk from a later card that parsed,
+and on 1 October 2026 TotalEnergies' morning template would otherwise have gone over it.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed

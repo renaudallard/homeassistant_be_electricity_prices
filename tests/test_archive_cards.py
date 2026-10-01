@@ -1122,6 +1122,59 @@ def test_no_text_goes_while_a_row_cannot_be_read(tmp_path: Path) -> None:
     assert not (tmp_path / "texts/2026-09").exists()
 
 
+async def test_a_retried_card_never_goes_over_a_row_its_month_has(
+    tmp_path: Path,
+) -> None:
+    """The walk files a month from a card that parsed, then the retry reads
+    the cards held as unreadable. On 1 October 2026 the morning's
+    TotalEnergies template, unreadable until the parser changed, went over
+    the afternoon card the walk had just filed, with its capture dated the
+    15th. A month with a row is not retried; one without still is."""
+    fetched: list[str] = []
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        fetched.append(contract)
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.9098),
+            publication_label="octobre 2026",
+        )
+
+    live = make_snapshot(
+        supplier="acme",
+        contract="acme_fix",
+        energy=FixedRates(single=0.2021),
+        publication_label="octobre 2026",
+    )
+    ac._write_card(
+        tmp_path, "acme", "acme_fix", "wallonia", "2026-10", live, [], NOW, "live"
+    )
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-10.json"
+    before = row.read_text()
+    held = [{"url": CARD_URL, "pdf": "abc"}]
+    (tmp_path / "unparsed.json").write_text(
+        json.dumps(
+            {
+                "acme/acme_fix/wallonia/2026-10": held,
+                "acme/acme_flex/wallonia/2026-10": held,
+            }
+        )
+    )
+    extractor = _extractor(fetch, contracts=("acme_fix", "acme_flex"))
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    await ac._retry_unparsed(
+        tmp_path,
+        {"acme": extractor},
+        ac._Cards(tmp_path, None, "2026-10"),
+        replay,
+        NOW,
+        ac._Summary(),
+    )
+    assert fetched == ["acme_flex"]
+    assert row.read_text() == before
+
+
 def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
     replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
 
