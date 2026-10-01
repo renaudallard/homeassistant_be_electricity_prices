@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 import voluptuous as vol
@@ -439,6 +439,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             hour=0,
             minute=0,
             second=rollover_second,
+        )
+    )
+
+    # The rebuild above anchors the hourly ticks at HH:00, so the last tick
+    # of a month ran at 23:00 and nothing read the month after it: a peak the
+    # capacity sensor set in that hour was never banked, and the hour was
+    # missing from the month's last cost. One more tick a minute before
+    # midnight on the month's last day closes it. Kept in the first half of
+    # the minute so a slow tick still finishes before midnight.
+    async def _close_the_month(now: datetime) -> None:
+        if (now + timedelta(days=1)).day == 1:
+            await coordinator.async_request_refresh()
+
+    entry.async_on_unload(
+        async_track_time_change(
+            hass,
+            _close_the_month,
+            hour=23,
+            minute=59,
+            second=rollover_second // 2,
         )
     )
 

@@ -4,6 +4,7 @@ time listeners ``async_setup_entry`` registers."""
 from __future__ import annotations
 
 import zlib
+from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -226,6 +227,30 @@ async def test_setup_registers_a_local_midnight_rebuild(hass: HomeAssistant) -> 
     assert refresh.await_count == 0
     await action(dt_util.now())
     assert refresh.await_count == 1
+
+
+async def test_the_last_day_of_a_month_ticks_once_more_before_midnight(
+    hass: HomeAssistant,
+) -> None:
+    """The midnight rebuild anchors the hourly ticks at HH:00, so the last
+    tick of a month ran at 23:00: a capacity peak set after it was never
+    banked and that hour was missing from the month's last cost. A tick a
+    minute before midnight on the month's last day closes the month, and on
+    no other day."""
+    registered, refresh = await _setup_capturing_time_listeners(hass)
+
+    closing = [(spec, fn) for spec, fn in registered if spec["hour"] == 23]
+    assert len(closing) == 1
+    spec, action = closing[0]
+    assert spec["minute"] == 59 and spec["second"] in range(30)
+
+    brussels = dt_util.get_time_zone("Europe/Brussels")
+    await action(datetime(2026, 9, 29, 23, 59, 10, tzinfo=brussels))
+    assert refresh.await_count == 0
+    await action(datetime(2026, 9, 30, 23, 59, 10, tzinfo=brussels))
+    assert refresh.await_count == 1
+    await action(datetime(2026, 12, 31, 23, 59, 10, tzinfo=brussels))
+    assert refresh.await_count == 2
 
 
 async def test_midnight_rebuild_second_is_stable_and_spread(
