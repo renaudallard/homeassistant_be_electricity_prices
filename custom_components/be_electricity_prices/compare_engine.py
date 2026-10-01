@@ -177,9 +177,14 @@ class _SweepEngine(_HouseholdMixin):
         # ENTSO-E fetch does not belong in a timer job. A household that
         # needs none leaves this empty, and the gate below is what keeps
         # that from printing an uncredited figure.
-        hist_spots = dict(getattr(coord, "_historical_spots", {}) or {})
-        hist_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
-        if _keyless_stale_spots(current, hist_spots, hh.ytd_from, today):
+        own_spots = dict(getattr(coord, "_historical_spots", {}) or {})
+        own_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
+        # The household's own row reads the cache as it is, which is what its
+        # current_year_cost sensor bills on. The candidates do not: a keyless
+        # entry's stale cache would credit their spot-indexed feed-in only up
+        # to the day its key went, so for them it counts as none.
+        hist_spots, hist_quarters = own_spots, own_quarters
+        if _keyless_stale_spots(current, own_spots, hh.ytd_from, today):
             hist_spots, hist_quarters = {}, {}
         own_ytd: float | None = None
         own_start = current_period_start(current, hh.ytd_from)
@@ -188,7 +193,7 @@ class _SweepEngine(_HouseholdMixin):
         # cohort splice can turn a spot-monthly leg into a variable one, which
         # answers "no spots needed" for a walk that still needs them.
         if hh.raw_snapshot is not None and not _needs_missing_spots(
-            hh.raw_snapshot, hh.quote_entry, hist_spots
+            hh.raw_snapshot, hh.quote_entry, own_spots
         ):
             with contextlib.suppress(Exception):
                 own_ytd = await _compute_current_year_cost(
@@ -200,8 +205,8 @@ class _SweepEngine(_HouseholdMixin):
                     # walk, and this figure sits beside the sensor's.
                     hh.raw_snapshot,
                     hh.quote_entry,
-                    historical_spots=hist_spots,
-                    spot_quarters=hist_quarters,
+                    historical_spots=own_spots,
+                    spot_quarters=own_quarters,
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
                     # The entry's own blend, so this says the same thing as the

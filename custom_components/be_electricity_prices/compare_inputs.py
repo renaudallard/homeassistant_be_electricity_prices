@@ -479,10 +479,11 @@ def _keyless_stale_spots(
     An entry whose key was removed keeps the cache it built while it had one,
     and nothing refreshes it after that, so it stops at the day the key went.
     The compare pages read such a cache as present: the quote then never
-    borrows the key typed on the page, and the ranking prints a year-to-date
-    figure whose spot-indexed feed-in is credited only up to that day. Read
-    as no cache at all, it is the state a never-keyed entry is already
-    priced in. Stale means it misses some day of the window, which for a
+    borrows the key typed on the page, and the ranking credits its
+    candidates' spot-indexed feed-in only up to that day. Read as no cache at
+    all, it is the state a never-keyed entry is already priced in. The
+    household's own row keeps reading it, since its current_year_cost sensor
+    bills on it. Stale means it misses some day of the window, which for a
     keyless entry is the days since its key was removed.
 
     Only a keyless entry. One with a key keeps its cache current, and a day

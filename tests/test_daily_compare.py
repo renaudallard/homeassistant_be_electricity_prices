@@ -689,8 +689,9 @@ def _one_hour_a_day(first: date, last: date) -> dict[datetime, float]:
         # An entry with a key keeps its cache current: handed as held, even
         # when ENTSO-E left a day out.
         ("k", False, True),
-        # A keyless entry holding what an earlier key left: stale, and read as
-        # no cache, the state a never-keyed entry is priced in.
+        # A keyless entry holding what an earlier key left: stale, so the
+        # candidates read it as no cache, the state a never-keyed entry is
+        # priced in.
         (None, False, False),
         # Keyless, but the cache still reaches yesterday: still good.
         (None, True, True),
@@ -705,8 +706,13 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     without spots is a solar household's bill with no solar in it. The
     one-to-one page has always passed them; this pass did not, which put the
     household's OWN row at odds with its current_year_cost sensor.
+
+    The own row always reads the cache as held, as its sensor does; only the
+    candidates drop a keyless entry's stale one.
     """
     from custom_components.be_electricity_prices import compare_engine
+    from custom_components.be_electricity_prices.providers._rates import ImpactRates
+    from tests import make_snapshot
 
     # Mid-year, so a cache holding 1 January alone is short of the window: on
     # 1 or 2 January that window is a day or less and the same cache covers it.
@@ -715,22 +721,39 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     ytd_from = date(today.year, 1, 1)
     last = today - timedelta(days=1) if covering else ytd_from
     spots = _one_hour_a_day(ytd_from, last)
-    seen: dict[str, Any] = {}
+    handed_to: dict[str, Any] = {}
 
     async def _capture(*args: Any, **kw: Any) -> float:
-        seen.update(kw)
+        side = "candidate" if kw.get("contract_override") else "own"
+        handed_to[side] = (kw["historical_spots"], kw["spot_quarters"])
         return 708.11
 
-    data = {"supplier": "eneco", "contract": "x"}
+    data: dict[str, Any] = {
+        "supplier": "luminus",
+        "contract": "luminus_smartflex",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "dynamic",
+        "dso_tariff_mode": "bi_horaire",
+        "solar_regime": "none",
+    }
     if key is not None:
         data["api_key"] = key
     entry = MockConfigEntry(domain=DOMAIN, data=data)
     entry.add_to_hass(hass)
     engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    raw = make_snapshot(
+        supplier="octaplus",
+        contract="octaplus_fixed_impact",
+        energy=ImpactRates(pic=0.30, medium=0.20, eco=0.10),
+    )
     sweep = {
         "region": "wallonia",
-        "rows": [RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)],
-        "labels": {},
+        "rows": [
+            RankedRow(label="Luminus SmartFlex", annual=1272.75, is_own=True),
+            RankedRow(label="OCTA+ Fixed Impact", annual=1102.75),
+        ],
+        "labels": {"OCTA+ Fixed Impact": ("octaplus", "octaplus_fixed_impact", False)},
         "household": SimpleNamespace(
             today_local=today,
             ytd_from=ytd_from,
@@ -738,8 +761,12 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
             raw_snapshot=object(),
             quote_entry=entry,
             peak_kw=4.0,
+            current_meter="dynamic",
+            dso_mode="bi_horaire",
+            regime="none",
         ),
     }
+    months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
     with (
         patch(
             "custom_components.be_electricity_prices.ytd_cost"
@@ -749,15 +776,26 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
         patch(
             "custom_components.be_electricity_prices.snapshot_months"
             ".archived_months_present",
-            return_value=[],
+            return_value={(m.year, m.month) for m in months},
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_months"
+            "._snapshot_for_month",
+            AsyncMock(return_value=raw),
         ),
         patch.object(compare_engine, "get_extractor", return_value=object()),
-        patch.object(compare_engine, "_sweep_rows", return_value={}),
+        patch.object(
+            compare_engine,
+            "_sweep_rows",
+            return_value={
+                ("wallonia", "octaplus", "octaplus_fixed_impact"): (raw, False)
+            },
+        ),
     ):
         await engine.fill_ytd_column(sweep, _coord_with_spots(spots))
 
-    assert seen["historical_spots"] == (spots if handed else {})
-    assert seen["spot_quarters"] == {}
+    assert handed_to["own"] == (spots, {})
+    assert handed_to["candidate"] == ((spots, {}) if handed else ({}, {}))
 
 
 async def test_a_row_needing_spots_that_are_absent_prints_no_figure(
