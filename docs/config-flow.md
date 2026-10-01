@@ -833,7 +833,10 @@ which saves and restores `_historical_spots`, `_historical_spot_quarters` and
 `_complete_spot_days` around the fetch — the completeness set travels with the
 two dicts because a day listed there counts as fully present without consulting
 them, so isolating the dicts alone would make the fetch skip every day the
-coordinator had already walked. The month-mean borrow merges
+coordinator had already walked. `_quarter_grid_days` and `_spot_day_retry_at`
+travel with them too: the walk writes both, the grid is persisted, and a retry
+marker left by one dialog's failed fetch would hold the next dialog back from
+the same days; an isolated borrow starts without either. The month-mean borrow merges
 (`compare_household.py`); the YTD borrow isolates (`compare_placeholders.py`),
 and runs when the cache is empty or, on a keyless entry where a key was typed
 on the page, stale (`_keyless_stale_spots`), so that key is not ignored over

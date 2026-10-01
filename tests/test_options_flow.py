@@ -6057,10 +6057,13 @@ def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
 
     hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
     later = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    retry = {date(2026, 3, 3): datetime(2026, 3, 4, 10, 0, tzinfo=UTC)}
     coord = SimpleNamespace(
         _historical_spots={hour: 0.10},
         _historical_spot_quarters={hour: [0.1, 0.2, 0.3, 0.4]},
         _complete_spot_days={date(2026, 3, 1)},
+        _quarter_grid_days={date(2026, 3, 1)},
+        _spot_day_retry_at=dict(retry),
     )
 
     # Merging: the fetch sees what is already cached, and adds to it.
@@ -6076,10 +6079,20 @@ def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
         assert coord._historical_spots == {}
         assert coord._historical_spot_quarters == {}
         assert coord._complete_spot_days == set()
+        # Nor a day another dialog's failed fetch backed off, nor the grid the
+        # entry's own days came on.
+        assert coord._spot_day_retry_at == {}
+        assert coord._quarter_grid_days == set()
         coord._historical_spots[later] = 0.20
+        coord._quarter_grid_days.add(date(2026, 3, 2))
+        coord._spot_day_retry_at[date(2026, 3, 2)] = later
     assert coord._historical_spots == {hour: 0.10}
     assert coord._historical_spot_quarters == {hour: [0.1, 0.2, 0.3, 0.4]}
     assert coord._complete_spot_days == {date(2026, 3, 1)}
+    # The walk writes both, and the entry persists the grid: what the borrow
+    # marked must not outlive it.
+    assert coord._quarter_grid_days == {date(2026, 3, 1)}
+    assert coord._spot_day_retry_at == retry
 
 
 def test_borrowed_spot_cache_restores_in_place() -> None:
@@ -6098,6 +6111,8 @@ def test_borrowed_spot_cache_restores_in_place() -> None:
         _historical_spots={hour: 0.10},
         _historical_spot_quarters={},
         _complete_spot_days=set(),
+        _quarter_grid_days=set(),
+        _spot_day_retry_at={},
     )
     held = coord._historical_spots
     with _borrowed_spot_cache(coord, isolate=True):
@@ -6122,6 +6137,8 @@ def test_isolating_the_cache_clears_the_completeness_set() -> None:
         _historical_spots={},
         _historical_spot_quarters={},
         _complete_spot_days=set(walked),
+        _quarter_grid_days=set(),
+        _spot_day_retry_at={},
     )
     with _borrowed_spot_cache(coord, isolate=True):
         # What _ensure_historical_spots reads to decide whether to fetch.

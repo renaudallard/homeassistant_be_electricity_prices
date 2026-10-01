@@ -624,11 +624,11 @@ def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
     never refresh it, so a partial month mean gets baked over the card's
     printed indicative for the rest of the month.
 
-    Three attributes are saved, not two. A day listed in
+    The two dicts are not all it saves. A day listed in
     ``_complete_spot_days`` is treated as fully present without consulting
-    the hour dict at all, so it has to travel with them: emptying the dicts
-    alone leaves the fetch believing every day the coordinator has already
-    walked is covered, and it returns without fetching anything.
+    the hour dict at all, so that set has to travel with them: emptying the
+    dicts alone leaves the fetch believing every day the coordinator has
+    already walked is covered, and it returns without fetching anything.
 
     Copied and restored in place rather than rebound, because
     ``_ensure_historical_spots`` merges each chunk into the attribute and
@@ -637,14 +637,25 @@ def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
     ``isolate`` empties the caches first, for a caller that wants only the
     hours it fetched itself; without it the fetch merges into what is
     already there, which is what a month mean wants.
+
+    Two more travel with them, for the same reason: the walk writes both and
+    reads both to decide what to fetch. ``_quarter_grid_days`` says which
+    product a day came from and is persisted, so a borrow on the other grid
+    would mark the entry's own days with it. ``_spot_day_retry_at`` backs a
+    failed day off for hours, so one dialog that hit an outage held the next
+    one back from the same days; an isolated borrow starts without either.
     """
     saved_spots = dict(coord._historical_spots)
     saved_quarters = dict(coord._historical_spot_quarters)
     saved_complete = set(coord._complete_spot_days)
+    saved_grid = set(coord._quarter_grid_days)
+    saved_retry = dict(coord._spot_day_retry_at)
     if isolate:
         coord._historical_spots.clear()
         coord._historical_spot_quarters.clear()
         coord._complete_spot_days.clear()
+        coord._quarter_grid_days.clear()
+        coord._spot_day_retry_at.clear()
     try:
         yield
     finally:
@@ -654,3 +665,7 @@ def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
         coord._historical_spot_quarters.update(saved_quarters)
         coord._complete_spot_days.clear()
         coord._complete_spot_days.update(saved_complete)
+        coord._quarter_grid_days.clear()
+        coord._quarter_grid_days.update(saved_grid)
+        coord._spot_day_retry_at.clear()
+        coord._spot_day_retry_at.update(saved_retry)
