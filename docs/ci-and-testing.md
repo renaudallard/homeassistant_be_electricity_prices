@@ -481,7 +481,10 @@ went on serving the August cards of Fixed, Flux, Eco Fixed and Eco Flux after re
 
 The report separates the two kinds of expected failure, because they need different explanations: a
 page-image card can come back, a supplier that has left cannot. Folding a withdrawal under
-"unreadable cards" would send the reader looking for a text layer that was never the problem.
+"unreadable cards" would send the reader looking for a text layer that was never the problem. A
+withdrawn product shares the supplier's marker but has a section of its own
+(`_withdrawn_product`): its supplier is still trading, its entries raise `contract_withdrawn`
+rather than the supplier-deprecated card, and it has no successor to name.
 
 The point of deriving it is that the allowance ends when the withdrawal does. A supplier name
 listed in `_PERIOD_EXEMPT` would go on suppressing the check long after the reason for it expired,

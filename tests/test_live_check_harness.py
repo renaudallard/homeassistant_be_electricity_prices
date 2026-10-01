@@ -1076,6 +1076,28 @@ def test_a_withdrawn_product_reports_but_does_not_gate_ci(
     assert [c for c in lc.CHECKS if not c.ok and not c.expected]
 
 
+def test_a_withdrawn_product_is_reported_apart_from_a_supplier_that_left(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A withdrawn OCTA+ product was listed under "Withdrawn suppliers", with
+    text saying the supplier is past its deprecated_until and its entries
+    raise the supplier-deprecated card naming a successor. OCTA+ is still
+    trading and a withdrawn product has no successor."""
+    monkeypatch.setitem(lc._WITHDRAWN_CONTRACTS, "octaplus_fixed", date(2026, 10, 1))
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 11, 3)))
+    lc._record("octaplus/octaplus_fixed/flanders: card is recent enough", False, "old")
+    lc._record("dats24/dats24_groen_variabel: card fetched", False, "404")
+    report = lc._render_report(list(lc.CHECKS))
+    suppliers, products = report.split("## Withdrawn products")
+    assert (
+        "dats24/dats24_groen_variabel" in suppliers.split("## Withdrawn suppliers")[1]
+    )
+    assert "octaplus/octaplus_fixed" not in suppliers
+    assert "octaplus/octaplus_fixed" in products.split("## All checks")[0]
+    assert "contract-withdrawn" in products
+
+
 def test_withdrawn_products_are_read_from_the_registry() -> None:
     from custom_components.be_electricity_prices.providers import octaplus
 

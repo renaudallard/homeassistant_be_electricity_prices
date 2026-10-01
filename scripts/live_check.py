@@ -780,6 +780,13 @@ def _supplier_of(label: str) -> str:
     return label.split(":", 1)[0].split("/", 1)[0].strip()
 
 
+def _withdrawn_product(label: str) -> date | None:
+    """The date the product a check's label names stopped being sold, or
+    None when it names no withdrawn product. Keyed on the contract segment."""
+    segments = label.split(":", 1)[0].split("/")
+    return _WITHDRAWN_CONTRACTS.get(segments[1]) if len(segments) > 1 else None
+
+
 def _mark_if_withdrawn(label: str, detail: str) -> str:
     """Prefix the withdrawal marker when this check's supplier has left.
 
@@ -803,8 +810,7 @@ def _mark_if_withdrawn(label: str, detail: str) -> str:
     # A withdrawn product's date is the first day it was no longer sold, so
     # the allowance starts on it: from then on its card is the last one the
     # supplier will ever publish for it, and it goes stale and then away.
-    segments = label.split(":", 1)[0].split("/")
-    product_gone = _WITHDRAWN_CONTRACTS.get(segments[1]) if len(segments) > 1 else None
+    product_gone = _withdrawn_product(label)
     if product_gone is not None and today >= product_gone:
         return f"{_WITHDRAWN_MARKER}: {detail}"
     supplier = _supplier_of(label)
@@ -4799,21 +4805,41 @@ def _render_report(
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
-    if withdrawn:
-        rows.append("## Withdrawn suppliers (expected, not a regression)")
-        rows.append("")
-        rows.append(
+    # One marker covers a supplier that left and a product its supplier
+    # withdrew, but their entries raise different Repairs cards and only one
+    # of them has a successor, so each gets its own explanation.
+    products = [c for c in withdrawn if _withdrawn_product(c.label) is not None]
+    for heading, text, gone in (
+        (
+            "## Withdrawn suppliers (expected, not a regression)",
             "These suppliers are past their own `deprecated_until`: they have "
             "left the residential market, so their cards stop being published "
             "and eventually stop resolving at all. Nothing in this repository "
             "can fix that. Affected entries raise the supplier-deprecated "
             "Repairs card naming the successor. These rows do not fail the "
-            "run, and they go away when the supplier is removed."
-        )
+            "run, and they go away when the supplier is removed.",
+            [c for c in withdrawn if c not in products],
+        ),
+        (
+            "## Withdrawn products (expected, not a regression)",
+            "Their supplier has stopped selling these products and left the "
+            "last card up, which goes stale and may later be taken down. "
+            "Nothing in this repository can fix that. Affected entries keep "
+            "pricing on that last card and raise the contract-withdrawn "
+            "Repairs card. These rows do not fail the run, and they go away "
+            "when the product is removed from the registry.",
+            products,
+        ),
+    ):
+        if not gone:
+            continue
+        rows.append(heading)
+        rows.append("")
+        rows.append(text)
         rows.append("")
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
-        for c in withdrawn:
+        for c in gone:
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
