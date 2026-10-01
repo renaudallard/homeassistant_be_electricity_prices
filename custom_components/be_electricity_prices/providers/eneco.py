@@ -847,6 +847,7 @@ _ENECO_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=0.7,
+    settles_on_next_card=True,
     id="eneco",
     label="Eneco",
     contracts=(

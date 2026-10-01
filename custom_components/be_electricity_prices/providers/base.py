@@ -517,6 +517,12 @@ class SupplierExtractor:
     # repository's card archive and falls back to the current snapshot as
     # a proxy.
     fetch_for_month: ArchivedSnapshotFetcher | None = None
+    # Whether ``fetch_for_month`` settles a month-indexed month on the card
+    # that follows it, and flags it provisional until that card is out
+    # (Eneco, EBEM, Trevion and Mega). Only for such a supplier is a closed
+    # month the card archive caught while it ran worth asking it about
+    # again: every other one answers with the same card.
+    settles_on_next_card: bool = False
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry
     # id of the supplier taking them over. Two effects, both deliberate:

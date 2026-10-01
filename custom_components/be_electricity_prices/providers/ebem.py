@@ -936,6 +936,7 @@ _RLP_BLEND: RlpBlend = "flanders"
 
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=5.3,
+    settles_on_next_card=True,
     id="ebem",
     label="EBEM",
     contracts=tuple(

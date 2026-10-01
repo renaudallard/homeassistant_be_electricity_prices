@@ -1657,10 +1657,10 @@ The integration reads that archive first for any closed month, one small
 JSON per month straight from `raw.githubusercontent.com` against a PDF
 download and a parse from the supplier; the supplier's own archive answers
 for a month the project's does not hold, and the current card stands in when
-neither has it. A card indexed on its own month (Eneco Flex, EBEM's variable
-cards, Mega's Flex and Impact range, Trevion's monthly contracts and the like)
-prints last month's index while it runs, and the supplier settles the month
-on the card after it. A month the archive caught live on such a card is
+neither has it. A card indexed on its own month at Eneco (Flex), EBEM (the
+variable cards), Mega (the Flex and Impact range) or Trevion (the monthly
+contracts) prints last month's index while it runs, and the supplier settles
+the month on the card after it. A month the archive caught live on such a card is
 therefore read from the supplier once it has closed, and billed on the
 archive's copy, re-asked daily, until that card is out; the daily run then
 replaces the archive's copy with the settled one. The request names the supplier, contract, region and month

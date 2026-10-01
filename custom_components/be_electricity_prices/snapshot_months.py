@@ -331,8 +331,9 @@ def _settles_after_its_month(snap: SupplierSnapshot) -> bool:
     the month on its own once it is known: Eneco and EBEM name it on the next
     card, Trevion prints both of its indices there, and Mega's next card states
     the figures it billed "pour le mois de" the one before. The parser marks
-    each such leg, and that mark is the test, so no list of suppliers has to
-    be kept beside it.
+    each such leg. It is not the whole test at runtime: a supplier whose
+    month lookup answers with the same card has nothing to settle, which is
+    what ``SupplierExtractor.settles_on_next_card`` says.
     """
     return bool(getattr(snap.energy, "month_indexed", False)) or (
         _injection_on_month_mean(snap)
@@ -722,7 +723,11 @@ async def _snapshot_for_month(
                 archive_failed = True
         if archived is not None:
             snap = archived.snapshot
-            if extractor.fetch_for_month is not None and _awaits_settlement(archived):
+            if (
+                extractor.fetch_for_month is not None
+                and extractor.settles_on_next_card
+                and _awaits_settlement(archived)
+            ):
                 snap = await _settled_by_supplier(
                     session,
                     extractor.fetch_for_month,

@@ -679,6 +679,7 @@ EXTRACTOR = SupplierExtractor(
     id="trevion",
     label="Trevion",
     sweep_cost_s=8.0,
+    settles_on_next_card=True,
     contracts=tuple(
         Contract(
             id=item.id,

@@ -5205,6 +5205,7 @@ async def _september_from_a_live_row(
     supplier_answer: Any,
     *,
     captured_live: bool = True,
+    settles_on_next_card: bool = True,
 ) -> tuple[SupplierSnapshot, int]:
     """September asked on 1 October, the archive holding ``caught``."""
     asked = 0
@@ -5222,6 +5223,7 @@ async def _september_from_a_live_row(
         contracts=(),
         fetch=AsyncMock(),
         fetch_for_month=_fetch_for_month,
+        settles_on_next_card=settles_on_next_card,
     )
     github = AsyncMock(
         return_value=ArchivedCard(
@@ -5294,6 +5296,38 @@ async def test_an_archive_row_needing_no_settlement_does_not_ask_the_supplier(
         hass, settled, None, captured_live=captured_live
     )
     assert asked == (1 if captured_live else 0)
+    # A supplier whose month lookup answers with the same card has nothing to
+    # settle. Engie, Luminus and two dozen others index a leg on the month
+    # too, and asking each cost the compare page a supplier fetch per
+    # candidate after every restart, up to two minutes apiece.
+    snap, asked = await _september_from_a_live_row(
+        hass,
+        settled,
+        None,
+        captured_live=captured_live,
+        settles_on_next_card=False,
+    )
+    assert snap is settled
+    assert asked == 0
+
+
+def test_every_supplier_that_settles_a_month_on_the_next_card_says_so() -> None:
+    """The flag is what lets the month lookup ask a supplier about a month
+    the archive caught while it ran, so a provider whose month lookup flags a
+    month provisional and leaves it unset would bill the estimate for good.
+    Read off the provider sources: a provisional month is what settling on
+    the next card looks like."""
+    import inspect
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    for extractor in EXTRACTORS.values():
+        module = inspect.getmodule(extractor.fetch)
+        assert module is not None
+        source = inspect.getsource(module)
+        assert extractor.settles_on_next_card == ("provisional=True" in source), (
+            extractor.id
+        )
 
 
 async def test_snapshot_for_month_uses_archive_when_available(
