@@ -86,6 +86,32 @@ from .snapshot_store import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _asked_while_it_ran(
+    stamped: datetime | None, year_month: date, today: date
+) -> bool:
+    """Whether a cached row of a month that has since closed was asked for
+    while that month was still running.
+
+    A provisional row of that kind answers a question about the running
+    month, not the closed one: "no card can be addressed by date yet" (Bolt's
+    variable folder, TotalEnergies, Ecofix), or the estimate a month-indexed
+    card printed. Kept on its TTL it outlived the 1st by up to a day, and with
+    the live card moved on the closed month was billed on the new month's
+    card: 0,0487 EUR/kWh over on a Bolt Variable September for most of 1
+    October, and for good wherever a backfill ran meanwhile, while the
+    archive, which held the month, was never asked.
+    """
+    if stamped is None or (year_month.year, year_month.month) >= (
+        today.year,
+        today.month,
+    ):
+        return False
+    after = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    return dt_util.as_local(stamped).date() < after
+
+
 def archived_months_present(
     hass: HomeAssistant,
     supplier: str,
@@ -170,8 +196,13 @@ def monthly_rows_to_store(
             # Written on its stamp alone, so a marker with no stamp, which
             # nothing writes today, is skipped rather than restored as
             # ageless. Never for the running month: that one is re-asked on
-            # every tick anyway.
-            if stamp is None or (month.year, month.month) >= running:
+            # every tick anyway, and nor once that month has closed, since
+            # it is asked again on the first read after the close.
+            if (
+                stamp is None
+                or (month.year, month.month) >= running
+                or _asked_while_it_ran(stamp, month, today)
+            ):
                 continue
             out[month_id] = {"_cached_at": stamp.isoformat(), "_absent": True}
             continue
@@ -223,6 +254,8 @@ def restore_monthly_rows(
             except (KeyError, TypeError, ValueError):
                 continue
             if dt_util.utcnow() - stamp >= _MONTHLY_PROVISIONAL_TTL:
+                continue
+            if _asked_while_it_ran(stamp, month, today):
                 continue
             if (month.year, month.month) >= (today.year, today.month):
                 # A marker for the running month is never written, but a blob
@@ -592,6 +625,7 @@ async def _snapshot_for_month(
             or (
                 stamped is not None
                 and dt_util.utcnow() - stamped < _MONTHLY_PROVISIONAL_TTL
+                and not _asked_while_it_ran(stamped, year_month, today)
             )
         ):
             # A caller that cannot fetch keeps the row it has, expired or not:
@@ -603,7 +637,9 @@ async def _snapshot_for_month(
         # within a day while the year-to-date and every backfilled row kept
         # billing the vintage first cached at startup, and a month whose card
         # had not published yet stayed "no archive" for the life of the HA
-        # process even after the card appeared.
+        # process even after the card appeared. One asked while its month was
+        # still running is re-asked once that month has closed, whatever its
+        # age.
         cache.pop(cache_key, None)
         fetched_at.pop(cache_key, None)
     if extractor.id == SUPPLIER_CUSTOM:

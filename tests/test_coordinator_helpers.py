@@ -119,6 +119,8 @@ from custom_components.be_electricity_prices.snapshot_months import (
     ArchivedCard,
     _archived_card_from_github,
     _snapshot_for_month,
+    monthly_rows_to_store,
+    restore_monthly_rows,
 )
 from custom_components.be_electricity_prices.snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
@@ -5399,6 +5401,78 @@ async def test_snapshot_for_month_reasks_a_row_that_can_still_move(
     freezer.move_to("2026-06-22 09:00:00+02:00")
     assert await _ask(date(2026, 6, 1)) is corrected
     assert fetch_calls == 2
+
+
+async def test_a_row_asked_while_its_month_ran_is_asked_again_once_it_closed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Bolt's variable folder cannot address a month by date, so the running
+    month is cached as "no card" and billed on the current card. At midnight
+    on the 1st that row was still inside its TTL, the live card moved to the
+    new month's, and the closed month was billed on it for up to a day while
+    the archive, which held the month, was not asked: a Bolt Variable
+    September 0,0487 EUR/kWh over for most of 1 October, and for good where a
+    backfill ran meanwhile or the marker was written to disk and restored."""
+    september = _archive_snapshot("2026-09")
+    october = _archive_snapshot("2026-10")
+
+    async def _none(*_a: object, **_kw: object) -> SupplierSnapshot | None:
+        return None
+
+    extractor = SupplierExtractor(
+        id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=_none
+    )
+    github = AsyncMock(return_value=_archive_row(september))
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    month = date(2026, 9, 1)
+    with patch.object(snapshot_months, "_archived_card_from_github", github):
+        freezer.move_to("2026-09-30 22:30:00+02:00")
+        assert (
+            await _snapshot_for_month(
+                hass, MagicMock(), extractor, "test", "flanders", month, september
+            )
+            is september
+        )
+        assert github.await_count == 0
+        freezer.move_to("2026-10-01 00:30:00+02:00")
+        # Neither written to disk nor restored from it.
+        assert monthly_rows_to_store(hass, "test", "test", "flanders", [month]) == {}
+        stamp = datetime(2026, 9, 30, 20, 30, tzinfo=UTC).isoformat()
+        _monthly_snapshots(hass).clear()
+        _monthly_fetched_at(hass).clear()
+        marker = {"2026-09": {"_cached_at": stamp, "_absent": True}}
+        assert restore_monthly_rows(hass, "test", "test", "flanders", marker) == 0
+        _monthly_snapshots(hass)[("test", "test", "flanders", "2026-09")] = None
+        _monthly_fetched_at(hass)[("test", "test", "flanders", "2026-09")] = (
+            datetime.fromisoformat(stamp)
+        )
+        # Read, it is asked again, and the archive answers for the month.
+        assert (
+            await _snapshot_for_month(
+                hass, MagicMock(), extractor, "test", "flanders", month, october
+            )
+            is september
+        )
+        assert github.await_count == 1
+        # A cached-only read keeps what it holds, as before.
+        _monthly_snapshots(hass)[("test", "test", "flanders", "2026-09")] = None
+        _monthly_fetched_at(hass)[("test", "test", "flanders", "2026-09")] = (
+            datetime.fromisoformat(stamp)
+        )
+        assert (
+            await _snapshot_for_month(
+                hass,
+                MagicMock(),
+                extractor,
+                "test",
+                "flanders",
+                month,
+                october,
+                cached_only=True,
+            )
+            is october
+        )
 
 
 async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
