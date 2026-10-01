@@ -103,6 +103,38 @@ def test_dynamic_bills_per_clock_hour() -> None:
     assert snap.energy.quarter_hourly is False
 
 
+@pytest.mark.parametrize(
+    ("fixture", "eco", "medium", "pic"),
+    [
+        # Headings ECO | MEDIUM | PIC, the order every card printed until
+        # September 2026.
+        ("luminus_dynamic_w.pdf", None, None, None),
+        # October 2026 turned the headings round to PIC | MEDIUM | ECO;
+        # ORES "11,98 13,27 7,39 16,57 10,83 5,09 ...".
+        ("luminus_dynamic_w_oct.pdf", 0.0509, 0.1083, 0.1657),
+    ],
+)
+def test_dynamic_wallonia_impact_bands_follow_the_headings(
+    fixture: str, eco: float | None, medium: float | None, pic: float | None
+) -> None:
+    snap = parse_snapshot("luminus_dynamic", fixture_text(fixture), "wallonia")
+    ores = snap.dsos["ores"]
+    assert ores.distribution_eco is not None
+    assert ores.distribution_medium is not None
+    assert ores.distribution_pic is not None
+    assert ores.distribution_eco < ores.distribution_medium < ores.distribution_pic
+    if eco is not None:
+        assert ores.distribution_eco == pytest.approx(eco)
+        assert ores.distribution_medium == pytest.approx(medium)
+        assert ores.distribution_pic == pytest.approx(pic)
+
+
+def test_dynamic_wallonia_without_impact_headings_fails_loud() -> None:
+    text = fixture_text("luminus_dynamic_w_oct.pdf").replace("Heures MEDIUM", "")
+    with pytest.raises(ExtractorError, match="Impact column headings"):
+        parse_snapshot("luminus_dynamic", text, "wallonia")
+
+
 def test_dynamic_flanders_has_a_different_base() -> None:
     # Luminus's hourly formula has a region-specific base; Flanders is
     # 50 cents below Wallonia. This is the one fact that motivates the

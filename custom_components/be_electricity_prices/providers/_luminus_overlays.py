@@ -239,13 +239,16 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Static rows have 7 numbers:
       mono | pleines | creuses | excl_nuit | transport | data_mgmt | prosumer
     Dynamic rows have 9:
-      mono | pleines | creuses | ECO | MEDIUM | PIC | excl_nuit |
+      mono | pleines | creuses | <Impact triplet> | excl_nuit |
       transport | data_mgmt
-    The IMPACT triplet (ECO/MEDIUM/PIC) is unique to dynamic; its
-    presence flips the prosumer column off (SMR3 has no compensation
-    regime).
+    The IMPACT triplet is unique to dynamic; its presence flips the
+    prosumer column off (SMR3 has no compensation regime). Its band order
+    is read from the headings: cards up to September 2026 print
+    ECO | MEDIUM | PIC, October 2026 turned it round to PIC | MEDIUM | ECO
+    with the same figures.
     """
     out: dict[str, DsoOverlay] = {}
+    order: tuple[str, ...] | None = None
     for label, key in _WALLONIA_LABELS.items():
         # Nine figures on a dynamic card, which carries the IMPACT triplet,
         # seven on a static one, which carries the prosumer rate instead.
@@ -256,10 +259,10 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         eco = medium = pic = None
         if len(nums) == 9:
             mono, pleines, creuses = nums[0], nums[1], nums[2]
-            # Luminus prints ECO | MEDIUM | PIC in ascending order
-            # (different from OCTA+/Bolt where the columns are PIC
-            # first, descending). Map to the schema's distribution_*.
-            eco, medium, pic = nums[3], nums[4], nums[5]
+            if order is None:
+                order = _impact_order(text)
+            bands = dict(zip(order, nums[3:6], strict=True))
+            eco, medium, pic = bands["eco"], bands["medium"], bands["pic"]
             excl_night = nums[6]
             transport = nums[7]
             data_mgmt = nums[8]
@@ -285,6 +288,28 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             prosumer_eur_per_kva_year=prosumer,
         )
     return out
+
+
+_IMPACT_HEADINGS_RE = re.compile(r"Tarif\s+Impact\b([\s\S]{0,200}?)Exclusif\s+nuit")
+_IMPACT_BAND_RE = re.compile(r"Heures\s+(ECO|MEDIUM|PIC)\b")
+
+
+def _impact_order(text: str) -> tuple[str, ...]:
+    """Return the Impact bands in the order the card prints their columns.
+
+    Each heading may be followed by its hours on lines of their own
+    ("Heures PIC / 17h-22h / Heures MEDIUM / ..."), so only the band
+    names between "Tarif Impact" and the next column heading count.
+    """
+    head = _IMPACT_HEADINGS_RE.search(text)
+    order = (
+        tuple(m.group(1).lower() for m in _IMPACT_BAND_RE.finditer(head.group(1)))
+        if head is not None
+        else ()
+    )
+    if sorted(order) != ["eco", "medium", "pic"]:
+        raise ExtractorError("Luminus: Impact column headings not found")
+    return order
 
 
 _FLANDERS_LABELS = FLUVIUS_CARD_LABELS

@@ -345,15 +345,16 @@ Two column layouts (`_luminus_overlays.py`):
 - **Static rows have 7 numbers**: mono, pleines, creuses, excl_nuit, transport,
   data_mgmt, prosumer. `prosumer` is populated (`nums[6]`), the Impact bands stay
   `None`.
-- **Dynamic rows have 9 numbers**: mono, pleines, creuses, ECO, MEDIUM, PIC,
-  excl_nuit, transport, data_mgmt. The IMPACT triplet (ECO/MEDIUM/PIC) is unique
-  to dynamic and its presence flips prosumer off (SMR3 has no compensation
-  regime).
+- **Dynamic rows have 9 numbers**: mono, pleines, creuses, the Impact triplet,
+  excl_nuit, transport, data_mgmt. The IMPACT triplet is unique to dynamic and
+  its presence flips prosumer off (SMR3 has no compensation regime).
 
-Band-ordering gotcha: Luminus prints the Impact triplet **ECO | MEDIUM | PIC in
-ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
-(`_luminus_overlays.py`). They are mapped to `distribution_eco` / `_medium` /
-`_pic` accordingly (`_luminus_overlays.py`). Illustrative
+Band-ordering gotcha: the triplet's order is read from the column headings
+(`_impact_order`, `_luminus_overlays.py`), never assumed. Cards up to September
+2026 print **ECO | MEDIUM | PIC**, the October 2026 cards turned it round to
+**PIC | MEDIUM | ECO** with the same figures, and a positional read billed every
+ECO hour at the PIC rate. Headings that do not name all three bands raise.
+Illustrative
 (`test_comfy_wallonia_fixed_rates_and_dso`): AIEG mono `0.1087`, pleines
 `0.1205`, creuses `0.0666`, transport `0.0274`, prosumer `81.03`.
 
@@ -485,8 +486,8 @@ print a single value and offer no exclusive-night), so the standard fee applies.
 - **Two DSO column widths** per region (static wide, dynamic narrow); the row
   is asked for at each width in turn, with prosumer present only on static
   (`_luminus_overlays.py`).
-- **Wallonia Impact triplet is ECO/MEDIUM/PIC ascending**, opposite to OCTA+/Bolt
-  (`_luminus_overlays.py`).
+- **Wallonia Impact triplet order follows the headings**: ECO/MEDIUM/PIC up to
+  September 2026, PIC/MEDIUM/ECO from October (`_luminus_overlays.py`).
 - **Label-to-key remaps**: Fluvius Kempen -> IVEKA, Fluvius Midden-Vlaanderen ->
   INTERGEM, in the shared `FLUVIUS_CARD_LABELS` (`const.py`, aliased at
   `_luminus_overlays.py`).
@@ -515,6 +516,7 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_smartflex_w.pdf` | SmartFlex (tou), Wallonia | TOU three-band + seasonal weekend rule |
 | `luminus_dynamic_w.pdf` | Dynamic, Wallonia | consumption + injection formula, taxes |
 | `luminus_dynamic_v.pdf` | Dynamic, Flanders | region-specific base, narrow SMR3 DSO table |
+| `luminus_dynamic_w_oct.pdf` | Dynamic, Wallonia, October 2026 | Impact columns printed PIC first |
 
 Note: fixtures for `luminus_comfy_plus`, `luminus_maxxfix`, `luminus_basicfix`
 and `luminus_basicflex` are not present; those contracts share the fixed /
