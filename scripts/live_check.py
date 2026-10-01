@@ -200,6 +200,14 @@ def _load_providers() -> dict[str, types.ModuleType]:
             if getattr(mod.EXTRACTOR, "deprecated_until", None) is not None
         }
     )
+    _WITHDRAWN_CONTRACTS.update(
+        {
+            c.id: c.withdrawn
+            for mod in loaded.values()
+            for c in mod.EXTRACTOR.contracts
+            if getattr(c, "withdrawn", None) is not None
+        }
+    )
     _DECLARED_SWEEP_COST.update(
         {supplier: mod.EXTRACTOR.sweep_cost_s for supplier, mod in loaded.items()}
     )
@@ -318,6 +326,9 @@ async def _fetch_text(_session: aiohttp.ClientSession, _url: str) -> str:
 # Read from the registry rather than restated here so a withdrawal date is
 # declared in exactly one place and the checks below expire with it.
 _DEPRECATED_UNTIL: dict[str, date] = {}
+# contract id -> its Contract.withdrawn, bound the same way: a product the
+# supplier stopped selling, whose last card stays up and stays stale.
+_WITHDRAWN_CONTRACTS: dict[str, date] = {}
 
 
 # Bound by _load_providers to providers/base.ExtractorError. The freshness
@@ -585,9 +596,10 @@ async def _attributed_check(
 # f"{type(err).__name__}: {err}", so the exception type is machine-written
 # at the front of the string. Matching on it is exact, not prose matching.
 _UNREADABLE_MARKER = "CardNotReadableError"
-# A supplier past its own deprecated_until has left the market; its final
-# card stays up and stays stale forever. Real, visible, and not actionable
-# by any change here: the same class as an unreadable card.
+# A supplier past its own deprecated_until has left the market, or a product
+# its supplier withdrew; the final card stays up and stays stale forever.
+# Real, visible, and not actionable by any change here: the same class as an
+# unreadable card.
 _WITHDRAWN_MARKER = "SupplierWithdrawn"
 # A federal tax block we have already looked at and decided about: the card
 # prints it, the integration does not bill it, and nothing here can make the
@@ -787,6 +799,14 @@ def _mark_if_withdrawn(label: str, detail: str) -> str:
     """
     if detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)):
         return detail
+    today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+    # A withdrawn product's date is the first day it was no longer sold, so
+    # the allowance starts on it: from then on its card is the last one the
+    # supplier will ever publish for it, and it goes stale and then away.
+    segments = label.split(":", 1)[0].split("/")
+    product_gone = _WITHDRAWN_CONTRACTS.get(segments[1]) if len(segments) > 1 else None
+    if product_gone is not None and today >= product_gone:
+        return f"{_WITHDRAWN_MARKER}: {detail}"
     supplier = _supplier_of(label)
     withdrawn = _DEPRECATED_UNTIL.get(supplier)
     if withdrawn is None:
@@ -794,7 +814,7 @@ def _mark_if_withdrawn(label: str, detail: str) -> str:
     # Up to and including its last day the supplier is still trading, so a
     # failure then is a real one. The allowance starts the day after, and
     # ends by itself when the supplier is removed.
-    if datetime.now(ZoneInfo("Europe/Brussels")).date() <= withdrawn:
+    if today <= withdrawn:
         return detail
     return f"{_WITHDRAWN_MARKER}: {detail}"
 

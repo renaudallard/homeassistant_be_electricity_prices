@@ -71,6 +71,13 @@ OCTA+ serves" (both), overridden only for the Impact variants.
 
 Notes:
 
+- Fixed, Fixed Impact, Eco Fixed, Flux and Eco Flux carry `withdrawn=date(2026, 10, 1)`
+  (`_RANGE_REPLACED`). OCTA+ replaced them with the Boost range on its October 2026
+  cards: the tarifs page and the October archive listing name none of them, while their
+  fixed URLs still answer with the cards of 31 August, which `probe` sees as unchanged.
+  They stay registered so an entry on one keeps pricing on that last card and is told
+  so by the `contract_withdrawn` Repairs card; new setups and both compare pages no
+  longer offer them. Their past months still come from the archive endpoint.
 - Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic Online carry
   `month_indexed_energy`, the registry twin
   of the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar

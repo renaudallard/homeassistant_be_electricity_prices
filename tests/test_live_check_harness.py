@@ -1051,6 +1051,46 @@ def test_a_withdrawn_supplier_reports_but_does_not_gate_ci(
     assert lc._extractor_regressions(lc.CHECKS) == []
 
 
+def test_a_withdrawn_product_reports_but_does_not_gate_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A product its supplier stopped selling keeps its last card up, stale,
+    until the file goes away. From its withdrawal date on, every failure on
+    it is reported and expected, and the rest of the supplier still gates."""
+    monkeypatch.setitem(lc._WITHDRAWN_CONTRACTS, "octaplus_flux", date(2026, 10, 1))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 11, 3)))
+    lc._expect_card_period(
+        "octaplus/octaplus_flux/wallonia",
+        "octaplus_flux",
+        _snap("09/2026", date(2026, 9, 30)),
+    )
+    failures = [c for c in lc.CHECKS if not c.ok]
+    assert failures
+    assert all(c.expected for c in failures)
+    lc.CHECKS.clear()
+    lc._expect_card_period(
+        "octaplus/octaplus_smartvariable/wallonia",
+        "octaplus_smartvariable",
+        _snap("09/2026", date(2026, 9, 30)),
+    )
+    assert [c for c in lc.CHECKS if not c.ok and not c.expected]
+
+
+def test_withdrawn_products_are_read_from_the_registry() -> None:
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    lc._load_providers()
+    gone = {c.id for c in octaplus.EXTRACTOR.contracts if c.withdrawn is not None}
+    assert gone == {
+        "octaplus_fixed",
+        "octaplus_fixed_impact",
+        "octaplus_ecofixed",
+        "octaplus_flux",
+        "octaplus_ecoflux",
+    }
+    assert gone <= set(lc._WITHDRAWN_CONTRACTS)
+
+
 def test_the_withdrawal_date_is_read_from_the_registry() -> None:
     """Declared on the supplier's own EXTRACTOR, so it lives in one place."""
     from custom_components.be_electricity_prices.providers import dats24

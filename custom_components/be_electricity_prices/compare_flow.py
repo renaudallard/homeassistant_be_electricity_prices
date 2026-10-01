@@ -130,7 +130,9 @@ def _compare_supplier_options(
         if region not in ext.regions():
             continue
         if not any(
-            region in c.regions and c.professional == professional
+            region in c.regions
+            and c.professional == professional
+            and c.withdrawn is None
             for c in ext.contracts
         ):
             continue
@@ -144,6 +146,7 @@ def _compare_contract_schema(
     current_kind: str,
     exclude_contract: str,
     professional: bool,
+    keep: str | None = None,
 ) -> vol.Schema:
     """Contract picker scoped to the user's region and segment.
 
@@ -152,7 +155,9 @@ def _compare_contract_schema(
     "what would this same contract cost me on a bi-hourly meter, or on the
     injection tariff instead of compensation" - the two switches a household
     can make without changing supplier. ``exclude_contract`` is kept for
-    callers that do want a strict alternative; pass "" for none.
+    callers that do want a strict alternative; pass "" for none. A product
+    the supplier has withdrawn is left out unless it is ``keep``, the entry's
+    own contract, which stays for the same what-if.
 
     It does NOT cross the residential/professional line. A professional card
     is published excluding VAT and bands the federal excise by annual volume,
@@ -165,7 +170,7 @@ def _compare_contract_schema(
     """
     contracts = [
         c
-        for c in _contracts_for(supplier_id, region)
+        for c in _contracts_for(supplier_id, region, keep=keep)
         if c.id != exclude_contract and c.professional == professional
     ]
     options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
@@ -268,7 +273,11 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         # comparison the page could not do.
         remaining = [
             c
-            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
+            for c in _contracts_for(
+                self._compare[CONF_SUPPLIER],
+                current[CONF_REGION],
+                keep=current[CONF_CONTRACT],
+            )
             if c.professional == own_professional
         ]
         if not remaining:
@@ -284,6 +293,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
                 current_kind,
                 "",
                 own_professional,
+                keep=current[CONF_CONTRACT],
             ),
         )
 

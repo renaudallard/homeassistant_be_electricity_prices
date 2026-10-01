@@ -305,7 +305,9 @@ def test_totalenergies_discover_matches_registry() -> None:
 def test_octaplus_discover_matches_registry() -> None:
     session = _FakeSession(_read("octaplus.html"))
     discovered = _run(octaplus_mod.discover(session))
-    expected = {c.slug for c in octaplus_mod._CONTRACTS}
+    # The October 2026 listing, which no longer links the products OCTA+
+    # withdrew that month.
+    expected = {c.slug for c in octaplus_mod._CONTRACTS if c.withdrawn is None}
     assert discovered == expected
 
 
@@ -716,6 +718,7 @@ def test_readme_documents_every_repairs_issue() -> None:
         15: "Fifteen",
         16: "Sixteen",
         17: "Seventeen",
+        18: "Eighteen",
     }
     stated = re.search(r"(\w+) repair issues surface", readme)
     assert stated is not None, "the README sentence counting the issues is gone"

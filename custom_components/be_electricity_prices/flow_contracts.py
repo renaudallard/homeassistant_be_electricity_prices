@@ -99,7 +99,9 @@ def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
     if not supplier or not region:
         return None
     try:
-        available = _contracts_for(str(supplier), str(region))
+        available = _contracts_for(
+            str(supplier), str(region), keep=data.get(CONF_CONTRACT)
+        )
     except ExtractorError:
         # Not this check's business: an unknown supplier id is rejected by the
         # selector itself.
@@ -109,8 +111,20 @@ def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
     return {CONF_SUPPLIER: "supplier_region_unavailable"}
 
 
-def _contracts_for(supplier_id: str, region: str | None = None) -> tuple[Contract, ...]:
-    contracts = get_extractor(supplier_id).contracts
+def _contracts_for(
+    supplier_id: str, region: str | None = None, keep: str | None = None
+) -> tuple[Contract, ...]:
+    """The contracts a picker may offer, dropping any the supplier withdrew.
+
+    ``keep`` is the contract already stored on the entry being edited, for
+    the reason ``_supplier_options`` gives: a SelectSelector rejects a default
+    that is not among its options.
+    """
+    contracts = tuple(
+        c
+        for c in get_extractor(supplier_id).contracts
+        if c.withdrawn is None or c.id == keep
+    )
     if region is None:
         return contracts
     return tuple(c for c in contracts if region in c.regions)
@@ -213,7 +227,8 @@ def _sweep_candidates(
     * not the expert custom supplier, which has no fetchable card and can only
       ever be the current side of a quote;
     * not a supplier on its way out of the market, since quoting a household
-      into a contract about to be transferred away is never useful;
+      into a contract about to be transferred away is never useful, nor a
+      product the supplier has stopped selling;
     * the same professional segment, for the reason
       ``_compare_contract_schema`` gives at length;
     * the same kind group, which is the one condition the 1:1 page does NOT
@@ -249,7 +264,7 @@ def _sweep_candidates(
                 continue
             if c.professional != professional:
                 continue
-            if c.id == own_contract:
+            if c.id == own_contract or c.withdrawn is not None:
                 continue
             # Expanded only where the settlement changes the KIND, which is
             # Bolt: its variable card is a different rate kind read either

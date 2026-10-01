@@ -1984,6 +1984,36 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_sync_withdrawn_contract_issue_creates_and_clears(
+    hass: HomeAssistant,
+) -> None:
+    """An entry on a product its supplier stopped selling keeps pricing on the
+    last card, which never moves again, so the Repairs card is the only thing
+    that tells it apart from a supplier whose prices simply did not change."""
+    entry = make_entry(supplier="octaplus", contract="octaplus_flux", region="wallonia")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"contract_withdrawn_{entry.entry_id}"
+
+    coord._sync_withdrawn_contract_issue()
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "contract_withdrawn"
+    assert issue.translation_placeholders == {
+        "supplier": "OCTA+",
+        "contract": "OCTA+ Flux",
+        "since": "2026-10-01",
+    }
+
+    # Moving the entry to a product still on sale clears it.
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "contract": "octaplus_boostflex"}
+    )
+    coord._sync_withdrawn_contract_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_sync_deprecated_supplier_issue_creates_and_clears(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2945,6 +2975,7 @@ _REPAIR_ISSUE_KINDS = (
     "card_read_by_ocr",
     "entsoe_auth_failed",
     "supplier_deprecated",
+    "contract_withdrawn",
     "exclusive_night_rate_missing",
     "impact_rates_missing",
     "connection_fee_missing",

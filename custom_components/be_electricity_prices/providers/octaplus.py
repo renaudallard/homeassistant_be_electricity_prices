@@ -116,10 +116,20 @@ class _ContractDef:
     # None means "every region OCTA+ serves"; the Impact comptage variant
     # is Wallonia-only (CWaPE Impact bands), so it overrides this.
     regions: frozenset[str] | None = None
+    # The first day OCTA+ no longer sold it; see ``Contract.withdrawn``.
+    withdrawn: date | None = None
 
+
+# Fixed, Eco Fixed, Flux and Eco Flux left the range with the October 2026
+# cards: the tarifs page and the October archive listing name none of them,
+# and their files still answer with the cards of 31 August, which would
+# otherwise be served as current with nothing said.
+_RANGE_REPLACED = date(2026, 10, 1)
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
-    _ContractDef("octaplus_fixed", "OCTA+ Fixed", "fixed", "FIXED"),
+    _ContractDef(
+        "octaplus_fixed", "OCTA+ Fixed", "fixed", "FIXED", withdrawn=_RANGE_REPLACED
+    ),
     # Impact comptage (SMR3) reuses the Fixed card but prices the three
     # CWaPE bands; Wallonia-only, the Flanders Fixed card omits the block.
     _ContractDef(
@@ -128,16 +138,31 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "tou_impact",
         "FIXED",
         regions=frozenset({REGION_WALLONIA}),
+        withdrawn=_RANGE_REPLACED,
     ),
-    _ContractDef("octaplus_ecofixed", "OCTA+ Eco Fixed", "fixed", "ECOFIXED"),
+    _ContractDef(
+        "octaplus_ecofixed",
+        "OCTA+ Eco Fixed",
+        "fixed",
+        "ECOFIXED",
+        withdrawn=_RANGE_REPLACED,
+    ),
     _ContractDef(
         "octaplus_smartvariable",
         "OCTA+ Smart Variable",
         "variable",
         "SMARTVARIABLE",
     ),
-    _ContractDef("octaplus_flux", "OCTA+ Flux", "variable", "FLUX"),
-    _ContractDef("octaplus_ecoflux", "OCTA+ Eco Flux", "variable", "ECOFLUX"),
+    _ContractDef(
+        "octaplus_flux", "OCTA+ Flux", "variable", "FLUX", withdrawn=_RANGE_REPLACED
+    ),
+    _ContractDef(
+        "octaplus_ecoflux",
+        "OCTA+ Eco Flux",
+        "variable",
+        "ECOFLUX",
+        withdrawn=_RANGE_REPLACED,
+    ),
     _ContractDef("octaplus_dynamic", "OCTA+ Dynamic", "dynamic", "DYNAMIC"),
     _ContractDef("octaplus_ecodynamic", "OCTA+ Eco Dynamic", "dynamic", "ECODYNAMIC"),
     # The range OCTA+ launched with the October 2026 cards. Same template as
@@ -829,6 +854,7 @@ EXTRACTOR = SupplierExtractor(
             regions=c.regions or _OCTAPLUS_REGIONS,
             spot_indexed_injection=c.kind != "dynamic",
             month_indexed_energy=c.contract_id in _MONTHLY_ENERGY_CONTRACTS,
+            withdrawn=c.withdrawn,
         )
         for c in _CONTRACTS
     ),

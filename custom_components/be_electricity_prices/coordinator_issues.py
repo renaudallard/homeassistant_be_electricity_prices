@@ -590,6 +590,39 @@ class _IssuesMixin:
             severity=ir.IssueSeverity.ERROR,
         )
 
+    def _sync_withdrawn_contract_issue(self) -> None:
+        """Raise or clear the 'this product is no longer sold' issue.
+
+        Driven by the registry's ``Contract.withdrawn``, the way the supplier
+        card below is by ``deprecated_until``: up for as long as the entry
+        points at a product its supplier has stopped selling, and cleared when
+        the entry moves off it or a release drops the flag. Prices are
+        untouched. The supplier overwrote nothing, so the card the entry
+        fetches is the last one published for the product, and it never
+        moves again: without this card that looks exactly like a supplier
+        that simply has not changed its prices.
+        """
+        extractor = self._entry_extractor()
+        contract_id = self.entry.data.get(CONF_CONTRACT)
+        contract = None
+        if extractor is not None:
+            contract = next(
+                (c for c in extractor.contracts if c.id == contract_id), None
+            )
+        if extractor is None or contract is None or contract.withdrawn is None:
+            self._sync_issue("contract_withdrawn", False)
+            return
+        # Labels, not registry ids, for the reason the supplier card gives.
+        self._sync_issue(
+            "contract_withdrawn",
+            True,
+            extra={
+                "supplier": extractor.label,
+                "contract": contract.label,
+                "since": contract.withdrawn.isoformat(),
+            },
+        )
+
     def _sync_deprecated_supplier_issue(self) -> None:
         """Raise or clear the 'this supplier is leaving the market' issue.
 

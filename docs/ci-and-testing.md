@@ -474,6 +474,10 @@ extractor-broken issue naming a supplier that no longer sells electricity (issue
 its date, so the rule lives in one place rather than at each of the six fetch call sites. It keys on
 the supplier segment of the label, so a check with no supplier prefix is untouched, and the day of
 the date itself still fails normally, since the supplier is trading until the end of it.
+A product its supplier stopped selling is marked the same way, keyed on the contract segment of the
+label against `_WITHDRAWN_CONTRACTS`, bound from each `Contract.withdrawn`. Its date is the first
+day the product was no longer sold, so the allowance starts on it rather than the day after: OCTA+
+went on serving the August cards of Fixed, Flux, Eco Fixed and Eco Flux after replacing them.
 
 The report separates the two kinds of expected failure, because they need different explanations: a
 page-image card can come back, a supplier that has left cannot. Folding a withdrawal under

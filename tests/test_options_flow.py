@@ -141,6 +141,32 @@ async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_edit_branch_offers_a_withdrawn_contract_it_already_has(
+    hass: HomeAssistant,
+) -> None:
+    """The contract twin of the test above: a product its supplier stopped
+    selling is hidden from everyone else, and the entry on it keeps it as an
+    option it can be submitted with."""
+    entry = make_entry(supplier="octaplus", contract="octaplus_flux", region="wallonia")
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "octaplus", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    marker = next(k for k in data_schema.schema if str(k) == "contract")
+    selector = data_schema.schema[marker]
+    options = {o["value"] for o in selector.config["options"]}
+    assert marker.default() == "octaplus_flux"
+    assert "octaplus_flux" in options
+    assert "octaplus_fixed" not in options
+    assert selector(marker.default()) == "octaplus_flux"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_an_impact_product_is_not_asked_which_tariff_mode(
     hass: HomeAssistant,
 ) -> None:
@@ -157,7 +183,7 @@ async def test_an_impact_product_is_not_asked_which_tariff_mode(
         result["flow_id"], {"supplier": "octaplus", "region": "wallonia"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"contract": "octaplus_fixed_impact"}
+        result["flow_id"], {"contract": "octaplus_boostfix_impact"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"dso": "ores"}
@@ -3247,7 +3273,7 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
     # The OCTA+ Wallonia card's bands, which tests/test_octaplus.py pins.
     impact_snap = make_snapshot(
         supplier="octaplus",
-        contract="octaplus_fixed_impact",
+        contract="octaplus_boostfix_impact",
         energy=ImpactRates(
             pic=0.1972, medium=0.1683, eco=0.1284, yearly_fixed_fee=65.0
         ),
@@ -3266,7 +3292,7 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
         on_bi,
         other_snap=impact_snap,
         other_supplier="octaplus",
-        other_contract="octaplus_fixed_impact",
+        other_contract="octaplus_boostfix_impact",
     )
 
     # The same target, quoted by a household already on the incitative
@@ -3282,7 +3308,7 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
         on_impact,
         other_snap=impact_snap,
         other_supplier="octaplus",
-        other_contract="octaplus_fixed_impact",
+        other_contract="octaplus_boostfix_impact",
     )
 
     assert quoted_from_bi["compare_per_kwh"] == quoted_from_impact["compare_per_kwh"]
@@ -6498,8 +6524,8 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # Eneco Zon & Wind Fix One adds one fixed card in each of Flanders
         # and Wallonia, read in the same listing fetch as Vast, and OCTA+'s
         # October 2026 range adds five in each region, at the 2,2 s an OCTA+
-        # card already costs.
-        ("flanders", "static", False): 61,
+        # card already costs, and takes out the four it replaced.
+        ("flanders", "static", False): 57,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -6516,7 +6542,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 57,
+        ("wallonia", "static", False): 53,
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
@@ -6525,8 +6551,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # as Eneco's other Walloon cards.
         ("wallonia", "spot", False): 15,
         ("wallonia", "spot", True): 6,
-        # Two more for the Impact twins of OCTA+'s Boost Fix and Eco Boost Fix.
-        ("wallonia", "slot", False): 7,
+        # Two more for the Impact twins of OCTA+'s Boost Fix and Eco Boost Fix,
+        # one fewer for the Fixed Impact they replaced.
+        ("wallonia", "slot", False): 6,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 29,
         ("brussels", "static", True): 21,

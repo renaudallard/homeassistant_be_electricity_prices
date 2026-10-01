@@ -138,7 +138,9 @@ Schema `_user_schema` (`flow_schemas.py`). Two dropdowns:
   extractor by `id`/`label`, ordered by label with the expert custom supplier
   last, minus any carrying `deprecated_until` (a supplier that
   has announced it is leaving the residential market -- you cannot sign up for a
-  contract being transferred away). Region filtering happens at the *contract* step
+  contract being transferred away). The contract step drops a product its supplier
+  has stopped selling (`Contract.withdrawn`, through `_contracts_for`) unless it is
+  the entry's own. Region filtering happens at the *contract* step
   instead, so a supplier with no product in the chosen region aborts there with a
   clear message rather than being hidden.
 

@@ -111,7 +111,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch VT *(titled Korting until September 2026)* · Dynamisch JN · Dynamisch Slim | Flanders only · [`frank.py`](./custom_components/be_electricity_prices/providers/frank.py) · [notes](./docs/providers/frank.md)
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU, with a Happy Sunday band on summer Sundays from October 2026)* · Dynamic · most months run a new-customer campaign tied to the month you sign, either a share of the energy cost (33% on the September 2026 Comfy card) or a volume of free energy (750 kWh as a cashback after 12 months, valued at the mono-hourly rate the card's terms name: its printed rate, or from October 2026 on MaxxFlex and ComfyFlex+ the card's own annual estimate), and it is billed from the card of your contract start month, which the archive can only supply from September 2026 on: Luminus's own tariff archive serves a past month without its campaign, so a contract signed before then is priced with no campaign at all | Flanders + Wallonia only · [`luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) · [notes](./docs/providers/luminus.md)
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Fixed · Off-peak Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin, and on Smart Flex and its pro twin in the months their card says so), or by the day from the first invoice on the residential cards since October 2026, and nineteen cards price it on whether the household pays by direct debit; every card that grants the ristourne adds a first-year bonus on the export, credited with the ristourne to a household on the injection regime once a year of its feed-in is measured · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Off-peak Fixed · Dynamic · Zen Fixed | [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
-| **OCTA+** | Boost Fix · Boost Fix Impact *(Wallonia, CWaPE 3-band)* · Eco Boost Fix · Eco Boost Fix Impact *(Wallonia)* · Boost Flex · Eco Boost Flex · Basic Online · Smart Variable · Dynamic · Eco Dynamic · Fixed · Fixed Impact *(Wallonia)* · Eco Fixed · Flux · Eco Flux | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
+| **OCTA+** | Boost Fix · Boost Fix Impact *(Wallonia, CWaPE 3-band)* · Eco Boost Fix · Eco Boost Fix Impact *(Wallonia)* · Boost Flex · Eco Boost Flex · Basic Online · Smart Variable · Dynamic · Eco Dynamic · *withdrawn on 2026-10-01, priced for existing entries only:* Fixed · Fixed Impact *(Wallonia)* · Eco Fixed · Flux · Eco Flux | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
 | **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe · the three fixed cards print no feed-in price since October 2026, so an export is measured but not credited unless a contract start date names an earlier card | [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before)* · Energreen · FlexiO Max *(monthly Belpex_RLP_VL, for a FlexiO EMS+; the flexibility fee the EMS+ earns is not modelled)* | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | All three regions; the tax step shows only the boxes your region bills: the green levy box takes GSC + WKK in Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
@@ -913,7 +913,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Seventeen repair issues surface
+TimeoutError` rather than trailing off after the colon. Eighteen repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -967,6 +967,16 @@ successful refresh:
   tells you to pick the product named on your letter, and what to do when it
   is not there: the **Expert: custom formula** supplier prices it from your
   own card in the meantime.
+- **`contract_withdrawn_<entry>`** — the supplier has stopped selling the
+  product the entry is on (OCTA+ Fixed, Fixed Impact, Eco Fixed, Flux and
+  Eco Flux since 2026-10-01). The entry keeps pricing on the last card the
+  supplier published for it, which is right for as long as your contract
+  runs on those terms, but that card never changes again, so nothing else
+  would tell it apart from prices that simply did not move. If your
+  supplier moves you to another product, record it with **Record a
+  supplier switch**, dated the first day of the new product. The product
+  is no longer offered when setting up an entry or as a comparison target.
+  Not a failure: it clears when the entry points at a product still on sale.
 - **`extractor_unreadable_<entry>`** — the card downloaded fine but its
   pages carry no text layer, so no parser change here can read it (Ecofix
   since the August 2026 card). Cached prices keep serving, and it clears

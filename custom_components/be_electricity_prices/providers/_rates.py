@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from ..const import REGIONS, VAT_RATE_REDUCED
 from dataclasses import dataclass, field, fields, replace
+from datetime import date
 from typing import Literal
 
 
@@ -135,6 +136,15 @@ class Contract:
     # only where the card states the reduction, never to offer a box a
     # supplier's own invoice would not honour.
     direct_debit_discount: bool = False
+    # Set when the supplier has stopped selling this product: the first day
+    # it was no longer offered. The contract-level twin of a supplier's
+    # ``deprecated_until``, with the same two effects and no others: the
+    # config flow and the compare pages stop offering it, and an entry still
+    # on it raises a Repairs card. Fetching is untouched, so the entry keeps
+    # pricing on the last card the supplier published for it, which is what
+    # a customer kept on the product's terms is still billed. Purely
+    # declarative: nothing compares it to the clock.
+    withdrawn: date | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

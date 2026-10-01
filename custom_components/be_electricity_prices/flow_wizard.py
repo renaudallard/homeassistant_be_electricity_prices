@@ -188,7 +188,7 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         supplier = self._data[CONF_SUPPLIER]
         region = self._data[CONF_REGION]
-        if not _contracts_for(supplier, region):
+        if not _contracts_for(supplier, region, keep=self._data.get(CONF_CONTRACT)):
             return self.async_abort(reason="supplier_region_unavailable")
         errors: dict[str, str] = {}
         if user_input is not None:

@@ -181,10 +181,10 @@ def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _contract_schema(
     supplier_id: str, region: str, defaults: dict[str, Any]
 ) -> vol.Schema:
-    contracts = _contracts_for(supplier_id, region)
+    current = defaults.get(CONF_CONTRACT)
+    contracts = _contracts_for(supplier_id, region, keep=current)
     options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
     valid_ids = {c.id for c in contracts}
-    current = defaults.get(CONF_CONTRACT)
     selector = SelectSelector(
         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
     )

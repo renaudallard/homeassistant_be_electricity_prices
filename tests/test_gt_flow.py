@@ -24,6 +24,8 @@ CASES = [
     # existing entry being edited.
     if ex.deprecated_until is None
     for c in ex.contracts
+    # A product its supplier stopped selling is hidden the same way.
+    if c.withdrawn is None
     for quarter_hourly in ((False, True) if c.quarter_hourly_option else (False,))
 ]
 

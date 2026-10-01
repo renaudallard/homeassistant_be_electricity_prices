@@ -592,6 +592,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "card_read_by_ocr",
         "entsoe_auth_failed",
         "supplier_deprecated",
+        "contract_withdrawn",
         "exclusive_night_rate_missing",
         "impact_rates_missing",
         "connection_fee_missing",
