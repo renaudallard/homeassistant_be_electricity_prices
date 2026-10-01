@@ -69,7 +69,9 @@ from .const import (
 from .meter_daily import _resolve_daily_kwh
 from .fees import (
     _welcome_credit_eur,
+    bills_gross_network,
     first_year_net_kwh,
+    gross_network_rebate,
     grants_a_welcome_credit,
     in_first_contract_year,
     window_energy_rate,
@@ -107,6 +109,7 @@ from .synergrid import (
     SppWeights,
 )
 from .ytd_energy import (
+    _record_network,
     _warn_month_dropped,
     _ytd_hourly_energy,
     _ytd_spot_injection_credit,
@@ -370,6 +373,23 @@ async def _compute_current_year_cost(
         meter=meter,
         cached_only=cached_only,
     )
+    # The DSO's half of that, the half article 81 caps on a double-flow meter.
+    prosumer_network_ytd = (
+        await _ytd_prosumer(
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            end,
+            window_start=window_start,
+            contract=contract,
+            cached_only=cached_only,
+            network_only=True,
+        )
+        if bills_gross_network(entry.data)
+        else 0.0
+    )
     fees = static_fees.total + prosumer_ytd + capacity_ytd
     # The breakdown when the caller asked for one, a throwaway otherwise. Every
     # figure written into it is a sum already computed, so filling one nobody
@@ -486,7 +506,19 @@ async def _compute_current_year_cost(
                 first_year_injection_kwh=entry_annual_injection_kwh(entry),
             )
         stats["welcome_credit_eur"] = credit
-        return energy + fees - credit
+        # On a double-flow meter the network bills the gross draws when that
+        # costs less than the prosumer tariff on the net ones. Only where a
+        # walk recorded both sides of that comparison: the fees-only floor has
+        # no draws to bill gross.
+        rebate = 0.0
+        if "gross_network_ytd_eur" in stats:
+            rebate = gross_network_rebate(
+                prosumer_network_ytd,
+                stats["net_network_ytd_eur"],
+                stats["gross_network_ytd_eur"],
+            )
+            stats["network_cap_rebate_eur"] = rebate
+        return energy + fees - credit - rebate
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the
@@ -703,13 +735,20 @@ async def _compute_current_year_cost(
             day_weights = _day_register_weights(rlp_weights, day, bi_capable, region)
             if bi_capable:
                 netting.add(
-                    "peak", d_cons - d_inj, peak_bd.all_in, day_weights.get("peak")
+                    "peak",
+                    d_cons - d_inj,
+                    peak_bd.all_in,
+                    day_weights.get("peak"),
+                    network=peak_bd.network,
+                    gross_kwh=d_cons,
                 )
                 netting.add(
                     "offpeak",
                     n_cons - n_inj,
                     offpeak_bd.all_in,
                     day_weights.get("offpeak"),
+                    network=offpeak_bd.network,
+                    gross_kwh=n_cons,
                 )
             else:
                 netting.add(
@@ -717,6 +756,8 @@ async def _compute_current_year_cost(
                     total_cons - total_inj,
                     single_bd.all_in,
                     day_weights.get("single"),
+                    network=single_bd.network,
+                    gross_kwh=total_cons,
                 )
             d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
@@ -785,6 +826,7 @@ async def _compute_current_year_cost(
         allocated = rlp_weights is not None
         energy_ytd_raw = netting.raw(allocated=allocated)
         energy_cost = netting.billed(allocated=allocated)
+        _record_network(stats, netting, entry, allocated=allocated)
 
     if regime == SOLAR_REGIME_INJECTION:
         # Spot-indexed injection on a static-energy contract (Cociter

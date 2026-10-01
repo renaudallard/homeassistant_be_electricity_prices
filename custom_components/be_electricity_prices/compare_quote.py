@@ -48,9 +48,12 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
     MEASURED_MIN_DAYS,
     MEASURED_YEAR_GAP_DAYS,
@@ -61,6 +64,8 @@ from .const import (
     SOLAR_REGIME_NONE,
 )
 from .compare_weighting import (
+    _register_network_rates,
+    _register_weights,
     _tou_weighted_per_kwh,
 )
 from .meter_daily import (
@@ -70,10 +75,14 @@ from .meter_daily import (
 from .fees import (
     _annual_static_fees,
     _compute_capacity,
+    _compensation_kva,
     _compute_prosumer,
+    _dso_prosumer_monthly_fee,
     _welcome_credit_eur,
     _year_ahead_welcome_credit,
+    bills_gross_network,
     first_year_net_kwh,
+    gross_network_rebate,
     grants_a_welcome_credit,
     window_energy_rate,
 )
@@ -176,9 +185,20 @@ def _annual_bill(
             fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
+        # Article 81's cap on a double-flow meter, settled on the same volumes
+        # and registers as the netting below and subtracted like a credit.
+        credit = welcome_credit_eur + _annual_network_rebate(
+            snapshot,
+            entry,
+            meter,
+            consumption_kwh,
+            injection_kwh,
+            register_weights,
+            fee_proration if prosumer_proration is None else prosumer_proration / 12.0,
+        )
         if export_per_kwh is None:
             billable = max(consumption_kwh - injection_kwh, 0.0)
-            return fees + per_kwh * billable - welcome_credit_eur
+            return fees + per_kwh * billable - credit
         # A reversing meter nets against the rate in force at the time, which
         # is what the live sensor bills. Netting the two annual totals first
         # and pricing the residue at the CONSUMPTION-weighted rate prices
@@ -217,9 +237,9 @@ def _annual_bill(
                         - injection_kwh * (inj_side / inj_total) * export_per_kwh,
                         0.0,
                     )
-                return fees + billed - welcome_credit_eur
+                return fees + billed - credit
         netted = consumption_kwh * per_kwh - injection_kwh * export_per_kwh
-        return fees + max(netted, 0.0) - welcome_credit_eur
+        return fees + max(netted, 0.0) - credit
     if regime == "injection" and injection_price is not None:
         return (
             fees
@@ -228,6 +248,55 @@ def _annual_bill(
             - welcome_credit_eur
         )
     return fees + per_kwh * consumption_kwh - welcome_credit_eur
+
+
+def _annual_network_rebate(
+    snapshot: Any,
+    entry: ConfigEntry,
+    meter: Any,
+    consumption_kwh: float,
+    injection_kwh: float,
+    register_weights: tuple[tuple[float, ...], tuple[float, ...]] | None,
+    prosumer_proration: float,
+) -> float:
+    """:func:`fees.gross_network_rebate` over a period quoted as two totals.
+
+    Each register's draws and export are its share of the totals, on the
+    household's own shape when ``register_weights`` carries one and on the
+    clock otherwise, the fallback every quote without a measured shape takes.
+    The net draws are clamped per register, as the meter forfeits them, and
+    ``prosumer_proration`` is the share of a year the prosumer tariff is
+    billed for, as the fees above prorate it.
+    """
+    if not bills_gross_network(entry.data):
+        return 0.0
+    dso = entry.data.get(CONF_DSO, "")
+    region = entry.data.get(CONF_REGION, "")
+    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+    rates = _register_network_rates(snapshot, dso, region, meter, dso_mode)
+    if rates is None:
+        return 0.0
+    if register_weights is None or len(register_weights[0]) != len(rates):
+        clock = _register_weights(region, None, meter=meter, dso_mode=dso_mode)
+        register_weights = (clock, clock)
+    cons_w, inj_w = register_weights
+    cons_total = sum(cons_w)
+    inj_total = sum(inj_w)
+    if cons_total <= 0.0:
+        return 0.0
+    gross = 0.0
+    net = 0.0
+    for rate, cons_side, inj_side in zip(rates, cons_w, inj_w, strict=True):
+        drawn = consumption_kwh * cons_side / cons_total
+        exported = injection_kwh * inj_side / inj_total if inj_total > 0.0 else 0.0
+        gross += drawn * rate
+        net += max(drawn - exported, 0.0) * rate
+    prosumer = (
+        12.0
+        * _dso_prosumer_monthly_fee(snapshot.dsos.get(dso), _compensation_kva(entry))
+        * prosumer_proration
+    )
+    return gross_network_rebate(prosumer, net, gross)
 
 
 def _annual_fees(

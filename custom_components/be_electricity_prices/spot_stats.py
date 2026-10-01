@@ -748,6 +748,13 @@ class _NetAllocation:
     one by one: each is a counter, and one that ends the year below where it
     started is forfeited on its own. ``raw`` is the same sum unclamped, for the
     diagnostics that tell the zero floor from a stalled meter.
+
+    A slice may also carry its ``network`` rate (distribution and transport)
+    and the ``gross_kwh`` drawn in it, for the article 81 cap on a double-flow
+    meter (:func:`fees.gross_network_rebate`): ``net_network`` is the network
+    share of what ``billed`` charges, allocated and clamped the same way, and
+    ``gross_network`` the network charges on the gross draws as metered,
+    which is how the DSO bills them.
     """
 
     def __init__(self) -> None:
@@ -755,16 +762,33 @@ class _NetAllocation:
         self._direct: dict[str, float] = {}
         self._weight: dict[str, float] = {}
         self._weighted_rate: dict[str, float] = {}
+        self._direct_network: dict[str, float] = {}
+        self._weighted_network: dict[str, float] = {}
+        self._gross_network = 0.0
 
     def add(
-        self, register: str, net_kwh: float, all_in: float, weight: float | None
+        self,
+        register: str,
+        net_kwh: float,
+        all_in: float,
+        weight: float | None,
+        *,
+        network: float = 0.0,
+        gross_kwh: float = 0.0,
     ) -> None:
         self._net[register] = self._net.get(register, 0.0) + net_kwh
         self._direct[register] = self._direct.get(register, 0.0) + net_kwh * all_in
+        self._direct_network[register] = (
+            self._direct_network.get(register, 0.0) + net_kwh * network
+        )
+        self._gross_network += gross_kwh * network
         if weight:
             self._weight[register] = self._weight.get(register, 0.0) + weight
             self._weighted_rate[register] = (
                 self._weighted_rate.get(register, 0.0) + weight * all_in
+            )
+            self._weighted_network[register] = (
+                self._weighted_network.get(register, 0.0) + weight * network
             )
 
     def _priced(self, register: str, allocated: bool) -> float:
@@ -773,6 +797,12 @@ class _NetAllocation:
             return self._net[register] * self._weighted_rate[register] / weight
         return self._direct[register]
 
+    def _priced_network(self, register: str, allocated: bool) -> float:
+        weight = self._weight.get(register, 0.0)
+        if allocated and weight > 0.0:
+            return self._net[register] * self._weighted_network[register] / weight
+        return self._direct_network[register]
+
     def raw(self, *, allocated: bool) -> float:
         return sum(self._priced(register, allocated) for register in self._net)
 
@@ -780,3 +810,15 @@ class _NetAllocation:
         return sum(
             max(0.0, self._priced(register, allocated)) for register in self._net
         )
+
+    def net_network(self, *, allocated: bool) -> float:
+        # A register billed nothing carries no network charge either: it was
+        # forfeited whole, network included.
+        return sum(
+            self._priced_network(register, allocated)
+            for register in self._net
+            if self._priced(register, allocated) > 0.0
+        )
+
+    def gross_network(self) -> float:
+        return self._gross_network

@@ -59,6 +59,7 @@ from .const import (
     CONF_DAY_INJECTION_KWH,
     CONF_CARD_ARCHIVE,
     CONF_DAILY_COMPARE,
+    CONF_DOUBLE_FLOW_METER,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_INJECTION_KWH,
     METER_SENSOR_KEYS,
@@ -259,28 +260,36 @@ def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
     regimes = _regime_options(defaults.get(CONF_REGION))
     stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     default_regime = stored if stored in regimes else SOLAR_REGIME_NONE
-    return vol.Schema(
-        {
+    fields: dict[Any, Any] = {
+        vol.Optional(
+            CONF_SOLAR_KVA,
+            default=defaults.get(CONF_SOLAR_KVA, 0.0),
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
+            )
+        ),
+        vol.Required(
+            CONF_SOLAR_REGIME,
+            default=default_regime,
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=regimes,
+                mode=SelectSelectorMode.LIST,
+                translation_key="solar_regime",
+            )
+        ),
+    }
+    # Only where the compensation regime is on offer, the one it bills under
+    # (fees.bills_gross_network).
+    if SOLAR_REGIME_COMPENSATION in regimes:
+        fields[
             vol.Optional(
-                CONF_SOLAR_KVA,
-                default=defaults.get(CONF_SOLAR_KVA, 0.0),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
-                )
-            ),
-            vol.Required(
-                CONF_SOLAR_REGIME,
-                default=default_regime,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=regimes,
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="solar_regime",
-                )
-            ),
-        }
-    )
+                CONF_DOUBLE_FLOW_METER,
+                default=bool(defaults.get(CONF_DOUBLE_FLOW_METER, False)),
+            )
+        ] = BooleanSelector()
+    return vol.Schema(fields)
 
 
 def _compare_solar_schema(defaults: dict[str, Any], *, ask_volumes: bool) -> vol.Schema:

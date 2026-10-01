@@ -124,7 +124,11 @@
         "description": "Inverter capacity in kVA and the regime that applies to your installation. The Walloon compensation regime is reserved for installations certified before 2024-01-01 and stays valid until 2030-12-31; new installations and Flemish smart meters are on the injection tariff.",
         "data": {
           "solar_kva": "Inverter capacity (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Meter counts draw and injection apart"
+        },
+        "data_description": {
+          "double_flow_meter": "Walloon compensation regime only. Tick it for a double-flow or communicating meter: the network then bills distribution and transport on your gross draws instead of the prosumer tariff whenever that costs less. Leave it off for a meter that runs backwards."
         }
       },
       "meters": {
@@ -463,7 +467,11 @@
         "description": "Inverter capacity in kVA and the regime that applies to your installation. The Walloon compensation regime is reserved for installations certified before 2024-01-01 and stays valid until 2030-12-31; new installations and Flemish smart meters are on the injection tariff.",
         "data": {
           "solar_kva": "Inverter capacity (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Meter counts draw and injection apart"
+        },
+        "data_description": {
+          "double_flow_meter": "Walloon compensation regime only. Tick it for a double-flow or communicating meter: the network then bills distribution and transport on your gross draws instead of the prosumer tariff whenever that costs less. Leave it off for a meter that runs backwards."
         }
       },
       "meters": {
@@ -806,7 +814,7 @@
     },
     "compensation_kva_missing": {
       "title": "No inverter capacity on this compensation entry ({supplier}, {contract})",
-      "description": "This entry is on the Walloon compensation regime, whose prosumer tariff is worked out from the inverter capacity, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter. With a double-flow or communicating meter the network bills distribution and transport on the gross draws instead, capped at the prosumer fee plus the network charges on the net draws; that option is not modelled, so the integration bills the cap, which needs the capacity too.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
+      "description": "This entry is on the Walloon compensation regime, whose prosumer tariff is worked out from the inverter capacity, but its inverter capacity is 0. The prosumer fee is therefore left out of every cost this entry reports: about €81 to €99 per kVA per year depending on the network operator, so roughly €430 a year on a 5 kVA inverter. With a double-flow or communicating meter the network bills distribution and transport on the gross draws instead, capped at the prosumer fee plus the network charges on the net draws; the integration bills the lower of the two once the solar step says the meter counts draw and injection apart, and the cap needs the capacity too.\n\nEdit the entry's options and enter the inverter capacity (kVA) on the solar step. This notice clears once it is set."
     },
     "register_pair_incomplete": {
       "title": "A meter of {supplier} ({contract}) stopped recording",

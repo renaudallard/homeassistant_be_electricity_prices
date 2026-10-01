@@ -421,6 +421,13 @@ Schema `_solar_schema` (`flow_schemas_meters.py`). Fields:
   name.
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
   `SOLAR_REGIMES` (`const.py`) with a region filter.
+- `CONF_DOUBLE_FLOW_METER`: `BooleanSelector`, default off, present only where
+  the compensation regime is on offer (Wallonia). Says the meter counts draw
+  and injection apart, which is what makes CWaPE bill the network on the gross
+  draws under the article 81 cap (`bills_gross_network`, `fees.py`; see
+  [pricing-model.md](pricing-model.md#prosumer-term)). Asked, not inferred: an
+  injection sensor in Home Assistant can come from the inverter rather than
+  the DSO meter.
 
 The region filter (`flow_schemas.py`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /

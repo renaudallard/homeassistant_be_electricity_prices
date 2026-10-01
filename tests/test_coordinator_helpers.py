@@ -11828,6 +11828,94 @@ async def test_compensation_registers_are_clamped_one_by_one(
     assert allocated == pytest.approx(31.0)
 
 
+async def test_a_double_flow_meter_bills_the_cheaper_network_option(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """CWaPE bills a compensation install whose meter counts draw and
+    injection apart on its GROSS draws for distribution and transport, capped
+    by article 81 at the prosumer tariff plus those charges on the net draws
+    (Note explicative tarif prosumer, 23 June 2025, sections 4 and 4.3).
+    Energy stays netted either way. The meter that runs backwards, and an
+    entry that did not say it has the other kind, keep the prosumer tariff."""
+    freezer.move_to("2026-01-31 12:00:00+01:00")
+
+    def _snap(prosumer_rate: float) -> SupplierSnapshot:
+        return make_snapshot(
+            energy=FixedRates(single=0.20),
+            dsos={
+                "ores": DsoOverlay(
+                    distribution_single=0.10,
+                    transport=0.02,
+                    prosumer_eur_per_kva_year=prosumer_rate,
+                )
+            },
+            taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+        )
+
+    days = _days_through(date(2026, 1, 1), dt_util.now().date())
+
+    async def _year(snap: SupplierSnapshot, inj: float, **data: object) -> float:
+        entry = _yearly_entry(
+            meter="mono", solar_regime="compensation", solar_kva=5.0, **data
+        )
+        with _patch_recorder_per_entity(
+            {
+                "sensor.day_cons": {d: 10.0 for d in days},
+                "sensor.night_cons": {d: 0.0 for d in days},
+                "sensor.day_inj": {d: inj for d in days},
+                "sensor.night_inj": {d: 0.0 for d in days},
+            }
+        ):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                _stub_extractor(),
+                snap,
+                entry,
+            )
+        assert cost is not None
+        return cost
+
+    # 31 days of 10 kWh drawn and 6 put back: 310 gross, 124 net. The tariff
+    # is 5 kVA x 60 EUR / 12 = 25 EUR for January.
+    dear = _snap(60.0)
+    flat_fee = 124 * 0.32 + 25.0
+    gross = 124 * 0.20 + 310 * 0.12
+    assert await _year(dear, 6.0) == pytest.approx(flat_fee)
+    assert await _year(dear, 6.0, double_flow_meter=False) == pytest.approx(flat_fee)
+    assert await _year(dear, 6.0, double_flow_meter=True) == pytest.approx(gross)
+    assert gross < flat_fee
+
+    # The compare page quotes the same window from its two totals and lands
+    # on the same bill, the cap included.
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+
+    quoted = _annual_bill(
+        dear,
+        _yearly_entry(
+            meter="mono",
+            solar_regime="compensation",
+            solar_kva=5.0,
+            double_flow_meter=True,
+        ),
+        0.0,
+        0.32,
+        310.0,
+        186.0,
+        fee_proration=31 / 365,
+        prosumer_proration=1.0,
+        meter="mono",
+    )
+    assert quoted == pytest.approx(gross)
+
+    # Little put back and a cheap tariff: the gross draws cost more, and the
+    # cap leaves the prosumer tariff on the net draws standing.
+    cheap = _snap(6.0)
+    capped = 279 * 0.32 + 2.5
+    assert 279 * 0.20 + 310 * 0.12 > capped
+    assert await _year(cheap, 1.0, double_flow_meter=True) == pytest.approx(capped)
+
+
 def _flat_month_spots(today: date, value: float = 0.06) -> dict[datetime, float]:
     """One flat month of hourly spots up to ``today``.
 

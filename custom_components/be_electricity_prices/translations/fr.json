@@ -124,7 +124,11 @@
         "description": "Puissance de l'onduleur en kVA et régime applicable à votre installation. Le régime de compensation wallon n'est valable que pour les installations certifiées avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
           "solar_kva": "Puissance onduleur (kVA)",
-          "solar_regime": "Régime"
+          "solar_regime": "Régime",
+          "double_flow_meter": "Le compteur mesure séparément prélèvement et injection"
+        },
+        "data_description": {
+          "double_flow_meter": "Régime de compensation wallon uniquement. Cochez pour un compteur double flux ou communicant : le réseau facture alors la distribution et le transport sur vos prélèvements bruts plutôt que le tarif prosumer, chaque fois que c'est moins cher. Laissez décoché pour un compteur qui tourne à l'envers."
         }
       },
       "meters": {
@@ -463,7 +467,11 @@
         "description": "Puissance de l'onduleur en kVA et régime applicable à votre installation. Le régime de compensation wallon n'est valable que pour les installations certifiées avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
           "solar_kva": "Puissance onduleur (kVA)",
-          "solar_regime": "Régime"
+          "solar_regime": "Régime",
+          "double_flow_meter": "Le compteur mesure séparément prélèvement et injection"
+        },
+        "data_description": {
+          "double_flow_meter": "Régime de compensation wallon uniquement. Cochez pour un compteur double flux ou communicant : le réseau facture alors la distribution et le transport sur vos prélèvements bruts plutôt que le tarif prosumer, chaque fois que c'est moins cher. Laissez décoché pour un compteur qui tourne à l'envers."
         }
       },
       "meters": {
@@ -806,7 +814,7 @@
     },
     "compensation_kva_missing": {
       "title": "Aucune puissance d'onduleur sur cette entrée en compensation ({supplier}, {contract})",
-      "description": "Cette entrée est en régime de compensation wallon, dont le tarif prosumer est calculé sur la puissance de l'onduleur, mais sa puissance d'onduleur vaut 0. Le tarif prosumer est donc absent de tous les coûts que cette entrée calcule : environ 81 € à 99 € par kVA et par an selon le gestionnaire de réseau, soit à peu près 430 € par an pour un onduleur de 5 kVA. Avec un compteur double flux ou communicant, le réseau facture à la place la distribution et le transport sur les prélèvements bruts, plafonnés au tarif prosumer augmenté des frais de réseau sur les prélèvements nets ; cette option n'est pas modélisée, l'intégration facture donc ce plafond, qui nécessite lui aussi la puissance.\n\nModifiez les options de l'entrée et indiquez la puissance de l'onduleur (kVA) à l'étape des panneaux solaires. Cet avis disparaît dès qu'elle est renseignée."
+      "description": "Cette entrée est en régime de compensation wallon, dont le tarif prosumer est calculé sur la puissance de l'onduleur, mais sa puissance d'onduleur vaut 0. Le tarif prosumer est donc absent de tous les coûts que cette entrée calcule : environ 81 € à 99 € par kVA et par an selon le gestionnaire de réseau, soit à peu près 430 € par an pour un onduleur de 5 kVA. Avec un compteur double flux ou communicant, le réseau facture à la place la distribution et le transport sur les prélèvements bruts, plafonnés au tarif prosumer augmenté des frais de réseau sur les prélèvements nets ; l'intégration facture le moins cher des deux dès que l'étape des panneaux solaires indique que le compteur mesure séparément prélèvement et injection, et ce plafond nécessite lui aussi la puissance.\n\nModifiez les options de l'entrée et indiquez la puissance de l'onduleur (kVA) à l'étape des panneaux solaires. Cet avis disparaît dès qu'elle est renseignée."
     },
     "register_pair_incomplete": {
       "title": "Un compteur de {supplier} ({contract}) n'enregistre plus",

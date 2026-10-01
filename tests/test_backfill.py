@@ -1289,6 +1289,152 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 
+async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
+    hass: HomeAssistant,
+) -> None:
+    """Article 81's cap on a double-flow compensation meter has to land the
+    same in the backfilled series as on the live year-to-date figure: the
+    prosumer tariff on the net draws against distribution and transport on
+    the gross ones, the lower of the two billed. Per-hour kind, so both run
+    the hourly walk, and a dear tariff, so the cap does bind."""
+    from custom_components.be_electricity_prices import ytd_energy
+    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import DynamicRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.02,
+                prosumer_eur_per_kva_year=90.0,
+            )
+        },
+    )
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = (
+        dt_util.start_of_local_day(date(2026, 1, 31)) + timedelta(days=1)
+    ).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    spots = {h: 0.06 for h in hours}
+    cons = {h: 0.4 for h in hours}
+    inj = {h: 0.6 if 10 <= dt_util.as_local(h).hour < 16 else 0.0 for h in hours}
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return dict(cons)
+        return dict(inj) if entity_id == "sensor.inj_total" else {}
+
+    async def noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    async def run(double_flow: bool) -> tuple[float, float]:
+        entry = make_entry(
+            region="wallonia",
+            dso="ores",
+            meter="dynamic",
+            title=f"Double flow {double_flow}",
+            solar_regime="compensation",
+            solar_kva=5.0,
+            double_flow_meter=double_flow,
+            consumption_kwh="sensor.cons_total",
+            injection_kwh="sensor.inj_total",
+        )
+        entry.add_to_hass(hass)
+        _register_sensors(hass, entry, ["current_year_cost"])
+        coordinator = SimpleNamespace(
+            hass=hass,
+            _snapshot=snap,
+            _session=None,
+            _historical_spots=dict(spots),
+            _historical_spot_quarters={},
+            _spp_weights={},
+            _rlp_weights={},
+            _ensure_historical_spots=AsyncMock(),
+            _ensure_spp_weights=AsyncMock(),
+            _ensure_rlp_weights=AsyncMock(),
+            _billed_peak_kw=lambda: 0.0,
+        )
+        entry.runtime_data = coordinator
+        captured: list[list[dict[str, Any]]] = []
+
+        def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+            captured.append(list(stats))
+
+        instance = MagicMock()
+        instance.async_add_executor_job = AsyncMock(return_value={})
+        with (
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+            patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
+            patch.object(
+                cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+            ),
+            patch.object(
+                ytd_cost,
+                "_effective_snapshot_for_month",
+                AsyncMock(return_value=snap),
+            ),
+            patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=fake_import,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance",
+                return_value=instance,
+            ),
+            patch(
+                "homeassistant.util.dt.now",
+                lambda: (
+                    dt_util.start_of_local_day(date(2026, 1, 31))
+                    + timedelta(hours=23, minutes=59)
+                ),
+            ),
+        ):
+            await bf._backfill_cost_sensor(
+                hass,
+                entry,
+                coordinator,  # type: ignore[arg-type]
+                hours,
+                dict(spots),
+                {},
+            )
+            live = await ytd_cost._compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                historical_spots=dict(spots),
+            )
+        rows = [row for batch in captured for row in batch]
+        assert rows, "the backfill imported nothing"
+        assert live is not None
+        return rows[-1]["sum"], live
+
+    flat_backfill, flat_live = await run(False)
+    capped_backfill, capped_live = await run(True)
+    assert capped_backfill == pytest.approx(capped_live, abs=1e-3)
+    assert flat_backfill == pytest.approx(flat_live, abs=1e-3)
+    # The tariff for January is 5 x 90 / 12 = 37,50 EUR. Gross draws are
+    # 744 x 0,4 kWh and the net ones what is left after the 186 kWh put back,
+    # all at 0,12 EUR of network, so gross costs 7,68 EUR less than the
+    # tariff plus the net network: that is what the cap takes off.
+    gross_network = 744 * 0.4 * 0.12
+    net_network = (744 * 0.4 - 31 * 6 * 0.6) * 0.12
+    assert flat_live - capped_live == pytest.approx(
+        37.5 + net_network - gross_network, abs=1e-6
+    )
+
+
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
     hass: HomeAssistant,
 ) -> None:

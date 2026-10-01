@@ -3965,6 +3965,30 @@ def test_solar_schema_offers_compensation_only_in_wallonia() -> None:
     assert "compensation" not in _regimes("brussels")
 
 
+def test_solar_schema_asks_for_the_meter_only_where_compensation_is_offered() -> None:
+    """Whether the meter counts draw and injection apart decides how CWaPE
+    bills a compensation install's network (fees.bills_gross_network), so it
+    is asked beside the regime, in Wallonia alone, and keeps its answer."""
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
+        _solar_schema,
+    )
+    from custom_components.be_electricity_prices.const import (
+        CONF_DOUBLE_FLOW_METER,
+    )
+
+    def _default(defaults: dict[str, object]) -> object:
+        schema = _solar_schema(defaults)
+        for key in schema.schema:
+            if getattr(key, "schema", key) == CONF_DOUBLE_FLOW_METER:
+                return key.default()
+        return None
+
+    assert _default({"region": "wallonia"}) is False
+    assert _default({"region": "wallonia", CONF_DOUBLE_FLOW_METER: True}) is True
+    assert _default({"region": "flanders"}) is None
+    assert _default({"region": "brussels"}) is None
+
+
 def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     """A spot-indexed credit is priced over the whole window, never at the slot
     the dialog happened to open in, and averaged by when the panels export.

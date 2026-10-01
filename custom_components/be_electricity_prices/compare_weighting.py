@@ -202,6 +202,44 @@ def _register_weights(
     )
 
 
+def _register_network_rates(
+    snapshot: Any, dso: str, region: str, meter: Any, dso_mode: Any
+) -> tuple[float, ...] | None:
+    """Distribution and transport per kWh in each meter register, VAT as the
+    bill carries it, in :func:`_register_hours`' order.
+
+    A register is one network rate by construction, since the DSO's schedule
+    is what divides the meter, so each is priced at the first hour of the year
+    the engine puts in it (:func:`spot_stats._register_for`) rather than at a
+    clock hour picked here, which a weekend or a holiday would place in the
+    other register. ``None`` when the card has no row for the DSO.
+    """
+    from .pricing import compute_network_and_taxes
+    from .spot_stats import _register_for
+
+    when = dt_util.start_of_local_day(date(dt_util.now().year, 1, 1))
+    if meter != METER_EXCLUSIVE_NIGHT and dso_mode == DSO_MODE_IMPACT:
+        names: tuple[str, ...] = ("pic", "medium", "eco")
+    elif meter in (METER_BI, METER_DYNAMIC):
+        names = ("peak", "offpeak")
+    else:
+        names = (_register_for(when, meter, dso_mode, region),)
+    first: dict[str, datetime] = {}
+    # A week holds every register of every schedule the engine knows.
+    for _ in range(7 * 24):
+        first.setdefault(_register_for(when, meter, dso_mode, region), when)
+        when += timedelta(hours=1)
+    try:
+        return tuple(
+            compute_network_and_taxes(
+                snapshot, dso, region, first[name], meter, dso_mode
+            ).network
+            for name in names
+        )
+    except (KeyError, ValueError):
+        return None
+
+
 def _hour_weighted_mean(
     samples: Iterable[tuple[datetime, float]],
     hour_weights: dict[int, float] | None,

@@ -55,7 +55,7 @@ from .meter_hourly import (
     _metered_sides,
     _top_up_today_hourly,
 )
-from .fees import in_first_contract_year
+from .fees import bills_gross_network, in_first_contract_year
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
@@ -107,6 +107,24 @@ def _warn_month_dropped(snap: SupplierSnapshot, month_first: date, why: str) -> 
         month_first,
         why,
     )
+
+
+def _record_network(
+    stats: dict[str, float],
+    netting: _NetAllocation,
+    entry: ConfigEntry,
+    *,
+    allocated: bool,
+) -> None:
+    """Keep the window's network charges beside its netted bill, on the net
+    draws and on the gross ones, for an entry whose network article 81 caps
+    (:func:`fees.gross_network_rebate`). Both walks fill them the same way, and
+    the bill subtracts the rebate only where they are present: a window no
+    meter reported has no gross draws to compare the prosumer tariff with."""
+    if not bills_gross_network(entry.data):
+        return
+    stats["net_network_ytd_eur"] = netting.net_network(allocated=allocated)
+    stats["gross_network_ytd_eur"] = netting.gross_network()
 
 
 async def _ytd_hourly_energy(
@@ -389,6 +407,8 @@ async def _ytd_hourly_energy(
                 kwh_cons - kwh_inj,
                 bd.all_in,
                 _rlp_hour_weight(rlp_weights, local),
+                network=bd.network,
+                gross_kwh=kwh_cons,
             )
             d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
@@ -469,6 +489,7 @@ async def _ytd_hourly_energy(
         energy_cost = netting.billed(allocated=allocated)
         if breakdown is not None:
             breakdown["energy_ytd_raw_eur"] = netting.raw(allocated=allocated)
+            _record_network(breakdown, netting, entry, allocated=allocated)
     if breakdown is not None:
         breakdown["hours_seen"] = float(hours_seen)
         breakdown["hours_priced"] = float(hours_priced)

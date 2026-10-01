@@ -1476,12 +1476,40 @@ The flat per-kVA fee is one of the two ways CWaPE bills a compensation prosumer
 household whose meter does not count draw and injection separately. With a
 double-flow or communicating meter, distribution and transport are billed
 proportionally on the GROSS draws instead, and article 81 of the 2025-2029 tariff
-methodology caps that at what the flat fee plus the net draws would cost. That
-proportional option is **not modelled**: every compensation entry is billed the
-flat fee on its net draws, which for a communicating-meter household is the
-ceiling of what it pays rather than the amount. The capacity is required all the
-same (`compensation_lacks_kva`, `fees.py`): at 0 neither option is billed, and
-the solar step refuses it.
+methodology caps that at what the flat fee plus the net draws would cost (the
+note's section 4.3, "montant maximum a facturer"). The DSO applies the cap by a
+rebate on the bill, so a household with such a meter pays the lower of the two
+without asking. Energy and the levies stay on the net draws either way:
+compensation still nets them, and only an install that is off compensation has
+its whole bill on the gross draws (section 4.4).
+
+The integration models it for an entry whose solar step says the meter counts
+draw and injection apart (`CONF_DOUBLE_FLOW_METER`, gated with the regime,
+Wallonia and a kVA above zero by `bills_gross_network`, `fees.py`). Every bill
+still carries the flat fee and the network on the net draws, and subtracts the
+difference the cap allows, never negative:
+
+```python
+rebate = max(0, prosumer_dso + net_network - gross_network)  # gross_network_rebate
+```
+
+`prosumer_dso` is the DSO half of the fee alone (`_dso_prosumer_monthly_fee`);
+the supplier forfait beside it is not a network charge and is not capped.
+`net_network` and `gross_network` are distribution plus transport, VAT as
+billed, on the netted draws and on the gross ones. Each walk takes them where
+it nets: `_NetAllocation` (`spot_stats.py`) carries each slice's network rate
+and gross kWh beside its all-in rate, so the net side is allocated and clamped
+per register exactly like the energy (a forfeited register carries no network
+either) and the gross side is summed as metered. The year-to-date walk
+(`_bill`, `ytd_cost.py`) and the backfill (`backfill_cost.py`) both subtract
+`gross_network_rebate`; the compare page and the projection settle it from two
+totals per register (`_annual_network_rebate`, `compare_quote.py`, with the
+register network rates from `_register_network_rates`). A window with no gross
+draws at all gets no rebate: that is a meter that reported nothing, not one
+that drew nothing. The live `prosumer_cost` sensor keeps showing the flat fee,
+which is the cap. The capacity is required all the same
+(`compensation_lacks_kva`, `fees.py`): at 0 neither option is billed, and the
+solar step refuses it.
 
 ## Brussels OSP tier
 

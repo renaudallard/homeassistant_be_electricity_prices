@@ -521,6 +521,17 @@ different, as long as the edit keeps the same supplier, contract and region
      2024-01-01**, valid until 2030-12-31. Needs the inverter capacity, which
      cannot be left at 0. Creates `prosumer_cost`, `projected_year_injection`
      and `rolling_year_injection`.
+   - **Meter counts draw and injection apart** *(Wallonia only, off by
+     default)* — tick it for a double-flow or communicating meter. CWaPE then
+     bills distribution and transport on your **gross** draws instead of the
+     prosumer tariff, and caps that at what the prosumer tariff plus those
+     charges on your net draws would cost (article 81 of the 2025-2029 tariff
+     methodology). The running bill, the backfilled series and the compare
+     page bill the lower of the two; energy and the levies stay netted either
+     way. Leave it off for a meter that runs backwards. `prosumer_cost` keeps
+     showing the tariff, which is the cap; `current_year_cost` carries
+     `net_network_ytd_eur`, `gross_network_ytd_eur` and
+     `network_cap_rebate_eur`, the difference taken off.
    - **Injection tariff** — post-2024 Walloon installations, Flemish smart
      meters and Brussels. Creates `injection_price`, ready for HA Energy,
      `projected_year_injection` and `rolling_year_injection`, plus the day and night
@@ -985,8 +996,9 @@ successful refresh:
   it gets this notice until the capacity is filled in. With a double-flow or
   communicating meter CWaPE bills distribution and transport on the gross
   draws instead, capped at the per-kVA fee plus the network charges on the
-  net draws; that option is not modelled, so such a household is billed the
-  cap.
+  net draws; the integration bills the lower of the two once the solar step
+  says the meter counts draw and injection apart, and the cap needs the
+  capacity too.
 - **`direct_debit_unanswered_<entry>`** — the card prices a direct-debit
   payer differently and this entry has no stored answer, which an entry
   created before the question existed does not. The difference is left

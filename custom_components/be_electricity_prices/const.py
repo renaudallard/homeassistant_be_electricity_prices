@@ -508,6 +508,13 @@ METER_SENSOR_KEYS: Final[tuple[str, ...]] = (
 # Solar inverter capacity in kVA. 0 means no panels (no prosumer cost).
 CONF_SOLAR_KVA: Final = "solar_kva"
 CONF_SOLAR_REGIME: Final = "solar_regime"
+# Whether a Walloon compensation meter counts draw and injection apart (a
+# double-flow or communicating meter). CWaPE then bills distribution and
+# transport on the gross draws, capped at the prosumer tariff plus those
+# charges on the net draws (article 81 of the 2025-2029 tariff methodology).
+# Asked rather than inferred: the meter type is a fact of the connection,
+# and an injection sensor in Home Assistant can come from the inverter.
+CONF_DOUBLE_FLOW_METER: Final = "double_flow_meter"
 
 # Walloon compensation regime ("compteur qui tourne a l'envers") only applies
 # to installations certified before 2024-01-01 and stays valid until

@@ -46,6 +46,7 @@ from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
     _compensation_kva,
+    _dso_prosumer_monthly_fee,
     _prosumer_monthly_fee,
 )
 from .pricing import MeterType, yearly_fixed_fee_for_meter
@@ -210,10 +211,14 @@ async def _ytd_prosumer(
     window_start: date,
     contract: str | None = None,
     cached_only: bool = False,
+    network_only: bool = False,
 ) -> float:
     """Sum the monthly prosumer fee across YTD using each month's archived
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
-    honoured for the months it applies to."""
+    honoured for the months it applies to.
+
+    ``network_only`` sums the DSO's half alone, leaving out the supplier's
+    forfait: that is the half article 81 caps (fees.gross_network_rebate)."""
     kva = _compensation_kva(entry)
     if not kva:
         return 0.0
@@ -232,7 +237,11 @@ async def _ytd_prosumer(
         cached_only=cached_only,
     ):
         overlay = snap_m.dsos.get(dso)
-        monthly_fee = _prosumer_monthly_fee(overlay, snap_m, kva)
+        monthly_fee = (
+            _dso_prosumer_monthly_fee(overlay, kva)
+            if network_only
+            else _prosumer_monthly_fee(overlay, snap_m, kva)
+        )
         if monthly_fee == 0.0:
             continue
         total += monthly_fee * (days_in_ytd / days_in_full_month)

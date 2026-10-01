@@ -43,6 +43,7 @@ from homeassistant.config_entries import ConfigEntry
 from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
+    CONF_DOUBLE_FLOW_METER,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
@@ -309,6 +310,15 @@ def _annual_static_fees(
     )
 
 
+def _dso_prosumer_monthly_fee(overlay: DsoOverlay | None, kva: float) -> float:
+    """The network half of the monthly prosumer fee: the DSO's per-kVA/year
+    tariff for ``kva`` of inverter, the only half article 81 caps (see
+    :func:`gross_network_rebate`). A missing rate contributes zero."""
+    if overlay is None or overlay.prosumer_eur_per_kva_year is None:
+        return 0.0
+    return kva * overlay.prosumer_eur_per_kva_year / 12.0
+
+
 def _prosumer_monthly_fee(
     overlay: DsoOverlay | None, snapshot: SupplierSnapshot, kva: float
 ) -> float:
@@ -319,13 +329,8 @@ def _prosumer_monthly_fee(
     raw, then divides to a monthly amount. Callers gate this to Walloon
     compensation installs; a missing rate contributes zero.
     """
-    dso_rate = (
-        overlay.prosumer_eur_per_kva_year
-        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
-        else 0.0
-    )
     supplier_rate = snapshot.supplier_prosumer_eur_per_kva_year or 0.0
-    return kva * (dso_rate + supplier_rate) / 12.0
+    return _dso_prosumer_monthly_fee(overlay, kva) + kva * supplier_rate / 12.0
 
 
 def _compensation_kva(entry: ConfigEntry) -> float:
@@ -344,6 +349,45 @@ def _compensation_kva(entry: ConfigEntry) -> float:
     return kva if kva is not None and kva > 0.0 else 0.0
 
 
+def bills_gross_network(data: Mapping[str, Any]) -> bool:
+    """Whether CWaPE bills this entry's network on its gross draws.
+
+    A Walloon compensation install whose meter counts draw and injection
+    apart pays distribution and transport on the GROSS draws instead of the
+    prosumer tariff, and article 81 of the 2025-2029 tariff methodology caps
+    that at what the prosumer tariff plus those charges on the net draws
+    would cost (CWaPE, Note explicative tarif prosumer, 23 June 2025,
+    sections 4 and 4.3). The DSO applies the cap itself, by a rebate on the
+    bill, so nothing is to be asked for. Needs a kVA above zero, like the fee
+    it is capped by.
+    """
+    kva = _walloon_compensation_kva(data)
+    return bool(kva) and bool(data.get(CONF_DOUBLE_FLOW_METER))
+
+
+def gross_network_rebate(
+    prosumer_eur: float, net_network_eur: float, gross_network_eur: float
+) -> float:
+    """What article 81 takes off a double-flow compensation bill.
+
+    The bills below already carry the default: the prosumer tariff
+    (``prosumer_eur``, its DSO half alone) plus distribution and transport on
+    the net draws (``net_network_eur``, the share of the netted bill they
+    make up). The network bills the gross draws instead
+    (``gross_network_eur``) unless that costs more, so the bill is the lower
+    of the two and this returns the difference to subtract, never negative.
+    Energy and the levies stay on the net draws either way: compensation
+    still nets them.
+
+    No gross draws at all is a window the meter reported nothing for, not a
+    household that drew nothing, so it is given no rebate: taking the whole
+    tariff off a bill on that evidence is the missing-as-zero mistake.
+    """
+    if gross_network_eur <= 0.0:
+        return 0.0
+    return max(0.0, prosumer_eur + net_network_eur - gross_network_eur)
+
+
 def compensation_lacks_kva(data: Mapping[str, Any]) -> bool:
     """A Walloon compensation install with no inverter capacity entered.
 
@@ -351,11 +395,10 @@ def compensation_lacks_kva(data: Mapping[str, Any]) -> bool:
     it, about 429 EUR a year at 5 kVA on ORES. A household with a double-flow
     or communicating meter is billed CWaPE's proportional option instead:
     distribution and transport on its gross draws, capped by article 81 at
-    what the flat fee plus the network charges on its net draws would cost.
-    That option is not modelled (docs/pricing-model.md), so such a household
-    is billed its cap, and the capacity is needed either way. The solar step
-    refuses it, and the coordinator raises a Repairs card for an entry saved
-    before it did.
+    what the flat fee plus the network charges on its net draws would cost
+    (:func:`gross_network_rebate`), and the capacity is needed for that cap
+    as much as for the fee. The solar step refuses it, and the coordinator
+    raises a Repairs card for an entry saved before it did.
     """
     kva = _walloon_compensation_kva(data)
     return kva is not None and not kva > 0.0

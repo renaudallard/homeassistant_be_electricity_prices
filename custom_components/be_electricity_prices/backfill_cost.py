@@ -57,9 +57,12 @@ from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
     _compensation_kva,
+    _dso_prosumer_monthly_fee,
     _prosumer_monthly_fee,
     _welcome_credit_eur,
+    bills_gross_network,
     first_year_net_kwh,
+    gross_network_rebate,
     in_first_contract_year,
     window_energy_rate,
 )
@@ -358,6 +361,9 @@ async def _accrue_cost(
         if sides is not None:
             cons_per_hour = sides.consumption.kwh
             inj_per_hour = sides.injection.kwh
+    # Article 81's cap on a double-flow meter (fees.gross_network_rebate).
+    network_cap = bills_gross_network(entry.data)
+    running_prosumer_network = 0.0
 
     _snap_for = ctx.snap_for
     spp_weights = ctx.spp_weights
@@ -464,6 +470,8 @@ async def _accrue_cost(
                     cons - inj,
                     bd.all_in,
                     _rlp_hour_weight(ctx.rlp_weights, local),
+                    network=bd.network,
+                    gross_kwh=cons,
                 )
             elif regime == SOLAR_REGIME_INJECTION:
                 running_energy += cons * bd.all_in
@@ -564,6 +572,12 @@ async def _accrue_cost(
                     / days_in_full_month
                     / hours_per_local_date[local.date()]
                 )
+                if network_cap:
+                    running_prosumer_network += (
+                        _dso_prosumer_monthly_fee(overlay, kva)
+                        / days_in_full_month
+                        / hours_per_local_date[local.date()]
+                    )
 
         # Compensation regime clamps the YTD energy term at zero
         # (Walloon meter forfeits surplus injection past
@@ -597,7 +611,16 @@ async def _accrue_cost(
             ),
             first_year_injection_kwh=ctx.annual_injection_kwh,
         )
-        bill = displayed_energy + running_fees - credit
+        rebate = (
+            gross_network_rebate(
+                running_prosumer_network,
+                netting.net_network(allocated=allocated),
+                netting.gross_network(),
+            )
+            if network_cap
+            else 0.0
+        )
+        bill = displayed_energy + running_fees - credit - rebate
         state = round(carried + bill, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but
         # only emit rows inside the requested window, so a mid-year

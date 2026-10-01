@@ -124,7 +124,11 @@
         "description": "Vermogen van de omvormer in kVA en het regime dat van toepassing is op je installatie. De Waalse compensatieregeling geldt enkel voor installaties gecertificeerd voor 2024-01-01 en blijft geldig tot 2030-12-31; nieuwe installaties en Vlaamse digitale meters vallen onder het injectietarief.",
         "data": {
           "solar_kva": "Vermogen omvormer (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Meter telt afname en injectie apart"
+        },
+        "data_description": {
+          "double_flow_meter": "Alleen voor het Waalse compensatieregime. Vink aan bij een tweerichtingsmeter of digitale meter: de netbeheerder rekent dan distributie en transport aan op je bruto afname in de plaats van het prosumententarief, telkens dat goedkoper is. Laat uit bij een terugdraaiende teller."
         }
       },
       "meters": {
@@ -463,7 +467,11 @@
         "description": "Vermogen van de omvormer in kVA en het regime dat van toepassing is op je installatie. De Waalse compensatieregeling geldt enkel voor installaties gecertificeerd voor 2024-01-01 en blijft geldig tot 2030-12-31; nieuwe installaties en Vlaamse digitale meters vallen onder het injectietarief.",
         "data": {
           "solar_kva": "Vermogen omvormer (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Meter telt afname en injectie apart"
+        },
+        "data_description": {
+          "double_flow_meter": "Alleen voor het Waalse compensatieregime. Vink aan bij een tweerichtingsmeter of digitale meter: de netbeheerder rekent dan distributie en transport aan op je bruto afname in de plaats van het prosumententarief, telkens dat goedkoper is. Laat uit bij een terugdraaiende teller."
         }
       },
       "meters": {
@@ -806,7 +814,7 @@
     },
     "compensation_kva_missing": {
       "title": "Geen omvormervermogen op deze invoer met compensatie ({supplier}, {contract})",
-      "description": "Deze invoer valt onder het Waalse compensatieregime, waarvan het prosumententarief op het omvormervermogen wordt berekend, maar het omvormervermogen staat op 0. Het prosumententarief ontbreekt daardoor in elke kost die deze invoer berekent: ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus zo'n €430 per jaar voor een omvormer van 5 kVA. Met een tweerichtingsmeter of digitale meter rekent de netbeheerder in de plaats distributie en transport aan op de bruto afname, begrensd op het prosumententarief plus de netkosten op de netto afname; die optie is niet gemodelleerd, dus de integratie rekent die bovengrens aan, waarvoor het vermogen ook nodig is.\n\nBewerk de opties van de invoer en vul het omvormervermogen (kVA) in bij de stap zonnepanelen. Deze melding verdwijnt zodra het is ingevuld."
+      "description": "Deze invoer valt onder het Waalse compensatieregime, waarvan het prosumententarief op het omvormervermogen wordt berekend, maar het omvormervermogen staat op 0. Het prosumententarief ontbreekt daardoor in elke kost die deze invoer berekent: ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus zo'n €430 per jaar voor een omvormer van 5 kVA. Met een tweerichtingsmeter of digitale meter rekent de netbeheerder in de plaats distributie en transport aan op de bruto afname, begrensd op het prosumententarief plus de netkosten op de netto afname; de integratie rekent het laagste van beide aan zodra de stap zonnepanelen zegt dat de meter afname en injectie apart telt, en voor de bovengrens is het vermogen ook nodig.\n\nBewerk de opties van de invoer en vul het omvormervermogen (kVA) in bij de stap zonnepanelen. Deze melding verdwijnt zodra het is ingevuld."
     },
     "register_pair_incomplete": {
       "title": "Een meter van {supplier} ({contract}) registreert niet meer",

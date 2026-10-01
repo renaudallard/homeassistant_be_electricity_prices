@@ -124,7 +124,11 @@
         "description": "Wechselrichterleistung in kVA und das für Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur für vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flämische intelligente Zähler sind im Einspeisetarif.",
         "data": {
           "solar_kva": "Wechselrichter (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Zähler erfasst Bezug und Einspeisung getrennt"
+        },
+        "data_description": {
+          "double_flow_meter": "Nur für die wallonische Kompensationsregelung. Bei einem Zweirichtungszähler oder intelligenten Zähler ankreuzen: Der Netzbetreiber berechnet dann Verteilung und Übertragung auf Ihren Bruttobezug statt des Prosumer-Tarifs, sofern das günstiger ist. Bei einem rückwärts laufenden Zähler ausgeschaltet lassen."
         }
       },
       "meters": {
@@ -463,7 +467,11 @@
         "description": "Wechselrichterleistung in kVA und das für Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur für vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flämische intelligente Zähler sind im Einspeisetarif.",
         "data": {
           "solar_kva": "Wechselrichter (kVA)",
-          "solar_regime": "Regime"
+          "solar_regime": "Regime",
+          "double_flow_meter": "Zähler erfasst Bezug und Einspeisung getrennt"
+        },
+        "data_description": {
+          "double_flow_meter": "Nur für die wallonische Kompensationsregelung. Bei einem Zweirichtungszähler oder intelligenten Zähler ankreuzen: Der Netzbetreiber berechnet dann Verteilung und Übertragung auf Ihren Bruttobezug statt des Prosumer-Tarifs, sofern das günstiger ist. Bei einem rückwärts laufenden Zähler ausgeschaltet lassen."
         }
       },
       "meters": {
@@ -806,7 +814,7 @@
     },
     "compensation_kva_missing": {
       "title": "Keine Wechselrichterleistung bei diesem Eintrag mit Kompensation ({supplier}, {contract})",
-      "description": "Dieser Eintrag unterliegt der wallonischen Kompensationsregelung, deren Prosumer-Tarif aus der Wechselrichterleistung berechnet wird, aber seine Wechselrichterleistung ist 0. Der Prosumer-Tarif fehlt daher in allen Kosten, die dieser Eintrag berechnet: je nach Netzbetreiber etwa 81 € bis 99 € je kVA und Jahr, also rund 430 € im Jahr bei einem Wechselrichter mit 5 kVA. Mit einem Zweirichtungszähler oder intelligenten Zähler berechnet der Netzbetreiber stattdessen Verteilung und Übertragung auf den Bruttobezug, begrenzt auf den Prosumer-Tarif zuzüglich der Netzkosten auf den Nettobezug; diese Option ist nicht abgebildet, daher berechnet die Integration diese Obergrenze, für die die Leistung ebenfalls nötig ist.\n\nBearbeiten Sie die Optionen des Eintrags und geben Sie im Schritt Solaranlage die Wechselrichterleistung (kVA) an. Dieser Hinweis verschwindet, sobald sie eingetragen ist."
+      "description": "Dieser Eintrag unterliegt der wallonischen Kompensationsregelung, deren Prosumer-Tarif aus der Wechselrichterleistung berechnet wird, aber seine Wechselrichterleistung ist 0. Der Prosumer-Tarif fehlt daher in allen Kosten, die dieser Eintrag berechnet: je nach Netzbetreiber etwa 81 € bis 99 € je kVA und Jahr, also rund 430 € im Jahr bei einem Wechselrichter mit 5 kVA. Mit einem Zweirichtungszähler oder intelligenten Zähler berechnet der Netzbetreiber stattdessen Verteilung und Übertragung auf den Bruttobezug, begrenzt auf den Prosumer-Tarif zuzüglich der Netzkosten auf den Nettobezug; die Integration berechnet den niedrigeren der beiden Beträge, sobald der Schritt Solaranlage angibt, dass der Zähler Bezug und Einspeisung getrennt erfasst, und die Obergrenze braucht ebenfalls die Leistung.\n\nBearbeiten Sie die Optionen des Eintrags und geben Sie im Schritt Solaranlage die Wechselrichterleistung (kVA) an. Dieser Hinweis verschwindet, sobald sie eingetragen ist."
     },
     "register_pair_incomplete": {
       "title": "Ein Zähler von {supplier} ({contract}) zeichnet nicht mehr auf",
