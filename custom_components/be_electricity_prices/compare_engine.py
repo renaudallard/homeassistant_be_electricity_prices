@@ -686,7 +686,7 @@ class _SweepEngine(_HouseholdMixin):
             # hours the household draws them instead of the hours the panels
             # produce. Omitted, a compensation row came out 23% low.
             export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
-            register_weights=hh.register_weights,
+            register_weights=hh.register_weights_for(meter, dso_mode),
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )

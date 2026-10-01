@@ -9218,6 +9218,94 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
     assert other0 - other4 == pytest.approx(200.0, abs=0.01)
 
 
+def test_an_impact_candidate_splits_the_households_year_into_its_own_bands() -> None:
+    """A bi-hourly household quoting a Tarif Impact candidate handed it the
+    day/night pair. The candidate has three registers, so its article 81
+    rebate fell back to the clock and spread the midday export over the
+    evening peak: on Bolt, OCTA+ and Eneco's Walloon cards, 23 to 178 EUR a
+    year short. The candidate's pair is the household's shapes cut its way."""
+    import dataclasses
+    import math
+
+    from custom_components.be_electricity_prices.compare_inputs import (
+        _HouseholdQuote,
+    )
+    from custom_components.be_electricity_prices.compare_quote import (
+        _annual_network_rebate,
+    )
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _register_weights,
+    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from tests import make_snapshot
+
+    draw = {h: 2.0 if 17 <= h < 22 else 1.0 if 7 <= h < 17 else 0.6 for h in range(24)}
+    sun = {
+        h: math.exp(-((h + 0.5 - 13.0) ** 2) / 8.0) if 6 <= h < 21 else 0.0
+        for h in range(24)
+    }
+    own = tuple(
+        _register_weights("wallonia", shape, meter="bi", dso_mode="bi_horaire")
+        for shape in (draw, sun)
+    )
+    fields: dict[str, Any] = {
+        f.name: None for f in dataclasses.fields(_HouseholdQuote)
+    } | {
+        "region": "wallonia",
+        "current_meter": "bi",
+        "dso_mode": "bi_horaire",
+        "hour_weights": draw,
+        "inj_hour_weights": sun,
+        "register_weights": own,
+    }
+    hh = _HouseholdQuote(**fields)
+    assert hh.register_weights_for("bi", "bi_horaire") is own
+    bands = hh.register_weights_for("bi", "impact")
+    assert len(bands[0]) == len(bands[1]) == 3
+
+    snap = make_snapshot(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.1198,
+                distribution_peak=0.1327,
+                distribution_offpeak=0.0739,
+                distribution_pic=0.1657,
+                distribution_medium=0.1083,
+                distribution_eco=0.0509,
+                transport=0.0274,
+                prosumer_eur_per_kva_year=85.84,
+            )
+        }
+    )
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        meter="bi",
+        dso_tariff_mode="impact",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        double_flow_meter=True,
+    )
+
+    def rebate(weights: Any) -> float:
+        return _annual_network_rebate(snap, entry, "bi", 3500.0, 3000.0, weights, 1.0)
+
+    # The day/night pair falls back to the clock; the bands, cut from the
+    # household's own shapes, put the export where the sun is.
+    assert rebate(bands) - rebate(own) > 100.0
+
+    # And every candidate's annual bill on the page takes its own cut.
+    from tests import compare_page_calls
+
+    for name, call in compare_page_calls("_annual_bill"):
+        if len(call.args) < 2 or ast.unparse(call.args[1]) != "target_entry":
+            continue
+        weights = {kw.arg: kw.value for kw in call.keywords}["register_weights"]
+        assert "register_weights_for" in ast.unparse(weights), (
+            f"{name}:{call.lineno} quotes a candidate on the household's registers"
+        )
+
+
 def test_every_candidate_welcome_credit_reads_the_signing_month() -> None:
     """A candidate is credited the card it is quoted on, as though signed
     today. Both ranking and quote did that through _annual_welcome_credit

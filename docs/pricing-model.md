@@ -1354,7 +1354,11 @@ context):
   midday band running backwards paid off the evening one and a matched
   3500 kWh install billed no energy; a bi-hourly one split its year day and
   night where the engine split it into the three CWaPE bands, 85,79 EUR out
-  on the same install.
+  on the same install. A candidate is cut its own way too
+  (`_HouseholdQuote.register_weights_for`, `compare_inputs.py`): a Tarif Impact
+  candidate quoted to a bi-hourly household was handed the day/night pair,
+  and its article 81 rebate fell back to the clock, which spread the midday
+  export over the evening peak, 23 to 178 EUR a year short.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
   from `_historical_injection_rate` (`injection.py`).
 

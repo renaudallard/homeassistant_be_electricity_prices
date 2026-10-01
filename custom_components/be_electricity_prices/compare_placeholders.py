@@ -395,7 +395,7 @@ class _PlaceholdersMixin(OptionsFlow):
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, register_weights=hh.register_weights, meter=meter, welcome_credit_eur=other_welcome_credit):.2f}"
+                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, register_weights=hh.register_weights_for(meter, other_dso_mode), meter=meter, welcome_credit_eur=other_welcome_credit):.2f}"
             )
 
         # A what-if moves BOTH sides together, so the printed supplier delta
@@ -499,7 +499,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 rolling_inj_kwh,
                 compare_inj_price,
                 export_per_kwh=other_export_per_kwh,
-                register_weights=hh.register_weights,
+                register_weights=hh.register_weights_for(meter, other_dso_mode),
                 meter=meter,
                 welcome_credit_eur=other_welcome_credit,
             ) - _annual_bill(
@@ -764,7 +764,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 ytd_inj_kwh,
                 compare_inj_price,
                 export_per_kwh=other_export_per_kwh,
-                register_weights=hh.register_weights,
+                register_weights=hh.register_weights_for(meter, other_dso_mode),
                 fee_proration=fee_proration,
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,

@@ -612,6 +612,25 @@ class _HouseholdQuote:
     # short of a full year of either, where that credit is left out.
     credit_year: CreditYear | None = None
 
+    def register_weights_for(self, meter: str, dso_mode: str) -> Any:
+        """``register_weights`` for a candidate on ``meter`` and ``dso_mode``.
+
+        The pair above splits the year the household's own meter does, and a
+        Tarif Impact candidate splits it in three where a bi-hourly meter
+        splits it in two. Handed the household's pair, a candidate's
+        per-register sums fell back to the clock, which spread midday export
+        over the evening peak and quoted its article 81 rebate up to 178 EUR
+        a year short.
+        """
+        if (meter, dso_mode) == (self.current_meter, self.dso_mode):
+            return self.register_weights
+        from .compare_weighting import _register_weights
+
+        return tuple(
+            _register_weights(self.region, weights, meter=meter, dso_mode=dso_mode)
+            for weights in (self.hour_weights, self.inj_hour_weights)
+        )
+
 
 def _detached_spot_view(coord: Any, *, isolate: bool) -> Any:
     """A copy of the coordinator that a compare-only fetch walks into.
