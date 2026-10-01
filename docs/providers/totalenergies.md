@@ -279,7 +279,10 @@ three Impact bands or four meter columns, because a row of four figures is
 otherwise either four rates with the fee left blank or Impact's fee and its
 three bands. The October myDrive card in Wallonia is the first case and is
 refused rather than read as the second. Impact prints its one energy rate in
-each band, and a card whose bands differed would be refused too.
+each band, and a card whose bands differed would be refused too. A row that
+prints its yearly fee among the rates is an unfilled card and is refused: the
+Impact card served on the morning of 1 October 2026 was a template with 94,34
+in every column, and it read as 90,98 c/kWh of energy.
 
 The first October cards printed their "A titre indicatif" block broken: every
 figure in it was a formula base (`Compteur Simple : 3.87`), the formula with
@@ -500,6 +503,7 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_mydrive_w_2026-10.pdf` | myDrive, Wallonia, October 2026 (no yearly fee printed: refused) |
 | `totalenergies_mycomfort_b_2026-10.pdf` | myComfort, Brussels, October 2026 (block at no index, 7.01 against a 6.91 base) |
 | `totalenergies_electricite_variable_b_2026-10_filled.pdf` | Electricité Variable, Brussels, October 2026 afternoon (block filled in, billed) |
+| `totalenergies_impact_w_2026-10_template.pdf` | Impact, Wallonia, October 2026 morning (unfilled, the fee in every rate column: refused) |
 
 ## When the card changes, look here
 

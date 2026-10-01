@@ -301,6 +301,17 @@ def test_october_2026_variable_card_with_the_fee_below_the_rates() -> None:
     assert snap.injection is None
 
 
+def test_an_unfilled_card_is_refused() -> None:
+    """The Impact card TotalEnergies served on the morning of 1 October 2026
+    was a template repeating its 94,34 yearly fee in all three rate columns,
+    and it read as 90,98 c/kWh of energy. A row printing the fee as a rate is
+    refused."""
+    text = fixture_text("totalenergies_impact_w_2026-10_template.pdf", layout=True)
+    assert "94,34 94,34 94,34 Tarif mensuel\n94,34" in text
+    with pytest.raises(ExtractorError, match="repeats the yearly fee"):
+        parse_snapshot("totalenergies_impact", text, "wallonia")
+
+
 def test_october_2026_card_with_no_fee_fails_loud() -> None:
     """The October 2026 myDrive card in Wallonia prints its four rates and no
     yearly fee. Four figures could read as Impact's fee and three bands, so

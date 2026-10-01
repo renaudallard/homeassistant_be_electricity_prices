@@ -105,6 +105,13 @@ def consumption_row(text: str, columns: int) -> tuple[float, list[float]] | None
         fee, rates = numbers[0], numbers[1:]
     if len(rates) != columns:
         return None
+    if fee in rates:
+        # An unfilled card: the Impact card TotalEnergies served on the
+        # morning of 1 October 2026 printed its 94,34 fee in all three rate
+        # columns too, which read as 90,98 c/kWh of energy.
+        raise ExtractorError(
+            "TotalEnergies: the consumption row repeats the yearly fee as a rate"
+        )
     return fee, rates
 
 
