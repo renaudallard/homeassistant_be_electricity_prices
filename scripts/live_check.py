@@ -1799,16 +1799,10 @@ async def _check_totalenergies(
                 detail=f"label={snap.publication_label!r}",
             )
             # TotalEnergies republishes product by product, and a card from
-            # October 2026 on offers no feed-in price, so the shape follows
-            # the card's month rather than the contract.
+            # October 2026 on offers no feed-in price, myDynamic's included,
+            # so the shape follows the card's month rather than the contract.
             ends = card_valid_until(None, snap.publication_label)
-            shape = (
-                "none"
-                if contract.kind != "dynamic"
-                and ends is not None
-                and ends >= _TE_NO_FEED_IN_FROM
-                else None
-            )
+            shape = "none" if ends is not None and ends >= _TE_NO_FEED_IN_FROM else None
             _validate_snapshot(
                 prefix, cid, snap, region=region_key, injection_shape=shape
             )
@@ -3601,8 +3595,8 @@ _INJECTION_SHAPE: dict[str, str] = {
     # "f * BELPEXM - b" beside a figure the card says is computed from "la
     # derniere valeur connue du Belpex_M". The cards republished since
     # October offer no feed-in price at all, which _check_totalenergies
-    # expects of them by their month. myDynamic indexes per hour on BELPEXH
-    # and stays derived.
+    # expects of them by their month. myDynamic indexed its feed-in per hour
+    # on BELPEXH until September and offers none from October either.
     "totalenergies_electricite_fixe": "month",
     "totalenergies_electricite_variable": "month",
     "totalenergies_impact": "month",

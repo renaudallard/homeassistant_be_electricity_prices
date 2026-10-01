@@ -261,7 +261,7 @@ def parse_snapshot(
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
 
-    columns = _IMPACT_BANDS if contract.slug == "IMPACT" else 4
+    columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
     included = cev_included(text)
     if included is not None:
@@ -370,6 +370,25 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
 # Impact prints its energy rate once per CWaPE band, every other card once per
 # meter reading.
 _IMPACT_BANDS = 3
+
+# The meter columns' header, ending on the exclusive-night one where the card
+# prints it. The October 2026 myDynamic cards drop that column and print
+# "19,37 19,37 19,37 Tarif mensuel" with the fee on the next line.
+_EXCL_NIGHT_HEADER_RE = re.compile(
+    r"Heures\s+creuses\s+excl\.\s*nuit\s*\n\s*Consommation"
+)
+
+
+def _meter_columns(text: str, contract: _ContractDef) -> int:
+    """How many rates the consumption row prints: three CWaPE bands on
+    Impact, three meter columns on a dynamic card without the exclusive-night
+    one, four otherwise."""
+    if contract.slug == "IMPACT":
+        return _IMPACT_BANDS
+    if contract.kind == "dynamic" and not _EXCL_NIGHT_HEADER_RE.search(text):
+        return 3
+    return 4
+
 
 # "TVA 6 % incluse" under the prices, and "(hors TVA 6%)" on the formulas.
 _VAT_RE = re.compile(r"TVA\s*(\d+)\s*%")
@@ -802,6 +821,11 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     formula: str | None = None
     month_indexed = False
     if kind == "dynamic":
+        if "injection" not in text.lower():
+            # The October 2026 myDynamic cards, like every other card
+            # republished that month, offer no feed-in price and do not
+            # mention injection anywhere: nothing to credit.
+            return None
         # Injection block always prints the formula cleanly on one line
         # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
         # so the consumption formula above can never be picked up.

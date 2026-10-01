@@ -301,6 +301,37 @@ def test_october_2026_variable_card_with_the_fee_below_the_rates() -> None:
     assert snap.injection is None
 
 
+@pytest.mark.parametrize(
+    ("fixture", "region", "base", "contribution", "printed"),
+    [
+        ("totalenergies_mydynamic_v_2026-10.pdf", "flanders", 3.41, 0.0157, 0.1937),
+        ("totalenergies_mydynamic_w_2026-10.pdf", "wallonia", 5.40, 0.0336, 0.2137),
+    ],
+)
+def test_october_2026_dynamic_card_prints_three_meter_columns(
+    fixture: str, region: str, base: float, contribution: float, printed: float
+) -> None:
+    """The October 2026 myDynamic cards drop the exclusive-night column and
+    print "19,37 19,37 19,37 Tarif mensuel" with the yearly fee on the next
+    line, and their formula carries the contribution like the rest of the
+    range. They offer no feed-in, and do not mention injection at all."""
+    text = fixture_text(fixture, layout=True)
+    assert "injection" not in text.lower()
+    snap = parse_snapshot("totalenergies_mydynamic", text, region)
+    energy = snap.energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.yearly_fixed_fee == pytest.approx(90.0)
+    assert energy.factor == pytest.approx(0.1031 * 1.06 * 10)
+    assert energy.base == pytest.approx(base * 1.06 / 100 - contribution)
+    assert snap.injection is None
+    # At a spot of 0,10 EUR/kWh the hour bills the card's formula, VAT and
+    # contribution included, once.
+    assert energy.factor * 0.1 + energy.base + contribution == pytest.approx(
+        (0.1031 * 100 + base) * 1.06 / 100
+    )
+    assert f"{printed * 100:.2f}".replace(".", ",") in text
+
+
 def test_an_unfilled_card_is_refused() -> None:
     """The Impact card TotalEnergies served on the morning of 1 October 2026
     was a template repeating its 94,34 yearly fee in all three rate columns,

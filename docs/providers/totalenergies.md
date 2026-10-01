@@ -308,6 +308,14 @@ their snapshot carries no injection leg. The live check expects none of a
 non-dynamic card from October 2026 on, by the card's month, since
 TotalEnergies republishes product by product.
 
+The October myDynamic cards drop the exclusive-night column: the header ends on
+`Heures creuses` and the row prints three figures, `19,37 19,37 19,37 Tarif
+mensuel`, with the yearly fee alone on the next line. `_meter_columns`
+(`totalenergies.py`) reads how many columns a dynamic card prints off that header.
+The formula carries the contribution like the rest of the range, and the card does
+not mention injection anywhere, so a dynamic card without the word has no
+injection leg rather than failing for want of a `BELPEXH` feed-in formula.
+
 The October myComfort cards in Flanders and Brussels are empty templates, with
 the rates left blank, and the Wallonia URL serves the Dutch card; all three
 fail to parse and keep the September card.
@@ -420,9 +428,10 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py`):
   the delivery month's mean re-prices it (`totalenergies.py`). Illustrative 0.0112 EUR/kWh for both a variable and
   a fixed card (`tests/test_totalenergies.py`).
 
-This places TotalEnergies in two of the three injection taxonomy shapes: shape (b)
-hourly factor*spot+base for myDynamic, shape (a) monthly-indicative-only for every
-other product. Shape (c) spot-indexed-variable is not used, which is a statement
+This placed TotalEnergies in two of the three injection taxonomy shapes until
+September 2026: shape (b) hourly factor*spot+base for myDynamic, shape (a)
+monthly-indicative-only for every other product. The cards republished from October
+2026 on offer no feed-in price at all, myDynamic's included. Shape (c) spot-indexed-variable is not used, which is a statement
 about the INDEX and not about the flag: 8 of the 9 contracts set
 `spot_indexed_injection`, because a monthly-mean credit needs spots the energy leg
 never fetches.
@@ -504,6 +513,8 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_mycomfort_b_2026-10.pdf` | myComfort, Brussels, October 2026 (block at no index, 7.01 against a 6.91 base) |
 | `totalenergies_electricite_variable_b_2026-10_filled.pdf` | Electricité Variable, Brussels, October 2026 afternoon (block filled in, billed) |
 | `totalenergies_impact_w_2026-10_template.pdf` | Impact, Wallonia, October 2026 morning (unfilled, the fee in every rate column: refused) |
+| `totalenergies_mydynamic_v_2026-10.pdf` | myDynamic, Flanders, October 2026 (three meter columns, fee below, no feed-in) |
+| `totalenergies_mydynamic_w_2026-10.pdf` | myDynamic, Wallonia, October 2026 (the same, base printed `5,40`) |
 
 ## When the card changes, look here
 

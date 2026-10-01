@@ -3936,20 +3936,32 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
     assert lc.CHECKS == []
 
 
-def test_a_totalenergies_card_from_october_2026_expects_no_feed_in() -> None:
+@pytest.mark.parametrize(
+    ("fixture", "cid"),
+    [
+        (
+            "totalenergies_electricite_variable_v_2026-10.pdf",
+            "totalenergies_electricite_variable",
+        ),
+        ("totalenergies_mydynamic_v_2026-10.pdf", "totalenergies_mydynamic"),
+    ],
+)
+def test_a_totalenergies_card_from_october_2026_expects_no_feed_in(
+    fixture: str, cid: str
+) -> None:
     """TotalEnergies republishes product by product, and its cards from
-    October 2026 on print no feed-in offer, variable and fixed alike. The
-    shape follows the card's month: the October variable card passes with
+    October 2026 on print no feed-in offer, variable, fixed and dynamic alike.
+    The shape follows the card's month: the October variable card passes with
     no injection leg, where the contract's pre-October "month" shape would
-    have failed it."""
+    have failed it, and so does myDynamic, which was "derived" until then."""
     from dataclasses import replace as dc_replace
 
     from custom_components.be_electricity_prices.providers import totalenergies
     from tests import fixture_text
 
-    text = fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True)
+    text = fixture_text(fixture, layout=True)
     contract = dc_replace(
-        totalenergies._CONTRACTS_BY_ID["totalenergies_electricite_variable"],
+        totalenergies._CONTRACTS_BY_ID[cid],
         regions=frozenset({"flanders"}),
     )
 
@@ -3960,7 +3972,7 @@ def test_a_totalenergies_card_from_october_2026_expects_no_feed_in() -> None:
         __name__=totalenergies.__name__, _CONTRACTS=(contract,), fetch=_fetch
     )
     asyncio.run(lc._check_totalenergies(None, module))  # type: ignore[arg-type]
-    rows = _rows("totalenergies/totalenergies_electricite_variable/flanders")
+    rows = _rows(f"totalenergies/{cid}/flanders")
     (absent,) = [r for r in rows if "injection" in r.label]
     assert absent.ok and "injection absent" in absent.label
 
