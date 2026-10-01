@@ -33,6 +33,7 @@ from custom_components.be_electricity_prices import (
 )
 from custom_components.be_electricity_prices.compare_table import RankedRow
 
+import ast
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -9205,6 +9206,31 @@ async def test_compare_credits_the_welcome_credit_on_both_sides(
     own2, other2 = await _quote(own_credited, other_credited, None)
     assert own2 == pytest.approx(own0, abs=0.01)
     assert other0 - other2 == pytest.approx(200.0, abs=0.01)
+
+    # A card naming the month a contract must be signed in grants nothing to
+    # one signed in September: Bolt serves last month's card on the 1st while
+    # the new one is unpublished, and a quote was credited its offer.
+    august = replace(other_credited, welcome_credit_signing_month=date(2026, 8, 1))
+    _own3, other3 = await _quote(own_plain, august, None)
+    assert other3 == pytest.approx(other0, abs=0.01)
+    september = replace(august, welcome_credit_signing_month=date(2026, 9, 1))
+    _own4, other4 = await _quote(own_plain, september, None)
+    assert other0 - other4 == pytest.approx(200.0, abs=0.01)
+
+
+def test_every_candidate_welcome_credit_reads_the_signing_month() -> None:
+    """A candidate is credited the card it is quoted on, as though signed
+    today. Both ranking and quote did that through _annual_welcome_credit
+    with the card as both arguments, which skipped the card's signing month,
+    so a candidate call must go through _candidate_welcome_credit instead."""
+    from tests import compare_page_calls
+
+    for name, call in compare_page_calls("_annual_welcome_credit"):
+        first, second = (ast.dump(arg) for arg in call.args[:2])
+        assert first != second, (
+            f"{name}:{call.lineno} credits a candidate past its signing month"
+        )
+    assert compare_page_calls("_candidate_welcome_credit")
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

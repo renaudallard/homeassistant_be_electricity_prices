@@ -47,7 +47,12 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
-from .compare_quote import _annual_bill, _annual_welcome_credit, _ytd_welcome_credit
+from .compare_quote import (
+    _annual_bill,
+    _annual_welcome_credit,
+    _candidate_welcome_credit,
+    _ytd_welcome_credit,
+)
 from .compare_table import (
     _card_caveats,
     _populate_charts,
@@ -301,8 +306,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     # A customer signing this card today, over the coming
                     # year, off the card as it prints today. The own side
                     # carries what is left of its own first year.
-                    other_welcome_credit = _annual_welcome_credit(
-                        other_snap,
+                    other_welcome_credit = _candidate_welcome_credit(
                         other_snap,
                         today_local,
                         dt_util.as_local(now_utc),

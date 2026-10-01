@@ -63,6 +63,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
+from .cohort import _signed_in
 from .compare_weighting import (
     _register_network_rates,
     _register_weights,
@@ -495,6 +496,46 @@ def _annual_welcome_credit(
         first_year_injection_kwh=(
             injection_kwh if regime == SOLAR_REGIME_INJECTION else 0.0
         ),
+    )
+
+
+def _candidate_welcome_credit(
+    snapshot: Any,
+    today: date,
+    when_now: datetime,
+    dso: str,
+    region: str,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+    hour_weights: dict[int, float] | None,
+    consumption_kwh: float,
+    injection_kwh: float = 0.0,
+    *,
+    regime: str,
+) -> float:
+    """What a customer signing ``snapshot`` today is granted over the coming
+    year, by :func:`_annual_welcome_credit`.
+
+    The card is read as signed today, so it grants nothing where it names
+    another signing month (:func:`cohort._signed_in`): Bolt keeps serving the
+    previous month's card while the new one is unpublished, and a November
+    quote was credited October's 315 EUR.
+    """
+    return _annual_welcome_credit(
+        snapshot,
+        _signed_in(snapshot, today.replace(day=1)),
+        today,
+        when_now,
+        dso,
+        region,
+        spot,
+        meter,
+        dso_mode,
+        hour_weights,
+        consumption_kwh,
+        injection_kwh,
+        regime=regime,
     )
 
 

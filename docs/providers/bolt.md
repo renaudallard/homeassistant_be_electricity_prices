@@ -161,7 +161,8 @@ everywhere and is carried as printed.
 contract signed in a month no archive holds is billed on today's card as a stand-in, and
 without that month `signing_month_snapshot` (`cohort.py`) would hand it today's campaign.
 It withholds a credit whose month is not the contract's card month, and a compare candidate is
-held to the household's own signing month the same way.
+held to the household's own signing month the same way in the year-to-date column, and to the
+month it is quoted in for the coming year (`_candidate_welcome_credit`, `compare_quote.py`).
 
 The column beside the block is interleaved into the sentence by `pdfplumber`, even between a
 figure and its unit (*"réduction de du lundi au vendredi, de 9 h à 17 h. €300"*). Each part is

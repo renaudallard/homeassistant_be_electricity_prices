@@ -44,7 +44,7 @@ from .compare_inputs import (
     _needs_missing_spots,
 )
 from .compare_table import DailyCompare, RankedRow
-from .compare_quote import _annual_bill, _annual_welcome_credit
+from .compare_quote import _annual_bill, _candidate_welcome_credit
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
 from .const import (
     CONF_CONTRACT,
@@ -648,8 +648,7 @@ class _SweepEngine(_HouseholdMixin):
         # carries what is left of its own first year, so a tier that exists
         # for its cashback (Frank's Korting) ranks on the year it would cost,
         # not on the year it would cost someone the credit was never offered.
-        welcome_credit = _annual_welcome_credit(
-            resolved,
+        welcome_credit = _candidate_welcome_credit(
             resolved,
             hh.today_local,
             dt_util.as_local(hh.now_utc),

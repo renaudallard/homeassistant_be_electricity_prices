@@ -781,7 +781,9 @@ the entry's own start date, off the candidate's current card: what this year wou
 cost on it, signed when the household signed its own. The annual column credits a
 candidate what a customer signing it today is granted over the coming year
 (`_year_ahead_welcome_credit`: 365 days plus the day a lump paid *"na een jaar"* lands on),
-and the household's own row whatever is left of its first year. `_annual_welcome_credit`
+and nothing where the card names another signing month (`_candidate_welcome_credit`):
+Bolt serves the previous month's card on the 1st while the new one is unpublished.
+The household's own row carries whatever is left of its first year. `_annual_welcome_credit`
 re-walks the energy leg on its `energy` component for the cap, and `_annual_bill` takes
 the credit off last. A Frank Korting tier therefore ranks on the year it would cost,
 cashback included, instead of as JN's loser. `projected_year_cost` takes the same
