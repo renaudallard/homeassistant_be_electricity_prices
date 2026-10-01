@@ -402,9 +402,15 @@ statistics setup, documented in its source comment:
 - `last_reset` (`sensor.py`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
-The value is numeric in every case but one: missing meter inputs collapse to
-the fees-only floor, and the one `unknown` is an entry with a recorded supplier
-switch whose earlier contracts have not all been priced, since a year missing a
+Missing meter inputs collapse to the fees-only floor rather than to
+`unknown`. The value is `unknown` in two cases. The first is the minutes after
+setup when no figure from before it applies: setup reads no meter and publishes
+the figures the last refresh that read them published (issue #107), so a new
+entry, a year that turned over while Home Assistant was down (a month, for
+`current_month_cost`) or a setting edited since reads unknown until the
+background refresh that reads the meters lands. The second is an entry with a
+recorded supplier switch whose earlier contracts have not all been priced,
+since a year missing a
 whole contract would reach the recorder as a large negative change and then the
 same positive one. That is usually the minutes after the switch is recorded,
 until the background pricing lands. A pricing that could not price one of the
