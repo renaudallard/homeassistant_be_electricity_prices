@@ -1176,6 +1176,31 @@ def test_replay_answers_404_for_a_read_card_asked_under_another_folder(
         )
 
 
+def test_replay_answers_404_for_a_read_card_asked_under_its_other_spelling(
+    tmp_path: Path,
+) -> None:
+    """Mega's October 2026 professional fixed cards are named "-Fix.pdf"
+    where every earlier one said "-Fixed.pdf", and the walk asks the old
+    spelling first. The site answers 404 there; refused as a network error in
+    a replay, the walk never reached the card the row read, and the three Zen
+    Fixed rows could never be replayed. A spelling the row never read and
+    whose other spelling it did not read either is still refused."""
+    (tmp_path / "electricity-2026-10-1").mkdir()
+    (tmp_path / "electricity-2026-10-1/abc.pdf").write_bytes(b"%PDF kept")
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    base = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-WL-102026-Zen0110"
+    replay.pdfs = {f"{base}-Fix.pdf": "abc"}
+
+    async def status(url: str) -> int:
+        async with replay.get(url) as resp:
+            return int(resp.status)
+
+    assert asyncio.run(status(f"{base}-Fixed.pdf")) == 404
+    assert asyncio.run(status(f"{base}-Fix.pdf")) == 200
+    with pytest.raises(aiohttp.ClientConnectionError):
+        asyncio.run(status(f"{base.replace('Zen', 'Cosy')}-Fixed.pdf"))
+
+
 @pytest.mark.parametrize(
     ("status", "error", "failed"),
     [

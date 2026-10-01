@@ -980,7 +980,9 @@ the same card; a HEAD answers 200 for a kept card and 404 for anything else, so 
 that probes candidate URLs before choosing one (Eneco's archive walks issue numbers) lands on the
 card the row was parsed from; a GET for that card's file under another folder answers the 404 the
 site did, since EnergyVision's Brusol files each card under the month it uploaded it and the month
-before delivery is asked first; anything else is refused as a network error, and the row is
+before delivery is asked first, and so does a GET for the card's file under its other spelling
+(`_respelled`), since Mega's professional fixed cards turned "-Fixed.pdf" into "-Fix.pdf" in
+October 2026 and the walk asks the old spelling first; anything else is refused as a network error, and the row is
 reported as not replayable and left as it was, as is a row whose text file is gone or whose
 archive path no longer settles it. The run reports rows `reparsed`, whose parse came out
 differently, apart from rows `restamped`, rewritten only to stamp the running schema, which every

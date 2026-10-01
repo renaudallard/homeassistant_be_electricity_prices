@@ -470,8 +470,8 @@ class _ReplaySession:
     kept card and 404 for anything else, so an extractor that probes
     candidate URLs before choosing one (Eneco's archive walks issue
     numbers) lands on the card the row was parsed from, and a GET for the
-    kept card's file under another folder answers 404 the same way (the
-    Brusol walk below). Anything else is refused as a network error, which
+    kept card's file under another folder or another spelling answers 404
+    the same way (the Brusol and Mega walks below). Anything else is refused as a network error, which
     the readers wrap the way they wrap a real one, and the row is left as
     it was and reported.
     """
@@ -577,13 +577,15 @@ class _ReplaySession:
         return await self._fetch(f"card:{digest}")
 
     def _get(self, url: str) -> _Pending:
-        if url not in self.pdfs and _file_name(url) in {
-            _file_name(read) for read in self.pdfs
-        }:
+        if url not in self.pdfs and (
+            _file_name(url) in {_file_name(read) for read in self.pdfs}
+            or _respelled(url) in self.pdfs
+        ):
             # The card the row was parsed from, asked for under another
-            # folder first: Brusol files each card under the month it
-            # uploaded it and the extractor tries the month before delivery
-            # first. The site answered that one 404 and the walk moved on;
+            # folder or another spelling first: Brusol files each card under
+            # the month it uploaded it and the extractor tries the month
+            # before delivery first, and Mega's walk asks "-Fixed" before
+            # "-Fix". The site answered that one 404 and the walk moved on;
             # refusing it as a network error made the month unreplayable.
             return self._Pending(self._probe(url))
         return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
@@ -592,6 +594,22 @@ class _ReplaySession:
 def _file_name(url: str) -> str:
     """The last path segment of ``url``, what a card is named by."""
     return urlsplit(url).path.rsplit("/", 1)[-1]
+
+
+# File name endings a supplier publishes one card under in two spellings.
+# Mega's professional fixed cards went from "-Fixed.pdf" to "-Fix.pdf" in
+# October 2026, and its walk asks for both, the old spelling first.
+_SPELLINGS = (("-Fixed.pdf", "-Fix.pdf"),)
+
+
+def _respelled(url: str) -> str | None:
+    """``url`` under the other spelling of its file name, or None if it has
+    no other."""
+    for one, other in _SPELLINGS:
+        for this, that in ((one, other), (other, one)):
+            if url.endswith(this):
+                return url[: -len(this)] + that
+    return None
 
 
 def _parser_digest() -> str:
