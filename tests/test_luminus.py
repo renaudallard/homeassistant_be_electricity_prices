@@ -542,6 +542,109 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
     assert at(8) < printed.peak
 
 
+async def test_smartflex_takes_the_prosumer_rate_its_card_bills_from_a_sibling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The October 2026 SmartFlex card in Wallonia prints the Impact triplet
+    where its prosumer column was, and its footnote still bills the tariff
+    ("plus avantageux que la facturation du tarif prosumer"). A household
+    under compensation was billed none of it: 35,77 EUR a month at 5 kVA on
+    ORES. The rate is the DSO's and comes from a sibling card; Dynamic's card
+    names no prosumer tariff and asks for none."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked: list[str] = []
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        for slug, fixture in (
+            ("smartflex", "luminus_smartflex_w_oct.pdf"),
+            ("comfyflex", "luminus_comfyflex_w_oct.pdf"),
+            ("dynamic", "luminus_dynamic_w_oct.pdf"),
+        ):
+            if f"documentSlug={slug}&" in url:
+                return fixture_text(fixture)
+        raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    snap = await luminus.fetch(
+        None,  # type: ignore[arg-type]
+        "luminus_smartflex",
+        "wallonia",
+    )
+    # ComfyFlex's "ORES (EST) ... 14,10 85,84", the figure September's
+    # SmartFlex card printed itself.
+    assert snap.dsos["ores"].prosumer_eur_per_kva_year == pytest.approx(85.84)
+    assert snap.dsos["aieg"].prosumer_eur_per_kva_year == pytest.approx(81.03)
+    assert all(o.distribution_eco is not None for o in snap.dsos.values())
+    assert len(asked) == 2
+
+    asked.clear()
+    dynamic = await luminus.fetch(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "wallonia",
+    )
+    assert all(o.prosumer_eur_per_kva_year is None for o in dynamic.dsos.values())
+    assert len(asked) == 1
+
+
+async def test_a_past_smartflex_month_takes_the_prosumer_rate_from_that_months_sibling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive path asks the same month's sibling card, by its own id."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    pdfs: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        assert "signing=2026-10" in url
+        return _archive_products(
+            ("Luminus SmartFlex Electricité", "id-smartflex"),
+            ("Luminus ComfyFlex Electricité", "id-comfyflex"),
+        )
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        pdfs.append(url)
+        if "productId=id-smartflex&" in url:
+            return fixture_text("luminus_smartflex_w_oct.pdf")
+        assert "productId=id-comfyflex&" in url and "date=2026-10" in url
+        return fixture_text("luminus_comfyflex_w_oct.pdf")
+
+    monkeypatch.setattr(luminus, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_smartflex",
+        "wallonia",
+        date(2026, 10, 1),
+    )
+    assert snap is not None
+    assert snap.dsos["ores"].prosumer_eur_per_kva_year == pytest.approx(85.84)
+    assert len(pdfs) == 2
+
+
+async def test_a_prosumer_rate_no_sibling_prints_fails_the_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every sibling missing leaves nothing to bill the tariff from, and a
+    card that bills it silently at zero is a wrong bill, so the card fails."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        if "documentSlug=smartflex&" in url:
+            return fixture_text("luminus_smartflex_w_oct.pdf")
+        raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    with pytest.raises(ExtractorError, match="prosumer"):
+        await luminus.fetch(
+            None,  # type: ignore[arg-type]
+            "luminus_smartflex",
+            "wallonia",
+        )
+
+
 # ---- month archive (fetch_for_month) ------------------------------------------
 
 

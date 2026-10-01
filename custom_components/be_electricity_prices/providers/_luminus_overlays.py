@@ -241,8 +241,10 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Dynamic rows have 9:
       mono | pleines | creuses | <Impact triplet> | excl_nuit |
       transport | data_mgmt
-    The IMPACT triplet is unique to dynamic; its presence flips the
-    prosumer column off (SMR3 has no compensation regime). Its band order
+    The IMPACT triplet takes the prosumer column's place on the SMR3
+    cards. Where such a card still bills the prosumer tariff (SmartFlex's
+    footnote does), ``luminus._with_sibling_prosumer`` fills it from a
+    sibling card. Its band order
     is read from the headings: cards up to September 2026 print
     ECO | MEDIUM | PIC, October 2026 turned it round to PIC | MEDIUM | ECO
     with the same figures.
@@ -250,7 +252,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     order: tuple[str, ...] | None = None
     for label, key in _WALLONIA_LABELS.items():
-        # Nine figures on a dynamic card, which carries the IMPACT triplet,
+        # Nine figures on an SMR3 card, which carries the IMPACT triplet,
         # seven on a static one, which carries the prosumer rate instead.
         row = numeric_row(text, label, 9) or numeric_row(text, label, 7)
         if not row:

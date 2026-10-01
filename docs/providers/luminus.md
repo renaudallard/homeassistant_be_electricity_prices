@@ -347,9 +347,17 @@ Two column layouts (`_luminus_overlays.py`):
 - **Static rows have 7 numbers**: mono, pleines, creuses, excl_nuit, transport,
   data_mgmt, prosumer. `prosumer` is populated (`nums[6]`), the Impact bands stay
   `None`.
-- **Dynamic rows have 9 numbers**: mono, pleines, creuses, the Impact triplet,
-  excl_nuit, transport, data_mgmt. The IMPACT triplet is unique to dynamic and
-  its presence flips prosumer off (SMR3 has no compensation regime).
+- **SMR3 rows have 9 numbers**: mono, pleines, creuses, the Impact triplet,
+  excl_nuit, transport, data_mgmt. The Impact triplet takes the prosumer
+  column's place. Dynamic's card names no prosumer tariff and keeps none.
+  SmartFlex's card printed the prosumer column until September 2026 and the
+  triplet from October, while its footnote still bills the tariff to a
+  bidirectional meter under compensation (*"si ce calcul est plus avantageux
+  que la facturation du tarif prosumer"*). The rate is the DSO's, so
+  `_with_sibling_prosumer` (`luminus.py`) takes it from a sibling Wallonia card
+  of the same month (ComfyFlex, then MaxxFlex, then BasicFlex; the archive's
+  card of that month for a past one) whenever a card names the tariff and
+  prints no rate, and the card fails to parse when no sibling carries it.
 
 Band-ordering gotcha: the triplet's order is read from the column headings
 (`_impact_order`, `_luminus_overlays.py`), never assumed. Cards up to September

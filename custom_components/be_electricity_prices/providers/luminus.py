@@ -48,8 +48,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Awaitable, Callable
 from datetime import date
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -227,7 +228,79 @@ async def fetch(
         )
     url = _document_url(contract.slug, region)
     text = await fetch_pdf_text(session, url)
-    return parse_snapshot(contract_id, text, region, url)
+
+    async def _current(sibling: _ContractDef) -> str | None:
+        return await fetch_pdf_text(session, _document_url(sibling.slug, region))
+
+    return await _with_sibling_prosumer(
+        parse_snapshot(contract_id, text, region, url), text, region, _current
+    )
+
+
+# Cards asked, in order, for the Walloon prosumer rate a card names but does
+# not print. Each prints the static seven-column table with the rate in its
+# last column, and the rate is the DSO's, not the product's.
+_PROSUMER_SIBLINGS: tuple[str, ...] = (
+    "luminus_comfyflex",
+    "luminus_maxxflex",
+    "luminus_basicflex",
+)
+_PROSUMER_NAMED_RE = re.compile(r"tarif\s+prosumer", re.IGNORECASE)
+
+
+async def _with_sibling_prosumer(
+    snap: SupplierSnapshot,
+    text: str,
+    region: str,
+    load: Callable[[_ContractDef], Awaitable[str | None]],
+) -> SupplierSnapshot:
+    """Fill the Walloon prosumer rate a card names but does not print.
+
+    SmartFlex's October 2026 card in Wallonia prints the Impact triplet where
+    its September card printed the prosumer column, yet its footnote still
+    bills the tariff: "si vous disposez d'un compteur bidirectionnel, la
+    redevance reseau peut egalement etre calculee sur la base du prelevement
+    brut d'electricite, si ce calcul est plus avantageux que la facturation du
+    tarif prosumer". So a household under compensation still owes it, and an
+    overlay without it billed that household nothing. The rate is the DSO's,
+    so it is taken from a sibling card of the same region and month. Dynamic's
+    card names no prosumer tariff at all and is left as it is.
+
+    A transient failure on a sibling propagates, so the fetch is retried; a
+    sibling that is missing or unreadable passes to the next, and the card
+    fails to parse when none of them carries the rate.
+    """
+    if (
+        region != REGION_WALLONIA
+        or not snap.dsos
+        or any(o.prosumer_eur_per_kva_year is not None for o in snap.dsos.values())
+        or _PROSUMER_NAMED_RE.search(text) is None
+    ):
+        return snap
+    for sibling_id in _PROSUMER_SIBLINGS:
+        try:
+            sibling_text = await load(_CONTRACTS_BY_ID[sibling_id])
+            if sibling_text is None:
+                continue
+            rates = {
+                key: overlay.prosumer_eur_per_kva_year
+                for key, overlay in _extract_wallonia_dsos(sibling_text).items()
+            }
+        except ExtractorError as err:
+            if is_transient_fetch_error(str(err)):
+                raise
+            continue
+        if all(rates.get(key) is not None for key in snap.dsos):
+            return replace(
+                snap,
+                dsos={
+                    key: replace(overlay, prosumer_eur_per_kva_year=rates[key])
+                    for key, overlay in snap.dsos.items()
+                },
+            )
+    raise ExtractorError(
+        "Luminus: no sibling card prints the Walloon prosumer rate this card bills"
+    )
 
 
 def _archive_product_name(name: str) -> str:
@@ -289,6 +362,14 @@ async def _resolve_archive_product_id(
     return None
 
 
+def _archive_pdf_url(product_id: str, first: date, region: str) -> str:
+    return (
+        f"{_ARCHIVE_PDF_URL}?language=FR&productId={product_id}"
+        f"&date={first.year:04d}-{first.month:02d}"
+        f"&region={_REGION_TO_TAB[region]}&inline=true"
+    )
+
+
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -317,13 +398,22 @@ async def fetch_for_month(
         product_id = await _resolve_archive_product_id(session, contract, region, first)
         if product_id is None:
             return None
-        url = (
-            f"{_ARCHIVE_PDF_URL}?language=FR&productId={product_id}"
-            f"&date={first.year:04d}-{first.month:02d}"
-            f"&region={_REGION_TO_TAB[region]}&inline=true"
-        )
+        url = _archive_pdf_url(product_id, first, region)
         text = await fetch_pdf_text(session, url)
-        snap = parse_snapshot(contract_id, text, region, url)
+
+        async def _archived(sibling: _ContractDef) -> str | None:
+            sibling_id = await _resolve_archive_product_id(
+                session, sibling, region, first
+            )
+            if sibling_id is None:
+                return None
+            return await fetch_pdf_text(
+                session, _archive_pdf_url(sibling_id, first, region)
+            )
+
+        snap = await _with_sibling_prosumer(
+            parse_snapshot(contract_id, text, region, url), text, region, _archived
+        )
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
