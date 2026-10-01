@@ -100,9 +100,26 @@ _INJECTION_RE = re.compile(rf"Terugleververgoeding\s+{_FORMULA}")
 # for, and the start of the period its formulas hold for, were both left on
 # the previous month on the September 2025 and March 2026 cards, while this
 # row moved on every time.
+#
+# Its rates are not read: they are a copy of the front page's, and the copy
+# has been typed wrong. The March 2026 row prints 12,558 for the single meter
+# where the front page prints 12,588, which is what the formula gives at the
+# row's own 85,13 (0,116 x 85,13 + 2, grossed by 6%, is 12,5876), and every
+# later card's table repeats the typo.
 _INDEX_ROW_RE = re.compile(
     rf"^([A-Za-z]{{3}})/(\d{{2}})\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s*$",
     re.M,
+)
+# The four printed rates on the front page, one row per register:
+# "Energiekosten dag (c€/kWh) incl. BTW  18,021 20,417" carries the single
+# meter and a dual meter's day, the two rows under it the night and the
+# exclusive night meter.
+_DAY_RATES_RE = re.compile(
+    rf"Energiekosten dag \(c€/kWh\) incl\.\s*BTW\s+{_NUM}\s+{_NUM}"
+)
+_NIGHT_RATE_RE = re.compile(rf"Energiekosten nacht \(c€/kWh\) incl\.\s*BTW\s+{_NUM}")
+_EXCL_NIGHT_RATE_RE = re.compile(
+    rf"Energiekosten excl\.\s*nacht \(c€/kWh\) incl\.\s*BTW\s+{_NUM}"
 )
 _FEE_RE = re.compile(
     rf"Vaste vergoeding \(€/jaar\) incl\.\s*BTW\s+{_NUM}\s+{_NUM}\s+{_NUM}"
@@ -247,10 +264,8 @@ def parse_snapshot(
     """Parse one Eco Plus Flex card."""
     if contract_id != _CONTRACT_ID:
         raise ExtractorError(f"unknown Aspiravi contract {contract_id!r}")
-    index = _index_row(text)
-    card_month = date(
-        index[0].year + (index[0].month == 12), index[0].month % 12 + 1, 1
-    )
+    index = _index_month(text)
+    card_month = date(index.year + (index.month == 12), index.month % 12 + 1, 1)
     vat = vat_multiplier(text, _VAT_RE)
     taxes = regional_tax_overlay(
         text,
@@ -265,7 +280,7 @@ def parse_snapshot(
         SupplierSnapshot(
             supplier=_SUPPLIER,
             contract=contract_id,
-            energy=_extract_energy(text, index[1], vat),
+            energy=_extract_energy(text, _printed_rates(text), vat),
             injection=_extract_injection(text),
             dsos=_extract_dsos(text),
             # The card prints its green power and WKK costs before VAT, unlike
@@ -279,16 +294,30 @@ def parse_snapshot(
     )
 
 
-def _index_row(text: str) -> tuple[date, list[float]]:
-    """The month the printed rates are for and those four rates, c€/kWh."""
+def _index_month(text: str) -> date:
+    """The month the printed rates were computed on."""
     rows = _INDEX_ROW_RE.findall(text)
     if not rows:
         raise ExtractorError("Aspiravi: price table of the past 12 months not found")
-    name, year, _belpex, *rates = rows[-1]
+    name, year, *_ = rows[-1]
     month = _MONTHS.get(name.lower())
     if month is None:
         raise ExtractorError(f"Aspiravi: unknown month {name!r} in the price table")
-    return date(2000 + int(year), month, 1), [to_float(r) for r in rates]
+    return date(2000 + int(year), month, 1)
+
+
+def _printed_rates(text: str) -> list[float]:
+    """The single, day, night and exclusive night rates the front page
+    prints, c€/kWh."""
+    day = _DAY_RATES_RE.search(text)
+    night = _NIGHT_RATE_RE.search(text)
+    excl_night = _EXCL_NIGHT_RATE_RE.search(text)
+    if day is None or night is None or excl_night is None:
+        raise ExtractorError("Aspiravi: printed energy rates not found")
+    return [
+        to_float(value)
+        for value in (*day.groups(), night.group(1), excl_night.group(1))
+    ]
 
 
 def _formula(pattern: re.Pattern[str], text: str, label: str) -> tuple[float, float]:

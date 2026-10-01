@@ -137,6 +137,26 @@ def test_the_formulas_reproduce_the_rates_the_card_prints() -> None:
     )
 
 
+def test_the_printed_rates_come_from_the_front_page() -> None:
+    """The March 2026 card's table of past rates prints 12,558 for February's
+    single meter where its front page prints 12,588, and the formula at the
+    row's own 85,13 gives the front page's figure. The table is a mistyped
+    copy, so the front page is what a keyless entry is billed."""
+    text = fixture_text(_MARCH)
+    assert "Feb/26 85,13 12,558 14,166 11,012 10,772" in text
+    energy = aspiravi.parse_snapshot(_CID, text).energy
+    assert isinstance(energy, VariableRates)
+    # 12,588 plus the 0,106 charity contribution.
+    assert energy.current == pytest.approx(0.12694)
+    assert energy.peak == pytest.approx(0.14272)
+    assert energy.offpeak == pytest.approx(0.11118)
+    assert energy.exclusive_night == pytest.approx(0.10878)
+    assert energy.formula_factor is not None and energy.formula_base is not None
+    assert energy.formula_factor * 0.08513 + energy.formula_base == pytest.approx(
+        energy.current, abs=5e-6
+    )
+
+
 def test_a_card_is_dated_by_its_price_table() -> None:
     """The March 2026 card still says it is for contracts signed in February
     and that its formulas hold from 1 February. Its table of past rates ends

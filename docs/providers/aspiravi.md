@@ -77,12 +77,20 @@ words, while both the formulas and the printed rates leave it out: at
 August's 129,32, (0,116 x 129,32 + 2) x 1,06 is the 18,021 printed. It is
 added to every register's base and printed rate.
 
-The printed rates are read from the last row of the "Energiekost van de
-afgelopen 12 maanden" table, which carries the month they were computed on and
-the four rates. That row also dates the card: the card is for the month after
-it. The sentence naming the month ("afgesloten in september 2026") and the start
-of the period the formulas hold for were both left on the previous month on the
+The printed rates are read from the front page, one row per register
+("Energiekosten dag", "nacht" and "excl. nacht"). The last row of the
+"Energiekost van de afgelopen 12 maanden" table carries the month they were
+computed on and dates the card: the card is for the month after it. The
+sentence naming the month ("afgesloten in september 2026") and the start of the
+period the formulas hold for were both left on the previous month on the
 September 2025 and March 2026 cards, while the table moved on every time.
+
+The table repeats the four rates too, and those are not read: the copy has been
+typed wrong. The March 2026 row prints 12,558 for the single meter where the
+front page prints 12,588, which is what the formula gives at the row's own
+85,13 ((0,116 x 85,13 + 2) x 1,06 is 12,5876), and every later card repeats the
+typo in its table. Read from the table, a keyless entry billed March 0,03
+c€/kWh low.
 
 The day formula prints its coefficient rounded: the card's own day rates work
 back to 0,13348 against the printed 0,1335, 3e-5 EUR/kWh at August's mean. The
