@@ -3202,6 +3202,71 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
     assert "volume" in reads
 
 
+async def test_a_setting_edited_during_the_day_read_is_not_stored_with_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An edit saved while the day's meter read runs reloads the entry, but
+    the read in flight finishes first and its figures were stored under the
+    settings as they stood at the save, the new ones. The reloaded entry then
+    took the old wiring's volume and register verdict for the rest of the
+    day. The figures carry the settings their read started under."""
+    from custom_components.be_electricity_prices import compare_quote
+    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+        },
+    )
+    entry.add_to_hass(hass)
+    volume = compare_quote._AnnualVolume(4200.0, 365, "measured", measured=True)
+
+    async def _volume(*_a: Any, **_k: Any) -> Any:
+        return volume
+
+    async def _measured(*_a: Any, **_k: Any) -> MeasuredKwh:
+        # The user rewires the night register while the read runs.
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "night_consumption_kwh": "sensor.new_night"}
+        )
+        return MeasuredKwh(4200.0, 365, "sensor.night_cons")
+
+    coord = BePricesCoordinator(hass, entry)
+    with (
+        patch.object(compare_quote, "_annual_volume", new=_volume),
+        patch.object(coordinator_snapshot, "_measured_kwh", new=_measured),
+        patch.object(
+            coordinator_snapshot, "_metered_sides", AsyncMock(return_value=None)
+        ),
+    ):
+        await coord._ensure_annual_volume()
+    saved: dict[str, Any] = {}
+
+    async def _save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    async def _load() -> dict[str, Any]:
+        return saved
+
+    with patch.object(coord._store, "async_save", new=_save):
+        await coord._save_persistent()
+    reloaded = BePricesCoordinator(hass, entry)
+    with patch.object(reloaded._store, "async_load", new=_load):
+        await reloaded.async_load_persistent()
+    assert reloaded._annual_kwh is None
+    assert reloaded._register_pair_fault == ""
+    assert reloaded._annual_kwh_day is None, "the new wiring is read"
+
+
 async def test_yesterdays_meter_results_outlive_a_second_restart(
     hass: HomeAssistant, freezer: Any
 ) -> None:

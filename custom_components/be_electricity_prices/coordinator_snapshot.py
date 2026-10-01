@@ -62,6 +62,7 @@ from .energy_meters import (
     _kwh_sensor_ids,
     noting_failed_reads,
 )
+from .coordinator_persist import settings_digest
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
 from .cohort import ytd_window_start
@@ -127,6 +128,7 @@ class _SnapshotMixin:
     _annual_kwh_full_year: bool
     _annual_kwh_day: date | None
     _annual_injection_kwh: float | None
+    _meter_results_inputs: str | None
     _register_pair_fault: str
     _register_pair_covered: bool
     _snapshot_annual_kwh: float | None
@@ -218,6 +220,10 @@ class _SnapshotMixin:
         today = dt_util.now().date()
         if self._annual_kwh_day == today:
             return
+        # The settings the read starts under, which is what its figures are
+        # stored with: an edit saved while it runs reloads the entry, but
+        # this read finishes first.
+        inputs = settings_digest(self.entry)
         # Stamped on success only, so a recorder that was busy this tick is
         # asked again on the next one rather than leaving the entry on the
         # default, or on nothing measured, for the rest of the day. A busy
@@ -268,6 +274,7 @@ class _SnapshotMixin:
             volume.days_with_data
         )
         self._annual_injection_kwh = injection
+        self._meter_results_inputs = inputs
         if await self._find_meter_faults(today):
             self._annual_kwh_day = today
 

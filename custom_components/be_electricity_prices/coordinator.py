@@ -228,6 +228,9 @@ class BePricesCoordinator(
         # _annual_kwh_day after a restart adopted them from the store: what is
         # stored again until the day's own read replaces them.
         self._meter_results_day: date | None = None
+        # The settings those figures were read under, taken when the read
+        # started: an edit saved while it ran must not be stored with them.
+        self._meter_results_inputs: str | None = None
         # A full trailing year of the export on the injection regime, read the
         # same day; None otherwise. A first-year feed-in bonus multiplies it.
         self._annual_injection_kwh: float | None = None

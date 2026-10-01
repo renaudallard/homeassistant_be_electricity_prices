@@ -79,6 +79,7 @@ class _PersistMixin:
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
     _meter_results_day: date | None
+    _meter_results_inputs: str | None
     _peak_history: dict[str, float]
     _peak_kw: float
     _peak_month: date | None
@@ -594,7 +595,7 @@ class _PersistMixin:
             return None
         return {
             "day": day.isoformat(),
-            "inputs": settings_digest(self.entry),
+            "inputs": self._meter_results_inputs or settings_digest(self.entry),
             "annual_kwh": self._annual_kwh,
             "full_year": self._annual_kwh_full_year,
             "annual_injection_kwh": self._annual_injection_kwh,
@@ -635,6 +636,7 @@ class _PersistMixin:
         self._register_pair_fault = fault
         self._register_pair_covered = blob.get("pair_covered") is True
         self._meter_results_day = day
+        self._meter_results_inputs = blob["inputs"]
         if day == dt_util.now().date():
             self._annual_kwh_day = day
 
