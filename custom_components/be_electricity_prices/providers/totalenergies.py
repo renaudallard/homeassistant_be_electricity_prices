@@ -670,6 +670,12 @@ def _formulas_hold_contribution(rates: VariableRates, included: float) -> bool:
     165,0 without, where every other card of the range agrees to within 1,3
     EUR/MWh with it in. The footnote stands unless the figures settle it the
     other way, and a card with one column cannot say.
+
+    Nor can a Flemish card. The readings drift apart by the contribution times
+    the spread of ``1 / factor`` across the columns, and Flanders' 1,57 c/kWh
+    misses by only 2,65 to 2,69 EUR/MWh on the October 2026 cards, under
+    ``_INDEX_MISFIT``: a Flemish formula printed without it would be read as
+    the footnote says. None is printed that way.
     """
     columns = [
         (rate, factor, base)

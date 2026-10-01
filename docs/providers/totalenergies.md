@@ -277,8 +277,9 @@ Brussels and Impact print the yearly fee alone on the line after the rates
 takes the fee from either place. The caller says how many rates it expects,
 three Impact bands or four meter columns, because a row of four figures is
 otherwise either four rates with the fee left blank or Impact's fee and its
-three bands. The October myDrive card in Wallonia is the first case and is
-refused rather than read as the second. Impact prints its one energy rate in
+three bands. The myDrive card in Wallonia first served on 1 October 2026 was the
+first case and was refused rather than read as the second; its republication the
+same day prints the fee and parses, billing 24,44 c/kWh as printed. Impact prints its one energy rate in
 each band, and a card whose bands differed would be refused too. A row that
 prints its yearly fee among the rates is an unfilled card and is refused: the
 Impact card served on the morning of 1 October 2026 was a template with 94,34
@@ -319,6 +320,16 @@ ways and leaves the bases as printed only when the figures settle it that way;
 the rates themselves still lose the contribution, which the tax leg bills. A
 card with a single column, Impact, cannot say, and the footnote stands.
 
+The test cannot fire on a Flemish card either. The two readings drift apart by
+the contribution times the spread of `1 / factor` across the columns, and
+Flanders' 1,57 c/kWh is small enough that the wrong reading misses by only 2,65
+to 2,69 EUR/MWh on the October 2026 Electricité Variable, myComfort and myDrive
+cards, under the 3 EUR/MWh the rule needs (Wallonia's 3,36 misses by 5,74 and
+Brussels' 2,85 by 3,95, both caught). A Flemish card printing its bases without
+the contribution would be read as its footnote says, and an entry with a key
+billed 1,57 c/kWh short. No Flemish card does: myEssential in Flanders prints
+`0.11 * BELPEXM_RLP + 3.09`, which fits with the contribution inside.
+
 The October myDynamic cards drop the exclusive-night column: the header ends on
 `Heures creuses` and the row prints three figures, `19,37 19,37 19,37 Tarif
 mensuel`, with the yearly fee alone on the next line. `_meter_columns`
@@ -327,9 +338,21 @@ The formula carries the contribution like the rest of the range, and the card do
 not mention injection anywhere, so a dynamic card without the word has no
 injection leg rather than failing for want of a `BELPEXH` feed-in formula.
 
-The October myComfort cards in Flanders and Brussels are empty templates, with
-the rates left blank, and the Wallonia URL serves the Dutch card; all three
-fail to parse and keep the September card.
+The myComfort cards first served in Flanders and Brussels on 1 October 2026
+were empty templates, with the rates left blank, and were refused. Both were
+republished the same day and bill as printed, 23,18 and 26,43 c/kWh. Late on 1
+October 2026 three October cards still fail, each with the "layout changed"
+Repairs card while the entry keeps its September card, and each because of what
+the URL serves rather than the parser:
+
+- myComfort in Wallonia: the URL serves the Dutch card ("Tariefkaart ...
+  myComfort Variabel"), which the French parser does not read.
+- myComfort Fixe in Brussels: the URL serves the injection card ("Injection pour
+  l'électricité"), with no consumption row at all.
+- myEssential in Flanders: the footnote says the prices include the
+  contribution and leaves its amount blank ("dont le montant est fixé à : €
+  cent/kWh"), so it cannot be taken back out of the rates, and the formula row
+  prints its first base inline and the other three on the next line.
 
 ### Month-indexed energy on the variable cards
 
@@ -520,7 +543,7 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_electricite_variable_v_2026-10.pdf` | Electricité Variable, Flanders, October 2026 (fee on the row, indicative block at a zero index) |
 | `totalenergies_electricite_variable_b_2026-10.pdf` | Electricité Variable, Brussels, October 2026 (fee on the line below the rates) |
 | `totalenergies_impact_w_2026-10.pdf` | Impact, Wallonia, October 2026 (three bands, fee below) |
-| `totalenergies_mydrive_w_2026-10.pdf` | myDrive, Wallonia, October 2026 (no yearly fee printed: refused) |
+| `totalenergies_mydrive_w_2026-10.pdf` | myDrive, Wallonia, October 2026, the first card served on 1 October (no yearly fee printed: refused; the republication parses) |
 | `totalenergies_mycomfort_b_2026-10.pdf` | myComfort, Brussels, October 2026 (block at no index, 7.01 against a 6.91 base) |
 | `totalenergies_electricite_variable_b_2026-10_filled.pdf` | Electricité Variable, Brussels, October 2026 afternoon (block filled in, billed) |
 | `totalenergies_impact_w_2026-10_template.pdf` | Impact, Wallonia, October 2026 morning (unfilled, the fee in every rate column: refused) |
