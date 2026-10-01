@@ -7735,6 +7735,43 @@ async def test_a_withdrawn_products_card_gone_keeps_the_entry_priced(
     assert coord._snapshot_schema_version == 73
 
 
+async def test_a_card_pair_caught_in_two_months_is_not_a_layout_change(
+    hass: HomeAssistant,
+) -> None:
+    """Bolt's Plenty Online card is priced on the Online card's index, and
+    the two are read off separate listing lookups. A timeout between them
+    pairs October with September, and the refusal raised the "supplier
+    changed its layout, open an issue" card on the first tick, although the
+    next fetch pairs them again."""
+    from custom_components.be_electricity_prices.providers import bolt
+    from tests import fixture_text
+
+    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
+    september = fixture_text("bolt_online_oct.pdf", layout=True).replace(
+        "Octobre 2026", "Septembre 2026"
+    )
+    entry = make_entry(
+        supplier="bolt", contract="bolt_plenty_online", region="flanders"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    cards = AsyncMock(side_effect=[("u14", plenty), ("u13", september)])
+    with (
+        patch.object(bolt, "_fetch_pdf_text", cards),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(extractor_id="bolt", fetch=bolt.fetch),
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert coord._last_error is not None
+    assert "not the same month" in coord._last_error
+    registry = ir.async_get(hass)
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}") is None
+    )
+
+
 async def test_a_withdrawn_product_with_no_card_left_says_why(
     hass: HomeAssistant, freezer: Any
 ) -> None:

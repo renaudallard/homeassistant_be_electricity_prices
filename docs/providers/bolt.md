@@ -120,7 +120,9 @@ fetched. It also refuses a pair whose `<Month> <Year>` headers differ: each card
 comes off its own listing read, and a read that fails falls back to a fixed version, so one
 timeout between the two would price October's card at September's index (13,89 c/kWh mono
 instead of 18,66), and Bolt's probe key, the listing's ETag, would keep that snapshot until
-the listing next changes.
+the listing next changes. The refusal's message opens with `OUT_OF_STEP` (`_pdf.py`), which
+`is_transient_fetch_error` counts as transient: the next fetch pairs the cards again, so it is
+held to the softer "could not reach the supplier" card rather than the layout-change one.
 
 ### Plenty offers
 

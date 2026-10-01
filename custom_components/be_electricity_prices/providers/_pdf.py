@@ -62,6 +62,11 @@ def _read_version() -> str:
 
 USER_AGENT = f"Home Assistant be_electricity_prices/{_read_version()}"
 
+# Opens the message of a card refused because a card it is read with came
+# from another month: a listing read that failed between the two fetches, or
+# one card republished before the other. The next fetch pairs them again.
+OUT_OF_STEP = "cards out of step"
+
 
 def is_transient_fetch_error(message: str) -> bool:
     """Whether an ExtractorError message describes a transient fetch
@@ -76,9 +81,10 @@ def is_transient_fetch_error(message: str) -> bool:
     (the Cloudflare-fronted suppliers intermittently answer an otherwise
     healthy resource with a 403 anti-bot challenge or a 429 that succeeds
     on retry); 404 / 410 mean the card was renamed or withdrawn and must
-    fail fast.
+    fail fast. A pair of cards caught in different months (``OUT_OF_STEP``)
+    is transient too: it is no layout change, and the next fetch heals it.
     """
-    if message.startswith("network error fetching"):
+    if message.startswith(("network error fetching", OUT_OF_STEP)):
         return True
     if message.startswith("storage error fetching"):
         return True

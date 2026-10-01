@@ -73,6 +73,7 @@ from ..const import (
 )
 from ._pdf import (
     FR_MONTHS,
+    OUT_OF_STEP,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
@@ -562,8 +563,9 @@ def parse_snapshot(
         month = _extract_publication_month(text).casefold()
         if not month or month != _extract_publication_month(index_text).casefold():
             raise ExtractorError(
-                f"Bolt: {contract_id} and the {contract.index_slug} card it is "
-                "priced on are not the same month's"
+                f"{OUT_OF_STEP}: Bolt: {contract_id} and the "
+                f"{contract.index_slug} card it is priced on are not the same "
+                "month's"
             )
         energy = _reprice_on_index(
             energy,

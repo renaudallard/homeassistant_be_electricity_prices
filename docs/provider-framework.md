@@ -615,7 +615,10 @@ Internals worth knowing:
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient
   (Cloudflare-fronted suppliers intermittently answer with a 403 anti-bot
   challenge or a retryable 429), while 404/410 are permanent (card renamed or
-  withdrawn) and must fail fast.
+  withdrawn) and must fail fast. A message opening with `OUT_OF_STEP` is
+  transient too: a card refused because the card it is read with came from
+  another month (Bolt Plenty Online and the Online card), which the next
+  fetch pairs again.
 
 ### Text extraction strategies
 
