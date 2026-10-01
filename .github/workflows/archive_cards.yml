@@ -285,13 +285,42 @@ jobs:
             "this repository, one release per month of cards, each file named by its SHA-256." \
             > tmp/cards/electricity/README.md
 
+      - name: Commit and push what changed
+        id: push
+        run: |
+          cd tmp/cards
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no card changed today"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
+          # The gas and water archives push to the same main, and the
+          # concurrency group only queues runs of this repository, so their
+          # daily push can land between this job's clone and this push. The
+          # three trees share one path, the root README.md, which all three
+          # jobs write with the same text, so rebasing onto another job's
+          # commit is conflict-free: a rejected push fetches, rebases and
+          # tries again rather than losing the run.
+          for attempt in 1 2 3 4 5; do
+            git push -q origin HEAD:main && exit 0
+            [ "$attempt" -lt 5 ] || break
+            sleep $((attempt * 3))
+            git pull -q --rebase origin main
+          done
+          exit 1
+
       - name: Warn before the upload token expires
         # A fine-grained token lives a year at most, and the first sign of
         # its expiry would otherwise be the failure issue on the morning
         # after. GitHub reports a fine-grained token's expiry in a response
         # header, so ask, and file an issue while there are still two weeks
         # to make a new one and update the secret. Runs even when an earlier
-        # step failed: the warning is worth having either way.
+        # step failed: the warning is worth having either way. After the
+        # push, so a failure here cannot keep the day's rows from being
+        # pushed.
         if: always()
         env:
           CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
@@ -324,33 +353,6 @@ jobs:
             --body token_body.md \
             --fingerprint token_fingerprint.txt \
             --workflow .github/workflows/archive_cards.yml
-
-      - name: Commit and push what changed
-        id: push
-        run: |
-          cd tmp/cards
-          git add -A
-          if git diff --cached --quiet; then
-            echo "no card changed today"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
-          # The gas and water archives push to the same main, and the
-          # concurrency group only queues runs of this repository, so their
-          # daily push can land between this job's clone and this push. The
-          # three trees share one path, the root README.md, which all three
-          # jobs write with the same text, so rebasing onto another job's
-          # commit is conflict-free: a rejected push fetches, rebases and
-          # tries again rather than losing the run.
-          for attempt in 1 2 3 4 5; do
-            git push -q origin HEAD:main && exit 0
-            [ "$attempt" -lt 5 ] || break
-            sleep $((attempt * 3))
-            git pull -q --rebase origin main
-          done
-          exit 1
 
       - name: File the failure as an issue
         # Nobody watches the Actions tab. A run that stored nothing, a push
