@@ -1343,6 +1343,19 @@ def test_plenty_online_will_not_bill_without_its_index_card() -> None:
         parse_snapshot("bolt_plenty_online", plenty, "flanders")
 
 
+def test_plenty_online_will_not_bill_on_another_months_index() -> None:
+    """Each card's version comes off its own listing read, and a read that
+    fails falls back to a fixed version. One timeout between the two pairs
+    October's card with September's Online card, whose index prices it 4,77
+    c/kWh low, so a pair whose months differ is refused."""
+    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
+    online = fixture_text("bolt_online_oct.pdf", layout=True)
+    assert "Octobre 2026" in online
+    september = online.replace("Octobre 2026", "Septembre 2026")
+    with pytest.raises(ExtractorError, match="not the same month"):
+        parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=september)
+
+
 def test_every_other_card_keeps_its_printed_monthly_price() -> None:
     """Only Plenty Online is re-priced. Re-pricing a card on its own index is
     the identity, which is what keeps the rule from spreading by accident."""

@@ -116,7 +116,11 @@ card names neither the index nor its value, which is why another card has to sup
 Bolt prints Plenty Online's own price one day, the result is the same, since the index does
 not change. `parse_snapshot` refuses to price the contract without the Online card's text
 rather than fall back to the printed figure, and the live check hands it the card it already
-fetched.
+fetched. It also refuses a pair whose `<Month> <Year>` headers differ: each card's version
+comes off its own listing read, and a read that fails falls back to a fixed version, so one
+timeout between the two would price October's card at September's index (13,89 c/kWh mono
+instead of 18,66), and Bolt's probe key, the listing's ETag, would keep that snapshot until
+the listing next changes.
 
 ### Plenty offers
 

@@ -553,13 +553,21 @@ def parse_snapshot(
                 f"Bolt: {contract_id} is billed at the index the "
                 f"{contract.index_slug} card prints, which was not read"
             )
+        index_text = index_text.replace("\u2028", "\n")
+        # The two cards are looked up on the listing one after the other, and
+        # a listing read that fails falls back to a fixed version. One timeout
+        # between them pairs this month's card with last month's index. A
+        # refused pair costs one tick; a mispriced one stands until the
+        # listing's ETag moves, which is usually the next month.
+        month = _extract_publication_month(text).casefold()
+        if not month or month != _extract_publication_month(index_text).casefold():
+            raise ExtractorError(
+                f"Bolt: {contract_id} and the {contract.index_slug} card it is "
+                "priced on are not the same month's"
+            )
         energy = _reprice_on_index(
             energy,
-            _extract_energy(
-                index_text.replace("\u2028", "\n"),
-                contract.kind,
-                professional=professional,
-            ),
+            _extract_energy(index_text, contract.kind, professional=professional),
         )
     injection = _extract_injection(text)
     if professional and injection is not None:
