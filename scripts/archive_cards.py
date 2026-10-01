@@ -1332,6 +1332,31 @@ def _targets(
     return out
 
 
+# Card addresses a supplier has moved, as (old prefix, new prefix). A row
+# names the address it was read under, and its replay asks for the new one:
+# Energy Knights put every card under "par" in October 2026, which left all
+# 72 of its rows unreplayable although each held the card's text.
+_URL_MOVES = (
+    (
+        "https://www.energyknights.be/website/getCurrentTariffchart/",
+        "https://www.energyknights.be/website/getCurrentTariffchart/par/",
+    ),
+    (
+        "https://www.energyknights.be/website/getHistoricalTariffchart/",
+        "https://www.energyknights.be/website/getHistoricalTariffchart/par/",
+    ),
+)
+
+
+def _moved_url(url: str) -> str | None:
+    """Where a card read at ``url`` is asked for since its supplier moved it,
+    or None if it has not moved."""
+    for old, new in _URL_MOVES:
+        if url.startswith(old) and not url.startswith(new):
+            return new + url[len(old) :]
+    return None
+
+
 def _memo_key(source: dict[str, str]) -> str:
     """How a source's text is keyed in the fetch memo: by URL, and by reader
     variant beside it for anything but a plain text read."""
@@ -1446,6 +1471,9 @@ async def _replay_row(
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 return
         dict.__setitem__(memo, key, stored)
+        moved = _moved_url(source["url"])
+        if moved is not None:
+            dict.__setitem__(memo, _memo_key({**source, "url": moved}), stored)
     # The supplier's other rows of the same month come before the follower,
     # for a card priced on another product's card: where both hold one
     # address, a sibling read it this month and the follower next month.
@@ -1462,7 +1490,11 @@ async def _replay_row(
             continue
         dict.__setitem__(memo, key, stored)
     replay.pdfs = {
-        s["url"]: digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s
+        url: digest_of(s["pdf"])
+        for s in row.get("_sources", [])
+        if "pdf" in s
+        for url in (s["url"], _moved_url(s["url"]))
+        if url is not None
     }
     cards.digests.update(replay.pdfs)
     cards.calls.clear()

@@ -2342,6 +2342,51 @@ async def test_a_row_priced_on_a_sibling_card_replays_from_the_siblings_text(
     assert session.hits == hits_before + 2  # the live walk, one read a card
 
 
+async def test_a_card_whose_address_moved_replays_from_the_row_that_read_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Energy Knights put every card under "par" in October 2026. Its rows
+    name the old address, the replayed parse asks for the new one, and the
+    offline session refused it: all 72 rows became unreplayable although
+    each held its card's text."""
+    old = "https://www.energyknights.be/website/getCurrentTariffchart/agilisonline/nl"
+    new = (
+        "https://www.energyknights.be/website/getCurrentTariffchart/par/agilisonline/nl"
+    )
+    session = _Session({old: "price=0.2 month=augustus 2026"})
+    where = {"url": old}
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        text = await fetch_text(session, where["url"])  # type: ignore[arg-type]
+        fields = dict(part.split("=", 1) for part in text.split(" ", 1))
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=float(fields["price"])),
+            publication_label=fields["month"],
+            source_url=where["url"],
+        )
+
+    extractor = _extractor(fetch)
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    august = datetime(2026, 8, 5, 6, 0, tzinfo=UTC)
+    await ac.archive(tmp_path, extractors=[extractor], now=august, sleep=_no_sleep)
+
+    where["url"] = new
+    session.pages = {new: "price=0.3 month=september 2026"}
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW.replace(day=18), sleep=_no_sleep
+    )
+    assert summary.unreplayable == []
+    card = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json").read_text()
+    )
+    assert card["publication_label"] == "augustus 2026"
+    assert [s["url"] for s in card["_sources"]] == [new]
+    assert ac._moved_url(new) is None
+
+
 async def test_the_next_months_text_never_shadows_a_rows_own_card(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

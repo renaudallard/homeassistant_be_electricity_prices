@@ -964,7 +964,11 @@ September cards, label, validity and price alike. Between the two come the texts
 other rows of the same region and month name (`_sibling_sources`), for a card priced on another
 product's card: Bolt Plenty Online reads the Online card for its index, its rows captured before
 it did named only their own, and all six were unreplayable. A sibling read its card in the row's
-own month, so it goes ahead of the follower where both hold one address. The clock is pinned with freezegun to the row's
+own month, so it goes ahead of the follower where both hold one address. A card whose supplier
+has moved its address since is seeded under the new address as well (`_URL_MOVES`), since the
+row names the old one and the replayed parse asks for the new: Energy Knights put every card
+under `par` in October 2026, which left all 72 of its rows unreplayable although each held its
+card's text. The clock is pinned with freezegun to the row's
 `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
