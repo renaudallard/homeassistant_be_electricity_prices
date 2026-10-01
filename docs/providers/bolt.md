@@ -697,6 +697,15 @@ standard rates: one row per CWaPE band, each with its printed price, that band's
 own quarterly index and the shared formula
 (`Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90`).
 
+**The fixed cards print the block too, and it is not read.** `bolt_fix` and
+`bolt_plenty_fix` carry the variable card's three rows digit for digit, with the formula
+column replaced by `Fixe` (`Eco consommation 9,91 65,59 Fixe`, `Medium consommation 14,64
+111,82 Fixe`, `Pic consommation 19,23 140,87 Fixe`), on the September and October 2026
+cards alike. A banded fixed price would not quote a quarterly Belpex index beside each
+band, so this is a template left over from the variable card rather than an offer, and a
+Walloon Bolt Fixe entry on the Impact network mode is billed the one fixed price in every
+band (`_extract_energy`, `_bolt_cards.py`, which says so where the fixed branch returns).
+
 This is one product in two network configurations, not a second product, so the
 bands live on `VariableRates.impact_*` and are selected by `dso_tariff_mode`
 exactly as the DSO side already is. Before this the network leg moved with the

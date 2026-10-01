@@ -1360,3 +1360,14 @@ def test_every_other_card_keeps_its_printed_monthly_price() -> None:
     assert isinstance(same, VariableRates) and isinstance(online, VariableRates)
     assert same.current == pytest.approx(online.current)
     assert same.peak == pytest.approx(online.peak)
+
+
+def test_a_fixed_card_bills_its_one_price_in_every_impact_band() -> None:
+    """The fixed cards print a Walloon Impact block that is the variable
+    card's, digit for digit, with "Fixe" where the formula goes. It is a
+    template left over, not a banded fixed price, so it is not read."""
+    text = fixture_text("bolt_plenty_fix_oct.pdf", layout=True)
+    assert re.search(r"Eco consommation\s+[\d,]+\s+[\d,]+\s+Fixe", text)
+    snap = parse_snapshot("bolt_plenty_fix", text, "wallonia")
+    assert isinstance(snap.energy, FixedRates)
+    assert not hasattr(snap.energy, "impact_eco")

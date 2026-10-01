@@ -225,6 +225,12 @@ def _extract_energy(
         raise ExtractorError(f"could not parse Bolt {kind} bi-hourly Jour/Nuit rates")
 
     if kind == "fixed":
+        # The fixed cards print a "Tarif Impact (Wallonie)" block too, and it is
+        # deliberately not read: its figures are the variable card's, digit for
+        # digit, with the formula column replaced by "Fixe" ("Eco consommation
+        # 9,91 65,59 Fixe" against the variable card's "... Belpex * 1,168 +
+        # 16,90"). A template left over from the variable card rather than a
+        # banded fixed price, so the one fixed price is billed in every band.
         return FixedRates(
             single=mono,
             peak=peak,
