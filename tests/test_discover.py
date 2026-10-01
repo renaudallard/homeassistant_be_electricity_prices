@@ -207,10 +207,18 @@ def test_energyvision_discover_reads_the_brusol_pages() -> None:
 def test_energyknights_discover_matches_registry() -> None:
     session = _FakeSession(_read("energyknights.html"))
     discovered = _run(energyknights_mod.discover(session))
-    # The listing carries all eight products; only three are modelled, so the
-    # baseline is DISCOVER_IDS (the full catalogue) and a genuinely new
-    # product is the only thing that flags.
-    assert discovered == set(energyknights_mod.DISCOVER_IDS)
+    # The listing of October 2026 carries the six products modelled here and
+    # no longer Optima. The baseline is DISCOVER_IDS, the full catalogue, so
+    # a genuinely new product is the only thing that flags.
+    assert discovered == {c.slug for c in energyknights_mod._CONTRACTS}
+    assert discovered <= energyknights_mod.DISCOVER_IDS
+
+
+def test_energyknights_discover_reads_the_par_listing_only() -> None:
+    """The site moved every card under ``par`` on 1 October 2026 and the old
+    hrefs answer 404, so a card link without the segment is not a product."""
+    html = _read("energyknights.html").replace("/par/", "/")
+    assert _run(energyknights_mod.discover(_FakeSession(html))) == set()
 
 
 def test_bolt_discover_matches_registry() -> None:

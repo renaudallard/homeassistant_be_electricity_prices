@@ -770,6 +770,60 @@ def test_fetch_for_month_is_registered() -> None:
     assert EXTRACTORS["energyknights"].fetch_for_month is not None
 
 
+def test_every_card_url_carries_the_par_segment() -> None:
+    """Energy Knights moved its cards under ``par`` on 1 October 2026. Every
+    URL without the segment answers 404, current, archive and listing."""
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    contract = energyknights._CONTRACTS_BY_ID[_AGILIOR]
+    assert energyknights._card_url(contract) == (
+        "https://www.energyknights.be/website/getCurrentTariffchart/par/"
+        "agilioronline/nl"
+    )
+    assert energyknights._ARCHIVE_URL.format(
+        month="2026-08", slug="agilioronline", lang="nl"
+    ) == (
+        "https://www.energyknights.be/website/getHistoricalTariffchart/par/"
+        "2026-08/agilioronline/nl"
+    )
+    assert energyknights._LISTING_URL == "https://www.energyknights.be/par/tariffcharts"
+
+
+@pytest.mark.parametrize(
+    ("message", "absent"),
+    [
+        # An absent month answers 302 to the homepage, which is HTML.
+        ("expected a PDF at test://, payload starts with b'<!DOCTYPE'", True),
+        # A status is never the site saying a month is absent: the 404 of the
+        # October 2026 move must surface, not empty the archive walk.
+        ("HTTP 404 fetching test://", False),
+        ("HTTP 503 fetching test://", False),
+    ],
+)
+def test_fetch_for_month_raises_on_an_error_status(
+    monkeypatch: pytest.MonkeyPatch, message: str, absent: bool
+) -> None:
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    async def failing(_session: Any, _url: str) -> str:
+        raise ExtractorError(message)
+
+    monkeypatch.setattr(energyknights, "fetch_pdf_text_layout", failing)
+    call = energyknights.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _AGILIOR,
+        "flanders",
+        date(2026, 8, 1),
+    )
+    if absent:
+        assert asyncio.run(call) is None
+    else:
+        with pytest.raises(ExtractorError, match=message.split(" test")[0]):
+            asyncio.run(call)
+
+
 # ---- the green twins ---------------------------------------------------------
 
 _AGILIOR_GREEN = "energyknights_agilior_green"

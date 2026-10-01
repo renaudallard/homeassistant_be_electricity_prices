@@ -80,11 +80,14 @@ Every card is served from a stable, product-keyed URL, so there is no listing to
 and no versioned blob to chase:
 
 ```
-https://www.energyknights.be/website/getCurrentTariffchart/<slug>/nl
+https://www.energyknights.be/website/getCurrentTariffchart/par/<slug>/nl
 ```
 
-The `/website/` prefix is part of the path. Without it the site answers 404. Slugs are
-`agilioronline`, `agilisonline` and `essentiaonline`.
+The `/website/` prefix is part of the path. Without it the site answers 404. So is the
+`par` segment, which the site added on 1 October 2026 beside a `prof` one for its
+professional cards: since then every URL without it, current, archive and listing alike,
+answers 404, which stopped all six contracts at once. Slugs are `agilioronline`,
+`agilisonline` and `essentiaonline`, and the same three with `green` appended.
 
 ```
 config (contract_id) -> fetch(): GET the product's card URL
@@ -101,8 +104,10 @@ it generated the month's card (09:00 on the last day of the preceding month for 
 August 2026 set), so the freshness key flips exactly when the rates do and the
 coordinator does not need the 24 h TTL fallback.
 
-`discover` scrapes `https://www.energyknights.be/tariffcharts` for
-`getCurrentTariffchart/<slug>/` hrefs.
+`discover` scrapes `https://www.energyknights.be/par/tariffcharts` for
+`getCurrentTariffchart/par/<slug>/` hrefs. The October 2026 listing no longer links
+Optima Online or its twin; both stay in `DISCOVER_IDS`, so their return is not reported as
+a new product.
 
 ### The 302 that is not an error
 
@@ -401,7 +406,7 @@ never referenced from any row on pages 1 or 2, and page 3 says of the reminder f
 
 ## The archive
 
-`fetch_for_month` reads `getHistoricalTariffchart/<YYYY-MM>/<slug>/nl`, so a past month
+`fetch_for_month` reads `getHistoricalTariffchart/par/<YYYY-MM>/<slug>/nl`, so a past month
 bills at the card Energy Knights actually published for it rather than at today's. Three
 things make that work, and each of them is a way to get it wrong.
 
@@ -438,6 +443,10 @@ or a retired slug answers 302 to the marketing homepage, which aiohttp follows, 
 payload is a few hundred bytes of HTML rather than an error status; nothing here inspects
 it, because `_fetch_validated_pdf_bytes` rejects it on the magic bytes. Every failure
 returns `None` rather than raising, since this runs inside the year-to-date walk and one
-unpublished month must not take the whole year down. The result goes through
+unpublished month must not take the whole year down. The exception is an error status:
+an absent month answers 302, so a status never means absent, and it is raised like a
+transient failure. The month cache then retries it rather than storing it as absent, and
+the card archive's backfill records a failure instead of skipping the month. Reading the
+404 of the October 2026 move as absent had emptied both without a word. The result goes through
 `archive_validity_check`, and because these cards carry their own "geldig van ... tot en
 met ..." range the authoritative tier always applies.

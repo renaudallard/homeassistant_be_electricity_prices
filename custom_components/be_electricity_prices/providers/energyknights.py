@@ -30,9 +30,12 @@ one tariff card per product per month as a text-layer PDF. Every card is
 served from a stable, product-keyed URL, so there is no listing to resolve
 and no versioned blob to chase:
 
-    /website/getCurrentTariffchart/<slug>/nl
+    /website/getCurrentTariffchart/par/<slug>/nl
 
 The ``/website/`` prefix is part of the path; without it the site answers 404.
+So is the ``par`` segment, which the site added on 1 October 2026 beside a
+``prof`` one for its professional cards: every URL without it, current,
+archive and listing alike, has answered 404 since.
 An unknown slug redirects to the marketing homepage with HTTP 302, which
 aiohttp follows, so a typo yields 480 KB of HTML rather than an error status.
 _fetch_validated_pdf_bytes catches that on the magic bytes and raises, which
@@ -131,9 +134,11 @@ from ._rates import (
 )
 
 _SITE_BASE = "https://www.energyknights.be"
-_CARD_URL = _SITE_BASE + "/website/getCurrentTariffchart/{slug}/{lang}"
-_ARCHIVE_URL = _SITE_BASE + "/website/getHistoricalTariffchart/{month}/{slug}/{lang}"
-_LISTING_URL = f"{_SITE_BASE}/tariffcharts"
+_CARD_URL = _SITE_BASE + "/website/getCurrentTariffchart/par/{slug}/{lang}"
+_ARCHIVE_URL = (
+    _SITE_BASE + "/website/getHistoricalTariffchart/par/{month}/{slug}/{lang}"
+)
+_LISTING_URL = f"{_SITE_BASE}/par/tariffcharts"
 _FLANDERS_ONLY = frozenset({REGION_FLANDERS})
 
 # Cards are published in nl, fr and en with identical numbers. The Dutch one
@@ -527,6 +532,11 @@ async def fetch_for_month(
     than an error status. Nothing here inspects it: _fetch_validated_pdf_bytes
     rejects it on the magic bytes and raises, and that raise lands in the
     except below.
+
+    An error status is therefore never the site saying a month is absent, and
+    it is raised rather than read as one. The one seen so far was every URL
+    answering 404 when the site moved its cards under ``par``, and reading that
+    as absent emptied the archive walk without a word.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
@@ -544,8 +554,10 @@ async def fetch_for_month(
         snap = parse_snapshot(contract_id, text, url, contract.products_for(first))
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
-        # so the month cache retries it instead of caching it as absent.
-        if is_transient_fetch_error(str(err)):
+        # so the month cache retries it instead of caching it as absent. Nor
+        # does any other status, since an absent month answers 302.
+        message = str(err)
+        if is_transient_fetch_error(message) or message.startswith("HTTP "):
             raise
         return None
     # The card carries its own "geldig van ... tot en met ..." range, so the
@@ -561,7 +573,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         html = await fetch_text(session, _LISTING_URL)
     except ExtractorError:
         return set()
-    return set(re.findall(r"getCurrentTariffchart/([a-z0-9]+)/", html))
+    return set(re.findall(r"getCurrentTariffchart/par/([a-z0-9]+)/", html))
 
 
 def _card_url(contract: _ContractDef) -> str:
