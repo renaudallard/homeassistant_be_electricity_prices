@@ -410,8 +410,14 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > coefficients stay the delivery month's, because those really are properties of
 > its own card. The M+1 card goes through the same `archive_validity_check` as
 > the main path, so a CDN stub cannot shift the rates by a further month. When
-> that card is not out yet the mapping comes back empty and the month keeps its
-> own figures — the newest month therefore behaves exactly as before.
+> that card is not out yet (or does not resolve) the month keeps its own
+> figures but comes back `provisional`, as Eneco, EBEM and Trevion do, so the
+> month cache asks again and the archive walk leaves it for later: unflagged,
+> the running month's row cached on the 30th became a closed month at midnight
+> and kept the previous month's figures for good (Smart Flex Wallonia September
+> 2026 at 0,1943 where Mega settled 0,2291). A timeout on that card is raised
+> for the same reason. A next card that is out and states no figure for the
+> month leaves it as it is, settled.
 >
 > Two consequences worth knowing. It costs **one extra archive fetch per month**
 > for a variable or Impact contract, on a walk that already caches one snapshot

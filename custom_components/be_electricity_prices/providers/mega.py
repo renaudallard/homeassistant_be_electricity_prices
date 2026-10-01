@@ -627,7 +627,7 @@ async def _realized_rates_for_month(
     region: str,
     region_code: str,
     year_month: date,
-) -> dict[str, float]:
+) -> dict[str, float] | None:
     """Month ``year_month``'s BILLED rates, read off the NEXT month's card.
 
     A variable or Impact card's headline table is a 12-month simulation, and
@@ -638,23 +638,28 @@ async def _realized_rates_for_month(
     path it shifted every past month of the year-to-date walk by one, billing
     June at May's rate while June's real rate sat unread on the July card.
 
-    So read the sentence from the M+1 card. Returns an empty mapping when that
-    card is not out yet (M is the current month) or does not resolve, and the
-    caller then keeps the M card's own figures, which is what it did before.
+    So read the sentence from the M+1 card. Returns None when that card is
+    not out yet (M is the current month) or does not resolve, and an empty
+    mapping when it is out and states no figure for M: the caller keeps the M
+    card's own figures either way, but only the first can still change. A
+    timeout or a 5xx says nothing about the card and is raised, so the month
+    cache retries it rather than file the estimate.
     """
     following = _next_month(year_month)
     if following > date(dt_util.now().year, dt_util.now().month, 1):
-        return {}
+        return None
     url = await _archive_pdf_url(
         session, contract, region_code, following, allow_current=True
     )
     if url is None:
-        return {}
+        return None
     try:
         text = await fetch_pdf_text(session, url)
         following_snap = parse_snapshot(contract.contract_id, text, region, url)
-    except ExtractorError:
-        return {}
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return None
     # Confirm the fetched card really is the following month's before trusting
     # its sentence: the same validity check the main path runs, so a CDN stub
     # or a stale issue served under a historical URL cannot shift the rates by
@@ -665,7 +670,7 @@ async def _realized_rates_for_month(
         )
         is None
     ):
-        return {}
+        return None
     return _realized_rates(text)
 
 
@@ -753,15 +758,20 @@ async def _apply_realized_for_month(
 
     Only the energy and injection legs move. The overlays, the yearly fee and
     the cohort coefficients stay M's, because those really are properties of
-    M's card. When the M+1 card is not out yet, or is missing a label, the
-    mapping comes back empty and M keeps its own figures: the behaviour
-    before this, and still the best available for the newest month.
+    M's card. When the M+1 card is not out yet, M keeps its own figures, the
+    best available for the newest month, and is flagged ``provisional`` so the
+    month cache asks again rather than keep last month's figures as M's for
+    good, which is what it did at midnight on the 1st. A next card that is out
+    and states no figure for M leaves it alone: retrying cannot conjure a
+    sentence the card does not print.
     """
     if contract.kind not in ("variable", "tou_impact"):
         return snap
     realized = await _realized_rates_for_month(
         session, contract, region, region_code, year_month
     )
+    if realized is None:
+        return replace(snap, provisional=True)
     if not realized:
         return snap
     energy = snap.energy

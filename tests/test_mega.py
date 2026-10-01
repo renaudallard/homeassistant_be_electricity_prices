@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import UTC, date, datetime
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1311,7 +1312,10 @@ async def test_archive_bills_each_month_at_its_own_realized_rate() -> None:
 
 async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> None:
     """The newest month has no following card yet, so it keeps the figures it
-    has -- the behaviour before this, and still the best available."""
+    has, the best available, but says they can still move. Unflagged, the
+    running month's row cached on the 30th turned into a closed month at
+    midnight and kept last month's figures for good: a keyless Smart Flex
+    September stayed at 0,1943 where Mega settled it at 0,2291."""
     from custom_components.be_electricity_prices.providers import mega as mega_mod
 
     snap = parse_snapshot(
@@ -1319,8 +1323,8 @@ async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> Non
     )
     contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
 
-    async def _none(*_a: object, **_k: object) -> dict[str, float]:
-        return {}
+    async def _none(*_a: object, **_k: object) -> dict[str, float] | None:
+        return None
 
     with patch.object(mega_mod, "_realized_rates_for_month", new=_none):
         out = await mega_mod._apply_realized_for_month(
@@ -1331,7 +1335,81 @@ async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> Non
             date(2026, 6, 1),
             snap,
         )
+    assert out.provisional
+    assert out == replace(snap, provisional=True)
+
+
+async def test_archive_keeps_its_own_rates_when_the_next_card_states_none() -> None:
+    """A following card that is out and names no figure for the month cannot
+    be waited on: the month keeps its own card's figures as settled."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
+
+    async def _empty(*_a: object, **_k: object) -> dict[str, float] | None:
+        return {}
+
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_empty):
+        out = await mega_mod._apply_realized_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            "WL",
+            date(2026, 6, 1),
+            snap,
+        )
     assert out is snap
+
+
+async def test_the_running_months_next_card_is_not_out(freezer: Any) -> None:
+    """For the running month there is no next card to read, and asking for it
+    costs no request."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    freezer.move_to("2026-09-30 22:00:00+02:00")
+    contract = mega_mod._CONTRACTS_BY_ID["mega_pro_smart_flex"]
+    with patch.object(
+        mega_mod, "_archive_pdf_url", new=AsyncMock(side_effect=AssertionError)
+    ):
+        got = await mega_mod._realized_rates_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            "WL",
+            date(2026, 9, 1),
+        )
+    assert got is None
+
+
+async def test_a_timeout_on_the_next_card_is_retried_not_filed() -> None:
+    """A timeout says nothing about the next card. Read as "not out" it would
+    only delay the month; read as "out with no figure" it would file the
+    estimate for good. It is raised, so the month cache retries."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
+
+    async def _url(*_a: object, **_k: object) -> str:
+        return "https://example.invalid/next.pdf"
+
+    async def _timeout(*_a: object, **_k: object) -> str:
+        raise ExtractorError("network error fetching next.pdf: TimeoutError")
+
+    with (
+        patch.object(mega_mod, "_archive_pdf_url", new=_url),
+        patch.object(mega_mod, "fetch_pdf_text", new=_timeout),
+        pytest.raises(ExtractorError),
+    ):
+        await mega_mod._realized_rates_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            "WL",
+            date(2026, 6, 1),
+        )
 
 
 async def test_a_fixed_card_is_never_re_read_from_the_next_month() -> None:
