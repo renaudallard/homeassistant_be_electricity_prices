@@ -421,7 +421,9 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
     for a month it held, so the archive served every installation the printed
     estimate for good: Eneco Flex 0,1761 where it settled 0,2079. Such a row is
     re-asked until the supplier's own path answers settled, then replaced;
-    a row on a card no month index moves is left alone."""
+    a row on a card no month index moves is left alone, and so is every row of
+    a supplier whose month does not settle on the next card: asking it again
+    would only fetch the card the row already holds."""
     answers: dict[str, SupplierSnapshot | None] = {}
     asked: list[tuple[str, date]] = []
 
@@ -446,7 +448,7 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
 
         return fetch
 
-    def extractor(fetch: Fetch) -> SupplierExtractor:
+    def extractor(fetch: Fetch, settles: bool = True) -> SupplierExtractor:
         return SupplierExtractor(
             id="acme",
             label="Acme",
@@ -458,6 +460,7 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
             ),
             fetch=fetch,
             fetch_for_month=fetch_for_month,
+            settles_on_next_card=settles,
         )
 
     row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
@@ -468,6 +471,17 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
         sleep=_no_sleep,
     )
     assert json.loads(row.read_text())["_via"] == "live"
+
+    # A supplier whose cards do not settle on the next one is not asked.
+    summary = await ac.archive(
+        tmp_path,
+        extractors=[extractor(live("acme_flex", "september 2026", 0.2079), False)],
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert asked == []
+    assert json.loads(row.read_text())["energy"]["current"] == 0.1761
 
     # The next card is not out: the live row stays, and is not "absent".
     answers["acme_flex"] = replace(

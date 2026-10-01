@@ -1092,8 +1092,8 @@ settled, and a month already on disk is not asked again, with one exception. A m
 caught live on a card indexed on its own month (`_settles_after_its_month`, `snapshot_months.py`:
 an energy leg flagged `month_indexed`, a `SpotMonthlyRates` leg, or an injection credit on a
 month mean) holds the estimate that card printed while the month ran, from the month before's
-index, and the supplier settles the month on the card after it. Such a row is asked for until
-`fetch_for_month` answers settled, then replaced by that answer under `archive`
+index, and the supplier settles the month on the card after it. At a supplier flagged
+`settles_on_next_card` such a row is asked for until `fetch_for_month` answers settled, then replaced by that answer under `archive`
 (`_awaits_settlement`, counted as `settled` in the summary); while the answer is still
 provisional or None the live row stays. The live walk never writes a card back over a closed
 month already filed under `archive`, which keeps a supplier still serving last month's card on

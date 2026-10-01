@@ -1788,7 +1788,9 @@ async def archive(
                     held = _read_row(
                         out / _ROWS / ex.id / contract / region / f"{month_id}.json"
                     )
-                    if held is not None and not _awaits_settlement(held):
+                    if held is not None and not (
+                        ex.settles_on_next_card and _awaits_settlement(held)
+                    ):
                         continue
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
