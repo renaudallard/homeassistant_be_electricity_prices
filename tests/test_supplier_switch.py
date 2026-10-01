@@ -1535,6 +1535,54 @@ async def test_the_compare_page_adds_the_earlier_contracts_under_its_what_if(
     assert fresh.await_args.kwargs["overrides"] == {CONF_SOLAR_REGIME: "none"}
 
 
+async def test_the_compare_page_prices_the_earlier_contracts_on_spots_it_fetched(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """When the page fetched its own day-ahead for the window, the current
+    contract is priced on it, so the earlier ones are too: read from the
+    entry's daily pricing they sat on its cache, one row on two sets of
+    spots."""
+    from custom_components.be_electricity_prices.contract_periods import SpotCaches
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(
+        previous_contracts=[
+            {"until": "2026-06-15", "data": _held("engie", "engie_easy_fixed")}
+        ]
+    )
+    period = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    row = PricedPeriod(
+        start=date(2026, 1, 1),
+        end=date(2026, 6, 14),
+        supplier="engie",
+        contract="engie_easy_fixed",
+        cost=250.0,
+        month_cost=None,
+        stand_in=False,
+    )
+    coordinator = SimpleNamespace(
+        _previous_priced=_priced(period, row, month=date(2026, 9, 1))
+    )
+    as_it_is = cast(ConfigEntry, _QuoteEntry(data=entry.data))
+    fetched = SpotCaches({datetime(2026, 3, 1, 11, tzinfo=dt_util.UTC): 0.07}, {})
+    fresh = AsyncMock(return_value=[PricedPeriod(**{**row.__dict__, "cost": 90.0})])
+    with patch.object(contract_periods, "price_previous_periods", new=fresh):
+        total = await with_previous_contracts(
+            hass,
+            None,  # type: ignore[arg-type]
+            coordinator,
+            entry,
+            as_it_is,
+            100.0,
+            window_start=date(2026, 1, 1),
+            today=date(2026, 9, 24),
+            spots=fetched,
+        )
+    assert total == pytest.approx(190.0)
+    assert fresh.await_args is not None
+    assert fresh.await_args.kwargs["spots"] == fetched
+
+
 # The backfill.
 
 

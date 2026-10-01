@@ -1353,6 +1353,103 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """After a recorded switch the own row is the current contract plus the
+    earlier ones. When the page fetched day-ahead for its window, the current
+    contract is priced on those spots, and the earlier ones have to be too:
+    read from the entry's daily pricing, they sat on its cache, one row on two
+    sets of spots."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices import contract_periods
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = {
+        "supplier": "engie",
+        "contract": "engie_easy_fixed",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "injection",
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **held,
+            "supplier": "mega",
+            "contract": "mega_online_fixed",
+            "contract_start_date": "2026-06-15",
+            "previous_contracts": [{"until": "2026-06-15", "data": held}],
+        },
+        title="Mega injection, after a switch",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(
+        hass, entry, _stub_snapshot("mega", "mega_online_fixed", 0.18)
+    )
+    coord._historical_spots = {}
+    entry.runtime_data = coord
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    fetched = {datetime(2026, 3, 1, 11, tzinfo=UTC): 0.07}
+
+    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+        if api_key:
+            coord._historical_spots.update(fetched)
+
+    earlier = AsyncMock(return_value=[])
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch.object(contract_periods, "price_previous_periods", new=earlier),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "TESTKEY"}
+        )
+        assert result["step_id"] == "compare_result"
+
+    assert earlier.await_args is not None
+    assert earlier.await_args.kwargs["spots"].hours == fetched
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_does_not_mutate_live_historical_spots(
     hass: HomeAssistant,
 ) -> None:

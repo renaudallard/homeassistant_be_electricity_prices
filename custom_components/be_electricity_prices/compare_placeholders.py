@@ -539,7 +539,11 @@ class _PlaceholdersMixin(OptionsFlow):
         #   2. Everything else (a side without an archive, the custom
         #      supplier, a spot-priced side whose spots are missing): the
         #      simple "current rate * ytd_kwh + pro-rated fees" model.
-        from .contract_periods import current_period_start, with_previous_contracts
+        from .contract_periods import (
+            SpotCaches,
+            current_period_start,
+            with_previous_contracts,
+        )
         from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
@@ -581,6 +585,13 @@ class _PlaceholdersMixin(OptionsFlow):
                 # a switch; the contracts before it are added below.
                 window_start_override=(own_start if own_start != ytd_from else None),
             )
+            # The earlier contracts on the same spots as the current one when
+            # the page fetched its own for the window; otherwise the entry's,
+            # which is what the sensor reads and what it already priced them on.
+            fetched = (
+                spots != coord._historical_spots
+                or quarters != coord._historical_spot_quarters
+            )
             return await with_previous_contracts(
                 self.hass,
                 session,
@@ -590,6 +601,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 own,
                 window_start=ytd_from,
                 today=today_local,
+                spots=SpotCaches(spots, quarters) if fetched else None,
             )
 
         # A spot-priced side bills each past hour at factor*spot+base (or the

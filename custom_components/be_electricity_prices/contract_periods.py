@@ -45,8 +45,8 @@ import json
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, timedelta
-from typing import Any, cast
+from datetime import date, datetime, timedelta
+from typing import Any, NamedTuple, cast
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -253,6 +253,13 @@ def _with_household_facts(
         if not settings.get(key) and data.get(key)
     }
     return {**settings, **filled} if filled else settings
+
+
+class SpotCaches(NamedTuple):
+    """Day-ahead by clock hour, and by quarter where an entry keeps them."""
+
+    hours: Mapping[datetime, float] | None
+    quarters: Mapping[datetime, list[float]] | None
 
 
 def previous_periods(
@@ -719,6 +726,7 @@ async def price_previous_periods(
     month_start: date,
     overrides: Mapping[str, Any] | None = None,
     load_profiles: bool = False,
+    spots: SpotCaches | None = None,
 ) -> list[PricedPeriod]:
     """Price every earlier contract over its own days, on its own cards.
 
@@ -740,7 +748,16 @@ async def price_previous_periods(
     loaded here for it, as the backfill does for the same days; otherwise the
     walk credits the card's printed forecast. The compare dialog leaves it
     off, and reads the profile the daily run left behind.
+
+    ``spots`` stands in for the coordinator's day-ahead, hours and quarters,
+    when the compare page fetched its own for the window: the earlier
+    contracts are then priced on the same spots as the current one.
     """
+    if spots is None:
+        spots = SpotCaches(
+            getattr(coordinator, "_historical_spots", None),
+            getattr(coordinator, "_historical_spot_quarters", None),
+        )
     out: list[PricedPeriod] = []
     for period in periods:
         supplier = str(period.data.get(CONF_SUPPLIER, ""))
@@ -765,16 +782,14 @@ async def price_previous_periods(
                 # Only with spots to weight, as the tick asks for its own.
                 if (
                     load_profiles
-                    and getattr(coordinator, "_historical_spots", None)
+                    and spots.hours
                     and _spp_weighting_enabled(proxy, card)
                 ):
                     await coordinator._ensure_spp_weights()
                 rlp = getattr(coordinator, "_rlp_weights", None) or None
                 inputs: dict[str, Any] = {
-                    "historical_spots": getattr(coordinator, "_historical_spots", None),
-                    "spot_quarters": getattr(
-                        coordinator, "_historical_spot_quarters", None
-                    ),
+                    "historical_spots": spots.hours,
+                    "spot_quarters": spots.quarters,
                     "spp_weights": getattr(coordinator, "_spp_weights", None) or None,
                     "rlp_weights": (
                         rlp
@@ -850,6 +865,7 @@ async def with_previous_contracts(
     *,
     window_start: date,
     today: date,
+    spots: SpotCaches | None = None,
 ) -> float | None:
     """The household's own year on the compare page, with any earlier contract.
 
@@ -859,7 +875,10 @@ async def with_previous_contracts(
     it reads. Served from the coordinator's daily pricing while the page quotes
     the household as it is. A what-if the page quotes both sides on, a solar
     regime or a DSO tariff mode, has to reach the earlier contracts as well, so
-    those are priced again under it. ``None`` when one cannot be priced.
+    those are priced again under it. So are they when the page fetched its own
+    day-ahead for the window (``spots``), on those spots, or the earlier
+    contracts would be priced on the entry's cache and the current one on the
+    page's. ``None`` when one cannot be priced.
     """
     periods = previous_periods(entry.data, window_start, today)
     if own is None or not periods:
@@ -870,7 +889,7 @@ async def with_previous_contracts(
         if entry.data.get(key) != value
     }
     month_start = today.replace(day=1)
-    if not overrides:
+    if not overrides and spots is None:
         year, _month = previous_costs(
             getattr(coordinator, "_previous_priced", None), periods, month_start
         )
@@ -883,6 +902,7 @@ async def with_previous_contracts(
         periods,
         month_start=month_start,
         overrides=overrides,
+        spots=spots,
     )
     costs = [row.cost for row in rows]
     if any(cost is None for cost in costs):
