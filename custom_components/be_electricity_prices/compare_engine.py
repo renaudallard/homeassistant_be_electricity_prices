@@ -242,17 +242,31 @@ class _SweepEngine(_HouseholdMixin):
         # year from January is asked to hold a real card for every one of
         # them. Held to the own contract's months alone, no candidate could
         # ever match and a switch emptied the whole column.
+        #
+        # The running month is left out of every coverage question. The walk
+        # prices it on the current card whether or not the month cache holds
+        # a row for it, and that is the running month's card on every side, so
+        # it is like for like. Whether a supplier also answers it by date only
+        # says how that supplier addresses its cards: Mega never does, Eneco
+        # does from the first, Cociter once it publishes. Counted, it split the
+        # column on that alone, for good between a Mega and an Eneco household.
+        closed = [month for month in months if month < today.replace(day=1)]
         own_first = own_start.replace(day=1)
+        own_closed = [month for month in closed if month >= own_first]
         baseline = archived_months_present(
             self.hass,
             current[CONF_SUPPLIER],
             current[CONF_CONTRACT],
             sweep["region"],
-            [month for month in months if month >= own_first],
+            own_closed,
         )
-        if baseline:
+        # The own row billed every closed month of its contract on a stand-in,
+        # so nothing a candidate replays can be held against it. A contract
+        # with no closed month yet has nothing to fail.
+        proxied = bool(own_closed) and not baseline
+        if not proxied:
             baseline |= {
-                (month.year, month.month) for month in months if month < own_first
+                (month.year, month.month) for month in closed if month < own_first
             }
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
         rows: list[RankedRow] = []
@@ -280,7 +294,7 @@ class _SweepEngine(_HouseholdMixin):
                 else None
             )
             snap = held[0] if held is not None else None
-            if row.annual is None or pair is None or snap is None or not baseline:
+            if row.annual is None or pair is None or snap is None or proxied:
                 rows.append(row)
                 continue
             supplier, contract, quarter_hourly = pair
@@ -329,8 +343,8 @@ class _SweepEngine(_HouseholdMixin):
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)
                 continue
-            if not archived_months_present(
-                self.hass, supplier, contract, sweep["region"], months[:1]
+            if closed and not archived_months_present(
+                self.hass, supplier, contract, sweep["region"], closed[:1]
             ):
                 rows.append(row)
                 continue
@@ -367,7 +381,7 @@ class _SweepEngine(_HouseholdMixin):
             # in it, and the walk quietly proxies the current card for the
             # months it could not fetch.
             covered = archived_months_present(
-                self.hass, supplier, contract, sweep["region"], months
+                self.hass, supplier, contract, sweep["region"], closed
             )
             if covered != baseline:
                 rows.append(row)

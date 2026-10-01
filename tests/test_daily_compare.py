@@ -673,6 +673,119 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     assert [r.ytd for r in rows] == [1250.0, None]
 
 
+@pytest.mark.parametrize(
+    ("own", "candidate"),
+    [
+        # Eneco answers the running month by date, a Mega candidate never does.
+        (("eneco", "power_flex"), ("mega", "mega_smart_flex")),
+        # And the other way round.
+        (("mega", "mega_smart_flex"), ("eneco", "power_flex")),
+    ],
+)
+async def test_the_running_month_does_not_split_the_year_to_date_column(
+    hass: HomeAssistant, own: tuple[str, str], candidate: tuple[str, str]
+) -> None:
+    """Coverage was compared over every month of the window, the running one
+    included. The walk prices that month on the current card whatever the
+    month cache holds, so it is like for like on both sides, but whether a
+    supplier answers it by date is only how it addresses its cards: Mega never
+    does, Eneco and Engie do. The column split on that alone, at the start of
+    every month and for good between a Mega and an Eneco household. A closed
+    month a candidate cannot replay still keeps its figure out.
+    """
+    from custom_components.be_electricity_prices import compare_engine
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+    from tests import make_snapshot
+
+    today = date(2026, 10, 1)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": own[0],
+            "contract": own[1],
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+        },
+    )
+    entry.add_to_hass(hass)
+    engine = compare_engine._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    gaps: dict[str, set[date]] = {}
+
+    def _months(contract: str) -> set[date]:
+        """What the walk leaves in the month cache: every closed month bar
+        the gaps, and the running month only where the supplier dates it,
+        which of these two only Eneco does."""
+        held = {date(2026, m, 1) for m in range(1, 10)} - gaps.get(contract, set())
+        if contract == "power_flex":
+            held.add(date(2026, 10, 1))
+        return held
+
+    async def _walk(
+        hass_: Any, session: Any, ext: Any, snap: Any, e: Any, **kw: Any
+    ) -> float:
+        return 1000.0
+
+    async def _warm(*a: Any, **kw: Any) -> Any:
+        return object()
+
+    def _present(
+        hass_: Any, supplier: str, contract: str, region: str, months: Any
+    ) -> set[tuple[int, int]]:
+        return {(m.year, m.month) for m in months if m in _months(contract)}
+
+    household = SimpleNamespace(
+        today_local=today,
+        ytd_from=ytd_window_start(entry, today),
+        current_snapshot=object(),
+        raw_snapshot=object(),
+        quote_entry=entry,
+        peak_kw=4.0,
+        current_meter="mono",
+        dso_mode="bi_horaire",
+        regime="none",
+    )
+    sweep = {
+        "region": "wallonia",
+        "rows": [
+            RankedRow(label="Own", annual=1272.75, is_own=True),
+            RankedRow(label="Candidate", annual=1300.0),
+        ],
+        "labels": {"Candidate": (*candidate, False)},
+        "household": household,
+    }
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _walk,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_months"
+            "._snapshot_for_month",
+            _warm,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_months"
+            ".archived_months_present",
+            _present,
+        ),
+        patch.object(compare_engine, "get_extractor", return_value=object()),
+        patch.object(
+            compare_engine,
+            "_sweep_rows",
+            return_value={("wallonia", *candidate): (make_snapshot(), False)},
+        ),
+    ):
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+        assert [r.ytd for r in rows] == [1000.0, 1000.0]
+        # A closed month the candidate cannot replay still keeps it out.
+        gaps[candidate[1]] = {date(2026, 9, 1)}
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
+    assert [r.ytd for r in rows] == [1000.0, None]
+
+
 def _one_hour_a_day(first: date, last: date) -> dict[datetime, float]:
     """A spot cache holding one hour of every local day in [first, last]."""
     out: dict[datetime, float] = {}
