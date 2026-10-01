@@ -42,7 +42,6 @@ from .coordinator_snapshot import _SnapshotMixin
 from .coordinator_spots import _SpotsMixin
 
 from .snapshot_store import (
-    SNAPSHOT_STALE_DAYS,
     _bump_tuple_generation,
     _drop_monthly_rows,
     _shared_failed_fetches,
@@ -426,9 +425,7 @@ class BePricesCoordinator(
             if self._snapshot is not None and self._snapshot_fetched_at is not None:
                 if not self._last_error:
                     self._last_error = str(err)
-                age = self._snapshot_age_hours()
-                stale = age > SNAPSHOT_STALE_DAYS * 24 and not self._supply_ended()
-                self._sync_stale_issue(stale)
+                self._sync_stale_issue(self._snapshot_overdue())
             raise
 
     async def async_request_refresh_after_tick(self) -> None:

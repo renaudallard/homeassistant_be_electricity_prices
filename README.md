@@ -922,7 +922,9 @@ successful refresh:
   days**. Not raised once the supplier has left the market (its
   `deprecated_until` has passed): the final card stays stale for good, the
   deprecation notice below already says so, and the entry stops asking the
-  supplier for a card that is gone.
+  supplier for a card that is gone. Nor on a product its supplier withdrew,
+  for the same reason: its last card never moves again, and the
+  withdrawn-product notice says so.
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;

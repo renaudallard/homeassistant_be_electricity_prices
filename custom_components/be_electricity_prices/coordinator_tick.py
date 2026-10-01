@@ -70,7 +70,7 @@ from .pricing import (
     static_breakdown,
     yearly_fixed_fee_for_meter,
 )
-from .snapshot_store import SNAPSHOT_STALE_DAYS, cached_month_card
+from .snapshot_store import cached_month_card
 from datetime import date, datetime
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
@@ -141,6 +141,7 @@ class _TickMixin:
         def _reresolve_snapshot(self) -> None: ...
         def _snapshot_age_hours(self) -> float: ...
         def _supply_ended(self) -> bool: ...
+        def _snapshot_overdue(self) -> bool: ...
         def _sync_brussels_power_term_issue(self) -> None: ...
         def _sync_connection_fee_issue(self) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
@@ -336,10 +337,7 @@ class _TickMixin:
         await self._save_persistent()
 
         age = self._snapshot_age_hours()
-        # A supplier that has left keeps its final card for good; the
-        # deprecation card already says so, and a second alarm on top of it
-        # asked the user to fix a staleness nothing can fix.
-        stale = age > SNAPSHOT_STALE_DAYS * 24 and not self._supply_ended()
+        stale = self._snapshot_overdue()
         self._sync_stale_issue(stale)
         self._sync_exclusive_night_gap_issue()
         self._sync_impact_gap_issue()

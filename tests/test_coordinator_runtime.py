@@ -7653,9 +7653,7 @@ async def test_a_withdrawn_supplier_is_neither_asked_nor_flagged_stale(
     ):
         await coord._maybe_refresh_snapshot()
         assert fetch.await_count == 0
-        coord._sync_stale_issue(
-            coord._snapshot_age_hours() > 7 * 24 and not coord._supply_ended()
-        )
+        coord._sync_stale_issue(coord._snapshot_overdue())
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"snapshot_stale_{entry.entry_id}") is None
 
@@ -7735,6 +7733,68 @@ async def test_a_withdrawn_products_card_gone_keeps_the_entry_priced(
     coord = await _tick(None, "flanders")
     assert coord._snapshot is not None
     assert coord._snapshot_schema_version == 73
+
+
+async def test_a_withdrawn_products_last_card_is_never_called_stale(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A withdrawn product's last card never moves again, and once OCTA+
+    takes the file down nothing refreshes the time it was fetched. A week
+    later the stale card came up for good, telling the user prices may no
+    longer reflect the bill and to open an issue, beside contract_withdrawn
+    saying the card stays right. A product still sold keeps the alarm."""
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _snapshot_to_dict,
+    )
+
+    freezer.move_to("2026-11-09 10:00:00+01:00")
+    registry = ir.async_get(hass)
+
+    async def _stale_after_tick(contract: str) -> bool:
+        url = f"https://files.octaplus.be/tariffs/{contract}.pdf"
+
+        async def _gone(*_args: Any) -> Any:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+
+        octaplus = replace(get("octaplus"), fetch=_gone, probe=_gone)
+        entry = make_entry(
+            supplier="octaplus", contract=contract, region="wallonia", dso="ores"
+        )
+        entry.add_to_hass(hass)
+        coord = BePricesCoordinator(hass, entry)
+        last = make_snapshot(
+            supplier="octaplus", contract=contract, publication_label="09/2026"
+        )
+        payload = _snapshot_to_dict(
+            last, dt_util.utcnow() - timedelta(days=9), probe_key=url
+        )
+        blob = {
+            "entry_supplier": "octaplus",
+            "entry_contract": contract,
+            "entry_region": "wallonia",
+            "snapshot": payload,
+        }
+        with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+            await coord.async_load_persistent()
+        with (
+            patch(
+                "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+                return_value=octaplus,
+            ),
+            patch(
+                "custom_components.be_electricity_prices.coordinator_issues.get_extractor",
+                return_value=octaplus,
+            ),
+        ):
+            await coord._update_body()
+        return (
+            registry.async_get_issue(DOMAIN, f"snapshot_stale_{entry.entry_id}")
+            is not None
+        )
+
+    assert not await _stale_after_tick("octaplus_fixed")
+    assert await _stale_after_tick("octaplus_dynamic")
 
 
 async def test_a_withdrawn_suppliers_refused_blob_is_replayed(

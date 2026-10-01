@@ -328,7 +328,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 | `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py`) |
 | `signing_card` | `str` | the card the cohort month resolved to; empty when the entry names none | `current_price` sensor attribute, diagnostics `coordinator` block |
 | `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py`) |
-| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py`) |
+| `snapshot_stale` | `bool` | True when age > 7 days on a card that can still move (`_snapshot_overdue`) | `current_price` sensor attribute (`sensor.py`) |
 | `snapshot_valid_until` | `date \| None` | last calendar day the rates apply; `None` = unknown | `tomorrow_prices_available` binary sensor (`binary_sensor.py`) |
 | `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py`) |
 | `monthly_peak_kw` | `float` | Flanders running monthly peak in kW, as measured (NOT floored) | `monthly_peak_kw` sensor (`sensor.py`) |
@@ -627,7 +627,7 @@ Repairs issues, all keyed by `entry_id`:
 
 | Issue | Raised by | When |
 |-------|-----------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d), and the supplier has not left the market (`_supply_ended`): past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all |
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) on a card that can still move (`_snapshot_overdue`): not once the supplier has left the market (`_supply_ended`), since past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all; nor on a withdrawn product (`_card_is_final`), whose last card never moves again and whose `contract_withdrawn` card says so |
 | `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / non-PDF; on the first failure |
 | `extractor_card_missing` | `_sync_extractor_issue(missing=True)` | the card's address answered 404 or 410, or served a web page in the card's place (`is_missing_card_error`, `providers/_pdf.py`): a card not out yet, a withdrawn product or moved cards, none of which is a layout to report; on the first failure |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures |

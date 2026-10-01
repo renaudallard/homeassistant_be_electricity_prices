@@ -128,6 +128,8 @@ class _IssuesMixin:
         # spots mixin extends.
         hass: HomeAssistant
 
+        def _snapshot_age_hours(self) -> float: ...
+
     def _sync_issue(
         self,
         key: str,
@@ -170,6 +172,19 @@ class _IssuesMixin:
             translation_key=translation_key or key,
             translation_placeholders=placeholders,
         )
+
+    def _snapshot_overdue(self) -> bool:
+        """Whether the card in hand is older than the stale threshold and a
+        newer one could still replace it.
+
+        A supplier that has left keeps its final card for good, and so does a
+        product its supplier withdrew; each has its own card saying so, and a
+        stale alarm on top of it asked the user to fix a staleness nothing can
+        fix.
+        """
+        if self._supply_ended() or self._card_is_final():
+            return False
+        return self._snapshot_age_hours() > SNAPSHOT_STALE_DAYS * 24
 
     def _sync_stale_issue(self, stale: bool) -> None:
         """Raise or clear the 'snapshot stale' repair issue for this entry."""
