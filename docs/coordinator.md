@@ -472,6 +472,10 @@ blank (`_HOUSEHOLD_BLANKS` in `contract_periods.py`: the inverter kVA, the
 ENTSO-E key and the connection kVA tier), since those are often entered only
 after the switch. A value the copy holds is kept, and the meter, its wiring,
 the DSO mode, the regime and direct debit are always the contract's own.
+Whether a Walloon compensation meter counts draw and injection apart is the
+meter's too, but a copy recorded before the setup flow asked it holds no
+answer at all, and takes the entry's (`_UNASKED_FACTS`); one that answered
+no keeps its no.
 `_ensure_annual_volume` adds `previous_meter_faults` to the register card:
 the same pair and silent-side checks over each earlier contract's own sensors
 and days, plus a consumption meter that recorded nothing over the whole

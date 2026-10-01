@@ -1842,6 +1842,39 @@ def test_an_earlier_contract_takes_only_the_household_facts_it_left_blank() -> N
     assert (period.data["solar_kva"], period.data["api_key"]) == (3.0, "OLDKEY")
 
 
+def test_an_earlier_contract_recorded_before_the_double_flow_question_takes_it() -> (
+    None
+):
+    """A switch recorded before the setup flow asked whether the meter counts
+    draw and injection apart left the copy with no answer, and the months
+    before the switch lost the article 81 cap on the gross draws. A copy that
+    answered keeps its own answer: the meter may have changed with the
+    contract."""
+    from custom_components.be_electricity_prices.fees import bills_gross_network
+
+    held = _held(
+        "engie", "engie_easy_variable", solar_regime="compensation", solar_kva=5.0
+    )
+
+    def _entry(earlier: dict[str, Any]) -> MockConfigEntry:
+        return make_entry(
+            supplier="eneco",
+            contract="power_flex",
+            solar_regime="compensation",
+            solar_kva=5.0,
+            double_flow_meter=True,
+            previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+        )
+
+    [period] = previous_periods(_entry(held).data, date(2026, 1, 1), date(2026, 9, 30))
+    assert bills_gross_network(period.data)
+    answered = {**held, "double_flow_meter": False}
+    [period] = previous_periods(
+        _entry(answered).data, date(2026, 1, 1), date(2026, 9, 30)
+    )
+    assert not bills_gross_network(period.data)
+
+
 async def test_an_earlier_mono_contract_stays_mono_after_the_entry_moves_to_bi(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -60,6 +60,7 @@ from .const import (
     CONF_API_KEY,
     CONF_CONNECTION_KVA_TIER,
     CONF_CONTRACT,
+    CONF_DOUBLE_FLOW_METER,
     CONF_DSO,
     CONF_PREVIOUS_CONTRACTS,
     CONF_REGION,
@@ -241,17 +242,28 @@ def recorded_contracts(data: Mapping[str, Any]) -> list[tuple[date, Mapping[str,
 # changes too; the meter, its wiring and direct debit are the contract's own.
 _HOUSEHOLD_BLANKS = (CONF_SOLAR_KVA, CONF_API_KEY, CONF_CONNECTION_KVA_TIER)
 
+# Questions a copy recorded before they were asked cannot answer. Whether the
+# meter counts draw and injection apart is the meter's own, so a copy that
+# says no keeps it; one that does not say at all takes the entry's answer.
+_UNASKED_FACTS = (CONF_DOUBLE_FLOW_METER,)
+
 
 def _with_household_facts(
     settings: Mapping[str, Any], data: Mapping[str, Any]
 ) -> Mapping[str, Any]:
-    """``settings`` with each of ``_HOUSEHOLD_BLANKS`` it left blank filled
-    from the entry's ``data``."""
+    """``settings`` with each of ``_HOUSEHOLD_BLANKS`` it left blank, and each
+    of ``_UNASKED_FACTS`` it does not hold, filled from the entry's
+    ``data``."""
     filled = {
         key: data[key]
         for key in _HOUSEHOLD_BLANKS
         if not settings.get(key) and data.get(key)
     }
+    filled.update(
+        (key, data[key])
+        for key in _UNASKED_FACTS
+        if key not in settings and key in data
+    )
     return {**settings, **filled} if filled else settings
 
 
@@ -270,7 +282,8 @@ def previous_periods(
     Each runs from the day the one before it ended, or the window's first day,
     or its own start date when it billed the year from there, to the day before
     its successor started, and carries the settings kept with it, blanks in
-    the household's facts filled from the entry (``_HOUSEHOLD_BLANKS``). A contract that ended before the
+    the household's facts filled from the entry (``_HOUSEHOLD_BLANKS``, and
+    ``_UNASKED_FACTS`` where the copy predates the question). A contract that ended before the
     window opens has no days in it: last year's switches, and every switch on
     an entry billing the year from its current contract's start date, which is
     how that option keeps meaning "this contract only".
