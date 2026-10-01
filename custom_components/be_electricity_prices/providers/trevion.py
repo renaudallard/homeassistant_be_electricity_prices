@@ -481,10 +481,17 @@ def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     )
 
 
+# The quarter-hour index of the dynamic cards. The October 2026 cards call it
+# "EPEX Spot", "gebaseerd op de kwartier notering van de Day Ahead Belpex
+# Baseload", where every card before them said "Belpex 15 MTU"; the formulas
+# and the coefficients are unchanged, so either name is the same index.
+_QUARTER_HOUR_INDEX = r"(?:Belpex 15 MTU|EPEX Spot)"
+
+
 def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
-    factor, base = _extract_formula(text, "Belpex 15 MTU")
+    factor, base = _extract_formula(text, _QUARTER_HOUR_INDEX)
     injection = re.search(
-        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*Belpex 15 MTU\s*([{SIGN_CHARS}])\s*({_NUM})",
+        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*{_QUARTER_HOUR_INDEX}\s*([{SIGN_CHARS}])\s*({_NUM})",
         text,
         re.IGNORECASE | re.DOTALL,
     )

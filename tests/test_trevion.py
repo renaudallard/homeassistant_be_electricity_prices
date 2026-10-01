@@ -223,6 +223,20 @@ def test_dynamic_contracts_parse_quarter_hourly_formulas(
     assert snap.injection.base == pytest.approx(inj_base)
 
 
+def test_the_october_2026_name_of_the_quarter_hour_index_is_read() -> None:
+    """The October 2026 dynamic cards call the index "EPEX Spot" where every
+    card before them said "Belpex 15 MTU", with the same formulas: "(0,107*
+    EPEX Spot +1,3) *1,06" and "0,086 x EPEX Spot – 0,5". Reading only the old
+    name took all three dynamic contracts offline."""
+    september = _layout("trevion_dynamic_2026-09.pdf")
+    october = september.replace("Belpex 15 MTU", "EPEX Spot")
+    assert "Belpex 15 MTU" not in october
+    before = parse_snapshot("groene_energie_dynamisch", september)
+    after = parse_snapshot("groene_energie_dynamisch", october)
+    assert after.energy == before.energy
+    assert after.injection == before.injection
+
+
 @pytest.mark.parametrize(
     "fixture",
     [
