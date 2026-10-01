@@ -255,10 +255,10 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
         v
  async_setup_entry            __init__.py
    |  _migrate_current_year_cost_unique_id(hass, entry)  # 0.5.2 key rename carry-over
-   |  BePricesCoordinator(hass, entry)
+   |  BePricesCoordinator(hass, entry, defer_meter_reads=True)
    |  entry.runtime_data = coordinator               # before the first refresh, see coordinator.md 1.2
    |  await coordinator.async_load_persistent()      # warm cache from .storage
-   |  await coordinator.async_config_entry_first_refresh()
+   |  await coordinator.async_config_entry_first_refresh()  # reads no meter, publishes held costs
    |        |
    |        v
    |   _async_update_data                            coordinator.py
@@ -275,6 +275,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |     v
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py
    |
+   async_create_background_task(refresh)             # the refresh that reads the meters
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
    async_track_time_change(...) -> push at slot boundaries   __init__.py
    async_create_background_task(backfill_if_missing) # recorder backfill
@@ -296,9 +297,12 @@ Numbered walkthrough:
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. `entry.runtime_data` is assigned
    before this refresh (`__init__.py`), so the yearly volume the month rows and the ceiling are
-   resolved against is the measured one on the first tick too; readers still type-check it,
-   since it is absent before setup, after a failed one and after an unload
-   ([coordinator.md](coordinator.md), section 1.2).
+   resolved against is the measured one restored from `meter_day` when it was read under the
+   same settings; readers still type-check it, since it is absent before setup, after a failed
+   one and after an unload ([coordinator.md](coordinator.md), section 1.2). This refresh reads
+   no meter: it publishes the costs held from the last refresh that did, and setup then asks for
+   the refresh that reads them as a background task it does not wait on (issue #107,
+   [coordinator.md](coordinator.md), section 1.1).
 5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
