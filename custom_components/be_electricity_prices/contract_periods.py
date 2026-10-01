@@ -259,12 +259,19 @@ def _with_household_facts(
         for key in _HOUSEHOLD_BLANKS
         if not settings.get(key) and data.get(key)
     }
-    filled.update(
-        (key, data[key])
-        for key in _UNASKED_FACTS
-        if key not in settings and key in data
-    )
+    filled.update(_unasked_facts(settings, data))
     return {**settings, **filled} if filled else settings
+
+
+def _unasked_facts(
+    settings: Mapping[str, Any], data: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Each of ``_UNASKED_FACTS`` that ``settings`` does not hold, from the
+    entry's ``data``: a copy kept before the question existed has no answer
+    of its own, and the entry's is the household's."""
+    return {
+        key: data[key] for key in _UNASKED_FACTS if key not in settings and key in data
+    }
 
 
 class SpotCaches(NamedTuple):

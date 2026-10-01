@@ -863,7 +863,9 @@ A switch recorded with the wrong date, or by mistake, is undone with
 **Configure → Remove the last supplier switch**, which puts the entry back as
 it stood before that switch was recorded: the contract you left becomes the
 current one again, with the settings it had then, and anything changed since
-is undone. To correct the date, remove the switch, record it again with the
+is undone, except the answer to a question added after the switch was
+recorded (whether the meter counts draw and injection apart), which is kept.
+To correct the date, remove the switch, record it again with the
 right date and pick the new contract again. A switch recorded in an earlier
 year is not offered: it no longer prices anything, and removing it would bring
 back a contract you left before the year began.

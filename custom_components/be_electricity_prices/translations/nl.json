@@ -292,7 +292,7 @@
       },
       "remove_switch": {
         "title": "Laatste leverancierswissel verwijderen",
-        "description": "Dit verwijdert de wissel die geregistreerd is op {until}, toen u {supplier} - {contract} verliet, en zet de invoer terug zoals ze was voor die wissel werd geregistreerd: {supplier} - {contract} wordt opnieuw uw huidige contract, met de instellingen van toen, en alles wat sindsdien gewijzigd is wordt ongedaan gemaakt. Om een wisseldatum te verbeteren, verwijdert u de wissel, registreert u hem opnieuw met de juiste datum en kiest u het nieuwe contract opnieuw. Bevestig om hem te verwijderen."
+        "description": "Dit verwijdert de wissel die geregistreerd is op {until}, toen u {supplier} - {contract} verliet, en zet de invoer terug zoals ze was voor die wissel werd geregistreerd: {supplier} - {contract} wordt opnieuw uw huidige contract, met de instellingen van toen, en alles wat sindsdien gewijzigd is wordt ongedaan gemaakt, behalve het antwoord op een vraag die pas na de registratie van de wissel bijkwam: dat blijft behouden. Om een wisseldatum te verbeteren, verwijdert u de wissel, registreert u hem opnieuw met de juiste datum en kiest u het nieuwe contract opnieuw. Bevestig om hem te verwijderen."
       },
       "edit": {
         "title": "Belgische elektriciteitsprijzen",

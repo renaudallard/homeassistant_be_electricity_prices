@@ -292,7 +292,7 @@
       },
       "remove_switch": {
         "title": "Remove the last supplier switch",
-        "description": "This removes the switch recorded for {until}, when you left {supplier} - {contract}, and puts the entry back as it stood before that switch was recorded: {supplier} - {contract} becomes your current contract again, with the settings it had then, and anything changed since is undone. To correct a switch date, remove the switch, then record it again with the right date and pick the new contract again. Submit to remove it."
+        "description": "This removes the switch recorded for {until}, when you left {supplier} - {contract}, and puts the entry back as it stood before that switch was recorded: {supplier} - {contract} becomes your current contract again, with the settings it had then, and anything changed since is undone, except the answer to a question added after the switch was recorded, which is kept. To correct a switch date, remove the switch, then record it again with the right date and pick the new contract again. Submit to remove it."
       },
       "edit": {
         "title": "Belgian Electricity Prices",

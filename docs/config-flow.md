@@ -647,7 +647,11 @@ configured for it, meter, sensors and regime included. Pricing is in
 Because the kept copy is the whole settings as they stood, it is also the way
 back. `async_step_remove_switch` shows the last record's date and contract and,
 on submit, `_remove_last_switch` makes that copy the entry's settings again,
-keeping the records before it. It is the only way to correct a switch date:
+keeping the records before it. The one setting it does not take from the copy
+is an answer the copy cannot hold: a question added after the switch was
+recorded (`_UNASKED_FACTS`, the double-flow box) keeps the entry's answer
+(`_unasked_facts`, `contract_periods.py`), the same answer the earlier
+contract's period reads while the switch stands. It is the only way to correct a switch date:
 `_validate_switch_date` refuses a new switch on or before the last one, and
 recording one would keep the contract set up since as the one left. An entry
 already set up for its new contract before the switch step existed has to be

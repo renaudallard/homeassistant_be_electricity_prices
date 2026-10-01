@@ -292,7 +292,7 @@
       },
       "remove_switch": {
         "title": "Supprimer le dernier changement de fournisseur",
-        "description": "Ceci supprime le changement enregistré pour le {until}, quand vous avez quitté {supplier} - {contract}, et remet l'entrée dans l'état où elle était avant l'enregistrement de ce changement : {supplier} - {contract} redevient votre contrat actuel, avec les paramètres qu'il avait alors, et tout ce qui a été modifié depuis est annulé. Pour corriger la date d'un changement, supprimez-le, puis enregistrez-le à nouveau avec la bonne date et choisissez à nouveau le nouveau contrat. Validez pour le supprimer."
+        "description": "Ceci supprime le changement enregistré pour le {until}, quand vous avez quitté {supplier} - {contract}, et remet l'entrée dans l'état où elle était avant l'enregistrement de ce changement : {supplier} - {contract} redevient votre contrat actuel, avec les paramètres qu'il avait alors, et tout ce qui a été modifié depuis est annulé, sauf la réponse à une question ajoutée après l'enregistrement de ce changement, qui est conservée. Pour corriger la date d'un changement, supprimez-le, puis enregistrez-le à nouveau avec la bonne date et choisissez à nouveau le nouveau contrat. Validez pour le supprimer."
       },
       "edit": {
         "title": "Prix de l'électricité en Belgique",

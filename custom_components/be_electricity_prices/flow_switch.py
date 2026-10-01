@@ -243,14 +243,18 @@ def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
     start date, card month, signing rate, end date and year-to-date box. The
     switches recorded before it stay. A switch recorded with the wrong date, or
     that never happened, has no other way out: a new one must be later than the
-    last, and it would keep the contract set up since as the one left.
+    last, and it would keep the contract set up since as the one left. The one
+    exception is a question added after the switch was recorded: the copy holds
+    no answer to it, so the entry's answer is kept rather than lost, the way
+    the earlier contract's period reads it while the switch stands.
     """
-    from .contract_periods import recorded_contracts
+    from .contract_periods import _unasked_facts, recorded_contracts
 
     records = recorded_contracts(data)
     if not records:
         return dict(data)
     held = dict(records[-1][1])
+    held.update(_unasked_facts(held, data))
     held.pop(CONF_PREVIOUS_CONTRACTS, None)
     kept = [
         {"until": when.isoformat(), "data": dict(settings)}

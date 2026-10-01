@@ -292,7 +292,7 @@
       },
       "remove_switch": {
         "title": "Letzten Lieferantenwechsel entfernen",
-        "description": "Dies entfernt den für den {until} erfassten Wechsel, bei dem Sie {supplier} - {contract} verlassen haben, und setzt den Eintrag auf den Stand vor der Erfassung dieses Wechsels zurück: {supplier} - {contract} wird wieder Ihr aktueller Vertrag, mit den damaligen Einstellungen, und alles seitdem Geänderte wird rückgängig gemacht. Um ein Wechseldatum zu korrigieren, entfernen Sie den Wechsel, erfassen ihn erneut mit dem richtigen Datum und wählen den neuen Vertrag erneut. Bestätigen Sie, um ihn zu entfernen."
+        "description": "Dies entfernt den für den {until} erfassten Wechsel, bei dem Sie {supplier} - {contract} verlassen haben, und setzt den Eintrag auf den Stand vor der Erfassung dieses Wechsels zurück: {supplier} - {contract} wird wieder Ihr aktueller Vertrag, mit den damaligen Einstellungen, und alles seitdem Geänderte wird rückgängig gemacht, außer der Antwort auf eine Frage, die erst nach der Erfassung des Wechsels hinzukam: sie bleibt erhalten. Um ein Wechseldatum zu korrigieren, entfernen Sie den Wechsel, erfassen ihn erneut mit dem richtigen Datum und wählen den neuen Vertrag erneut. Bestätigen Sie, um ihn zu entfernen."
       },
       "edit": {
         "title": "Belgische Strompreise",

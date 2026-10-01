@@ -38,6 +38,7 @@ from custom_components.be_electricity_prices.compare_inputs import _QuoteEntry
 from custom_components.be_electricity_prices.const import (
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_DOUBLE_FLOW_METER,
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_PREVIOUS_CONTRACTS,
     CONF_SOLAR_REGIME,
@@ -475,6 +476,27 @@ def test_removing_the_last_switch_puts_the_settings_back_as_they_were() -> None:
     # The earlier switch stays, and removing it too leaves none.
     assert [r["until"] for r in back[CONF_PREVIOUS_CONTRACTS]] == ["2026-02-01"]
     assert CONF_PREVIOUS_CONTRACTS not in _remove_last_switch(back)
+
+
+def test_removing_a_switch_keeps_an_answer_its_copy_could_not_hold() -> None:
+    """A switch recorded before the double-flow question existed kept a copy
+    with no answer to it. Removing the switch put that copy back whole, so a
+    household that ticked the box since lost it, and with it the gross draw
+    rebate for the whole year, while the same copy reads the entry's answer
+    for as long as the switch stands. An answer the copy does hold wins."""
+    data = dict(make_entry(contract_start_date="2025-03-01").data)
+    recorded = _record_switch(data, date(2026, 6, 15))
+    recorded.update(supplier="cociter", contract="cociter_variable")
+    recorded[CONF_DOUBLE_FLOW_METER] = True
+    back = _remove_last_switch(recorded)
+    assert back[CONF_DOUBLE_FLOW_METER] is True
+    assert {k: v for k, v in back.items() if k != CONF_DOUBLE_FLOW_METER} == data
+
+    answered = _record_switch(
+        {**data, CONF_DOUBLE_FLOW_METER: False}, date(2026, 6, 15)
+    )
+    answered[CONF_DOUBLE_FLOW_METER] = True
+    assert _remove_last_switch(answered)[CONF_DOUBLE_FLOW_METER] is False
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
