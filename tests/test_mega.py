@@ -455,6 +455,18 @@ def test_missing_flanders_renewables_is_fatal() -> None:
         parse_snapshot("mega_smart_fixed", text, "flanders")
 
 
+def test_green_levy_is_found_past_a_page_footer() -> None:
+    """The October 2026 Cosy Flex Flanders card breaks its page between the
+    "Cotisation Verte (c€/kWh)" heading and the "Flandre" row, so the page
+    footer sits in between: 407 characters where its siblings print 33. A
+    400-character window failed the whole card on it."""
+    text = fixture_text("mega_cosy_flex_v_2026-10.pdf")
+    heading = text.index("Cotisation Verte (c€/kWh)")
+    assert text.index("\nFlandre\n", heading) - heading > 400
+    snap = parse_snapshot("mega_cosy_flex", text, "flanders")
+    assert snap.taxes.flanders_renewables == pytest.approx(0.01554)
+
+
 def test_wrong_region_card_is_rejected() -> None:
     # parse_snapshot applies region-specific DSO and levy overlays, so the
     # sibling-region URL fallback (#42) must never let a mismatched card

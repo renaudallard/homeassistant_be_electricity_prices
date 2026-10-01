@@ -449,6 +449,29 @@ def _extract_connection_fee(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
+def _green_levy_value(text: str, region_label: str) -> float | None:
+    """The figure under the "Cotisation Verte (c€/kWh)" heading for a region.
+
+    The region's name and its value sit on two lines of their own somewhere
+    after the heading, and what lies between moves with the layout: a page
+    footer (address, VAT number, IBAN) lands there whenever the card breaks
+    its page under the heading. A character budget was the wrong bound. The
+    October 2026 Cosy Flex Flanders card put 407 characters between them
+    against 33 on its siblings, past the 400 that had been allowed, and the
+    whole card failed. So the region and the number are matched as whole
+    lines, which nothing else after the heading prints.
+    """
+    match = re.search(
+        rf"Cotisation Verte\s*\(c€/kWh\).*?^[ \t]*{region_label}[ \t]*\n"
+        r"[ \t]*([\d.,]+)[ \t]*$",
+        text,
+        re.S | re.M,
+    )
+    if match is None:
+        return None
+    return to_float(match.group(1)) / 100.0
+
+
 def _extract_flanders_renewables(text: str) -> float:
     """Flanders green-energy + cogeneration surcharge.
 
@@ -458,14 +481,10 @@ def _extract_flanders_renewables(text: str) -> float:
     Called only for Flanders, where the surcharge is mandatory; raise on a
     miss rather than silently zero it.
     """
-    match = re.search(
-        r"Cotisation Verte\s*\(c€/kWh\).{0,400}?Flandre\s*\n\s*([\d.,]+)",
-        text,
-        re.S,
-    )
-    if match is None:
+    value = _green_levy_value(text, "Flandre")
+    if value is None:
         raise ExtractorError("Mega: Flanders green-energy surcharge not found")
-    return to_float(match.group(1)) / 100.0
+    return value
 
 
 def _extract_renewables(text: str, region_label: str) -> float:
@@ -474,16 +493,12 @@ def _extract_renewables(text: str, region_label: str) -> float:
     Called only for the matching region, where the green-energy levy is
     mandatory; raise on a miss rather than silently zero it.
     """
-    match = re.search(
-        rf"Cotisation Verte\s*\(c€/kWh\).{{0,400}}?{region_label}\s*\n\s*([\d.,]+)",
-        text,
-        re.S,
-    )
-    if match is None:
+    value = _green_levy_value(text, region_label)
+    if value is None:
         raise ExtractorError(
             f"Mega: {region_label} renewables (Cotisation Verte) not found"
         )
-    return to_float(match.group(1)) / 100.0
+    return value
 
 
 _FLANDERS_LABELS = FLUVIUS_CARD_LABELS

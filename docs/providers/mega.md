@@ -541,6 +541,11 @@ month (Mega cards are valid for the printed month).
   `Cotisation Verte` line that already folds in cogeneration, so no separate
   cogénération row appears, `_mega_overlays.py`), `wallonia_renewables`, or
   `brussels_renewables`, per region. Each raises on a miss in its own region.
+  The value is read as the region's name and a number on two lines of their own
+  anywhere after the heading (`_green_levy_value`), not within a character budget:
+  a page break under the heading puts the page footer in between, 407 characters
+  on the October 2026 Cosy Flex Flanders card, which failed it under the old
+  400-character window.
 - `region_connection_fee`: the Wallonia raccordement
   (`Redevance de raccordement`, `_mega_overlays.py`), 0.0 outside Wallonia. Mandatory in
   Wallonia, raises on a miss.
