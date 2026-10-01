@@ -637,12 +637,15 @@ class _PlaceholdersMixin(OptionsFlow):
             # that floors exposes no archive, and threaded so it stays
             # unreachable rather than latent.
             hist_quarters = coord._historical_spot_quarters
-            # Only when there is a typed key to borrow in its place: with none,
-            # dropping the cache would zero the household's own feed-in credit
-            # below the current_year_cost sensor that reads the same cache.
-            stale = bool(self._compare.get(CONF_API_KEY)) and _keyless_stale_spots(
-                current, hist_spots, ytd_from, today_local
-            )
+            # A keyless entry's cache that stops short of the window is what an
+            # earlier key left: it would credit the target's spot-indexed
+            # feed-in only up to the day that key was removed. The target reads
+            # it as no cache, as the ranking's candidates do and as the token
+            # step and the annual note say, so with no key typed the credit is
+            # left out whole. The own row keeps it unless a typed key brings it
+            # up to date, since the current_year_cost sensor bills on it.
+            stale = _keyless_stale_spots(current, hist_spots, ytd_from, today_local)
+            typed = bool(self._compare.get(CONF_API_KEY))
             if stale:
                 hist_spots, hist_quarters = {}, {}
             if compare_spot_injection and not hist_spots:
@@ -666,18 +669,22 @@ class _PlaceholdersMixin(OptionsFlow):
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)
-            if stale:
+            if stale and typed:
                 # Laid over the stale cache rather than in place of it: a fetch
                 # that came back short or empty (ENTSO-E down, or out of quota
                 # partway through the window) still leaves every hour the
                 # stale cache covers, and a full one wins wherever both hold.
                 hist_spots = {**coord._historical_spots, **hist_spots}
                 hist_quarters = {**coord._historical_spot_quarters, **hist_quarters}
+            own_spots, own_quarters = hist_spots, hist_quarters
+            if stale and not typed:
+                own_spots = coord._historical_spots
+                own_quarters = coord._historical_spot_quarters
             if spot_priced and not _spots_cover(hist_spots, ytd_from, today_local):
                 archive_capable = False
         if archive_capable and other_snap is not None and current_snapshot is not None:
             try:
-                current_ytd_val = await _own_year(hist_spots, hist_quarters)
+                current_ytd_val = await _own_year(own_spots, own_quarters)
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
                     session,

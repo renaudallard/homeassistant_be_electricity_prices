@@ -1242,7 +1242,8 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
         ("TESTKEY", True, True),
         # A key typed but nothing came back: the stale cache is kept.
         ("TESTKEY", False, False),
-        # No key typed: the stale cache is kept.
+        # No key typed: the own row keeps the stale cache, the target reads
+        # it as none.
         ("", False, False),
     ],
 )
@@ -1253,9 +1254,11 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     had one, and nothing brings them up to date. Read as present, they made
     the quote skip the key typed on the page and credit the target's per-slot
     feed-in only up to the day the key went. A stale cache on a keyless entry
-    now counts as none when a key was typed, so that key is borrowed for the
-    window. With none typed the cache is kept: dropping it would zero the
-    household's own credit below its current_year_cost sensor."""
+    now counts as none for the target, so a typed key is borrowed for the
+    window, and with none typed the target's credit is left out whole, as the
+    ranking does and as the token step and the annual note say. The own row
+    keeps the cache unless a typed key brings it up to date: dropping it would
+    zero the household's own credit below its current_year_cost sensor."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
@@ -1346,10 +1349,20 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     assert window_fetches == ([(year_start, typed)] if typed else [])
     # What was fetched is laid over the stale cache, never in place of it, so
     # a short fetch keeps every hour the cache covered.
-    handed = [c.kwargs.get("historical_spots") for c in engine.call_args_list]
-    assert handed
+    own = [
+        c.kwargs.get("historical_spots")
+        for c in engine.call_args_list
+        if "contract_override" not in c.kwargs
+    ]
+    target = [
+        c.kwargs.get("historical_spots")
+        for c in engine.call_args_list
+        if "contract_override" in c.kwargs
+    ]
+    assert own and target
     expected = {**stale, **fresh} if borrowed else stale
-    assert all(spots == expected for spots in handed)
+    assert all(spots == expected for spots in own)
+    assert all(spots == (expected if typed else {}) for spots in target)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
