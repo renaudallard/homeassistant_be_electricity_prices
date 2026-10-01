@@ -1620,6 +1620,45 @@ async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
         assert fetch_calls == 2
 
 
+async def test_a_card_past_its_validity_is_asked_for_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A probe-less card that expired at midnight is fetched again on the
+    next tick rather than held for the rest of the TTL, and while the
+    supplier still serves the old card it is asked again hourly."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    fetch_calls = 0
+    september = replace(_fake_snapshot(), valid_until=date(2026, 9, 30))
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return september
+
+    extractor = make_stub_extractor(fetch=_fake_fetch)
+    freezer.move_to("2026-09-30 14:00:00+02:00")
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+        freezer.move_to("2026-09-30 23:30:00+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 1
+        freezer.move_to("2026-10-01 00:00:30+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 2
+        # Still September's card: held for an hour, not for a day.
+        freezer.move_to("2026-10-01 00:50:00+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 2
+        freezer.move_to("2026-10-01 01:01:00+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 3
+
+
 async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
     """When extractor.probe returns the same key on a subsequent refresh,
     the coordinator must NOT call extractor.fetch again."""

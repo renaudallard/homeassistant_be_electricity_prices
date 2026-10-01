@@ -243,7 +243,9 @@ that key changes from what we last fetched. This catches a supplier
 publication within an hour at near-zero ongoing bandwidth instead of a
 fixed 24-hour schedule. Suppliers that have no usable probe (energie.be, Engie
 and Luminus, where no cheap freshness key is exposed) keep the time-based
-24-hour TTL. DATS 24, which left the market on 31 August 2026, is not fetched
+24-hour TTL, except that a card past the last day it states is asked for
+again at the next hourly tick, so the new month's card is picked up on the
+1st rather than up to a day later. DATS 24, which left the market on 31 August 2026, is not fetched
 at all any more.
 
 ## What the integration computes
@@ -859,7 +861,8 @@ back a contract you left before the year began.
 - **Supplier snapshot** — the coordinator runs a cheap `probe()` every
   hour and only re-fetches the full PDF when the probe key changes
   (see *How often the integration polls* above). Suppliers without a
-  probe (energie.be, Engie, Luminus) fall back to a 24 h time-based TTL.
+  probe (energie.be, Engie, Luminus) fall back to a 24 h time-based TTL,
+  shortened to an hour once the card's own validity has run out.
   Multiple entries pointing at the same
   `(supplier, contract, region)` tuple share their fetched snapshot
   through an in-memory cache, so the same PDF is never polled twice.

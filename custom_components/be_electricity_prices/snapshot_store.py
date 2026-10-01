@@ -81,6 +81,11 @@ _SHARED_LOCKS_KEY = "snapshot_locks"
 _SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
 _SHARED_FAILURE_TTL = timedelta(minutes=5)
 
+# How long a card already past its ``valid_until`` is reused before the
+# supplier is asked again: a supplier publishing the new month's card late
+# is checked every tick or so rather than once a day.
+_EXPIRED_CARD_TTL = timedelta(hours=1)
+
 # Per-(supplier, contract, region, YYYY-MM) cache of historical snapshots
 # the time-correct yearly-cost flow uses to bill each past month at its
 # own rate. ``None`` is a negative cache so a probe-less supplier or a
@@ -162,10 +167,22 @@ def _row_is_fresh(
     matches proves the supplier has not republished, and without a probe the
     row stands until the TTL runs out. Two copies of this drifted apart once
     already, which is what ``fetch_shared`` exists to prevent.
+
+    Without a probe the card's own ``valid_until`` also counts: a card that
+    has expired since it was fetched is asked for again on the next tick, and
+    one that was already expired when fetched stands for an hour only. Age
+    alone held September's card until mid-afternoon on the 1st while the
+    month's cost already read October's.
     """
     if probe_key is not None:
         return row.probe_key == probe_key
-    return now - row.fetched_at < ttl
+    age = now - row.fetched_at
+    valid_until = row.snapshot.valid_until
+    if valid_until is not None and valid_until < dt_util.as_local(now).date():
+        if dt_util.as_local(row.fetched_at).date() <= valid_until:
+            return False
+        return age < min(ttl, _EXPIRED_CARD_TTL)
+    return age < ttl
 
 
 def _adopted(
