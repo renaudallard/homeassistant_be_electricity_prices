@@ -430,9 +430,11 @@ def resolve_federal_excise(
     if not FEDERAL_EXCISE_KNOWN_FROM <= month < FEDERAL_EXCISE_KNOWN_UNTIL:
         return snapshot
     # The constant carries the reduced rate; a VAT-inclusive card takes it at
-    # the rate the card states or else the month's, an ex-VAT one without.
+    # the rate the card states or else the month's, an ex-VAT one without it.
+    # The ex-VAT figure is the law's whatever rate the card is on: dividing by
+    # the card's own rate would cancel the engine grossing it back up.
     rate = (
-        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + taxes.vat_rate)
+        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + VAT_RATE_REDUCED)
         if taxes.vat_rate > 0.0
         else FEDERAL_EXCISE_RESIDENTIAL_TVAC
         * (

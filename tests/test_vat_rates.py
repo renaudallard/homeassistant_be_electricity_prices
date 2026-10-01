@@ -168,6 +168,15 @@ def test_a_card_priced_excluding_vat_takes_the_months_rate_where_it_assumed(
     got = resolve_vat_rate(unstated, NOV, professional=False)
     assert got.taxes.vat_rate == 0.07
     assert got.energy == unstated.energy
+    # The levy excluding VAT is the law's figure whatever the month's rate,
+    # so the bill moves with the rate like on a card priced including it.
+    excise = resolve_federal_excise(got, NOV, professional=False).taxes
+    assert excise.federal_excise == pytest.approx(
+        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + VAT_RATE_REDUCED)
+    )
+    assert excise.federal_excise * (1.0 + excise.vat_rate) == pytest.approx(
+        FEDERAL_EXCISE_RESIDENTIAL_TVAC * 1.07 / 1.06
+    )
 
 
 def test_a_professional_card_takes_the_months_standard_rate(
