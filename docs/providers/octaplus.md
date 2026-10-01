@@ -337,6 +337,23 @@ unread, which is what the January 2026 cards did, and credited the consumption
 formula as the feed-in. Bounded, such a card reads no formula, which the live
 check reports (`test_an_unread_injection_formula_is_not_taken_from_the_amr_clause`).
 
+### Year-one credit note (`_extract_credit_note`, `octaplus.py`)
+
+The June to September 2026 cards grant *"une note de crédit de 180 € après une
+année de consommation sur base de ce tarif (promotion unique, non cumulable avec
+d'autres avantages)"*: 180 EUR on Fixed and Fixed Impact (150 in June), 110 on Flux,
+95 on Dynamic (65 in June), nothing on the Eco cards or Smart Variable. It lands in
+`welcome_credit_eur` with `welcome_credit_kind = "anniversary"`: a lump on the
+invoice once a year has been consumed, with no cap stated, on the card's TVAC basis.
+Like every welcome credit it is read off the card of the contract's signing month,
+so it needs a contract start date. The card names existing customers too, but a
+customer who signed before June has no card granting it, and is not credited.
+
+The cards before June word a different promotion, *"une réduction (*) de 60 € TVA
+incluse"* for a contract signed within a window of a few days the card states
+(*"Proposition valable du 01/03/2026 au 06/03/2026"*). A signing month cannot tell
+those days apart, so it is not read. The October 2026 cards grant nothing.
+
 ### Supplier PV forfait (`_extract_supplier_prosumer`, `_octaplus_overlays.py`)
 
 Fixed and variable cards print `+ <value> €/kVA par mois` ("Forfait panneaux

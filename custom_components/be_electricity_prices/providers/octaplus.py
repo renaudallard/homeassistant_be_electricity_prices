@@ -55,6 +55,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
     VAT_RATE_REDUCED,
+    WELCOME_CREDIT_ANNIVERSARY,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -460,7 +461,32 @@ def parse_snapshot(
         supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
             text, contract.kind
         ),
+        welcome_credit_eur=_extract_credit_note(text),
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
     )
+
+
+# The credit note the June to September 2026 cards print: "Tous nos clients,
+# existants et nouveaux, reçoivent une note de crédit de 180 € après une
+# année de consommation sur base de ce tarif (promotion unique, non cumulable
+# avec d'autres avantages)". 180 on Fixed and Fixed Impact (150 in June), 110
+# on Flux, 95 on Dynamic (65 in June), none on the Eco cards or Smart Variable,
+# and none on the October cards. A lump on the invoice after a year, on the
+# card's TVAC basis; Flux spells that out after the amount.
+#
+# The cards before June word their promotion differently, "une réduction (*)
+# de 60 € TVA incluse" for a contract signed within a window of a few days
+# the card states ("Proposition valable du 01/03/2026 au 06/03/2026"). A
+# signing month cannot tell those days apart, so that wording is not read.
+_CREDIT_NOTE_RE = re.compile(
+    r"note\s+de\s+cr[ée]dit\s+de\s+(\d+(?:[.,]\d+)?)\s*€", re.IGNORECASE
+)
+
+
+def _extract_credit_note(text: str) -> float | None:
+    """The year-one credit note in EUR, or None on a card that grants none."""
+    match = _CREDIT_NOTE_RE.search(text)
+    return to_float(match.group(1)) if match else None
 
 
 # ---- energy block -------------------------------------------------------------

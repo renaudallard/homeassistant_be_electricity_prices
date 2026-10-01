@@ -355,6 +355,29 @@ def test_the_october_2026_range_parses_on_the_same_template() -> None:
     assert flex.valid_until == date(2026, 10, 31)
 
 
+def test_the_year_one_credit_note_is_read_as_an_anniversary_lump() -> None:
+    """The June to September 2026 cards grant "une note de crédit de 180 €
+    après une année de consommation sur base de ce tarif". The April card's
+    promotion was limited to a few signing days and is not read, and the
+    October cards grant nothing."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    august = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_w_aug.pdf"), "wallonia"
+    )
+    assert august.welcome_credit_eur == pytest.approx(180.0)
+    assert august.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY
+    assert august.welcome_credit_after_months == 12
+    april = parse_snapshot("octaplus_fixed", _text("octaplus_fixed_w.pdf"), "wallonia")
+    assert april.welcome_credit_eur is None
+    october = parse_snapshot(
+        "octaplus_boostfix", _text("octaplus_boostfix_w_oct.pdf"), "wallonia"
+    )
+    assert october.welcome_credit_eur is None
+
+
 def test_missing_regional_renewables_raises() -> None:
     # The regional green-energy surcharge is mandatory for its region; a
     # miss must raise rather than silently zero ~1.6-3.1 c€/kWh.
