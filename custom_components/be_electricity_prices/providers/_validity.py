@@ -269,3 +269,30 @@ def parse_valid_until(text: str) -> date | None:
             if _accept(cand):
                 candidates.append(cand)
     return max(candidates) if candidates else None
+
+
+_NUMERIC_MONTH_RE = re.compile(r"\b(0[1-9]|1[0-2])/(20\d{2})\b")
+
+
+def card_valid_until(valid_until: date | None, label: str) -> date | None:
+    """The last day a card is good for: the date it states, or else the end
+    of the month its publication label names.
+
+    Bolt and TotalEnergies print no validity sentence, only the month in the
+    title ("Septembre 2026"), so their cards have no ``valid_until`` and
+    anything asking whether they still cover a day had no answer: a
+    September card advertised October's prices as tomorrow's. The title is
+    as good an answer for a monthly card. A label naming its month only as
+    "2026-08" is not taken: Ecopower dates its card by the month the index
+    settled, which is not the month the card is used in.
+    """
+    if valid_until is not None:
+        return valid_until
+    folded = fold_accents(label)
+    named = scan_month_end(folded, _MONTH_NAMES, limit=len(folded))
+    if named is not None:
+        return named
+    match = _NUMERIC_MONTH_RE.search(folded)
+    if match is None:
+        return None
+    return end_of_month(int(match.group(2)), int(match.group(1)))

@@ -487,8 +487,9 @@ class SupplierSnapshot:
 | `provisional` | `bool` | `False` | The extractor knows this ARCHIVED month's figures can still change (an Eneco month whose next card, carrying the realised index, is not out yet). The monthly snapshot cache re-fetches such a row after its TTL instead of keeping it as a closed month's fact. Never set on a live card. |
 
 `valid_until` feeds the `tomorrow_prices_available` binary sensor, which checks
-`date.today() <= valid_until`; `None` means "we do not know", so callers fall
-back to treating tomorrow's rates as available (`providers/base.py`).
+`date.today() < valid_until`. On `None` it falls back to the month the
+`publication_label` names (`card_valid_until`, `_validity.py`), and only a card
+dated by neither is treated as available (`providers/base.py`).
 
 ## The registry (providers/__init__.py)
 

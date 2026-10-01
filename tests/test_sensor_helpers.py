@@ -395,6 +395,39 @@ def test_tomorrow_aggregations_report_inside_the_card_validity() -> None:
         assert _tomorrow_max(data) == pytest.approx(0.20)
 
 
+def test_the_tomorrow_arrays_stop_at_the_card_validity() -> None:
+    """Issue #108: on the last day of a monthly card the chart drew the
+    forward-filled rates as tomorrow's while every tomorrow_* sensor was
+    unknown. The arrays follow the same gate, the feed-in one too."""
+    expiring = replace(
+        _today_and_tomorrow_data([0.10] * 24, [0.20] * 24),
+        injection_hourly=_injection_today_and_tomorrow(
+            [0.05] * 24, [0.06] * 24
+        ).injection_hourly,
+        snapshot_valid_until=_fixed_today_local().date(),
+    )
+    today, tomorrow = _split_today_tomorrow(expiring)
+    assert len(today) == 24 and tomorrow == []
+    today, tomorrow = _split_injection_today_tomorrow(expiring)
+    assert len(today) == 24 and tomorrow == []
+
+
+def test_a_card_dated_only_by_its_title_expires_with_its_month() -> None:
+    """Bolt and TotalEnergies print no validity sentence, only the month in
+    the title, so a September card went on advertising tomorrow through
+    October. The title dates it; a label naming no month in words or as
+    MM/YYYY is still trusted, so Ecopower's index month cannot lock it."""
+    base = _today_and_tomorrow_data([0.10] * 24, [0.20] * 24)
+    for label in ("Avril 2026", "april 2026", "04/2026", "Avril 2026/Résidentiel"):
+        expired = replace(base, snapshot_publication=label)
+        assert _has_tomorrow(expired) is False, label
+        assert _split_today_tomorrow(expired)[1] == [], label
+    for label in ("mei 2026", "Mai 2026", "05/2026", "2026-04", ""):
+        current = replace(base, snapshot_publication=label)
+        assert _has_tomorrow(current) is True, label
+        assert len(_split_today_tomorrow(current)[1]) == 24, label
+
+
 def test_signing_card_attribute_appears_only_with_a_cohort() -> None:
     """The card a start date resolved to, published beside the price.
 

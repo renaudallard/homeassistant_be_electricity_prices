@@ -40,7 +40,7 @@ from typing import Any, TypeVar
 
 from homeassistant.util import dt as dt_util
 
-from .binary_sensor import _has_tomorrow
+from .binary_sensor import _card_covers_tomorrow, _has_tomorrow
 from .const import RESOLUTION_HOURLY
 from .coordinator_data import CoordinatorData
 from .pricing import PriceBreakdown, breakdown_row, slot_start
@@ -301,8 +301,14 @@ def _split_today_tomorrow(
     (``db_schema.shared_attrs_bytes_from_event``). So the downsampling bought
     nothing and cost the one thing a 15-minute contract is chosen for, which
     is knowing which quarter is cheap.
+
+    Tomorrow is left empty while the card does not cover it
+    (``_card_covers_tomorrow``), as the tomorrow_* sensors are: on the last
+    day of a monthly card the table forward-fills rates the supplier has not
+    published, and a chart drew them as tomorrow's prices.
     """
-    return _split_hourly_today_tomorrow(data.hourly, breakdown_row)
+    today, tomorrow = _split_hourly_today_tomorrow(data.hourly, breakdown_row)
+    return today, tomorrow if _card_covers_tomorrow(data) else []
 
 
 def _split_injection_today_tomorrow(
@@ -319,11 +325,14 @@ def _split_injection_today_tomorrow(
     approximation. A floored feed-in formula is convex, so the mean of four
     floored quarter rates is not the rate of their mean, and the hourly row
     this used to show was the former while the credit is earned per slot.
+
+    Tomorrow is gated on the card covering it, as the price arrays are.
     """
-    return _split_hourly_today_tomorrow(
+    today, tomorrow = _split_hourly_today_tomorrow(
         data.injection_hourly,
         lambda local, rate: {"start": local.isoformat(), "injection": round(rate, 6)},
     )
+    return today, tomorrow if _card_covers_tomorrow(data) else []
 
 
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:

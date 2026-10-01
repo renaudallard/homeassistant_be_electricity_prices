@@ -189,6 +189,11 @@ month. Only the tomorrow side is gated; an expired card still describes today
 better than nothing, and a snapshot stale enough to matter raises its own repair
 issue.
 
+The `tomorrow` arrays on `current_price` and `injection_price` follow the same
+validity gate (`_card_covers_tomorrow`, `binary_sensor.py`): on that last day
+they are empty rather than drawing the extrapolation as tomorrow's prices
+(issue #108).
+
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, `injection_price` carries
@@ -212,7 +217,7 @@ The payload:
 | `cheapest_4h_today` | `_today_ranked(data, 4)[0]` | 4 cheapest today-hours, chronological |
 | `most_expensive_4h_today` | `_today_ranked(data, 4)[1]` | 4 dearest today-hours, chronological |
 | `today` | `_split_today_tomorrow(data)[0]` | per-hour breakdown rows for today |
-| `tomorrow` | `_split_today_tomorrow(data)[1]` | per-hour breakdown rows for tomorrow |
+| `tomorrow` | `_split_today_tomorrow(data)[1]` | per-hour breakdown rows for tomorrow, empty while the card does not cover tomorrow |
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
 rounded to 6 decimals, `pricing.py`). `cheapest_4h_today` /
@@ -469,24 +474,27 @@ only when both gates hold:
    midnight used to fail this gate, and the `tomorrow_*` scalar sensors along
    with it, until the next tick landed. A local-midnight refresh now re-anchors
    the table on the new day (see coordinator.md 5.1.1).
-2. The snapshot's published validity covers tomorrow:
-   `data.snapshot_valid_until is None or tomorrow <= data.snapshot_valid_until`.
+2. The card still covers tomorrow (`_card_covers_tomorrow`): its validity end,
+   or when it states none the end of the month its title names
+   (`card_valid_until`, `providers/_validity.py`), is not before tomorrow.
 
 ```python
-if not data.hourly:
+if not data.hourly or not _card_covers_tomorrow(data):
     return False
 tomorrow = dt_util.now().date() + timedelta(days=1)
-if data.snapshot_valid_until is not None and tomorrow > data.snapshot_valid_until:
-    return False
 return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
 ```
 
 Gate 2 is the historical fix for monthly variable cards (Eneco, Mega, ...): at
 month-end the previously extrapolated "tomorrow" hours are no longer billable
 because the supplier has not yet published the new month's rates, so the sensor
-must not claim they are available. When the extractor could not parse a validity
-end (`valid_until is None`) gate 2 is skipped and the price table alone decides,
-tying this sensor directly to `SupplierSnapshot.valid_until`.
+must not claim they are available. A card with no parseable validity end
+(`valid_until is None`) is dated by its title: Bolt and TotalEnergies print only
+"Septembre 2026", and skipping the gate for them left a September card
+advertising October's prices. The title counts when it names the month in words
+or as `MM/YYYY`; an ISO `YYYY-MM` label does not, because Ecopower's names the
+month its index settled rather than the month the card is used in. Only a card
+dated by neither skips gate 2, and the price table alone decides.
 
 ## Button (`button.py`)
 

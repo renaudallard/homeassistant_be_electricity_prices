@@ -44,6 +44,7 @@ from .coordinator import (
     supplier_device_info,
 )
 from .coordinator_data import CoordinatorData
+from .providers._validity import card_valid_until
 
 
 def _has_tomorrow(data: CoordinatorData) -> bool:
@@ -60,15 +61,23 @@ def _has_tomorrow(data: CoordinatorData) -> bool:
          month-end rollover invalidates the previously-extrapolated
          "tomorrow" hours: the supplier hasn't published the new
          month's rates yet, so we shouldn't claim they're available.
-         When the extractor couldn't parse a validity end (None), we
-         skip this gate and trust the price table alone.
+         A card stating no validity end is dated by the month its title
+         names (``card_valid_until``); only one naming neither is
+         trusted on the price table alone.
+
+    The second gate is ``_card_covers_tomorrow``, which also gates the
+    ``tomorrow`` arrays on the price sensors.
     """
-    if not data.hourly:
+    if not data.hourly or not _card_covers_tomorrow(data):
         return False
     tomorrow = dt_util.now().date() + timedelta(days=1)
-    if data.snapshot_valid_until is not None and tomorrow > data.snapshot_valid_until:
-        return False
     return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
+
+
+def _card_covers_tomorrow(data: CoordinatorData) -> bool:
+    """Whether the card in hand is still good tomorrow, or cannot be dated."""
+    valid_until = card_valid_until(data.snapshot_valid_until, data.snapshot_publication)
+    return valid_until is None or dt_util.now().date() < valid_until
 
 
 _DESCRIPTION = BinarySensorEntityDescription(
