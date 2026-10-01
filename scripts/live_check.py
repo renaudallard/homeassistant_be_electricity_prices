@@ -1760,11 +1760,19 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
             _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
+# The first month whose TotalEnergies cards print no feed-in offer.
+_TE_NO_FEED_IN_FROM = date(2026, 10, 1)
+
+
 async def _check_totalenergies(
     session: aiohttp.ClientSession, totalenergies: types.ModuleType
 ) -> None:
     # TotalEnergies serves all 3 regions for every product. Walk every
     # (contract, region) pair against the real /latest/ PDFs.
+    # Read off the package the module came from, which a test swaps.
+    card_valid_until = importlib.import_module(
+        totalenergies.__name__.rpartition(".")[0] + "._validity"
+    ).card_valid_until
     for contract in totalenergies._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
@@ -1784,7 +1792,20 @@ async def _check_totalenergies(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_snapshot(prefix, cid, snap, region=region_key)
+            # TotalEnergies republishes product by product, and a card from
+            # October 2026 on offers no feed-in price, so the shape follows
+            # the card's month rather than the contract.
+            ends = card_valid_until(None, snap.publication_label)
+            shape = (
+                "none"
+                if contract.kind != "dynamic"
+                and ends is not None
+                and ends >= _TE_NO_FEED_IN_FROM
+                else None
+            )
+            _validate_snapshot(
+                prefix, cid, snap, region=region_key, injection_shape=shape
+            )
 
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
@@ -3570,19 +3591,20 @@ _INJECTION_SHAPE: dict[str, str] = {
     "engie_pro_empower_variable": "month",
     "engie_pro_flow": "month",
     "engie_pro_empty_house": "month",
-    # Every variable TotalEnergies card prints "f * BELPEXM - b" beside a
-    # figure the card says is computed from "la derniere valeur connue du
-    # Belpex_M". myDynamic indexes per hour on BELPEXH and stays derived. The
-    # fixed cards printed the same until September 2026 and offer no feed-in
-    # price at all since October.
-    "totalenergies_electricite_fixe": "none",
+    # Until September 2026 every non-dynamic TotalEnergies card printed
+    # "f * BELPEXM - b" beside a figure the card says is computed from "la
+    # derniere valeur connue du Belpex_M". The cards republished since
+    # October offer no feed-in price at all, which _check_totalenergies
+    # expects of them by their month. myDynamic indexes per hour on BELPEXH
+    # and stays derived.
+    "totalenergies_electricite_fixe": "month",
     "totalenergies_electricite_variable": "month",
     "totalenergies_impact": "month",
     "totalenergies_mycomfort": "month",
-    "totalenergies_mycomfort_fixed": "none",
+    "totalenergies_mycomfort_fixed": "month",
     "totalenergies_mydrive": "month",
     "totalenergies_myessential": "month",
-    "totalenergies_myessential_fixed": "none",
+    "totalenergies_myessential_fixed": "month",
     # Every Mega variable ("Flex") and Impact card states "le prix de
     # rachat ... est indexe mensuellement ... pondere par le SPP (publie par
     # Synergrid), sur le mois de fourniture ... : Epex SPP * 0,85 - 2,2

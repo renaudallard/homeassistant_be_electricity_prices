@@ -85,7 +85,6 @@ from ._rates import (
     fixed_or_variable_rates,
 )
 from ._totalenergies_overlays import (
-    CONSUMPTION_WITH_FEE_RE,
     _energy_contribution_from_table,
     _extract_brussels_dsos,
     _extract_energy_contribution,
@@ -96,6 +95,7 @@ from ._totalenergies_overlays import (
     _extract_renewables,
     _extract_wallonia_dsos,
     cev_included,
+    consumption_row,
 )
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
@@ -261,7 +261,8 @@ def parse_snapshot(
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
 
-    energy = _extract_energy(text, contract.kind)
+    columns = _IMPACT_BANDS if contract.slug == "IMPACT" else 4
+    energy = _extract_energy(text, contract.kind, columns)
     included = cev_included(text)
     if included is not None:
         energy = _without_renewables(energy, included)
@@ -366,6 +367,10 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
     return factor, sign, to_float(after_formule.group(1))
 
 
+# Impact prints its energy rate once per CWaPE band, every other card once per
+# meter reading.
+_IMPACT_BANDS = 3
+
 # "TVA 6 % incluse" under the prices, and "(hors TVA 6%)" on the formulas.
 _VAT_RE = re.compile(r"TVA\s*(\d+)\s*%")
 
@@ -374,8 +379,8 @@ def _vat_multiplier(text: str) -> float:
     return vat_multiplier(text, _VAT_RE)
 
 
-def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
-    yearly_fee = _extract_yearly_fee(text)
+def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRates:
+    yearly_fee = _extract_yearly_fee(text, columns)
     if kind == "dynamic":
         consumption = _resolve_consumption_formula(text)
         if consumption is None:
@@ -401,7 +406,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # expose. Prefer it; fall back to the table estimate only when absent.
     if kind == "variable":
         realized = _realized_monthly_consumption(text)
-        if realized is not None:
+        if realized is not None and not _priced_at_no_index(realized, text):
             # The realized row is that indicative, so it is what a keyless
             # entry keeps; the formula beside it is what re-prices the
             # delivery month for one carrying an ENTSO-E key.
@@ -435,12 +440,22 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         text,
     )
     if consumption_match:
-        columns = consumption_match.groups()
-    elif fee_row := CONSUMPTION_WITH_FEE_RE.search(text):
-        columns = fee_row.groups()[1:]
+        mono, peak, offpeak, excl_night = (
+            to_float(c) / 100.0 for c in consumption_match.groups()
+        )
+    elif row := consumption_row(text, columns):
+        if columns == _IMPACT_BANDS:
+            # Impact's energy leg does not band: the three bands are the
+            # network side, and the card prints the one rate in each.
+            if len(set(row[1])) != 1:
+                raise ExtractorError(
+                    "TotalEnergies: Impact prints different energy rates per band"
+                )
+            mono, peak, offpeak, excl_night = row[1][0] / 100.0, None, None, None
+        else:
+            mono, peak, offpeak, excl_night = (rate / 100.0 for rate in row[1])
     else:
         raise ExtractorError(f"could not parse TotalEnergies {kind} consumption block")
-    mono, peak, offpeak, excl_night = (to_float(c) / 100.0 for c in columns)
     rates = fixed_or_variable_rates(
         kind,
         single=mono,
@@ -620,8 +635,8 @@ def _without_renewables(energy: EnergyRates, included: float) -> EnergyRates:
     )
 
 
-def _extract_yearly_fee(text: str) -> float:
-    fee, _ = _extract_fee_and_renewables(text)
+def _extract_yearly_fee(text: str, columns: int = 4) -> float:
+    fee, _ = _extract_fee_and_renewables(text, columns)
     return fee
 
 
@@ -677,6 +692,26 @@ def _realized_monthly_consumption(
     return None
 
 
+def _priced_at_no_index(
+    realized: tuple[float, float | None, float | None, float | None], text: str
+) -> bool:
+    """Whether the realized block is the formula at an index of zero.
+
+    The October 2026 variable cards print the block with every figure equal
+    to a formula base (3,87 under "Compteur Simple" beside "0.1098 *
+    BELPEXM_RLP + 3.87"): the index term is missing, so the figure is no
+    price at all. Read as one it billed 2,30 c/kWh where the card's own
+    monthly rate is 22,87. Compared as sets of figures, not column by
+    column: the Wallonia card prints its off-peak and exclusive-night bases
+    in the block in the other order from its formula row.
+    """
+    pairs = _consumption_month_formula(text)
+    if pairs is None:
+        return False
+    printed = sorted(round(value, 6) for value in realized if value is not None)
+    return printed == sorted(round(base / 100.0, 6) for _, base in pairs)
+
+
 def _realized_monthly_injection(text: str) -> float | None:
     """Realized monthly injection indicative.
 
@@ -685,7 +720,10 @@ def _realized_monthly_injection(text: str) -> float | None:
     card). Returns None when the block is absent.
     """
     block = _MONTHLY_BLOCK_RE.search(text)
-    if block is None:
+    # The October 2026 variable cards offer no feed-in and head the block
+    # with "Consommation" alone. Its last "Compteur Simple" is then a
+    # consumption figure, which credited 3,87 c/kWh of feed-in no card offers.
+    if block is None or "Injection" not in block.group(0):
         return None
     # Injection is the last "Compteur Simple" value (standard cards) or the
     # last "Heures PIC" value (Impact cards); both are the second/injection

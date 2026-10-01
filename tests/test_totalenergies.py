@@ -189,6 +189,69 @@ def test_october_2026_fixed_cards_offer_no_feed_in() -> None:
     assert snap.energy.single + snap.taxes.wallonia_renewables == pytest.approx(0.2390)
 
 
+def test_october_2026_variable_card_bills_its_monthly_rate() -> None:
+    """The October 2026 variable cards print their "A titre indicatif" block
+    with each figure equal to a formula base, the formula at an index of
+    zero: 3,87 under "Compteur Simple" beside "0.1098 * BELPEXM_RLP + 3.87".
+    Read as the price it billed 2,30 c/kWh once the contribution came out,
+    and the block's last figure became a feed-in credit on a card that
+    offers none. The card's own monthly rate is the row before the formula.
+    """
+    text = fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True)
+    assert "Compteur Simple : 3.87" in text
+    assert "94,34 22,87 24,87 21,12 21,74 Tarif mensuel" in text
+    snap = parse_snapshot("totalenergies_electricite_variable", text, "flanders")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.yearly_fixed_fee == pytest.approx(94.34)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0157)
+    for rate, printed in (
+        (energy.current, 0.2287),
+        (energy.peak, 0.2487),
+        (energy.offpeak, 0.2112),
+        (energy.exclusive_night, 0.2174),
+    ):
+        assert rate is not None
+        assert rate + snap.taxes.flanders_renewables == pytest.approx(printed)
+    # The formula keeps re-pricing the delivery month, its base less the
+    # contribution the footnote says it holds.
+    assert energy.month_indexed
+    assert energy.formula_factor == pytest.approx(0.1098 * 1.06 * 10)
+    assert energy.formula_base == pytest.approx(0.0387 * 1.06 - 0.0157)
+    assert snap.injection is None
+
+
+def test_october_2026_variable_card_with_the_fee_below_the_rates() -> None:
+    """Brussels prints the four rates on the row and the yearly fee alone on
+    the next line. Wallonia's Impact does the same with its three bands, one
+    energy rate in each."""
+    text = fixture_text("totalenergies_electricite_variable_b_2026-10.pdf", layout=True)
+    assert "25,34 27,34 23,60 24,21 Tarif mensuel\n94,34" in text
+    snap = parse_snapshot("totalenergies_electricite_variable", text, "brussels")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(94.34)
+    assert snap.energy.current + snap.taxes.brussels_renewables == pytest.approx(0.2534)
+    assert snap.injection is None
+
+    text = fixture_text("totalenergies_impact_w_2026-10.pdf", layout=True)
+    snap = parse_snapshot("totalenergies_impact", text, "wallonia")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(94.34)
+    assert snap.energy.current + snap.taxes.wallonia_renewables == pytest.approx(0.2357)
+    assert snap.energy.peak is None
+    assert snap.injection is None
+
+
+def test_october_2026_card_with_no_fee_fails_loud() -> None:
+    """The October 2026 myDrive card in Wallonia prints its four rates and no
+    yearly fee. Four figures could read as Impact's fee and three bands, so
+    the caller says how many rates it expects and the card is refused."""
+    text = fixture_text("totalenergies_mydrive_w_2026-10.pdf", layout=True)
+    assert "22,85 26,00 20,59 22,31 Tarif mensuel" in text
+    with pytest.raises(ExtractorError, match="yearly fee"):
+        parse_snapshot("totalenergies_mydrive", text, "wallonia")
+
+
 def test_a_card_billing_the_contribution_apart_keeps_its_rates() -> None:
     """Without the footnote nothing is taken out of the energy leg: the
     April 2026 card prints the contribution in a column of its own."""

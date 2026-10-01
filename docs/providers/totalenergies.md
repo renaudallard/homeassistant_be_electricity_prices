@@ -177,8 +177,8 @@ Notable parsing hurdles:
   realized monthly indicative ("prix mensuels calcules sur base de la derniere
   valeur connue du BELPEX_M_RLP"). The billed price is the realized block, so the
   extractor prefers it and only falls back to the table estimate when the block is
-  absent (`totalenergies.py`, `_realized_monthly_consumption`,
-  `totalenergies.py`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
+  absent, or holds only the formula's bases as on the October 2026 cards
+  (`totalenergies.py`, `_realized_monthly_consumption`, `_priced_at_no_index`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
   over estimate (15,62 / ...) values as illustrative
   (`tests/test_totalenergies.py`).
 - **Per-contract table drift.** The `Consommation` row has 0 to 5 trailing
@@ -242,7 +242,7 @@ and no longer print the green energy contribution (CEV) beside it. Footnote 0 sa
 instead that "les prix de l'énergie et les formules tarifaires ... comprennent la
 Contribution Énergie Verte (CEV), dont le montant est fixé à : 1,57 € cent/kWh"
 (2,85 in Brussels, 3,36 in Wallonia). `cev_included` reads that figure,
-`CONSUMPTION_WITH_FEE_RE` reads the row (`_totalenergies_overlays.py`), and
+`consumption_row` reads the row (`_totalenergies_overlays.py`), and
 `_without_renewables` (`totalenergies.py`) takes the contribution back out of every
 printed rate and formula base, so it stays in `TaxOverlay` like every other card's
 and the card's 22,74 is billed once, as 21,17 of energy plus 1,57 of contribution.
@@ -258,6 +258,47 @@ The registry keeps `spot_indexed_injection` on them, because a contract start da
 names a card from before October, whose feed-in is a `BELPEXM` formula. The
 October myComfort Fixe card in Flanders spells the brand "Total Energies" in its
 title, which `_extract_publication_month` allows.
+
+### The October 2026 variable cards
+
+The variable cards republished in October 2026 take the same layout, with a
+`Tarif mensuel` header and the month formula on the next two lines:
+
+```
+Consommation
+94,34 22,87 24,87 21,12 21,74 Tarif mensuel
+0.1098 * BELPEXM_RLP 0.1223 * BELPEXM_RLP 0.0989 * BELPEXM_RLP 0.1034 * BELPEXM_RLP Formule tarifaire
++ 3.87 + 3.87 + 3.77 + 3.87
+```
+
+Brussels and Impact print the yearly fee alone on the line after the rates
+(`25,34 27,34 23,60 24,21 Tarif mensuel` then `94,34`), so `consumption_row`
+takes the fee from either place. The caller says how many rates it expects,
+three Impact bands or four meter columns, because a row of four figures is
+otherwise either four rates with the fee left blank or Impact's fee and its
+three bands. The October myDrive card in Wallonia is the first case and is
+refused rather than read as the second. Impact prints its one energy rate in
+each band, and a card whose bands differed would be refused too.
+
+Their "A titre indicatif" block is broken: every figure in it equals a formula
+base (`Compteur Simple : 3.87`), the formula at an index of zero.
+`_priced_at_no_index` (`totalenergies.py`) recognises it, comparing the figures
+as a set because the Wallonia card lists its off-peak and exclusive-night bases
+in the other order, and the card's own monthly row is billed instead: in
+Wallonia and Brussels that row is the formula at the last known index, to the
+digit, and in Flanders it is the Vlaamse Nutsregulator estimate the table has
+always carried. Read as the price, the block billed 2,30 c/kWh in Flanders where
+the card prints 22,87. The block also no longer has an injection column, and
+`_realized_monthly_injection` only reads a block headed `Injection`: the last
+`Compteur Simple` of a consumption-only block credited 3,87 c/kWh of feed-in on
+a card that offers none. Like the fixed cards, these print no feed-in offer, so
+their snapshot carries no injection leg. The live check expects none of a
+non-dynamic card from October 2026 on, by the card's month, since
+TotalEnergies republishes product by product.
+
+The October myComfort cards in Flanders and Brussels are empty templates, with
+the rates left blank, and the Wallonia URL serves the Dutch card; all three
+fail to parse and keep the September card.
 
 ### Month-indexed energy on the variable cards
 
@@ -444,6 +485,10 @@ The tests exercise six real April 2026 fixture PDFs and two of October 2026 unde
 | `totalenergies_mycomfort_v.pdf` | myComfort, Flanders (realized monthly indicative vs annual estimate) |
 | `totalenergies_electricite_fixe_v_2026-10.pdf` | Electricité Fixe, Flanders, October 2026 (fee on the consumption row, CEV in the price) |
 | `totalenergies_myessential_fixed_w_2026-10.pdf` | myEssential Fixe, Wallonia, October 2026 (the same layout, no feed-in offer) |
+| `totalenergies_electricite_variable_v_2026-10.pdf` | Electricité Variable, Flanders, October 2026 (fee on the row, indicative block at a zero index) |
+| `totalenergies_electricite_variable_b_2026-10.pdf` | Electricité Variable, Brussels, October 2026 (fee on the line below the rates) |
+| `totalenergies_impact_w_2026-10.pdf` | Impact, Wallonia, October 2026 (three bands, fee below) |
+| `totalenergies_mydrive_w_2026-10.pdf` | myDrive, Wallonia, October 2026 (no yearly fee printed: refused) |
 
 ## When the card changes, look here
 

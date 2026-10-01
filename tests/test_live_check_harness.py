@@ -3912,3 +3912,32 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
     _vat_row(tmp_path, "c", "c_fix", "2026-11", 0.06)
     lc._check_vat_consensus(tmp_path)
     assert lc.CHECKS == []
+
+
+def test_a_totalenergies_card_from_october_2026_expects_no_feed_in() -> None:
+    """TotalEnergies republishes product by product, and its cards from
+    October 2026 on print no feed-in offer, variable and fixed alike. The
+    shape follows the card's month: the October variable card passes with
+    no injection leg, where the contract's pre-October "month" shape would
+    have failed it."""
+    from dataclasses import replace as dc_replace
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from tests import fixture_text
+
+    text = fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True)
+    contract = dc_replace(
+        totalenergies._CONTRACTS_BY_ID["totalenergies_electricite_variable"],
+        regions=frozenset({"flanders"}),
+    )
+
+    async def _fetch(_session: object, cid: str, region: str) -> object:
+        return totalenergies.parse_snapshot(cid, text, region)
+
+    module = SimpleNamespace(
+        __name__=totalenergies.__name__, _CONTRACTS=(contract,), fetch=_fetch
+    )
+    asyncio.run(lc._check_totalenergies(None, module))  # type: ignore[arg-type]
+    rows = _rows("totalenergies/totalenergies_electricite_variable/flanders")
+    (absent,) = [r for r in rows if "injection" in r.label]
+    assert absent.ok and "injection absent" in absent.label

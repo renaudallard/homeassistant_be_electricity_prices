@@ -68,15 +68,44 @@ _CEV_INCLUDED_RE = re.compile(
     r"[^:\n]{0,80}:\s*([\d.,]+)"
 )
 
-# The same cards moved the yearly fee onto the consumption row, as its first
-# figure, with the four meter rates after it and the header at the end:
+# The same cards moved the yearly fee onto the consumption row. The fixed cards
+# print it as the row's first figure, with the meter rates after it and the
+# header at the end; the variable cards do the same in Flanders and Wallonia,
+# while in Brussels and on Impact the fee sits alone on the next line:
 #
 #   Consommation
 #   100,00 22,74 24,52 21,19 21,70 Tarif annuel
-CONSUMPTION_WITH_FEE_RE = re.compile(
-    r"Consommation\*{0,5}\s*\n[ \t]*(\d{2,3}[.,]\d{2})[ \t]+([\d.,]+)[ \t]+"
-    r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+Tarif\s+(?:annuel|mensuel)"
+#
+#   Consommation
+#   25,34 27,34 23,60 24,21 Tarif mensuel
+#   94,34
+_CONSUMPTION_ROW_RE = re.compile(
+    r"Consommation\*{0,5}[ \t]*\n[ \t]*((?:[\d.,]+[ \t]+)+)Tarif\s+(?:annuel|mensuel)"
+    r"[ \t]*(?:\n[ \t]*(\d{2,3}(?:[.,]\d{2})?)[ \t]*(?=\n))?"
 )
+
+
+def consumption_row(text: str, columns: int) -> tuple[float, list[float]] | None:
+    """The yearly fee and the ``columns`` meter rates (c EUR/kWh) of a card
+    that states its contribution in a footnote, or None when its consumption
+    row does not hold exactly that.
+
+    Impact prints three CWaPE bands, every other card four meter columns. The
+    caller says which, because a row of four figures is otherwise either four
+    rates with the fee left blank or Impact's fee and bands: the October 2026
+    myDrive card in Wallonia is the first, and must not read as the second.
+    """
+    match = _CONSUMPTION_ROW_RE.search(text)
+    if match is None:
+        return None
+    numbers = [to_float(n) for n in match.group(1).split()]
+    if match.group(2) is not None:
+        fee, rates = to_float(match.group(2)), numbers
+    else:
+        fee, rates = numbers[0], numbers[1:]
+    if len(rates) != columns:
+        return None
+    return fee, rates
 
 
 def cev_included(text: str) -> float | None:
@@ -86,7 +115,7 @@ def cev_included(text: str) -> float | None:
     return to_float(match.group(1)) / 100.0 if match else None
 
 
-def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
+def _extract_fee_and_renewables(text: str, columns: int = 4) -> tuple[float, float]:
     """Pull the (yearly_fee_eur, renewables_eur_per_kwh) pair.
 
     Until September 2026 TotalEnergies printed them on a dedicated 2-number
@@ -109,12 +138,12 @@ def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
     """
     included = cev_included(text)
     if included is not None:
-        row = CONSUMPTION_WITH_FEE_RE.search(text)
+        row = consumption_row(text, columns)
         if row is None:
             raise ExtractorError(
                 "TotalEnergies: yearly fee not found on the consumption row"
             )
-        return to_float(row.group(1)), included
+        return row[0], included
     match = re.search(
         r"Tarif\s+(?:mensuel|annuel)[\s\S]{0,400}?"
         r"^(\d{2,3}[.,]\d{2})\s+(\d[.,]\d{1,3})\s*$",
@@ -193,8 +222,12 @@ def _extract_renewables(text: str) -> float:
     """The renewables value is the second number on the fee+renewables line.
 
     Each PDF is region-specific, so we just pick the value next to the
-    yearly fee; the caller's region is not needed to disambiguate.
+    yearly fee; the caller's region is not needed to disambiguate. A card
+    that folds it into its prices states it in a footnote instead.
     """
+    included = cev_included(text)
+    if included is not None:
+        return included
     _, renewables = _extract_fee_and_renewables(text)
     return renewables
 
