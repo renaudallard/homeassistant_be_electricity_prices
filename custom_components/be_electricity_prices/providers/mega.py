@@ -438,6 +438,7 @@ async def _archive_pdf_urls(
     year_month: date,
     *,
     allow_current: bool = False,
+    first_day_first: bool = False,
 ) -> list[str]:
     """The CDN URLs ``contract``'s card for one month may sit under, or none.
 
@@ -447,6 +448,13 @@ async def _archive_pdf_urls(
     placeholders: the ``-MMYYYY-`` segment and the ``<MM>`` half of the
     product's effective-date ``<DD><MM>`` suffix, while preserving the
     effective day, which is not the 1st for every product.
+
+    The day the listing shows today says nothing about another month,
+    though. Mega publishes every card on the 1st and re-issues some on the
+    8th: Cosy Flex has a ``Cosy0101`` and a ``Cosy0801`` for January 2026,
+    and while the listing showed ``Cosy0809`` the February card was asked
+    for as ``Cosy0802``, which does not exist. The card of the 1st is the
+    second candidate, or the first under ``first_day_first``.
     """
     if contract.professional:
         return _pro_pdf_urls(contract, region_code, year_month)
@@ -471,8 +479,9 @@ async def _archive_pdf_urls(
     new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
     # Online0106-Fixed -> Online0105-Fixed, Cosy1306 -> Cosy1305. A product
     # whose publication day varies month to month resolves to the CDN's HTML
-    # stub, which the PDF magic-byte check rejects, so the walk falls back to
-    # the proxy rather than mis-billing.
+    # stub, which the PDF magic-byte check rejects, so the card of the 1st is
+    # tried next, and without one the walk falls back to the proxy rather
+    # than mis-billing.
     prefix, sep, tail = new_url.partition(f"-{historical_mmyyyy}-")
     if sep:
         tail = re.sub(
@@ -481,7 +490,14 @@ async def _archive_pdf_urls(
             tail,
             count=1,
         )
+        first_day = (
+            prefix
+            + sep
+            + re.sub(rf"\d{{2}}({target_mm})(?=[-.])", r"01\g<1>", tail, count=1)
+        )
         new_url = prefix + sep + tail
+    else:
+        first_day = new_url
     # A rewrite that lands back on the listing's own URL means the requested
     # month IS the current one. fetch_for_month refuses that, so a current
     # card can never be served as a historical month. The realized-rate
@@ -489,7 +505,8 @@ async def _archive_pdf_urls(
     # card carrying its billed figures is precisely the current one.
     if new_url == current_url and not allow_current:
         return []
-    return [new_url]
+    urls = [new_url] if first_day == new_url else [new_url, first_day]
+    return urls[::-1] if first_day_first else urls
 
 
 def _next_month(year_month: date) -> date:
@@ -526,8 +543,15 @@ async def _realized_rates_for_month(
     following = _next_month(year_month)
     if following > date(dt_util.now().year, dt_util.now().month, 1):
         return None
+    # The card of the 1st first: a re-issue later in the month states the
+    # same figures for this month, and the 1st is the one always published.
     urls = await _archive_pdf_urls(
-        session, contract, region_code, following, allow_current=True
+        session,
+        contract,
+        region_code,
+        following,
+        allow_current=True,
+        first_day_first=True,
     )
     if not urls:
         return None

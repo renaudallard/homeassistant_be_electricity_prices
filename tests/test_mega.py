@@ -144,10 +144,10 @@ def test_fetch_for_month_rewrites_effective_date_month_preserving_day() -> None:
     # -MMYYYY- segment and the suffix month to the requested month while
     # preserving the publication day, so the historical URL resolves.
     listing = (FIXTURES / "mega_listing.html").read_text()
-    captured: dict[str, str] = {}
+    captured: list[str] = []
 
     async def _capture(_session: object, url: str, **_kw: object) -> str:
-        captured["url"] = url
+        captured.append(url)
         raise ExtractorError("short-circuit before parse")
 
     async def _run() -> None:
@@ -165,10 +165,69 @@ def test_fetch_for_month_rewrites_effective_date_month_preserving_day() -> None:
             )
         assert out is None  # the patched fetch raised
         # April 2204 (22 April) -> March 2203 (22 March): both months
-        # rotate, the day stays put, the year is untouched.
-        assert captured["url"].endswith("-032026-Smart2203-Fixed.pdf")
+        # rotate, the day stays put, the year is untouched. The card of the
+        # 1st is asked next, since the listing's day is today's.
+        assert [url.rsplit("-", 2)[-2:] for url in captured] == [
+            ["Smart2203", "Fixed.pdf"],
+            ["Smart0103", "Fixed.pdf"],
+        ]
+        assert captured[0].endswith("-032026-Smart2203-Fixed.pdf")
 
     asyncio.run(_run())
+
+
+def test_a_past_month_is_also_asked_under_the_card_of_the_1st() -> None:
+    """Mega publishes every card on the 1st and re-issues some on the 8th.
+    With the listing on the April re-issue, Cosy0804, February was asked for
+    as Cosy0802, which the CDN answers with its stub, while the card is
+    Cosy0102. January and April 2026 of Cosy Flex were filed with no
+    settlement that way and kept the estimate: April billed 15,34 c/kWh
+    where the May card states 13,81. The month's settlement reads the card
+    of the 1st first, since a re-issue states the same figures for it."""
+    listing = (FIXTURES / "mega_listing.html").read_text()
+    contract = mega_mod._CONTRACTS_BY_ID["mega_cosy_flex"]
+    base = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-VL-022026-"
+
+    async def _run(**kwargs: bool) -> list[str]:
+        with patch.object(
+            mega_mod, "_fetch_listing_html", new=AsyncMock(return_value=listing)
+        ):
+            return await mega_mod._archive_pdf_urls(
+                None,  # type: ignore[arg-type]
+                contract,
+                "VL",
+                date(2026, 2, 1),
+                **kwargs,
+            )
+
+    assert asyncio.run(_run()) == [base + "Cosy0802.pdf", base + "Cosy0102.pdf"]
+    assert asyncio.run(_run(first_day_first=True)) == [
+        base + "Cosy0102.pdf",
+        base + "Cosy0802.pdf",
+    ]
+
+    asked: list[str] = []
+
+    async def _fetch(_session: object, url: str, **_kw: object) -> str:
+        asked.append(url)
+        raise ExtractorError("short-circuit before parse")
+
+    with (
+        patch.object(
+            mega_mod, "_fetch_listing_html", new=AsyncMock(return_value=listing)
+        ),
+        patch.object(mega_mod, "fetch_pdf_text", new=_fetch),
+    ):
+        asyncio.run(
+            mega_mod._realized_rates_for_month(
+                None,  # type: ignore[arg-type]
+                contract,
+                "flanders",
+                "VL",
+                date(2026, 1, 1),
+            )
+        )
+    assert asked[0] == base + "Cosy0102.pdf"
 
 
 def test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract() -> None:

@@ -278,18 +278,30 @@ for example, uses another day). The rewrite:
    (`mega.py`). If validity or the month text does not match, return `None` so
    the YTD walk falls back to the proxy snapshot rather than mis-billing.
 
+The day the listing shows today is no guide to another month's, though. Mega
+publishes every card on the 1st and re-issues some later in the month: Cosy Flex has
+both a `Cosy0101` and a `Cosy0801` for January 2026, and both an April `Cosy0104` and
+`Cosy0804`. With the listing on a re-issue, the rewrite asked for February as
+`Cosy0802`, which does not exist, so `_archive_pdf_urls` also returns the card of the
+1st, as the second candidate. The settlement of a month reads it first
+(`first_day_first`): the original and the re-issue state the same figures for the
+month before (checked on January, April and September 2026), and the 1st is the one
+always published. Rewriting the listing's day alone left the January and April 2026
+Cosy Flex rows on the estimate, April billing 15,34 c/kWh where the May card states
+13,81.
+
 `fetch_for_month` returns `None` when the URL 404s, when the CDN serves its HTML
 stub for a non-archived effective day (the PDF magic-byte check in
-`_is_pdf_payload`, `_pdf.py`, rejects it), when the parse fails, or when the
-requested month falls outside the archive. A product whose publication day varies
-month to month resolves to the HTML stub and correctly falls back to the proxy
-(`mega.py`).
+`_is_pdf_payload`, `_pdf.py`, rejects it) under every candidate, when the parse
+fails, or when the requested month falls outside the archive, so the walk falls back
+to the proxy (`mega.py`).
 
 The test `test_fetch_for_month_rewrites_effective_date_month_preserving_day`
 (`test_mega.py`) is the canonical regression: Smart Fixed publishes on day 22 with
 the suffix mid-token (`Smart2204-Fixed`), exactly the case the old `01<MM>.pdf$`
 rewrite missed. Requesting March 2026 must yield a URL ending
-`-032026-Smart2203-Fixed.pdf` (both months rotate, day 22 stays, year untouched).
+`-032026-Smart2203-Fixed.pdf` (both months rotate, day 22 stays, year untouched),
+and then the card of the 1st, `-032026-Smart0103-Fixed.pdf`.
 
 A **professional** contract skips all of that: the B2B cards are absent from the
 listing, so `fetch_for_month` builds the filename with `_pro_pdf_url` for the
