@@ -95,6 +95,11 @@ about. Hence no fallback, by design.
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
 from the residential card header by `_publication_label` (`providers/energiebe.py`).
+Until September 2026 the header read "Elektriciteit dynamisch tarief particulier online -
+september 2026"; the October dynamic card shortened it to "Elektriciteit dynamisch online -
+oktober 2026", and the card's own list of current products names the other two
+"Elektriciteit online" and "Elektriciteit vast online". `_LABEL_RE` takes every one of those
+and never the professional title, which says "professioneel".
 
 ## Contracts
 
@@ -164,7 +169,7 @@ There is no probe, and there is an archive:
   fills in once the card is uploaded. Unlike the contracts API, this listing names the
   dynamic product by the same `tariffType` word as the other two. The card prints no
   validity date, so `archive_validity_check` cross-checks the month name in the title
-  (`particulier online - juni 2026`) through `NL_MONTHS`. The June 2025 card and its
+  (`particulier online - juni 2026`, `dynamisch online - oktober 2026`) through `NL_MONTHS`. The June 2025 card and its
   neighbours are page images and answer `None` (`CardNotReadableError` is an
   `ExtractorError`); December 2025 onwards parses whole, all eight DSO rows included.
 
@@ -562,6 +567,7 @@ The fixtures live under `tests/fixtures/`:
 | fixture | represents |
 | --- | --- |
 | `energiebe_dynamic_jul.pdf` | the full `?key=DynamicTariffs` PDF (residential + professional), July 2026 |
+| `energiebe_dynamic_oct.pdf` | the same document for October 2026, the first under the shorter "Elektriciteit dynamisch online" title |
 | `energiebe_variable_aug.pdf` | the residential variable card named by the contracts API, August 2026 |
 | `energiebe_fixed_aug.pdf` | the residential fixed card named by the contracts API, August 2026 |
 

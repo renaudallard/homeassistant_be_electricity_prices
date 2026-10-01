@@ -42,7 +42,10 @@ from custom_components.be_electricity_prices.providers._rates import (
     FixedRates,
     SpotMonthlyRates,
 )
-from custom_components.be_electricity_prices.providers.energiebe import parse_snapshot
+from custom_components.be_electricity_prices.providers.energiebe import (
+    _publication_label,
+    parse_snapshot,
+)
 from tests import fixture_text
 
 
@@ -594,6 +597,18 @@ def test_variable_metadata_and_publication_label() -> None:
     assert snap.supplier == "energiebe"
     assert snap.contract == "energiebe_variable"
     assert snap.publication_label == "augustus 2026"
+
+
+def test_the_october_2026_title_names_the_month() -> None:
+    """The October 2026 dynamic card renamed its title to "Elektriciteit
+    dynamisch online - oktober 2026", dropping the "tarief particulier" the
+    label was anchored on. The month is what dates a card that prints no
+    validity date, and the archive cross-checks it."""
+    text = fixture_text("energiebe_dynamic_oct.pdf", layout=True)
+    assert parse_snapshot(text, "t://x").publication_label == "oktober 2026"
+    # The professional title names the same month; it is not read as one.
+    pro = "Elektriciteit dynamisch professioneel online – oktober 2026"
+    assert _publication_label(pro) == ""
 
 
 def test_variable_abolished_contribution_row_is_read_as_zero() -> None:

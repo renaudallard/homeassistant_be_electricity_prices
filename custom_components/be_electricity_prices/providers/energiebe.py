@@ -233,8 +233,16 @@ _CONTRIB_RE = re.compile(rf"Bijdrage\s+op\s+de\s+Energie\s*\([^)]*\)\s*{_NUM}")
 _FUND_RE = re.compile(
     rf"Bijdrage\s+Energiefonds\s+Residentieel\s*\([^)]*\)\s*\*?\s*{_NUM}"
 )
+# The residential title, "Elektriciteit [dynamisch tarief|vast] particulier
+# online - juni 2026" until September 2026. The October dynamic card dropped
+# "tarief particulier" ("Elektriciteit dynamisch online - oktober 2026"), and
+# its list of current products names the other two "Elektriciteit online" and
+# "Elektriciteit vast online", so every word but "online" is optional. The
+# professional title says "professioneel", which none of them allows.
 _LABEL_RE = re.compile(
-    r"particulier\s+online\s*[–\-]\s*([A-Za-z]+)\s*(20\d{2})", re.IGNORECASE
+    r"Elektriciteit\s+(?:dynamisch\s+)?(?:tarief\s+)?(?:vast\s+)?"
+    r"(?:particulier\s+)?online\s*[–\-]\s*([A-Za-z]+)\s*(20\d{2})",
+    re.IGNORECASE,
 )
 
 
@@ -354,7 +362,8 @@ async def fetch_for_month(
     past month on its own card rather than on today's as a proxy.
 
     The card prints no validity date, so the cross-check is the month name
-    the card prints in its title ("particulier online - juni 2026").
+    the card prints in its title ("particulier online - juni 2026", from
+    October 2026 "dynamisch online - oktober 2026").
     Every failure is swallowed: this runs inside the year-to-date walk, and
     one month that is missing, unreadable (the mid-2025 cards are page
     images) or misfiled must not take the whole year down.
