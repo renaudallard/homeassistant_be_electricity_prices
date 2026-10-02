@@ -155,7 +155,7 @@ Mega has `_mega_contracts.py`, which holds its contract registry. The
 supplier module keeps the urls, the archive and `parse_snapshot`, which calls
 into them.
 
-An eighteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
+A nineteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
 stub) and the
 coordinator builds its snapshot from the config entry. The framework they implement is
 documented in [provider-framework.md](provider-framework.md).
