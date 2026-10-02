@@ -104,6 +104,7 @@ from homeassistant.core import HomeAssistant
 import aiohttp
 import logging
 from .coordinator_costs import TickCosts, held_costs_blob
+from .coordinator_persist import settings_digest
 from .energy_meters import warm_meter_reads
 
 _LOGGER = logging.getLogger(__name__)
@@ -211,6 +212,8 @@ class _TickMixin:
         # them once Home Assistant is no longer waiting (issue #107).
         deferred = self._meter_reads_deferred
         self._meter_reads_deferred = False
+        # The settings the costs are priced under, stored with them.
+        inputs = settings_digest(self.entry)
         self._sync_deprecated_supplier_issue()
         self._sync_withdrawn_contract_issue()
         # Before the snapshot, because _set_snapshot resolves the volume
@@ -361,7 +364,7 @@ class _TickMixin:
                 allocating,
                 billed_peak,
             )
-            self._held_costs = held_costs_blob(self.entry, costs)
+            self._held_costs = held_costs_blob(self.entry, costs, inputs)
         self.meter_reads_pending = deferred
 
         await self._save_persistent()

@@ -414,6 +414,48 @@ async def test_a_held_figure_covers_only_its_own_window(
         await hass.async_block_till_done()
 
 
+async def test_costs_priced_before_an_edit_are_held_under_their_settings(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An edit saved while a refresh runs reloads the entry, but the refresh
+    finishes first. Its costs were held under a digest of the settings as
+    they stood once it had priced them, the new ones, so a restart served
+    the old wiring's figures as if priced under the new. They carry the
+    settings the refresh started under."""
+    from custom_components.be_electricity_prices.coordinator_costs import (
+        _CostsMixin,
+    )
+    from custom_components.be_electricity_prices.coordinator_persist import (
+        settings_digest,
+    )
+
+    freezer.move_to("2026-06-20 10:30:00+02:00")
+    recorder = _Recorder()
+    with _a_frank_entry(hass, recorder) as entry:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await _settle(hass, freezer)
+        coord = entry.runtime_data
+        before = settings_digest(entry)
+        priced = _CostsMixin._tick_costs
+
+        async def _priced_then_edited(self: Any, *args: Any) -> Any:
+            costs = await priced(self, *args)
+            # The user rewires the night register while the refresh runs.
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "night_consumption_kwh": "sensor.new"}
+            )
+            return costs
+
+        with patch.object(_CostsMixin, "_tick_costs", _priced_then_edited):
+            await coord.async_refresh()
+        assert settings_digest(entry) != before
+        assert coord._held_costs is not None
+        assert coord._held_costs["inputs"] == before
+        await hass.async_block_till_done()
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
 async def test_the_costs_alone_moving_leaves_the_entry_blob_unwritten(
     hass: HomeAssistant,
 ) -> None:

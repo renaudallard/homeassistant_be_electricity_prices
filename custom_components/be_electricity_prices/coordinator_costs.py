@@ -132,14 +132,18 @@ class TickCosts:
     year_end_breakdown: dict[str, Any]
 
 
-def held_costs_blob(entry: ConfigEntry, costs: TickCosts) -> dict[str, Any]:
+def held_costs_blob(
+    entry: ConfigEntry, costs: TickCosts, inputs: str
+) -> dict[str, Any]:
     """``costs`` as the entry's store keeps them for ``_held_tick_costs``.
 
-    With the windows they cover and the settings they were priced under, so
-    a restart serves them only while both still hold.
+    With the windows they cover and the settings they were priced under,
+    ``inputs``, the digest the tick took before it read anything: an edit
+    saved while the tick runs reloads the entry, but the tick finishes
+    first. A restart serves them only while both still hold.
     """
     blob: dict[str, Any] = {name: getattr(costs, name) for name in _HELD_FIGURES}
-    blob["inputs"] = settings_digest(entry)
+    blob["inputs"] = inputs
     blob["year_reset"] = ytd_window_reset(entry, costs.window_now).isoformat()
     blob["month_reset"] = month_window_reset(entry, costs.window_now).isoformat()
     return blob
