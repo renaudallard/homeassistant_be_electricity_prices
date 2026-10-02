@@ -1301,6 +1301,84 @@ def test_an_offer_is_carried_on_the_cards_own_basis() -> None:
     )
 
 
+def test_a_professional_offer_is_read_on_its_dutch_cards_basis() -> None:
+    """The French professional Plenty Fixe card copies the residential
+    sentence, "reduction de 10,0 c€/kWh (TVA comprise)", on a card priced HTVA
+    throughout, and its Dutch edition says "10,0 c€/kWh (excl. btw) korting".
+    Read on the French words the cut was 8,26 c€ before VAT, 1,74 c€ short.
+    August is the check that the Dutch label is read rather than assumed:
+    both editions say VAT included there, so the 470 EUR lump keeps its
+    388,43 before VAT."""
+    october = fixture_text("bolt_pro_plenty_fix_oct.pdf", layout=True)
+    dutch = fixture_text("bolt_pro_plenty_fix_oct_nl.pdf", layout=True)
+    read = parse_snapshot("bolt_pro_plenty_fix", october, "flanders", dutch_text=dutch)
+    assert read.welcome_credit_eur_per_kwh == pytest.approx(0.10)
+    assert read.welcome_credit_injection_eur_per_kwh == pytest.approx(0.01)
+    alone = parse_snapshot("bolt_pro_plenty_fix", october, "flanders")
+    assert alone.welcome_credit_eur_per_kwh == pytest.approx(0.10 / 1.21)
+    august = fixture_text("bolt_pro_plenty_fix_aug.pdf", layout=True)
+    august_nl = fixture_text("bolt_pro_plenty_fix_aug_nl.pdf", layout=True)
+    for dutch_text in (august_nl, None):
+        snap = parse_snapshot(
+            "bolt_pro_plenty_fix", august, "flanders", dutch_text=dutch_text
+        )
+        assert snap.welcome_credit_eur == pytest.approx(470.0 / 1.21)
+    # A residential card is never read off the Dutch one.
+    residential = fixture_text("bolt_plenty_fix_oct.pdf", layout=True)
+    snap = parse_snapshot("bolt_plenty_fix", residential, "flanders", dutch_text=dutch)
+    assert snap.welcome_credit_eur_per_kwh == pytest.approx(0.09)
+
+
+def test_a_dutch_card_naming_another_figure_says_nothing() -> None:
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        _dutch_basis,
+        _promotion_basis,
+    )
+
+    dutch = fixture_text("bolt_pro_plenty_fix_oct_nl.pdf", layout=True)
+    assert _dutch_basis(dutch, 10.0) == "(excl. btw)"
+    assert _dutch_basis(dutch, 9.0) is None
+    assert _promotion_basis("(excl. btw)", professional=True) == 1.0
+    assert _promotion_basis("(incl. btw)", professional=True) == pytest.approx(1 / 1.21)
+
+
+def test_the_professional_fetch_reads_the_dutch_edition_beside_it() -> None:
+    """fetch() reads the Dutch card at the French URL with _el_nl_; one that
+    is not there leaves the French reading, and a timeout is raised so the
+    tick retries rather than keep the French reading for the month."""
+    october = fixture_text("bolt_pro_plenty_fix_oct.pdf", layout=True)
+    dutch = fixture_text("bolt_pro_plenty_fix_oct_nl.pdf", layout=True)
+
+    def serve(missing: str | None) -> AsyncMock:
+        async def _fetch(_session: object, url: str, **_kw: object) -> str:
+            if "_el_nl_" in url:
+                if missing is not None:
+                    raise ExtractorError(missing)
+                return dutch
+            return october
+
+        return AsyncMock(side_effect=_fetch)
+
+    async def run(missing: str | None) -> float | None:
+        with patch.object(bolt_mod, "fetch_pdf_text_layout", new=serve(missing)):
+            snap = await bolt_mod.fetch(
+                None,  # type: ignore[arg-type]
+                "bolt_pro_plenty_fix",
+                "flanders",
+            )
+        return snap.welcome_credit_eur_per_kwh
+
+    assert asyncio.run(run(None)) == pytest.approx(0.10)
+    assert asyncio.run(run("HTTP 404 fetching the card")) == pytest.approx(0.10 / 1.21)
+    with pytest.raises(ExtractorError, match="network error"):
+        asyncio.run(run("network error fetching the card: TimeoutError"))
+    # A card that prints no offer costs no second download.
+    plain = AsyncMock(return_value=fixture_text("bolt_pro_fix.pdf", layout=True))
+    with patch.object(bolt_mod, "fetch_pdf_text_layout", new=plain):
+        asyncio.run(bolt_mod.fetch(None, "bolt_pro_fix", "flanders"))  # type: ignore[arg-type]
+    assert plain.await_count == 1
+
+
 def test_plenty_online_is_billed_its_own_formula_at_the_online_index() -> None:
     """The October 2026 Plenty Online card prints Bolt Online's monthly price,
     19,05 / 20,09 / 18,15 c/kWh, beside its own formula "Belpex * 1,145 +

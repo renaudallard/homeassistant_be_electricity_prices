@@ -520,10 +520,22 @@ _PROMO_INJECTION_RE = re.compile(
     rf"(\d+(?:,\d+)?){_PROMO_UNIT}c€",
     re.IGNORECASE | re.DOTALL,
 )
+# The Dutch edition's sentence for the same offer: "geniet je van 10,0 c€/kWh
+# (excl. btw) korting" in October 2026, "van € 470 (incl. btw) korting" in
+# August. Only its basis is read, and only where its figure is the French
+# card's.
+_PROMO_DUTCH_RE = re.compile(
+    r"(\d+(?:,\d+)?)\s*(?:c€\s*/\s*kWh\s*)?(\(\s*(?:incl|excl)\.?\s*btw\s*\))\s*korting",
+    re.IGNORECASE,
+)
 
 
 def _extract_promotion(
-    text: str, region: str, *, professional: bool = False
+    text: str,
+    region: str,
+    *,
+    professional: bool = False,
+    dutch_text: str | None = None,
 ) -> Promotion | None:
     """The card's new-signing offer, or ``None`` where it prints none.
 
@@ -540,10 +552,12 @@ def _extract_promotion(
     not modelled.
 
     The basis is read per figure, since the cards mix them: the consumption cut
-    is "TVA comprise" on the residential card and on the French professional
-    Plenty Fixe one, while the Dutch edition of that same professional card
-    says "excl. btw". The French card is the one read here, and its words are
-    taken as printed.
+    is "TVA comprise" on the residential card. The French professional Plenty
+    Fixe card copies that sentence while every other figure on it is HTVA, and
+    its Dutch edition says "excl. btw" in October 2026 and "incl. btw" in
+    August, so on a professional card the basis is the one ``dutch_text``, the
+    Dutch edition of the same card, states for the same figure. Without it, or
+    where it states none, the French words are taken as printed.
     """
     anchor = _PROMO_ANCHOR_RE.search(text)
     if anchor is None:
@@ -571,6 +585,8 @@ def _extract_promotion(
         # What lies between the figure and the feed-in clause says which
         # basis the figure is on, interleaved column or not.
         tail = span[amount.end() : injection.start() if injection else None]
+        if professional and dutch_text is not None:
+            tail = _dutch_basis(dutch_text, figure) or tail
         figure *= _promotion_basis(tail, professional=professional)
         if amount.group("cent"):
             per_kwh = figure / 100.0
@@ -584,14 +600,35 @@ def _extract_promotion(
     )
 
 
+def _prints_promotion(text: str) -> bool:
+    """Whether the card prints a new-signing offer at all."""
+    return _PROMO_ANCHOR_RE.search(text) is not None
+
+
+def _dutch_basis(dutch_text: str, figure: float) -> str | None:
+    """The basis the Dutch edition states for ``figure``, as its words.
+
+    None where its sentence names another figure or none, which is a card the
+    two editions disagree on more than the label.
+    """
+    for match in _PROMO_DUTCH_RE.finditer(dutch_text.replace("\u2028", "\n")):
+        if to_float(match.group(1)) == figure:
+            return match.group(2)
+    return None
+
+
 def _promotion_basis(tail: str, *, professional: bool) -> float:
     """What brings a consumption figure onto the card's own basis.
 
     1.0 when the card states the figure on that basis already, otherwise the
     VAT factor between the two. A figure stating neither is taken as printed.
+    Read in either language: "hors TVA" or "excl. btw", "TVA comprise" or
+    "incl. btw".
     """
-    excluded = re.search(r"\bhors\b", tail, re.IGNORECASE) is not None
-    included = re.search(r"\b(?:compris|inclus)e?\b", tail, re.IGNORECASE) is not None
+    excluded = re.search(r"\b(?:hors|excl)\b", tail, re.IGNORECASE) is not None
+    included = (
+        re.search(r"\b(?:compris|inclus|incl)e?\b", tail, re.IGNORECASE) is not None
+    )
     if professional and included and not excluded:
         return 1.0 / (1.0 + VAT_RATE_STANDARD)
     if not professional and excluded and not included:

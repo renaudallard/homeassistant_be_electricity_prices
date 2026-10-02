@@ -1336,6 +1336,33 @@ def test_replay_answers_404_for_a_read_card_asked_under_its_other_spelling(
         asyncio.run(status(f"{base.replace('Zen', 'Cosy')}-Fixed.pdf"))
 
 
+def test_replay_answers_404_for_the_dutch_edition_a_row_never_read(
+    tmp_path: Path,
+) -> None:
+    """A Bolt professional card's offer is read off its Dutch edition. A row
+    captured before that read only the French card, and refusing the Dutch
+    one as a network error would leave it unreplayable: it answers 404, and
+    the parse falls back to the French reading the row was made on. A row
+    that did read the Dutch card is served it."""
+    (tmp_path / "electricity-2026-10-1").mkdir()
+    (tmp_path / "electricity-2026-10-1/abc.pdf").write_bytes(b"%PDF french")
+    (tmp_path / "electricity-2026-10-1/def.pdf").write_bytes(b"%PDF dutch")
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    french = (
+        "https://files.boltenergie.be/pricelists/fix/plenty_fix_pro_el_fr_202610.pdf"
+    )
+    dutch = french.replace("_el_fr_", "_el_nl_")
+    replay.pdfs = {french: "abc"}
+
+    async def status(url: str) -> int:
+        async with replay.get(url) as resp:
+            return int(resp.status)
+
+    assert asyncio.run(status(dutch)) == 404
+    replay.pdfs = {french: "abc", dutch: "def"}
+    assert asyncio.run(status(dutch)) == 200
+
+
 @pytest.mark.parametrize(
     ("status", "error", "failed"),
     [

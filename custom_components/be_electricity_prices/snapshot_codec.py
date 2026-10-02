@@ -406,7 +406,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Aspiravi's printed rates, OCTA+'s year-one note and the Brusol cards. v74
 # also carries welcome_credit_kwh_rate, welcome_credit_signing_month and the
 # Happy Sunday band of the SmartFlex rates, which a v73 row cannot hold.
-_SNAPSHOT_SCHEMA_VERSION = 74
+# v75: Bolt's professional Plenty Fixe offer is read on the VAT basis its
+# Dutch edition states. The October 2026 French card says "10,0 c€/kWh (TVA
+# comprise)" on a card priced HTVA, the Dutch one "excl. btw", and a v74 row
+# carries the cut at 8,26 c€ where it is 10,0.
+_SNAPSHOT_SCHEMA_VERSION = 75
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

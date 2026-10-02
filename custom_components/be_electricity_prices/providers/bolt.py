@@ -112,6 +112,7 @@ from ._bolt_cards import (
     _extract_energy,
     _extract_injection,
     _extract_promotion,
+    _prints_promotion,
     _reprice_on_index,
 )
 
@@ -453,6 +454,36 @@ async def _fetch_pdf_text(
         )
 
 
+async def _dutch_edition(
+    session: aiohttp.ClientSession, contract: _ContractDef, url: str, text: str
+) -> str | None:
+    """The Dutch edition of a professional card that prints an offer.
+
+    Its French sentence is the residential one carried over: "reduction de
+    10,0 c€/kWh (TVA comprise)" on a card priced HTVA throughout, where the
+    Dutch card says "(excl. btw)". The Dutch card is the one whose basis is
+    read (see ``_extract_promotion``). A timeout is raised like any other, so
+    the tick retries rather than keep the French reading for the month; a
+    Dutch card that is not there leaves the French reading.
+    """
+    if not contract.professional or not _prints_promotion(text):
+        return None
+    dutch = url.replace("_el_fr_", "_el_nl_")
+    try:
+        return await fetch_pdf_text_layout(session, dutch, timeout=60)
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        _LOGGER.debug(
+            "Bolt %s: no Dutch edition at %s (%s); reading the offer's basis "
+            "off the French card",
+            contract.contract_id,
+            dutch,
+            err,
+        )
+        return None
+
+
 def _index_card(contract: _ContractDef) -> _ContractDef | None:
     """The card whose printed monthly price ``contract`` is re-priced on."""
     if contract.index_slug is None:
@@ -478,7 +509,10 @@ async def fetch(
     index_text = (
         None if reference is None else (await _fetch_pdf_text(session, reference))[1]
     )
-    return parse_snapshot(contract_id, text, region, url, index_text=index_text)
+    dutch_text = await _dutch_edition(session, contract, url, text)
+    return parse_snapshot(
+        contract_id, text, region, url, index_text=index_text, dutch_text=dutch_text
+    )
 
 
 async def fetch_for_month(
@@ -514,8 +548,9 @@ async def fetch_for_month(
         if is_transient_fetch_error(str(err)):
             raise
         return None
+    dutch_text = await _dutch_edition(session, contract, url, text)
     try:
-        snap = parse_snapshot(contract_id, text, region, url)
+        snap = parse_snapshot(contract_id, text, region, url, dutch_text=dutch_text)
     except ExtractorError:
         return None
     # The month is URL-keyed, but guard against the CDN ever serving a
@@ -533,12 +568,15 @@ def parse_snapshot(
     source_url: str = _BASE_URL,
     *,
     index_text: str | None = None,
+    dutch_text: str | None = None,
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests.
 
     ``index_text`` is the card ``contract.index_slug`` names, required for a
     contract that has one: its printed monthly price is re-derived from that
-    card's (see :func:`_reprice_on_index`).
+    card's (see :func:`_reprice_on_index`). ``dutch_text`` is the Dutch
+    edition of a professional card, whose words decide the basis of its offer
+    (see :func:`_dutch_edition`).
     """
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
     # Bolt's PDFs sprinkle U+2028 LINE SEPARATOR characters where one
@@ -606,7 +644,9 @@ def parse_snapshot(
     card_vat, assumed_vat = vat_basis(
         printed_vat_rate(text, _VAT_PHRASE_RE), energy, professional=professional
     )
-    promotion = _extract_promotion(text, region, professional=professional)
+    promotion = _extract_promotion(
+        text, region, professional=professional, dutch_text=dutch_text
+    )
     return SupplierSnapshot(
         supplier="bolt",
         contract=contract_id,

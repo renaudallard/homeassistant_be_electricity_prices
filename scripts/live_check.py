@@ -1746,11 +1746,30 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
         index_text = (
             None if held is None or isinstance(held, BaseException) else held[1]
         )
+        # And the Dutch edition a professional card's offer is read off, as
+        # fetch() reads it.
+        try:
+            dutch_text = await _fetch_with_retry(
+                partial(bolt._dutch_edition, session, contract, url, text)
+            )
+        except Exception as err:
+            for region_key in ("flanders", "wallonia", "brussels"):
+                _record(
+                    f"bolt/{cid}/{region_key}: fetch",
+                    False,
+                    f"Dutch edition: {type(err).__name__}: {err}",
+                )
+            continue
         for region_key in ("flanders", "wallonia", "brussels"):
             prefix = f"bolt/{cid}/{region_key}"
             try:
                 snap = bolt.parse_snapshot(
-                    cid, text, region_key, url, index_text=index_text
+                    cid,
+                    text,
+                    region_key,
+                    url,
+                    index_text=index_text,
+                    dutch_text=dutch_text,
                 )
             except Exception as err:
                 _record(f"{prefix}: parse", False, f"{type(err).__name__}: {err}")

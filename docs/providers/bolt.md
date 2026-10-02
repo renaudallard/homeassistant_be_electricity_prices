@@ -157,10 +157,17 @@ October cards during 1 October to add those words: the first render of the day h
 
 **Basis.** Each figure is read on the basis its card states and brought onto the card's own:
 TVAC on a residential card, excluding VAT on a professional one, which `apply_vat` then
-grosses for a business that pays VAT. The October French professional Plenty Fixe card states
-its 10,0 c€/kWh *"TVA comprise"* where its Dutch edition says *"excl. btw"*; the French card is
-the one read, so its words stand (8,26 c€/kWh ex-VAT). The feed-in bonus is *"hors TVA"*
-everywhere and is carried as printed.
+grosses for a business that pays VAT. On a professional card the basis comes from the Dutch
+edition of the same card (`_dutch_edition` in `bolt.py`, the French URL with `_el_nl_`), because
+the French sentence is the residential one carried over: the October 2026 French professional
+Plenty Fixe card states its 10,0 c€/kWh *"TVA comprise"* on a card priced HTVA throughout, where
+the Dutch edition says *"10,0 c€/kWh (excl. btw) korting"*, so the cut is 10,0 c€/kWh before VAT.
+The two editions agree in August (*"470 € (TVA incluse)"*, *"€ 470 (incl. btw) korting"*), and that
+lump stays 388,43 EUR before VAT. The Dutch label counts only for the figure the French card
+prints; a Dutch card that is not there, or names no such figure, leaves the French words as
+printed, and a timeout fails the fetch so the tick retries. The feed-in bonus is *"hors TVA"*
+everywhere and is carried as printed. The archive replays a row captured before the Dutch card
+was read on its French reading (`_respelled` in `scripts/archive_cards.py`).
 
 **Signing month.** The offer is for contracts signed in the month the sentence names, held in
 `welcome_credit_signing_month`. The variable cards are addressed by version, so a Plenty Online

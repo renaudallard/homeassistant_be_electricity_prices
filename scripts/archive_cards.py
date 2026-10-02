@@ -473,7 +473,7 @@ class _ReplaySession:
     candidate URLs before choosing one (Eneco's archive walks issue
     numbers) lands on the card the row was parsed from, and a GET for the
     kept card's file under another folder or another spelling answers 404
-    the same way (the Brusol and Mega walks below). Anything else is refused as a network error, which
+    the same way (the Brusol, Mega and Bolt walks below). Anything else is refused as a network error, which
     the readers wrap the way they wrap a real one, and the row is left as
     it was and reported.
     """
@@ -589,6 +589,9 @@ class _ReplaySession:
             # before delivery first, and Mega's walk asks "-Fixed" before
             # "-Fix". The site answered that one 404 and the walk moved on;
             # refusing it as a network error made the month unreplayable.
+            # Bolt's Dutch edition of a professional card the row read in
+            # French alone is the same case: a row captured before the Dutch
+            # card was read is replayed on the French reading it was made on.
             return self._Pending(self._probe(url))
         return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
 
@@ -598,19 +601,21 @@ def _file_name(url: str) -> str:
     return urlsplit(url).path.rsplit("/", 1)[-1]
 
 
-# File name endings a supplier publishes one card under in two spellings.
-# Mega's professional fixed cards went from "-Fixed.pdf" to "-Fix.pdf" in
-# October 2026, and its walk asks for both, the old spelling first.
-_SPELLINGS = (("-Fixed.pdf", "-Fix.pdf"),)
+# File name parts a supplier publishes one card under in two forms. Mega's
+# professional fixed cards went from "-Fixed.pdf" to "-Fix.pdf" in October
+# 2026, and its walk asks for both, the old spelling first. Bolt publishes
+# every card in French and Dutch, and a professional card's offer is read off
+# the Dutch edition beside the French one.
+_SPELLINGS = (("-Fixed.pdf", "-Fix.pdf"), ("_el_fr_", "_el_nl_"))
 
 
 def _respelled(url: str) -> str | None:
-    """``url`` under the other spelling of its file name, or None if it has
-    no other."""
+    """``url`` under the other form of its file name, or None if it has no
+    other."""
     for one, other in _SPELLINGS:
         for this, that in ((one, other), (other, one)):
-            if url.endswith(this):
-                return url[: -len(this)] + that
+            if this in url:
+                return url.replace(this, that, 1)
     return None
 
 
