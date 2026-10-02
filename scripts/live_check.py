@@ -723,6 +723,48 @@ def _expect_vat_stated(
     _record(f"{prefix}: VAT rate stated", False, detail)
 
 
+# A card the supplier published broken, already looked at: another document
+# served at the card's URL, or a figure or formula the card leaves out. Nothing
+# here can make the supplier reprint. Keyed on the exact check label and
+# failure detail, so another failure on the same card still files, and each
+# entry expires on the day the supplier's next card is due: a card still broken
+# then is news again.
+_ALLOWED_CARD_MARKER = "KnownCardDefect"
+# (label, detail) -> (expires, why).
+_KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
+    (
+        "totalenergies/totalenergies_mycomfort/wallonia: fetch",
+        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 French URL serves the Dutch card",
+    ),
+    (
+        "totalenergies/totalenergies_mycomfort_fixed/brussels: fetch",
+        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 URL serves the Brussels Injection Variable card",
+    ),
+    (
+        "totalenergies/totalenergies_myessential/flanders: fetch",
+        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 card leaves the green energy contribution blank",
+    ),
+}
+
+
+def _mark_if_known_defect(label: str, detail: str) -> str:
+    """Prefix the card-defect marker when this exact failure was looked at."""
+    known = _KNOWN_CARD_DEFECTS.get((label, detail))
+    today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+    if known is None or today >= known[0]:
+        return detail
+    return f"{_ALLOWED_CARD_MARKER}: {detail}; {known[1]}"
+
+
 def _vreg_ceiling_allowance(supplier: str, printed: float, today: date) -> str | None:
     """The reason this exact ceiling is allowed today, or ``None``.
 
@@ -752,7 +794,7 @@ def _tax_block_allowance(
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
     if not ok:
-        detail = _mark_if_withdrawn(label, detail)
+        detail = _mark_if_known_defect(label, _mark_if_withdrawn(label, detail))
     CHECKS.append(
         Check(
             label=label,
@@ -767,6 +809,7 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
                     _ALLOWED_TAX_MARKER,
                     _ALLOWED_NETWORK_MARKER,
                     _ALLOWED_VAT_MARKER,
+                    _ALLOWED_CARD_MARKER,
                 )
             ),
         )
@@ -4754,6 +4797,7 @@ def _render_report(
     known_network = [
         c for c in expected if c.detail.startswith(_ALLOWED_NETWORK_MARKER)
     ]
+    known_cards = [c for c in expected if c.detail.startswith(_ALLOWED_CARD_MARKER)]
     headline = f"# Live extractor check: {pass_count} pass, {len(regressions)} fail"
     if unreadable:
         # Say it in the headline. A run that reads "0 fail" while the table
@@ -4765,6 +4809,8 @@ def _render_report(
         headline += f", {len(allowed)} known tax blocks (expected)"
     if known_network:
         headline += f", {len(known_network)} known network figures (expected)"
+    if known_cards:
+        headline += f", {len(known_cards)} known card defects (expected)"
     rows.append(headline)
     rows.append("")
     if regressions:
@@ -4813,6 +4859,25 @@ def _render_report(
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
         for c in known_network:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
+        rows.append("")
+    if known_cards:
+        rows.append("## Known card defects (expected, not a regression)")
+        rows.append("")
+        rows.append(
+            "These cards were published broken and each has been looked at: "
+            "the URL serves another document, or the card leaves out a figure "
+            "or a formula. Nothing in this repository can make the supplier "
+            "reprint. Affected entries keep pricing on their last good card, "
+            "or on what the card prints when it still parses. Each allowance "
+            "is keyed on the exact failure, so another failure on the same "
+            "card files, and each expires when the supplier's next card is due."
+        )
+        rows.append("")
+        rows.append("| Check | Detail |")
+        rows.append("| --- | --- |")
+        for c in known_cards:
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")

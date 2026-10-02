@@ -490,6 +490,15 @@ The point of deriving it is that the allowance ends when the withdrawal does. A 
 listed in `_PERIOD_EXEMPT` would go on suppressing the check long after the reason for it expired,
 and nobody would notice.
 
+A card its supplier published broken gets a marker of its own, `KnownCardDefect`, from
+`_KNOWN_CARD_DEFECTS`: the URL serves another document, or the card leaves out a figure or a
+formula. Each entry is keyed on the exact check label and failure detail, so another failure on
+the same card still files, and expires on the day the supplier's next card is due, when a card
+still broken is news again. Added for issue #114, where three October 2026 TotalEnergies URLs
+served the Dutch card, the Brussels injection card and a card with no green energy contribution.
+Their entries keep pricing on their last good card meanwhile. The report gives these rows their
+own section.
+
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently
 fails to read 104 of the 236 live labels, and since an unreadable label is skipped, the check would

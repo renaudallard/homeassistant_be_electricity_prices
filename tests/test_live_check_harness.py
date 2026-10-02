@@ -3938,6 +3938,39 @@ def test_a_supplier_stating_its_vat_rate_is_held_to_it(
     assert not row.expected
 
 
+def test_a_known_card_defect_is_reported_apart_until_it_expires(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """TotalEnergies served the Dutch myComfort card at the French Wallonia
+    URL in October 2026. The exact failure is reported in its own section and
+    sets no exit bit; another failure on the same card files, and so does the
+    same one once the allowance has expired."""
+    label = "te/te_comfort/wallonia: fetch"
+    detail = "ExtractorError: row not found"
+    monkeypatch.setitem(
+        lc._KNOWN_CARD_DEFECTS,
+        (label, detail),
+        (date(2026, 11, 1), "the French URL serves the Dutch card"),
+    )
+    freezer.move_to("2026-10-02 08:00:00+02:00")
+    lc.CHECKS.clear()
+    lc._record(label, False, detail)
+    lc._record(label, False, "ExtractorError: HTTP 404")
+    known, other = lc.CHECKS
+    assert known.expected and known.detail.startswith(lc._ALLOWED_CARD_MARKER)
+    assert not other.expected
+    report = lc._render_report([known])
+    assert "1 known card defects (expected)" in report
+    assert "## Known card defects" in report
+    assert "## Failures" not in report
+    lc.CHECKS.clear()
+    freezer.move_to("2026-11-01 08:00:00+01:00")
+    lc._record(label, False, detail)
+    (row,) = lc.CHECKS
+    assert not row.expected
+    lc.CHECKS.clear()
+
+
 def _vat_row(
     archive: Path, supplier: str, contract: str, month: str, rate: float
 ) -> None:
