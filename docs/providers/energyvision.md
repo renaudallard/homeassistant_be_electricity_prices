@@ -129,7 +129,10 @@ leg pays for the key, not about whether the index is hourly.
 
 `fetch` (`providers/energyvision.py`) looks the contract's card up by region, refusing a
 region it is not sold in, then `_resolve_card_url` GETs that card's `index_url` and regexes
-the first `href=".../sites/default/files/<any path>/EV-<4 digits>-<CODE>-<token>...pdf"`.
+every `href=".../sites/default/files/<any path>/EV-<4 digits>-<CODE>-<token>...pdf"`,
+keeping the one whose `EV-<MMYY>` names the latest month. A page can link more than one:
+from October 2026 Brusol's signup pages link last month's card in the form's consent
+checkbox, ahead of the current card on the button, and the first match was September's.
 The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is
 optional because the EnergyVision listing writes site-relative hrefs and Brusol absolute
 ones; and the directory is not anchored because Brusol files each card under the month it

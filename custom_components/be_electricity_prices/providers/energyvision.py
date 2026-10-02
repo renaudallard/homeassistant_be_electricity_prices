@@ -583,14 +583,20 @@ def _archive_card_urls(
 async def _resolve_card_url(
     session: aiohttp.ClientSession, contract: _ContractDef, card: _CardDef
 ) -> str:
+    """The newest card the page links, by the month its file name prices.
+
+    A page can link more than one: from October 2026 Brusol's signup pages
+    carry the current card on their button and last month's in the signup
+    form's consent checkbox, which comes first in the HTML.
+    """
     html = await fetch_text(session, card.index_url)
-    match = _card_href_re(contract.code, card.token).search(html)
-    if not match:
+    hrefs: list[str] = _card_href_re(contract.code, card.token).findall(html)
+    if not hrefs:
         raise ExtractorError(
             f"EnergyVision: no listing entry for card {contract.code} "
             f"({card.token}) on {card.index_url}"
         )
-    href = match.group(1)
+    href = max(hrefs, key=lambda h: _card_month(h) or date.min)
     return href if href.startswith("http") else card.site + href
 
 
