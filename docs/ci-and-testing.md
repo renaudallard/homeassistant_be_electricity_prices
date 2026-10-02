@@ -1032,7 +1032,11 @@ with no `json`: some months a supplier publishes its card as page images that no
 read, and those bytes are uploaded like any other card, so something has to say which card they
 are. `_write_unparsed` keeps that list in `unparsed.json`, by the row the card would have become,
 merged with what earlier runs saw so a run over one supplier does not forget the others, and an
-entry whose month has a row is dropped, so a month that starts parsing leaves by itself.
+entry whose month has a row is dropped, so a month that starts parsing leaves by itself, as is one
+whose cards a row the walk filed for the same contract and region already reads: a card filed
+under the month it names rather than the one it was captured in. A row the backfill settled does
+not count, since Trevion settles a month off the index alone on the next card, whose own month may
+still fail to parse.
 `_write_vat` writes `vat.json` from the rows too: per card month, the VAT rate the rows' cards
 state (`taxes.card_vat_rate`), `residential` from the residential contracts and `standard` from
 the professional ones. A month gets a `rate` only when at least three suppliers state one and
@@ -1085,7 +1089,11 @@ the middle of the month the card was captured in, the way a row's replay is pinn
 capture day, so a parse that reads "valid until" against today does not decide a card from two
 months ago is expired. A month that already has a row is not retried: `unparsed.json` keeps no
 entry for such a month, so the row was filed by the same run's walk from a later card that parsed,
-and on 1 October 2026 TotalEnergies' morning template would otherwise have gone over it.
+and on 1 October 2026 TotalEnergies' morning template would otherwise have gone over it. An entry
+is keyed on the month its card was captured in, which is all a card nobody could read can say, and
+a supplier still serving last month's card on the 1st is captured in the new month; once read, the
+card is filed under the month it names, the way the walk files it (`_card_month`), and not over a
+row that month already has.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed

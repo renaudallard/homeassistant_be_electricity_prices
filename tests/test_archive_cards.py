@@ -1175,6 +1175,88 @@ async def test_a_retried_card_never_goes_over_a_row_its_month_has(
     assert row.read_text() == before
 
 
+async def test_a_retried_card_is_filed_under_the_month_it_names(
+    tmp_path: Path,
+) -> None:
+    """A card nobody could read is held under the month it was captured in,
+    and a supplier still serving September's card on 1 October is captured
+    in October. Read later, it was filed as October's row. It goes under
+    the month it names, not over a row that month already has, and its
+    entry leaves the unreadable list once a row reads its bytes."""
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.21),
+            publication_label="septembre 2026",
+        )
+
+    held = [{"url": CARD_URL, "pdf": "abc"}]
+    (tmp_path / "unparsed.json").write_text(
+        json.dumps(
+            {
+                "acme/acme_fix/wallonia/2026-10": held,
+                "acme/acme_flex/wallonia/2026-10": held,
+            }
+        )
+    )
+    flex_september = tmp_path / "cards/acme/acme_flex/wallonia/2026-09.json"
+    ac._write_card(
+        tmp_path,
+        "acme",
+        "acme_flex",
+        "wallonia",
+        "2026-09",
+        make_snapshot(
+            supplier="acme",
+            contract="acme_flex",
+            energy=FixedRates(single=0.25),
+            publication_label="septembre 2026",
+        ),
+        [],
+        NOW,
+        "live",
+    )
+    before = flex_september.read_text()
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    await ac._retry_unparsed(
+        tmp_path,
+        {"acme": _extractor(fetch, contracts=("acme_fix", "acme_flex"))},
+        ac._Cards(tmp_path, None, "2026-10"),
+        replay,
+        NOW,
+        ac._Summary(),
+    )
+    rows = tmp_path / "cards/acme"
+    assert not (rows / "acme_fix/wallonia/2026-10.json").exists()
+    fix = json.loads((rows / "acme_fix/wallonia/2026-09.json").read_text())
+    assert fix["energy"]["single"] == 0.21
+    assert not (rows / "acme_flex/wallonia/2026-10.json").exists()
+    assert flex_september.read_text() == before
+
+    # The fixed contract's September row now reads the card; the flex
+    # contract's does not, so only its entry stays.
+    fix["_sources"] = held
+    (rows / "acme_fix/wallonia/2026-09.json").write_text(json.dumps(fix))
+    ac._write_unparsed(tmp_path, {}, 12, NOW.date())
+    assert json.loads((tmp_path / "unparsed.json").read_text()) == {
+        "acme/acme_flex/wallonia/2026-10": held
+    }
+
+    # A row the backfill settled off that card does not retire the entry:
+    # Trevion reads only the index off the next card, and the card's own
+    # month may still not parse.
+    flex = json.loads(flex_september.read_text())
+    flex["_sources"] = held
+    flex["_via"] = "archive"
+    flex_september.write_text(json.dumps(flex))
+    ac._write_unparsed(tmp_path, {}, 12, NOW.date())
+    assert json.loads((tmp_path / "unparsed.json").read_text()) == {
+        "acme/acme_flex/wallonia/2026-10": held
+    }
+
+
 def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
     replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
 

@@ -1156,8 +1156,12 @@ def _write_unparsed(
 
     Merged rather than replaced, so a run over one supplier does not forget
     the others; an entry whose month now has a row is dropped, so a card
-    that starts parsing leaves by itself; and the retention window is the
-    same one the rows are pruned on.
+    that starts parsing leaves by itself, and so is one whose cards a row the
+    walk filed for the same contract and region reads, which is a card filed
+    under the month it names rather than the one it was captured in. A row
+    the backfill settled does not count: Trevion settles a month off the
+    index alone on the next card, a card whose own month may still not
+    parse. The retention window is the same one the rows are pruned on.
     """
     known = {key: _as_sources(value) for key, value in _read_unparsed(out).items()}
     known.update(seen)
@@ -1171,9 +1175,14 @@ def _write_unparsed(
         supplier, contract, region, month = parts
         if month < cutoff:
             continue
-        if month in held.get(supplier, {}).get((contract, region), {}):
+        rows = held.get(supplier, {}).get((contract, region), {})
+        if month in rows:
             continue
-        entries[key] = sorted(_as_sources(digests), key=lambda s: s.get("url", ""))
+        sources = _as_sources(digests)
+        read = {d for row in rows.values() if row.via == "live" for d in row.digests}
+        if sources and all(digest_of(s.get("pdf", "")) in read for s in sources):
+            continue
+        entries[key] = sorted(sources, key=lambda s: s.get("url", ""))
     path = out / _UNPARSED
     if not entries:
         path.unlink(missing_ok=True)
@@ -1596,6 +1605,12 @@ async def _retry_unparsed(
     that parsed and was captured later than the one held here: on
     1 October 2026 TotalEnergies' morning template would have gone over the
     afternoon's card, dated the 15th.
+
+    The entry is keyed on the month the card was captured in, which is all a
+    card nobody could read can say, and a supplier still serving last
+    month's card on the 1st is captured in the new month. Once read, the
+    card is filed under the month it names, the way the walk files it, and
+    not over a row that month already has.
     """
     entries = {key: _as_sources(value) for key, value in _read_unparsed(out).items()}
     for key, sources in sorted(entries.items()):
@@ -1628,6 +1643,13 @@ async def _retry_unparsed(
                 continue
         if snap is None or snap.provisional:
             continue
+        captured = date(int(month[:4]), int(month[5:]), 15)
+        named = _card_month(snap, captured)
+        if (
+            named != month
+            and (out / _ROWS / supplier / contract / region / f"{named}.json").exists()
+        ):
+            continue
         read = _sources_of(memo, cards, out, month)
         summary.replayed += 1
         if _write_card(
@@ -1635,12 +1657,12 @@ async def _retry_unparsed(
             supplier,
             contract,
             region,
-            month,
+            named,
             snap,
             read,
             now,
             "live",
-            date(int(month[:4]), int(month[5:]), 15),
+            captured,
         ):
             summary.reparsed += 1
 
