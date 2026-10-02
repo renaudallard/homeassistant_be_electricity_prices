@@ -753,6 +753,15 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         date(2026, 11, 1),
         "the October 2026 card leaves the green energy contribution blank",
     ),
+    (
+        "mega/mega_pro_smart_flex/flanders: month-indexed energy matches the "
+        "registry flag",
+        "parsed month_indexed=False, registry month_indexed_energy=True",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 card prints no price formula in French or Dutch, "
+        "where the Wallonia and Brussels cards do; billed on the printed rates",
+    ),
 }
 
 
