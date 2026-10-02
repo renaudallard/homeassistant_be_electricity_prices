@@ -97,6 +97,7 @@ relative to that package directory.
 | `projected_volume.py` | The rolling-year consumption and injection (the last 365 days, the volume `projected_year_cost` prices) and the calendar-year projections: this year's closed days plus last year's same remaining days, with a Synergrid profile fallback only where the entry already holds one. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
 | `meter_faults.py` | Judges the registers those reads come from: a pair wired by halves, a register that stopped or started late, a totals sensor standing in for a pair. |
+| `meter_warm.py` | The one hourly read per meter a tick answers every window from, and the rows kept between ticks so an ordinary tick reads only the days from the day before yesterday again. |
 | `meter_hourly.py` | The hourly kWh series an hourly-billed contract is walked on, with once-a-day meters spread over their hours and the running day topped up live. |
 | `meter_daily.py` | Per-day kWh for the static bill, and the measured volume over a window with how much of it the meters cover. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |

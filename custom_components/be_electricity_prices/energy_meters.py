@@ -279,31 +279,6 @@ async def _recorder_rows(
     return rows
 
 
-async def warm_meter_reads(
-    hass: HomeAssistant, entry: ConfigEntry, start: date, end: date
-) -> None:
-    """Read every meter the bill reads once, hour by hour, over ``start`` to
-    ``end``, for the reads of the block to come to be answered from.
-
-    The hourly rows answer an hourly read of any window inside them and a
-    daily one too (:func:`_days_from_hours`), so one read per meter serves
-    the yearly volume, the register check, the year and the month to date
-    and both volume projections. Outside a ``memoise_meter_reads`` block it
-    would read for nothing, so it does not read at all.
-    """
-    if _METER_MEMO.get() is None:
-        return
-    sides = (
-        ("consumption", "injection") if _bills_injection(entry) else ("consumption",)
-    )
-    for side in sides:
-        for entity_id in dict.fromkeys(_kwh_sensor_ids(entry, side)):
-            if entity_id:
-                await _recorder_rows(
-                    hass, entity_id, start, end, "hour", {"change", "sum"}
-                )
-
-
 def _held_rows(
     held: Iterable[tuple[str, date, date, list[Any]]],
     start: date,

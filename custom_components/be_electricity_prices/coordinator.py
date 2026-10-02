@@ -69,6 +69,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .energy_meters import memoise_meter_reads
+from .meter_warm import KeptRows
 from .const import (
     CONF_CONTRACT,
     CONF_REGION,
@@ -231,6 +232,10 @@ class BePricesCoordinator(
         # The settings those figures were read under, taken when the read
         # started: an edit saved while it ran must not be stored with them.
         self._meter_results_inputs: str | None = None
+        # Each meter's hourly rows from the last full read, so a tick reads
+        # only the last days again (meter_warm). Kept in memory only: the first
+        # tick after a restart or a reload reads the whole year.
+        self._meter_rows: dict[str, KeptRows] = {}
         # A full trailing year of the export on the injection regime, read the
         # same day; None otherwise. A first-year feed-in bonus multiplies it.
         self._annual_injection_kwh: float | None = None

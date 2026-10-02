@@ -105,7 +105,7 @@ import aiohttp
 import logging
 from .coordinator_costs import TickCosts, held_costs_blob
 from .coordinator_persist import settings_digest
-from .energy_meters import warm_meter_reads
+from .meter_warm import KeptRows, warm_meter_reads
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +119,7 @@ class _TickMixin:
     _held_costs: dict[str, Any] | None
     _last_error: str
     _meter_reads_deferred: bool
+    _meter_rows: dict[str, KeptRows]
     _peak_kw: float
     _peak_month: date | None
     _previous_priced: PricedPeriods | None
@@ -232,6 +233,7 @@ class _TickMixin:
                     ytd_window_start(self.entry, today) - timedelta(days=2),
                 ),
                 today,
+                self._meter_rows,
             )
             await self._ensure_annual_volume()
         # Sibelga's power term, for a Brussels entry whose card prints only the

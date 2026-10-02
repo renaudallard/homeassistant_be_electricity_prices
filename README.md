@@ -919,7 +919,14 @@ back a contract you left before the year began.
   check behind the register Repairs card are read once a day and kept
   across restarts; a database too busy to answer leaves the day's figures
   as they were and is asked again on the next refresh. Every refresh reads
-  each meter once, where it used to ask for each figure's window apart.
+  each meter once, where it used to ask for each figure's window apart,
+  and an ordinary one reads only the days since the day before yesterday
+  and keeps the rest from earlier refreshes. The whole year is read again
+  on the first refresh of each day, after a restart, when a read fails,
+  when those last days hold no statistics and when the statistics no
+  longer join the kept ones. An older hour corrected, or a gap filled in
+  later, shows at the next day's full read: until then the totals are
+  right, but the energy of a filled gap sits on the hour after it.
 
 ### Failure mode
 
