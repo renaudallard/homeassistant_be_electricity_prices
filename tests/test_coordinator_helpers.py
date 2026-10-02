@@ -45,6 +45,7 @@ from custom_components.be_electricity_prices import meter_daily, meter_hourly
 import calendar
 from collections.abc import Mapping
 import json
+import logging
 from datetime import UTC, date, datetime, timedelta
 from dataclasses import replace
 from types import SimpleNamespace
@@ -9315,6 +9316,47 @@ async def test_cohort_freezes_the_feed_in_coefficients(
     assert legs.injection.base == -0.011
     # The keyless fallback stays on the current card's printed figure.
     assert legs.injection.current == 0.058
+
+
+async def test_the_cohort_source_is_logged_once_per_answer(
+    hass: HomeAssistant, freezer: Any, caplog: Any
+) -> None:
+    """Which card a cohort is priced from is logged when the answer changes.
+
+    The legs are resolved once per month a walk prices, and the line went to
+    the debug log about forty times a tick on a year to date (issue #107),
+    burying the lines a reporter's log was asked for.
+    """
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    current = make_snapshot(energy=DynamicRates(factor=1.06, base=0.01272))
+    archived = make_snapshot(energy=DynamicRates(factor=1.1342, base=0.00742))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    cohort._LOGGED_SOURCE.clear()
+    _monthly_snapshots(hass).clear()
+    extractor = _fixed_extractor(_ffm)
+
+    async def resolve(start: str) -> None:
+        entry = _entry(contract="test", contract_start_date=start)
+        await _cohort_legs(
+            hass, MagicMock(), extractor, "test", "wallonia", entry, current
+        )
+
+    def logged() -> int:
+        return sum("energy priced from" in r.getMessage() for r in caplog.records)
+
+    with caplog.at_level(logging.DEBUG, logger=cohort.__name__):
+        for _ in range(3):
+            await resolve("2026-06-30")
+        assert logged() == 1
+        # Another start date is another answer.
+        await resolve("2026-05-01")
+        assert logged() == 2
 
 
 async def test_the_cohort_credit_keeps_the_delivery_month_index(

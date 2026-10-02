@@ -81,6 +81,11 @@ from .cohort_legs import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# The resolution last logged per contract and start date. The legs are
+# resolved once for every month a walk prices, about forty times a tick on a
+# year to date, and the line is only news when its answer changes.
+_LOGGED_SOURCE: dict[tuple[str, date | None], str] = {}
+
 
 def _parse_iso_date(value: Any) -> date | None:
     """Parse a stored ISO ``YYYY-MM-DD`` date string, or ``None``.
@@ -401,12 +406,14 @@ async def _cohort_legs(
     # Which of the three resolutions won is otherwise invisible: the sensors
     # publish a price, not its provenance, so "my signing rate does nothing"
     # was unanswerable without reading the source.
-    _LOGGER.debug(
-        "%s: contract started %s, energy priced from the %s",
-        contract,
-        start,
-        source,
-    )
+    if _LOGGED_SOURCE.get((contract, start)) != source:
+        _LOGGED_SOURCE[(contract, start)] = source
+        _LOGGER.debug(
+            "%s: contract started %s, energy priced from the %s",
+            contract,
+            start,
+            source,
+        )
     # The feed-in leg locks with the offtake leg, so it is resolved from the
     # same archived card rather than left on the current one (issue #85), and
     # laid onto the card of the month being billed.
