@@ -837,7 +837,6 @@ def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
         _injection_needs_month_spot,
         _injection_needs_spot,
         _injection_price_for_slot,
-        _injection_varies_intraday,
     )
 
     snap = parse_snapshot(
@@ -886,9 +885,12 @@ def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
     assert _historical_injection_rate(
         inj, mean, energy=leg, when=saturday_19
     ) == pytest.approx(baked.transition)
-    assert _injection_varies_intraday(baked, leg)
+    # The baked triplet still moves through the day, slot by slot.
     assert _injection_price_for_slot(baked, leg, None, peak_hour) == pytest.approx(
         baked.peak
+    )
+    assert _injection_price_for_slot(baked, leg, None, saturday_19) == pytest.approx(
+        baked.transition
     )
 
 

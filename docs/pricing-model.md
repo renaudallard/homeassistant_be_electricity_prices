@@ -1275,14 +1275,13 @@ data (`injection.py`). Priority:
    `injection.py`).
 
 This scalar is resolved once per coordinator tick, so it is not what the
-`injection_price` sensor publishes when the injection varies intra-day. There the
-sensor indexes `injection_hourly` at the current slot (`_current_injection`,
-`sensor_values.py`), the same way the price sensors index `hourly`, nearest-slot
-guard included: an unpriced slot resolves to an adjacent slot's rate, and the
-scalar is reached only for a flat contract, which emits no array at all, or when
-nothing lies inside the guard's window. Beware that a dynamic contract with a
-hole in its curve therefore shows a neighbouring hour's rate rather than the
-tick value the diagnostics dump reports.
+`injection_price` sensor publishes. The sensor indexes `injection_hourly` at the
+current slot (`_current_injection`, `sensor_values.py`), the same way the price
+sensors index `hourly`, nearest-slot guard included: an unpriced slot resolves
+to an adjacent slot's rate, and the scalar is reached only when nothing lies
+inside the guard's window. Beware that a dynamic contract with a hole in its
+curve therefore shows a neighbouring hour's rate rather than the tick value the
+diagnostics dump reports.
 The tick is a plain 60-minute interval anchored on setup, so publishing the scalar
 directly made the sensor lag every band change by however far the tick had
 drifted (issue #44, Engie Empower Flextime).

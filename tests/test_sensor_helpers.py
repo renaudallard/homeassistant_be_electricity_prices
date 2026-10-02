@@ -522,7 +522,8 @@ def test_split_injection_empty_tomorrow_before_publication() -> None:
 
 
 def test_split_injection_handles_empty_data() -> None:
-    # A flat contract emits no injection_hourly, so both lists are empty.
+    # Off the injection regime there is no injection_hourly, so both lists
+    # are empty.
     today, tomorrow = _split_injection_today_tomorrow(CoordinatorData())
     assert today == []
     assert tomorrow == []
@@ -558,8 +559,8 @@ def test_injection_price_tracks_the_slot_boundary(freezer: Any) -> None:
 
 
 def test_injection_price_falls_back_to_the_tick_scalar_without_an_array() -> None:
-    # A flat contract emits no injection_hourly; its scalar is constant across
-    # the day, so the tick value is both the only one available and correct.
+    # With no injection_hourly near now the tick value is the only one left,
+    # and it is what the coordinator priced for the slot it ran in.
     assert _current_injection(
         CoordinatorData(injection_price_eur_per_kwh=0.0476)
     ) == pytest.approx(0.0476)

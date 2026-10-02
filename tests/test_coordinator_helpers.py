@@ -107,7 +107,6 @@ from custom_components.be_electricity_prices.injection import (
     _injection_needs_spot_quarters,
     _injection_replays_hourly_spot,
     _injection_price_for_slot,
-    _injection_varies_intraday,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
     _month_row_is_provisional,
@@ -1152,53 +1151,6 @@ def test_replayed_hour_rate_equals_the_mean_of_the_published_slots() -> None:
     assert floored_mean < replayed
 
 
-def test_injection_varies_intraday_true_for_spot_and_tou() -> None:
-    # Dynamic energy + formula.
-    assert _injection_varies_intraday(
-        InjectionRates(factor=0.9, base=-0.01, current=0.05),
-        DynamicRates(factor=0.1, base=0.0),
-    )
-    # Static energy + spot formula with no monthly indicative (Cociter Variable).
-    assert _injection_varies_intraday(
-        InjectionRates(factor=0.97, base=-0.021, current=None),
-        VariableRates(current=0.16),
-    )
-    # TOU schedule (Engie Empower Flextime).
-    assert _injection_varies_intraday(
-        InjectionRates(current=0.05, peak=0.08, transition=0.05, offpeak=0.02),
-        TimeOfUseRates(
-            peak=0.2, transition=0.15, offpeak=0.1, weekend_rule="weekend_no_peak"
-        ),
-    )
-    # Trevion Vast flags its peak/off-peak pair as the meter's registers: it
-    # varies on a two-register meter only, and an unflagged pair on fixed
-    # energy is not read at all.
-    pair = InjectionRates(current=0.05, peak=0.08, offpeak=0.02, bi_hourly=True)
-    fixed = FixedRates(single=0.2, peak=0.22, offpeak=0.18)
-    assert _injection_varies_intraday(pair, fixed, meter="bi")
-    assert not _injection_varies_intraday(pair, fixed)
-    assert not _injection_varies_intraday(
-        InjectionRates(current=0.05, peak=0.08, offpeak=0.02), fixed, meter="bi"
-    )
-
-
-def test_injection_varies_intraday_false_for_flat() -> None:
-    # Flat monthly indicative only.
-    assert not _injection_varies_intraday(
-        InjectionRates(current=0.0476), FixedRates(single=0.20)
-    )
-    # Dual-published on static energy -> guard keeps it flat.
-    assert not _injection_varies_intraday(
-        InjectionRates(current=0.0432, factor=0.884, base=-0.005),
-        VariableRates(current=0.16),
-    )
-    # Spot-monthly baked to a flat indicative (factor/base cleared).
-    assert not _injection_varies_intraday(
-        InjectionRates(current=0.05, factor=None, base=None),
-        SpotMonthlyRates(factor=1.0, base=0.0),
-    )
-
-
 def _build_injection_hourly(
     entry: MockConfigEntry,
     snap: SupplierSnapshot,
@@ -1285,13 +1237,50 @@ def test_build_injection_hourly_empty_off_injection_regime() -> None:
     assert _build_injection_hourly(entry, snap, {_slot(10): 0.10}, [_slot(10)]) == {}
 
 
-def test_build_injection_hourly_empty_for_flat_contract() -> None:
-    # A flat monthly-indicative injection would just repeat its scalar, so no
-    # array is emitted.
+def test_build_injection_hourly_repeats_a_flat_credit() -> None:
+    # A flat feed-in fills every slot with the figure the sensor shows, the
+    # way the price arrays repeat a fixed card's price, so a chart drawn off
+    # the arrays works for it too. No spot is needed for any slot.
     entry = _entry(solar_regime="injection")
     snap = _snapshot(
         prosumer=None, capacity=None, injection=InjectionRates(current=0.0476)
     )
+    out = _build_injection_hourly(entry, snap, {}, [_slot(10), _slot(11)])
+    assert out == {_slot(10): pytest.approx(0.0476), _slot(11): pytest.approx(0.0476)}
+
+
+def test_build_injection_hourly_repeats_a_month_indexed_credit() -> None:
+    # Issue #108: Aspiravi Eco Plus Flex credits the feed-in on the month's
+    # Belpex average, so the credit is the same all month. Its arrays used to
+    # be empty and the README's injection chart never drew. Each slot now
+    # carries the scalar the sensor shows, today and tomorrow, with or without
+    # a day-ahead spot for the slot.
+    entry = _entry(solar_regime="injection")
+    inj = InjectionRates(current=0.08948, factor=0.7, base=-0.02, month_indexed=True)
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.21458, month_indexed=True),
+        injection=inj,
+    )
+    scalar = _compute_injection_price(snap, entry, {_slot(10): 0.30})
+    assert scalar == pytest.approx(0.08948)
+    tomorrow = _slot(10) + timedelta(days=1)
+    out = _build_injection_hourly(
+        entry, snap, {_slot(10): 0.30}, [_slot(10), _slot(11), tomorrow]
+    )
+    assert out == {
+        _slot(10): pytest.approx(scalar),
+        _slot(11): pytest.approx(scalar),
+        tomorrow: pytest.approx(scalar),
+    }
+
+
+def test_build_injection_hourly_empty_without_a_feed_in_price() -> None:
+    # A card that prints no feed-in (TotalEnergies' October 2026 fixed cards)
+    # credits nothing, so there is no array rather than a row of zeros.
+    entry = _entry(solar_regime="injection")
+    snap = _snapshot(prosumer=None, capacity=None, injection=None)
     assert _build_injection_hourly(entry, snap, {}, [_slot(10), _slot(11)]) == {}
 
 

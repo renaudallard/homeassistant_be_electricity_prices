@@ -99,8 +99,7 @@ def _current_injection(data: CoordinatorData) -> float | None:
     A single slot the coordinator could not price (a dynamic contract with
     a hole in the day-ahead curve) is covered by the shared nearest-slot
     rule, so the sensor shows an adjacent slot's rate. The tick's scalar is
-    the last resort: the flat contracts that emit no array at all, and a
-    table with nothing inside the window.
+    the last resort, for a table with nothing inside the window.
     """
     rate = _current_slot_value(data.injection_hourly, data.resolution)
     return data.injection_price_eur_per_kwh if rate is None else rate
@@ -317,9 +316,8 @@ def _split_injection_today_tomorrow(
     """Group the per-slot injection prices into today and tomorrow buckets.
 
     Each bucket is a chronological list of ``{start, injection}`` rows, at the
-    grid the contract settles on. Both are empty for a contract whose
-    injection doesn't vary intra-day (the coordinator emits no
-    ``injection_hourly`` for it).
+    grid the contract settles on. A flat feed-in repeats its one figure; both
+    are empty off the injection regime or on a card with no feed-in price.
 
     Publishing the slots rather than an hourly mean of them also retires an
     approximation. A floored feed-in formula is convex, so the mean of four

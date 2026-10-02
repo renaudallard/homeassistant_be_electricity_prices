@@ -135,7 +135,7 @@ pulls (all fields defined at `coordinator_data.py`).
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only); 0 in fixed capacity mode, which measures nothing and banks no month, while keeping the months measured before |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime in Wallonia, the one region that bills it; an entry saved with compensation elsewhere before the regime was restricted to Wallonia no longer gets it) |
-| Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
+| Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays whenever the card prices the feed-in |
 | Peak price | `price_peak` | - | MEASUREMENT | EUR/kWh | `static_peak_price.all_in`, the contract's CONSTANT all-in day rate rather than the price now (created only on a bi-hourly meter, `CONF_METER == METER_BI`, and not on the Walloon Impact DSO tariff, whose every card prints the CWaPE distribution bands, unless the entry is a custom one that may leave them out). A monthly leg (`SpotMonthlyRates`, which is also what a month-indexed variable card becomes once a key is set) is priced at the mean its price table was built on (`static_breakdown(..., month_mean)`, `_static_monthly` in `pricing.py`); it used to have no rate here and sat unavailable. Unavailable where no such constant exists (`unavailable_when_none`; it used to read unknown): a dynamic or time-of-use contract, the Walloon Impact tariff, or a DSO the snapshot does not carry |
 | Offpeak price | `price_offpeak` | - | MEASUREMENT | EUR/kWh | `static_offpeak_price.all_in`, the same for the night band |
 | Peak injection price | `injection_price_peak` | - | MEASUREMENT | EUR/kWh | `static_injection_peak` (a two-register meter, bi-hourly or digital, on the injection regime, which is where the engine credits the pair per register). A card that prints no register pair, which is every card but Trevion Vast, credits both registers on its one formula or rate, so the sensor falls back to `_current_injection`, the figure `injection_price` shows: the credit of the register counting now, which the Energy dashboard reads per return register. They sat unavailable on those cards before. Unavailable, not unknown, only while no credit is resolved at all (`unavailable_when_none`). The pair is read both rates or neither, so a half-filled card falls back as one with none |
@@ -165,8 +165,7 @@ however far the tick had drifted, which is what issue #44 reported on Engie
 Empower Flextime. A slot the coordinator could not price (a hole in the
 day-ahead curve) is covered by the same nearest-slot rule the price sensors
 use, so the state shows an adjacent slot's rate; the tick's scalar survives
-only as the last resort, for the flat contracts that emit no array at all and
-for a table with nothing inside the window.
+only as the last resort, for a table with nothing inside the window.
 
 `_next_hour` (`sensor_values.py`) targets `slot_start(now) + 1h`. On a 15-minute
 contract that deliberately stays the same quarter one hour later, so the sensor
@@ -197,7 +196,7 @@ they are empty rather than drawing the extrapolation as tomorrow's prices
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day, and
+`today`/`tomorrow` arrays whenever the card prices the feed-in, and
 `ev_home_charging_rate` carries the quarter its state is the rate of plus the
 regulator's whole series as `history`, so an automation can settle last
 quarter's kWh at last quarter's rate once the state has moved on (`sensor.py`);
@@ -251,19 +250,26 @@ not actually vary across the day.
 
 #### `injection_price`
 
-When the injection price varies across the day, `injection_price` also carries
-`today` and `tomorrow` arrays of `{start, injection}` rows (each rounded to 6
-decimals) so a battery force-export automation can rank the day's injection
-hours ahead of time (`_split_injection_today_tomorrow`). The coordinator fills
-`data.injection_hourly` only for contracts whose injection actually varies:
-every dynamic contract, both Cociter variable cards and every Bolt fixed and variable card
-(spot-indexed `factor*spot+base`), Engie Empower Flextime (a TOU schedule, each slot credit
-re-indexed on the month), and Trevion Groene Energie Vast on a bi-hourly or dynamic meter (a
-day and a night feed-in price, one per register; `_injection_varies_intraday`). A flat or monthly-indexed
-contract emits no array, so both lists come back empty and the sensor returns
-`{}`. The rows carry the contract's own grid, like `current_price`, and
-`tomorrow` fills in once the day-ahead publishes (~13:00 CET), like the
-consumption array.
+`injection_price` also carries `today` and `tomorrow` arrays of
+`{start, injection}` rows (each rounded to 6 decimals), so a battery force-export
+automation can rank the day's injection hours ahead of time and a chart can draw
+the feed-in (`_split_injection_today_tomorrow`). The coordinator fills
+`data.injection_hourly` for every contract on the injection regime whose card
+prices the feed-in. It varies across the day on every dynamic contract, both
+Cociter variable cards and every Bolt fixed and variable card (spot-indexed
+`factor*spot+base`), Engie Empower Flextime (a TOU schedule, each slot credit
+re-indexed on the month) and Trevion Groene Energie Vast on a bi-hourly or
+dynamic meter (a day and a night feed-in price, one per register). A flat,
+fixed or monthly-indexed feed-in repeats the one figure the sensor shows, the way
+`current_price` repeats a fixed card's price, which is what keeps the README's
+injection chart drawing for such a contract too (issue #108; until 0.34.0 those
+contracts emitted no array). The sensor returns `{}` only off the injection
+regime or on a card that prints no feed-in price. A slot the card cannot price
+(a spot formula before the day-ahead publishes, or with no key) has no row
+rather than a zero. The rows carry the contract's own grid, like
+`current_price`, `tomorrow` fills in once the day-ahead publishes (~13:00 CET)
+on a spot-indexed contract, and it stays empty on the last day the card covers,
+like the price arrays.
 
 Publishing the slots rather than an hourly mean of them also retired an
 approximation. A floored feed-in formula is convex, so the mean of four floored
@@ -273,8 +279,8 @@ replay still averages the floored quarters per hour, because the recorder only
 keeps hourly consumption, and a test pins that the replayed hour equals the
 mean of exactly the slots the sensor now publishes.
 
-`data.injection_hourly` is also where the sensor's own state comes from for
-those contracts (`_current_injection`). That makes the state the `today` row for
+`data.injection_hourly` is also where the sensor's own state comes from
+(`_current_injection`). That makes the state the `today` row for
 the slot the clock is in, on either grid. The two still differ on a slot with no
 row at all, where the nearest-slot guard substitutes a neighbour. What no longer happens is the state sitting
 on a slot the clock has already left: it used to replay the coordinator tick's

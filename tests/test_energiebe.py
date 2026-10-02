@@ -542,7 +542,6 @@ def test_variable_injection_never_prices_off_an_hourly_spot() -> None:
 
     from custom_components.be_electricity_prices.injection import (
         _injection_price_for_slot,
-        _injection_varies_intraday,
     )
 
     snap = _var_snap()
@@ -553,8 +552,6 @@ def test_variable_injection_never_prices_off_an_hourly_spot() -> None:
         assert _injection_price_for_slot(
             snap.injection, snap.energy, spot, when
         ) == pytest.approx(flat)
-    # and it publishes no today/tomorrow array, which would imply it varies
-    assert _injection_varies_intraday(snap.injection, snap.energy) is False
 
 
 def test_variable_injection_resolves_exactly_on_the_spp_mean() -> None:

@@ -69,7 +69,6 @@ from .injection import (
     _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_price_for_slot,
-    _injection_varies_intraday,
 )
 from .cohort import (
     ytd_window_start,
@@ -581,21 +580,23 @@ class _PricesMixin:
         """Per-slot injection price (EUR/kWh) over the same today+tomorrow grid
         as ``hourly``, for the injection sensor's today/tomorrow arrays.
 
-        Empty unless the user is on the injection regime AND the injection
-        actually varies intra-day: a flat contract would just repeat its
-        scalar, so no array is emitted. ``injection_snapshot`` is the possibly
-        mean-baked snapshot and ``energy`` the effective (cohort) energy, so a
-        spot-monthly / Cociter-cohort contract is treated as flat and gated
-        out: keeping the array consistent with the live scalar and the YTD
-        credit. Slots with no spot (tomorrow before the day-ahead publishes)
-        are dropped, exactly like the consumption tomorrow array.
+        Empty off the injection regime and on a card that prints no feed-in.
+        Every other shape gets a row per slot, a flat or monthly-indexed one
+        too: it repeats the scalar, which is what the contract pays, and the
+        price arrays do the same for a fixed card, so a chart drawn off them
+        works whatever the contract (issue #108). ``injection_snapshot`` is
+        the possibly mean-baked snapshot and ``energy`` the effective (cohort)
+        energy, the same pair the scalar reads, so each slot is the figure the
+        sensor shows for it. A slot the card cannot price (a per-slot spot
+        formula before the day-ahead publishes, or without a key) is dropped
+        rather than credited at zero, exactly like the consumption array.
         """
         if self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
             return {}
         inj = injection_snapshot.injection
-        meter = self.entry.data.get(CONF_METER, METER_MONO)
-        if inj is None or not _injection_varies_intraday(inj, energy, meter=meter):
+        if inj is None:
             return {}
+        meter = self.entry.data.get(CONF_METER, METER_MONO)
         region = self.entry.data.get(CONF_REGION, REGION_FLANDERS)
         out: dict[datetime, float] = {}
         for utc in grid_keys:

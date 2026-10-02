@@ -4899,9 +4899,10 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
     # month mean 0.97 * 0.10 - 0.021 = 0.076.
     value = data.injection_price_eur_per_kwh
     assert value is not None and abs(value - 0.270) < 1e-9
-    # And the today/tomorrow injection arrays survive: a flat baked rate made
-    # _injection_varies_intraday False and emitted nothing (issue #40 arrays).
+    # And the today/tomorrow injection arrays carry the hour's own spot too,
+    # not a baked month mean (issue #40 arrays).
     assert data.injection_hourly
+    assert all(abs(v - 0.270) < 1e-9 for v in data.injection_hourly.values())
 
 
 async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> None:

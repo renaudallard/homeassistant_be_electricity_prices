@@ -358,7 +358,7 @@ All sensors share one device per config entry.
 | `prosumer_cost` | Wallonia, compensation regime + `solar_kva > 0` | Monthly compensation fee in EUR (`solar_kva × (DSO_prosumer_rate + supplier_forfait) / 12`). Most suppliers bill only the regulated DSO rate; Cociter Tarif Variable and Variable Trihoraire, Mega and OCTA+ add a supplier-side PV forfait (already TVAC) on top. Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
 | `price_peak` / `price_offpeak` | Bi-hourly meter | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate, except on an *Expert: custom formula* entry. |
 | `injection_price_peak` / `injection_price_offpeak` | Bi-hourly or dynamic (smart) meter, injection regime | The feed-in credit of each register. A card that prints a day and a night injection rate (Trevion Groene Energie Vast) gives each its own; every other card credits both registers on one formula or rate, so both show the current credit, the same figure as `injection_price`, which is what lets the Energy dashboard price each return register off its own sensor. Both or neither: a card carrying only one of the pair is read as having none. |
-| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. A card that indexes the credit per settlement slot follows the spot hour by hour; one that indexes it on the delivery month is resolved against that month's own mean; a flat card shows its printed figure. Without an ENTSO-E key a card that indexes the credit on the month shows the figure it prints, where it prints one; a credit settled per slot is unknown. See [docs/entities.md](./docs/entities.md). |
+| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. A card that indexes the credit per settlement slot follows the spot hour by hour; one that indexes it on the delivery month is resolved against that month's own mean; a flat card shows its printed figure. Without an ENTSO-E key a card that indexes the credit on the month shows the figure it prints, where it prints one; a credit settled per slot is unknown. Carries `today`/`tomorrow` arrays of the credit per slot on every card that prices the feed-in, flat ones included, for the injection chart below. See [docs/entities.md](./docs/entities.md). |
 | `projected_year_injection` | Compensation or injection regime | The same for feed-in, read off your injection meter. Its fallback is Synergrid's solar production profile, used only where the entry already loads it (a feed-in indexed on Belpex SPP, or a custom entry weighting its feed-in on SPP). |
 | `rolling_year_injection` | Compensation or injection regime | The same as `rolling_year_consumption` for feed-in, read off your injection meter. |
 | `contract_end_date` | A contract end date is set | Timestamp of your contract's end date (`device_class: timestamp`), so an automation can remind you to renew before it rolls over. Changes no billed rate. It does bound the projection: `projected_year_cost` reads it to report how much of the year today's contract still covers. Stays available even when a supplier fetch fails. |
@@ -1473,12 +1473,11 @@ series:
 ```
 
 The bars can dip below zero at low spot, where you pay to inject. The
-sensor only publishes those arrays on contracts whose injection actually
-varies during the day (every dynamic contract, both Cociter variable cards,
-every Bolt fixed and variable card, Engie Empower Flextime, and Trevion Groene
-Energie Vast on a bi-hourly or dynamic meter); a flat or
-monthly-indexed injection has no curve to draw, so the chart comes up
-empty.
+curve moves during the day on every dynamic contract, both Cociter variable
+cards, every Bolt fixed and variable card, Engie Empower Flextime, and Trevion
+Groene Energie Vast on a bi-hourly or dynamic meter; on a flat, fixed or
+monthly-indexed feed-in every bar shows the same credit, the one the sensor
+reads. The chart stays empty only on a card that prints no feed-in price.
 
 ## Exclusive-night meter circuit
 

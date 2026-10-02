@@ -609,9 +609,9 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "tomorrow": tomorrow,
             }
         if self.entity_description.key == "injection_price":
-            # Only spot-indexed / TOU contracts populate injection_hourly, so
-            # a flat contract stays attribute-free rather than repeating one
-            # value 24-48 times.
+            # Empty only off the injection regime or on a card with no feed-in
+            # price; a flat feed-in repeats its one figure, as the price
+            # arrays do for a fixed card.
             today, tomorrow = _split_injection_today_tomorrow(data)
             if not today and not tomorrow:
                 return {}

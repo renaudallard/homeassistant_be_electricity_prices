@@ -398,9 +398,9 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     indicative: it has both coefficients, and either the energy is dynamic or
     the card publishes no flat ``current`` to prefer.
 
-    Written out twice, once where it decides the rate and once where it
-    decides whether the display array varies intraday. A drift between them
-    mis-gates the array against the billed value.
+    The live scalar, the display array and the historical walk all decide
+    through this one predicate, so the array cannot drift from the billed
+    value.
     """
     if inj.month_indexed or inj.spp_indexed:
         # Month coefficients are never a per-hour formula, whatever else is
@@ -574,25 +574,6 @@ def _compute_injection_price(
         meter=entry.data.get(CONF_METER, METER_MONO),
         region=entry.data.get(CONF_REGION, REGION_FLANDERS),
     )
-
-
-def _injection_varies_intraday(
-    inj: InjectionRates, energy: EnergyRates, *, meter: MeterType = METER_MONO
-) -> bool:
-    """True when this contract's injection changes across the day: a TOU
-    schedule (Engie Empower Flextime), a day/night register pair on a meter
-    with two registers (Trevion Vast) or a spot-indexed formula (every dynamic
-    contract, both Cociter variable cards and every Bolt fixed and variable
-    card). Flat monthly-indicative, fixed and
-    (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
-    array is worth emitting for it. Mirrors the branch conditions of
-    ``_injection_price_for_slot``."""
-    if inj.peak is not None and (
-        _tou_weekend_rule(energy) is not None
-        or (inj.bi_hourly and meter in ("bi", "dynamic"))
-    ):
-        return True
-    return _injection_is_spot_formula(inj, energy)
 
 
 def _historical_injection_rate(
