@@ -305,6 +305,14 @@ compare page does the same (`compare_flow.py`) -- and it is the highest of
 the three bands so a path that somehow reached it would over-bill visibly
 rather than under-bill quietly.
 
+The trihoraire card's `yearly` column is the Walloon terme fixe. September
+2026 printed the standard figures (ORES 14,10), October 2026 prints 0,00 on
+every GRD, which is what the Impact configuration charges. The parser stores
+the figure as printed and nothing bills it either way: `fees.py` drops the
+Walloon fixed term on an Impact entry. The live check's metering floor lets an
+exact zero through on a `tou_impact` contract (`impact_only` on
+`_validate_dsos`), so a misread column still fails.
+
 The parser discriminates on the literal header string `"Tarif prosumer"` in
 the document (`cociter.py`), not on column count. This is deliberate: an
 end-of-line anchor would silently lose the prosumer value if a 7th column were

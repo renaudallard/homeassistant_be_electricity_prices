@@ -4027,7 +4027,13 @@ def _validate_snapshot(
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
     _expect_feed_in_fixed_for_term(prefix, contract_id, snap)
-    _validate_dsos(prefix, snap, require_capacity=require_capacity)
+    _validate_dsos(
+        prefix,
+        snap,
+        require_capacity=require_capacity,
+        impact_only=getattr(_CONTRACTS_BY_ID.get(contract_id), "kind", "")
+        == "tou_impact",
+    )
 
 
 def _feed_in_fixed_for_term(contract_id: str) -> bool:
@@ -4306,7 +4312,11 @@ _CAPACITY_REQUIRED = frozenset({"fluvius_antwerpen"})
 
 
 def _validate_dsos(
-    prefix: str, snap: object, *, require_capacity: frozenset[str] = frozenset()
+    prefix: str,
+    snap: object,
+    *,
+    require_capacity: frozenset[str] = frozenset(),
+    impact_only: bool = False,
 ) -> None:
     """Bounds-check the capacity tariff on every DSO overlay a supplier
     populates, so a column-index misread fails CI instead of shipping
@@ -4321,10 +4331,18 @@ def _validate_dsos(
     after the _validate_snapshot call that already runs this function, so the
     same bound was recorded twice per run. Those blocks are the leftovers this
     parameter replaces: a key absent from the snapshot is still not asserted,
-    which is what they did."""
+    which is what they did.
+
+    ``impact_only`` marks a contract sold on the Impact tariff alone. Impact
+    has no Walloon fixed term, so its card may print 0,00 there (Cociter's
+    trihoraire card does from October 2026) and the integration never bills
+    the figure anyway. Only an exact zero is let through: a column misread
+    still lands outside the bounds."""
     dsos = getattr(snap, "dsos", None) or {}
     for key, overlay in dsos.items():
         metering = getattr(overlay, "data_management_per_year", None)
+        if impact_only and key in _WALLONIA_DSO_KEYS and metering == 0.0:
+            metering = None
         if metering is not None:
             # A Brussels row also carries the <= 13 kVA Sibelga power term when
             # the supplier folds it in, so it runs well above what every

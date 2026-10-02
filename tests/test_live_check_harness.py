@@ -2255,6 +2255,39 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     ]
 
 
+def test_an_impact_card_may_print_no_walloon_fixed_term(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cociter's October 2026 trihoraire card prints 0,00 as every Walloon
+    DSO's terme fixe: Impact has none, and the integration never bills it on
+    Impact. A contract sold on Impact alone may print that zero; any other
+    contract, and any figure off the bounds that is not zero, still fails."""
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    monkeypatch.setattr(lc, "_WALLONIA_DSO_KEYS", frozenset({"ores"}))
+    snap = SimpleNamespace(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.1657,
+                distribution_exclusive_night=0.0739,
+                distribution_pic=0.1657,
+                distribution_medium=0.1083,
+                distribution_eco=0.0509,
+                transport=0.0274,
+                data_management_per_year=0.0,
+            )
+        }
+    )
+    assert _failures(lambda: lc._validate_dsos("x", snap, impact_only=True)) == []
+    assert _failures(lambda: lc._validate_dsos("x", snap)) == [
+        "ores metering fee in [5, 40] EUR/yr"
+    ]
+    snap.dsos["ores"] = replace(snap.dsos["ores"], data_management_per_year=85.84)
+    assert _failures(lambda: lc._validate_dsos("x", snap, impact_only=True)) == [
+        "ores metering fee in [5, 40] EUR/yr"
+    ]
+
+
 def test_the_energy_contribution_is_bounded_for_every_supplier() -> None:
     """Three suppliers asked for it at their own call sites; the levy is
     federal and a unit slip on it is not supplier-specific."""
