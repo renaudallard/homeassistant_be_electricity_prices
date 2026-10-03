@@ -949,8 +949,9 @@ successful refresh:
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;
-  cached prices keep serving, and with no cached card the sensors stay
-  unavailable.
+  cached prices keep serving, including a card stored by an earlier version
+  that an upgrade would otherwise drop, and with no cached card at all the
+  sensors stay unavailable.
 - **`extractor_card_missing_<entry>`** — the supplier's site answered
   that there is no tariff card at the address the integration reads (HTTP
   404 or 410, or a web page where the card should be): the card for the

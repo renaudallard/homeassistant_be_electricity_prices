@@ -457,17 +457,24 @@ class _SnapshotMixin:
         if self._card_read_by_ocr:
             self._sync_card_read_by_ocr_issue(True)
 
-    def _replay_stale_snapshot(self, reason: str) -> None:
-        """Serve the blob the schema gate rejected, because nothing can replace it.
+    def _replay_stale_snapshot(self, reason: str, *, refetch: bool = False) -> None:
+        """Serve the blob the schema gate rejected, because nothing replaced it.
 
         Reached when no fetch is left to heal with: the card downloaded fine
         and carries no text layer, which no amount of parser work can read,
         or the supplier has left the market and its final card is the last
         it will ever publish. Either way the choice is this months-old card
         or no prices at all. The gate is right in every other case and
-        stays: it is how a parser fix reaches a cached user, and it only
-        becomes a trap when there is no fetch left to heal with. ``reason``
-        is the clause the log line hangs on the supplier's name.
+        stays: it is how a parser fix reaches a cached user. ``reason`` is
+        the clause the log line hangs on the supplier's name.
+
+        Also reached, with ``refetch``, when a fetch fails for an entry left
+        with no card. An upgrade across a schema bump drops the stored card
+        and counts on the next fetch, and a card the parser cannot read that
+        day made that every entity unavailable: TotalEnergies served its
+        Dutch myComfort card at the French address in October 2026. The
+        replayed card then leaves its probe key behind, so the next refresh
+        asks the supplier again and a readable card still replaces it.
 
         Refused below ``_DEGRADED_MIN_SCHEMA_VERSION``, where the stored fields
         do not mean what they say any more. Above it the replayed card is
@@ -496,7 +503,7 @@ class _SnapshotMixin:
         self._snapshot_fetched_at = fetched_at
         cached_probe = blob.get("_probe_key")
         self._snapshot_probe_key = (
-            cached_probe if isinstance(cached_probe, str) else None
+            cached_probe if isinstance(cached_probe, str) and not refetch else None
         )
         self._snapshot_schema_version = int(blob.get("_schema_version", 1))
         self._restore_read_by_ocr(blob)
@@ -660,6 +667,12 @@ class _SnapshotMixin:
             # here, before the repair below picks which of the two unreadable
             # cards to raise.
             self._replay_stale_snapshot("publishes its tariff card as page images")
+        elif self._snapshot is None:
+            # Any other failure can heal on a later fetch, but until then the
+            # card the schema gate rejected beats no prices at all.
+            self._replay_stale_snapshot(
+                f"could not be refreshed ({result.error_message})", refetch=True
+            )
         if not transient:
             # A 404 or 410, or a web page where the card should be, says the
             # supplier has no card at that address, which is a late card, a
@@ -673,11 +686,11 @@ class _SnapshotMixin:
         elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
             self._sync_extractor_issue(result.error_message, transient=True)
         _LOGGER.warning(
-            "snapshot refresh failed for %s/%s: %s; keeping cached"
-            " (consecutive failure %d)",
+            "snapshot refresh failed for %s/%s: %s; %s (consecutive failure %d)",
             self.entry.data.get(CONF_SUPPLIER),
             self.entry.data.get(CONF_CONTRACT),
             result.error_message,
+            "keeping cached" if self._snapshot is not None else "no card to price with",
             result.fail_count,
         )
         if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):

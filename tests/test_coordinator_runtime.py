@@ -7436,6 +7436,73 @@ async def test_an_unreadable_card_replays_the_schema_rejected_snapshot(
     )
 
 
+async def test_a_card_that_fails_to_parse_replays_the_schema_rejected_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """An upgrade across a schema bump drops the stored card and counts on the
+    next fetch. In October 2026 TotalEnergies served the Dutch myComfort card
+    at the French address, the fetch failed to parse it, and every entity of
+    an upgraded entry went unavailable. The rejected card is served instead,
+    and without its probe key, so the next refresh still asks the supplier
+    even when the card has not changed since: that is how a parser fix
+    reaches the entry."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_failed_fetches,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _unparsable_fetch(*args: Any, **kwargs: Any) -> None:
+        raise ExtractorError("TotalEnergies: yearly fee + renewables row not found")
+
+    async def _fake_load() -> dict[str, Any]:
+        return {
+            "entry_supplier": coord.entry.data["supplier"],
+            "entry_contract": coord.entry.data["contract"],
+            "entry_region": coord.entry.data["region"],
+            "snapshot": _stale_blob(16),
+        }
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+    assert coord._snapshot is None
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_unparsable_fetch),
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    assert coord._snapshot is not None, "the rejected card must be served"
+    assert coord._snapshot_schema_version == 16
+    assert coord._snapshot_probe_key is None
+
+    fetched: list[bool] = []
+
+    async def _readable_fetch(*args: Any, **kwargs: Any) -> Any:
+        fetched.append(True)
+        return make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+
+    async def _unchanged_probe(*args: Any, **kwargs: Any) -> str:
+        return "jul-etag"
+
+    _shared_failed_fetches(hass).clear()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=replace(
+            make_stub_extractor(fetch=_readable_fetch), probe=_unchanged_probe
+        ),
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    assert fetched == [True]
+    assert coord._snapshot_schema_version == _SNAPSHOT_SCHEMA_VERSION
+    assert coord._stale_snapshot is None
+
+
 async def test_a_blob_below_the_replay_floor_is_still_refused(
     hass: HomeAssistant,
 ) -> None:
