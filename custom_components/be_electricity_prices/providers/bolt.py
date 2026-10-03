@@ -113,7 +113,7 @@ from ._bolt_cards import (
     _extract_injection,
     _extract_promotion,
     _prints_promotion,
-    _reprice_on_index,
+    _with_index_card_formula,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -162,9 +162,9 @@ class _ContractDef:
     # True when the customer chooses whether this card settles per quarter-hour
     # or against the RLP-weighted month. Every variable card, no fixed one.
     settlement: bool = False
-    # The slug of the card whose printed monthly price fixes the index this
-    # one is billed at, for a card whose own printed price cannot be trusted
-    # to (see _reprice_on_index).
+    # The slug of the card whose monthly prices this one prints, and whose
+    # formula and Impact bands it is then billed on, for a card that prints
+    # another product's beside them (see _with_index_card_formula).
     index_slug: str | None = None
 
     @property
@@ -199,11 +199,10 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef(
         "bolt_online", "Bolt Online", "variable", "var", "online", settlement=True
     ),
-    # Plenty Online prints its own formula, "Belpex * 1,145 + 16,45", beside
-    # the base card's monthly price, which is the other formula's result: on
-    # the October 2026 card 19,05 c/kWh, where its own formula at the same
-    # index gives 18,66. The price billed is the card's own formula, so the
-    # index is read off the Online card, whose price and formula agree.
+    # The French Plenty Online card prints the Online card's monthly prices
+    # beside the professional cards' formula, "Belpex * 1,145 + 16,45", and
+    # their Impact bands. Its Dutch edition prints the Online card's formula
+    # and bands beside the same prices, so those are what it is billed on.
     _ContractDef(
         "bolt_plenty_online",
         "Bolt Plenty Online",
@@ -485,7 +484,8 @@ async def _dutch_edition(
 
 
 def _index_card(contract: _ContractDef) -> _ContractDef | None:
-    """The card whose printed monthly price ``contract`` is re-priced on."""
+    """The card whose formula ``contract`` is billed on while it prints that
+    card's monthly prices."""
     if contract.index_slug is None:
         return None
     return next(
@@ -573,8 +573,9 @@ def parse_snapshot(
     """Pure parser exposed for unit tests.
 
     ``index_text`` is the card ``contract.index_slug`` names, required for a
-    contract that has one: its printed monthly price is re-derived from that
-    card's (see :func:`_reprice_on_index`). ``dutch_text`` is the Dutch
+    contract that has one: while this card prints that card's monthly prices,
+    it is billed on that card's formula and Impact bands (see
+    :func:`_with_index_card_formula`). ``dutch_text`` is the Dutch
     edition of a professional card, whose words decide the basis of its offer
     (see :func:`_dutch_edition`).
     """
@@ -589,15 +590,16 @@ def parse_snapshot(
     if contract.index_slug is not None:
         if index_text is None:
             raise ExtractorError(
-                f"Bolt: {contract_id} is billed at the index the "
+                f"Bolt: {contract_id} is billed on the formula the "
                 f"{contract.index_slug} card prints, which was not read"
             )
         index_text = index_text.replace("\u2028", "\n")
         # The two cards are looked up on the listing one after the other, and
         # a listing read that fails falls back to a fixed version. One timeout
-        # between them pairs this month's card with last month's index. A
-        # refused pair costs one tick; a mispriced one stands until the
-        # listing's ETag moves, which is usually the next month.
+        # between them pairs this month's card with last month's, whose prices
+        # differ, and the card would keep the formula it prints. A refused
+        # pair costs one tick; a mispriced one stands until the listing's ETag
+        # moves, which is usually the next month.
         month = _extract_publication_month(text).casefold()
         if not month or month != _extract_publication_month(index_text).casefold():
             raise ExtractorError(
@@ -605,7 +607,7 @@ def parse_snapshot(
                 f"{contract.index_slug} card it is priced on are not the same "
                 "month's"
             )
-        energy = _reprice_on_index(
+        energy = _with_index_card_formula(
             energy,
             _extract_energy(index_text, contract.kind, professional=professional),
         )

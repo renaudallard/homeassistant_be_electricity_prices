@@ -977,7 +977,7 @@ Trevion ones. Behind, because the memo is keyed by URL and several suppliers pub
 at one unchanging address: seeded first, the follower replayed Ecofix's six August 2026 rows as
 September cards, label, validity and price alike. Between the two come the texts the supplier's
 other rows of the same region and month name (`_sibling_sources`), for a card priced on another
-product's card: Bolt Plenty Online reads the Online card for its index, its rows captured before
+product's card: Bolt Plenty Online reads the Online card for its formula, its rows captured before
 it did named only their own, and all six were unreplayable. A sibling read its card in the row's
 own month, so it goes ahead of the follower where both hold one address. A card whose supplier
 has moved its address since is seeded under the new address as well (`_URL_MOVES`), since the

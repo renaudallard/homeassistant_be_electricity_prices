@@ -1379,38 +1379,31 @@ def test_the_professional_fetch_reads_the_dutch_edition_beside_it() -> None:
     assert plain.await_count == 1
 
 
-def test_plenty_online_is_billed_its_own_formula_at_the_online_index() -> None:
-    """The October 2026 Plenty Online card prints Bolt Online's monthly price,
-    19,05 / 20,09 / 18,15 c/kWh, beside its own formula "Belpex * 1,145 +
-    16,45". Those prices are the base formula's at the month's index, so the
-    index is read back off the Online card, whose price and formula agree,
-    and Plenty Online's own formula prices it: 18,66 c/kWh mono, 13,58
-    EUR a year less at 3500 kWh than the printed figure billed."""
+def test_plenty_online_is_billed_on_the_online_formula_its_prices_stand_for() -> None:
+    """The French October 2026 Plenty Online card prints the Online card's
+    monthly prices, 19,05 / 20,09 / 18,15 c/kWh, beside the professional
+    formula "Belpex * 1,145 + 16,45" and the professional Impact bands. Its
+    Dutch edition prints the same prices beside the Online formula, "Belpex *
+    1,168 + 16,90", and the Online bands, so those are billed. The prices and
+    the 0,99 EUR/month standing charge stay its own."""
     plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
     online = fixture_text("bolt_online_oct.pdf", layout=True)
-    snap = parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=online)
-    energy = snap.energy
-    assert isinstance(energy, VariableRates)
-    reference = parse_snapshot("bolt_online", online, "flanders").energy
-    assert isinstance(reference, VariableRates)
-    assert reference.current == pytest.approx(0.1905)
-    assert energy.formula_factor == pytest.approx(1.145 * 1.06)
-    assert energy.formula_base == pytest.approx(0.01645 * 1.06)
-    assert reference.formula_factor is not None
-    assert reference.formula_base is not None
-    assert energy.formula_factor is not None and energy.formula_base is not None
-    for printed, billed in (
-        (reference.current, energy.current),
-        (reference.peak, energy.peak),
-        (reference.offpeak, energy.offpeak),
-        (reference.exclusive_night, energy.exclusive_night),
-    ):
-        assert printed is not None and billed is not None
-        index = (printed - reference.formula_base) / reference.formula_factor
-        assert billed == pytest.approx(
-            energy.formula_factor * index + energy.formula_base
-        )
-    assert energy.current == pytest.approx(0.18662, abs=1e-5)
+    assert "1,145 + 16,45" in plenty
+    for region in ("flanders", "wallonia"):
+        energy = parse_snapshot(
+            "bolt_plenty_online", plenty, region, index_text=online
+        ).energy
+        reference = parse_snapshot("bolt_online", online, region).energy
+        assert isinstance(energy, VariableRates)
+        assert isinstance(reference, VariableRates)
+        assert energy.current == pytest.approx(0.1905)
+        assert energy.peak == pytest.approx(0.2009)
+        assert energy.formula_factor == pytest.approx(1.168 * 1.06)
+        assert energy.formula_base == pytest.approx(0.0169 * 1.06)
+        assert energy.impact_pic == reference.impact_pic
+        assert energy.impact_medium == reference.impact_medium
+        assert energy.impact_eco == reference.impact_eco
+        assert energy.yearly_fixed_fee == pytest.approx(0.99 * 12)
 
 
 def test_plenty_online_will_not_bill_without_its_index_card() -> None:
@@ -1434,11 +1427,14 @@ def test_plenty_online_will_not_bill_on_another_months_index() -> None:
         parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=september)
 
 
-def test_every_other_card_keeps_its_printed_monthly_price() -> None:
-    """Only Plenty Online is re-priced. Re-pricing a card on its own index is
-    the identity, which is what keeps the rule from spreading by accident."""
+def test_only_a_card_printing_the_online_prices_takes_its_formula() -> None:
+    """Only Plenty Online is read with another card, and only while it prints
+    that card's monthly prices: a card with a price of its own keeps the
+    formula it prints, so the rule does not outlive the copy it works around."""
+    from dataclasses import replace as dc_replace
+
     from custom_components.be_electricity_prices.providers._bolt_cards import (
-        _reprice_on_index,
+        _with_index_card_formula,
     )
 
     assert [c.contract_id for c in bolt_mod._CONTRACTS if c.index_slug] == [
@@ -1447,10 +1443,11 @@ def test_every_other_card_keeps_its_printed_monthly_price() -> None:
     online = parse_snapshot(
         "bolt_online", fixture_text("bolt_online_oct.pdf", layout=True), "flanders"
     ).energy
-    same = _reprice_on_index(online, online)
-    assert isinstance(same, VariableRates) and isinstance(online, VariableRates)
-    assert same.current == pytest.approx(online.current)
-    assert same.peak == pytest.approx(online.peak)
+    assert isinstance(online, VariableRates)
+    own = dc_replace(online, current=0.1866, formula_factor=1.2137)
+    assert _with_index_card_formula(own, online) == own
+    printing = dc_replace(online, formula_factor=1.2137, impact_pic=0.1777)
+    assert _with_index_card_formula(printing, online) == online
 
 
 def test_a_fixed_card_bills_its_one_price_in_every_impact_band() -> None:

@@ -1778,8 +1778,8 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 )
             continue
         url, text = result
-        # The card a contract is re-priced on is one of the cards fetched
-        # above, so read it from there as fetch() would.
+        # The card whose formula a contract is billed on is one of the cards
+        # fetched above, so read it from there as fetch() would.
         reference = bolt._index_card(contract)
         held = None if reference is None else fetched[reference]
         index_text = (

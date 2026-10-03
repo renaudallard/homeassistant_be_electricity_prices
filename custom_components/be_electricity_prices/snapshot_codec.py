@@ -410,7 +410,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Dutch edition states. The October 2026 French card says "10,0 c€/kWh (TVA
 # comprise)" on a card priced HTVA, the Dutch one "excl. btw", and a v74 row
 # carries the cut at 8,26 c€ where it is 10,0.
-_SNAPSHOT_SCHEMA_VERSION = 75
+# v76: Bolt's residential Plenty Online card is billed on the Online card's
+# formula and Impact bands, which its Dutch edition prints beside the same
+# monthly prices; the French card prints the professional ones. A v75 row
+# carries the professional formula and prices re-derived from it.
+_SNAPSHOT_SCHEMA_VERSION = 76
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
