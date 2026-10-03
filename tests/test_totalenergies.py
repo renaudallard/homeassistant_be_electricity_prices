@@ -782,3 +782,47 @@ def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
     # the bound is sized on that and leaves every real tariff alone.
     resolved = energy.formula_factor * index + energy.formula_base
     assert 0.05 <= resolved <= 0.60
+
+
+def test_a_dutch_card_reads_as_its_french_edition() -> None:
+    """The October 2026 myComfort card for Wallonia was served in Dutch at its
+    French address. Every figure below is the card's own: the realised prices
+    and the formula base less the 3,36 green contribution they include."""
+    text = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
+    snap = parse_snapshot("totalenergies_mycomfort", text, "wallonia", "t://")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert snap.publication_label == "octobre 2026"
+    assert energy.yearly_fixed_fee == pytest.approx(90.0)
+    assert energy.current == pytest.approx(0.2181)
+    assert energy.peak == pytest.approx(0.2397)
+    assert energy.offpeak == pytest.approx(0.1992)
+    assert energy.exclusive_night == pytest.approx(0.2062)
+    assert energy.formula_factor == pytest.approx(0.1096 * 10.6)
+    assert energy.formula_base == pytest.approx((5.88 * 1.06 - 3.36) / 100)
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.0336)
+    assert snap.taxes.federal_excise == pytest.approx(0.0488)
+    assert snap.taxes.energy_contribution == pytest.approx(0.002)
+    assert snap.taxes.region_connection_fee == pytest.approx(0.0007)
+    assert snap.taxes.card_vat_rate == pytest.approx(0.06)
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    assert snap.dsos["ores"].distribution_single == pytest.approx(0.1198)
+    assert snap.dsos["ores"].data_management_per_year == pytest.approx(14.10)
+
+
+@pytest.mark.parametrize(
+    ("contract", "region", "error"),
+    [
+        ("totalenergies_myessential", "wallonia", "is not myEssential Variabel"),
+        ("totalenergies_mycomfort_fixed", "wallonia", "is not myComfort Vast"),
+        ("totalenergies_mycomfort", "flanders", "is not the flanders"),
+    ],
+)
+def test_a_dutch_card_for_another_product_or_region_is_refused(
+    contract: str, region: str, error: str
+) -> None:
+    """TotalEnergies' October 2026 uploads put cards at the wrong address, and
+    a card sharing the layout would parse. Its title and region line decide."""
+    text = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
+    with pytest.raises(ExtractorError, match=error):
+        parse_snapshot(contract, text, region, "t://")

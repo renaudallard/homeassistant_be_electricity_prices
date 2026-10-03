@@ -40,6 +40,22 @@ where `<SLUG>` is the per contract file prefix (see table) and `<REGION>` is one
 of `VL` / `WAL` / `BXL` (`_REGION_TO_CODE`, `totalenergies.py`). All cards
 are fetched in the French (`_FR`) edition.
 
+A Dutch card is read too. TotalEnergies prints every card in both languages on
+the same layout, so `parse_snapshot` puts the labels the parsers anchor on in
+French first (`_DUTCH_LABELS` and `in_french`, `_totalenergies_cards.py`), month
+names included. A card is Dutch when it says `Tariefkaart`. Before that,
+`_check_dutch_card` (`totalenergies.py`) requires the product name of the
+contract's `dutch_title` and the region's `Elektriciteit in het ... Gewest` line,
+because the October 2026 Dutch uploads put cards at the wrong address and a card
+sharing the layout would parse: the Brussels Electricité Variable address served
+myEssential Variabel, the Flemish myComfort one myComfort Vast and the Brussels
+myEssential one a gas card. Read side by side on the October 2026 cards, every
+Dutch card that is the right one gives the French edition's snapshot, except
+where the two editions print different figures: Electricité Variable in
+Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch, and the Dutch
+Brussels myDrive and myDynamic cards print `BTW % inbegrepen` with the rate
+missing, which leaves the assumed 6%.
+
 These PDFs contain rotated DSO and tax columns that pypdf cannot read (it emits
 "Rotated text discovered. Output will be incomplete."). The extractor therefore
 downloads with `fetch_pdf_text_layout` (pdfplumber, layout aware), unlike the
@@ -343,12 +359,11 @@ injection leg rather than failing for want of a `BELPEXH` feed-in formula.
 The myComfort cards first served in Flanders and Brussels on 1 October 2026
 were empty templates, with the rates left blank, and were refused. Both were
 republished the same day and bill as printed, 23,18 and 26,43 c/kWh. Late on 1
-October 2026 three October cards still fail, each with the "layout changed"
-Repairs card while the entry keeps its September card, and each because of what
-the URL serves rather than the parser:
+October 2026 three October cards still failed, each because of what the URL
+served rather than the parser:
 
 - myComfort in Wallonia: the URL serves the Dutch card ("Tariefkaart ...
-  myComfort Variabel"), which the French parser does not read.
+  myComfort Variabel"). Read since the Dutch cards are, see above.
 - myComfort Fixe in Brussels: the URL serves the injection card ("Injection pour
   l'électricité"), with no consumption row at all.
 - myEssential in Flanders: the footnote says the prices include the

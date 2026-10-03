@@ -733,13 +733,6 @@ _ALLOWED_CARD_MARKER = "KnownCardDefect"
 # (label, detail) -> (expires, why).
 _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
     (
-        "totalenergies/totalenergies_mycomfort/wallonia: fetch",
-        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 French URL serves the Dutch card",
-    ),
-    (
         "totalenergies/totalenergies_mycomfort_fixed/brussels: fetch",
         "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
     ): (

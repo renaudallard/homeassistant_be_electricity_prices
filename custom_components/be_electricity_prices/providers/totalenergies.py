@@ -86,6 +86,8 @@ from ._totalenergies_cards import (
     _extract_injection,
     _extract_publication_month,
     _without_renewables,
+    in_french,
+    is_dutch_card,
 )
 from ._totalenergies_overlays import (
     _energy_contribution_from_table,
@@ -114,6 +116,8 @@ class _ContractDef:
     label: str
     kind: TariffKind
     slug: str  # the file prefix in TotalEnergies's URL
+    # The product name the Dutch edition of the card prints in its title.
+    dutch_title: str
     # Regions the product is actually published in. TotalEnergies's
     # listing page advertises every product in V/W/B but a few only
     # have a Wallonia PDF; the others return a 200 OK HTML 404 page.
@@ -126,18 +130,21 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies Electricité Fixe",
         "fixed",
         "ELECTRICITE-FIXE",
+        "Elektriciteit Vast",
     ),
     _ContractDef(
         "totalenergies_electricite_variable",
         "TotalEnergies Electricité Variable",
         "variable",
         "ELECTRICITE-VARIABLE",
+        "Elektriciteit Variabel",
     ),
     _ContractDef(
         "totalenergies_impact",
         "TotalEnergies Impact",
         "variable",
         "IMPACT",
+        "Impact Variabel",
         regions=frozenset({REGION_WALLONIA}),
     ),
     _ContractDef(
@@ -145,36 +152,42 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies myComfort",
         "variable",
         "MYCOMFORT",
+        "myComfort Variabel",
     ),
     _ContractDef(
         "totalenergies_mycomfort_fixed",
         "TotalEnergies myComfort Fixe",
         "fixed",
         "MYCOMFORT-FIXED",
+        "myComfort Vast",
     ),
     _ContractDef(
         "totalenergies_mydrive",
         "TotalEnergies myDrive",
         "variable",
         "MYDRIVE",
+        "myDrive",
     ),
     _ContractDef(
         "totalenergies_mydynamic",
         "TotalEnergies myDynamic",
         "dynamic",
         "MYDYNAMIC",
+        "myDynamic",
     ),
     _ContractDef(
         "totalenergies_myessential",
         "TotalEnergies myEssential",
         "variable",
         "MYESSENTIAL",
+        "myEssential Variabel",
     ),
     _ContractDef(
         "totalenergies_myessential_fixed",
         "TotalEnergies myEssential Fixe",
         "fixed",
         "MYESSENTIAL-FIXED",
+        "myEssential Vast",
     ),
 )
 
@@ -261,6 +274,9 @@ def parse_snapshot(
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
+    if is_dutch_card(text):
+        _check_dutch_card(text, contract, region)
+        text = in_french(text)
 
     columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
@@ -321,6 +337,37 @@ def parse_snapshot(
         ),
         printed_vat_rate(text, _VAT_RE),
     )
+
+
+# How the Dutch cards name each region in their "Elektriciteit in het ..."
+# line.
+_DUTCH_REGIONS: dict[str, str] = {
+    REGION_FLANDERS: "Vlaamse Gewest",
+    REGION_WALLONIA: "Waalse Gewest",
+    REGION_BRUSSELS: "Brussels Hoofdstedelijk Gewest",
+}
+
+
+def _check_dutch_card(text: str, contract: _ContractDef, region: str) -> None:
+    """Refuse a Dutch card that is not this product's electricity card for
+    this region.
+
+    TotalEnergies' October 2026 uploads put cards at the wrong address: the
+    Dutch Brussels address of Electricité Variable served myEssential
+    Variabel, the Dutch Flemish one of myComfort served myComfort Vast and
+    the Dutch Brussels one of myEssential a gas card. The layout is shared,
+    so such a card would parse. Its title and region line say what it is.
+    """
+    words = r"\s+".join(map(re.escape, contract.dutch_title.split()))
+    if not re.search(rf"Total\s?Energies\s+{words}(?!\w)", text):
+        raise ExtractorError(
+            f"TotalEnergies: the Dutch card is not {contract.dutch_title}"
+        )
+    place = r"\s+".join(map(re.escape, _DUTCH_REGIONS[region].split()))
+    if not re.search(rf"Elektriciteit\s+in\s+het\s+{place}", text):
+        raise ExtractorError(
+            f"TotalEnergies: the Dutch card is not the {region} electricity card"
+        )
 
 
 # The meter columns' header, ending on the exclusive-night one where the card

@@ -676,3 +676,66 @@ def _extract_connection_fee(text: str) -> float:
     if match is None:
         raise ExtractorError("TotalEnergies: Wallonia connection fee not found")
     return to_float(match.group(1)) / 100.0
+
+
+# TotalEnergies prints every card in French and in Dutch, on the same layout
+# and with the same figures. The parsers above anchor on the French labels, so
+# a Dutch card has those labels put in French before it is read: the October
+# 2026 myComfort card for Wallonia was served in Dutch at its French address.
+# Only the labels a parser anchors on are listed. A Dutch card using a label
+# missing here fails the way a French card would.
+_DUTCH_LABELS: tuple[tuple[str, str], ...] = (
+    (
+        r"omvatten de Bijdrage Groene Energie \(BGE\), waarvan het bedrag als "
+        r"volgt wordt vastgesteld",
+        "comprennent la Contribution Énergie Verte (CEV), dont le montant est fixé à :",
+    ),
+    (r"(?m)^Verbruik(?=\**$)", "Consommation"),
+    (r"Maandelijkstarief", "Tarif mensuel"),
+    (r"Jaarlijkstarief", "Tarif annuel"),
+    (r"BTW\s*(\d+)\s*%\s*inbegrepen", r"TVA \1 % incluse"),
+    (r"TotalEnergies Elektriciteit", "TotalEnergies Electricité"),
+    (r"Verbruik tussen ([\d.]+) & ([\d.]+) kWh", r"Consommation entre \1 et \2 kWh"),
+    (r"Bijdrage op de energie", "Cotisation sur l’énergie"),
+    (r"Aansluitingsvergoeding", "Redevance de raccordement"),
+    (r"Ter beschikking gesteld vermogen", "Terme de puissance"),
+    (
+        r"Bijdrage voor openbaredienstverplichtingen",
+        "Droit pour le financement des Obligations de Service Public",
+    ),
+    (r"maandelijkse prijzen", "prix mensuels"),
+    (r"Enkelvoudige Meter:", "Compteur Simple :"),
+    (r"Piekuren:", "Heures Pleines :"),
+    (r"Daluren:", "Heures Creuses :"),
+    (r"Meter Excl\. Nacht:", "Compteur Excl. Nuit :"),
+    (r"PIEKuren:", "Heures PIC :"),
+)
+
+_DUTCH_MONTHS: dict[str, str] = {
+    "januari": "janvier",
+    "februari": "février",
+    "maart": "mars",
+    "april": "avril",
+    "mei": "mai",
+    "juni": "juin",
+    "juli": "juillet",
+    "augustus": "août",
+    "september": "septembre",
+    "oktober": "octobre",
+    "november": "novembre",
+    "december": "décembre",
+}
+_DUTCH_MONTH_RE = re.compile(rf"\b({'|'.join(_DUTCH_MONTHS)})(?=\s+\d{{4}})")
+
+
+def is_dutch_card(text: str) -> bool:
+    """Whether the card is the Dutch edition: its title says Tariefkaart."""
+    return "Tariefkaart" in text
+
+
+def in_french(text: str) -> str:
+    """The Dutch card's text with the labels the parsers read put in French,
+    and its months, so the publication label reads as on a French card."""
+    for pattern, french in _DUTCH_LABELS:
+        text = re.sub(pattern, french, text)
+    return _DUTCH_MONTH_RE.sub(lambda m: _DUTCH_MONTHS[m.group(1)], text)
