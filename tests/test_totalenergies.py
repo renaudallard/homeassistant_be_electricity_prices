@@ -826,3 +826,51 @@ def test_a_dutch_card_for_another_product_or_region_is_refused(
     text = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
     with pytest.raises(ExtractorError, match=error):
         parse_snapshot(contract, text, region, "t://")
+
+
+def test_the_dutch_card_stands_in_for_a_french_one_that_does_not_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In October 2026 the French address of myComfort Fixe in Brussels served
+    the injection card while the Dutch one served the right card. Here the
+    French address serves a page nothing reads and the Dutch one the October
+    myComfort card for Wallonia."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    dutch = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
+    asked: list[str] = []
+
+    async def text(_session: object, url: str) -> str:
+        asked.append(url)
+        return dutch if url.endswith("_NL.pdf") else "Carte tarifaire Injection"
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
+    snap = asyncio.run(
+        totalenergies.fetch(None, "totalenergies_mycomfort", "wallonia")  # type: ignore[arg-type]
+    )
+    assert [url.rsplit("/", 1)[1] for url in asked] == [
+        "MYCOMFORT_ELECTRICITY_WAL_FR.pdf",
+        "MYCOMFORT_ELECTRICITY_WAL_NL.pdf",
+    ]
+    assert snap.source_url.endswith("MYCOMFORT_ELECTRICITY_WAL_NL.pdf")
+    assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
+
+
+def test_the_french_error_stands_when_the_dutch_card_fails_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Dutch Flemish address of myComfort served myComfort Vast in October
+    2026. A Dutch card for another product is refused, and the error reported
+    is the French card's."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    dutch = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
+
+    async def text(_session: object, url: str) -> str:
+        return dutch if url.endswith("_NL.pdf") else "Carte tarifaire Injection"
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
+    with pytest.raises(ExtractorError, match="yearly fee"):
+        asyncio.run(
+            totalenergies.fetch(None, "totalenergies_myessential", "wallonia")  # type: ignore[arg-type]
+        )

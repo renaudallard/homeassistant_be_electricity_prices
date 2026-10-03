@@ -199,9 +199,9 @@ _LISTING_URL = (
 )
 
 
-def _document_url(slug: str, region: str) -> str:
+def _document_url(slug: str, region: str, language: str = "FR") -> str:
     region_code = _REGION_TO_CODE[region]
-    return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_FR.pdf"
+    return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_{language}.pdf"
 
 
 async def probe(
@@ -266,7 +266,21 @@ async def fetch(
         )
     url = _document_url(contract.slug, region)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, region, url)
+    try:
+        return parse_snapshot(contract_id, text, region, url)
+    except ExtractorError as err:
+        # The French address can serve the wrong document: in October 2026
+        # myComfort Fixe in Brussels served the injection card and myEssential
+        # in Flanders a card with its green contribution left blank, while
+        # the Dutch address served the right card. The Dutch card is read
+        # when the French one does not parse, and the French error stands
+        # when neither does.
+        dutch = _document_url(contract.slug, region, "NL")
+        try:
+            text = await fetch_pdf_text_layout(session, dutch)
+            return parse_snapshot(contract_id, text, region, dutch)
+        except ExtractorError:
+            raise err from None
 
 
 def parse_snapshot(

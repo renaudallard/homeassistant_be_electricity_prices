@@ -496,10 +496,11 @@ formula. Each entry is keyed on the exact check label and failure detail, so ano
 the same card still files, and expires on the day the supplier's next card is due, when a card
 still broken is news again. Added for issue #114, where three October 2026 TotalEnergies URLs
 served the Dutch card, the Brussels injection card and a card with no green energy contribution.
-The first went once the parser read Dutch cards. Mega's Flemish professional Smart Flex card
-printed no price formula in either language the same month, where the Wallonia and Brussels
-cards do; it still parses, so its entries bill the rates it prints. The report gives these rows
-their own section.
+The first went once the parser read Dutch cards, the other two once a French card that does not
+parse fell back to its Dutch edition. Mega's Flemish professional Smart Flex card printed no
+price formula in either language the same month, where the Wallonia and Brussels cards do; it
+still parses, so its entries bill the rates it prints. The report gives these rows their own
+section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

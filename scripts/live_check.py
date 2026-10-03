@@ -733,20 +733,6 @@ _ALLOWED_CARD_MARKER = "KnownCardDefect"
 # (label, detail) -> (expires, why).
 _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
     (
-        "totalenergies/totalenergies_mycomfort_fixed/brussels: fetch",
-        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 URL serves the Brussels Injection Variable card",
-    ),
-    (
-        "totalenergies/totalenergies_myessential/flanders: fetch",
-        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 card leaves the green energy contribution blank",
-    ),
-    (
         "mega/mega_pro_smart_flex/flanders: month-indexed energy matches the "
         "registry flag",
         "parsed month_indexed=False, registry month_indexed_energy=True",

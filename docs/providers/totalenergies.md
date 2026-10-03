@@ -40,6 +40,13 @@ where `<SLUG>` is the per contract file prefix (see table) and `<REGION>` is one
 of `VL` / `WAL` / `BXL` (`_REGION_TO_CODE`, `totalenergies.py`). All cards
 are fetched in the French (`_FR`) edition.
 
+When the French card does not parse, `fetch` reads the same card's Dutch
+edition (`_NL.pdf`) and reports the French error when that fails too: in
+October 2026 the French address of myComfort Fixe in Brussels served the
+injection card, and myEssential in Flanders a card with its green contribution
+left blank, while both Dutch addresses served the right card. The probe still
+HEADs the French address, which TotalEnergies rewrites with every new month.
+
 A Dutch card is read too. TotalEnergies prints every card in both languages on
 the same layout, so `parse_snapshot` puts the labels the parsers anchor on in
 French first (`_DUTCH_LABELS` and `in_french`, `_totalenergies_cards.py`), month
@@ -365,11 +372,12 @@ served rather than the parser:
 - myComfort in Wallonia: the URL serves the Dutch card ("Tariefkaart ...
   myComfort Variabel"). Read since the Dutch cards are, see above.
 - myComfort Fixe in Brussels: the URL serves the injection card ("Injection pour
-  l'électricité"), with no consumption row at all.
+  l'électricité"), with no consumption row at all. Read off the Dutch card since.
 - myEssential in Flanders: the footnote says the prices include the
   contribution and leaves its amount blank ("dont le montant est fixé à : €
   cent/kWh"), so it cannot be taken back out of the rates, and the formula row
-  prints its first base inline and the other three on the next line.
+  prints its first base inline and the other three on the next line. Read off
+  the Dutch card since, which prints 1,57.
 
 ### Month-indexed energy on the variable cards
 
