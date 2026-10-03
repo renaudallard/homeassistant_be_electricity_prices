@@ -950,8 +950,9 @@ successful refresh:
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;
   cached prices keep serving, including a card stored by an earlier version
-  that an upgrade would otherwise drop, and with no cached card at all the
-  sensors stay unavailable.
+  that an upgrade would otherwise drop. With no card at all, last month's
+  card from the project's card archive stands in, and only with the archive
+  box unticked or nothing there do the sensors stay unavailable.
 - **`extractor_card_missing_<entry>`** — the supplier's site answered
   that there is no tariff card at the address the integration reads (HTTP
   404 or 410, or a web page where the card should be): the card for the
@@ -1698,6 +1699,13 @@ on the current card as an entry with no signing month does, unless you typed
 the rate you signed. A signing card an installation has read is kept on disk until an
 update changes the stored card format, so this matters when the entry is
 new, its signing date changes, or such an update is installed.
+
+The archive also stands in for the running month's card when that cannot be
+read. An entry that holds a card keeps pricing on it; one that holds none (a
+new entry, or one whose stored card an update set aside and which the update
+could not replace) is priced on the archive's card for the month before, so
+its sensors keep values, and the Repairs card about the unreadable card stays
+up until a fetch succeeds.
 The same run writes `vat.json`: for each month, the VAT rate the cards agree
 on, when at least three suppliers state one rate and none states another. The
 integration reads it once a day to price what a card leaves without a rate

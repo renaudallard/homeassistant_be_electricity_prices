@@ -69,7 +69,8 @@ from .cohort import ytd_window_start
 from .snapshot_months import (
     ArchivedCard,
     card_for_unreadable_month,
-    last_card_of_withdrawn,
+    card_of_month_before,
+    month_before,
 )
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -81,7 +82,7 @@ from .snapshot_codec import (
     _snapshot_from_dict,
 )
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -588,8 +589,11 @@ class _SnapshotMixin:
         if result.source == "backoff":
             # A sibling failed on this tuple moments ago. Take its reason, so a
             # cold-start coordinator reports the real failure rather than "cold
-            # start", and leave the snapshot alone.
+            # start", and leave the snapshot alone, or with none fall back as
+            # the failure itself would.
             self._last_error = result.error_message
+            if self._snapshot is None:
+                await self._serve_stand_in_card(result.error_message)
             return
 
         if result.source == "local" and result.row is not None:
@@ -668,11 +672,7 @@ class _SnapshotMixin:
             # cards to raise.
             self._replay_stale_snapshot("publishes its tariff card as page images")
         elif self._snapshot is None:
-            # Any other failure can heal on a later fetch, but until then the
-            # card the schema gate rejected beats no prices at all.
-            self._replay_stale_snapshot(
-                f"could not be refreshed ({result.error_message})", refetch=True
-            )
+            await self._serve_stand_in_card(result.error_message)
         if not transient:
             # A 404 or 410, or a web page where the card should be, says the
             # supplier has no card at that address, which is a late card, a
@@ -747,7 +747,7 @@ class _SnapshotMixin:
         """
         if self._snapshot is None:
             try:
-                archived = await last_card_of_withdrawn(
+                archived = await card_of_month_before(
                     self._session,
                     self.entry.data[CONF_SUPPLIER],
                     self.entry.data[CONF_CONTRACT],
@@ -766,6 +766,57 @@ class _SnapshotMixin:
                 self._replay_stale_snapshot(f"no longer sells this product ({error})")
         self._sync_extractor_issue(
             error if self._snapshot is None else None, missing=True
+        )
+
+    async def _serve_stand_in_card(self, error: str) -> None:
+        """Give an entry left with no card the closest one there is.
+
+        Any failure but page images can heal on a later fetch, but until then
+        the card the schema gate rejected beats no prices at all, and last
+        month's card beats it being missing too.
+        """
+        self._replay_stale_snapshot(f"could not be refreshed ({error})", refetch=True)
+        if self._snapshot is None:
+            await self._serve_former_month_card(error)
+
+    async def _serve_former_month_card(self, error: str) -> None:
+        """Price an entry left with no card off last month's, from the archive.
+
+        Reached when a fetch fails and nothing is held, not even a card an
+        upgrade set aside: an entry set up while its supplier's card cannot
+        be read. The archive's row for the month before is the closest card
+        there is. Unlike a withdrawn product's last card it is no answer, so
+        the failure's Repairs card stays up, and it is dated to the first day
+        of its month with no probe key: the snapshot reads as old, no sibling
+        takes it for a fresh card, and the next refresh asks the supplier.
+        """
+        today = dt_util.now().date()
+        try:
+            archived = await card_of_month_before(
+                self._session,
+                self.entry.data[CONF_SUPPLIER],
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data[CONF_REGION],
+                today,
+                self.entry,
+            )
+        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+            _LOGGER.debug("card archive read failed for last month's card: %s", err)
+            return
+        if archived is None:
+            return
+        former = month_before(today)
+        self._set_snapshot(archived.snapshot)
+        self._snapshot_fetched_at = datetime(former.year, former.month, 1, tzinfo=UTC)
+        self._snapshot_probe_key = None
+        self._card_read_by_ocr = archived.read_by_ocr
+        self._sync_card_read_by_ocr_issue(archived.read_by_ocr)
+        _LOGGER.warning(
+            "%s could not be refreshed (%s); serving the card archive's card "
+            "of %s rather than no prices at all",
+            self.entry.data.get(CONF_SUPPLIER),
+            error,
+            former.strftime("%Y-%m"),
         )
 
     def _adopt_archived_card(self, archived: ArchivedCard) -> None:

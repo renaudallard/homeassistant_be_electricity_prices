@@ -7503,6 +7503,124 @@ async def test_a_card_that_fails_to_parse_replays_the_schema_rejected_snapshot(
     assert coord._stale_snapshot is None
 
 
+async def _fail_with_archive(
+    hass: HomeAssistant, coord: BePricesCoordinator, archived: Any
+) -> AsyncMock:
+    """One refresh whose card fails to parse, with ``archived`` as the card
+    archive's answer; returns the archive read for the caller to inspect."""
+    from custom_components.be_electricity_prices import snapshot_months
+
+    async def _unparsable_fetch(*args: Any, **kwargs: Any) -> None:
+        raise ExtractorError("TotalEnergies: yearly fee + renewables row not found")
+
+    read = AsyncMock(return_value=archived)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=make_stub_extractor(fetch=_unparsable_fetch),
+        ),
+        patch.object(snapshot_months, "_archived_card_from_github", read),
+    ):
+        await coord._maybe_refresh_snapshot()
+    return read
+
+
+async def test_an_entry_with_no_card_is_priced_off_last_months(
+    hass: HomeAssistant,
+) -> None:
+    """An entry set up while its supplier's card cannot be read holds no card
+    at all, and every entity was unavailable. Last month's card, read from the
+    card archive, stands in. The failure's Repairs card stays up, and the card
+    is dated to its own month with no probe key, so it reads as old and the
+    next refresh still asks the supplier."""
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        month_before,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    card = make_snapshot(supplier="eneco", contract="power_fix")
+    read = await _fail_with_archive(
+        hass, coord, ArchivedCard(snapshot=card, read_by_ocr=False)
+    )
+
+    former = month_before(dt_util.now().date())
+    read.assert_awaited_once_with(ANY, "eneco", "power_fix", "wallonia", former)
+    assert coord._snapshot is not None
+    assert coord._snapshot_fetched_at == datetime(
+        former.year, former.month, 1, tzinfo=UTC
+    )
+    assert coord._snapshot_probe_key is None
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
+
+
+async def test_last_months_card_waits_for_the_archive_box_and_the_entrys_own(
+    hass: HomeAssistant,
+) -> None:
+    """The card-archive box keeps the integration off GitHub, and a card the
+    entry stored itself, set aside by an upgrade, is closer than the archive's
+    copy of last month."""
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
+
+    archived = ArchivedCard(
+        snapshot=make_snapshot(supplier="ecofix", contract="ecofix_flexy"),
+        read_by_ocr=False,
+    )
+    entry = make_entry(card_archive=False)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    read = await _fail_with_archive(hass, coord, archived)
+    read.assert_not_awaited()
+    assert coord._snapshot is None
+
+    # Another region, since the first failure holds its own tuple off.
+    entry = make_entry(region="flanders", dso="fluvius_antwerpen")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _fake_load() -> dict[str, Any]:
+        return {
+            "entry_supplier": coord.entry.data["supplier"],
+            "entry_contract": coord.entry.data["contract"],
+            "entry_region": coord.entry.data["region"],
+            "snapshot": _stale_blob(16),
+        }
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+    read = await _fail_with_archive(hass, coord, archived)
+    read.assert_not_awaited()
+    assert coord._snapshot_schema_version == 16
+
+
+async def test_an_entry_starting_in_a_siblings_back_off_gets_last_months_card(
+    hass: HomeAssistant,
+) -> None:
+    """A sibling's failure holds the tuple off for a while, and an entry that
+    starts inside that window does not fetch at all. With no card of its own
+    it falls back as the failure itself would have."""
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
+
+    archived = ArchivedCard(
+        snapshot=make_snapshot(supplier="eneco", contract="power_fix"),
+        read_by_ocr=False,
+    )
+    first = _entry()
+    first.add_to_hass(hass)
+    await _fail_with_archive(hass, BePricesCoordinator(hass, first), archived)
+
+    second = _entry()
+    second.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, second)
+    read = await _fail_with_archive(hass, coord, archived)
+    read.assert_awaited_once()
+    assert coord._snapshot is not None
+    assert "yearly fee" in coord._last_error
+
+
 async def test_a_blob_below_the_replay_floor_is_still_refused(
     hass: HomeAssistant,
 ) -> None:

@@ -478,26 +478,32 @@ async def card_for_unreadable_month(
     )
 
 
-async def last_card_of_withdrawn(
+def month_before(day: date) -> date:
+    """The first day of the month before ``day``'s."""
+    return (day.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+async def card_of_month_before(
     session: aiohttp.ClientSession,
     supplier: str,
     contract: str,
     region: str,
-    withdrawn: date,
+    day: date,
     entry: ConfigEntry | None,
 ) -> ArchivedCard | None:
-    """The archive's row for the last month a withdrawn product was sold.
+    """The archive's row for the month before ``day``'s, for an entry left
+    with no card. Honours the card-archive box like the reader above.
 
-    The supplier keeps a withdrawn product's last card up for a while, and
-    an entry left on the product is priced off it. Once the file is taken
-    down, and with no card held (a fresh start, or one the schema gate
-    refused), the archive's copy is the only one left: the month before
-    ``withdrawn``. Honours the card-archive box like the reader above.
+    Two callers. A withdrawn product whose card the supplier took down is
+    priced off the last month it was sold, the month before ``withdrawn``. An
+    entry whose supplier's card cannot be read, and that holds no card of its
+    own, is priced off last month's, the month before today.
     """
     if not _archive_allowed(entry):
         return None
-    last = (withdrawn.replace(day=1) - timedelta(days=1)).replace(day=1)
-    return await _archived_card_from_github(session, supplier, contract, region, last)
+    return await _archived_card_from_github(
+        session, supplier, contract, region, month_before(day)
+    )
 
 
 def _archive_allowed(entry: ConfigEntry | None) -> bool:
