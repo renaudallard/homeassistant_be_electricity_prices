@@ -49,9 +49,9 @@ import time
 import traceback
 import types
 from collections.abc import Awaitable, Callable, Iterable, Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -156,10 +156,12 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _RATE_SPOT_MONTHLY = rates.SpotMonthlyRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR, _render_through
+    global _memoise_text_fetches
     # The readers' render seam, from the copy of _pdf the providers loaded
     # here actually consult; the real package's would be a different
     # ContextVar and the hook would never be seen.
     _render_through = pdf.render_through
+    _memoise_text_fetches = pdf.memoise_text_fetches
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
     global _parse_vreg_ceiling
@@ -306,6 +308,12 @@ _RATE_SPOT_MONTHLY: type = object
 
 # Bound by _load_providers to providers/_pdf.render_through; a no-op until then.
 _render_through: Any = None
+
+
+# Bound the same way to providers/_pdf.memoise_text_fetches; memoises
+# nothing until then.
+def _memoise_text_fetches(_store: dict[str, str]) -> AbstractContextManager[None]:
+    return nullcontext()
 
 
 # Bound by _load_providers to providers/_pdf.is_transient_fetch_error so
@@ -1829,6 +1837,17 @@ async def _check_totalenergies(
     card_valid_until = importlib.import_module(
         totalenergies.__name__.rpartition(".")[0] + "._validity"
     ).card_valid_until
+    # One memo for the walk, so the edition comparison reads the French card
+    # the fetch already read instead of downloading and parsing it again.
+    with _memoise_text_fetches({}):
+        await _walk_totalenergies(session, totalenergies, card_valid_until)
+
+
+async def _walk_totalenergies(
+    session: aiohttp.ClientSession,
+    totalenergies: types.ModuleType,
+    card_valid_until: Callable[..., date | None],
+) -> None:
     for contract in totalenergies._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
@@ -1856,6 +1875,76 @@ async def _check_totalenergies(
             _validate_snapshot(
                 prefix, cid, snap, region=region_key, injection_shape=shape
             )
+            await _compare_totalenergies_editions(
+                session, totalenergies, contract, region_key
+            )
+
+
+# What a card's two editions may differ in without either being wrong: where
+# each was fetched from, and the VAT rate the card states, which the Dutch
+# Brussels cards of October 2026 print without its digit and which every
+# card is priced at either way.
+_EDITION_IGNORED = frozenset(
+    {"source_url", "card_vat_rate", "assumed_vat_rate", "published_vat_rate"}
+)
+
+
+def _edition_differences(french: Any, dutch: Any, path: str = "") -> list[str]:
+    """Every billed figure the two editions of one card disagree on."""
+    if isinstance(french, dict) and isinstance(dutch, dict):
+        return [
+            line
+            for key in sorted(set(french) | set(dutch))
+            if key not in _EDITION_IGNORED
+            for line in _edition_differences(
+                french.get(key), dutch.get(key), f"{path}.{key}" if path else key
+            )
+        ]
+    if french == dutch:
+        return []
+    return [f"{path}: French {french!r}, Dutch {dutch!r}"]
+
+
+async def _compare_totalenergies_editions(
+    session: aiohttp.ClientSession,
+    totalenergies: types.ModuleType,
+    contract: Any,
+    region: str,
+) -> None:
+    """Assert a TotalEnergies card reads the same in French and in Dutch.
+
+    The integration reads the French card and falls back to the Dutch one
+    when the French one does not parse, which is only worth anything while
+    the Dutch card is right. In October 2026 four Dutch addresses served
+    another product or a typo, and Electricité Variable in Wallonia charged
+    a 100,00 EUR fee in French and 94,34 in Dutch. A French card that does
+    not parse is the extractor check's to report, so it is left alone here.
+    """
+    label = (
+        f"totalenergies/{contract.contract_id}/{region}: French and Dutch cards agree"
+    )
+    figures: list[dict[str, Any]] = []
+    for language in ("FR", "NL"):
+        url = totalenergies._document_url(contract.slug, region, language)
+        try:
+            text = await _fetch_with_retry(
+                partial(totalenergies.fetch_pdf_text_layout, session, url)
+            )
+            snap = totalenergies.parse_snapshot(contract.contract_id, text, region, url)
+        except Exception as err:
+            if language == "FR" or _is_transient_fetch_error(str(err)):
+                return
+            _record(
+                label,
+                False,
+                f"the Dutch card does not read: {type(err).__name__}: {err}",
+                kind="edition",
+            )
+            return
+        figures.append(asdict(snap))
+    french, dutch = figures
+    differences = _edition_differences(french, dutch)
+    _record(label, not differences, "; ".join(differences), kind="edition")
 
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
@@ -5102,6 +5191,7 @@ async def _run(texts: Path | None = None) -> int:
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
     tax_checks = [c for c in CHECKS if c.kind == "tax"]
     network_checks = [c for c in CHECKS if c.kind == "network"]
+    edition_checks = [c for c in CHECKS if c.kind == "edition"]
     # Stdout = extractor report (existing workflow consumes this).
     # Metrics piggyback on the extractor report so silent slowdowns and
     # PDF-size jumps surface daily without a separate pipeline.
@@ -5131,6 +5221,9 @@ async def _run(texts: Path | None = None) -> int:
     # And network figures apart from both: they are billed as printed, so the
     # issue says a household pays the figure, which a tax row cannot say.
     (ROOT / "network_report.md").write_text(_render_report(network_checks))
+    # And a card whose two editions disagree, which is neither: the French one
+    # is billed, and the Dutch one only stands in when the French one breaks.
+    (ROOT / "edition_report.md").write_text(_render_report(edition_checks))
     # What the workflow fingerprints those two issues on: the failing labels.
     # Each report also carries its pass count and every passing row, so a
     # fingerprint over it changed with any unrelated row and the same open
@@ -5141,6 +5234,9 @@ async def _run(texts: Path | None = None) -> int:
     _write_failure_labels(ROOT / "tax_failures.txt", _extractor_regressions(tax_checks))
     _write_failure_labels(
         ROOT / "network_failures.txt", _extractor_regressions(network_checks)
+    )
+    _write_failure_labels(
+        ROOT / "edition_failures.txt", _extractor_regressions(edition_checks)
     )
     failed_suppliers = _failed_suppliers(extractor_checks)
     drift_warnings = _drift_warnings(METRICS, failed_suppliers)
@@ -5158,13 +5254,15 @@ async def _run(texts: Path | None = None) -> int:
     extractor_failed = bool(regressions)
     # One bit for both: neither fails a pull request, and the workflow tells
     # them apart by which report carries failures.
-    catalog_failed = _catalog_gates_ci([*catalog_checks, *tax_checks, *network_checks])
+    catalog_failed = _catalog_gates_ci(
+        [*catalog_checks, *tax_checks, *network_checks, *edition_checks]
+    )
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
     #   bit 0 (1) = extractor failure
     #   bit 1 (2) = catalog signal (a new product or a failed discovery,
-    #               a tax block or a network figure that disagrees; the
-    #               three reports say which)
+    #               a tax block, a network figure or a card's two editions
+    #               that disagree; the four reports say which)
     #   bit 2 (4) = drift alert
     return (
         (1 if extractor_failed else 0)
@@ -5185,8 +5283,9 @@ BYTES_WARN_THRESHOLD = 5_000_000
 # steady-state metrics table after the bolt 3x-refetch fix:
 #   * bolt: ~32 MB (6 contracts x ~5 MB PDF, parsed once for all 3
 #     regions). Allow 50 MB for headroom and a possible new product.
-#   * totalenergies: ~11 MB (7 contracts x 3 regions, ~0.45 MB each).
-#     Allow 15 MB.
+#   * totalenergies: ~20 MB measured on 3 October 2026, every card in both
+#     languages for the edition comparison: 9,72 MB French and 10,24 MB
+#     Dutch over 25 cards each. Allow 25 MB.
 #   * engie: ~5.4 MB (sitemap discovery + ~24 region PDFs). Allow 8 MB
 #     so we don't fire on a slow day.
 #   * ecofix: 13.2 MB (4 contracts x 2 regions, no per-PDF cache), measured
@@ -5209,7 +5308,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     # region PDFs, mega 33 -> ~57. Budgets doubled to match, still with
     # the same slack the residential-only figures carried.
     "bolt": 100_000_000,
-    "totalenergies": 15_000_000,
+    "totalenergies": 25_000_000,
     "engie": 16_000_000,
     "ecofix": 16_000_000,
     "mega": 14_000_000,

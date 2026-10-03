@@ -45,7 +45,7 @@ import sys
 from datetime import date, datetime
 from types import SimpleNamespace
 from collections.abc import Callable, Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -3061,6 +3061,108 @@ def test_a_network_disagreement_files_apart_from_the_tax_block(
     assert "--label 'live-check-network'" in run
 
 
+def test_a_card_edition_disagreement_files_apart(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A card reading differently in Dutch than in French is the supplier's
+    own inconsistency: the French card is billed, so it is neither a tax nor
+    a network row and gets its own report, fingerprint and label."""
+    import yaml  # type: ignore[import-untyped]
+
+    label = "totalenergies/te_variable/wallonia: French and Dutch cards agree"
+
+    def _consensus(*_args: Any) -> None:
+        lc._record(label, False, "energy.yearly_fixed_fee", kind="edition")
+
+    rc = _drive_run(monkeypatch, tmp_path, _check_network_consensus=_consensus)
+    assert rc & 2 and not rc & 1
+    assert "## Failures" in (tmp_path / "edition_report.md").read_text()
+    assert "## Failures" not in (tmp_path / "network_report.md").read_text()
+    assert (tmp_path / "edition_failures.txt").read_text() == f"{label}\n"
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    steps = {s.get("name", ""): s for s in workflow["jobs"]["check"]["steps"]}
+    run = steps["Open or update card-editions issue"]["run"]
+    assert "--fingerprint edition_failures.txt" in run
+    assert "--label 'live-check-editions'" in run
+
+
+@dataclass
+class _EditionTaxes:
+    vat_rate: float
+    card_vat_rate: float | None
+
+
+@dataclass
+class _EditionCard:
+    fee: float
+    taxes: _EditionTaxes
+    source_url: str
+
+
+def _editions(
+    french: Any, dutch: Any, transient: bool = False
+) -> list[tuple[str, bool, str]]:
+    """Run the edition comparison over two stand-in cards and return the rows
+    it recorded. ``french`` and ``dutch`` are a card, or an exception the
+    parse raises."""
+
+    async def _text(_session: Any, url: str) -> str:
+        return url
+
+    def _parse(_cid: str, text: str, _region: str, url: str) -> Any:
+        card = french if text.endswith("_FR.pdf") else dutch
+        if isinstance(card, Exception):
+            raise card
+        return card
+
+    module = SimpleNamespace(
+        _document_url=lambda slug, region, language: f"{slug}_{region}_{language}.pdf",
+        fetch_pdf_text_layout=_text,
+        parse_snapshot=_parse,
+    )
+    contract = SimpleNamespace(contract_id="te", slug="TE")
+    lc.CHECKS.clear()
+    original = lc._is_transient_fetch_error
+    lc._is_transient_fetch_error = lambda _message: transient  # type: ignore[assignment]
+    try:
+        asyncio.run(
+            lc._compare_totalenergies_editions(None, module, contract, "wallonia")  # type: ignore[arg-type]
+        )
+    finally:
+        lc._is_transient_fetch_error = original  # type: ignore[assignment]
+    return [(c.label, c.ok, c.detail) for c in lc.CHECKS if c.kind == "edition"]
+
+
+def test_a_cards_two_editions_are_compared_on_what_is_billed() -> None:
+    """Electricité Variable in Wallonia charged a 100,00 EUR fee in French and
+    94,34 in Dutch in October 2026. Where each edition was fetched from and the
+    VAT rate it states are not billed figures, and do not count."""
+    label = "totalenergies/te/wallonia: French and Dutch cards agree"
+    french = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "fr")
+    same = _EditionCard(100.0, _EditionTaxes(0.0, None), "nl")
+    assert _editions(french, same) == [(label, True, "")]
+    other = _EditionCard(94.34, _EditionTaxes(0.0, 0.06), "nl")
+    assert _editions(french, other) == [
+        (label, False, "fee: French 100.0, Dutch 94.34")
+    ]
+
+
+def test_a_dutch_edition_that_does_not_read_is_reported() -> None:
+    """The Dutch card only matters as the French one's stand-in, so it failing
+    is reported, while a French card failing is the extractor check's to say,
+    and a transient failure on the Dutch one says nothing."""
+    french = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "fr")
+    refused = ValueError("the Dutch card is not myComfort Variabel")
+    ((label, ok, detail),) = _editions(french, refused)
+    assert not ok and "the Dutch card does not read" in detail
+    assert _editions(ValueError("layout"), french) == []
+    assert _editions(french, refused, transient=True) == []
+
+
 # ---- the workflow's retry loop -----------------------------------------------
 
 
@@ -4034,8 +4136,17 @@ def test_a_totalenergies_card_from_october_2026_expects_no_feed_in(
     async def _fetch(_session: object, cid: str, region: str) -> object:
         return totalenergies.parse_snapshot(cid, text, region)
 
+    async def _text(_session: object, _url: str) -> str:
+        return text
+
+    # The same card in both languages, so the edition comparison agrees.
     module = SimpleNamespace(
-        __name__=totalenergies.__name__, _CONTRACTS=(contract,), fetch=_fetch
+        __name__=totalenergies.__name__,
+        _CONTRACTS=(contract,),
+        fetch=_fetch,
+        _document_url=totalenergies._document_url,
+        fetch_pdf_text_layout=_text,
+        parse_snapshot=totalenergies.parse_snapshot,
     )
     asyncio.run(lc._check_totalenergies(None, module))  # type: ignore[arg-type]
     rows = _rows(f"totalenergies/{cid}/flanders")

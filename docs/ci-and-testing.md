@@ -817,7 +817,7 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
 | 0 | 1 | extractor **regression** (fetch or parse, the spot fallback included) or a phase of the run that crashed, excluding unreadable cards | yes |
-| 1 | 2 | catalog signal: a new product appeared at a supplier or its discovery failed, or a supplier's federal tax block or network figure disagrees with the month's consensus. One bit for three kinds of news, because none is a regression in what this repository bills and none should fail a pull request; `catalog_report.md`, `tax_report.md` and `network_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
+| 1 | 2 | catalog signal: a new product appeared at a supplier or its discovery failed, a supplier's federal tax block or network figure disagrees with the month's consensus, or a card's French and Dutch editions disagree. One bit for four kinds of news, because none is a regression in what this repository bills and none should fail a pull request; `catalog_report.md`, `tax_report.md`, `network_report.md` and `edition_report.md` carry one kind each, and the workflow files whichever has failures under its own title | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash: a top-level Python exception in the script, or, set by the workflow's loop itself, any exit above 7 and any odd exit with no `extractor_failures.txt` written (a module-level ImportError exits 1, an OOM kill 137, a runner SIGTERM 143) | no |
 
@@ -1265,6 +1265,20 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
+| bit 1 (rc 2/3/6/7) | Open or update card-editions issue | `live-check-editions` | `[live-check] a supplier's French and Dutch cards disagree` |
+
+TotalEnergies' cards are also read in Dutch and compared with the French edition
+(`_compare_totalenergies_editions`, `scripts/live_check.py`), into `edition_report.md` and its
+own issue. The French card is billed and the Dutch one stands in only when the French one does
+not parse, so a Dutch card that does not read, or that parses to different billed figures, is a
+fallback that would mislead on the day it is needed. Where each edition was fetched from and the
+VAT rate it states are left out of the comparison. A French card that does not parse is the
+extractor check's to report, and a transient failure on the Dutch one reports nothing. The walk
+runs under one `memoise_text_fetches`, so the French card the fetch read is not read twice. It
+runs daily, and the issue's fingerprint posts only when the set of disagreeing cards changes,
+which is once a month in practice, when TotalEnergies republishes. On 3 October 2026 it reported
+five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch,
+and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
 The tax report carries five kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling

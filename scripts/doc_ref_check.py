@@ -68,6 +68,8 @@ NOT_OURS = frozenset(
         "coverage.md",
         "drift_fingerprint.txt",
         "drift_report.md",
+        "edition_failures.txt",
+        "edition_report.md",
         "extractor_failures.txt",
         "network_failures.txt",
         "network_report.md",
