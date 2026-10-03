@@ -517,13 +517,14 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     """Match one card's href on an index page.
 
     The href is site-relative on the EnergyVision listing and absolute on the
-    Brusol pages, so the site prefix is optional. The directory is not
+    Brusol pages, so the site prefix is optional, and Brusol has ended one in
+    a space ("EV-1026-GSG-BXL-nl.pdf "). The directory is not
     anchored: EnergyVision keeps every card in one ``inline-files`` folder
     while Brusol files each one under the month it uploaded it.
     """
     return re.compile(
         rf'href="((?:https?://[^"/]+)?/sites/default/files/[^"]*?'
-        rf'EV-\d{{4}}-{re.escape(code)}-{re.escape(token)}[^"]*\.pdf)"',
+        rf'EV-\d{{4}}-{re.escape(code)}-{re.escape(token)}[^"]*\.pdf)\s*"',
         re.IGNORECASE,
     )
 

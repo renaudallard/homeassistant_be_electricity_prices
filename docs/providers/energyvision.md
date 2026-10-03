@@ -135,8 +135,9 @@ from October 2026 Brusol's signup pages link last month's card in the form's con
 checkbox, ahead of the current card on the button, and the first match was September's.
 The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is
 optional because the EnergyVision listing writes site-relative hrefs and Brusol absolute
-ones; and the directory is not anchored because Brusol files each card under the month it
-uploaded it. The resolved absolute URL is layout-extracted with `fetch_pdf_text_layout`
+ones; whitespace is allowed before the closing quote because Brusol's October 2026 page
+ended the gas card's href in a space; and the directory is not anchored because Brusol
+files each card under the month it uploaded it. The resolved absolute URL is layout-extracted with `fetch_pdf_text_layout`
 (the layout extractor keeps column alignment, important for the DSO table), then parsed.
 
 The page can lag the upload. On 1 October 2026 Brusol's pages still linked the September

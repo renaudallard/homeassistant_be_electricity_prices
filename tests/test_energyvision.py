@@ -1110,6 +1110,28 @@ async def test_the_newest_card_a_page_links_is_resolved(
     assert url == f"{base}/2026-09/EV-1026-GRS-BXL-nl.pdf"
 
 
+async def test_a_card_href_ending_in_a_space_is_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Brusol's October 2026 page linked the gas card as "...-BXL-nl.pdf "."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    base = "https://www.brusol.be/sites/default/files"
+    html = (
+        f'<a class="btn" href="{base}/2026-09/EV-1026-GRS-BXL-nl.pdf ">Tariefkaart</a>'
+    )
+
+    async def page(_session: Any, _url: str) -> str:
+        return html
+
+    monkeypatch.setattr(ev, "fetch_text", page)
+    contract = ev._CONTRACTS_BY_ID[_GRS]
+    card = contract.card("brussels")
+    assert card is not None
+    url = await ev._resolve_card_url(None, contract, card)  # type: ignore[arg-type]
+    assert url == f"{base}/2026-09/EV-1026-GRS-BXL-nl.pdf"
+
+
 # ---- Brussels (Brusol) card: GRS "Groene stroom" -----------------------------
 
 _GRS = "energyvision_groene_stroom"
