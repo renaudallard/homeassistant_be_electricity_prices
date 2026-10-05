@@ -93,8 +93,8 @@ from .providers.base import (
 from .providers._pdf import is_transient_fetch_error
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import (
-    _snapshot_for_month,
     card_for_unreadable_month,
+    month_card,
     month_card_failed,
 )
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
@@ -656,17 +656,15 @@ async def _latest_archived_card(
     extractor: SupplierExtractor,
     proxy: ConfigEntry,
     period: ContractPeriod,
-    fallback: SupplierSnapshot,
 ) -> tuple[SupplierSnapshot | None, bool]:
     """The newest card an archive holds for the old contract inside its days,
     and, when there is none, whether a month's read failed just now.
 
     For a supplier that has left the market and no longer publishes one: DATS
     24's cards answer 404 since September 2026, and the project's archive keeps
-    the months it captured. ``_snapshot_for_month`` hands back the fallback it
-    is given, the very object, for a month no archive holds, which is how a
-    real card is told from none, and for a month whose read failed, which
-    ``month_card_failed`` tells apart.
+    the months it captured. ``month_card`` answers None for a month no archive
+    holds and for a month whose read failed, which ``month_card_failed`` tells
+    apart.
     """
     data = proxy.data
     contract = data.get(CONF_CONTRACT, "")
@@ -675,10 +673,10 @@ async def _latest_archived_card(
     first = date(period.start.year, period.start.month, 1)
     failed = False
     while month >= first:
-        card = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month, fallback, proxy
+        card = await month_card(
+            hass, session, extractor, contract, region, month, proxy
         )
-        if card is not fallback:
+        if card is not None:
             return card, False
         failed = failed or month_card_failed(
             hass, extractor.id, contract, region, month
@@ -728,7 +726,7 @@ async def period_card(
     )
     if card is None and fallback is not None:
         card, archive_failed = await _latest_archived_card(
-            hass, session, extractor, proxy, period, fallback
+            hass, session, extractor, proxy, period
         )
         read_failed = read_failed or archive_failed
     if card is None:

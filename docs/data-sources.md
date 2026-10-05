@@ -486,7 +486,7 @@ repository's own card archive first for a closed month (`_archived_card_from_git
 archives into), then the extractor's `fetch_for_month` archive for a month the project's does not
 hold or holds only as the estimate a month-indexed card printed while it ran (see
 [provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
-when neither holds the month.
+when neither holds the month, with the federal levies that month owes (`_proxy_for_month`).
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`
@@ -551,9 +551,9 @@ cost. Two rules enforce this:
   be read, a closed month whose card read failed and is waiting out its
   marker, and every month of a contract whose signing month is one
   (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
-  month no archive holds, since `_snapshot_for_month` hands back the current
-  card for both). An earlier contract no archive kept is priced on the
-  stand-in the live walk uses, imported at once so the anchor probe finds its
+  month no archive holds, since `month_card` answers None for both). An
+  earlier contract no archive kept is priced on the stand-in the live walk
+  uses, imported at once so the anchor probe finds its
   row on the next restart; the response lists it under `stand_in` and a
   warning names it. A read that failed just now is a retry, not a stand-in:
   the live sensor bills those days on their own cards again once they can be

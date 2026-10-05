@@ -769,6 +769,7 @@ class _HouseholdMixin:
             placeholders=placeholders,
             current_snapshot=current_snapshot,
             raw_snapshot=raw_snapshot,
+            parsed_snapshot=coord._snapshot_raw,
             baseline_snapshot=baseline_snapshot,
             hour_weights=hour_weights,
             inj_hour_weights=inj_hour_weights,

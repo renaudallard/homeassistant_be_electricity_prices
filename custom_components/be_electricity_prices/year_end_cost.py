@@ -101,6 +101,7 @@ async def _compute_year_end_cost(
     billed_peak_kw: float = 0.0,
     cached_only: bool = False,
     window_start_override: date | None = None,
+    snapshot_raw: SupplierSnapshot | None = None,
 ) -> float | None:
     """The calendar year's bill in EUR, or ``None`` with the reason in
     ``breakdown["energy_basis"]`` or ``breakdown["volume_basis"]``.
@@ -108,6 +109,8 @@ async def _compute_year_end_cost(
     ``snapshot`` is the entry's card as the year-to-date walk takes it, and
     ``card`` the one the live price is built from, the signing cohort spliced
     in and a month-indexed feed-in baked on the running month.
+    ``snapshot_raw`` is the card ``snapshot`` was resolved from, which the
+    year-to-date walk prices a month no archive holds on.
     ``energy_index`` is the running month's index for a month-indexed energy
     leg. ``previous_eur`` is what the contracts held earlier in the year cost.
     """
@@ -148,6 +151,7 @@ async def _compute_year_end_cost(
             cached_only=cached_only,
             window_start_override=window_start_override,
             window_end=date(today.year, 12, 31),
+            snapshot_raw=snapshot_raw,
         )
     if cost is None:
         return None

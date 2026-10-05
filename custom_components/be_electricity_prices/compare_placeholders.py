@@ -224,6 +224,7 @@ class _PlaceholdersMixin(OptionsFlow):
         other_welcome_credit = 0.0
         other_register_rates: Any = None
         other_snap = None
+        other_raw = None
         # Resolve the quote against this entry's site facts through the same
         # helper the coordinator uses, not apply_vat alone. Both transforms are
         # per-entry, and skipping the excise band priced a professional quote
@@ -284,6 +285,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 assert fetched.row is not None
                 other_read_by_ocr = False
                 fetched_snapshot = fetched.row.snapshot
+            other_raw = fetched_snapshot
             other_snap = _resolve_snapshot(
                 _quote_entry(
                     self.config_entry,
@@ -620,6 +622,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 # From the day the entry's contract started when it recorded
                 # a switch; the contracts before it are added below.
                 window_start_override=(own_start if own_start != ytd_from else None),
+                snapshot_raw=hh.parsed_snapshot,
             )
             # The earlier contracts on the same spots as the current one when
             # the page fetched its own for the window; otherwise the entry's,
@@ -742,6 +745,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     # Over the days the own row covers, which after a
                     # recorded switch the entry's settings no longer give.
                     window_start_override=ytd_from,
+                    snapshot_raw=other_raw,
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None

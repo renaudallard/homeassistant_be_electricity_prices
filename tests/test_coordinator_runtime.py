@@ -2852,6 +2852,95 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots.assert_awaited()
 
 
+async def test_a_month_no_archive_holds_owes_its_own_federal_levies(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month no archive holds is billed on the current card, which is
+    resolved for today: its energy contribution struck out from August 2026
+    and its excise the flat August rate. A January to July month billed on it
+    owed neither, so TotalEnergies and Ecofix entries read 4 to 7 EUR low
+    over those months. The tick hands the engine the card as parsed, and a
+    proxied month takes the levies resolved for itself and nothing else."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.providers import get
+
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "ecofix",
+            "contract": "ecofix_flexy",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # Prints the contribution and July's excise, as Ecofix's picture of its
+    # July card does.
+    raw = make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+    coord._set_snapshot(raw)
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    engine = AsyncMock(return_value=0.0)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+        engine,
+    ):
+        await coord._async_update_data()
+    assert engine.await_args_list
+    assert all(c.kwargs.get("snapshot_raw") is raw for c in engine.await_args_list)
+
+    from custom_components.be_electricity_prices.snapshot_months import (
+        _snapshot_for_month,
+        month_card,
+    )
+
+    today = coord._snapshot
+    assert today is not None
+    assert today.taxes.energy_contribution == 0.0
+    march = date(2026, 3, 1)
+    owed = _resolve_snapshot(entry, raw, delivery_month=march).taxes
+    assert owed.energy_contribution > 0.0
+    assert (
+        await month_card(
+            hass, MagicMock(), get("ecofix"), "ecofix_flexy", "wallonia", march, entry
+        )
+        is None
+    )
+    got = await _snapshot_for_month(
+        hass,
+        MagicMock(),
+        get("ecofix"),
+        "ecofix_flexy",
+        "wallonia",
+        march,
+        today,
+        entry,
+        current_raw=raw,
+    )
+    assert got.taxes.energy_contribution == owed.energy_contribution
+    assert got.taxes.federal_excise == owed.federal_excise
+    assert got.energy is today.energy and got.dsos is today.dsos
+    # A month whose levies are today's gets the current card itself.
+    september = await _snapshot_for_month(
+        hass,
+        MagicMock(),
+        get("ecofix"),
+        "ecofix_flexy",
+        "wallonia",
+        date(2026, 9, 1),
+        today,
+        entry,
+        current_raw=raw,
+    )
+    assert september is today
+
+
 async def test_a_rejected_key_for_a_spot_indexed_credit_raises_the_notice(
     hass: HomeAssistant,
 ) -> None:

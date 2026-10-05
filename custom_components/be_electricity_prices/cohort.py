@@ -71,6 +71,7 @@ from .providers._rates import (
 from .snapshot_months import (
     _month_card_retrievable,
     _snapshot_for_month,
+    month_card,
     month_card_cached,
 )
 from .vat_rates import residential_vat
@@ -318,19 +319,11 @@ async def _cohort_legs(
     if start < this_month and _month_card_retrievable(
         extractor, start, now.date(), entry
     ):
-        snap_start = await _snapshot_for_month(
-            hass,
-            session,
-            extractor,
-            contract,
-            region,
-            start,
-            current_snapshot,
-            entry,
+        snap_start = await month_card(
+            hass, session, extractor, contract, region, start, entry
         )
-        # _snapshot_for_month returns the SAME current_snapshot object when the
-        # signing month has no archive; identity means "no archived card".
-        if snap_start is not current_snapshot:
+        # None when no archive holds the signing month's card.
+        if snap_start is not None:
             archived_snap = snap_start
             cohort = _cohort_energy_from_archived(snap_start)
             # A SpotMonthlyRates leg bills at the current month's mean spot,
@@ -521,20 +514,19 @@ async def signing_month_snapshot(
         return _signed_in(current_snapshot, start)
     if not _month_card_retrievable(extractor, start, now.date(), entry):
         return _signed_in(current_snapshot, start)
-    resolved = await _snapshot_for_month(
+    resolved = await month_card(
         hass,
         session,
         extractor,
         contract,
         region,
         start,
-        current_snapshot,
         entry,
         cached_only=cached_only,
     )
     if (
         cached_only
-        and resolved is current_snapshot
+        and resolved is None
         and not month_card_cached(hass, extractor.id, contract, region, start)
     ):
         # The setup path forbids a fetch, so this is today's card standing in
@@ -554,8 +546,8 @@ async def signing_month_snapshot(
         # too. A supplier with no archive, a contract with no cohort month and
         # a signing month inside the running one all return above, so they
         # keep reading the credit off the card they already had.
-        return without_welcome_credit(resolved)
-    return _signed_in(resolved, start)
+        return without_welcome_credit(current_snapshot)
+    return _signed_in(current_snapshot if resolved is None else resolved, start)
 
 
 def _signed_in(
@@ -592,6 +584,7 @@ async def _effective_snapshot_for_month(
     entry: ConfigEntry,
     *,
     cached_only: bool = False,
+    current_raw: "SupplierSnapshot | None" = None,
 ) -> "SupplierSnapshot":
     """Delivery-month snapshot with the signing cohort's energy leg spliced in.
 
@@ -602,10 +595,11 @@ async def _effective_snapshot_for_month(
     tariffs and taxes still track the delivery month. A no-op (returns the
     plain delivery-month snapshot) when there is no cohort override.
 
-    ``cached_only`` is passed straight through to the delivery-month lookup
-    (see :func:`_snapshot_for_month`). The cohort leg below is NOT gated by
-    it: the signing month is what the live price table is already built from
-    on the same tick, so its row is in the cache by the time this runs.
+    ``cached_only`` and ``current_raw`` are passed straight through to the
+    delivery-month lookup (see :func:`_snapshot_for_month`). The cohort leg
+    below is NOT gated by ``cached_only``: the signing month is what the live
+    price table is already built from on the same tick, so its row is in the
+    cache by the time this runs.
 
     A month after the running one, read ahead for the year-end cost
     (:mod:`year_ahead`), has no card anywhere yet and bills on the card as it
@@ -624,6 +618,7 @@ async def _effective_snapshot_for_month(
         current_snapshot,
         entry,
         cached_only=cached_only,
+        current_raw=current_raw,
     )
     legs = await _cohort_legs(
         hass,
@@ -676,6 +671,7 @@ def _month_snapshot_cache(
     entry: ConfigEntry,
     *,
     cached_only: bool = False,
+    current_raw: SupplierSnapshot | None = None,
 ) -> Callable[[date], Awaitable[SupplierSnapshot]]:
     """Return a memoised ``snap_for(month_first)`` fetching each delivery
     month's effective snapshot once.
@@ -683,7 +679,8 @@ def _month_snapshot_cache(
     The live YTD cost and both backfill passes walk the same months
     repeatedly; the per-call cache keeps archive fetches to at most one
     per month. ``cached_only`` forwards the no-network mode the first
-    coordinator tick runs its year-to-date walk in.
+    coordinator tick runs its year-to-date walk in, and ``current_raw`` the
+    card ``snapshot`` was resolved from (``_snapshot_for_month``).
     """
     cache: dict[date, SupplierSnapshot] = {}
 
@@ -699,6 +696,7 @@ def _month_snapshot_cache(
                 snapshot,
                 entry,
                 cached_only=cached_only,
+                current_raw=current_raw,
             )
         return cache[month_first]
 

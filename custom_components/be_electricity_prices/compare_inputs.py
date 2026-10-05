@@ -612,6 +612,10 @@ class _HouseholdQuote:
     # static card's spot-indexed feed-in credit is quoted (_credit_year); None
     # short of a full year of either, where that credit is left out.
     credit_year: CreditYear | None = None
+    # The entry's card as parsed, which ``raw_snapshot`` was resolved from:
+    # the own row's walk bills a month no archive holds on it, with that
+    # month's federal levies (``_snapshot_for_month``).
+    parsed_snapshot: Any = None
 
     def register_weights_for(self, meter: str, dso_mode: str) -> Any:
         """``register_weights`` for a candidate on ``meter`` and ``dso_mode``.

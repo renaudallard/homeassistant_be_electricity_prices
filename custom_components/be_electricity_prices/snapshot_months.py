@@ -624,8 +624,79 @@ async def _snapshot_for_month(
     entry: ConfigEntry | None = None,
     *,
     cached_only: bool = False,
+    current_raw: "SupplierSnapshot | None" = None,
 ) -> "SupplierSnapshot":
-    """Resolve the historical snapshot for ``year_month`` or fall back.
+    """The card ``year_month`` is billed on: its own (``month_card``), or
+    the current card standing in for it.
+
+    The stand-in is ``current_snapshot`` itself, unless the caller hands the
+    card it was resolved from as ``current_raw``: the two federal levies are
+    then resolved for the delivery month (``_proxy_for_month``), since the
+    law and not the card decides them, and a January bill on October's card
+    still owes January's. Whether the answer is a stand-in is ``month_card``
+    returning None, never the identity of what comes back.
+    """
+    card = await month_card(
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        year_month,
+        entry,
+        cached_only=cached_only,
+    )
+    if card is not None:
+        return card
+    if entry is None or current_raw is None:
+        return current_snapshot
+    return _proxy_for_month(entry, current_snapshot, current_raw, year_month)
+
+
+def _proxy_for_month(
+    entry: ConfigEntry,
+    current: "SupplierSnapshot",
+    raw: "SupplierSnapshot",
+    year_month: date,
+) -> "SupplierSnapshot":
+    """``current`` standing in for ``year_month``, with the federal levies
+    that month owes.
+
+    ``current`` was resolved for today, so its energy contribution is struck
+    out from August 2026 and its excise is the flat August rate, which a
+    January to July month billed on it did not owe: 4 to 7 EUR a year on
+    the TotalEnergies and Ecofix months no archive holds. Only those two
+    figures are taken from ``raw`` resolved for the month, and only where
+    they differ from ``raw`` resolved for today, so everything else the
+    caller applied to ``current`` stands, and an excise picked from a band
+    by the yearly volume is left alone. Identity for every month whose
+    levies match today's.
+    """
+    today = _resolve_snapshot(entry, raw).taxes
+    month = _resolve_snapshot(entry, raw, delivery_month=year_month).taxes
+    changes = {
+        name: getattr(month, name)
+        for name in ("energy_contribution", "federal_excise")
+        if getattr(month, name) != getattr(today, name)
+    }
+    if not changes:
+        return current
+    return replace(current, taxes=replace(current.taxes, **changes))
+
+
+async def month_card(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    year_month: date,
+    entry: ConfigEntry | None = None,
+    *,
+    cached_only: bool = False,
+) -> "SupplierSnapshot | None":
+    """The month's own card, resolved for the month, or None where the
+    caller has to stand its current card in for it.
 
     Three tiers, in order. The repository's card archive
     (``_archived_card_from_github``) comes first for a closed month it can
@@ -638,13 +709,13 @@ async def _snapshot_for_month(
     month before its horizon, a row it cannot serve. It is also asked over a
     row the archive caught live on a card indexed on its own month, which
     holds the estimate the card printed rather than what the month settled
-    at (``_awaits_settlement``). The current snapshot is
-    the proxy when neither has the month, and it is the running month's card
-    by definition, so that month never reaches the repository.
+    at (``_awaits_settlement``). None when neither has the month: the
+    current card is then the proxy, and it is the running month's card by
+    definition, so that month never reaches the repository.
     A blip reading the archive is not "no card": the supplier is still
     asked, and a month neither could give is retried on the failure marker
-    rather than cached. Both hand back the current snapshot itself, so a
-    caller that keeps what it priced asks ``month_card_failed`` which it got.
+    rather than cached. Both answer None, so a caller that keeps what it
+    priced asks ``month_card_failed`` which it got.
 
     Caches the result per (supplier, contract, region, YYYY-MM): a hit
     skips the network round-trip on subsequent refreshes. ``None`` is
@@ -653,12 +724,11 @@ async def _snapshot_for_month(
 
     The cache is shared across entries, so it holds archived cards exactly
     as parsed and each caller's own VAT / consumption facts are applied on
-    the way out. ``current_snapshot`` is the caller's own and already
-    resolved, so it is passed through untouched.
+    the way out.
 
     ``cached_only`` answers from the cache and never reaches the network: a
-    month with no row falls back to the current snapshot, the same proxy a
-    supplier without an archive gets. The first coordinator tick asks for it
+    month with no row answers None, the same proxy a supplier without an
+    archive gets. The first coordinator tick asks for it
     because that tick runs inside config-entry setup, and one archived card
     per elapsed month is not something setup can afford (Frank Energie's
     cards take ~25 s each to lay out on a Raspberry Pi, so a September start
@@ -667,9 +737,9 @@ async def _snapshot_for_month(
     path and asks for a refresh.
     """
 
-    def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
+    def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot | None":
         if snap is None:
-            return current_snapshot
+            return None
         return (
             snap
             if entry is None
@@ -717,20 +787,20 @@ async def _snapshot_for_month(
         # a card for it, whatever the month, so this row is never provisional.
         cache[cache_key] = None
         fetched_at[cache_key] = dt_util.utcnow()
-        return current_snapshot
+        return None
     if cached_only:
         # Uncached and no fetch allowed: the documented fallback. Nothing is
         # written to the cache, so the warm-up still asks the archives.
-        return current_snapshot
+        return None
     # Negative cache: a transient archive failure is intentionally NOT
     # written to ``cache`` (a cached None means "no archive has this
     # month"); without this secondary marker the hourly YTD walk would
     # re-attempt every uncached month against a flaky CDN. Skip the retry
-    # while the marker is fresh; current_snapshot is the documented proxy
+    # while the marker is fresh; the current card is the documented proxy
     # for non-archive months.
     last_fail = failed.get(cache_key)
     if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
-        return current_snapshot
+        return None
     gen_at_entry = _tuple_generation(hass, cache_key)
     async with _monthly_lock(hass, cache_key):
         # Re-check under the lock so the second waiter doesn't repeat
@@ -743,7 +813,7 @@ async def _snapshot_for_month(
             last_fail is not None
             and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL
         ):
-            return current_snapshot
+            return None
         fetch_failed = False
         archive_failed = False
         snap: SupplierSnapshot | None = None

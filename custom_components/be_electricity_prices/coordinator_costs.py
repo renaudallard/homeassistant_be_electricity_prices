@@ -168,6 +168,7 @@ class _CostsMixin:
     _rlp_weights_year: int | None
     _session: aiohttp.ClientSession
     _snapshot: SupplierSnapshot | None
+    _snapshot_raw: SupplierSnapshot | None
     _spp_fetched_at: datetime | None
     _spp_weights: SppWeights
     _spp_weights_year: int | None
@@ -245,6 +246,7 @@ class _CostsMixin:
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
             window_start_override=own_start if own_start != ytd_start else None,
+            snapshot_raw=self._snapshot_raw,
         )
         # The same bill over the running month. A second pass rather than an
         # accumulator inside the first: the walk has four branches and four
@@ -269,6 +271,7 @@ class _CostsMixin:
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
             window_start_override=max(month_start, own_start),
+            snapshot_raw=self._snapshot_raw,
         )
         if periods:
             self._schedule_previous_pricing(periods, window_now.date())
@@ -437,6 +440,7 @@ class _CostsMixin:
                 billed_peak_kw=billed_peak,
                 cached_only=cached_months_only,
                 window_start_override=own_start if own_start != ytd_start else None,
+                snapshot_raw=self._snapshot_raw,
             )
         self._year_end_memo = (year_end_key, year_end_cost, dict(year_end_breakdown))
         return TickCosts(

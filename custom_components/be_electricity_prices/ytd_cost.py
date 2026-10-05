@@ -150,6 +150,7 @@ async def _compute_current_year_cost(
     cached_only: bool = False,
     window_start_override: date | None = None,
     window_end: date | None = None,
+    snapshot_raw: SupplierSnapshot | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -270,6 +271,10 @@ async def _compute_current_year_cost(
     window is then priced exactly as a running one, from the recorder alone:
     no live top-up for today and no fees past that day. ``today`` stays the
     calendar's, since whether a month is still running is not about the window.
+
+    ``snapshot_raw`` is the card ``snapshot`` was resolved from. With it, a
+    month no archive holds bills its own month's federal levies on the
+    current card rather than today's (``_snapshot_for_month``).
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -627,6 +632,7 @@ async def _compute_current_year_cost(
             snapshot,
             entry,
             cached_only=cached_only,
+            current_raw=snapshot_raw,
         )
         try:
             single_bd = static_breakdown(snap_m, dso, region, "single", dso_mode)
@@ -830,6 +836,7 @@ async def _compute_current_year_cost(
                 snapshot,
                 entry,
                 cached_only=cached_only,
+                current_raw=snapshot_raw,
             ),
             window_start=window_start,
             billed_days=billed_kwh.keys(),

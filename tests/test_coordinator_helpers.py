@@ -11547,14 +11547,14 @@ async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
         return float(leg.yearly_fixed_fee)
 
     # Engie keeps an archive now, and the archived card is not what this
-    # test is about: answer "no archived card" the way the store does, by
-    # handing the current snapshot back, so the typed fee is the only overlay.
+    # test is about: answer "no archived card" the way the store does, so the
+    # typed fee is the only overlay.
     async def _no_archived_card(*args: Any, **kwargs: Any) -> Any:
-        return args[6]
+        return None
 
     # The typed 121,00 is gross; an entry that deducts VAT bills 100,00. The
     # raw card (live tick) and the resolved card (YTD / monthly) must agree.
-    with patch.object(cohort, "_snapshot_for_month", new=_no_archived_card):
+    with patch.object(cohort, "month_card", new=_no_archived_card):
         assert await fee(raw) == pytest.approx(100.0)
         assert await fee(apply_vat(raw, include_vat=False)) == pytest.approx(100.0)
 
@@ -13858,18 +13858,17 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
         contract: str,
         _region: str,
         _month: date,
-        current: Any,
         _entry: Any,
         **_kw: Any,
     ) -> Any:
         asked.append(contract)
-        return current
+        return None
 
     entry = _entry(contract="mine", contract_start_date="2026-03-01")
     extractor = SimpleNamespace(fetch_for_month=object(), id="x")
     snap = _snapshot(prosumer=None, capacity=None)
 
-    with patch.object(cohort, "_snapshot_for_month", new=_fake_for_month):
+    with patch.object(cohort, "month_card", new=_fake_for_month):
         own = await cohort.signing_month_snapshot(
             hass,
             None,  # type: ignore[arg-type]
@@ -13919,8 +13918,8 @@ async def test_a_credit_tied_to_a_signing_month_reaches_that_cohort_alone(
         welcome_credit_signing_month=date(2026, 10, 1),
     )
 
-    async def _no_month_card(*args: Any, **_kw: Any) -> Any:
-        return args[6]
+    async def _no_month_card(*_args: Any, **_kw: Any) -> Any:
+        return None
 
     extractor = SimpleNamespace(fetch_for_month=object(), id="x")
 
@@ -13935,7 +13934,7 @@ async def test_a_credit_tied_to_a_signing_month_reaches_that_cohort_alone(
             october,
         )
 
-    with patch.object(cohort, "_snapshot_for_month", new=_no_month_card):
+    with patch.object(cohort, "month_card", new=_no_month_card):
         march = await _signed("mine", "2026-03-15")
         signed_now = await _signed("mine", "2026-10-02")
         candidate = await _signed("someone_elses", "2026-03-15")
@@ -14128,12 +14127,11 @@ async def test_a_cold_tick_does_not_credit_a_campaign_off_the_wrong_month(
         _contract: str,
         _region: str,
         _month: date,
-        current: Any,
         _entry: Any,
         **_kw: Any,
     ) -> Any:
-        # What _snapshot_for_month does under cached_only with nothing cached.
-        return current
+        # What month_card answers under cached_only with nothing cached.
+        return None
 
     entry = _entry(contract="mine", contract_start_date="2026-03-01")
     extractor = SimpleNamespace(fetch_for_month=object(), id="luminus")
@@ -14142,7 +14140,7 @@ async def test_a_cold_tick_does_not_credit_a_campaign_off_the_wrong_month(
         welcome_credit_kind=WELCOME_CREDIT_PRO_RATA,
     )
 
-    with patch.object(cohort, "_snapshot_for_month", new=_no_fetch):
+    with patch.object(cohort, "month_card", new=_no_fetch):
         cold = await cohort.signing_month_snapshot(
             hass,
             None,  # type: ignore[arg-type]

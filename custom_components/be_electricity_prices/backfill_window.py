@@ -382,7 +382,20 @@ async def _build_context(
         # Cache per-month snapshot lookups so a 365-day window touches at
         # most 12 archive fetches.
         snap_for=_month_snapshot_cache(
-            hass, coordinator._session, extractor, contract, region, snap, entry
+            hass,
+            coordinator._session,
+            extractor,
+            contract,
+            region,
+            snap,
+            entry,
+            # The entry's own card is resolved from this; an earlier
+            # contract's card stands in as it is, as the live sensor bills it.
+            current_raw=(
+                getattr(coordinator, "_snapshot_raw", None)
+                if snapshot is None
+                else None
+            ),
         ),
         # Entries whose injection is SPP-weighted - a card that indexes on
         # Belpex_SPP, or a custom monthly entry that opted in - price the

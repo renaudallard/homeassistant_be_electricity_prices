@@ -9576,6 +9576,7 @@ async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
             spot_quarters={},
             billed_peak_kw=coord._peak_kw,
             window_start_override=date(2026, 6, 15),
+            snapshot_raw=coord._snapshot_raw,
         )
     assert own is not None
     assert page["compare_ytd"] != "-"

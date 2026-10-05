@@ -225,6 +225,7 @@ class _SweepEngine(_HouseholdMixin):
                     window_start_override=(
                         own_start if own_start != hh.ytd_from else None
                     ),
+                    snapshot_raw=hh.parsed_snapshot,
                 )
                 own_ytd = await with_previous_contracts(
                     self.hass,
@@ -375,6 +376,7 @@ class _SweepEngine(_HouseholdMixin):
                     # The own row's days, which after a recorded switch the
                     # entry's settings no longer give.
                     window_start_override=hh.ytd_from,
+                    snapshot_raw=snap,
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)
