@@ -2719,6 +2719,54 @@ async def test_ytd_reports_coverage_against_elapsed_not_against_priced(
     assert diag["hours_elapsed"] > 1400
 
 
+@pytest.mark.parametrize(
+    "when", ["2026-03-01 12:30:00+01:00", "2026-07-15 12:30:00+02:00"]
+)
+async def test_ytd_hours_elapsed_counts_real_hours_in_summer_time(
+    hass: HomeAssistant, freezer: Any, when: str
+) -> None:
+    """A fully recorded year reads hours_seen == hours_elapsed in any season.
+
+    Subtracting two Brussels datetimes on the wall clock counted the hour the
+    spring change skipped, so every summer reading showed a one-hour gap the
+    recorder did not have."""
+    freezer.move_to(when)
+    snap = replace(_yearly_snapshot(), energy=DynamicRates(factor=1.0, base=0.0))
+    entry = _entry(
+        region="wallonia",
+        dso="ores",
+        solar_regime="none",
+        supplier="test",
+        contract="test",
+        consumption_kwh="sensor.cons",
+    )
+    # Every completed hour since 1 January, as the recorder holds them.
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    per_hour = {
+        start + timedelta(hours=i): 1.0
+        for i in range(int((now - start).total_seconds() // 3600))
+    }
+
+    async def _fake(_h: object, eid: str, _s: date, _e: date) -> dict[datetime, float]:
+        return dict(per_hour) if eid == "sensor.cons" else {}
+
+    diag: dict[str, float] = {}
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict.fromkeys(per_hour, 0.10),
+            breakdown=diag,
+        )
+
+    assert diag["hours_seen"] == float(len(per_hour))
+    assert diag["hours_elapsed"] == diag["hours_seen"]
+
+
 async def test_recorder_deltas_drops_a_first_bucket_that_reaches_back(
     hass: HomeAssistant, caplog: Any
 ) -> None:

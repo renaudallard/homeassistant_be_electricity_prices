@@ -512,7 +512,11 @@ async def _ytd_hourly_energy(
             if window_end is None
             else dt_util.start_of_local_day(window_end + timedelta(days=1))
         )
-        elapsed = until - dt_util.start_of_local_day(window_start)
+        # In UTC: two datetimes sharing one zone subtract on the wall clock,
+        # which counts an hour too many between the spring and autumn changes.
+        elapsed = dt_util.as_utc(until) - dt_util.as_utc(
+            dt_util.start_of_local_day(window_start)
+        )
         breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values()) - dropped_cons
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values()) - dropped_inj
