@@ -1349,9 +1349,8 @@ user-facing numbers diverged (`injection.py`).
 ### Historical bug: monthly-indexed injection emitting an hourly factor
 
 A monthly-indexed injection (DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One,
-EnergyVision 3 jaar vast / 1 an fixe) must
-emit only the realized monthly `current`, never an hourly `factor*spot+base`,
-because the indicative is the actual credit. The guard that keeps shape (b)/(c)
+EnergyVision 3 jaar vast / 1 an fixe) must never be priced as a per-hour
+`factor*spot+base`: its formula is a monthly one, shape (d). The guard that keeps shape (b)/(c)
 from swallowing these cards is the `month_indexed` / `spp_indexed` refusal that
 `_injection_needs_spot` and `_injection_is_spot_formula` (`injection.py`) apply
 ahead of their `current is None or slot_indexed` test: a month-indexed leg is

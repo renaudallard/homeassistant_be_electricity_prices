@@ -599,21 +599,27 @@ cross-region excise (0.0503288) and the per-region renewables split.
 ## Injection
 
 `_extract_injection` (`_mega_cards.py`) produces an `InjectionRates` from the same energy
-block, second column. There are three shapes depending on the kind:
+block, second column. What it reads depends on the kind:
 
-- `tou_impact`: injection is the second number under any of the three tier labels
-  (all three rows print the same value, so the first found wins). This is a
-  monthly-indicative `current` only (`test_offpeak_impact_injection_uses_per_tier_column`,
-  `test_mega.py`, illustrative 0.0292 EUR).
-- `fixed` / `variable`: injection is the second number under
-  `Compteur mono-horaire`, a monthly-indicative `current` only.
+- `tou_impact`: `current` is the second number under any of the three tier labels
+  (all three rows print the same value, so the first found wins;
+  `test_offpeak_impact_injection_uses_per_tier_column`, `test_mega.py`, illustrative
+  0.0292 EUR).
+- `fixed` / `variable`: `current` is the second number under
+  `Compteur mono-horaire`. On a fixed card that is the whole leg.
+- `variable` and `tou_impact` also read the card's monthly formula on Epex SPP
+  (`_VARIABLE_INJECTION_SPP_RE`) into `factor` / `base` with `spp_indexed`, and
+  the realized figure the card states for the last month (`_realized_rates`),
+  when printed, replaces the table's `current`, which stays the fallback for a
+  month whose mean is not known.
 - `dynamic`: injection is the HTVA `factor * spot + base` formula
   (`_INJECTION_FORMULA_RE`), stored as `factor`, `base`, and the raw `formula` text.
   Residential injection is VAT-exempt, so the HTVA numbers are used as-is.
 
 In the taxonomy from [../pricing-model.md](../pricing-model.md), Mega uses shape (a)
-monthly-indicative-only for its non-dynamic products and shape (b) hourly
-`factor*spot+base` for Dynamic. It never uses the spot-indexed-variable shape (c),
+monthly indicative for its fixed products, shape (d) month-indexed formula for its
+Flex and Off-peak Impact products, and shape (b) hourly `factor*spot+base` for
+Dynamic. It never uses the spot-indexed-variable shape (c),
 which is a statement about the INDEX and not about the flag: 8 of the 21 contracts
 set `spot_indexed_injection`, because a monthly-mean credit needs spots the energy
 leg never fetches. `_extract_injection` returns `None` only

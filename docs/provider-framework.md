@@ -397,10 +397,13 @@ vast majority of contracts leave the triplet `None` (one injection rate across
 all hours). A card whose slots are each a monthly formula (Engie Empower Flextime)
 sets the three `factor_*` / `base_*` pairs beside the triplet and `month_indexed`;
 the triplet is then last month's figure and the coordinator bakes the pairs on the
-delivery month's mean. Note the related invariant: monthly-indexed injection (EBEM
-Variabel/B@sic+, Eneco Fix/Fix One/Flex/Flex One, DATS24) must emit `current` only and never an
-hourly-spot `factor`/`base`, or a latent mis-price is masked while the
-indicative prints.
+delivery month's mean. Note the related invariant: a monthly-indexed injection (EBEM
+Variabel/B@sic+, Eneco Fix/Fix One/Flex/Flex One, DATS 24, EnergyVision fixed) keeps the
+printed indicative as `current`, carries the month formula as `factor`/`base`, and sets
+the `month_indexed` or `spp_indexed` flag its card names, so `_injection_needs_spot` and
+`_injection_is_spot_formula` (`injection.py`) never price it per hour. Without the flag
+the formula would be read as an hourly-spot one, a latent mis-price the indicative masks
+while it prints; without the formula the delivery-month re-price is lost.
 
 ## Overlay dataclasses
 
@@ -691,9 +694,11 @@ Grounded in the protocol above, a minimal new PDF provider looks like this:
    <your pattern>))`, reading the rate with the same pattern the formula is
    grossed by, so the archive can build its VAT consensus from the card and a
    formula grossed on an assumed rate is marked as such.
-5. Populate `injection` (`InjectionRates`) if the contract has feed-in. Emit
-   `current` only for monthly-indexed injection; emit `factor`/`base` only for a
-   genuine hourly-spot formula; use the per-slot triplet only for a TOU contract
+5. Populate `injection` (`InjectionRates`) if the contract has feed-in. For a
+   monthly-indexed injection emit the printed `current` beside the month formula's
+   `factor`/`base` and set `month_indexed` or `spp_indexed`, whichever index the
+   card names, so it is never priced per hour; emit `factor`/`base` without either
+   flag only for a genuine hourly-spot formula; use the per-slot triplet only for a TOU contract
    whose feed-in varies by slot, adding the per-slot coefficient pairs and
    `month_indexed` when each slot is itself a monthly formula. Injection values
    are never VAT-incl.
