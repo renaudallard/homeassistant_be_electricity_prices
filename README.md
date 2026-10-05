@@ -1088,8 +1088,9 @@ successful refresh:
   the power half, could not be read. About 50 EUR a year is left out rather
   than guessed; the sheet is retried every six hours. While Brugel has not
   published a year's final sheet, the power half is taken from its 2025-2027
-  tariff grid, which gives each of those years as indicative figures, and the
-  same card says so in its own wording until the final sheet is read.
+  tariff grid, which gives its later years, 2026 and 2027, as indicative
+  figures, and the same card says so in its own wording until the final sheet
+  is read.
 - **`register_pair_incomplete_<entry>`** — one register of a day/night pair
   records nothing, or stopped while its twin carries on (a rename, an
   integration swap, a meter replacement). The pair is billed only on the
