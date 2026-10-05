@@ -44,13 +44,14 @@ TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
 ]
 
-# Which residential-load blend an RLP-weighted month index uses. Three Belgian
-# suppliers read Synergrid's one workbook three ways, each reproducing its own
-# published value to the cent: "distinct" is the equal mean of the three
-# distinct regional curves (Fluvius, the Walloon DSOs, Sibelga), which is
-# Eneco's Belpex-RLP-M; "columns" is the mean over every DSO column, weighting
-# each region by its number of sub-areas, which is energie.be's Belpex_RLP and
-# the closest of the three to the EPEX RLP Ecopower prints;
+# Which residential-load blend an RLP-weighted month index uses. Belgian
+# suppliers read Synergrid's one workbook four ways, each reproducing its own
+# published value: "distinct" is the equal mean of the three distinct
+# regional curves (Fluvius, the Walloon DSOs, Sibelga), which is Eneco's
+# Belpex-RLP-M; "columns" is the mean over every DSO column, weighting each
+# region by its number of sub-areas, which is energie.be's Belpex_RLP and the
+# closest of "distinct", "columns" and "flanders" to the EPEX RLP Ecopower
+# prints;
 # "flanders" is the Fluvius curve alone, which Energy Knights, a Flanders-only
 # supplier, bills on; "wallonia" is the Walloon DSOs' curve alone, which Bolt's
 # printed quarterly Belpex index reproduces in every region. Meaningful only
