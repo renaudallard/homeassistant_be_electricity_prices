@@ -795,7 +795,11 @@ to load or no longer matches usually returns an empty set rather than raising, s
 the only sign that a supplier's new products have gone unseen. It used to pass with
 a warning on stderr, and Luminus's sitemap turning into an index kept its products unseen for at
 least the first three weeks of September 2026. A withdrawn supplier's empty discovery is marked
-expected and files nothing (`test_a_discovery_that_sees_nothing_fails`).
+expected and files nothing (`test_a_discovery_that_sees_nothing_fails`). An empty answer is asked
+again after the card fetch's backoff (`_discover`), up to three times: the workflow does not
+retry the catalog bit, so one listing timeout on the run's last attempt filed "discovery failed"
+while the extractor rows fetching the same listing retried and passed
+(`test_a_discovery_that_comes_back_on_a_second_ask_passes`).
 
 The diff runs both ways. A registered product the listing no longer names fails
 `<supplier>/catalog: no products gone from supplier`, because that is what a withdrawal looks

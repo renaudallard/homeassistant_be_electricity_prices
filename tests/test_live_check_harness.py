@@ -3288,6 +3288,7 @@ def test_a_discovery_that_sees_nothing_fails(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
     monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 9, 23)))
+    monkeypatch.setattr(lc, "_RETRY_BACKOFF_S", (0.0, 0.0))
     modules = {
         "luminus": SimpleNamespace(discover=_nothing),
         "dats24": SimpleNamespace(discover=_nothing),
@@ -3299,6 +3300,33 @@ def test_a_discovery_that_sees_nothing_fails(monkeypatch: pytest.MonkeyPatch) ->
     assert not dats24.ok and dats24.expected
     assert lc._catalog_gates_ci([dats24]) is False
     assert lc._catalog_gates_ci(lc.CHECKS) is True
+
+
+def test_a_discovery_that_comes_back_on_a_second_ask_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Most discover() implementations turn a listing timeout into an empty
+    set, and the workflow does not retry the catalog bit, so one timeout on
+    the run's last attempt filed "discovery failed" while every extractor row
+    fetching the same listing retried and passed. An empty answer is asked
+    again after the card fetch's backoff."""
+    answers: list[set[str]] = [set(), set(), {"A", "B"}]
+
+    async def _flaky(_session: Any) -> set[str]:
+        return answers.pop(0)
+
+    monkeypatch.setitem(lc._CATALOG_BASELINES, "eneco", lambda _m: {"A", "B"})
+    monkeypatch.setattr(lc, "_RETRY_BACKOFF_S", (0.0, 0.0))
+    lc.CHECKS.clear()
+    asyncio.run(
+        lc._check_catalogs(None, {"eneco": SimpleNamespace(discover=_flaky)})  # type: ignore[arg-type]
+    )
+    assert [(c.label, c.ok) for c in lc.CHECKS] == [
+        ("eneco/catalog: no new products at supplier", True),
+        ("eneco/catalog: no products gone from supplier", True),
+    ]
+    assert answers == []
+    lc.CHECKS.clear()
 
 
 def test_a_product_the_listing_no_longer_names_is_reported(

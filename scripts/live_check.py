@@ -2200,6 +2200,27 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
 _CATALOG_PARTIAL: frozenset[str] = frozenset({"engie"})
 
 
+async def _discover(
+    discover: Callable[[aiohttp.ClientSession], Awaitable[set[str]]],
+    session: aiohttp.ClientSession,
+) -> set[str]:
+    """``discover()``, asked again after the card fetch's backoff while it
+    finds nothing.
+
+    Most implementations turn a failed listing fetch into an empty set, so
+    one timeout on the last attempt of the run filed a discovery failure,
+    which the workflow does not retry, while the extractor rows fetching the
+    same listing retried it and passed.
+    """
+    discovered = await discover(session)
+    for wait in _RETRY_BACKOFF_S:
+        if discovered:
+            break
+        await asyncio.sleep(wait)
+        discovered = await discover(session)
+    return discovered
+
+
 async def _check_catalogs(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
@@ -2215,7 +2236,7 @@ async def _check_catalogs(
         if discover is None:
             continue
         try:
-            discovered = await discover(session)
+            discovered = await _discover(discover, session)
         except Exception as err:
             _record(
                 f"{name}/catalog: discovery raised",
