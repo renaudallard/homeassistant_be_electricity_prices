@@ -1282,7 +1282,8 @@ the script through a fake `gh`.
 | bit 0 (rc 1/3/5/7) | Open or update extractor-broken issue | `live-check-extractor` | `[live-check] supplier extractor broken` |
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
-| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-discovery` | `[live-check] supplier product discovery failed`, when no new product is among the failures |
+| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-product-gone` | `[live-check] a registered product left the supplier listing`, when no new product is among the failures and a registered one is gone |
+| bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-discovery` | `[live-check] supplier product discovery failed`, when no product is new or gone among the failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |

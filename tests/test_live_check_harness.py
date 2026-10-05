@@ -2025,6 +2025,13 @@ def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     assert _file_catalog_issue(blind, "luminus/catalog: discovery raised\n") == (
         "[live-check] supplier product discovery failed"
     )
+    # A discovery that worked and no longer finds a registered product is a
+    # withdrawal, not a broken discovery.
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    assert _file_catalog_issue(
+        gone, "octaplus/catalog: no products gone from supplier\n"
+    ) == ("[live-check] a registered product left the supplier listing")
 
 
 def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
@@ -2069,6 +2076,11 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
             "a/catalog: discovery raised\n",
         ),
         (
+            "Open or update new-products issue",
+            "catalog",
+            "a/catalog: no products gone from supplier\n",
+        ),
+        (
             "Open or update tax-block issue",
             "tax",
             "_federal: the excise window needs extending\n",
@@ -2085,8 +2097,8 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         root.mkdir()
         title = _file_catalog_issue(root, failures, step, kind)
         labels[title] = (root / "label").read_text()
-    assert len(labels) == 4
-    assert len(set(labels.values())) == 4, labels
+    assert len(labels) == 5
+    assert len(set(labels.values())) == 5, labels
 
     archive = (
         Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"

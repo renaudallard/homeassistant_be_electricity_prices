@@ -348,9 +348,11 @@ jobs:
             echo "no new product; nothing to file" >&2
             exit 0
           fi
-          # The report also carries a discovery that failed. Titled after a
+          # The report also carries a discovery that failed, and a
+          # registered product the listing no longer names. Titled after a
           # new product whatever failed, it sent the triager looking for a
-          # product that did not exist.
+          # product that did not exist, and titled "discovery failed" a
+          # withdrawal sent them looking for a broken discovery.
           # Each title has its own label: file_ci_issue.sh finds the open
           # issue by label and only reads the title when it opens one, so a
           # shared label posted a failed discovery under an open "new
@@ -358,6 +360,9 @@ jobs:
           if grep -q '/catalog: no new products at supplier$' catalog_failures.txt; then
             title_prefix='[live-check] new supplier products detected'
             label='live-check-catalog'
+          elif grep -q '/catalog: no products gone from supplier$' catalog_failures.txt; then
+            title_prefix='[live-check] a registered product left the supplier listing'
+            label='live-check-product-gone'
           else
             title_prefix='[live-check] supplier product discovery failed'
             label='live-check-discovery'
