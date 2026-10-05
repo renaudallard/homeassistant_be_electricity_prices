@@ -330,6 +330,7 @@ eco    : 01:00-07:00 + 11:00-17:00      (lowest)
 | `pic_factor` / `pic_base` | `float \| None` | `None` | PIC band's indexation coefficients. |
 | `medium_factor` / `medium_base` | `float \| None` | `None` | MEDIUM band's coefficients. |
 | `eco_factor` / `eco_base` | `float \| None` | `None` | ECO band's coefficients. |
+| `rlp_indexed` / `rlp_blend` | `bool` / `RlpBlend` | `False` / `"distinct"` | Same as on `VariableRates`: the bands' index is the RLP-weighted month mean, in that blend (Mega Off-peak Impact, `columns`); Cociter's trihoraire BELIX keeps the plain mean. |
 
 The six coefficients are the numeric form of `formula`, on the same basis as the
 resolved rates beside them: baked to TVAC EUR/kWh on a residential card, left ex-VAT

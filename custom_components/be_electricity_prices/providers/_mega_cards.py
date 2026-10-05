@@ -356,6 +356,9 @@ def _extract_energy(
                 coefficients[f"{band}_factor"] is not None
                 for band in ("pic", "medium", "eco")
             ),
+            # The same "ponderee par le RLP" paragraph as the variable cards.
+            rlp_indexed=_rlp_indexed(text),
+            rlp_blend=_RLP_BLEND,
             pic_factor=coefficients["pic_factor"],
             pic_base=coefficients["pic_base"],
             medium_factor=coefficients["medium_factor"],

@@ -549,7 +549,12 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
         # half-read card bills its printed bands rather than one band on a
         # formula and two on nothing.
         month_indexed=all(value is not None for value in coefficients.values()),
-        **coefficients,
+        pic_factor=coefficients["pic_factor"],
+        pic_base=coefficients["pic_base"],
+        medium_factor=coefficients["medium_factor"],
+        medium_base=coefficients["medium_base"],
+        eco_factor=coefficients["eco_factor"],
+        eco_base=coefficients["eco_base"],
     )
 
 

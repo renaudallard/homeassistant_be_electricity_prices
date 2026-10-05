@@ -175,7 +175,9 @@ card says which one in a paragraph of its own: "Il est base sur la moyenne des
 valeurs quart-horaires Day-Ahead EPEX SPOT Belgium, ponderee par le RLP (publie
 par Synergrid), sur le mois de fourniture", against "ponderee par le SPP" on
 the injection formula beside it. So the offtake leg carries `rlp_indexed` and
-the credit keeps the SPP weighting. `_rlp_indexed()` reads the clause from the
+the credit keeps the SPP weighting. The Off-peak Impact card prints the same
+paragraph, and its `ImpactRates` leg carries the flag and the blend too, through
+the three-band `SpotMonthlyRates` it is re-priced on. `_rlp_indexed()` reads the clause from the
 card rather than listing products, because the SME cards drop it and settle on
 the plain arithmetic mean; reading every card as a plain mean billed 2,4 to 7,6
 percent low, about 21 EUR a year at 3500 kWh. The weighting is the `columns`

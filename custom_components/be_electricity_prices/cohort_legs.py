@@ -237,6 +237,8 @@ def _cohort_energy_from_archived(
             ceiling_pic=energy.ceiling_pic,
             ceiling_medium=energy.ceiling_medium,
             ceiling_eco=energy.ceiling_eco,
+            rlp_indexed=energy.rlp_indexed,
+            rlp_blend=energy.rlp_blend,
             yearly_fixed_fee=energy.yearly_fixed_fee,
         )
     if isinstance(energy, TimeOfUseRates) and energy.month_indexed:

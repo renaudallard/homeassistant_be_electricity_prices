@@ -531,6 +531,11 @@ class ImpactRates:
     # says the printed rate is last month's index (Cociter trihoraire). Same
     # meaning as ``VariableRates.month_indexed``.
     month_indexed: bool = False
+    # Same meaning as ``VariableRates.rlp_indexed`` and ``rlp_blend``. Mega's
+    # Off-peak Impact card weights its index by the RLP profile; Cociter's
+    # trihoraire BELIX is the plain mean and keeps the default.
+    rlp_indexed: bool = False
+    rlp_blend: RlpBlend = "distinct"
 
 
 EnergyRates = (

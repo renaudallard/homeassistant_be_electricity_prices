@@ -60,6 +60,7 @@ from .providers.base import SupplierSnapshot
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
+    ImpactRates,
     SpotMonthlyRates,
     VariableRates,
 )
@@ -461,10 +462,10 @@ def _hour_spot(
 
 def _energy_is_rlp_indexed(energy: EnergyRates | None) -> bool:
     """True when this energy leg resolves against the RLP-weighted month mean:
-    a month-indexed variable card that names one, or the SpotMonthlyRates leg
-    it is re-priced through. What decides whether the Synergrid RLP profile is
-    worth fetching for an entry."""
-    if isinstance(energy, VariableRates):
+    a month-indexed variable or Impact card that names one, or the
+    SpotMonthlyRates leg it is re-priced through. What decides whether the
+    Synergrid RLP profile is worth fetching for an entry."""
+    if isinstance(energy, (VariableRates, ImpactRates)):
         return energy.month_indexed and energy.rlp_indexed
     if isinstance(energy, SpotMonthlyRates):
         return energy.rlp_indexed

@@ -612,6 +612,58 @@ def test_offpeak_impact_exposes_per_band_coefficients() -> None:
     assert energy.pic_factor > energy.medium_factor > energy.eco_factor
 
 
+def test_offpeak_impact_index_is_rlp_weighted_like_the_variable_cards() -> None:
+    """The Impact card says the same as the Flex ones: "base sur la moyenne
+    des valeurs quart-horaires Day-Ahead EPEX SPOT Belgium, ponderee par le
+    RLP". The leg resolved on the plain mean and the profile was never even
+    fetched for it, 0,65 to 1,1 c/kWh under Mega's settled MEDIUM band on
+    every keyed month from May to September 2026. Cociter's trihoraire BELIX
+    is the plain mean and keeps it."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import snapshot_codec
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.providers import cociter
+    from custom_components.be_electricity_prices.spot_stats import (
+        _energy_is_rlp_indexed,
+        _rlp_blend_for,
+    )
+
+    snap = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    )
+    energy = snap.energy
+    assert isinstance(energy, ImpactRates)
+    assert energy.month_indexed is True
+    assert energy.rlp_indexed is True
+    assert energy.rlp_blend == "columns"
+    assert _energy_is_rlp_indexed(energy)
+    leg = _month_indexed_leg(
+        snap,
+        SimpleNamespace(data={CONF_API_KEY: "k"}),  # type: ignore[arg-type]
+    )
+    assert _energy_is_rlp_indexed(leg)
+    assert _rlp_blend_for(leg) == "columns"
+    restored = snapshot_codec._snapshot_from_dict(
+        snapshot_codec._snapshot_to_dict(
+            snap, datetime(2026, 10, 5, tzinfo=UTC), probe_key=None
+        )
+    )
+    assert restored.energy == energy
+
+    trihoraire = cociter.parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"), "cociter_variable_impact", "t", "2026-09"
+    ).energy
+    assert isinstance(trihoraire, ImpactRates)
+    assert trihoraire.month_indexed is True
+    assert not _energy_is_rlp_indexed(trihoraire)
+
+
 def test_offpeak_impact_coefficients_agree_with_the_printed_rates() -> None:
     """Inverting each band's formula must land on ONE index, which is what
     proves the TVAC basis is right.
