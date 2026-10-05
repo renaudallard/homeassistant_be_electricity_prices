@@ -420,6 +420,7 @@ def _cohort_card(
     month_now: date,
     archived: "SupplierSnapshot | None",
     current: "SupplierSnapshot",
+    unbilled: str | None = None,
 ) -> str:
     """Which card a contract that names a cohort month ends up billing on.
 
@@ -430,15 +431,24 @@ def _cohort_card(
     diagnostics dump. Issue #96 is that question asked from the outside, on
     a supplier that happened to print the same formula four months running.
 
-    Three answers, one string. The archived card by name when it was
-    retrieved; the current card by name for a contract signed this month,
-    where the two are the same card; and the current card WITH the month
+    Four answers, one string. The archived card by name when something read
+    off it is billed; the current card by name for a contract signed this
+    month, where the two are the same card; the current card WITH the month
     that could not be retrieved for a past signing the archive has nothing
-    for, which is the case the entry otherwise hides.
+    for, which is the case the entry otherwise hides; and the current card
+    with the archived one and ``unbilled``, the reason nothing on it is
+    billed. A keyless variable cohort is that last case: its signing card is
+    retrieved, but re-pricing it needs spots, so the entry bills the current
+    card's printed rate exactly as it would with no start date at all, and
+    naming the signing card alone answered "did my start date do anything?"
+    with a yes it had not earned.
     """
-    if archived is not None:
-        return archived.publication_label or f"{start:%Y-%m}"
     label = current.publication_label or "the current card"
+    if archived is not None:
+        signing = archived.publication_label or f"{start:%Y-%m}"
+        if unbilled is None:
+            return signing
+        return f"{label} (signing card {signing} not re-priced: {unbilled})"
     if start >= month_now:
         return label
     return f"{label} (no archived card for {start:%Y-%m})"

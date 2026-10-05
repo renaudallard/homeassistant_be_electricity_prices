@@ -316,6 +316,8 @@ async def _cohort_legs(
     # rolled over and the price jumped under the user.
     archived: EnergyRates | None = None
     archived_snap: SupplierSnapshot | None = None
+    # Why a retrieved signing card prices nothing, for its label.
+    unbilled = "no formula on it to re-price"
     if start < this_month and _month_card_retrievable(
         extractor, start, now.date(), entry
     ):
@@ -344,6 +346,7 @@ async def _cohort_legs(
                 CONF_API_KEY
             ):
                 cohort = None
+                unbilled = "no ENTSO-E key"
             archived = cohort
     # The typed rate overlays whichever card was retrieved, so a user who
     # filled in only some boxes keeps the archived signing-month values for
@@ -436,10 +439,26 @@ async def _cohort_legs(
         )
     else:
         vat_rate = _leg_vat(current_snapshot, now.date())
+    # A frozen feed-in leg bills off the signing card only where it is not
+    # the printed figure: fixed for the term, or resolved on spots.
+    billed_off_archive = (
+        manual is not None
+        or archived is not None
+        or (
+            injection is not None
+            and (injection.fixed_for_term or bool(entry.data.get(CONF_API_KEY)))
+        )
+    )
     return _CohortLegs(
         energy=energy,
         injection=injection,
-        card=_cohort_card(start, this_month, archived_snap, current_snapshot),
+        card=_cohort_card(
+            start,
+            this_month,
+            archived_snap,
+            current_snapshot,
+            None if billed_off_archive else unbilled,
+        ),
         vat_rate=vat_rate,
     )
 

@@ -10119,6 +10119,116 @@ async def test_cohort_card_says_which_month_the_archive_could_not_serve(
     assert legs.card == "september 2026 (no archived card for 2026-06)"
 
 
+async def test_cohort_card_says_when_the_signing_card_bills_nothing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A keyless variable cohort retrieves its signing card but cannot use
+    it: the re-priced leg needs spots, so energy and feed-in bill the current
+    card's printed figures, exactly as with no start date. Naming the signing
+    card alone told the user the start date was doing something it was not.
+    With a key the same card is billed and is named."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+
+    freezer.move_to("2026-10-05 12:00:00+02:00")
+    current = make_snapshot(
+        energy=VariableRates(
+            current=0.2291, month_indexed=True, formula_factor=1.2, formula_base=0.04
+        ),
+        publication_label="octobre 2026",
+        injection=InjectionRates(
+            current=0.0604, factor=0.9, base=-0.02, month_indexed=True
+        ),
+    )
+    may = make_snapshot(
+        energy=VariableRates(
+            current=0.1381, month_indexed=True, formula_factor=1.1, formula_base=0.036
+        ),
+        publication_label="mai 2026",
+        injection=InjectionRates(
+            current=0.0018, factor=0.85, base=-0.022, month_indexed=True
+        ),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return may
+
+    _monthly_snapshots(hass).clear()
+    keyless = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        _entry(contract="test", contract_start_date="2026-05-15"),
+        current,
+    )
+    assert keyless.energy is None
+    assert keyless.card == (
+        "octobre 2026 (signing card mai 2026 not re-priced: no ENTSO-E key)"
+    )
+    keyed = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        _entry(
+            contract="test", contract_start_date="2026-05-15", **{CONF_API_KEY: "k"}
+        ),
+        current,
+    )
+    assert keyed.energy is not None
+    assert keyed.card == "mai 2026"
+
+    # A card printing resolved TOU bands and no formula has nothing to
+    # re-price either, key or not; a feed-in price fixed for the term on it
+    # is billed whatever the key, and then the card is named again.
+    tou = make_snapshot(
+        energy=TimeOfUseRates(peak=0.3, transition=0.25, offpeak=0.2),
+        publication_label="mai 2026",
+    )
+
+    async def _tou(*_a: object, **_k: object) -> SupplierSnapshot:
+        return tou
+
+    _monthly_snapshots(hass).clear()
+    legs = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_tou),
+        "test",
+        "wallonia",
+        _entry(
+            contract="test", contract_start_date="2026-05-15", **{CONF_API_KEY: "k"}
+        ),
+        replace(current, injection=None),
+    )
+    assert legs.card == (
+        "octobre 2026 (signing card mai 2026 not re-priced: no formula on it to"
+        " re-price)"
+    )
+    fixed_feed_in = replace(
+        tou, injection=InjectionRates(current=0.05, fixed_for_term=True)
+    )
+
+    async def _fixed_feed_in(*_a: object, **_k: object) -> SupplierSnapshot:
+        return fixed_feed_in
+
+    _monthly_snapshots(hass).clear()
+    legs = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_fixed_feed_in),
+        "test",
+        "wallonia",
+        _entry(contract="test", contract_start_date="2026-05-15"),
+        current,
+    )
+    assert legs.injection is not None and legs.injection.fixed_for_term
+    assert legs.card == "mai 2026"
+
+
 async def test_cohort_card_is_the_current_card_for_a_start_this_month(
     hass: HomeAssistant, freezer: Any
 ) -> None:
