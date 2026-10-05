@@ -570,11 +570,29 @@ def month_card_failed(
     a card or ``None``, is an answer; a fresh failure marker with no row is a
     failed read.
     """
-    key = (supplier, contract, region, f"{year_month.year:04d}-{year_month.month:02d}")
+    key = _month_key(supplier, contract, region, year_month)
     if key in _monthly_snapshots(hass):
         return False
     failed_at = _monthly_failed_fetches(hass).get(key)
     return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
+
+
+def month_card_cached(
+    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+) -> bool:
+    """Whether the month cache holds an answer for this month: its card, or
+    ``None`` for a month no archive has. Either is final, so a caller under
+    ``cached_only`` can tell it from a row that was simply never fetched."""
+    return _month_key(supplier, contract, region, year_month) in _monthly_snapshots(
+        hass
+    )
+
+
+def _month_key(
+    supplier: str, contract: str, region: str, year_month: date
+) -> tuple[str, str, str, str]:
+    """The month cache's key for one contract's card."""
+    return (supplier, contract, region, f"{year_month.year:04d}-{year_month.month:02d}")
 
 
 async def _snapshot_for_month(

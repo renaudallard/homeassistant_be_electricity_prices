@@ -68,7 +68,11 @@ from .providers._rates import (
     SpotMonthlyRates,
     rescale_vat,
 )
-from .snapshot_months import _month_card_retrievable, _snapshot_for_month
+from .snapshot_months import (
+    _month_card_retrievable,
+    _snapshot_for_month,
+    month_card_cached,
+)
 from .vat_rates import residential_vat
 from .cohort_legs import (
     _cohort_card,
@@ -528,7 +532,11 @@ async def signing_month_snapshot(
         entry,
         cached_only=cached_only,
     )
-    if cached_only and resolved is current_snapshot:
+    if (
+        cached_only
+        and resolved is current_snapshot
+        and not month_card_cached(hass, extractor.id, contract, region, start)
+    ):
         # The setup path forbids a fetch, so this is today's card standing in
         # for a month it is not the card of. That is the documented proxy and
         # it is sound for RATES, which move slowly and whose stand-in is at
@@ -540,10 +548,12 @@ async def signing_month_snapshot(
         # then vanishes on the next tick when the archive answers properly.
         #
         # Withhold it until the real card arrives, which makes the cold tick
-        # agree with every tick after it. Only this branch is touched: a
-        # supplier with no archive, a contract with no cohort month and a
-        # signing month inside the running one all return above, so they keep
-        # reading the credit off the card they already had.
+        # agree with every tick after it. Only a month never fetched is
+        # withheld: one cached as None is the archive's final "no card for
+        # this month", which every warm tick answers off the current card
+        # too. A supplier with no archive, a contract with no cohort month and
+        # a signing month inside the running one all return above, so they
+        # keep reading the credit off the card they already had.
         return without_welcome_credit(resolved)
     return _signed_in(resolved, start)
 

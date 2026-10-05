@@ -13963,6 +13963,52 @@ async def test_a_cold_tick_does_not_credit_a_campaign_off_the_wrong_month(
     assert warm is card
 
 
+async def test_a_cold_tick_credits_a_signing_month_the_archive_has_no_card_for(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month cached as None is the archive's final answer that no card exists
+    for it, and every warm tick then credits the welcome credit off the current
+    card. The cold tick holds the same row, so it must answer the same rather
+    than withhold the credit as it does for a month it has not fetched yet."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_fetched_at,
+        _monthly_snapshots,
+    )
+
+    freezer.move_to("2026-10-05 12:00:00+02:00")
+    entry = _entry(contract="frank_dynamic_jn", contract_start_date="2026-03-10")
+    extractor = SimpleNamespace(fetch_for_month=object(), id="frank")
+    card = make_snapshot(
+        welcome_credit_eur=35.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+    )
+
+    async def _signed(cached_only: bool) -> Any:
+        return await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            "frank_dynamic_jn",
+            "flanders",
+            entry,
+            card,
+            cached_only=cached_only,
+        )
+
+    # Never fetched: the cold tick still withholds it.
+    assert (await _signed(True)).welcome_credit_eur is None
+
+    key = ("frank", "frank_dynamic_jn", "flanders", "2026-03")
+    _monthly_snapshots(hass)[key] = None
+    _monthly_fetched_at(hass)[key] = dt_util.utcnow()
+    cold = await _signed(True)
+    warm = await _signed(False)
+    assert warm.welcome_credit_eur == pytest.approx(35.0)
+    assert cold.welcome_credit_eur == pytest.approx(35.0)
+
+
 def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> None:
     """Four answers in order: a full year of meter, then what the entry typed,
     then a shorter measurement scaled up, then the household default.
