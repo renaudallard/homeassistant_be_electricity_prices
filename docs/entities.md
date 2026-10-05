@@ -42,14 +42,18 @@ see [Services](#services).
 
 Every sensor is one `BePriceSensor` (`sensor.py`) instance driven by a
 frozen `BePriceSensorDescription` (`sensor.py`), which extends HA's
-`SensorEntityDescription` with two pure callables:
+`SensorEntityDescription` with two pure callables and one flag:
 
 ```python
 @dataclass(frozen=True, kw_only=True)
 class BePriceSensorDescription(SensorEntityDescription):
     value_fn: Callable[[CoordinatorData], float | None]
-    last_reset_fn: Callable[[], datetime] | None = None
+    last_reset_fn: Callable[[CoordinatorData], datetime | None] | None = None
+    unavailable_when_none: bool = False
 ```
+
+`unavailable_when_none` makes a `None` from `value_fn` read as unavailable
+rather than unknown; the four band sensors and `ev_home_charging_rate` set it.
 
 `native_value` (`sensor.py`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
@@ -69,15 +73,17 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | Group | Source | Created when |
 | --- | --- | --- |
 | `SENSORS` (11 core price sensors) | `sensor.py` | always |
-| `FEE_SENSORS` (5 fee/cost sensors) | `sensor.py` | always |
+| `FEE_SENSORS` (6 fee/cost sensors) | `sensor.py` | always |
+| `projected_year_consumption`, `rolling_year_consumption` (2) | `sensor.py` | always |
 | `EV_RATE_SENSORS` (1) | `sensor.py` | `CONF_EV_HOME_CHARGING_RATE` is on |
-| `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI` |
+| `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI`, except on Tarif Impact (`DSO_MODE_IMPACT`) for any supplier but the custom one |
 | `CAPACITY_SENSORS` (2) | `sensor.py` | `CONF_REGION == REGION_FLANDERS` |
-| `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
+| `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0`, `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` and `CONF_REGION == REGION_WALLONIA` |
+| `projected_year_injection`, `rolling_year_injection` (2) | `sensor.py` | `CONF_SOLAR_REGIME` is compensation or injection |
 | `INJECTION_SENSORS` (1) | `sensor.py` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
 | `BI_HOURLY_INJECTION_SENSORS` (2 band credits) | `sensor.py` | injection regime on a bi-hourly or dynamic meter, the two meters the engine credits a register pair on |
 | `ContractEndDateSensor` (1) | `sensor.py` | `CONF_CONTRACT_END_DATE` is set |
-| `PotentialSavingSensor` (1) | `sensor.py` | `CONF_DAILY_COMPARE` is on |
+| `PotentialSavingSensor` (1) | `sensor.py` | `CONF_DAILY_COMPARE` is on and `_ranking_candidates` (`flow_contracts.py`) leaves something to rank |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -405,8 +411,11 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py`) is pinned to Jan 1 00:00 local via
-  `last_reset_fn`, so long-term statistics bucket each calendar year separately.
+- `last_reset` (`sensor.py`) is pinned via `last_reset_fn` to local midnight
+  of the year-to-date window start, `ytd_window_reset` (`coordinator_data.py`):
+  1 January, or the contract start date during the contract's first calendar
+  year on an entry that bills from it. Long-term statistics bucket each
+  calendar year separately.
 
 Missing meter inputs collapse to the fees-only floor rather than to
 `unknown`. The value is `unknown` in two cases. The first is the minutes after
@@ -546,12 +555,18 @@ any entry finishes loading. Names and field descriptions are declared in
 
 ### `refresh`
 
-No fields. Iterates `async_loaded_entries(DOMAIN)` and calls
-`coordinator.async_force_refresh()` on each, skipping any entry whose
-`runtime_data` is still the `UNDEFINED` sentinel mid-reload
-(`__init__.py`). It drops the cached supplier snapshot and the ENTSO-E spot
-cache and re-fetches both immediately, clearing a transient fetch error without
-waiting for the next hourly tick.
+One optional field, `clear_history` (boolean, default false). Iterates
+`async_loaded_entries(DOMAIN)` and calls
+`coordinator.async_force_refresh(clear_history=...)` on each, skipping any
+entry whose `runtime_data` is still the `UNDEFINED` sentinel mid-reload
+(`__init__.py`). It drops the cached supplier snapshot, the ENTSO-E spot
+cache of today and tomorrow and the month cards the year-to-date cost is
+billed on, and re-fetches them immediately, clearing a transient fetch error
+without waiting for the next hourly tick. The cache of past spot prices the
+year-to-date walk replays is kept: only `clear_history` drops it
+(`_historical_spots`, `_historical_spot_quarters`, `_complete_spot_days`,
+`_spot_day_retry_at` and `_quarter_grid_days`, `coordinator.py`), since
+refilling it re-fetches every day of the year-to-date window.
 
 ### `cheapest_window` and `most_expensive_window`
 
@@ -618,7 +633,7 @@ predating the entry's first live tick. Fields (`services.yaml`):
 | Field | Required | Selector | Default |
 | --- | --- | --- | --- |
 | `entry_id` | no | `config_entry` | first loaded entry |
-| `start` | no | datetime | Jan 1 00:00 of the current local year |
+| `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it |
 | `end` | no | datetime (exclusive) | the current hour |
 | `clear` | no | boolean | false |
 
@@ -649,7 +664,8 @@ archive kept a card for, imported on today's card (`backfill.py`).
 is about to write itself stays untouched. Re-runs are safe: rows are upserted on
 `(statistic_id, hour)`. `clear=true` is destructive: it deletes the ENTIRE
 target series (not just the requested range) and then repopulates only the
-requested range, so a window starting after Jan 1 of the end year is rejected
+requested range, so a window starting after the end year's year-to-date start
+(Jan 1, or the contract start date on an entry that bills from it) is rejected
 (unless it ends on or before the current year-to-date start, where the cost
 series is left out of both the
 wipe and the re-import and there is nothing to protect)
@@ -663,7 +679,8 @@ All handlers raise localized `ServiceValidationError`s keyed under
 
 | translation_key | Raised when |
 | --- | --- |
-| `not_enough_hours` | fewer matching (or contiguous) slots than requested |
+| `not_enough_hours` | fewer matching slots than requested |
+| `not_enough_contiguous_hours` | enough slots, but no contiguous run of the requested length |
 | `duration_too_small` | `duration_hours < 1` |
 | `no_loaded_entry` | no loaded entry and no `entry_id` given |
 | `no_loaded_entry_with_id` | given `entry_id` matches no loaded entry |
@@ -761,7 +778,7 @@ Top-level keys in `strings.json`:
 | --- | --- |
 | `config` | config-flow steps, `abort`, `error` (see [config-flow.md](config-flow.md)) |
 | `options` | options/compare flow steps |
-| `selector` | option labels for `region`, `capacity_mode`, `meter`, `dso_tariff_mode`, `connection_kva_tier`, `solar_regime` |
+| `selector` | option labels for `region`, `capacity_mode`, `meter`, `dso_tariff_mode`, `connection_kva_tier`, `solar_regime`, `custom_injection_mode` |
 | `services` | names and field descriptions for the four services |
 | `exceptions` | `ServiceValidationError` messages |
 | `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_card_missing`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `card_read_by_ocr`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `supplier_deprecated_ended`, `supplier_deprecated_ended_no_successor`, `contract_withdrawn`, `exclusive_night_rate_missing`, `impact_rates_missing`, `prosumer_tariff_missing`, `compensation_kva_missing`, `connection_fee_missing`, `brussels_power_term_missing`, `direct_debit_unanswered`, `register_pair_incomplete`, `register_pair_covered`, `brussels_power_term_indicative` |
@@ -770,5 +787,5 @@ Top-level keys in `strings.json`:
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under
 `entity.sensor.<key>.name` (`strings.json`) or HA falls back to the raw key.
-The `entity.sensor` block lists all twenty-six possible sensors even though a given
+The `entity.sensor` block lists every possible sensor even though a given
 entry only instantiates the subset its region and solar regime allow.
