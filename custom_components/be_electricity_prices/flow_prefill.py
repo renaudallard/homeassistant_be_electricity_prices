@@ -172,29 +172,58 @@ def _utility_meter_day_night_children(
     return {}
 
 
-async def _energy_grid_source(hass: HomeAssistant) -> dict[str, Any] | None:
-    """The Energy dashboard's FIRST grid source, or None.
+async def _energy_grid_stats(hass: HomeAssistant) -> tuple[list[str], list[str]]:
+    """The Energy dashboard's grid import and export statistic ids, in order.
 
-    Both pre-fill helpers open-coded this: the guarded import, the manager
-    load, the empty-prefs check and the walk to the first ``type == "grid"``
-    entry. The import has to stay inside the function (the tests patch the
-    absolute path, and ``energy`` may not be installed), and every failure mode
-    collapses to None because a pre-fill must never break the wizard.
+    Home Assistant 2026.3 rewrote the grid prefs into one ``type == "grid"``
+    source per connection, carrying ``stat_energy_from`` and ``stat_energy_to``
+    at the top level; either may be None on an export-only or import-only
+    connection. Older installs keep a single grid source whose ``flow_from``
+    and ``flow_to`` lists hold the registers. Both shapes are read, so the
+    import and export ids may come from different sources.
+
+    The import has to stay inside the function (the tests patch the absolute
+    path, and ``energy`` may not be installed), and every failure mode
+    collapses to empty lists because a pre-fill must never break the wizard.
     """
     try:
         from homeassistant.components.energy.data import async_get_manager
     except ImportError:
-        return None
+        return [], []
     try:
         manager = await async_get_manager(hass)
     except Exception:  # noqa: BLE001 - energy may not be ready
-        return None
+        return [], []
     prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
     if not prefs:
-        return None
+        return [], []
+    imports: list[str] = []
+    exports: list[str] = []
     for source in prefs.get("energy_sources") or []:
-        if source.get("type") == "grid":
-            return source  # type: ignore[no-any-return]
+        if source.get("type") != "grid":
+            continue
+        if "flow_from" in source or "flow_to" in source:
+            flows_from = source.get("flow_from") or []
+            flows_to = source.get("flow_to") or []
+        else:
+            flows_from = flows_to = [source]
+        for flow in flows_from:
+            if isinstance(stat := flow.get("stat_energy_from"), str) and stat:
+                imports.append(stat)
+        for flow in flows_to:
+            if isinstance(stat := flow.get("stat_energy_to"), str) and stat:
+                exports.append(stat)
+    return imports, exports
+
+
+def _entity_stat(stats: list[str]) -> str | None:
+    """The first statistic id, when it is an entity the pickers can show.
+
+    EntitySelector only accepts real entities; recorder-only statistic ids
+    (no leading "sensor.") would render as a broken default.
+    """
+    if stats and stats[0].startswith("sensor."):
+        return stats[0]
     return None
 
 
@@ -224,36 +253,19 @@ async def _apply_energy_manager_defaults(
         )
     ):
         return
-    source = await _energy_grid_source(hass)
-    if source is not None:
-        flow_from: list[dict[str, Any]] = source.get("flow_from") or []
-        flow_to: list[dict[str, Any]] = source.get("flow_to") or []
-        consumption_stat: str | None = None
-        injection_stat: str | None = None
-        if flow_from:
-            stat = flow_from[0].get("stat_energy_from")
-            # EntitySelector only accepts real entities; recorder-only
-            # statistic ids (no leading "sensor.") would render as a
-            # broken default.
-            if isinstance(stat, str) and stat.startswith("sensor."):
-                consumption_stat = stat
-        if flow_to:
-            stat = flow_to[0].get("stat_energy_to")
-            if isinstance(stat, str) and stat.startswith("sensor."):
-                injection_stat = stat
-        if consumption_stat is not None:
-            defaults[CONF_CONSUMPTION_KWH] = consumption_stat
-            day_night = _utility_meter_day_night_children(hass, consumption_stat)
-            if day_night:
-                defaults[CONF_DAY_CONSUMPTION_KWH] = day_night["day"]
-                defaults[CONF_NIGHT_CONSUMPTION_KWH] = day_night["night"]
-        if injection_stat is not None:
-            defaults[CONF_INJECTION_KWH] = injection_stat
-            day_night = _utility_meter_day_night_children(hass, injection_stat)
-            if day_night:
-                defaults[CONF_DAY_INJECTION_KWH] = day_night["day"]
-                defaults[CONF_NIGHT_INJECTION_KWH] = day_night["night"]
-        return
+    imports, exports = await _energy_grid_stats(hass)
+    if (consumption_stat := _entity_stat(imports)) is not None:
+        defaults[CONF_CONSUMPTION_KWH] = consumption_stat
+        day_night = _utility_meter_day_night_children(hass, consumption_stat)
+        if day_night:
+            defaults[CONF_DAY_CONSUMPTION_KWH] = day_night["day"]
+            defaults[CONF_NIGHT_CONSUMPTION_KWH] = day_night["night"]
+    if (injection_stat := _entity_stat(exports)) is not None:
+        defaults[CONF_INJECTION_KWH] = injection_stat
+        day_night = _utility_meter_day_night_children(hass, injection_stat)
+        if day_night:
+            defaults[CONF_DAY_INJECTION_KWH] = day_night["day"]
+            defaults[CONF_NIGHT_INJECTION_KWH] = day_night["night"]
 
 
 def _dsmr_monthly_peak_sensor(hass: HomeAssistant) -> str | None:
@@ -313,15 +325,8 @@ async def _apply_energy_manager_capacity_default(
     if (meter_peak := _dsmr_monthly_peak_sensor(hass)) is not None:
         defaults[CONF_CAPACITY_PEAK_SENSOR] = meter_peak
         return
-    consumption_stat: str | None = None
-    source = await _energy_grid_source(hass)
-    if source is not None:
-        flow_from: list[dict[str, Any]] = source.get("flow_from") or []
-        if flow_from:
-            stat = flow_from[0].get("stat_energy_from")
-            if isinstance(stat, str) and stat.startswith("sensor."):
-                consumption_stat = stat
-    if consumption_stat is None:
+    imports, _exports = await _energy_grid_stats(hass)
+    if (consumption_stat := _entity_stat(imports)) is None:
         return
     from homeassistant.helpers import entity_registry as er
 

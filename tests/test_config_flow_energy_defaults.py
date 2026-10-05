@@ -54,6 +54,33 @@ def _grid_prefs(
     }
 
 
+def _unified_grid_prefs(*connections: tuple[str | None, str | None]) -> dict[str, Any]:
+    """Grid prefs in the shape Home Assistant 2026.3 and later store.
+
+    One grid source per connection with ``stat_energy_from`` and
+    ``stat_energy_to`` at the top level, either None on an export-only or
+    import-only connection, as ``_migrate_legacy_grid_to_unified`` in
+    ``homeassistant/components/energy/data.py`` writes them.
+    """
+    return {
+        "energy_sources": [
+            {
+                "type": "grid",
+                "stat_energy_from": consumption,
+                "stat_energy_to": injection,
+                "stat_cost": None,
+                "entity_energy_price": None,
+                "number_energy_price": None,
+                "stat_compensation": None,
+                "entity_energy_price_export": None,
+                "number_energy_price_export": None,
+                "cost_adjustment_day": 0.0,
+            }
+            for consumption, injection in connections
+        ]
+    }
+
+
 def _patch_manager(prefs: dict[str, Any] | None) -> Any:
     manager = AsyncMock()
     manager.data = prefs
@@ -94,6 +121,40 @@ async def test_grid_source_pre_fills_cumulative_sensors(
     assert defaults["injection_kwh"] == "sensor.electricity_returned_total"
     assert "day_consumption_kwh" not in defaults
     assert "night_consumption_kwh" not in defaults
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_unified_grid_source_pre_fills_cumulative_sensors(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant 2026.3 migrated every grid source to the unified shape,
+    which has no flow_from or flow_to list; reading only those left the
+    meters step empty on every supported release."""
+    defaults: dict[str, Any] = {}
+    prefs = _unified_grid_prefs(
+        ("sensor.electricity_meter_total", "sensor.electricity_returned_total")
+    )
+    with _patch_manager(prefs):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults["consumption_kwh"] == "sensor.electricity_meter_total"
+    assert defaults["injection_kwh"] == "sensor.electricity_returned_total"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_unified_import_and_export_may_sit_on_separate_connections(
+    hass: HomeAssistant,
+) -> None:
+    """An export-only connection listed first carries no import id, so each
+    side is taken from the first connection that has one."""
+    defaults: dict[str, Any] = {}
+    prefs = _unified_grid_prefs(
+        (None, "sensor.electricity_returned_total"),
+        ("sensor.electricity_meter_total", None),
+    )
+    with _patch_manager(prefs):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults["consumption_kwh"] == "sensor.electricity_meter_total"
+    assert defaults["injection_kwh"] == "sensor.electricity_returned_total"
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -367,6 +428,29 @@ async def test_capacity_pre_fill_walks_integration_helper_to_kw_source(
     )
     defaults: dict[str, Any] = {}
     prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == "sensor.electricity_meter_power"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_reads_a_unified_grid_source(
+    hass: HomeAssistant,
+) -> None:
+    """The Riemann walk starts from the unified grid source as well."""
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.electricity_meter_power",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_unified",
+    )
+    hass.states.async_set(
+        "sensor.electricity_meter_power",
+        "1234",
+        {"device_class": "power", "unit_of_measurement": "W"},
+    )
+    defaults: dict[str, Any] = {}
+    prefs = _unified_grid_prefs(("sensor.electricity_meter_total", None))
     with _patch_manager(prefs):
         await _apply_energy_manager_capacity_default(hass, defaults)
     assert defaults["capacity_peak_sensor"] == "sensor.electricity_meter_power"

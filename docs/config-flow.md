@@ -508,11 +508,14 @@ drifted apart.
 
 Energy-dashboard defaults: `async_step_meters` copies `self._data` and calls
 `_apply_energy_manager_defaults` (`flow_prefill.py`) before rendering, but only
-when *none* of the six keys is already set (`flow_schemas.py`). It reads the
-dashboard's grid source `flow_from[0].stat_energy_from` (consumption) and
-`flow_to[0].stat_energy_to` (injection), accepting them only when the statistic id
-starts with `sensor.` (a recorder-only statistic id would render as a broken
-`EntitySelector` default; `flow_schemas.py`). For each side it then tries
+when *none* of the six keys is already set (`flow_schemas.py`).
+`_energy_grid_stats` collects the dashboard's grid import (`stat_energy_from`)
+and export (`stat_energy_to`) statistic ids from both storage shapes: the
+unified one Home Assistant 2026.3 migrated to (one grid source per connection,
+either field possibly None) and the legacy `flow_from` / `flow_to` lists. The
+first id of each side is accepted only when it starts with `sensor.` (a
+recorder-only statistic id would render as a broken `EntitySelector` default;
+`flow_prefill.py`). For each side it then tries
 `_utility_meter_day_night_children` (`flow_prefill.py`) to also pre-fill the
 day/night registers from a `utility_meter` helper rooted at the same source. That
 helper:
