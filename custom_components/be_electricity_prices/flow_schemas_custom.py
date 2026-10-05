@@ -64,6 +64,7 @@ from .const import (
     CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
     CONF_CUSTOM_TAX_FEDERAL_EXCISE,
     CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
+    CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
     CONF_CUSTOM_VAT_RATE,
     CONF_CUSTOM_YEARLY_FIXED_FEE,
@@ -321,4 +322,10 @@ def _custom_tax_schema(defaults: dict[str, Any]) -> vol.Schema:
     ] = NumberSelector(
         NumberSelectorConfig(min=0.0, max=1.0, step=0.01, mode=NumberSelectorMode.BOX)
     )
+    fields[
+        vol.Optional(
+            CONF_CUSTOM_PROFESSIONAL,
+            default=bool(defaults.get(CONF_CUSTOM_PROFESSIONAL, False)),
+        )
+    ] = BooleanSelector()
     return vol.Schema(fields)

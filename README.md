@@ -149,7 +149,7 @@ Each of these has a section of its own further down; this is the scan.
 > supplier's federal block against the rest and reports a card that drifts. A
 > figure the reader could not read whole is left out rather than guessed. If you would rather type the numbers in yourself, the
 > **Expert: custom formula** supplier takes them, though its federal levies
-> follow the law the same way.
+> follow the law the same way, unless the entry is marked a business.
 >
 > The full story — what changed in their generator, what Ecofix said about it,
 > the measurements, and the current formulas to copy — is in
@@ -211,7 +211,10 @@ and tax values, which are identical for every supplier on your grid. The two
 federal levies among them follow the law as they do on every card (see
 [The federal levies come from the law](#the-federal-levies-come-from-the-law-not-from-your-card)):
 from August 2026 the energy contribution is dropped whatever you type, and
-through December 2026 the excise is billed at the legal flat rate. Coefficients
+through December 2026 the excise is billed at the legal flat rate. Those are
+the residential figures: a business (a Yuso customer, say) still owes the
+professional excise and the contribution, so tick **Business contract** on the
+tax step and the two levies you type are billed as typed. Coefficients
 are entered excluding VAT and the VAT rate grosses them up. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of

@@ -739,3 +739,7 @@ CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH: Final = "custom_tax_energy_fund_per_month
 # printed on their tariff sheet verbatim.
 CONF_CUSTOM_VAT_RATE: Final = "custom_vat_rate"
 DEFAULT_CUSTOM_VAT_RATE: Final = 0.06
+# A business on the custom supplier: the federal excise and energy contribution
+# it typed are the professional scheme's and are billed as typed, where a
+# residential entry's are corrected to the law's residential figures.
+CONF_CUSTOM_PROFESSIONAL: Final = "custom_professional"

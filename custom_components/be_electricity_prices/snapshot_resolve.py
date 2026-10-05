@@ -50,6 +50,7 @@ from homeassistant.util import dt as dt_util
 from .brugel import cached_power_term
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CUSTOM_PROFESSIONAL,
     CONF_DIRECT_DEBIT,
     CONF_INCLUDE_VAT,
     CONF_METER,
@@ -60,6 +61,7 @@ from .const import (
     DEFAULT_INCLUDE_VAT,
     METER_MONO,
     SOLAR_REGIME_INJECTION,
+    SUPPLIER_CUSTOM,
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers.base import SupplierSnapshot
@@ -122,6 +124,23 @@ def _direct_debit(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
     if not bool(entry.data.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)):
         return False
     return offers_direct_debit(snap.supplier, snap.contract)
+
+
+def _custom_professional(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
+    """Whether a custom formula entry is a business keeping its typed levies.
+
+    The registry says which supplier cards are professional, and the expert
+    custom supplier has no card for it to describe: the household says so on
+    the tax step instead. A business there owes the professional excise and
+    energy contribution it typed, which the residential corrections below
+    would otherwise replace. Asked about the CARD in hand for the reason
+    :func:`_quarter_hourly` gives: the compare page resolves another
+    supplier's card through a proxy carrying this entry's data, and the
+    answer describes the levies typed here, not that card's.
+    """
+    if snap.supplier != SUPPLIER_CUSTOM:
+        return False
+    return bool(entry.data.get(CONF_CUSTOM_PROFESSIONAL, False))
 
 
 def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
@@ -263,9 +282,14 @@ def _resolve_snapshot(
     resolved = resolve_vreg_network_ceiling(resolved, month)
     resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
-    # than by the card that prints them.
-    resolved = resolve_federal_contribution(resolved, month, professional=professional)
-    resolved = resolve_federal_excise(resolved, month, professional=professional)
+    # than by the card that prints them. A business on the custom supplier
+    # keeps the professional ones it typed; its VAT rate is its own and stays
+    # out of resolve_vat_rate's professional branch above.
+    levies_professional = professional or _custom_professional(entry, snap)
+    resolved = resolve_federal_contribution(
+        resolved, month, professional=levies_professional
+    )
+    resolved = resolve_federal_excise(resolved, month, professional=levies_professional)
     if annual_kwh is None:
         annual_kwh = entry_annual_kwh(entry)
     # Before the tranche, which can turn a spot-monthly leg into a fixed one:

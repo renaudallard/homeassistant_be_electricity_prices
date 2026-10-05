@@ -210,7 +210,8 @@
           "custom_tax_regional_renewables": "Prélèvement vert : GSC + WKK en Flandre, contribution énergie verte en Wallonie et à Bruxelles (EUR/kWh)",
           "custom_tax_region_connection_fee": "Redevance de raccordement wallonne (exonérée de TVA, Wallonie uniquement) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Fonds énergie (EUR/mois)",
-          "custom_vat_rate": "Taux de TVA (ex. 0.06)"
+          "custom_vat_rate": "Taux de TVA (ex. 0.06)",
+          "custom_professional": "Contrat professionnel : facturer l'accise fédérale et la cotisation énergie ci-dessus telles que saisies"
         }
       },
       "settlement": {
@@ -555,7 +556,8 @@
           "custom_tax_regional_renewables": "Prélèvement vert : GSC + WKK en Flandre, contribution énergie verte en Wallonie et à Bruxelles (EUR/kWh)",
           "custom_tax_region_connection_fee": "Redevance de raccordement wallonne (exonérée de TVA, Wallonie uniquement) (EUR/kWh)",
           "custom_tax_energy_fund_per_month": "Fonds énergie (EUR/mois)",
-          "custom_vat_rate": "Taux de TVA (ex. 0.06)"
+          "custom_vat_rate": "Taux de TVA (ex. 0.06)",
+          "custom_professional": "Contrat professionnel : facturer l'accise fédérale et la cotisation énergie ci-dessus telles que saisies"
         }
       },
       "compare_all_progress": {

@@ -1167,3 +1167,96 @@ def test_a_per_kwh_figure_typed_in_cents_is_refused() -> None:
     assert (
         _custom_num(key=const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)(400.0) == 400.0
     )
+
+
+def _business_levies(professional: bool) -> dict[str, Any]:
+    """A custom fixed Flanders entry typing the professional federal levies
+    (Ecopower's 'zakelijk' column) at 21% VAT, as a Yuso customer would."""
+    return {
+        const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_REGION: const.REGION_FLANDERS,
+        const.CONF_DSO: "fluvius_antwerpen",
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.12,
+        const.CONF_CUSTOM_TAX_FEDERAL_EXCISE: 0.01421,
+        const.CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION: 0.0019261,
+        const.CONF_CUSTOM_VAT_RATE: 0.21,
+        const.CONF_CUSTOM_PROFESSIONAL: professional,
+    }
+
+
+@pytest.mark.parametrize("professional", [True, False])
+def test_a_business_keeps_the_professional_levies_it_typed(
+    professional: bool,
+) -> None:
+    """From August 2026 the residential scheme drops the contribution and
+    bills a flat excise, and a residential custom entry is corrected to it.
+    A business still owes the professional excise and the contribution, so
+    one that says so on the tax step is billed what it typed."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+
+    data = _business_levies(professional)
+    entry = SimpleNamespace(data=data)
+    raw = build_snapshot(data, const.REGION_FLANDERS, "fluvius_antwerpen")
+    snap = _resolve_snapshot(
+        entry,  # type: ignore[arg-type]
+        raw,
+        annual_kwh=3500.0,
+        delivery_month=date(2026, 10, 1),
+    )
+    if professional:
+        assert snap.taxes.federal_excise == pytest.approx(0.01421)
+        assert snap.taxes.energy_contribution == pytest.approx(0.0019261)
+    else:
+        assert snap.taxes.federal_excise == pytest.approx(
+            const.FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + const.VAT_RATE_REDUCED)
+        )
+        assert snap.taxes.energy_contribution == 0.0
+    # The typed VAT rate is the business's own either way.
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+
+
+def test_the_business_answer_stays_on_the_custom_card() -> None:
+    """The compare page resolves another supplier's card through a proxy
+    carrying this entry's data: the answer describes the levies typed here,
+    so a residential card priced for the household is still corrected."""
+    from dataclasses import replace
+    from datetime import date
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+
+    data = _business_levies(True)
+    raw = replace(
+        build_snapshot(data, const.REGION_FLANDERS, "fluvius_antwerpen"),
+        supplier="ecopower",
+        contract="ecopower_burgerstroom",
+    )
+    snap = _resolve_snapshot(
+        SimpleNamespace(data=data),  # type: ignore[arg-type]
+        raw,
+        annual_kwh=3500.0,
+        delivery_month=date(2026, 10, 1),
+    )
+    assert snap.taxes.energy_contribution == 0.0
+
+
+def test_the_custom_tax_step_asks_whether_the_contract_is_a_business() -> None:
+    from custom_components.be_electricity_prices.flow_schemas_custom import (
+        _custom_tax_schema,
+    )
+
+    schema = _custom_tax_schema({const.CONF_REGION: const.REGION_FLANDERS})
+    assert schema({})[const.CONF_CUSTOM_PROFESSIONAL] is False
+    stored = {
+        const.CONF_REGION: const.REGION_FLANDERS,
+        const.CONF_CUSTOM_PROFESSIONAL: True,
+    }
+    assert _custom_tax_schema(stored)({})[const.CONF_CUSTOM_PROFESSIONAL] is True
