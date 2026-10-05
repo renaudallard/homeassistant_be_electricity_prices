@@ -1708,11 +1708,11 @@ JSON per month straight from `raw.githubusercontent.com` against a PDF
 download and a parse from the supplier; the supplier's own archive answers
 for a month the project's does not hold, and the current card stands in when
 neither has it, with the federal levies of the month it stands in for. A
-card indexed on its own month at Eneco (Flex, and the feed-in credit of every
-card but Dynamic), EBEM (the variable cards), Engie (the EPEXDAM cards), Mega
-(the Flex and Impact range) or Trevion (the monthly contracts) prints last
-month's index while it runs, and the supplier settles the month on the card
-after it. A month the archive caught live on such a card is
+card indexed on its own month at Cociter (Variable and Trihoraire), Eneco
+(Flex, and the feed-in credit of every card but Dynamic), EBEM (the variable
+cards), Engie (the EPEXDAM cards), Mega (the Flex and Impact range) or Trevion
+(the monthly contracts) prints last month's index while it runs, and the
+supplier settles the month on the card after it. A month the archive caught live on such a card is
 therefore read from the supplier once it has closed, and billed on the
 archive's copy, re-asked daily, until that card is out; the daily run then
 replaces the archive's copy with the settled one. Luminus (MaxxFlex,

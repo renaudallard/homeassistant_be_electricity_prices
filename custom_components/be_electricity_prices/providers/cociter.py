@@ -43,6 +43,7 @@ Cociter only sells in Wallonia.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import date
 
 import aiohttp
@@ -63,6 +64,7 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
+from ._cociter_settle import published_belix, settled_energy
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
     archive_validity_check,
@@ -167,11 +169,13 @@ async def fetch_for_month(
     requested year_month, and parse. Returns None when the listing
     doesn't list the month, the URL 404s, or the PDF doesn't parse -
     the coordinator falls back to the current snapshot as a proxy.
+
+    A month-indexed card is then settled on the BELIX the next card prints
+    for it (:func:`_settle_on_next_card`), from the same listing.
     """
     pattern = _CONTRACT_PATTERNS.get(contract_id)
     if pattern is None:
         return None
-    target_yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
     try:
         html = await fetch_text(session, _INDEX_URL)
     except ExtractorError as err:
@@ -180,6 +184,23 @@ async def fetch_for_month(
         if is_transient_fetch_error(str(err)):
             raise
         return None
+    found = await _card_for_month(session, html, pattern, contract_id, year_month)
+    if found is None:
+        return None
+    return await _settle_on_next_card(
+        session, html, pattern, contract_id, year_month, found[0]
+    )
+
+
+async def _card_for_month(
+    session: aiohttp.ClientSession,
+    html: str,
+    pattern: re.Pattern[str],
+    contract_id: str,
+    year_month: date,
+) -> tuple[SupplierSnapshot, str] | None:
+    """The validated card the listing holds for ``year_month``, and its text."""
+    target_yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
     # A month can appear twice when Cociter re-uploads its card: WordPress
     # keeps the original and adds "-1" to the newcomer, so the suffixed URL is
     # the NEWER file. Take the highest suffix rather than the first match, or
@@ -220,8 +241,45 @@ async def fetch_for_month(
             if is_transient_fetch_error(str(err)):
                 raise
             continue
-        return archive_validity_check(snap, text, year_month, month_names=_FR_MONTHS)
+        checked = archive_validity_check(snap, text, year_month, month_names=_FR_MONTHS)
+        return None if checked is None else (checked, text)
     return None
+
+
+async def _settle_on_next_card(
+    session: aiohttp.ClientSession,
+    html: str,
+    pattern: re.Pattern[str],
+    contract_id: str,
+    year_month: date,
+    snap: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """Settle a month-indexed month on the BELIX the next card prints for it.
+
+    Note (7) bills the delivery month on its own BELIX, while the card prints
+    its rates on the month before's, so a closed month billed on its own card
+    runs one index behind: over January to September 2026, between 1,86 c/kWh
+    over and 2,15 c/kWh under on the mono row. The next card names the month
+    and its BELIX, and that is what the month is billed at.
+
+    While that card is not out the printed rates stand and the month is
+    provisional, so the monthly cache asks again. A next card naming another
+    month settles nothing. The dynamic card bills the quarter-hour spot and
+    is returned as it is.
+    """
+    energy = snap.energy
+    if not isinstance(energy, (VariableRates, ImpactRates)) or not energy.month_indexed:
+        return snap
+    following = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    found = await _card_for_month(session, html, pattern, contract_id, following)
+    if found is None:
+        return replace(snap, provisional=True)
+    published = published_belix(found[1])
+    if published is None or published[0] != year_month:
+        return snap
+    return replace(snap, energy=settled_energy(energy, published[1]))
 
 
 async def probe(
@@ -879,6 +937,7 @@ _COCITER_REGIONS = frozenset({REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=1.6,
+    settles_on_next_card=True,
     id="cociter",
     label="Cociter",
     contracts=(

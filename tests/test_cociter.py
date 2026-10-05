@@ -425,6 +425,115 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
     assert snap is None
 
 
+def _august_from(september: str) -> str:
+    """A September card relabelled as August's, printing July's BELIX."""
+    return (
+        september.replace("août 2026", "juillet 2026")
+        .replace("septembre 2026", "août 2026")
+        .replace("30/09/26", "31/08/26")
+        .replace("129,32", "109,25")
+        .replace("15,5809", "13,9854")
+    )
+
+
+def _settle(contract: str, family: str, cards: dict[str, str], month: date) -> Any:
+    listing = "".join(
+        f'<a href="https://x/{family}_Coop-{yymm}-fr.pdf">m</a>' for yymm in cards
+    )
+
+    async def _pdf(_session: object, url: str, **_kw: object) -> str:
+        for yymm, text in cards.items():
+            if f"-{yymm}-" in url:
+                return text
+        raise AssertionError(url)
+
+    with patch(
+        "custom_components.be_electricity_prices.providers.cociter.fetch_pdf_text",
+        new=_pdf,
+    ):
+        return asyncio.run(
+            fetch_for_month(
+                make_text_session(listing),  # type: ignore[arg-type]
+                contract,
+                "wallonia",
+                month,
+            )
+        )
+
+
+def test_a_closed_month_settles_on_the_belix_the_next_card_prints() -> None:
+    """Note (7) bills the delivery month on its own BELIX, and the card prints
+    its rates on the month before's. The September card names August's,
+    "129,32 ... dans ce cas-ci août 2026", so August bills every row at it:
+    the mono row comes out at the 15,5809 c€/kWh September printed, not the
+    13,9854 August printed on July's 109,25."""
+    september = fixture_text("cociter_var_2609.pdf")
+    snap = _settle(
+        "cociter_variable",
+        "RCVar_YMR",
+        {"2608": _august_from(september), "2609": september},
+        date(2026, 8, 1),
+    )
+    assert snap is not None
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised == pytest.approx(0.12932)
+    assert energy.current == pytest.approx(0.155809, abs=1e-6)
+    assert energy.peak == pytest.approx(0.169517, abs=1e-6)
+    assert energy.offpeak == pytest.approx(0.142101, abs=1e-6)
+    assert energy.exclusive_night == pytest.approx(0.142101, abs=1e-6)
+    assert snap.provisional is False
+
+
+def test_a_trihoraire_month_settles_each_band_on_the_next_card() -> None:
+    """Each band is rebuilt through its own formula: August's PIC, printed at
+    July's 109,25 as (0,1 x 109,25 + 5) x 1,06 = 16,8805, bills at the
+    19,0079 the same formula gives at August's 129,32."""
+    september = fixture_text("cociter_vai_2609.pdf")
+    august = _august_from(september).replace("19,0079", "16,8805")
+    snap = _settle(
+        "cociter_variable_impact",
+        "RCVaI_YMR",
+        {"2608": august, "2609": september},
+        date(2026, 8, 1),
+    )
+    assert snap is not None
+    energy = snap.energy
+    assert isinstance(energy, ImpactRates)
+    assert energy.pic == pytest.approx(0.190079, abs=1e-6)
+    assert energy.medium == pytest.approx(0.162663, abs=1e-6)
+    assert energy.eco == pytest.approx(0.135248, abs=1e-6)
+    assert snap.provisional is False
+
+
+def test_a_month_waits_for_its_next_card_and_ignores_one_naming_another() -> None:
+    """With no September card yet the printed rates stand and the month is
+    provisional, so it is asked again. A next card naming some other month
+    settles nothing and the month is final as printed."""
+    september = fixture_text("cociter_var_2609.pdf")
+    august = _august_from(september)
+    waiting = _settle(
+        "cociter_variable", "RCVar_YMR", {"2608": august}, date(2026, 8, 1)
+    )
+    assert waiting is not None
+    assert waiting.provisional is True
+    assert isinstance(waiting.energy, VariableRates)
+    assert waiting.energy.index_realised is None
+    assert waiting.energy.current == pytest.approx(0.139854, abs=1e-6)
+
+    other = september.replace("dans ce cas-ci août 2026", "dans ce cas-ci mai 2026")
+    unsettled = _settle(
+        "cociter_variable",
+        "RCVar_YMR",
+        {"2608": august, "2609": other},
+        date(2026, 8, 1),
+    )
+    assert unsettled is not None
+    assert unsettled.provisional is False
+    assert isinstance(unsettled.energy, VariableRates)
+    assert unsettled.energy.index_realised is None
+
+
 def test_injection_formula_survives_a_meter_label_rewording() -> None:
     """Cociter rewords the meter-type label in front of the injection
     formula: "Tout compteur", "Compteur SMR3", and from the August 2026
@@ -538,7 +647,9 @@ async def test_an_unparseable_re_upload_falls_back_to_the_edition_it_displaced()
         # Only the displaced original parses.
         if text.endswith("-fr-1.pdf"):
             raise ExtractorError("could not parse Cociter dynamic formula")
-        return SimpleNamespace(supplier="cociter", contract="cociter_dynamic")
+        return SimpleNamespace(
+            supplier="cociter", contract="cociter_dynamic", energy=None
+        )
 
     with (
         patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)),

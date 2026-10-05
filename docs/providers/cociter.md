@@ -124,6 +124,21 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py`).
 
+A month-indexed card (Variable, Trihoraire) is then settled on the card that
+follows it (`_settle_on_next_card`). Note (7) bills the delivery month on its
+own BELIX while the card prints its rates on the month before's, and the next
+card prints that BELIX and names the month: "156,41 ... dans ce cas-ci
+septembre 2026". `published_belix` (`_cociter_settle.py`) reads both, and when
+the month matches, `settled_energy` rebuilds every printed row through its own
+formula at that value (`VariableRates.index_realised` records it on the
+variable card); the card's price ceiling stays with the engine. Over January to
+September 2026 the printed mono rate ran between 1,86 c/kWh over and 2,15 c/kWh
+under the settled one. The next card comes out of the listing already fetched.
+While it is not published the month keeps its printed rates and is returned
+`provisional=True`, so the monthly cache asks again; a next card naming another
+month settles nothing. The extractor sets `settles_on_next_card`. The dynamic
+card bills the quarter-hour spot and asks for no second card.
+
 `archive_validity_check` (`_validity.py`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
@@ -135,7 +150,10 @@ The three `fetch_for_month` tests (`test_cociter.py`) exercise: a
 matching listing URL returning a parsed snapshot with the right
 `publication_label`, a missing month returning `None`, and an unknown contract
 returning `None`. The listing fixture `_LISTING_HTML` (`test_cociter.py`)
-is inline HTML with three `RCVar_YMR_Coop-YYMM-fr.pdf` links.
+is inline HTML with three `RCVar_YMR_Coop-YYMM-fr.pdf` links. The settlement
+is pinned by `test_a_closed_month_settles_on_the_belix_the_next_card_prints`,
+`test_a_trihoraire_month_settles_each_band_on_the_next_card` and
+`test_a_month_waits_for_its_next_card_and_ignores_one_naming_another`.
 
 ### Product discovery: `discover`
 
@@ -404,15 +422,15 @@ an entry losing its price: about 185 EUR/yr on a 5 kVA install.
 ```
 cociter_variable  -> VariableRates(current, peak, offpeak, exclusive_night,
                                     yearly_fixed_fee, formula)
-                     energy is the printed monthly indicative rate per meter;
-                     BELIX formula is diagnostic text only.
+                     energy is the printed monthly indicative rate per meter,
+                     rebuilt at the next card's BELIX for a closed month.
 
 cociter_variable_impact
                   -> ImpactRates(pic, medium, eco, yearly_fixed_fee, formula,
                                   <band>_factor, <band>_base)
                      one BELIX formula per CWaPE band; the printed rates are
-                     the indicatives, the coefficients are diagnostic (see
-                     ImpactRates, base.py).
+                     the indicatives, rebuilt at the next card's BELIX for a
+                     closed month (see ImpactRates, _rates.py).
 
 cociter_dynamic   -> DynamicRates(factor, base, yearly_fixed_fee,
                                    quarter_hourly=True)

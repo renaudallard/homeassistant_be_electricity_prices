@@ -373,7 +373,13 @@ the coordinator already computes, so nothing is approximated here.
 Without an ENTSO-E key it returns `None` and the printed indicative stands: the
 key is offered as an optional, skippable step to every contract the registry
 flags `month_indexed_energy`, on any solar regime, and an entry that skipped it
-is better served by a rate a month stale than by no energy leg at all.
+is better served by a rate a month stale than by no energy leg at all. That
+holds for the running month only: the next card prints the BELIX the month
+settled at and names it ("dans ce cas-ci septembre 2026"), so
+`cociter.fetch_for_month` rebuilds a closed month's printed rates through their
+own formulas at that value (`VariableRates.index_realised` on the variable
+card, the three bands on the trihoraire one) and flags the month
+`SupplierSnapshot.provisional` until that card is out.
 
 Eneco Zon & Wind Flex and Flex One are the same shape on an RLP-weighted index,
 Belpex-RLP-M, and Eneco closes the loop itself: every card footnotes "de
