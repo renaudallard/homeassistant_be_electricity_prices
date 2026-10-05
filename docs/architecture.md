@@ -335,8 +335,9 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   bandwidth (`providers/base.py`).
 - TTL fallback: suppliers with no usable probe (energie.be, Engie, Luminus, where the only
   cheap response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
-  `snapshot_store.py`), cut short once the card's `valid_until` has passed so the new month's
-  card is fetched on the 1st rather than up to a day later. DATS 24 has no probe either, but left the market on 2026-08-31 and is
+  `snapshot_store.py`), cut short once the card's `valid_until` has passed, or for a card that
+  states none the month its title names (`card_valid_until`, `providers/_validity.py`), so the
+  new month's card is fetched on the 1st rather than up to a day later. DATS 24 has no probe either, but left the market on 2026-08-31 and is
   no longer fetched at all.
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather

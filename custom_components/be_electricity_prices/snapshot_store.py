@@ -51,6 +51,7 @@ import asyncio
 from .const import (
     DOMAIN,
 )
+from .providers._validity import card_valid_until
 from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
@@ -172,12 +173,17 @@ def _row_is_fresh(
     has expired since it was fetched is asked for again on the next tick, and
     one that was already expired when fetched stands for an hour only. Age
     alone held September's card until mid-afternoon on the 1st while the
-    month's cost already read October's.
+    month's cost already read October's. A card that states no date is good
+    to the end of the month its title names (``card_valid_until``): most of
+    Luminus's cards, Engie's Empty House and every energie.be card print only
+    "octobre 2026", and were held on age alone.
     """
     if probe_key is not None:
         return row.probe_key == probe_key
     age = now - row.fetched_at
-    valid_until = row.snapshot.valid_until
+    valid_until = card_valid_until(
+        row.snapshot.valid_until, row.snapshot.publication_label
+    )
     if valid_until is not None and valid_until < dt_util.as_local(now).date():
         if dt_util.as_local(row.fetched_at).date() <= valid_until:
             return False

@@ -1659,6 +1659,42 @@ async def test_a_card_past_its_validity_is_asked_for_again(
         assert fetch_calls == 3
 
 
+async def test_a_card_naming_only_its_month_is_asked_for_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Most Luminus cards, Engie Empty House and every energie.be card print
+    their month ("octobre 2026") and no validity date, and these suppliers
+    have no probe. Held on age alone, current_price stayed on September's
+    card for up to a day into October while the month's cost already read
+    October's card. The month the label names counts as the card's validity."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    fetch_calls = 0
+    september = replace(
+        _fake_snapshot(), valid_until=None, publication_label="septembre 2026"
+    )
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return september
+
+    extractor = make_stub_extractor(fetch=_fake_fetch)
+    freezer.move_to("2026-09-30 14:00:00+02:00")
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+        freezer.move_to("2026-09-30 23:30:00+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 1
+        freezer.move_to("2026-10-01 00:00:30+02:00")
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 2
+
+
 async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
     """When extractor.probe returns the same key on a subsequent refresh,
     the coordinator must NOT call extractor.fetch again."""
