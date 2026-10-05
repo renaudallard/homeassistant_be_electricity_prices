@@ -2553,7 +2553,6 @@ async def _freshness_row(
     served_of: Callable[[str], Awaitable[list[str | None]]],
     key: Callable[[str], int],
     exclude: str = "",
-    resolver_falls_back: bool = False,
 ) -> None:
     """One supplier-family freshness row.
 
@@ -2570,12 +2569,11 @@ async def _freshness_row(
     row still fails. Where a break really can hit one member at a time,
     the caller emits a row per member instead of collapsing them.
 
-    ``resolver_falls_back`` says what an unreadable or unrecognisable page
-    means for THIS supplier, and it is read out of the resolver, never
-    assumed. A resolver that RAISES is already reported by the extractor
-    phase, so this row passes and does not duplicate it. A resolver that
-    falls back to a constant or an older card leaves every other check
-    green, so this row is the only thing that can report it and must fail.
+    An unreadable or unrecognisable page passes here: every resolver this
+    row covers RAISES on one, which the extractor phase already reports. A
+    resolver that fell back to a constant or an older card instead would
+    leave every other check green, and this row would then have to fail on
+    such a page, the only thing that could report it.
     """
     try:
         html = await _fetch_text(session, page)
@@ -2585,11 +2583,7 @@ async def _freshness_row(
         # signature propagates to the caller and is recorded as a failure:
         # catching those made the gate pass green precisely when it had
         # stopped working.
-        detail = f"page unreadable: {type(err).__name__}: {err}"
-        if resolver_falls_back:
-            _expect(label, False, f"{detail}; extractor is serving its fallback")
-        else:
-            _record(label, True, detail)
+        _record(label, True, f"page unreadable: {type(err).__name__}: {err}")
         return
     if not served:
         _expect(label, False, "extractor resolved no card at all")
@@ -2607,7 +2601,6 @@ async def _freshness_row(
         max([s for s in served if s is not None], key=key),
         key=key,
         exclude=exclude,
-        empty_is_ok=not resolver_falls_back,
     )
 
 

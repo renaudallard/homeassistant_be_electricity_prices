@@ -558,7 +558,8 @@ All of them -- Bolt, Cociter, EBEM, Ecopower, Eneco, EnergyVision, Frank, Mega -
 page will not load or carries no card, so their own extractor row already reports the breakage and
 this gate records a pass rather than duplicating it. A resolver that fell back to a constant or an
 older card instead would leave every other check green, so for it an unreadable *or* reshaped
-listing would be a **failure** (`resolver_falls_back=True`), the only signal that would report it.
+listing would have to be a **failure**, the only signal that would report it; no resolver does
+today, so `_freshness_row` has no such mode.
 Bolt's `_resolve_variable_suffix` used to fall back to a fixed version, `_13`, which by October 2026
 was September's card, still served and still parsing; it raises since. A transient blip still files
 nothing, because the workflow only opens an issue for a check that fails every retry.
