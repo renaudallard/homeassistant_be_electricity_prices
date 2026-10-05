@@ -12633,8 +12633,8 @@ def test_a_per_kwh_welcome_credit_rides_the_first_year_not_the_window() -> None:
     Mega's Smart Flex, whose credit lands whole at the anniversary, a March
     anniversary read a January-to-March window and credited 114,03 EUR where
     the card grants 291,50; a 20.000 kWh entry took 326,78 against its own
-    848,00 ceiling. A pro-rata card divides the same partial volume by the
-    days a second time, which no card in the registry does today.
+    848,00 ceiling. A pro-rata card divided the same partial volume by the
+    days a second time, and Mega's October 2026 residential cards are one.
     """
     from custom_components.be_electricity_prices.const import (
         WELCOME_CREDIT_ANNIVERSARY,

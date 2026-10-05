@@ -481,9 +481,12 @@ def first_year_net_kwh(
     shorter, so the per-kWh leg was billed on whatever share of a year had
     elapsed: at the March anniversary of a 3500 kWh Smart Flex entry the
     engine credited 114,03 EUR where the card grants 291,50, and a 20.000 kWh
-    one took 326,78 against its own 848,00 ceiling. A pro-rata card is worse
-    still, dividing the same partial volume by the days again, though no card
-    in the registry is both pro-rata and per-kWh today.
+    one took 326,78 against its own 848,00 ceiling. A pro-rata card was worse
+    still, dividing the same partial volume by the days again. Mega's October
+    2026 residential cards are that shape: their per-kWh half is computed on
+    this yearly volume, as the card's "calculee sur la base de la
+    consommation indiquee lors de la souscription" allows, and then accrues
+    by the day like the flat half.
 
     ``annual_kwh`` is the entry's own yearly volume, resolved by
     :func:`entry_annual_kwh` from a measured full year, then the figure typed
