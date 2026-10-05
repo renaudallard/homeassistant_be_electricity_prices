@@ -524,9 +524,11 @@ def _realized_rates(text: str) -> dict[str, float]:
         # the June 2026 Flanders cards collide two runs in the text layer:
         # "Compteur mono- horaire : 16.76.38". That yielded mono = 16,76,
         # which is the Jour value, so mono == peak while offpeak was 14,20, a
-        # combination the card cannot print. Refusing the token drops the key
-        # and the caller falls back to the headline table, which is honest;
-        # taking a prefix that belongs to another row is not. A trailing
+        # combination the card cannot print. Refusing the token drops the key.
+        # On the live path the caller then falls back to the headline table,
+        # and on the archive path it re-prices the band from the ones the
+        # sentence does state (mega._with_unstated_bands); taking a prefix
+        # that belongs to another row is neither. A trailing
         # sentence period still has to pass ("Injection : 2.32."), so the
         # boundary rejects only a further DIGIT or a decimal group.
         m = re.search(

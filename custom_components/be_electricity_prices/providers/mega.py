@@ -142,6 +142,7 @@ from .base import (
 from ._rates import (
     Contract,
     DynamicRates,
+    EnergyRates,
     ImpactRates,
     VariableRates,
 )
@@ -666,6 +667,10 @@ async def _apply_realized_for_month(
     good, which is what it did at midnight on the 1st. A next card that is out
     and states no figure for M leaves it alone: retrying cannot conjure a
     sentence the card does not print.
+
+    A band the sentence leaves out is re-priced from one it states, through
+    the card's own coefficients (``_with_unstated_bands``), rather than kept:
+    on this path the M card's own figure for it is the month before's.
     """
     if contract.kind not in ("variable", "tou_impact"):
         return snap
@@ -677,6 +682,7 @@ async def _apply_realized_for_month(
     if not realized:
         return snap
     energy = snap.energy
+    realized = _with_unstated_bands(realized, energy)
     if isinstance(energy, VariableRates):
         energy = replace(
             energy,
@@ -696,6 +702,63 @@ async def _apply_realized_for_month(
     if injection is not None and realized.get("injection") is not None:
         injection = replace(injection, current=realized["injection"])
     return replace(snap, energy=energy, injection=injection)
+
+
+# The coefficient pair each settled band is the formula of, per leg kind.
+_BAND_COEFFICIENTS: dict[type, dict[str, tuple[str, str]]] = {
+    VariableRates: {
+        "mono": ("formula_factor", "formula_base"),
+        "peak": ("formula_factor_peak", "formula_base_peak"),
+        "offpeak": ("formula_factor_offpeak", "formula_base_offpeak"),
+        "exclusive_night": (
+            "formula_factor_exclusive_night",
+            "formula_base_exclusive_night",
+        ),
+    },
+    ImpactRates: {
+        "pic": ("pic_factor", "pic_base"),
+        "medium": ("medium_factor", "medium_base"),
+        "eco": ("eco_factor", "eco_base"),
+    },
+}
+
+
+def _with_unstated_bands(
+    realized: dict[str, float], energy: EnergyRates
+) -> dict[str, float]:
+    """``realized`` with every band it leaves out re-priced at the month's
+    index, solved from a band it states through the card's coefficients.
+
+    The June 2026 Flanders Cosy Flex and Smart Flex cards print "Compteur
+    mono- horaire : 16.76.38" for May, which is refused, beside a readable
+    Jour and Nuit. Keeping the May card's own mono billed May at April's
+    settled 13,81 c/kWh where the bands put it at 15,38. All bands solve to
+    one index on every other month, so the missing one is the formula at it.
+    A card printing no coefficients leaves ``realized`` as it is.
+    """
+    pairs = {
+        band: (getattr(energy, factor), getattr(energy, base))
+        for band, (factor, base) in _BAND_COEFFICIENTS.get(type(energy), {}).items()
+    }
+    pairs = {
+        band: pair
+        for band, pair in pairs.items()
+        if pair[0] is not None and pair[1] is not None
+    }
+    index = next(
+        (
+            (realized[band] - base) / factor
+            for band, (factor, base) in pairs.items()
+            if band in realized and factor
+        ),
+        None,
+    )
+    if index is None:
+        return realized
+    return {
+        **{band: factor * index + base for band, (factor, base) in pairs.items()},
+        **realized,
+    }
 
 
 def _assert_card_region(text: str, region: str) -> None:

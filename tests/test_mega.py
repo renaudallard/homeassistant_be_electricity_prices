@@ -1296,8 +1296,8 @@ def test_a_collided_value_token_is_refused_not_truncated() -> None:
     boundary the pattern took the well-formed prefix 16.76 -- which is the
     Jour value on that same card -- and billed it as mono, giving
     mono == peak while offpeak was 14,20, a combination the card cannot
-    print. Refusing the token drops the key and the caller falls back to the
-    headline table for that field.
+    print. Refusing the token drops the key; what the caller puts in its
+    place is the next test's.
     """
     from custom_components.be_electricity_prices.providers.mega import _realized_rates
 
@@ -1464,6 +1464,69 @@ async def test_archive_bills_each_month_at_its_own_realized_rate() -> None:
     assert out.energy.yearly_fixed_fee == pytest.approx(before_fee)
     assert out.dsos == before_dsos
     assert out.taxes == before_taxes
+
+
+async def test_a_band_the_next_card_leaves_unread_is_priced_from_the_others() -> None:
+    """The June 2026 Flanders Cosy Flex and Smart Flex cards state May as
+    "Compteur mono- horaire : 16.76.38; Jour : 16.76; Nuit : 14.2", and the
+    mono token is refused. Keeping the May card's own mono in its place billed
+    May at April's settled 13,81 c/kWh, because on the archive path a card's
+    own figures are the month before's. Jour and Nuit both solve to one index
+    through May's coefficients, and the mono formula at it is 15,38, the
+    figure the collided token ends in."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    card = parse_snapshot(
+        "mega_cosy_flex", fixture_text("mega_cosy_flex_v_2026-10.pdf"), "flanders"
+    )
+    assert isinstance(card.energy, VariableRates)
+    # The May 2026 Flanders card: its sentence names April, and its formulas
+    # are "Epex * 1,113 + 3,6 c€/kWh" (mono), "* 1,2455" (jour) and "* 0,999"
+    # (nuit), TVAC at 6%.
+    may = replace(
+        card,
+        energy=replace(
+            card.energy,
+            current=0.1381,
+            peak=0.15,
+            offpeak=0.1278,
+            exclusive_night=0.1278,
+            formula_factor=1.17978,
+            formula_base=0.03816,
+            formula_factor_peak=1.32023,
+            formula_base_peak=0.03816,
+            formula_factor_offpeak=1.05894,
+            formula_base_offpeak=0.03816,
+            formula_factor_exclusive_night=1.05894,
+            formula_base_exclusive_night=0.03816,
+        ),
+    )
+    june_sentence = mega_mod._realized_rates(
+        "Les derniers prix constates et utilises pour le calcul de votre "
+        "facture de regularisation pour le mois de mai 2026 sont les suivants "
+        "(c€/kWh) : Compteur mono- horaire : 16.76.38; Jour : 16.76; "
+        "Nuit : 14.2; Exclusif nuit : 14.2 ; Injection : 1.4. Pour plus"
+    )
+    assert "mono" not in june_sentence
+
+    async def _realized(*_a: object, **_k: object) -> dict[str, float]:
+        return june_sentence
+
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_realized):
+        out = await mega_mod._apply_realized_for_month(
+            None,  # type: ignore[arg-type]
+            mega_mod._CONTRACTS_BY_ID["mega_cosy_flex"],
+            "flanders",
+            "VL",
+            date(2026, 5, 1),
+            may,
+        )
+    assert isinstance(out.energy, VariableRates)
+    assert out.energy.current == pytest.approx(0.1538, abs=1e-4)
+    assert out.energy.peak == pytest.approx(0.1676)
+    assert out.energy.offpeak == pytest.approx(0.142)
+    assert out.injection is not None
+    assert out.injection.current == pytest.approx(0.014)
 
 
 async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> None:
