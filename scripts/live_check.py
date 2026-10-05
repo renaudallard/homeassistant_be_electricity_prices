@@ -833,6 +833,82 @@ def _tax_block_allowance(
     return known[1]
 
 
+# Each marker of an expected failure, with what the report's headline calls
+# its rows and the section that explains them. _record reads its markers off
+# this table and _render_report its sections, so a marker cannot be honoured
+# by one and left out of the other: the VAT one was, and its rows counted in
+# no headline and appeared under no heading. The withdrawal marker is the one
+# more _record takes; its rows split into two sections of their own.
+_EXPECTED_SECTIONS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        _ALLOWED_TAX_MARKER,
+        "known tax blocks",
+        "## Known tax blocks (expected, not a regression)",
+        "These cards print a federal levy that disagrees with the rest of "
+        "the fleet, and each has been looked at: the integration bills both "
+        "federal levies from the law rather than from the card, so no "
+        "household is billed these figures. They are listed because the "
+        "card is still wrong and the supplier may fix it. Each allowance is "
+        "keyed on the exact pair printed, so a supplier that changes either "
+        "figure by a digit files again, and each expires on 2027-01-01, "
+        "when the excise steps down and every card in the country has to be "
+        "reprinted anyway.",
+    ),
+    (
+        _ALLOWED_NETWORK_MARKER,
+        "known network figures",
+        "## Known network figures (expected, not a regression)",
+        "These cards print a regulated network figure that disagrees with "
+        "the other suppliers' cards for the same DSO, and each has been "
+        "looked at. The integration bills what each card prints, so an "
+        "entry on one of these cards pays the figure shown. Each allowance "
+        "is keyed on the exact figure, so a supplier that changes it by a "
+        "digit files again, and each expires on 2027-01-01, when the DSOs "
+        "publish next year's tariffs and every card is reprinted.",
+    ),
+    (
+        _ALLOWED_VAT_MARKER,
+        "known VAT statements",
+        "## Known VAT statements (expected, not a regression)",
+        "These cards come from a supplier that prints its VAT rate, yet the "
+        "parser reads none on them, and each has been looked at. They are "
+        "priced on the month's VAT rate, as a card of a supplier stating "
+        "none always is. Each allowance is keyed on the supplier and the "
+        "region and expires on a set date, after which the same card files "
+        "again.",
+    ),
+    (
+        _ALLOWED_CARD_MARKER,
+        "known card defects",
+        "## Known card defects (expected, not a regression)",
+        "These cards were published broken and each has been looked at: "
+        "the URL serves another document, or the card leaves out a figure "
+        "or a formula. Nothing in this repository can make the supplier "
+        "reprint. Affected entries keep pricing on their last good card, "
+        "or on what the card prints when it still parses. Each allowance "
+        "is keyed on the exact failure, so another failure on the same "
+        "card files, and each expires when the supplier's next card is due.",
+    ),
+    (
+        _UNREADABLE_MARKER,
+        "unreadable",
+        "## Unreadable cards (expected, not a regression)",
+        "These suppliers publish their tariff card as page images, so there "
+        "is no text layer to parse. No change to this repository can fix "
+        "them; affected entries raise the `extractor_unreadable` Repairs "
+        "card when a cached card is still being served, or its "
+        "`_no_prices` twin when there is none, both pointing at the "
+        "custom-supplier workaround. These rows do "
+        "not fail the run, and they disappear on their own if the supplier "
+        "goes back to publishing text.",
+    ),
+)
+_EXPECTED_MARKERS: tuple[str, ...] = (
+    *(marker for marker, *_ in _EXPECTED_SECTIONS),
+    _WITHDRAWN_MARKER,
+)
+
+
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
     if not ok:
         detail = _mark_if_known_defect(label, _mark_if_withdrawn(label, detail))
@@ -842,17 +918,7 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
             ok=ok,
             detail=detail,
             kind=kind,
-            expected=not ok
-            and detail.startswith(
-                (
-                    _UNREADABLE_MARKER,
-                    _WITHDRAWN_MARKER,
-                    _ALLOWED_TAX_MARKER,
-                    _ALLOWED_NETWORK_MARKER,
-                    _ALLOWED_VAT_MARKER,
-                    _ALLOWED_CARD_MARKER,
-                )
-            ),
+            expected=not ok and detail.startswith(_EXPECTED_MARKERS),
         )
     )
 
@@ -4902,6 +4968,15 @@ def _render_metrics(metrics: dict[str, dict[str, float]]) -> str:
     return "\n".join(rows) + "\n"
 
 
+def _check_table(checks: Iterable[Check]) -> list[str]:
+    """A report table of checks and their failure details."""
+    rows = ["| Check | Detail |", "| --- | --- |"]
+    for c in checks:
+        detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+        rows.append(f"| `{c.label}` | {detail} |")
+    return rows
+
+
 def _render_report(
     checks: Iterable[Check], metrics: dict[str, dict[str, float]] | None = None
 ) -> str:
@@ -4910,125 +4985,36 @@ def _render_report(
     pass_count = sum(1 for c in checks if c.ok)
     regressions = [c for c in checks if not c.ok and not c.expected]
     expected = [c for c in checks if not c.ok and c.expected]
-    # Two different reasons a failure is expected, and they need different
-    # explanations: a page-image card can come back, a supplier that has left
-    # the market cannot. Reporting a withdrawal under "unreadable cards" would
-    # tell the reader to go looking for a text layer.
-    unreadable = [c for c in expected if c.detail.startswith(_UNREADABLE_MARKER)]
-    withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
-    allowed = [c for c in expected if c.detail.startswith(_ALLOWED_TAX_MARKER)]
-    known_network = [
-        c for c in expected if c.detail.startswith(_ALLOWED_NETWORK_MARKER)
+    sections = [
+        (phrase, heading, text, [c for c in expected if c.detail.startswith(marker)])
+        for marker, phrase, heading, text in _EXPECTED_SECTIONS
     ]
-    known_cards = [c for c in expected if c.detail.startswith(_ALLOWED_CARD_MARKER)]
+    # Reported apart from the unreadable cards: a page-image card can come
+    # back, a supplier that has left the market cannot, and reporting a
+    # withdrawal under "unreadable cards" would tell the reader to go
+    # looking for a text layer.
+    withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
     headline = f"# Live extractor check: {pass_count} pass, {len(regressions)} fail"
-    if unreadable:
-        # Say it in the headline. A run that reads "0 fail" while the table
-        # below lists failing rows reads like a bug in the harness.
-        headline += f", {len(unreadable)} unreadable (expected)"
+    # Say each kind in the headline. A run that reads "0 fail" while the
+    # tables below list failing rows reads like a bug in the harness.
+    for phrase, _heading, _text, of in sections:
+        if of:
+            headline += f", {len(of)} {phrase} (expected)"
     if withdrawn:
         headline += f", {len(withdrawn)} withdrawn (expected)"
-    if allowed:
-        headline += f", {len(allowed)} known tax blocks (expected)"
-    if known_network:
-        headline += f", {len(known_network)} known network figures (expected)"
-    if known_cards:
-        headline += f", {len(known_cards)} known card defects (expected)"
     rows.append(headline)
     rows.append("")
     if regressions:
         rows.append("## Failures")
         rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in regressions:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
-        rows.append("")
-    if allowed:
-        rows.append("## Known tax blocks (expected, not a regression)")
-        rows.append("")
-        rows.append(
-            "These cards print a federal levy that disagrees with the rest of "
-            "the fleet, and each has been looked at: the integration bills both "
-            "federal levies from the law rather than from the card, so no "
-            "household is billed these figures. They are listed because the "
-            "card is still wrong and the supplier may fix it. Each allowance is "
-            "keyed on the exact pair printed, so a supplier that changes either "
-            "figure by a digit files again, and each expires on 2027-01-01, "
-            "when the excise steps down and every card in the country has to be "
-            "reprinted anyway."
-        )
-        rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in allowed:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
-        rows.append("")
-    if known_network:
-        rows.append("## Known network figures (expected, not a regression)")
-        rows.append("")
-        rows.append(
-            "These cards print a regulated network figure that disagrees with "
-            "the other suppliers' cards for the same DSO, and each has been "
-            "looked at. The integration bills what each card prints, so an "
-            "entry on one of these cards pays the figure shown. Each allowance "
-            "is keyed on the exact figure, so a supplier that changes it by a "
-            "digit files again, and each expires on 2027-01-01, when the DSOs "
-            "publish next year's tariffs and every card is reprinted."
-        )
-        rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in known_network:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
-        rows.append("")
-    if known_cards:
-        rows.append("## Known card defects (expected, not a regression)")
-        rows.append("")
-        rows.append(
-            "These cards were published broken and each has been looked at: "
-            "the URL serves another document, or the card leaves out a figure "
-            "or a formula. Nothing in this repository can make the supplier "
-            "reprint. Affected entries keep pricing on their last good card, "
-            "or on what the card prints when it still parses. Each allowance "
-            "is keyed on the exact failure, so another failure on the same "
-            "card files, and each expires when the supplier's next card is due."
-        )
-        rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in known_cards:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
-        rows.append("")
-    if unreadable:
-        rows.append("## Unreadable cards (expected, not a regression)")
-        rows.append("")
-        rows.append(
-            "These suppliers publish their tariff card as page images, so there "
-            "is no text layer to parse. No change to this repository can fix "
-            "them; affected entries raise the `extractor_unreadable` Repairs "
-            "card when a cached card is still being served, or its "
-            "`_no_prices` twin when there is none, both pointing at the "
-            "custom-supplier workaround. These rows do "
-            "not fail the run, and they disappear on their own if the supplier "
-            "goes back to publishing text."
-        )
-        rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in unreadable:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
+        rows += _check_table(regressions)
         rows.append("")
     # One marker covers a supplier that left and a product its supplier
     # withdrew, but their entries raise different Repairs cards and only one
     # of them has a successor, so each gets its own explanation.
     products = [c for c in withdrawn if _withdrawn_product(c.label) is not None]
-    for heading, text, gone in (
+    shown = [(heading, text, of) for _phrase, heading, text, of in sections]
+    shown += [
         (
             "## Withdrawn suppliers (expected, not a regression)",
             "These suppliers are past their own `deprecated_until`: they have "
@@ -5049,18 +5035,15 @@ def _render_report(
             "when the product is removed from the registry.",
             products,
         ),
-    ):
-        if not gone:
+    ]
+    for heading, text, of in shown:
+        if not of:
             continue
         rows.append(heading)
         rows.append("")
         rows.append(text)
         rows.append("")
-        rows.append("| Check | Detail |")
-        rows.append("| --- | --- |")
-        for c in gone:
-            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-            rows.append(f"| `{c.label}` | {detail} |")
+        rows += _check_table(of)
         rows.append("")
     rows.append("## All checks")
     rows.append("")

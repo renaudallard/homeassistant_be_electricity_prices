@@ -323,7 +323,10 @@ asserts, card by card, that a residential card of a supplier that states its rat
 sentence would otherwise gross the formula on the assumed residential rate in silence, which
 only a rate change would show. A gap already looked at is allowed until it expires
 (`_KNOWN_VAT_GAPS`: TotalEnergies' September 2026 Brussels cards, whose text layer lost the
-digit). `_check_vat_consensus` asks the archive the federal check's question of the rate: the
+digit), and reported in a section of its own and counted in the headline like every other
+allowance. The markers and the report's sections are one table, `_EXPECTED_SECTIONS`: this one
+was honoured by `_record` and left out of the report, so its rows sat under no heading and in no
+count (`test_every_expected_marker_is_counted_and_listed`). `_check_vat_consensus` asks the archive the federal check's question of the rate: the
 month most residential cards are filed under, the supplier as the voter, the majority as the
 answer and a tie unreported, a supplier stating another rate filed under the tax kind. A month
 they disagree on is also the month the archive's `vat.json` leaves out, so installations keep

@@ -4073,6 +4073,21 @@ def test_a_supplier_stating_its_vat_rate_is_held_to_it(
     assert not row.expected
 
 
+@pytest.mark.parametrize("marker", lc._EXPECTED_MARKERS)
+def test_every_expected_marker_is_counted_and_listed(marker: str) -> None:
+    """_record took the VAT marker as expected and the report had no place
+    for it: the four TotalEnergies Brussels rows were in no headline count
+    and under no heading, only unchecked boxes in "All checks", which the
+    filed issue strips. A row under any marker _record honours is counted in
+    the headline and listed in a table above "All checks"."""
+    label = "eneco/power_fix/flanders: VAT rate stated"
+    row = lc.Check(label, False, f"{marker}: looked at", expected=True)
+    report = lc._render_report([row])
+    head, _, tables = report.partition("\n")
+    assert head.endswith("(expected)"), head
+    assert f"`{label}`" in tables.split("## All checks")[0]
+
+
 def test_a_known_card_defect_is_reported_apart_until_it_expires(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
