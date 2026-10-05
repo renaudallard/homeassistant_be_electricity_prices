@@ -405,6 +405,9 @@ class _SweepEngine(_HouseholdMixin):
         sweep = self.build_sweep()
         if isinstance(sweep, str):
             return sweep
+        # Every night is a new sweep, so it starts from the shared cache and
+        # its probe rather than from the cards an earlier night held.
+        evict_sweep_rows(self.hass, self.config_entry.entry_id)
         sweep["household"] = await self._resolve_household(
             coord,
             candidates=sweep["candidates"],
@@ -722,13 +725,13 @@ def _feed_in_left_out(snapshot: Any, credit: float | None, hh: Any) -> bool:
 def _sweep_rows(
     hass: HomeAssistant, entry_id: str, region: str
 ) -> dict[tuple[str, str, str], Any]:
-    """Snapshots this entry's sweep has already fetched, for the life of the
-    process.
+    """Snapshots this entry's latest sweep has fetched.
 
     Keyed by (supplier, contract) and holding the CARD rather than the priced
-    row, so reopening after changing a household setting re-prices from what
-    was already downloaded instead of re-downloading it. The expensive half of
-    a sweep is the fetch and the parse; the arithmetic on top is free.
+    row, so a card sold on both settlements is fetched once and the
+    year-to-date pass re-prices from what was already downloaded instead of
+    re-downloading it. The expensive half of a sweep is the fetch and the
+    parse; the arithmetic on top is free.
 
     The value is ``(card, read_by_ocr)``: a supplier publishing page images is
     priced off the archive's OCR reading, and the row has to say so however
@@ -742,10 +745,14 @@ def _sweep_rows(
 
     Deliberately not the shared snapshot cache: that one is keyed by tuple and
     shared between entries, and evicting it is the coordinator's business.
-    This is scratch belonging to one dialog. It is dropped when the entry
-    unloads (``evict_sweep_rows``), which is the only lifetime it needs: a
-    ranking is read in one sitting, and the shared cache underneath it already
-    applies the freshness rules.
+    This is scratch belonging to one sweep. It is dropped when a new sweep
+    starts (the nightly run, a dialog sweep, the refresh box) and when the
+    entry unloads (``evict_sweep_rows``). Held any longer, the nightly
+    ranking kept pricing every alternative on the cards of its first run
+    after a restart, past every monthly card change, because a row found
+    here never reaches the shared cache and its probe. It is kept between
+    sweeps only for the year-to-date pass, which prices the cards the
+    ranking it extends was built on.
     """
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     store: dict[str, dict[tuple[str, str, str], Any]] = bucket.setdefault(
@@ -755,7 +762,8 @@ def _sweep_rows(
 
 
 def evict_sweep_rows(hass: HomeAssistant, entry_id: str) -> None:
-    """Drop an entry's ranking scratch when it unloads.
+    """Drop an entry's ranking scratch when a sweep starts or the entry
+    unloads.
 
     Without it the cards a sweep fetched outlive the entry that asked for
     them, for the life of the Home Assistant process.

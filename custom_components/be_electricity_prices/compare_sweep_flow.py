@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from .compare_flow import _CompareStepsMixin, _REFRESH_FIELD, _YTD_FIELD
 
-from .compare_engine import _SweepEngine
+from .compare_engine import _SweepEngine, evict_sweep_rows
 from .compare_inputs import _candidate_label, _effective_regime
 from .compare_table import RankedRow, _ranking_table
 from .const import (
@@ -148,6 +148,9 @@ class _SweepStepsMixin(_CompareStepsMixin):
         would interrupt the sweep at nearly every row. The one-to-one page
         already owns the prompt and its live validation; this borrows both.
         """
+        # A new sweep fetches through the shared cache, whose probe and TTL
+        # notice a new month's card; the previous sweep's cards would not.
+        evict_sweep_rows(self.hass, self.config_entry.entry_id)
         current = self.config_entry.data
         candidates = self._sweep["candidates"]
         needs_key = _effective_regime(current, {}) == SOLAR_REGIME_INJECTION and any(
@@ -341,9 +344,10 @@ class _SweepStepsMixin(_CompareStepsMixin):
         """
         if user_input is not None:
             if user_input.get(_REFRESH_FIELD):
-                # Drop the stored answer and sweep live. The cards themselves
-                # are still cached and probe-gated underneath, so asking again
-                # an hour later re-prices rather than re-downloads. The
+                # Drop the stored answer and sweep live. The sweep refetches
+                # through the shared card cache, which is probe-gated, so
+                # asking again an hour later re-prices rather than
+                # re-downloads unless a supplier published a new card. The
                 # household goes too: the progress step appends the own row
                 # only when it resolves the household itself, and a
                 # year-to-date pass run on the stored ranking had already

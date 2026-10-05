@@ -1628,3 +1628,102 @@ def test_every_annual_row_on_the_page_clamps_per_register() -> None:
         f"pass no register_weights, so those rows are netted and clamped once: "
         f"{missing}"
     )
+
+
+def _rate_switchable_extractors(rate: dict[str, float]) -> dict[str, Any]:
+    """Every extractor, fetching a stub card at whatever ``rate`` holds."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from tests.test_options_flow import _stub_snapshot
+
+    async def _fetch(*_a: Any, **_k: Any) -> Any:
+        return _stub_snapshot("x", "x", rate["v"])
+
+    return {
+        sid: replace(ext, fetch=AsyncMock(side_effect=_fetch), probe=None)
+        for sid, ext in EXTRACTORS.items()
+    }
+
+
+def _alternatives(rows: Any) -> dict[str, float | None]:
+    return {r.label: r.annual for r in rows if not r.is_own}
+
+
+async def test_the_nightly_sweep_prices_the_cards_published_since_the_last_one(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The sweep's card scratch outlived the sweep. From the second night on
+    every alternative was priced on the card the first run after a restart
+    fetched, so after a monthly card change the ranking set this month's own
+    contract against last month's market until the next restart."""
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    freezer.move_to("2026-09-30 03:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    entry.runtime_data = coord
+    rate = {"v": 0.16}
+    with patch.dict(EXTRACTORS, _rate_switchable_extractors(rate)):
+        first = await _SweepEngine(hass, entry, {}).run_full_sweep(coord)
+        # The next month's cards are out by the following night.
+        rate["v"] = 0.30
+        freezer.tick(timedelta(days=1))
+        second = await _SweepEngine(hass, entry, {}).run_full_sweep(coord)
+    assert not isinstance(first, str)
+    assert not isinstance(second, str)
+    before = _alternatives(first.rows)
+    after = _alternatives(second.rows)
+    assert before
+    priced = [label for label, annual in before.items() if annual is not None]
+    assert priced
+    for label in priced:
+        assert after[label] is not None
+        assert after[label] > before[label], label  # type: ignore[operator]
+
+
+async def test_a_new_dialog_sweep_prices_the_cards_published_since_the_last_one(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The dialog read the same scratch, so a ranking opened again days later
+    in the same Home Assistant session re-priced the old cards."""
+    from homeassistant import data_entry_flow
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    async def _sweep() -> str:
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        for _ in range(400):
+            if result["type"] is not data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        assert result["step_id"] == "compare_all_result"
+        placeholders = result["description_placeholders"]
+        assert placeholders is not None
+        ranking: str = placeholders["ranking"]
+        await hass.config_entries.options.async_configure(result["flow_id"], {})
+        return ranking
+
+    freezer.move_to("2026-09-30 13:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    rate = {"v": 0.16}
+    with patch.dict(EXTRACTORS, _rate_switchable_extractors(rate)):
+        first = await _sweep()
+        rate["v"] = 0.30
+        freezer.tick(timedelta(days=2))
+        second = await _sweep()
+    assert first != second
