@@ -91,7 +91,8 @@ _EXPIRED_CARD_TTL = timedelta(hours=1)
 # the time-correct yearly-cost flow uses to bill each past month at its
 # own rate. ``None`` is a negative cache so a probe-less supplier or a
 # month outside the supplier's archive horizon doesn't refetch every
-# refresh. Lives in-memory only; rebuilt fresh on HA restart.
+# refresh. Written to the entry's store blob under ``monthly_cards`` and
+# restored from it on restart (monthly_rows_to_store, restore_monthly_rows).
 _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 
 # Per-(supplier, contract, region, YYYY-MM) timestamp of the last
@@ -99,9 +100,10 @@ _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 # deliberately does NOT cache a transient error as a negative result
 # (cached None means "no archive for this month"), so without this
 # secondary marker every hourly tick would re-attempt every still-
-# uncached past month against a flaky CDN. The TTL matches the live
-# TTL: long enough to dedupe one hour of update ticks, short enough
-# that a real recovery is picked up promptly.
+# uncached past month against a flaky CDN. Thirty minutes, not the live
+# card's five: long enough that the walks run around one tick (the fill,
+# a backfill, a sibling entry on the same tuple) do not each ask again for
+# every month that failed, short enough that the next hourly tick does.
 _MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
 _MONTHLY_FETCHED_AT_KEY = "monthly_snapshot_fetched_at"
 _MONTHLY_FAILURE_TTL = timedelta(minutes=30)

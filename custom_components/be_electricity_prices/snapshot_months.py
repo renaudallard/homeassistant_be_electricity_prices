@@ -26,15 +26,16 @@
 """One month's card: reading it, storing it, and serving it back.
 
 The shared cache in ``snapshot_store`` holds today's card per supplier tuple.
-This module holds the other axis: a card as it stood in a given month, read
-off the repository's card archive when the supplier no longer publishes it.
+This module holds the other axis: a card as it stood in a given month.
 Backfill and the year-to-date cost walk months, so these rows outnumber the
-live ones by an order of magnitude and persist to their own store.
+live ones by an order of magnitude, and they persist in the entry's own
+store blob under ``monthly_cards`` (``coordinator_persist``).
 
-The archive is a fallback, not a source: a month is read from it only when
-the supplier's own card cannot be had, and a row that came from it says so,
-because a figure the user cannot check against a published PDF needs to be
-labelled as what it is.
+For a closed month the repository's card archive is asked first: one small
+JSON against a PDF download and a parse from the supplier. The supplier's
+own ``fetch_for_month`` answers for the running month and for what the
+archive does not hold, and settles a month the archive only caught while
+it ran on a card indexed on that month (``_snapshot_for_month``).
 """
 
 from __future__ import annotations

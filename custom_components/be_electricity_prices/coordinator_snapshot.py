@@ -531,8 +531,9 @@ class _SnapshotMixin:
             and return. If the key changed, fall through to a real fetch.
 
           * **No probe**: fall back to the time-based TTL, refetching
-            when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h).
-            DATS 24, Engie and Luminus take this path.
+            when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h)
+            or the card's validity, or the month its title names, has
+            passed. DATS 24, energie.be, Engie and Luminus take this path.
 
         The shared (supplier, contract, region) cache short-circuits the
         same way: a probe-key match against a sibling coordinator's

@@ -424,12 +424,6 @@ class BePricesCoordinator(
         """
         return self._card_unreadable
 
-        # Older persisted blobs may carry kwh_buckets / kwh_baselines /
-        # year_start / year_start_register_baselines from a previous
-        # release that tracked monthly accumulation in-process. Those
-        # are unused now: the recorder is the source of truth. Drop
-        # them silently on next save.
-
     async def _async_update_data(self) -> CoordinatorData:
         # Lifecycle note: a slow tick that started before an OptionsFlow
         # change of supplier / contract / region / meter sensors can
