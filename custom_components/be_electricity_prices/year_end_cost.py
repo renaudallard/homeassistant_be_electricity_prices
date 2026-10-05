@@ -45,7 +45,7 @@ from .const import (
 )
 from .energy_meters import _bills_injection, _kwh_sensor_ids, reading_year_ahead
 from .injection import _compute_injection_price, _injection_is_spot_formula
-from .projected_cost import _contract_basis, held_at_index
+from .projected_cost import _contract_basis, held_at_index, index_period
 from .projected_volume import _last_year_window, _same_days_last_year
 from .providers._rates import DynamicRates, SpotMonthlyRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
@@ -61,7 +61,9 @@ def _unpriceable(card: SupplierSnapshot, entry: ConfigEntry) -> str | None:
             "not projected: a dynamic contract has no prices for the rest of the year"
         )
     if isinstance(card.energy, SpotMonthlyRates) and card.energy.index_realised is None:
-        return "not projected: this month's index is not known yet"
+        return (
+            f"not projected: this {index_period(card.energy)}'s index is not known yet"
+        )
     if (
         entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
         and card.injection is not None

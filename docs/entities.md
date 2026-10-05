@@ -368,7 +368,8 @@ over a recorder already holding those days.
 
 A month-indexed energy leg holds the running month's index to 31 December, set
 as the leg's `index_realised`, the way the rolling year cost holds a variable
-card's printed rate. Unknown (`energy_basis` says why) on a dynamic contract,
+card's printed rate; Bolt's variable cards hold the running quarter's to date,
+and `energy_basis` names the quarter. Unknown (`energy_basis` says why) on a dynamic contract,
 on a feed-in credit that follows the spot price per slot on the injection
 regime, while the running month has no index yet, and while the feed-in credit
 has no rate yet (a month-indexed credit printing no figure, before the month's

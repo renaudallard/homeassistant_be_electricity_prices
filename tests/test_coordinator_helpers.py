@@ -8152,6 +8152,38 @@ async def test_projection_holds_this_months_index_on_a_month_indexed_leg(
     assert diag["energy_basis"].endswith("this month's is not known yet")
 
 
+async def test_projection_names_the_quarter_on_a_quarter_indexed_leg(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Bolt's variable cards are re-priced on the delivery quarter's index, so
+    the basis names the quarter where it names the month on every other."""
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+    leg = replace(
+        _yearly_snapshot(),
+        energy=SpotMonthlyRates(factor=1.1, base=0.02, quarter_indexed=True),
+    )
+
+    async def at(index: float | None) -> dict[str, Any]:
+        _, diag = await _project(
+            hass,
+            _projection_entry(api_key="KEY"),
+            _daily(10.0),
+            snapshot=card,
+            priced=leg,
+            energy_index=index,
+        )
+        return diag
+
+    assert (await at(0.05))["energy_basis"] == (
+        "this quarter's index, held for a full year"
+    )
+    assert (await at(None))["energy_basis"].endswith(
+        "each quarter's Belpex index, as the supplier bills it, and this "
+        "quarter's is not known yet"
+    )
+
+
 def test_a_leg_settled_on_its_index_is_priced_without_a_spot() -> None:
     """The month's settled index is that month's price; a spot handed in still
     wins, and a leg with neither has no price."""

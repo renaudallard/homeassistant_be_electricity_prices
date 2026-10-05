@@ -445,6 +445,15 @@ async def test_no_index_for_the_running_month_is_no_number(
     )
     assert got is None
     assert diag["energy_basis"] == "not projected: this month's index is not known yet"
+    quarterly = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.1, base=0.02, quarter_indexed=True)
+    )
+    _, diag = await _year_end(
+        hass, make_entry(consumption_kwh="sensor.cons"), quarterly, _seasonal
+    )
+    assert (
+        diag["energy_basis"] == "not projected: this quarter's index is not known yet"
+    )
 
 
 async def test_a_dynamic_contract_is_not_projected(

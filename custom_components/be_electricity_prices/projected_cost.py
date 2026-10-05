@@ -115,12 +115,20 @@ _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in
 _NO_INJECTION_METER = "not folded in: no feed-in meter is wired"
 _COHORT_SPOT_BASIS = (
     "not projected: the {setting} re-prices this card to its signing cohort, "
-    "which settles on a monthly Belpex index, and this month's is not known yet"
+    "which settles on a {period}ly Belpex index, and this {period}'s is not "
+    "known yet"
 )
 _KEYED_SPOT_BASIS = (
-    "not projected: with an ENTSO-E key this card is re-priced on each month's "
-    "Belpex index, as the supplier bills it, and this month's is not known yet"
+    "not projected: with an ENTSO-E key this card is re-priced on each {period}'s "
+    "Belpex index, as the supplier bills it, and this {period}'s is not known yet"
 )
+
+
+def index_period(energy: object) -> str:
+    """The period a month leg's index covers, as its basis names it: Bolt's
+    variable cards settle on the delivery quarter's, every other on the
+    month's."""
+    return "quarter" if getattr(energy, "quarter_indexed", False) else "month"
 
 
 def held_at_index(snapshot: SupplierSnapshot, index: float | None) -> SupplierSnapshot:
@@ -277,14 +285,15 @@ async def _compute_projected_year_cost(
             )
         elif _tariff_card_month(entry) is not None:
             basis = _COHORT_SPOT_BASIS.format(
+                period=index_period(priced.energy),
                 setting=(
                     "tariff card month"
                     if _parse_iso_date(entry.data.get(CONF_TARIFF_CARD_DATE))
                     else "contract start date"
-                )
+                ),
             )
         else:
-            basis = _KEYED_SPOT_BASIS
+            basis = _KEYED_SPOT_BASIS.format(period=index_period(priced.energy))
         breakdown["energy_basis"] = basis
         return None
 
@@ -491,7 +500,7 @@ async def _compute_projected_year_cost(
     breakdown["welcome_credit_eur"] = welcome_credit
 
     breakdown["energy_basis"] = (
-        "this month's index, held for a full year"
+        f"this {index_period(priced.energy)}'s index, held for a full year"
         if held
         else "today's published rate, held for a full year"
     )
