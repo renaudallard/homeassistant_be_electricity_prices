@@ -703,12 +703,21 @@ def _welcome_credit_eur(
         # page hands this the card it read the amount off, typed Any, and a
         # caller holding one without rates still has to get the realised-rate
         # fallback rather than an AttributeError out of a fee helper.
+        #
+        # The card's single rate is the one figure here not yet on the entry's
+        # basis: apply_vat grosses a stated rate but leaves the energy leg for
+        # the engine, which adds taxes.vat_rate. So it is grossed the same way,
+        # or an ex-VAT card would value the volume a VAT rate short.
         card_energy = getattr(snapshot, "energy", None)
-        volume_rate = getattr(snapshot, "welcome_credit_kwh_rate", None) or (
+        single = (
             static_energy_eur_per_kwh(card_energy, "single")
             if card_energy is not None
             else None
         )
+        if single is not None:
+            taxes = getattr(snapshot, "taxes", None)
+            single *= 1.0 + getattr(taxes, "vat_rate", 0.0)
+        volume_rate = getattr(snapshot, "welcome_credit_kwh_rate", None) or single
         if volume_rate is None or volume_rate <= 0.0:
             volume_rate = energy_eur_per_kwh
         if volume_rate > 0.0:

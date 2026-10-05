@@ -13064,6 +13064,41 @@ def test_the_rate_a_free_volume_is_valued_at_takes_the_energy_vat() -> None:
     )
 
 
+def test_a_free_volume_valued_at_the_card_rate_takes_the_energy_vat() -> None:
+    """With no stated valuation rate the free volume is worth the card's single
+    rate, and on an ex-VAT card that rate is printed without VAT. An entry
+    billed with VAT has to value it on the same basis as a stated rate, which
+    apply_vat grosses, rather than a VAT rate short of it."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+
+    card = make_snapshot(
+        energy=FixedRates(single=0.2),
+        welcome_credit_kwh=750.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    card = replace(card, taxes=replace(card.taxes, vat_rate=0.21))
+
+    def _credit(snap: SupplierSnapshot, include_vat: bool) -> float:
+        return _welcome_credit_eur(
+            apply_vat(snap, include_vat=include_vat),
+            date(2025, 10, 1),
+            date(2026, 1, 1),
+            date(2026, 10, 31),
+            1e9,
+        )
+
+    stated = replace(card, welcome_credit_kwh_rate=0.2)
+    assert _credit(card, True) == pytest.approx(750.0 * 0.242)
+    assert _credit(card, True) == pytest.approx(_credit(stated, True))
+    # A business deducting VAT keeps the card's figure.
+    assert _credit(card, False) == pytest.approx(750.0 * 0.2)
+
+
 def test_the_feed_in_bonus_takes_the_feed_in_price_vat() -> None:
     """A professional card prints the bonus HTVA ("1 c EUR/kWh (HTVA)"). It is
     a bonus on the feed-in price, so it is grossed where the card taxes its

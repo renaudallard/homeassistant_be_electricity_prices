@@ -714,6 +714,9 @@ conditions particulieres, par 750 kWh"*. Valuing it at the realised rate instead
 bi-hourly household 0,89 to 4,50 EUR and an exclusive-night one 16,28 to 18,52, and on the
 two variable cards it floated with the year where the clause pins the signing card. A card
 publishing no single rate falls back to the realised rate rather than crediting nothing.
+The printed single rate is grossed by the entry's `taxes.vat_rate`, the way the engine
+grosses the energy leg, so on an ex-VAT card billed with VAT it sits on the same basis
+as a stated `welcome_credit_kwh_rate` (which `apply_vat` grosses) and the realised rate.
 The October 2026 MaxxFlex and ComfyFlex+ cards name another single rate, *"le prix unitaire
 en EUR/kWh TVAC de l'estimation annuelle de l'energie fournie applicable aux compteurs
 mono-horaires"*, the card's own yearly estimate printed under the rates (20,70 c/kWh on
