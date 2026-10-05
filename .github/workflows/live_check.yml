@@ -133,8 +133,9 @@ jobs:
             # rc 0 = all green.
             # rc 8 = harness crash (top-level Python exception); the
             #        traceback is in the run's stdout. None of the
-            #        issue-creation steps below fire for rc=8, so the
-            #        PR check (last step) is the only push-time signal.
+            #        issue-creation steps below fire for rc=8: the
+            #        "Fail run on harness crash" step fails a push run
+            #        and the PR-fail step a pull request.
             # A harness that died before _run wrote no failure list: a
             # module-level ImportError exits 1, an OOM kill 137, a runner
             # SIGTERM 143. An odd code took the extractor branch with an
@@ -234,10 +235,10 @@ jobs:
               # rejected it and nothing was filed at all. It only repeats
               # what the failures table says.
               #
-              # And drop failures table rows for checks that a LATER attempt
-              # passed. The table is the last attempt's, so on a slow runner
-              # it carries one-off network timeouts beside the real
-              # regressions, and they read as part of the fault being
+              # And drop failures table rows for checks that an EARLIER
+              # attempt passed. The table is the last attempt's, so on a
+              # slow runner it carries one-off network timeouts beside the
+              # real regressions, and they read as part of the fault being
               # reported. Only the rows are filtered; the count in the
               # heading is the raw one, and the omission is stated at the end
               # so nothing disappears silently.
@@ -256,7 +257,7 @@ jobs:
                    }
                    END{
                      if (dropped)
-                       printf "\n_%d transient failure(s) that a later attempt passed are omitted from the table above; the run log has them._\n", dropped
+                       printf "\n_%d transient failure(s) that an earlier attempt passed are omitted from the table above; the run log has them._\n", dropped
                    }' persistent_failures.txt report.md
             else
               # No report at all means the harness died before printing

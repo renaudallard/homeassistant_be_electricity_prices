@@ -2034,6 +2034,42 @@ def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     ) == ("[live-check] a registered product left the supplier listing")
 
 
+def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
+    tmp_path: Path,
+) -> None:
+    """report.md is rewritten by every attempt, so the table the issue quotes
+    is the last attempt's and a row missing from the persistent list passed
+    in an EARLIER attempt. The note said a later one, which sent the triager
+    looking past the run's end for a pass that came before it."""
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    script = next(
+        s["run"]
+        for s in workflow["jobs"]["check"]["steps"]
+        if s.get("name") == "Open or update extractor-broken issue"
+    )
+    script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "file_ci_issue.sh").write_text("exit 0\n")
+    (tmp_path / "persistent_failures.txt").write_text("eneco/power_fix: fetch\n")
+    (tmp_path / "report.md").write_text(
+        "# Live extractor check: 1 pass, 2 fail\n\n## Failures\n\n"
+        "| Check | Detail |\n| --- | --- |\n"
+        "| `eneco/power_fix: fetch` | HTTP 404 |\n"
+        "| `ebem/dyn: fetch` | TimeoutError |\n\n## All checks\n\n- [x] a\n"
+    )
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
+    body = (tmp_path / "issue_body.md").read_text()
+    assert "`eneco/power_fix: fetch` | HTTP 404" in body
+    assert "ebem/dyn" not in body
+    assert "1 transient failure(s) that an earlier attempt passed" in body
+
+
 def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     """From 6 November 2026 the excise and VREG window reminders fail every
     night, and they filed as "a supplier's federal tax block disagrees",

@@ -29,8 +29,9 @@
 Walks every (supplier, contract) tuple, hits the supplier's real
 publication, parses the result, and verifies the snapshot is structurally
 sane: energy populated, expected DSO keys present, taxes populated, rates
-inside loose plausibility bounds. Prints a markdown report to stdout and
-exits non-zero on the first failure.
+inside loose plausibility bounds. Runs every check, prints a markdown
+report to stdout and exits bit-coded: 1 for an extractor failure, 2 for a
+catalog signal, 4 for a drift alert, or 8 when the harness itself crashed.
 
 Run by ``.github/workflows/live_check.yml`` daily; on persistent failure
 the workflow opens or updates a GitHub issue with this report attached.
@@ -5374,7 +5375,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # retry, see _fetch_with_retry) doesn't push a normal slow day over
 # budget. bolt fetches its six ~5 MB PDFs concurrently (see _check_bolt),
 # so on a slow-CDN day (issue #13) the six 20-30 s fetches sum to ~180 s
-# even though real wallclock stays well under the 240 s hard cap and the
+# even though real wallclock stays well under _SUPPLIER_HARD_TIMEOUT_S and the
 # snapshot succeeds; budget it accordingly so it doesn't false-fire.
 # The same professional editions double the fetch count for bolt, engie
 # and mega. elapsed_s is the SUM of per-request durations, so it scales
@@ -5418,7 +5419,7 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     # range, summed 63,9 s on a loaded Pi), so their summed elapsed_s blows
     # the 90 s default on a slow day even though each fetch is small and
     # the snapshot succeeds. Budget like the other multi-fetch suppliers,
-    # well under the 240 s hard cap.
+    # well under _SUPPLIER_HARD_TIMEOUT_S.
     "totalenergies": 150.0,
     "octaplus": 130.0,
 }
