@@ -476,6 +476,11 @@ _ENERGY_OPTIONAL_KEYS = (
     "formula_base_eco",
     "quarter_indexed",
 )
+# The RLP pair is optional on the Impact leg alone: VariableRates and
+# SpotMonthlyRates have carried it since before the archive went live, and
+# every row of theirs holds it, while ImpactRates gained it for Mega's
+# Off-peak Impact index.
+_IMPACT_OPTIONAL_KEYS = ("rlp_indexed", "rlp_blend")
 
 
 def _injection_to_dict(inj: InjectionRates) -> dict[str, Any]:
@@ -498,8 +503,12 @@ def _energy_to_dict(energy: EnergyRates) -> dict[str, Any]:
     """The energy leg as a row, without the optional fields it does not use
     (see ``_INJECTION_OPTIONAL_KEYS`` for why)."""
     data = dict(energy.__dict__)
-    for key in _ENERGY_OPTIONAL_KEYS:
-        if key in data and (data[key] is None or data[key] is False):
+    defaults = {f.name: f.default for f in fields(energy)}
+    optional: tuple[str, ...] = _ENERGY_OPTIONAL_KEYS
+    if isinstance(energy, ImpactRates):
+        optional += _IMPACT_OPTIONAL_KEYS
+    for key in optional:
+        if key in data and data[key] == defaults[key]:
             del data[key]
     return data
 

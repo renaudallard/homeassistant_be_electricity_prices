@@ -86,6 +86,29 @@ def test_a_happy_sunday_band_is_written_only_when_set() -> None:
     )
 
 
+def test_an_impact_rlp_index_is_written_only_when_set() -> None:
+    """ImpactRates gained the RLP pair for Mega's Off-peak Impact index, and a
+    version from before the archive learned to drop unknown fields cannot
+    decode a row that carries it. Every other Impact card keeps the shape it
+    had; the variable and monthly legs, which carried the pair long before,
+    keep writing it."""
+    flat = ImpactRates(pic=0.30, medium=0.22, eco=0.15)
+    plain = make_snapshot(energy=flat)
+    row = _snapshot_to_dict(plain, NOW)
+    assert not {"rlp_indexed", "rlp_blend"} & set(row["energy"])
+    assert _snapshot_from_dict(row).energy == plain.energy
+    for indexed in (
+        replace(flat, rlp_indexed=True, rlp_blend="columns"),
+        replace(flat, rlp_blend="columns"),
+    ):
+        row = _snapshot_to_dict(make_snapshot(energy=indexed), NOW)
+        assert row["energy"]["rlp_blend"] == "columns"
+        assert _snapshot_from_dict(row).energy == indexed
+    row = _snapshot_to_dict(make_snapshot(energy=VariableRates(current=0.2)), NOW)
+    assert row["energy"]["rlp_indexed"] is False
+    assert row["energy"]["rlp_blend"] == "distinct"
+
+
 def test_a_card_vat_basis_is_written_only_when_set() -> None:
     """The same rule for the tax overlay's two VAT fields: a card stating no
     rate and assuming none keeps the row shape every earlier version reads."""
