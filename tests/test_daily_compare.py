@@ -1436,6 +1436,34 @@ async def test_the_scheduled_sweep_fills_the_year_to_date_column(
     assert [r.ytd for r in result.rows] == [612.40]
 
 
+async def test_the_scheduled_sweep_records_the_settings_it_ran_on(
+    hass: HomeAssistant,
+) -> None:
+    """The restart gate compares this with the entry's settings, so the sweep
+    has to state them, read before it prices anything."""
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
+    from custom_components.be_electricity_prices.coordinator_persist import (
+        settings_digest,
+    )
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    engine = _SweepEngine(hass, entry, {})
+    with (
+        patch.object(
+            _SweepEngine,
+            "build_sweep",
+            return_value={"candidates": [], "rows": []},
+        ),
+        patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "fill_ytd_column", AsyncMock(return_value=[])),
+    ):
+        result = await engine.run_full_sweep(_coord(entry))
+    assert not isinstance(result, str)
+    assert result.inputs == settings_digest(entry)
+
+
 async def test_a_failed_year_to_date_pass_keeps_the_annual_ranking(
     hass: HomeAssistant,
 ) -> None:

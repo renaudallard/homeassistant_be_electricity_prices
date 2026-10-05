@@ -41,6 +41,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from .coordinator_profiles import (
     _load_profile_cache,
@@ -363,10 +364,17 @@ class _PersistMixin:
         # against the household's own contract, so one computed before an
         # OptionsFlow swap compares them to a contract they no longer hold.
         # That is worse than showing nothing, because the sensor reads as a
-        # live figure either way.
+        # live figure either way. The tuple is not the whole of it: a
+        # settlement, meter, regime or DSO mode edited since re-prices both
+        # sides, or moves the household to another group of candidates, so
+        # the ranking is kept only under the settings it was priced on. A blob
+        # written before the digest was stored is kept once and stamped.
         stored_compare = stored.get("daily_compare")
         if isinstance(stored_compare, dict) and not tuple_mismatch:
-            self.daily_compare = _daily_compare_from_dict(stored_compare)
+            ranking = _daily_compare_from_dict(stored_compare)
+            digest = settings_digest(self.entry)
+            if ranking is not None and ranking.inputs in ("", digest):
+                self.daily_compare = replace(ranking, inputs=digest)
         # The earlier contracts' pricing, outside the tuple gate: it carries
         # the periods it was priced for, and the tick serves it only for those,
         # so a switch recorded since simply leaves it unused.
@@ -665,6 +673,7 @@ def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
         "own": result.own,
         "priced": result.priced,
         "total": result.total,
+        "inputs": result.inputs,
         "rows": [
             {
                 "label": row.label,
@@ -713,6 +722,9 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
     priced, total = blob.get("priced"), blob.get("total")
     if not isinstance(priced, int) or not isinstance(total, int):
         return None
+    inputs = blob.get("inputs", "")
+    if not isinstance(inputs, str):
+        return None
     raw_rows = blob.get("rows")
     if not isinstance(raw_rows, list):
         return None
@@ -749,4 +761,5 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
         priced=priced,
         total=total,
         ran_at=ran_at,
+        inputs=inputs,
     )

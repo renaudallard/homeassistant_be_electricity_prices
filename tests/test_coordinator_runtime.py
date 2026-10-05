@@ -7314,6 +7314,48 @@ async def test_a_ranking_for_a_different_contract_is_not_restored(
     assert fresh.daily_compare is None
 
 
+async def test_a_ranking_priced_under_other_settings_is_not_restored(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A settlement, meter, regime or DSO mode edit reloads the entry with the
+    same supplier and contract, so the tuple gate let the old ranking back in:
+    a saving and a table for a household that no longer exists, served until
+    the next night's sweep. Restored under the settings it was priced on only.
+    """
+    from custom_components.be_electricity_prices.coordinator_persist import (
+        settings_digest,
+    )
+
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    coord.daily_compare = _ranking(datetime(2026, 9, 1, 3, 17, tzinfo=UTC))
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    # What a sweep run under these settings writes.
+    saved["daily_compare"]["inputs"] = settings_digest(entry)
+
+    same = BePricesCoordinator(hass, entry)
+    with patch.object(same._store, "async_load", AsyncMock(return_value=saved)):
+        await same.async_load_persistent()
+    assert same.daily_compare is not None
+
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "solar_regime": "injection"}
+    )
+    edited = BePricesCoordinator(hass, entry)
+    with patch.object(edited._store, "async_load", AsyncMock(return_value=saved)):
+        await edited.async_load_persistent()
+    assert edited.daily_compare is None
+
+
 async def test_a_half_written_ranking_is_dropped_whole(
     hass: HomeAssistant, freezer: Any
 ) -> None:

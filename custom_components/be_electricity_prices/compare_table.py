@@ -153,6 +153,13 @@ class DailyCompare:
     ranking is still worth publishing then: the alternatives rank against
     each other, but there is no saving to state, so the sensor reads unknown
     rather than claiming zero.
+
+    ``inputs`` is the digest of the entry's settings the sweep started under
+    (``coordinator_persist.settings_digest``). A restart restores the ranking
+    only under the same settings: a settlement, meter, regime or DSO mode
+    edited since reloads the entry with the same supplier and contract, and
+    re-prices both sides or moves the household to another group of
+    candidates.
     """
 
     rows: tuple[RankedRow, ...]
@@ -160,6 +167,7 @@ class DailyCompare:
     priced: int
     total: int
     ran_at: datetime
+    inputs: str = ""
 
     @property
     def cheapest(self) -> RankedRow | None:

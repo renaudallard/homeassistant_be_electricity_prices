@@ -46,6 +46,7 @@ from .compare_inputs import (
 from .compare_table import DailyCompare, RankedRow
 from .compare_quote import _annual_bill, _candidate_welcome_credit
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
+from .coordinator_persist import settings_digest
 from .const import (
     CONF_CONTRACT,
     CONF_METER,
@@ -405,6 +406,9 @@ class _SweepEngine(_HouseholdMixin):
         sweep = self.build_sweep()
         if isinstance(sweep, str):
             return sweep
+        # Read before anything is priced: an edit landing during the sweep
+        # reloads the entry, and the ranking belongs to the settings it ran on.
+        inputs = settings_digest(self.config_entry)
         # Every night is a new sweep, so it starts from the shared cache and
         # its probe rather than from the cards an earlier night held.
         evict_sweep_rows(self.hass, self.config_entry.entry_id)
@@ -452,6 +456,7 @@ class _SweepEngine(_HouseholdMixin):
             priced=sum(1 for r in rows if r.annual is not None and not r.is_own),
             total=len(sweep["candidates"]),
             ran_at=dt_util.utcnow(),
+            inputs=inputs,
         )
 
     def build_sweep(self) -> dict[str, Any] | str:
