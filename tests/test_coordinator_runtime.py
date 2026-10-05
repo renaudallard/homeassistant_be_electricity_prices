@@ -2810,6 +2810,41 @@ async def test_readable_supplier_keeps_the_extractor_failed_card(
     )
 
 
+async def test_repairs_cards_name_the_supplier_and_contract_as_picked(
+    hass: HomeAssistant,
+) -> None:
+    """The cards read "frank (frank_dynamic)", registry ids nobody picked by
+    that name. They carry the labels the config flow shows, and the id only
+    when this build no longer ships the supplier or the contract."""
+    entry = make_entry(supplier="frank", contract="frank_dynamic", region="flanders")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+
+    coord._sync_extractor_issue("boom")
+    issue = registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "supplier": "Frank Energie",
+        "contract": "Frank Energie Dynamisch",
+        "error": "boom",
+    }
+
+    coord._sync_entsoe_auth_issue(True, "401")
+    issue = registry.async_get_issue(DOMAIN, f"entsoe_auth_failed_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["supplier"] == "Frank Energie"
+
+    gone = make_entry(supplier="frank", contract="frank_gone", region="flanders")
+    gone.add_to_hass(hass)
+    BePricesCoordinator(hass, gone)._sync_entsoe_auth_issue(True, "401")
+    issue = registry.async_get_issue(DOMAIN, f"entsoe_auth_failed_{gone.entry_id}")
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["contract"] == "frank_gone"
+
+
 async def test_sync_entsoe_auth_issue_creates_and_clears(
     hass: HomeAssistant,
 ) -> None:

@@ -143,8 +143,9 @@ class _IssuesMixin:
 
         Five syncers spelled this out: the unloaded guard, the
         ``f"{translation_key}_{entry_id}"`` id, the create call with its
-        supplier / contract placeholders, and the delete in the else. Only the
-        key, the predicate and a couple of extra placeholders differ.
+        supplier / contract placeholders (``_issue_names``), and the delete in
+        the else. Only the key, the predicate and a couple of extra
+        placeholders differ.
 
         The id shape is load-bearing and must stay byte-identical: Repairs
         persists it, so a changed id leaves an already-raised issue orphaned
@@ -158,10 +159,7 @@ class _IssuesMixin:
         if not active:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
-        placeholders = {
-            "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-            "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-        }
+        placeholders = self._issue_names()
         placeholders.update(extra or {})
         ir.async_create_issue(
             self.hass,
@@ -355,6 +353,29 @@ class _IssuesMixin:
         self._sync_issue(
             "compensation_kva_missing", compensation_lacks_kva(self.entry.data)
         )
+
+    def _issue_names(self) -> dict[str, str]:
+        """The supplier and contract as a Repairs card names them.
+
+        The labels the config flow's pickers show, not the registry ids: a card
+        reading "frank (frank_dynamic)" names an entry nobody picked by that
+        name. The id stands in when this build no longer ships the supplier or
+        the contract, which is the one case with no label to show.
+        """
+        extractor = self._entry_extractor()
+        contract = self._entry_contract()
+        return {
+            "supplier": (
+                extractor.label
+                if extractor is not None
+                else str(self.entry.data.get(CONF_SUPPLIER, ""))
+            ),
+            "contract": (
+                contract.label
+                if contract is not None
+                else str(self.entry.data.get(CONF_CONTRACT, ""))
+            ),
+        }
 
     def _entry_extractor(self) -> SupplierExtractor | None:
         """This entry's registry extractor, or None if this build drops it."""
@@ -572,11 +593,7 @@ class _IssuesMixin:
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key=translation_key,
-            translation_placeholders={
-                "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                "error": message,
-            },
+            translation_placeholders={**self._issue_names(), "error": message},
         )
 
     def _sync_card_read_by_ocr_issue(self, active: bool) -> None:
@@ -637,15 +654,10 @@ class _IssuesMixin:
         if extractor is None or contract is None or contract.withdrawn is None:
             self._sync_issue("contract_withdrawn", False)
             return
-        # Labels, not registry ids, for the reason the supplier card gives.
         self._sync_issue(
             "contract_withdrawn",
             True,
-            extra={
-                "supplier": extractor.label,
-                "contract": contract.label,
-                "since": contract.withdrawn.isoformat(),
-            },
+            extra={"since": contract.withdrawn.isoformat()},
         )
 
     def _sync_deprecated_supplier_issue(self) -> None:
