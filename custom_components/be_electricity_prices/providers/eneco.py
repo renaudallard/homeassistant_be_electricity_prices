@@ -506,10 +506,13 @@ def _extract_variable(text: str) -> VariableRates:
     )
     # Accept any sign character between the BELPEX factor and the base
     # so a future card flipping to '-' or to a Unicode minus doesn't
-    # silently drop the formula display string. _extract_dynamic above
-    # already does the same.
+    # silently drop the formula display string, and an integer base as
+    # the dynamic and injection formulas do: the card already prints
+    # "0,077 X BELPEX -3", and a missed formula here parses cleanly
+    # while dropping the month indexing.
     formula_match = re.search(
-        rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([{SIGN_CHARS}])\s*(\d+,\d+)\)", text
+        rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)\)",
+        text,
     )
     if not yearly_fee_match or not monthly_match:
         raise ExtractorError("could not parse Eneco variable energy block")

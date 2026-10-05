@@ -980,3 +980,18 @@ def test_flex_is_month_indexed_on_the_rlp_weighted_mean() -> None:
         fixture_text("eneco_fix.pdf"), "power_fix", "t", REGION_WALLONIA
     )
     assert not _energy_is_rlp_indexed(fix.energy)
+
+
+def test_a_flex_formula_with_an_integer_base_stays_month_indexed() -> None:
+    """The card already prints integer coefficients elsewhere ("0,077 X
+    BELPEX -3" on the feed-in side). A Flex base printed the same way must
+    still be read, or the card parses cleanly with its month indexing gone."""
+    text = fixture_text("eneco_flex_aug26.pdf").replace(
+        "BELPEX-RLP-M + 3,058)", "BELPEX-RLP-M + 3)"
+    )
+    energy = parse_snapshot(text, "power_flex", "t", REGION_WALLONIA).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.rlp_indexed is True
+    assert energy.formula_factor == pytest.approx(0.102 * 1.06 * 10)
+    assert energy.formula_base == pytest.approx(3 * 1.06 / 100)
