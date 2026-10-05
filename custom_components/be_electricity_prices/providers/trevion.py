@@ -61,7 +61,7 @@ from .base import (
     TaxOverlay,
     with_vat_basis,
 )
-from ._resolve import settled_injection
+from ._settle import settled_injection
 from ._rates import (
     Contract,
     DynamicRates,

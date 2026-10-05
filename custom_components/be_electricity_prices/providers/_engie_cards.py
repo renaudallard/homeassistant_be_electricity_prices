@@ -44,8 +44,9 @@ from ._rates import (
 )
 from .base import ExtractorError
 from dataclasses import replace
+from datetime import date
 import re
-from ._pdf import vat_multiplier
+from ._pdf import _MONTH_NAMES, vat_multiplier
 
 
 def _epexdam_formulas(
@@ -458,6 +459,32 @@ def _epexdam_index(text: str) -> float | None:
 _EPEXDAM_INDEX_RE = re.compile(
     r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
 )
+# The same sentence with the month it names: "connue (Septembre 2026: 156,41
+# EUR/MWh)", with or without a space before the colon.
+_EPEXDAM_NAMED_RE = re.compile(
+    r"EPEXDAM\s+connue\s*\(\s*([^\W\d_]+)\s+(20\d{2})\s*:\s*(\d+[,.]\d+)\s*€?\s*/\s*MWh",
+    re.IGNORECASE,
+)
+
+
+def published_index(text: str) -> tuple[date, float] | None:
+    """The EPEXDAM a card names for the month before it, as
+    ``(month, EUR/kWh)``, or ``None``.
+
+    "La valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de mois. A
+    titre informatif, les prix indiques sont bases sur la derniere valeur du
+    EPEXDAM connue (Septembre 2026: 156,41 EUR/MWh)": the month that index
+    closed at, and so what that month is billed on. The plain monthly mean
+    of the day-ahead prices reproduces every value Engie printed from May to
+    September 2026.
+    """
+    match = _EPEXDAM_NAMED_RE.search(text)
+    if match is None:
+        return None
+    number = _MONTH_NAMES.get(match.group(1).lower())
+    if number is None:
+        return None
+    return date(int(match.group(2)), number, 1), to_float(match.group(3)) / 1000.0
 
 
 def _vat_multiplier(text: str, *, professional: bool = False) -> float:

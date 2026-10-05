@@ -5336,8 +5336,8 @@ async def test_an_archive_row_needing_no_settlement_does_not_ask_the_supplier(
     )
     assert asked == (1 if captured_live else 0)
     # A supplier whose month lookup answers with the same card has nothing to
-    # settle. Engie, Luminus and two dozen others index a leg on the month
-    # too, and asking each cost the compare page a supplier fetch per
+    # settle. Luminus and two dozen others index a leg on the month too,
+    # and asking each cost the compare page a supplier fetch per
     # candidate after every restart, up to two minutes apiece.
     snap, asked = await _september_from_a_live_row(
         hass,

@@ -1086,6 +1086,120 @@ async def test_archive_offset_counts_from_the_brussels_date(
     assert asked and "monthOffset=1&" in asked[0]
 
 
+async def test_a_closed_epexdam_month_is_settled_on_the_index_the_next_card_names(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """An EPEXDAM card prints its rates at the previous month's index, so a
+    keyless entry billed every closed month a month behind: 3,38 c/kWh under
+    in September 2026 on Empower Variable, 2,88 over in February. The next
+    card names what the month closed at, "EPEXDAM connue (Avril 2026: 78,94
+    EUR/MWh)", and every rate with a formula behind it is rebuilt on it, the
+    feed-in credit and the three Flextime slots included."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    following = "... la derniere valeur du EPEXDAM connue (Avril 2026: 78,94 €/MWh)."
+    urls: list[str] = []
+
+    def _serving(card: str, next_card: str) -> Any:
+        async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+            urls.append(url)
+            return card if "monthOffset=5&" in url else next_card
+
+        return _fake_pdf
+
+    for contract, fixture, region in (
+        ("engie_empower_variable", "engie_empower_variable_v.pdf", REGION_FLANDERS),
+        ("engie_empower_flextime", "engie_empower_flextime_w.pdf", REGION_WALLONIA),
+    ):
+        text = fixture_text(fixture)  # "Avril 2026", printed at March's 92,57
+        printed = engie.parse_snapshot(contract, {region: text})
+        urls.clear()
+        monkeypatch.setattr(engie, "fetch_pdf_text", _serving(text, following))
+        snap = await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            region,
+            date(2026, 4, 1),
+        )
+        assert snap is not None and not snap.provisional
+        assert "monthOffset=4&" in urls[-1]
+        inj, inj0 = snap.injection, printed.injection
+        assert inj is not None and inj0 is not None
+        assert inj.index_realised == pytest.approx(0.07894)
+        energy = snap.energy
+        if isinstance(energy, VariableRates):
+            e0 = printed.energy
+            assert isinstance(e0, VariableRates)
+            assert energy.index_realised == pytest.approx(0.07894)
+            for value, factor, base in (
+                (energy.current, e0.formula_factor, e0.formula_base),
+                (energy.peak, e0.formula_factor_peak, e0.formula_base_peak),
+                (energy.offpeak, e0.formula_factor_offpeak, e0.formula_base_offpeak),
+                (
+                    energy.exclusive_night,
+                    e0.formula_factor_exclusive_night,
+                    e0.formula_base_exclusive_night,
+                ),
+            ):
+                assert factor is not None and base is not None
+                assert value == pytest.approx(factor * 0.07894 + base)
+            assert energy.current < e0.current
+            assert inj0.factor is not None and inj0.base is not None
+            assert inj.current == pytest.approx(inj0.factor * 0.07894 + inj0.base)
+        else:
+            assert isinstance(energy, TimeOfUseRates)
+            e0 = printed.energy
+            assert isinstance(e0, TimeOfUseRates)
+            assert e0.formula_factor_peak is not None
+            assert e0.formula_base_peak is not None
+            assert energy.peak == pytest.approx(
+                e0.formula_factor_peak * 0.07894 + e0.formula_base_peak
+            )
+            assert inj0.factor_offpeak is not None and inj0.base_offpeak is not None
+            assert inj.offpeak == pytest.approx(
+                inj0.factor_offpeak * 0.07894 + inj0.base_offpeak
+            )
+
+    # The running month has no next card yet: the estimate stands and says
+    # it can still move, and nothing more is asked.
+    text = fixture_text("engie_empower_variable_v.pdf")
+    freezer.move_to("2026-04-20 12:00:00+02:00")
+    urls.clear()
+
+    async def _only_current(session: object, url: str, **kwargs: object) -> str:
+        urls.append(url)
+        return text
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _only_current)
+    running = await engie.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "engie_empower_variable",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert running is not None and running.provisional
+    assert len(urls) == 1
+
+    # A next card naming another month settles nothing.
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    monkeypatch.setattr(
+        engie, "fetch_pdf_text", _serving(text, following.replace("Avril", "Mai"))
+    )
+    kept = await engie.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "engie_empower_variable",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert kept is not None and not kept.provisional
+    assert (
+        kept.energy
+        == parse_snapshot("engie_empower_variable", {REGION_FLANDERS: text}).energy
+    )
+    assert EXTRACTORS["engie"].settles_on_next_card is True
+
+
 def test_the_two_epexdam_sets_are_two_objects() -> None:
     """A card can index its feed-in credit on the monthly EPEXDAM and still
     print an energy rate published in advance, which is why the ENDEX101

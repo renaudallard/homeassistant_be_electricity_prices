@@ -520,7 +520,7 @@ class SupplierExtractor:
     fetch_for_month: ArchivedSnapshotFetcher | None = None
     # Whether ``fetch_for_month`` settles a month-indexed month on the card
     # that follows it, and flags it provisional until that card is out
-    # (Eneco, EBEM, Trevion and Mega). Only for such a supplier is a closed
+    # (Eneco, EBEM, Trevion, Mega and Engie). Only for such a supplier is a closed
     # month the card archive caught while it ran worth asking it about
     # again: every other one answers with the same card.
     settles_on_next_card: bool = False

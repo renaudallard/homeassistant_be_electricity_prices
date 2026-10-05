@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -104,7 +104,9 @@ from ._engie_cards import (
     _extract_energy,
     _extract_injection,
     _VAT_RE,
+    published_index,
 )
+from ._settle import settled_energy, settled_injection
 
 _API_URL = (
     "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF"
@@ -501,7 +503,66 @@ async def fetch_for_month(
         if is_transient_fetch_error(str(err)):
             raise
         return None
-    return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
+    checked = archive_validity_check(snap, text, first, month_names=FR_MONTHS)
+    if checked is None:
+        return None
+    return await _settle_on_published_index(
+        session, contract, region_code, checked, first, offset
+    )
+
+
+async def _settle_on_published_index(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region_code: str,
+    snap: SupplierSnapshot,
+    first: date,
+    offset: int,
+) -> SupplierSnapshot:
+    """Bill a month on the EPEXDAM it closed at, which the next card names.
+
+    An EPEXDAM card prints its rates at the PREVIOUS month's index, and says
+    so: the month's own is "connue qu'en fin de mois". So a keyless entry
+    billed every closed month a month behind, between 3,4 c/kWh under and
+    2,9 over in 2026, while the card after it states the figure: "derniere
+    valeur du EPEXDAM connue (Septembre 2026: 156,41 EUR/MWh)". Every rate
+    with a formula behind it is rebuilt at that index, energy and feed-in,
+    mono, bi-hourly, night circuit and the three Flextime slots alike.
+
+    The next card is the one the API serves one month closer to today. While
+    it is not out, which is the running month, the printed estimate stands
+    and the month is flagged ``provisional`` so the month cache asks again.
+    A next card naming another month settles nothing, and the month keeps
+    its own figures. An ENDEX101 card is indexed in advance and has nothing
+    to settle, so it costs no download.
+    """
+    injection = snap.injection
+    indexed_injection = injection is not None and injection.month_indexed
+    if not getattr(snap.energy, "month_indexed", False) and not indexed_injection:
+        return snap
+    if offset == 0:
+        return replace(snap, provisional=True)
+    try:
+        following = await fetch_pdf_text(
+            session, _document_url(contract, region_code, month_offset=offset - 1)
+        )
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return replace(snap, provisional=True)
+    published = published_index(following)
+    if published is None or published[0] != first:
+        return snap
+    index = published[1]
+    return replace(
+        snap,
+        energy=settled_energy(snap.energy, index),
+        injection=(
+            settled_injection(injection, index)
+            if injection is not None and indexed_injection
+            else injection
+        ),
+    )
 
 
 def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSnapshot:
@@ -681,4 +742,5 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     fetch_for_month=fetch_for_month,
+    settles_on_next_card=True,
 )

@@ -322,32 +322,6 @@ def resolve_excise_band(
     return replace(snapshot, taxes=replace(snapshot.taxes, federal_excise=rate))
 
 
-def settled_injection(inj: InjectionRates, index: float) -> InjectionRates:
-    """A feed-in leg recomputed at the index its month actually settled at.
-
-    ``current`` is rebuilt from the card's own coefficients, so the printed
-    estimate gives way to the arithmetic the supplier invoices, and
-    ``index_realised`` carries the figure so the engine bills it rather than
-    the weighted mean it would otherwise compute. A leg with no coefficients
-    keeps its printed figure and records the index alone.
-
-    Worth settling because that mean is not the same number for these two
-    suppliers. It weights each hour's MEAN price by the hour's solar share,
-    while EBEM's SPP0 and Trevion's Belpex_SPP_BE weight each QUARTER by its
-    own, and over January to August 2026 the computed one ran about
-    0,9 EUR/MWh above both published series in every month. It is not a bug in
-    the mean: Energy Knights defines its Belpex-SPP-M on the hourly quotation
-    and the same computation reproduces its published series to 0,007%, so the
-    resolution is a property of the card. See ``spot_stats._spp_month_mean``.
-
-    Shared by every provider whose card publishes the settled value: EBEM
-    names it as "vorige maand", Trevion names the month outright.
-    """
-    if inj.factor is None or inj.base is None:
-        return replace(inj, index_realised=index)
-    return replace(inj, current=inj.factor * index + inj.base, index_realised=index)
-
-
 def resolve_federal_contribution(
     snapshot: SupplierSnapshot, delivery_month: date, *, professional: bool
 ) -> SupplierSnapshot:

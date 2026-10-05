@@ -84,7 +84,7 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from ._resolve import settled_injection
+from ._settle import settled_injection
 from ._rates import (
     Contract,
     DynamicRates,

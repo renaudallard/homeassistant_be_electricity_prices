@@ -186,6 +186,23 @@ current card whatever date was set, and every past month of the year-to-date was
 billed on today's card as a proxy. The docs used to say the API had no accessible
 archive; it had one all along, one parameter away.
 
+An EPEXDAM card prints its rates at the PREVIOUS month's index ("la valeur du
+EPEXDAM du mois en cours ne sera connue qu'en fin de mois"), and the card after
+it names what the month closed at: "derniere valeur du EPEXDAM connue (Septembre
+2026: 156,41 EUR/MWh)". So `fetch_for_month` settles a month on that card
+(`_settle_on_published_index`, `engie.py`): it reads the next card one offset
+closer to today, checks it names the month asked for (`published_index`,
+`_engie_cards.py`), and rebuilds every rate with a formula behind it at that index
+(`settled_energy` and `settled_injection`, `_settle.py`): mono, bi-hourly, night
+circuit, the three Flextime bands and the feed-in credit, with `index_realised`
+on the variable and feed-in legs. A keyless entry billed every closed month a
+month behind before this, between 3,4 c/kWh under and 2,9 over on Empower
+Variable in 2026; the settled rates match the plain monthly mean of the day-ahead
+prices to 0,01 c/kWh. The running month has no next card and comes back
+`provisional`; an ENDEX101 card has nothing to settle and costs no download.
+`EXTRACTOR.settles_on_next_card` is set, so a closed month the card archive caught
+live is asked again until it is settled.
+
 ### `discover(session)` (`engie.py`)
 
 A best-effort, informational family-level catalog check, not part of the fetch
