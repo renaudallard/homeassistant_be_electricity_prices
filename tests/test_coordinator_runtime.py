@@ -49,6 +49,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.api import (
     EntsoeAuthError,
     EntsoeError,
+    EntsoeNoDataError,
 )
 from custom_components.be_electricity_prices.const import (
     DOMAIN,
@@ -690,6 +691,10 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
     refetched, filled = await _refuse(EntsoeAuthError("rejected"))
     assert refetched == 0, "a revoked token must not re-pull the year every tick"
     assert not filled, "and must not be papered over by the keyless source"
+
+    refetched, filled = await _refuse(EntsoeNoDataError("No matching data found"))
+    assert refetched == 0, "a past window with no data stays that way"
+    assert not filled
 
     refetched, filled = await _refuse(EntsoeError("timeout"))
     assert filled, "a 5xx is what the keyless source is there for"

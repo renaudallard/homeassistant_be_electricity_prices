@@ -39,6 +39,7 @@ from custom_components.be_electricity_prices import api
 from custom_components.be_electricity_prices.api import (
     EnergyChartsClient,
     EntsoeAuthError,
+    EntsoeNoDataError,
     EntsoeClient,
     EntsoeError,
     _parse_iso_utc,
@@ -50,20 +51,32 @@ from custom_components.be_electricity_prices.api import (
 )
 
 
-def test_acknowledgement_document_raises_auth_error() -> None:
-    """A rejected or quota-exhausted token returns HTTP 200 + an
-    Acknowledgement_MarketDocument. The parser must surface it as an auth
-    error so the dynamic table isn't silently blanked."""
-    ack = """<?xml version="1.0" encoding="UTF-8"?>
+def _ack(text: str) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Acknowledgement_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-1:acknowledgementdocument:7:0">
   <Reason>
     <code>999</code>
-    <text>No matching data found</text>
+    <text>{text}</text>
   </Reason>
 </Acknowledgement_MarketDocument>
 """
-    with pytest.raises(EntsoeAuthError, match="No matching data found"):
-        parse_day_ahead_xml(ack)
+
+
+def test_acknowledgement_document_raises_auth_error() -> None:
+    """An HTTP 200 acknowledgement other than "no matching data" carries no
+    TimeSeries either. The parser surfaces it as an auth error so the dynamic
+    table isn't silently blanked and a key problem reaches Repairs."""
+    with pytest.raises(EntsoeAuthError, match="Quota exceeded"):
+        parse_day_ahead_xml(_ack("Quota exceeded"))
+
+
+def test_a_no_matching_data_acknowledgement_is_not_an_auth_error() -> None:
+    """A rejected token is answered HTTP 401. "No matching data found" is
+    ENTSO-E holding nothing for the window, which a new key cannot fix and
+    the keyless fallback can, so it must not raise the "rotate your API key"
+    card."""
+    with pytest.raises(EntsoeNoDataError, match="No matching data found"):
+        parse_day_ahead_xml(_ack("No matching data found"))
 
 
 async def test_client_error_redacts_security_token() -> None:
@@ -434,12 +447,14 @@ class _CM:
 class _FakeSession:
     """Dispatches on URL so one session can serve both legs of the fallback."""
 
-    def __init__(self, entsoe: Exception, fallback_body: str) -> None:
+    def __init__(self, entsoe: Exception | str, fallback_body: str) -> None:
         self._entsoe = entsoe
         self._fallback_body = fallback_body
 
     def get(self, url: str, **_: object) -> _CM:
         if "entsoe" in url:
+            if isinstance(self._entsoe, str):
+                return _CM(resp=_Resp(200, self._entsoe))
             if isinstance(self._entsoe, EntsoeAuthError):
                 # A rejected token is an HTTP 401 on the wire.
                 return _CM(resp=_Resp(401, ""))
@@ -555,6 +570,21 @@ async def test_fallback_answers_when_entsoe_is_unreachable() -> None:
     caller is told which one answered."""
     body = json.dumps({"unix_seconds": [1788127200], "price": [100.0]})
     session = _FakeSession(entsoe=EntsoeError("503"), fallback_body=body)
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
+        datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+    )
+    assert source == "energy-charts"
+    assert prices == {datetime(2026, 8, 30, 22, 0, tzinfo=UTC): 0.1}
+
+
+async def test_fallback_answers_when_entsoe_has_no_matching_data() -> None:
+    """ENTSO-E holding nothing for the window is an outage of its data, not of
+    the key, so the keyless source answers it."""
+    body = json.dumps({"unix_seconds": [1788127200], "price": [100.0]})
+    session = _FakeSession(entsoe=_ack("No matching data found"), fallback_body=body)
     prices, source = await fetch_day_ahead_or_fallback(
         "key",
         session,  # type: ignore[arg-type]

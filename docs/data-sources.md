@@ -220,14 +220,22 @@ loop during a coordinator tick.
 
 ### The Acknowledgement trap (HTTP 200 with no data)
 
-ENTSO-E answers a rejected or quota-exhausted token with HTTP 200 and an
-`Acknowledgement_MarketDocument` (no `TimeSeries`), not a 401. Returning `{}`
-here would silently blank the dynamic price table with no Repairs guidance. The
-runtime always requests a window that includes today, and the BE zone always
-publishes today's curve, so a document carrying zero matching data really means
-the request was refused. `parse_day_ahead_xml` detects the acknowledgement root
-(`api.py`) and raises `EntsoeAuthError` with a best-effort reason extracted
-from the document's `Reason` block by `_ack_reason` (`api.py`).
+An `Acknowledgement_MarketDocument` carries no `TimeSeries`, and returning `{}`
+for it would silently blank the dynamic price table. A rejected token is not
+answered that way: ENTSO-E returns HTTP 401 (with an acknowledgement reading
+`999 Authentication failed.`, measured in October 2026), which
+`fetch_day_ahead` raises as `EntsoeAuthError` before parsing. A 200
+acknowledgement reading `No matching data found` is ENTSO-E holding nothing
+for the window, a late publication for instance. `parse_day_ahead_xml`
+(`api.py`) raises it as `EntsoeNoDataError`, an `EntsoeError`, so the live
+fetch falls back to energy-charts and then the cached curve as on any outage,
+and the config flow's key check reports `cannot_connect`. The historical walk
+catches it with `EntsoeAuthError` and holds the chunk's past days back on the
+short-day TTL, since a past window with no data stays that way. Any other
+acknowledgement still raises `EntsoeAuthError`, whose Repairs card asks for a
+new key: a quota answer has not been seen, and a key problem must not be
+papered over. The reason is read from the document's `Reason` block by
+`_ack_reason` (`api.py`).
 
 ### Resolution handling: PT60M vs PT15M and aggregation
 
@@ -383,7 +391,7 @@ constructs a fresh `EntsoeClient` per call (`api.py`,
   (`coordinator_spots.py`). A negative cache, `_spot_day_retry_at` with a TTL, marks
   stable past days that stay short after a fetch so subsequent ticks skip them
   (`coordinator_spots.py`); today and yesterday are always re-fetched. An
-  `EntsoeAuthError` marks its chunk's stable past days the same way, so a
+  `EntsoeAuthError` or `EntsoeNoDataError` marks its chunk's stable past days the same way, so a
   revoked key, an exhausted quota or an acknowledgement with no matching data
   backs off instead of re-pulling the year every tick. A window NEITHER source
   could serve -- ENTSO-E 5xx with the keyless fallback down or rate-limited --

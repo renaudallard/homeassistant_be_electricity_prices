@@ -307,9 +307,11 @@ by `_validate_entsoe_key` (`flow_schemas.py`) before the flow proceeds:
 
 - returns `None` on success,
 - `"invalid_api_key"` when ENTSO-E returns 401, *and* on an HTTP 200 that comes
-  back as an empty `Acknowledgement_MarketDocument` with no `TimeSeries`, which
-  `parse_day_ahead_xml` also raises `EntsoeAuthError` for,
-- `"cannot_connect"` on transport/parse error, and on a document that parses but
+  back as an `Acknowledgement_MarketDocument` with no `TimeSeries`, which
+  `parse_day_ahead_xml` also raises `EntsoeAuthError` for, unless it reads
+  "No matching data",
+- `"cannot_connect"` on transport/parse error, on that "No matching data"
+  acknowledgement (`EntsoeNoDataError`), and on a document that parses but
   covers none of the requested window.
 
 The two outcomes are handled differently, because only one of them is the user's to
@@ -338,13 +340,12 @@ key never reaches the keyless energy-charts source that a merely *wrong* key wou
 have been priced from until ENTSO-E came back to reject it. The step answers
 `"empty_api_key"` itself and sends no request.
 
-The validator queries a 24h window anchored on yesterday (`flow_schemas.py`): a
-quota-exhausted token returns 200 plus an empty acknowledgement, and the BE bidding
-zone effectively never goes a full local day with no publication, so an empty 24h
-response reliably means "key not usable" (quota or maintenance). That is why the
-empty acknowledgement is grouped with the refusal rather than with the outage: it
-keeps the user on the form instead of offering them the continue-anyway menu, and
-so blocks them from finalizing an entry that would fail on its first refresh. The
+The validator queries a 24h window anchored on yesterday (`flow_schemas.py`). A
+rejected token is answered HTTP 401, and an acknowledgement other than "No
+matching data" is grouped with that refusal: it keeps the user on the form
+instead of offering them the continue-anyway menu. "No matching data" says
+nothing about the key, so it is grouped with the outage, which the BE bidding
+zone, effectively never a full local day without publication, keeps rare. The
 two error strings map to `config.error.invalid_api_key` /
 `config.error.cannot_connect`, and the blank one to `config.error.empty_api_key`
 (`strings.json`).

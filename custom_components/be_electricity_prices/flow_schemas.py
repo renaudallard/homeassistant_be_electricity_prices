@@ -504,16 +504,14 @@ async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
     window.
 
     An HTTP 200 carrying an Acknowledgement_MarketDocument with no
-    TimeSeries counts as a rejection, not as unreachable:
-    parse_day_ahead_xml raises EntsoeAuthError for that root element,
-    so it lands on ``"invalid_api_key"`` and keeps the user on the
-    form. Use a 24h window anchored on yesterday, which is what makes
-    that safe: a quota-exhausted token returns exactly that empty
-    Acknowledgement, and the BE bidding zone rarely (never, in
-    practice) goes a full local day with no publication, so an empty
-    24h response really does mean the token is not usable - whether
-    quota or maintenance, better than letting the user finalise an
-    entry that fails on first refresh.
+    TimeSeries counts as a rejection, not as unreachable, unless it reads
+    "No matching data": parse_day_ahead_xml raises EntsoeAuthError for
+    the others, so they land on ``"invalid_api_key"`` and keep the user
+    on the form. A no-data answer is EntsoeNoDataError, an EntsoeError,
+    so it lands on ``"cannot_connect"``: ENTSO-E answered without saying
+    anything about the key. A 24h window anchored on yesterday keeps that
+    rare, since the BE bidding zone does not go a full local day with no
+    publication.
 
     A blank key never gets this far. The step that requires one
     rejects an empty field itself, and the two that treat it as

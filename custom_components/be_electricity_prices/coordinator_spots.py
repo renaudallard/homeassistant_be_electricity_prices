@@ -43,6 +43,7 @@ from .api import (
     EntsoeAuthError,
     EntsoeClient,
     EntsoeError,
+    EntsoeNoDataError,
     fetch_day_ahead_or_fallback,
 )
 from .const import (
@@ -443,11 +444,11 @@ class _SpotsMixin(_ProfilesMixin):
                         prices = await entsoe.fetch_day_ahead(
                             start_utc, end_utc, quarter_hourly=on_quarters
                         )
-                    except EntsoeAuthError as err:
-                        # This class covers a rejected key, an exhausted daily
-                        # quota, and a window ENTSO-E acknowledges with no
-                        # matching data, which for a PAST chunk can simply mean
-                        # the data does not exist. None of the three is fixed
+                    except (EntsoeAuthError, EntsoeNoDataError) as err:
+                        # A rejected key, an exhausted daily quota, and a window
+                        # ENTSO-E acknowledges with no matching data, which for
+                        # a PAST chunk can simply mean the data does not exist.
+                        # None of the three is fixed
                         # by asking again in an hour, and a failed fetch leaves
                         # each day exactly as short as it was, so with no marker
                         # the whole year is re-pulled on every hourly tick and

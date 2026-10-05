@@ -74,6 +74,15 @@ class EntsoeError(Exception):
     """Raised on transport or parsing failure."""
 
 
+class EntsoeNoDataError(EntsoeError):
+    """Raised when ENTSO-E acknowledges a request with no matching data.
+
+    An ``EntsoeError`` because it is not the key's fault: the live price
+    falls back like on any outage. The historical walk catches it on its
+    own, since a past window with no data stays that way.
+    """
+
+
 class EntsoeClient:
     """Minimal ENTSO-E client for day-ahead document A44."""
 
@@ -180,17 +189,22 @@ def parse_day_ahead_xml(
         # rather than an unhandled exception out of the coordinator tick.
         raise EntsoeError(f"unsafe XML rejected: {err}") from err
 
-    # ENTSO-E answers a rejected or quota-exhausted token with HTTP 200 +
-    # an Acknowledgement_MarketDocument (no TimeSeries) rather than a 401.
-    # Returning {} here would silently blank the dynamic price table with
-    # no Repairs guidance. The runtime always requests a window that
-    # includes today, and the BE zone always publishes today's curve, so a
-    # document carrying zero matching data really means the request was
-    # refused. Surface it as an auth error so the coordinator raises the
-    # "rotate your token" Repairs card.
+    # An Acknowledgement_MarketDocument carries no TimeSeries, and returning
+    # {} for it would silently blank the dynamic price table. A rejected
+    # token is not one of them: it is answered HTTP 401 (with an ack reading
+    # "999 Authentication failed.", measured in October 2026), which
+    # fetch_day_ahead raises before parsing. "No matching data found" is
+    # ENTSO-E holding nothing for the window, a late publication for
+    # instance, which the keyless fallback or the cached curve can cover and
+    # rotating the key cannot. Any other acknowledgement keeps the auth error
+    # and its "rotate your token" Repairs card: a quota answer has not been
+    # seen, and a key problem must not be papered over.
     if _local_name(root.tag) == "Acknowledgement_MarketDocument":
+        reason = _ack_reason(root)
+        if "no matching data" in reason.lower():
+            raise EntsoeNoDataError(f"ENTSO-E returned no data ({reason})")
         raise EntsoeAuthError(
-            f"ENTSO-E returned no data ({_ack_reason(root)}); the API key "
+            f"ENTSO-E returned no data ({reason}); the API key "
             "may be invalid or its daily quota exhausted"
         )
 
