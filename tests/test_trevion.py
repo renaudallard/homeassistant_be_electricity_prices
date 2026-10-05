@@ -539,6 +539,30 @@ def test_validity_parses_dutch_month_name() -> None:
     assert _extract_validity("geen periode") is None
 
 
+def test_a_january_card_parses_and_a_february_card_settles_january() -> None:
+    """The month table once lost the first letter of "januari", so a January
+    card, and a February card naming January's settled index, raised
+    KeyError instead of parsing."""
+    from custom_components.be_electricity_prices.providers.trevion import (
+        published_rlp_index,
+        published_spp_index,
+    )
+
+    may = _layout("trevion_flex_2026-05.pdf")
+    january = may.replace("mei 2026", "januari 2027")
+    snap = parse_snapshot("groene_stroom_flex", january)
+    assert snap.valid_until == date(2027, 1, 31)
+
+    february = may.replace("april 2026", "januari 2027").replace(
+        "mei 2026", "februari 2027"
+    )
+    assert published_rlp_index(february) == (date(2027, 1, 1), pytest.approx(0.0856))
+    assert published_spp_index(february) == (
+        date(2027, 1, 1),
+        pytest.approx(0.02917),
+    )
+
+
 @pytest.mark.parametrize(
     ("old", "message"),
     [

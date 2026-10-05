@@ -45,6 +45,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NL_MONTHS,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
@@ -75,8 +76,8 @@ from ._rates import (
 _LISTING_URL = "https://trevion.be/tariefkaarten/"
 _BASE_URL = "https://trevion.be"
 _NUM = r"[\d.,]+"
-_MONTH = r"(?:januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)"
-_MONTH_NUMBERS = {name: index for index, name in enumerate(_MONTH[4:-1].split("|"), 1)}
+_MONTH = "(?:" + "|".join(NL_MONTHS) + ")"
+_MONTH_NUMBERS = {name: index for index, name in enumerate(NL_MONTHS, 1)}
 # The settled index a card names, with the month it belongs to: "De laatst
 # gekende waarde is deze van augustus 2026 (79,11 EUR/MWh)". The card prints
 # that sentence twice in the same words, once per parameter, so each reader
