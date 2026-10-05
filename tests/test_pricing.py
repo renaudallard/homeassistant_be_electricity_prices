@@ -736,6 +736,44 @@ def test_exclusive_night_on_impact_bills_its_own_variable_rate(hour: int) -> Non
     assert main == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("mode", ["bi_horaire", "impact"])
+def test_a_night_circuit_on_a_re_priced_impact_card_bills_its_band(
+    mode: DsoTariffMode,
+) -> None:
+    """A Tarif Impact card prints no night rate, so a night circuit on it bills
+    the CWaPE band of the hour (Cociter trihoraire, Mega Off-peak Impact). The
+    month leg it is re-priced through fell to its mono pair, which on such a
+    card is the PIC formula, and billed the night at the dearest band."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+
+    index = 0.10
+    card = ImpactRates(
+        pic=1.2 * index + 0.03,
+        medium=1.1 * index + 0.02,
+        eco=0.9 * index + 0.01,
+        pic_factor=1.2,
+        pic_base=0.03,
+        medium_factor=1.1,
+        medium_base=0.02,
+        eco_factor=0.9,
+        eco_base=0.01,
+        month_indexed=True,
+    )
+    leg = _cohort_energy_from_archived(make_snapshot(energy=card))
+    assert isinstance(leg, SpotMonthlyRates)
+    for hour in range(24):
+        when = datetime(2026, 10, 14, hour, tzinfo=ZoneInfo("Europe/Brussels"))
+        printed = energy_eur_per_kwh(
+            card, when, None, "exclusive_night", "wallonia", mode
+        )
+        keyed = energy_eur_per_kwh(
+            leg, when, index, "exclusive_night", "wallonia", mode
+        )
+        assert keyed == pytest.approx(printed), hour
+
+
 def test_exclusive_night_distribution_falls_back_to_offpeak_rate() -> None:
     """The DSO overlay doesn't (yet) expose an exclusive_night
     distribution column; route through distribution_offpeak when

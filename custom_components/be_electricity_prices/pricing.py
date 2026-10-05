@@ -390,7 +390,9 @@ def energy_eur_per_kwh(
             energy.factor_pic is not None
             and energy.factor_medium is not None
             and energy.factor_eco is not None
-            and meter != "exclusive_night"
+            and not (
+                meter == "exclusive_night" and energy.factor_exclusive_night is not None
+            )
             and (dso_tariff_mode == "impact" or energy.factor_peak is None)
         ):
             # A Tarif Impact card re-priced on the month: the band is the
@@ -398,7 +400,9 @@ def energy_eur_per_kwh(
             # same routing ``ImpactRates`` gets below. A card that prints the
             # bands beside a mono and day/night pair (OCTA+ in Wallonia)
             # bills them only on the Impact configuration, and a night
-            # circuit keeps its own formula on either.
+            # circuit keeps its own formula on either. A night circuit on a
+            # card with no night formula bills the band, as ``ImpactRates``
+            # does: the mono pair of a Tarif Impact leg is its PIC formula.
             band = dso_impact_band(when)
             if band == "pic":
                 band_coefs = (energy.factor_pic, energy.base_pic, energy.ceiling_pic)
