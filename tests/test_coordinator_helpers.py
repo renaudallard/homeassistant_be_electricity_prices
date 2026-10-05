@@ -12509,6 +12509,114 @@ async def test_the_projection_nets_each_side_on_its_own_shape(
     assert peak.all_in != pytest.approx(offpeak.all_in)
 
 
+@pytest.mark.parametrize(("meter", "mode"), [("mono", "impact"), ("bi", "bi_horaire")])
+async def test_the_projection_prices_each_register_at_its_own_rate(
+    hass: HomeAssistant, freezer: Any, meter: str, mode: str
+) -> None:
+    """A compensation year forfeits a register at that register's own rates,
+    in the projection as in the year-to-date.
+
+    The per-register clamp priced every register at the all-hours rates. That
+    is exact while no register clamps, and wrong as soon as one does: under
+    Tarif Impact a PV household's midday and night bands run backwards and
+    are forfeited, the evening band is billed alone, and the projection billed
+    its kWh at the year's mean, 57 to 99 EUR a year under what the
+    year-to-date bills on the same card. A Walloon off-peak register holds the
+    midday hours, so a bi-hourly meter clamps the same way. Over one calendar
+    year of the same hourly load the two have to agree."""
+    from custom_components.be_electricity_prices import cohort
+    from tests import make_entry
+
+    last = date(2026, 12, 31)
+    freezer.move_to(dt_util.start_of_local_day(last) + timedelta(hours=23, minutes=59))
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, peak=0.24, offpeak=0.16),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.13,
+                distribution_offpeak=0.07,
+                distribution_pic=0.22,
+                distribution_medium=0.10,
+                distribution_eco=0.05,
+                transport=0.02,
+                prosumer_eur_per_kva_year=60.0,
+            )
+        },
+    )
+    entry = make_entry(
+        meter=meter,
+        dso_tariff_mode=mode,
+        solar_regime="compensation",
+        solar_kva=5.0,
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    entry.add_to_hass(hass)
+    # The same day every day, evening-heavy draw and a midday bell of export,
+    # so a year of hour-of-day shares describes the year exactly.
+    draw = [0.25] * 7 + [0.45] * 2 + [0.25] * 2 + [0.35] * 6 + [0.75] * 5 + [0.25] * 2
+    bell = [0.0] * 8 + [0.2, 0.5, 0.8, 1.0, 1.1, 1.1, 1.0, 0.8, 0.5, 0.2] + [0.0] * 6
+    first_hour = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    year_hours = [
+        first_hour + timedelta(hours=i)
+        for i in range(
+            int(
+                (
+                    dt_util.start_of_local_day(last + timedelta(days=1)) - first_hour
+                ).total_seconds()
+                // 3600
+            )
+        )
+    ]
+
+    async def fake_deltas(
+        _h: Any, entity_id: str, start: date, end: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        side = {"sensor.cons": (draw, 9.6), "sensor.inj": (bell, 8.2)}.get(entity_id)
+        if side is None:
+            return []
+        shape, per_day = side
+        lo = dt_util.start_of_local_day(start).astimezone(UTC)
+        hi = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+        rows = [
+            (h, shape[dt_util.as_local(h).hour] * per_day / sum(shape))
+            for h in year_hours
+            if lo <= h < hi
+        ]
+        if period == "hour":
+            return rows
+        days: dict[datetime, float] = {}
+        for h, kwh in rows:
+            day = dt_util.start_of_local_day(dt_util.as_local(h)).astimezone(UTC)
+            days[day] = days.get(day, 0.0) + kwh
+        return sorted(days.items())
+
+    async def same_card(*args: Any, **_k: Any) -> Any:
+        return args[6]
+
+    with (
+        patch.object(energy_meters, "_read_deltas", new=fake_deltas),
+        patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
+        patch.object(cohort, "_snapshot_for_month", new=same_card),
+    ):
+        ytd = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+        )
+        diag: dict[str, Any] = {}
+        # Its trailing year is calendar 2026, the window the year-to-date bills.
+        projected = await _compute_projected_year_cost(
+            hass, entry, snap, snap, billed_peak_kw=0.0, today=last, breakdown=diag
+        )
+    assert projected is not None and ytd is not None
+    assert diag["annual_injection_kwh"] > 0.0
+    assert projected == pytest.approx(ytd, abs=0.05)
+
+
 def test_a_published_month_index_is_billed_without_any_spots() -> None:
     """The supplier's own settled index for a month needs no day-ahead cache.
 

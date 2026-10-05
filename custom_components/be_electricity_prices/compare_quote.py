@@ -89,6 +89,11 @@ from .fees import (
 )
 from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 
+# Each meter register's own all-in rate, weighted by the consumption shape and
+# by the export shape (compare_weighting._register_rates), in the order of
+# ``register_weights``; ``None`` for a side or a register with no rate.
+RegisterRates = tuple[tuple[float | None, ...] | None, tuple[float | None, ...] | None]
+
 
 def _annual_bill(
     snapshot: Any,
@@ -106,6 +111,7 @@ def _annual_bill(
     include_capacity: bool = True,
     welcome_credit_eur: float = 0.0,
     register_weights: tuple[tuple[float, ...], tuple[float, ...]] | None = None,
+    register_rates: RegisterRates | None = None,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
@@ -145,7 +151,9 @@ def _annual_bill(
       forfeits each register on its own, so a quote given the export shape and
       no weights still clamps the year once and lets one register pay off
       another. ``test_compensation_clamps_each_register_not_the_annual_total``
-      carries the measurement.
+      carries the measurement. ``register_rates`` then prices each register
+      on its own rates (:func:`compare_weighting._register_rates`), where
+      ``per_kwh`` and ``export_per_kwh`` stand in for any it leaves out.
     - ``"injection"``: consumption is billed at ``per_kwh`` AND
       injection is credited at ``injection_price``; the credit is
       subtracted from the cost and can drive the bill negative when
@@ -226,16 +234,31 @@ def _annual_bill(
         # decides the same way _register_for does. Gating on the meter here
         # instead let a mono Impact entry (TotalEnergies Impact is one) take
         # the annual clamp, where a band running backwards pays off another.
+        #
+        # And each register at its OWN rates, consumption- and export-weighted
+        # over that register's hours, which is what the meter forfeits and
+        # what the year-to-date bills. The all-hours rates price a register
+        # dearer or cheaper than the rest at the mean, which cancels only
+        # while no register clamps: under Tarif Impact the evening band is
+        # billed alone while the other two run backwards, and at the mean it
+        # was quoted 57 to 99 EUR a year under the year-to-date on one card.
         if register_weights is not None and len(register_weights[0]) > 1:
             cons_w, inj_w = register_weights
             cons_total = sum(cons_w)
             inj_total = sum(inj_w)
             if cons_total > 0.0 and inj_total > 0.0:
+                cons_rates, inj_rates = register_rates or ((), ())
                 billed = 0.0
-                for cons_side, inj_side in zip(cons_w, inj_w, strict=True):
+                for index, (cons_side, inj_side) in enumerate(
+                    zip(cons_w, inj_w, strict=True)
+                ):
                     billed += max(
-                        consumption_kwh * (cons_side / cons_total) * per_kwh
-                        - injection_kwh * (inj_side / inj_total) * export_per_kwh,
+                        consumption_kwh
+                        * (cons_side / cons_total)
+                        * _own_rate(cons_rates, index, per_kwh)
+                        - injection_kwh
+                        * (inj_side / inj_total)
+                        * _own_rate(inj_rates, index, export_per_kwh),
                         0.0,
                     )
                 return fees + billed - credit
@@ -249,6 +272,17 @@ def _annual_bill(
             - welcome_credit_eur
         )
     return fees + per_kwh * consumption_kwh - welcome_credit_eur
+
+
+def _own_rate(
+    rates: tuple[float | None, ...] | None, index: int, fallback: float
+) -> float:
+    """A register's own rate out of ``rates``, ``fallback`` where there is
+    none for it."""
+    if rates is None or index >= len(rates):
+        return fallback
+    rate = rates[index]
+    return fallback if rate is None else rate
 
 
 def _annual_network_rebate(

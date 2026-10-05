@@ -544,6 +544,9 @@ class _SweepEngine(_HouseholdMixin):
                 credit,
                 export_per_kwh=hh.current_export_per_kwh,
                 register_weights=hh.register_weights,
+                register_rates=await hh.register_rates_for(
+                    hh.current_snapshot, hh.current_meter, hh.dso_mode
+                ),
                 meter=hh.current_meter,
                 welcome_credit_eur=hh.own_welcome_credit,
             )
@@ -687,6 +690,7 @@ class _SweepEngine(_HouseholdMixin):
             # produce. Omitted, a compensation row came out 23% low.
             export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
             register_weights=hh.register_weights_for(meter, dso_mode),
+            register_rates=await hh.register_rates_for(resolved, meter, dso_mode),
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )

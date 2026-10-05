@@ -46,6 +46,7 @@ from .const import (
     DSO_MODE_IMPACT,
     MEASURED_FULL_YEAR_DAYS,
     METER_MONO,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
 )
 from .injection import _injection_bakes_to_month_mean, _injection_needs_spot
@@ -628,6 +629,34 @@ class _HouseholdQuote:
 
         return tuple(
             _register_weights(self.region, weights, meter=meter, dso_mode=dso_mode)
+            for weights in (self.hour_weights, self.inj_hour_weights)
+        )
+
+    async def register_rates_for(self, snapshot: Any, meter: str, dso_mode: str) -> Any:
+        """Each register's own rates on ``snapshot``, on the consumption and
+        the export shape, for the per-register clamp a compensation quote
+        settles on (:func:`compare_quote._annual_bill`). ``None`` off that
+        regime, on a single register, or without a card, where the clamp
+        does not read them."""
+        if self.regime != SOLAR_REGIME_COMPENSATION or snapshot is None:
+            return None
+        from .compare_weighting import _register_names, _register_rates
+
+        if len(_register_names(meter, dso_mode, self.region)) < 2:
+            return None
+        spot = await self.spot_for(snapshot)
+        first_day = dt_util.as_local(self.now_utc).date()
+        return tuple(
+            _register_rates(
+                snapshot,
+                self.dso,
+                self.region,
+                first_day,
+                spot,
+                meter,
+                dso_mode,
+                weights,
+            )
             for weights in (self.hour_weights, self.inj_hour_weights)
         )
 

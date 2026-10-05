@@ -1371,7 +1371,14 @@ context):
   (`_HouseholdQuote.register_weights_for`, `compare_inputs.py`): a Tarif Impact
   candidate quoted to a bi-hourly household was handed the day/night pair,
   and its article 81 rebate fell back to the clock, which spread the midday
-  export over the evening peak, 23 to 178 EUR a year short.
+  export over the evening peak, 23 to 178 EUR a year short. Each register is
+  also priced at its OWN rates, weighted by the consumption shape and by the
+  export shape over that register's hours (`_register_rates`,
+  `compare_weighting.py`), as the year-to-date bills it. At the all-hours
+  rates a register that clamps is priced wrong: under Tarif Impact the
+  evening band is billed alone while the other two run backwards, and the
+  projection and every Impact row of the compare page came out 57 to 99 EUR
+  a year under the year-to-date on the same card.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
   from `_historical_injection_rate` (`injection.py`).
 

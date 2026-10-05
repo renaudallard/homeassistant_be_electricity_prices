@@ -8192,6 +8192,27 @@ def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:
         )
 
 
+def test_every_compare_register_clamp_prices_each_register_on_its_own() -> None:
+    """A compare bill clamped per register prices each register at its own
+    rates, as the year-to-date bills it.
+
+    Handed the registers' shares and not their rates, the clamp priced every
+    register at the all-hours mean, and under Tarif Impact a compensation
+    household's candidates were quoted 57 to 99 EUR a year below the bill.
+    Read from the source of every compare module so a call added later is
+    held to the same rule."""
+    from tests import compare_page_calls
+
+    calls = compare_page_calls("_annual_bill")
+    assert calls, "the compare page must still price a bill somewhere"
+    for name, call in calls:
+        keywords = {kw.arg for kw in call.keywords}
+        if "register_weights" in keywords:
+            assert "register_rates" in keywords, (
+                f"_annual_bill call at {name}:{call.lineno} omits register_rates"
+            )
+
+
 def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     """Not the year-ahead figure the annual rows carry: what these days have
     actually accrued, and nothing for a card that grants none.

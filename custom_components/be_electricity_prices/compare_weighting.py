@@ -203,6 +203,18 @@ def _register_weights(
     )
 
 
+def _register_names(meter: Any, dso_mode: Any, region: str) -> tuple[str, ...]:
+    """The names :func:`spot_stats._register_for` gives the registers, in
+    :func:`_register_hours`' order."""
+    from .spot_stats import _register_for
+
+    if meter != METER_EXCLUSIVE_NIGHT and dso_mode == DSO_MODE_IMPACT:
+        return ("pic", "medium", "eco")
+    if meter in (METER_BI, METER_DYNAMIC):
+        return ("peak", "offpeak")
+    return (_register_for(dt_util.start_of_local_day(), meter, dso_mode, region),)
+
+
 def _register_network_rates(
     snapshot: Any, dso: str, region: str, meter: Any, dso_mode: Any
 ) -> tuple[float, ...] | None:
@@ -219,12 +231,7 @@ def _register_network_rates(
     from .spot_stats import _register_for
 
     when = dt_util.start_of_local_day(date(dt_util.now().year, 1, 1))
-    if meter != METER_EXCLUSIVE_NIGHT and dso_mode == DSO_MODE_IMPACT:
-        names: tuple[str, ...] = ("pic", "medium", "eco")
-    elif meter in (METER_BI, METER_DYNAMIC):
-        names = ("peak", "offpeak")
-    else:
-        names = (_register_for(when, meter, dso_mode, region),)
+    names = _register_names(meter, dso_mode, region)
     first: dict[str, datetime] = {}
     # A week holds every register of every schedule the engine knows.
     for _ in range(7 * 24):
@@ -239,6 +246,43 @@ def _register_network_rates(
         )
     except (KeyError, ValueError):
         return None
+
+
+def _register_rates(
+    snapshot: Any,
+    dso: str,
+    region: str,
+    first_day: date,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+    hour_weights: dict[int, float] | None,
+) -> tuple[float | None, ...]:
+    """Each register's own all-in EUR/kWh over the year from ``first_day``,
+    weighted by ``hour_weights``, in :func:`_register_hours`' order.
+
+    What a reversing meter forfeits is a register's own net at that
+    register's own rates, so the per-register clamp in
+    :func:`compare_quote._annual_bill` prices each register on these.
+
+    ``None`` for a register no hour of the walk weighs, or one the card
+    cannot price.
+    """
+    return tuple(
+        _year_avg_all_in(
+            snapshot,
+            dso,
+            region,
+            first_day,
+            365,
+            spot,
+            meter,
+            dso_mode,
+            hour_weights,
+            register=name,
+        )
+        for name in _register_names(meter, dso_mode, region)
+    )
 
 
 def _hour_weighted_mean(
@@ -558,10 +602,13 @@ def _year_avg_all_in(
     dso_mode: Any,
     hour_weights: dict[int, float] | None = None,
     component: str = "all_in",
+    register: str | None = None,
 ) -> float | None:
     """Mean all-in EUR/kWh over the ``num_days`` from ``first_day``, priced
     once per kind of day. ``component`` names another field of the breakdown
     to average instead, ``energy`` for the supplier's component alone.
+    ``register`` keeps only the hours the meter counts in that register
+    (:func:`spot_stats._register_for`).
 
     Every hour has to carry its true energy slot AND network band, since the
     TOU windows and the bi-horaire network bands do not align and both change
@@ -588,6 +635,7 @@ def _year_avg_all_in(
     the clock. Returns None on any compute failure so the caller can fall back.
     """
     from .pricing import _is_smartflex_summer, compute_breakdown, is_belgian_holiday
+    from .spot_stats import _register_for
 
     counts: dict[tuple[bool, int, bool], int] = {}
     representative: dict[tuple[bool, int, bool], date] = {}
@@ -606,6 +654,11 @@ def _year_avg_all_in(
             # Wall-clock arithmetic on purpose: the breakdown reads the local
             # hour, and a seam day still yields 24 distinct ones this way.
             when = midnight + timedelta(hours=hour)
+            if (
+                register is not None
+                and _register_for(when, meter, dso_mode, region) != register
+            ):
+                continue
             try:
                 bd = compute_breakdown(
                     snapshot, dso, region, when, spot, meter, dso_mode
