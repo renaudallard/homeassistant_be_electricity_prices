@@ -112,6 +112,7 @@ _NO_INJECTION_RATE = (
     "price, and a full year of day-ahead prices and of feed-in is not held yet"
 )
 _NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
+_NO_INJECTION_METER = "not folded in: no feed-in meter is wired"
 _COHORT_SPOT_BASIS = (
     "not projected: the {setting} re-prices this card to its signing cohort, "
     "which settles on a monthly Belpex index, and this month's is not known yet"
@@ -231,6 +232,7 @@ async def _compute_projected_year_cost(
         _covers_a_year,
     )
     from .compare_inputs import _credit_year
+    from .energy_meters import _kwh_sensor_ids
     from .compare_weighting import (
         _compare_injection_credit,
         _tou_weighted_per_kwh,
@@ -318,7 +320,12 @@ async def _compute_projected_year_cost(
     inj_rate: float | None = None
     inj_hour_weights: dict[int, float] | None = None
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
-    if regime != SOLAR_REGIME_NONE:
+    if regime != SOLAR_REGIME_NONE and not any(_kwh_sensor_ids(entry, "injection")):
+        # No feed-in meter is wired, which the meters step allows: the year is
+        # billed gross, as the year to date and the year-end cost bill it,
+        # rather than refused for a feed-in history no meter could record.
+        injection_basis = _NO_INJECTION_METER
+    elif regime != SOLAR_REGIME_NONE:
         measured_inj = await _measured_kwh(
             hass, entry, trailing_start, today, side="injection"
         )
@@ -416,9 +423,9 @@ async def _compute_projected_year_cost(
     # CONSUMPTION-weighted rate values exported kWh at hours they were never
     # produced in, which is what the compare page and the live sensor both
     # stopped doing. ``None`` keeps that older behaviour for an entry with no
-    # measured export shape, which under this regime cannot happen: the branch
-    # above refuses a compensation year without a full trailing year of
-    # feed-in.
+    # measured export shape, which under this regime happens only with no
+    # feed-in meter wired, billed gross: the branch above refuses a
+    # compensation year without a full trailing year of feed-in.
     export_per_kwh: float | None = None
     if regime == SOLAR_REGIME_COMPENSATION and inj_hour_weights:
         export_per_kwh = _tou_weighted_per_kwh(

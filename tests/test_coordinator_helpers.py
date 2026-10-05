@@ -8399,6 +8399,23 @@ async def test_projection_refuses_an_unnettable_compensation_year(
     assert "netted against its own feed-in" in diag["injection_basis"]
 
 
+async def test_projection_bills_gross_with_no_feed_in_meter_wired(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The meters step does not ask for a feed-in meter under compensation.
+    With none wired there is no feed-in history to wait for: the year is
+    billed gross, as the year to date and the year-end cost bill it, not
+    refused for lack of a history no meter could record."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(solar_regime="compensation", solar_kva=4.0)
+    got, diag = await _project(hass, entry, _daily(10.0))
+    assert got is not None, diag
+    assert diag["injection_basis"] == "not folded in: no feed-in meter is wired"
+    assert diag["annual_injection_kwh"] == 0.0
+    assert diag["energy_basis"] == "today's published rate, held for a full year"
+
+
 async def test_projection_says_when_a_measured_year_earns_no_credit(
     hass: HomeAssistant, freezer: Any
 ) -> None:
