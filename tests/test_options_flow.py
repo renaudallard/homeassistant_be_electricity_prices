@@ -9989,3 +9989,85 @@ async def test_compare_weights_the_month_it_fetched_on_the_load_profile(
     )
     assert expected is not None
     assert quoted == pytest.approx(expected)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_ytd_fallback_credits_the_welcome_credit_the_engine_does(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A candidate's year-to-date welcome credit runs from the household's
+    own start date on both paths. The simple model, taken when a side keeps
+    no month archive, started it today, so a 200 EUR pro-rata credit came
+    out at one day of it beside an own row credited in full."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    freezer.move_to("2026-10-05 12:00:00+02:00")
+    entry = make_entry(
+        supplier="eneco",
+        contract="power_fix",
+        consumption_kwh="sensor.cons",
+        solar_regime="none",
+        contract_start_date="2026-03-15",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    entry.runtime_data = coord
+    now = dt_util.utcnow()
+
+    async def _fake_deltas(
+        _h: Any, entity_id: str, start: date, end: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        if entity_id != "sensor.cons":
+            return []
+        step = timedelta(hours=1 if period == "hour" else 24)
+        kwh = 0.4 if period == "hour" else 9.6
+        slot = dt_util.start_of_local_day(start).astimezone(UTC)
+        stop = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+        out = []
+        while slot < min(stop, now):
+            out.append((slot, kwh))
+            slot += step
+        return out
+
+    async def _page(other_snap: Any, archive: bool) -> float:
+        fake_own = replace(
+            EXTRACTORS["eneco"],
+            fetch=AsyncMock(return_value=coord._snapshot),
+            probe=None,
+            fetch_for_month=AsyncMock(return_value=None),
+        )
+        fake_other = replace(
+            EXTRACTORS["engie"],
+            fetch=AsyncMock(return_value=other_snap),
+            probe=None,
+            fetch_for_month=AsyncMock(return_value=None) if archive else None,
+        )
+        with patch.dict(EXTRACTORS, {"eneco": fake_own, "engie": fake_other}):
+            placeholders = await _drive_compare(
+                hass,
+                entry,
+                other_snap=other_snap,
+                other_supplier="engie",
+                other_contract="engie_easy_fixed",
+            )
+        return float(placeholders["compare_ytd"])
+
+    plain = _stub_snapshot("engie", "engie_easy_fixed", 0.15)
+    credited = replace(plain, welcome_credit_eur=200.0)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_deltas",
+            new=_fake_deltas,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._live_today_kwh",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        engine = await _page(plain, True) - await _page(credited, True)
+        fallback = await _page(plain, False) - await _page(credited, False)
+    # 205 of 365 days of 200 EUR, on both paths.
+    assert engine == pytest.approx(200.0 * 205 / 365, abs=0.02)
+    assert fallback == pytest.approx(engine, abs=0.02)

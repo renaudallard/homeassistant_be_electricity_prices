@@ -63,7 +63,7 @@ from .compare_table import (
 )
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
 from .flow_contracts import _contract_kind
-from .cohort import _parse_iso_date
+from .cohort import _parse_iso_date, _signed_in, _tariff_card_month
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from .providers import get as get_extractor, settlement_answer
@@ -793,12 +793,14 @@ class _PlaceholdersMixin(OptionsFlow):
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
                 meter=meter,
-                # A candidate is granted what its own card prints today, on the
-                # same window, exactly as the annual row beside it reads it.
+                # Credited as the engine credits a candidate: off the card it
+                # prints today, as if signed when the household signed its
+                # own contract. Started today, the credit accrued one day of
+                # the window while the own row beside it had all of them.
                 welcome_credit_eur=_ytd_welcome_credit(
                     other_snap,
-                    other_snap,
-                    today_local,
+                    _signed_in(other_snap, _tariff_card_month(target_entry)),
+                    _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
                     dt_util.as_local(now_utc),
                     dso,
                     region,

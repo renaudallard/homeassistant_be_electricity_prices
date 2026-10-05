@@ -1181,7 +1181,11 @@ no archive, a spot-priced side has no day-ahead for the window, or the archive
 engine throws, carries the welcome credit on its year-to-date rows too
 (`_ytd_welcome_credit`, `compare_quote.py`). Scoped to the window rather than the
 year the annual rows quote, with the standing charge in the eligible base
-prorated the way the bill beside it prorates it. It carried none at all, so a row
+prorated the way the bill beside it prorates it. A candidate's credit runs from
+the household's own start date, as if it signed the card when the household
+signed its contract (`cohort._signed_in` on `_tariff_card_month`), which is how
+the engine credits it; started on the day of the quote, it accrued one day of
+the window. It carried none at all, so a row
 the engine priced included a credit and the same row from the fallback did not,
 beside annual figures that always do:
 `test_every_compare_annual_bill_carries_a_welcome_credit` reads the source and
