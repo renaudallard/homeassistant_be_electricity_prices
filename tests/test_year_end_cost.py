@@ -319,6 +319,24 @@ async def test_on_1_january_nothing_is_metered_yet(
     )
 
 
+async def test_the_contract_end_is_measured_against_the_calendar_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The year-end prices to 31 December, so the days its contract basis
+    counts are the ones left this year, where the rolling year cost counts
+    the 365 days it prices."""
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    snap = make_snapshot(energy=FixedRates(single=0.25))
+    for end, want in (
+        ("2026-11-30", "28 of the 59 days left this year (47%)"),
+        ("2027-02-01", "runs past this year (ends 2027-02-01)"),
+    ):
+        entry = make_entry(consumption_kwh="sensor.cons", contract_end_date=end)
+        got, diag = await _year_end(hass, entry, snap, _seasonal)
+        assert got is not None, diag
+        assert want in diag["contract_basis"]
+
+
 async def test_a_summer_surplus_is_spent_on_the_winter_after_it(
     hass: HomeAssistant, freezer: Any
 ) -> None:

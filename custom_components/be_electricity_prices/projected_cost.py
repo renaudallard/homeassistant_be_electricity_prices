@@ -133,14 +133,16 @@ def held_at_index(snapshot: SupplierSnapshot, index: float | None) -> SupplierSn
     return replace(snapshot, energy=replace(snapshot.energy, index_realised=index))
 
 
-def _contract_basis(entry: ConfigEntry, today: date) -> str:
-    """How much of the projected year the current contract actually covers.
+def _contract_basis(entry: ConfigEntry, today: date, horizon: date) -> str:
+    """How much of the days priced the current contract actually covers.
 
-    The projection holds today's rate for a full year. When a contract end
-    date falls inside that year, the months after it are priced on a card the
-    user will not be on, at whatever they renew to. The figure stays as it is,
-    because nothing better exists to price those months with, but saying so is
-    the difference between an estimate and a claim.
+    ``horizon`` is the last day the figure prices: a year from today for the
+    rolling year cost, which holds today's rate for a full year, and 31
+    December for the year-end cost. When a contract end date falls before it,
+    the days after it are priced on a card the user will not be on, at
+    whatever they renew to. The figure stays as it is, because nothing better
+    exists to price those days with, but saying so is the difference between
+    an estimate and a claim.
 
     The end date is optional and independent of the start date, and it was
     collected as an inert renewal reminder, so some stored values are
@@ -157,16 +159,17 @@ def _contract_basis(entry: ConfigEntry, today: date) -> str:
         # it still points at is the only rate available, so behave exactly as
         # if no date were set and say which.
         return f"today's contract, whose recorded end date ({end}) has passed"
-    horizon = date(today.year, 12, 31)
+    calendar = horizon == date(today.year, 12, 31)
     if end >= horizon:
-        return f"today's contract, which runs past this year (ends {end})"
+        span = "this year" if calendar else "the year priced"
+        return f"today's contract, which runs past {span} (ends {end})"
     covered = (end - today).days
     total = (horizon - today).days
     pct = round(100.0 * covered / total) if total else 100
+    days = "days left this year" if calendar else "days priced"
     return (
-        f"today's contract for {covered} of the {total} days left this year "
-        f"({pct}%), ends {end}; the rest is priced on a contract you have not "
-        "signed yet"
+        f"today's contract for {covered} of the {total} {days} ({pct}%), "
+        f"ends {end}; the rest is priced on a contract you have not signed yet"
     )
 
 
@@ -485,7 +488,9 @@ async def _compute_projected_year_cost(
         if held
         else "today's published rate, held for a full year"
     )
-    breakdown["contract_basis"] = _contract_basis(entry, today)
+    breakdown["contract_basis"] = _contract_basis(
+        entry, today, today + timedelta(days=MEASURED_FULL_YEAR_DAYS)
+    )
     breakdown["fee_basis"] = "today's network tariffs, taxes and fees, held for a year"
     breakdown["volume_basis"] = annual.source
     breakdown["injection_basis"] = injection_basis

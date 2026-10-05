@@ -171,7 +171,9 @@ async def _compute_year_end_cost(
         if (today.month, today.day) == (1, 1)
         else f"metered to {today - timedelta(days=1)}, then last year's same days"
     )
-    breakdown["contract_basis"] = _contract_basis(entry, today)
+    breakdown["contract_basis"] = _contract_basis(
+        entry, today, date(today.year, 12, 31)
+    )
     breakdown["consumption_kwh"] = stats.get("consumption_ytd_kwh", 0.0)
     breakdown["injection_kwh"] = stats.get("injection_ytd_kwh", 0.0)
     breakdown["fees_eur"] = stats.get("fees_ytd_eur", 0.0)

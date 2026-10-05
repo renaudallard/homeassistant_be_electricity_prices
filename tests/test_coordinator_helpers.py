@@ -8558,27 +8558,34 @@ async def test_projection_discloses_a_contract_ending_inside_the_year(
     """An end date inside the projected year is disclosed, not priced.
 
     The projection holds today's rate for a full year. When the contract runs
-    out before December the later months are priced on a card the user will
-    not be on. Nothing better exists to price them with, so the figure stands
-    and the basis says how much of it is actually contracted."""
+    out before that year does, the later months are priced on a card the user
+    will not be on. Nothing better exists to price them with, so the figure
+    stands and the basis says how much of it is actually contracted: measured
+    against the 365 days priced, not the days left in the calendar year."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
     entry = _projection_entry(contract_end_date="2026-09-30")
     got, diag = await _project(hass, entry, _daily(10.0))
     assert got is not None  # still produces a number
-    assert "91 of the 183 days" in diag["contract_basis"]
+    assert "91 of the 365 days priced (25%)" in diag["contract_basis"]
     assert "not signed yet" in diag["contract_basis"]
+
+    # Past 31 December, but well inside the year priced.
+    entry = _projection_entry(contract_end_date="2027-02-01")
+    _got, diag = await _project(hass, entry, _daily(10.0))
+    assert "215 of the 365 days priced (59%)" in diag["contract_basis"]
 
 
 async def test_projection_says_when_the_contract_outlives_the_year(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """An end date past 31 December leaves the whole projection contracted."""
+    """An end date a year or more away leaves the whole projection
+    contracted."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
-    entry = _projection_entry(contract_end_date="2027-06-30")
+    entry = _projection_entry(contract_end_date="2027-07-01")
     _got, diag = await _project(hass, entry, _daily(10.0))
-    assert "runs past this year" in diag["contract_basis"]
+    assert "runs past the year priced" in diag["contract_basis"]
     assert "not signed yet" not in diag["contract_basis"]
 
 
