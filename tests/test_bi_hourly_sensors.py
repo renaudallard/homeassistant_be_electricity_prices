@@ -50,10 +50,27 @@ def test_a_single_rate_meter_does_not() -> None:
     assert not (BANDS & _added(make_entry(meter="mono")))
 
 
-def test_a_dynamic_meter_does_not() -> None:
+def test_a_dynamic_contract_does_not() -> None:
     """A dynamic contract's price moves every hour; there is no constant for
-    a band to report."""
-    assert not (BANDS & _added(make_entry(meter="dynamic")))
+    a band to report. Bolt's variable card settled per quarter-hour is one,
+    as the meter step reads it."""
+    assert not (BANDS & _added(make_entry(meter="dynamic", contract="power_dynamic")))
+    bolt = make_entry(
+        meter="dynamic",
+        supplier="bolt",
+        contract="bolt_variable",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        quarter_hourly=True,
+    )
+    assert not (BANDS & _added(bolt))
+
+
+def test_a_digital_meter_on_a_two_rate_card_gets_the_band_prices() -> None:
+    """The engine bills a digital meter's day and night registers on the
+    card's two rates exactly as it bills a bi-hourly meter, and the Energy
+    dashboard's two-tariff grid source needs one constant price for each."""
+    assert BANDS <= _added(make_entry(meter="dynamic"))
 
 
 def test_the_walloon_impact_tariff_gets_no_band_prices() -> None:

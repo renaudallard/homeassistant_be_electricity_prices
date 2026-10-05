@@ -47,11 +47,13 @@ from homeassistant.util import dt as dt_util
 from . import creg_ev
 from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
+    CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
     CONF_DSO_TARIFF_MODE,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
+    CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -61,6 +63,7 @@ from .const import (
     METER_DYNAMIC,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
@@ -75,7 +78,7 @@ from .coordinator import (
     supplier_device_info,
 )
 from .coordinator_data import CoordinatorData
-from .flow_contracts import _ranking_candidates
+from .flow_contracts import _contract_kind, _ranking_candidates
 from .sensor_values import (
     _current_field,
     _current_injection,
@@ -145,8 +148,9 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
 
 # Static peak/offpeak prices for the Energy Dashboard. These do NOT vary with
 # the time of day - they represent the constant all-in rate for that tariff
-# band. Useful for bi-hourly meter configurations where the Energy Dashboard
-# needs separate price entities for tariff 1 (day) and tariff 2 (night).
+# band. Useful for two-register meters (bi-hourly, or digital on a static
+# card) where the Energy Dashboard needs separate price entities for tariff 1
+# (day) and tariff 2 (night).
 # Returns None for dynamic/TOU contracts or Wallonia impact tariff.
 BI_HOURLY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     _eur_per_kwh(
@@ -401,16 +405,30 @@ async def async_setup_entry(
     # Only for a household that asked for it: a company car charged at home.
     if entry.data.get(CONF_EV_HOME_CHARGING_RATE, DEFAULT_EV_HOME_CHARGING_RATE):
         descriptions.extend(EV_RATE_SENSORS)
-    # Only where the two bands are a thing the household is billed on. On a
-    # single-rate or dynamic meter these have no constant to report and would
-    # sit unavailable for good, which is two dead entities per entry. The
+    # Only where the two bands are a thing the household is billed on: a
+    # bi-hourly meter, or a digital one on a fixed or variable card, whose two
+    # registers the engine bills on the card's day and night rates. A mono
+    # meter has no bands, and the contracts that force the digital meter
+    # (dynamic, time-of-use, the Impact bands, read the way the meter step
+    # reads them) have no constant to report: the pair would sit unavailable
+    # for good, which is two dead entities per entry. The
     # same on the Walloon Impact tariff, whose distribution follows the
     # CWaPE bands every card prints, except a custom entry left without them.
     impact = (
         entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
         and entry.data.get(CONF_SUPPLIER) != SUPPLIER_CUSTOM
     )
-    if entry.data.get(CONF_METER) == METER_BI and not impact:
+    meter = entry.data.get(CONF_METER)
+    two_bands = meter == METER_BI or (
+        meter == METER_DYNAMIC
+        and _contract_kind(
+            str(entry.data.get(CONF_SUPPLIER, "")),
+            str(entry.data.get(CONF_CONTRACT, "")),
+            quarter_hourly=bool(entry.data.get(CONF_QUARTER_HOURLY, False)),
+        )
+        not in SMART_METER_CONTRACT_KINDS
+    )
+    if two_bands and not impact:
         descriptions.extend(BI_HOURLY_SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
