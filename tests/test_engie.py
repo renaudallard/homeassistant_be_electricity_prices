@@ -1200,6 +1200,39 @@ async def test_a_closed_epexdam_month_is_settled_on_the_index_the_next_card_name
     assert EXTRACTORS["engie"].settles_on_next_card is True
 
 
+@pytest.mark.parametrize("named", ["Mars", "Février"])
+async def test_a_month_whose_next_card_is_not_out_stays_provisional(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any, named: str
+) -> None:
+    """On the 1st, before Engie puts the new month's card out, the card one
+    offset closer can still be the closed month's own, which names the month
+    before it. That settled nothing and the month came back final, so the
+    store kept it on the printed estimate for good. A next card naming an
+    earlier month than the one asked is not out yet: the month stays
+    provisional and is asked again."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    freezer.move_to("2026-05-01 03:00:00+02:00")
+    text = fixture_text("engie_empower_variable_v.pdf")  # "Avril 2026"
+    following = f"... la derniere valeur du EPEXDAM connue ({named} 2026: 92,57 €/MWh)."
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        return text if "monthOffset=1&" in url else following
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _fake_pdf)
+    snap = await engie.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "engie_empower_variable",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert snap is not None and snap.provisional
+    assert (
+        snap.energy
+        == parse_snapshot("engie_empower_variable", {REGION_FLANDERS: text}).energy
+    )
+
+
 def test_the_two_epexdam_sets_are_two_objects() -> None:
     """A card can index its feed-in credit on the monthly EPEXDAM and still
     print an energy rate published in advance, which is why the ENDEX101

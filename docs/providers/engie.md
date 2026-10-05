@@ -199,7 +199,11 @@ on the variable and feed-in legs. A keyless entry billed every closed month a
 month behind before this, between 3,4 c/kWh under and 2,9 over on Empower
 Variable in 2026; the settled rates match the plain monthly mean of the day-ahead
 prices to 0,01 c/kWh. The running month has no next card and comes back
-`provisional`; an ENDEX101 card has nothing to settle and costs no download.
+`provisional`, and so does a month whose "next card" names an earlier month than
+it: that is the month's own card still served, as on the 1st before Engie puts
+the new month's card out, so the month is asked again rather than stored as
+settled on its estimate. An ENDEX101 card has nothing to settle and costs no
+download.
 `EXTRACTOR.settles_on_next_card` is set, so a closed month the card archive caught
 live is asked again until it is settled.
 

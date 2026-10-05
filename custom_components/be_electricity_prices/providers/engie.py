@@ -532,8 +532,9 @@ async def _settle_on_published_index(
     The next card is the one the API serves one month closer to today. While
     it is not out, which is the running month, the printed estimate stands
     and the month is flagged ``provisional`` so the month cache asks again.
-    A next card naming another month settles nothing, and the month keeps
-    its own figures. An ENDEX101 card is indexed in advance and has nothing
+    So is a "next card" naming an earlier month than this one, which is this
+    month's own card still served. A next card naming a later month settles
+    nothing, and the month keeps its own figures. An ENDEX101 card is indexed in advance and has nothing
     to settle, so it costs no download.
     """
     injection = snap.injection
@@ -551,6 +552,12 @@ async def _settle_on_published_index(
             raise
         return replace(snap, provisional=True)
     published = published_index(following)
+    if published is not None and published[0] < first:
+        # The card one offset closer names an earlier month, so it is this
+        # month's own card or an older one: Engie has not put the next card
+        # out yet, as on the 1st before the new month's file exists. Asked
+        # again, never filed as settled on the estimate.
+        return replace(snap, provisional=True)
     if published is None or published[0] != first:
         return snap
     index = published[1]
