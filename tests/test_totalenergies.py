@@ -828,6 +828,47 @@ def test_a_dutch_card_for_another_product_or_region_is_refused(
         parse_snapshot(contract, text, region, "t://")
 
 
+@pytest.mark.parametrize(
+    ("fixture", "contract", "region", "error"),
+    [
+        (
+            "totalenergies_myessential_b_2026-10.pdf",
+            "totalenergies_electricite_variable",
+            "brussels",
+            "is not Electricité Variable",
+        ),
+        (
+            "totalenergies_mycomfort_fixed_w.pdf",
+            "totalenergies_mycomfort",
+            "wallonia",
+            "is not myComfort Variable",
+        ),
+        (
+            "totalenergies_mycomfort_v.pdf",
+            "totalenergies_mycomfort_fixed",
+            "flanders",
+            "is not myComfort Fixe",
+        ),
+        (
+            "totalenergies_mycomfort_v.pdf",
+            "totalenergies_mycomfort",
+            "brussels",
+            "is not the brussels",
+        ),
+    ],
+)
+def test_a_french_card_for_another_product_or_region_is_refused(
+    fixture: str, contract: str, region: str, error: str
+) -> None:
+    """The French addresses get the Dutch ones' check. myEssential's card at
+    the Electricité Variable address parsed and billed its 35 EUR fee where
+    the product charges 100, and the label "myComfort" alone would let the
+    myComfort Fixe card through."""
+    text = fixture_text(fixture, layout=True)
+    with pytest.raises(ExtractorError, match=error):
+        parse_snapshot(contract, text, region, "t://")
+
+
 def test_the_dutch_card_stands_in_for_a_french_one_that_does_not_parse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -870,7 +911,7 @@ def test_the_french_error_stands_when_the_dutch_card_fails_too(
         return dutch if url.endswith("_NL.pdf") else "Carte tarifaire Injection"
 
     monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
-    with pytest.raises(ExtractorError, match="yearly fee"):
+    with pytest.raises(ExtractorError, match="is not myEssential Variable"):
         asyncio.run(
             totalenergies.fetch(None, "totalenergies_myessential", "wallonia")  # type: ignore[arg-type]
         )

@@ -53,12 +53,17 @@ A Dutch card is read too. TotalEnergies prints every card in both languages on
 the same layout, so `parse_snapshot` puts the labels the parsers anchor on in
 French first (`_DUTCH_LABELS` and `in_french`, `_totalenergies_cards.py`), month
 names included. A card is Dutch when it says `Tariefkaart`. Before that,
-`_check_dutch_card` (`totalenergies.py`) requires the product name of the
+`_check_card` (`totalenergies.py`) requires the product name of the
 contract's `dutch_title` and the region's `Elektriciteit in het ... Gewest` line,
 because the October 2026 Dutch uploads put cards at the wrong address and a card
 sharing the layout would parse: the Brussels Electricité Variable address served
 myEssential Variabel, the Flemish myComfort one myComfort Vast and the Brussels
-myEssential one a gas card. Read side by side on the October 2026 cards, every
+myEssential one a gas card. A French card is held to the same test, on its
+`french_title` and its `Électricité en Région ...` line, so a French address
+serving a sibling product's card is refused and the Dutch card stands in rather
+than billing the other product's rates and fee. The title is the product name
+the card prints (`myComfort Variable`, `Impact Variable`), not the contract
+label, which for myComfort is also how `myComfort Fixe` begins. Read side by side on the October 2026 cards, every
 Dutch card that is the right one gives the French edition's snapshot, except
 where the two editions print different figures: Electricité Variable in
 Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch, and the Dutch

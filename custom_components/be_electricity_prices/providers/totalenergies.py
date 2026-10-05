@@ -117,7 +117,9 @@ class _ContractDef:
     label: str
     kind: TariffKind
     slug: str  # the file prefix in TotalEnergies's URL
-    # The product name the Dutch edition of the card prints in its title.
+    # The product name each edition of the card prints in its title. The
+    # labels above are not it: "myComfort" is also how "myComfort Fixe" begins.
+    french_title: str
     dutch_title: str
     # Regions the product is actually published in. TotalEnergies's
     # listing page advertises every product in V/W/B but a few only
@@ -131,6 +133,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies Electricité Fixe",
         "fixed",
         "ELECTRICITE-FIXE",
+        "Electricité Fixe",
         "Elektriciteit Vast",
     ),
     _ContractDef(
@@ -138,6 +141,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies Electricité Variable",
         "variable",
         "ELECTRICITE-VARIABLE",
+        "Electricité Variable",
         "Elektriciteit Variabel",
     ),
     _ContractDef(
@@ -145,6 +149,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies Impact",
         "variable",
         "IMPACT",
+        "Impact Variable",
         "Impact Variabel",
         regions=frozenset({REGION_WALLONIA}),
     ),
@@ -153,6 +158,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies myComfort",
         "variable",
         "MYCOMFORT",
+        "myComfort Variable",
         "myComfort Variabel",
     ),
     _ContractDef(
@@ -160,6 +166,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies myComfort Fixe",
         "fixed",
         "MYCOMFORT-FIXED",
+        "myComfort Fixe",
         "myComfort Vast",
     ),
     _ContractDef(
@@ -168,6 +175,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "variable",
         "MYDRIVE",
         "myDrive",
+        "myDrive",
     ),
     _ContractDef(
         "totalenergies_mydynamic",
@@ -175,12 +183,14 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "dynamic",
         "MYDYNAMIC",
         "myDynamic",
+        "myDynamic",
     ),
     _ContractDef(
         "totalenergies_myessential",
         "TotalEnergies myEssential",
         "variable",
         "MYESSENTIAL",
+        "myEssential Variable",
         "myEssential Variabel",
     ),
     _ContractDef(
@@ -188,6 +198,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "TotalEnergies myEssential Fixe",
         "fixed",
         "MYESSENTIAL-FIXED",
+        "myEssential Fixe",
         "myEssential Vast",
     ),
 )
@@ -294,8 +305,10 @@ def parse_snapshot(
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
     if is_dutch_card(text):
-        _check_dutch_card(text, contract, region)
+        _check_card(text, contract.dutch_title, _DUTCH_REGIONS[region], region)
         text = in_french(text)
+    else:
+        _check_card(text, contract.french_title, _FRENCH_REGIONS[region], region)
 
     columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
@@ -358,34 +371,38 @@ def parse_snapshot(
     )
 
 
-# How the Dutch cards name each region in their "Elektriciteit in het ..."
-# line.
+# How each edition names the region in its "Elektriciteit in het ..." or
+# "Électricité en Région ..." line.
 _DUTCH_REGIONS: dict[str, str] = {
-    REGION_FLANDERS: "Vlaamse Gewest",
-    REGION_WALLONIA: "Waalse Gewest",
-    REGION_BRUSSELS: "Brussels Hoofdstedelijk Gewest",
+    REGION_FLANDERS: r"Elektriciteit\s+in\s+het\s+Vlaamse\s+Gewest",
+    REGION_WALLONIA: r"Elektriciteit\s+in\s+het\s+Waalse\s+Gewest",
+    REGION_BRUSSELS: r"Elektriciteit\s+in\s+het\s+Brussels\s+Hoofdstedelijk\s+Gewest",
+}
+_FRENCH_REGIONS: dict[str, str] = {
+    REGION_FLANDERS: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+flamande",
+    REGION_WALLONIA: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+wallonne",
+    REGION_BRUSSELS: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+de\s+Bruxelles-Capitale",
 }
 
 
-def _check_dutch_card(text: str, contract: _ContractDef, region: str) -> None:
-    """Refuse a Dutch card that is not this product's electricity card for
-    this region.
+def _check_card(text: str, title: str, place: str, region: str) -> None:
+    """Refuse a card that is not this product's electricity card for this
+    region.
 
     TotalEnergies' October 2026 uploads put cards at the wrong address: the
     Dutch Brussels address of Electricité Variable served myEssential
     Variabel, the Dutch Flemish one of myComfort served myComfort Vast and
     the Dutch Brussels one of myEssential a gas card. The layout is shared,
-    so such a card would parse. Its title and region line say what it is.
+    so such a card would parse, and a French address serving a sibling's
+    card would bill that product's rates and fee without a word. Its title
+    and region line say what it is.
     """
-    words = r"\s+".join(map(re.escape, contract.dutch_title.split()))
+    words = r"\s+".join(map(re.escape, title.split()))
     if not re.search(rf"Total\s?Energies\s+{words}(?!\w)", text):
+        raise ExtractorError(f"TotalEnergies: the card is not {title}")
+    if not re.search(place, text):
         raise ExtractorError(
-            f"TotalEnergies: the Dutch card is not {contract.dutch_title}"
-        )
-    place = r"\s+".join(map(re.escape, _DUTCH_REGIONS[region].split()))
-    if not re.search(rf"Elektriciteit\s+in\s+het\s+{place}", text):
-        raise ExtractorError(
-            f"TotalEnergies: the Dutch card is not the {region} electricity card"
+            f"TotalEnergies: the card is not the {region} electricity card"
         )
 
 
