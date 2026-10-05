@@ -455,8 +455,11 @@ class _PlaceholdersMixin(OptionsFlow):
                 register_rates=current_register_rates,
                 meter=current_meter,
                 # The same first-year share the what-if side carries, on the
-                # card as configured: a what-if moves the regime or the meter,
-                # never the day the household signed.
+                # card and under the regime as configured: a what-if moves the
+                # regime or the meter, never the day the household signed,
+                # and the regime decides whether the ristourne is netted and
+                # whether a feed-in bonus applies, so the what-if regime here
+                # moved the credit the note says the change is worth.
                 welcome_credit_eur=_annual_welcome_credit(
                     baseline_snapshot,
                     hh.signing_snapshot,
@@ -470,7 +473,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     hour_weights,
                     annual_kwh,
                     rolling_inj_kwh,
-                    regime=regime,
+                    regime=stored_regime,
                 ),
             )
         placeholders["solar_note"] = _whatif_note(

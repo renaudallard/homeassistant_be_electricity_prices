@@ -2663,6 +2663,74 @@ async def test_compare_solar_whatif_prints_the_own_contract_baseline(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("stored", "whatif"),
+    [("compensation", "injection"), ("injection", "compensation")],
+)
+async def test_compare_solar_whatif_baseline_keeps_the_configured_welcome_credit(
+    hass: HomeAssistant, stored: str, whatif: str
+) -> None:
+    """The baseline is the own contract as configured, welcome credit
+    included. The credit was taken under the what-if regime, which decides
+    whether the per-kWh ristourne is netted, so the baseline stopped matching
+    the unmodified quote by the whole difference the what-if asks about."""
+    from dataclasses import replace
+
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    current_snap = replace(current_snap, welcome_credit_eur_per_kwh=0.05)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "solar_regime": stored,
+            "contract_start_date": "2026-09-15",
+        },
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return _spread(5000.0, start, end)
+        if entity_id == "sensor.inj":
+            return _spread(4000.0, start, end)
+        return {}
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_fake_recorder_daily_kwh,
+        ),
+        patch.object(
+            compare_household,
+            "signing_month_snapshot",
+            AsyncMock(return_value=current_snap),
+        ),
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+        moved = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime=whatif,
+        )
+
+    assert (
+        f"{as_configured['current_annual']} EUR/year as configured"
+        in (moved["solar_note"])
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_solar_requires_volumes_without_an_injection_meter(
     hass: HomeAssistant,
 ) -> None:
