@@ -411,9 +411,11 @@ async def async_setup_entry(
     # meter has no bands, and the contracts that force the digital meter
     # (dynamic, time-of-use, the Impact bands, read the way the meter step
     # reads them) have no constant to report: the pair would sit unavailable
-    # for good, which is two dead entities per entry. The
-    # same on the Walloon Impact tariff, whose distribution follows the
-    # CWaPE bands every card prints, except a custom entry left without them.
+    # for good, which is two dead entities per entry. The same on the Walloon
+    # Impact tariff: the energy leg follows the CWaPE bands whether or not the
+    # card prints them (a card without them raises impact_rates_missing), so
+    # there is no day or night rate. A custom entry left without the bands
+    # bills one distribution rate and keeps the pair.
     impact = (
         entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
         and entry.data.get(CONF_SUPPLIER) != SUPPLIER_CUSTOM

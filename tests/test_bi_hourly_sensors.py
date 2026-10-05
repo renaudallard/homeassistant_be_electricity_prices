@@ -74,9 +74,9 @@ def test_a_digital_meter_on_a_two_rate_card_gets_the_band_prices() -> None:
 
 
 def test_the_walloon_impact_tariff_gets_no_band_prices() -> None:
-    """On the Impact tariff the distribution follows the CWaPE bands every
-    Walloon card prints, so there is no constant day or night rate and the
-    pair sat unavailable for good. A custom entry left without the bands
+    """On the Impact tariff the energy leg follows the CWaPE bands whether or
+    not the card prints them, so there is no constant day or night rate and
+    the pair sat unavailable for good. A custom entry left without the bands
     bills one distribution rate and keeps them."""
     assert not (BANDS & _added(make_entry(meter="bi", dso_tariff_mode="impact")))
     assert BANDS <= _added(make_entry(meter="bi", dso_tariff_mode="bi_horaire"))
