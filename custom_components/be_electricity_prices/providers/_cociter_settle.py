@@ -23,17 +23,15 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Cociter: settling a month on the BELIX the next card prints for it."""
+"""Cociter: the BELIX the next card prints for a month, which settles it."""
 
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 from datetime import date
 
 from ._parse import to_float
 from ._pdf import FR_MONTHS
-from ._rates import ImpactRates, VariableRates
 
 # The BELIX column of the variable and trihoraire cards, and the month it
 # belongs to: "Compteur monohoraire (0,075 x BELIX + 5) + 6% TVA 156,41
@@ -61,55 +59,4 @@ def published_belix(text: str) -> tuple[date, float] | None:
     return (
         date(int(month.group(2)), FR_MONTHS.index(name) + 1, 1),
         to_float(value.group(1)) / 1000.0,
-    )
-
-
-def _at(
-    factor: float | None, base: float | None, printed: float, index: float
-) -> float:
-    """A printed rate rebuilt through its formula, or kept with none behind it."""
-    return printed if factor is None or base is None else factor * index + base
-
-
-def _at_optional(
-    factor: float | None, base: float | None, printed: float | None, index: float
-) -> float | None:
-    return None if printed is None else _at(factor, base, printed, index)
-
-
-def settled_energy(
-    energy: VariableRates | ImpactRates, index: float
-) -> VariableRates | ImpactRates:
-    """A month-indexed leg's printed rates rebuilt at its settled BELIX.
-
-    Each row is recomputed through its own formula, and a row printed with no
-    formula keeps its figure. The card's price ceiling is left to the engine,
-    which applies it to whatever rate it bills.
-    """
-    if isinstance(energy, ImpactRates):
-        return replace(
-            energy,
-            pic=_at(energy.pic_factor, energy.pic_base, energy.pic, index),
-            medium=_at(energy.medium_factor, energy.medium_base, energy.medium, index),
-            eco=_at(energy.eco_factor, energy.eco_base, energy.eco, index),
-        )
-    return replace(
-        energy,
-        current=_at(energy.formula_factor, energy.formula_base, energy.current, index),
-        peak=_at_optional(
-            energy.formula_factor_peak, energy.formula_base_peak, energy.peak, index
-        ),
-        offpeak=_at_optional(
-            energy.formula_factor_offpeak,
-            energy.formula_base_offpeak,
-            energy.offpeak,
-            index,
-        ),
-        exclusive_night=_at_optional(
-            energy.formula_factor_exclusive_night,
-            energy.formula_base_exclusive_night,
-            energy.exclusive_night,
-            index,
-        ),
-        index_realised=index,
     )

@@ -64,7 +64,8 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
-from ._cociter_settle import published_belix, settled_energy
+from ._cociter_settle import published_belix
+from ._settle import settled_energy
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
     archive_validity_check,

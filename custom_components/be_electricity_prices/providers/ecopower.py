@@ -97,7 +97,7 @@ from ._pdf import (
     fetch_text,
     is_transient_fetch_error,
 )
-from ._settle import settled_injection
+from ._settle import settled_energy, settled_injection
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -275,11 +275,7 @@ def _settled(snap: SupplierSnapshot, text: str, year_month: date) -> SupplierSna
         if rlp is None or rlp[0] != year_month.month:
             unsettled = True
         else:
-            changed["energy"] = replace(
-                energy,
-                current=energy.formula_factor * rlp[1] + energy.formula_base,
-                index_realised=rlp[1],
-            )
+            changed["energy"] = settled_energy(energy, rlp[1])
     injection = snap.injection
     if injection is not None and injection.spp_indexed:
         spp = printed_spp_index(text)

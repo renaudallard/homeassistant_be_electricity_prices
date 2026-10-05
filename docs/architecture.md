@@ -154,8 +154,8 @@ Nine of them carry their card readers in sibling modules, named
 also has `_energyvision_wallonia.py`, because its Walloon card is a different
 document in a different language rather than a variant of the Dutch one, and
 Mega has `_mega_contracts.py`, which holds its contract registry, and Cociter
-has only `_cociter_settle.py`, which settles a closed month on the BELIX its
-next card prints. The
+has only `_cociter_settle.py`, which reads the BELIX its next card prints for a
+closed month (`_settle.py` settles the month on it). The
 supplier module keeps the urls, the archive and `parse_snapshot`, which calls
 into them.
 
