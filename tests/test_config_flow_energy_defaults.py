@@ -158,6 +158,39 @@ async def test_unified_import_and_export_may_sit_on_separate_connections(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_two_tariff_registers_are_not_offered_as_the_total(
+    hass: HomeAssistant,
+) -> None:
+    """A P1 meter is wired to the dashboard as tariff 1 and tariff 2 registers,
+    in both storage shapes. Taking the first as the total consumption billed
+    one register as all of it, so a side with several is left blank."""
+    legacy = {
+        "energy_sources": [
+            {
+                "type": "grid",
+                "flow_from": [
+                    {"stat_energy_from": "sensor.consumption_tarif_1"},
+                    {"stat_energy_from": "sensor.consumption_tarif_2"},
+                ],
+                "flow_to": [{"stat_energy_to": "sensor.production_total"}],
+            }
+        ]
+    }
+    unified = _unified_grid_prefs(
+        ("sensor.consumption_tarif_1", "sensor.production_tarif_1"),
+        ("sensor.consumption_tarif_2", "sensor.production_tarif_2"),
+    )
+    defaults: dict[str, Any] = {}
+    with _patch_manager(legacy):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults == {"injection_kwh": "sensor.production_total"}
+    defaults = {}
+    with _patch_manager(unified):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults == {}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_existing_user_choice_is_never_overridden(
     hass: HomeAssistant,
 ) -> None:

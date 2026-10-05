@@ -594,8 +594,10 @@ different, as long as the edit keeps the same supplier, contract and region
    - **Auto-fill from the Energy dashboard**: if you've already
      configured a grid source in HA's Energy dashboard, the cumulative
      consumption / injection fields are pre-selected from the
-     dashboard's first grid source so you don't pick the same sensor
-     twice. When a `utility_meter` helper rooted at that grid source
+     dashboard's grid meters so you don't pick the same sensor twice.
+     A side the dashboard lists as more than one meter (tariff 1 and
+     tariff 2 registers) is left blank: one register is not the total.
+     When a `utility_meter` helper rooted at that grid source
      splits it into peak / offpeak (or jour / nuit, dag / nacht, piek /
      dal — case-insensitive, separator-tolerant) child tariffs, the
      four day/night registers are pre-selected too. Tariffs whose

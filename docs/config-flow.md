@@ -388,8 +388,8 @@ power, so the resulting peak is an hourly-sampled estimate of a quarter-hour
 average rather than the billed figure; the config-flow description says so. The
 fallback pre-fills `CONF_CAPACITY_PEAK_SENSOR` only when that source is a real power sensor
 (device_class power/apparent_power, or unit W/kW/VA/kVA). It is skipped when the
-user already picked a sensor, the energy component is not loaded, there is no grid
-source, or the consumption sensor is not a Riemann child (`flow_prefill.py`
+user already picked a sensor, the energy component is not loaded, the dashboard
+lists no grid import meter or several, or the consumption sensor is not a Riemann child (`flow_prefill.py`
 comment). A non-power source is left blank so the device_class-filtered picker
 forces a deliberate choice (issue #19 again, `flow_prefill.py`).
 
@@ -512,10 +512,11 @@ when *none* of the six keys is already set (`flow_schemas.py`).
 `_energy_grid_stats` collects the dashboard's grid import (`stat_energy_from`)
 and export (`stat_energy_to`) statistic ids from both storage shapes: the
 unified one Home Assistant 2026.3 migrated to (one grid source per connection,
-either field possibly None) and the legacy `flow_from` / `flow_to` lists. The
-first id of each side is accepted only when it starts with `sensor.` (a
-recorder-only statistic id would render as a broken `EntitySelector` default;
-`flow_prefill.py`). For each side it then tries
+either field possibly None) and the legacy `flow_from` / `flow_to` lists. A
+side is pre-filled only when the dashboard lists exactly one id for it and that
+id starts with `sensor.` (`_entity_stat`): a P1 meter wired as tariff 1 and
+tariff 2 registers would otherwise put one register in the totals field, and a
+recorder-only statistic id would render as a broken `EntitySelector` default. For each side it then tries
 `_utility_meter_day_night_children` (`flow_prefill.py`) to also pre-fill the
 day/night registers from a `utility_meter` helper rooted at the same source. That
 helper:

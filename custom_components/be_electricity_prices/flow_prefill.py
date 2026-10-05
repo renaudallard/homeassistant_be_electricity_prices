@@ -217,12 +217,18 @@ async def _energy_grid_stats(hass: HomeAssistant) -> tuple[list[str], list[str]]
 
 
 def _entity_stat(stats: list[str]) -> str | None:
-    """The first statistic id, when it is an entity the pickers can show.
+    """The side's only statistic id, when it is an entity the pickers can show.
+
+    Only one: a Belgian P1 meter is usually wired to the dashboard as two
+    import and two export registers (tariff 1 and tariff 2), and either one
+    put in a totals field bills a single register as the whole consumption.
+    Which of the two is the day register is not knowable from the ids, so a
+    side listing several is left for the user.
 
     EntitySelector only accepts real entities; recorder-only statistic ids
     (no leading "sensor.") would render as a broken default.
     """
-    if stats and stats[0].startswith("sensor."):
+    if len(stats) == 1 and stats[0].startswith("sensor."):
         return stats[0]
     return None
 
@@ -316,7 +322,7 @@ async def _apply_energy_manager_capacity_default(
     Skipped when:
       - the user already picked a sensor (preserve manual choice),
       - the energy component isn't loaded,
-      - the dashboard has no grid source,
+      - the dashboard lists no grid import meter, or several,
       - the consumption sensor isn't a Riemann-integration child
         (no way to derive the kW source automatically).
     """
