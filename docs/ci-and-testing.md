@@ -1405,7 +1405,12 @@ at every release of the month that exists, uploads into the last one while it ha
 uploaded again, only recorded. Retention deletes only `electricity-` releases; the gas and
 water integrations' are not this job's. Where each file landed is merged into the manifest once per month
 directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
-whole manifest for each took longer than some of the uploads.
+whole manifest for each took longer than some of the uploads. An upload that fails stops the
+uploads and fails the step, but only once the month's files that did land are in the manifest,
+and the index, README and push steps still run whenever the walk itself succeeded: skipped, they
+threw the day's rows and texts away with the runner, and a card a supplier replaces at a fixed
+URL was lost for good. The next run offers the PDFs that did not land again
+(`test_a_failed_upload_still_records_what_landed`).
 
 The `Warn before the upload token expires` step asks GitHub for the token's expiry (a fine-grained
 token reports it in the `github-authentication-token-expiration` response header) and, from two

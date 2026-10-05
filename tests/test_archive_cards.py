@@ -2818,3 +2818,67 @@ def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> No
         f"Cards seen on {datetime.now(UTC).date().isoformat()}",
         "Water listings",
     ]
+
+
+def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
+    """The upload step ran under bash -e, so one failed upload ended it
+    before the month's landed files reached pdfs.json, and the push step,
+    skipped after a failure, threw away the day's rows and texts. The step's
+    own shell, with gh failing the second of two uploads, must record the
+    first and fail; the steps that push must not need the uploads."""
+    import os
+    import subprocess
+
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
+        ).read_text()
+    )
+    steps = workflow["jobs"]["archive"]["steps"]
+    script = next(s["run"] for s in steps if s.get("id") == "keep")
+    month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
+    month.mkdir(parents=True)
+    (month / "aaa.pdf").write_bytes(b"%PDF a")
+    (month / "bbb.pdf").write_bytes(b"%PDF b")
+    (tmp_path / "tmp" / "cards" / "electricity").mkdir(parents=True)
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    # No release of the month yet; creating one works, uploading bbb fails.
+    (stubs / "gh").write_text(
+        "#!/bin/sh\n"
+        'case "$1 $2" in\n'
+        '  "release view") exit 1 ;;\n'
+        '  "release upload") case "$4" in *bbb.pdf) exit 1 ;; esac ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    (stubs / "git").write_text("#!/bin/sh\necho 'abc refs/heads/main'\n")
+    for stub in stubs.iterdir():
+        stub.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{stubs}:{os.environ['PATH']}",
+        "GH_TOKEN": "x",
+        "CARDS_REPO": "o/r",
+    }
+    done = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    manifest = json.loads(
+        (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").read_text()
+    )
+    assert manifest == {"aaa": "electricity-2026-10/aaa.pdf"}
+
+    for name in ("Index the kept cards for people", "Write the two READMEs"):
+        step = next(s for s in steps if s.get("name") == name)
+        assert "steps.store.outcome == 'success'" in step["if"], name
+    push = next(s for s in steps if s.get("id") == "push")
+    assert "steps.store.outcome == 'success'" in push["if"]
+    assert "!cancelled()" in push["if"]
