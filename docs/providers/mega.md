@@ -63,6 +63,9 @@ regions and with a B2B edition it had not had before -- the catalog check
 flagged it the day it reappeared (issue #57). Mega Cap was retired with the
 September 2026 cards, residential and professional together (issue #81).
 
+The table lists the residential products; the professional editions are
+described under [The professional editions](#the-professional-editions).
+
 | id | label | TariffKind | Regions | Notes |
 | --- | --- | --- | --- | --- |
 | `mega_smart_fixed` | Mega Smart Fixed (2 years) | `fixed` | all three | flagship fixed product |
@@ -72,6 +75,7 @@ September 2026 cards, residential and professional together (issue #81).
 | `mega_online_flex` | Mega Online Flex | `variable` | all three | |
 | `mega_cosy_fixed` | Mega Cosy Fixed | `fixed` | all three | publishes on a non-1st day |
 | `mega_cosy_flex` | Mega Cosy Flex | `variable` | all three | |
+| `mega_offpeak_fixed` | Mega Off-peak Fixed | `fixed` | all three | retired July 2026, back for the August 2026 card |
 | `mega_offpeak_flex` | Mega Off-peak Flex | `variable` | all three | |
 | `mega_offpeak_impact_var` | Mega Off-peak Impact | `tou_impact` | Wallonia only | CWaPE Tarif réseau IMPACT + SMR3 meter |
 | `mega_dynamic` | Mega Dynamic | `dynamic` | all three | hourly-billed (see below) |
