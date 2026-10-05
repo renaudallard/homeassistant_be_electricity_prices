@@ -27,11 +27,11 @@ on:
         required: false
         type: boolean
 
-# The job pushes to the cards repository, and nothing else does; issues so
+# The run pushes to the cards repository, and nothing else does; issues so
 # a failed run is filed rather than left on the Actions tab.
-# Read only on this repository: every write, the clone, the push and the
-# releases, goes through the cards repository's own token; github.token is
-# used by the two issue steps alone.
+# Read only on this repository: every write, the push and the releases,
+# goes through the cards repository's own token; github.token is used by the
+# issue steps alone.
 permissions:
   contents: read
   issues: write
@@ -43,14 +43,22 @@ concurrency:
   group: archive-cards
   cancel-in-progress: false
 
+# Four jobs, so the cards token never shares a runner with third-party code.
+# The walk and the index run the integration and the PDF readers, which
+# could leave a git hook, a git config entry or a GITHUB_ENV line for any
+# later step on their runner; neither is given the token. The two jobs that
+# hold it, keep and push, run only gh, git and jq, and take what the others
+# wrote as artifacts: plain files, never a .git directory.
 jobs:
-  archive:
+  walk:
     runs-on: ubuntu-latest
     # The walk's own budget sits on its step below; this only bounds the
-    # upload and the push around it.
+    # install and the hand-over around it.
     timeout-minutes: 420
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           # 3.14 for ocr_price_cards, which needs it; the rest of the stack
@@ -86,14 +94,10 @@ jobs:
         # integration's repository, and three years of daily commits
         # certainly do not belong in every HACS download. Cloned shallow
         # under tmp/, which main's .gitignore covers, and without the token:
-        # the repository is public, and the walk that follows runs
-        # third-party code, which must not find on disk a token that writes
-        # to the cards of three integrations. Only the push is given it.
+        # the repository is public, and this job runs third-party code.
         env:
-          CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           CARDS_REPO: renaudallard/be_price_cards
         run: |
-          [ -n "$CARDS_TOKEN" ] || { echo "no cards token"; exit 1; }
           git clone -q --depth=1 "https://github.com/${CARDS_REPO}.git" tmp/cards
           mkdir -p tmp/cards/electricity
 
@@ -180,6 +184,50 @@ jobs:
             --body unlearnt_body.md \
             --fingerprint unlearnt_fingerprint.txt \
             --workflow .github/workflows/archive_cards.yml
+
+      - name: Hand the walk over
+        # The rows, texts, sheets and manifest the walk wrote, and the PDFs
+        # it fetched. The PDF folder always holds a file, so a day with no
+        # new card still hands over an artifact for the keep job to read.
+        run: |
+          mkdir -p tmp/pdfs
+          echo "PDFs fetched by this run, by month" > tmp/pdfs/README
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: walk-cards
+          path: tmp/cards/electricity
+          if-no-files-found: error
+          retention-days: 3
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: walk-pdfs
+          path: tmp/pdfs
+          if-no-files-found: error
+          retention-days: 3
+
+  keep:
+    # Holds the cards token and runs no code of this repository or its
+    # dependencies: gh, git and jq on the walk's files.
+    needs: walk
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Check the cards token is set
+        env:
+          CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
+        run: '[ -n "$CARDS_TOKEN" ] || { echo "no cards token"; exit 1; }'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: walk-cards
+          path: tmp/cards/electricity
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: walk-pdfs
+          path: tmp/pdfs
 
       - name: Keep the cards themselves
         id: keep
@@ -292,14 +340,58 @@ jobs:
               fi
             done
 
+      - name: Hand the manifest over
+        # Whatever the uploads did, so the files that landed before one
+        # failed still reach the index and the push.
+        if: ${{ !cancelled() && steps.keep.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: kept-manifest
+          path: tmp/cards/electricity/pdfs.json
+          if-no-files-found: error
+          retention-days: 3
+
+  index:
+    # Runs the integration again, so no token. It runs whenever the walk
+    # succeeded, even when an upload failed: skipped, the push behind it
+    # threw away the day's rows and texts, and a card a supplier replaces at
+    # a fixed URL was lost for good.
+    needs: [walk, keep]
+    if: ${{ !cancelled() && needs.walk.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c requirements-dev.txt \
+            pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: walk-cards
+          path: tmp/cards/electricity
+
+      - name: Take the kept manifest
+        # Missing when the keep job stopped before its uploads; the walk's
+        # manifest stands then, and the next run offers the PDFs again.
+        id: manifest
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: kept-manifest
+          path: tmp/cards/electricity
+
       - name: Index the kept cards for people
         # The walk wrote the coverage sheets before today's uploads were
         # in the manifest; rewrite them now so every month links to a file
-        # that exists. No fetch, a second or two. This and the two steps
-        # after it run when an upload failed: skipped, they threw away the
-        # day's rows and texts with the runner, and a card a supplier
-        # replaces at a fixed URL was lost for good.
-        if: ${{ !cancelled() && steps.store.outcome == 'success' }}
+        # that exists. No fetch, a second or two.
         env:
           CARDS_REPO: renaudallard/be_price_cards
         run: >-
@@ -308,10 +400,9 @@ jobs:
           --archive-base-url "https://github.com/${CARDS_REPO}/blob/main/electricity"
 
       - name: Write the two READMEs
-        if: ${{ !cancelled() && steps.store.outcome == 'success' }}
         # The walk has already written the rows, the texts, the manifest and
-        # the sheets into the clone. These two say what a person is looking
-        # at; the push at the end of the job sends the lot. The root README
+        # the sheets under tmp/cards/electricity. These two say what a
+        # person is looking at; the push job sends the lot. The root README
         # is the same text the gas and water workflows write, so none of the
         # three rewrites another's.
         run: |
@@ -353,9 +444,44 @@ jobs:
             "this repository, one release per month of cards, each file named by its SHA-256." \
             > tmp/cards/electricity/README.md
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: indexed-cards
+          path: |
+            tmp/cards/README.md
+            tmp/cards/electricity
+          if-no-files-found: error
+          retention-days: 3
+
+  push:
+    # Holds the cards token and runs no code of this repository or its
+    # dependencies: a fresh clone, the indexed files laid over it as plain
+    # files, git.
+    needs: index
+    if: ${{ !cancelled() && needs.index.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the cards repository
+        env:
+          CARDS_REPO: renaudallard/be_price_cards
+        run: git clone -q --depth=1 "https://github.com/${CARDS_REPO}.git" tmp/cards
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: indexed-cards
+          path: tmp/indexed
+
+      - name: Lay the indexed files over the clone
+        # The electricity tree is replaced whole, so a row the walk pruned
+        # goes, and the root README is the one the three archives share.
+        run: |
+          rm -rf tmp/cards/electricity
+          cp -R tmp/indexed/electricity tmp/cards/electricity
+          cp tmp/indexed/README.md tmp/cards/README.md
+
       - name: Commit and push what changed
         id: push
-        if: ${{ !cancelled() && steps.store.outcome == 'success' }}
         env:
           CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
         run: |
@@ -386,6 +512,17 @@ jobs:
           done
           exit 1
 
+  token:
+    # Holds the cards token; runs gh and the issue script only.
+    needs: push
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Warn before the upload token expires
         # A fine-grained token lives a year at most, and the first sign of
         # its expiry would otherwise be the failure issue on the morning
@@ -395,7 +532,6 @@ jobs:
         # step failed: the warning is worth having either way. After the
         # push, so a failure here cannot keep the day's rows from being
         # pushed.
-        if: always()
         env:
           CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           GH_TOKEN: ${{ github.token }}
@@ -428,6 +564,16 @@ jobs:
             --fingerprint token_fingerprint.txt \
             --workflow .github/workflows/archive_cards.yml
 
+  report:
+    needs: [walk, keep, index, push, token]
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: File the failure as an issue
         # Nobody watches the Actions tab. A run that stored nothing, a push
         # that was refused or an upload token that has expired (fine-grained
@@ -435,15 +581,15 @@ jobs:
         # Same label-deduplicated shape as the live check's issues: one open
         # issue per problem, a comment per further failing run, and it says
         # which step failed so the token case is told from the others.
-        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           failed=''
-          [ "${{ steps.store.outcome }}" = 'failure' ] && failed='Store today'"'"'s cards (the walk stored nothing, or crashed)'
-          [ "${{ steps.keep.outcome }}" = 'failure' ] && failed='Keep the cards themselves (the upload to the cards repository; check the BE_ELECTRICITY_CARDS token, it expires)'
-          [ "${{ steps.push.outcome }}" = 'failure' ] && failed='Commit and push what changed (the push to the cards repository)'
+          [ "${{ needs.walk.result }}" = 'failure' ] && failed='Store today'"'"'s cards (the walk stored nothing, or crashed)'
+          [ "${{ needs.keep.result }}" = 'failure' ] && failed='Keep the cards themselves (the upload to the cards repository; check the BE_ELECTRICITY_CARDS token, it expires)'
+          [ "${{ needs.index.result }}" = 'failure' ] && failed='Index the kept cards for people (the sheets and READMEs written after the upload)'
+          [ "${{ needs.push.result }}" = 'failure' ] && failed='Commit and push what changed (the push to the cards repository)'
           {
             echo "## Run"
             echo

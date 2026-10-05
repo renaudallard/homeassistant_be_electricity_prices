@@ -2802,7 +2802,7 @@ def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> No
             Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
         ).read_text()
     )
-    steps = workflow["jobs"]["archive"]["steps"]
+    steps = workflow["jobs"]["push"]["steps"]
     script = next(s["run"] for s in steps if s.get("id") == "push")
     stubs = tmp_path / "bin"
     stubs.mkdir()
@@ -2825,7 +2825,7 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     before the month's landed files reached pdfs.json, and the push step,
     skipped after a failure, threw away the day's rows and texts. The step's
     own shell, with gh failing the second of two uploads, must record the
-    first and fail; the steps that push must not need the uploads."""
+    first and fail; the jobs that index and push must not need the uploads."""
     import os
     import subprocess
 
@@ -2836,8 +2836,9 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
             Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
         ).read_text()
     )
-    steps = workflow["jobs"]["archive"]["steps"]
-    script = next(s["run"] for s in steps if s.get("id") == "keep")
+    jobs = workflow["jobs"]
+    keep = jobs["keep"]["steps"]
+    script = next(s["run"] for s in keep if s.get("id") == "keep")
     month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
     month.mkdir(parents=True)
     (month / "aaa.pdf").write_bytes(b"%PDF a")
@@ -2876,9 +2877,59 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     )
     assert manifest == {"aaa": "electricity-2026-10/aaa.pdf"}
 
-    for name in ("Index the kept cards for people", "Write the two READMEs"):
-        step = next(s for s in steps if s.get("name") == name)
-        assert "steps.store.outcome == 'success'" in step["if"], name
-    push = next(s for s in steps if s.get("id") == "push")
-    assert "steps.store.outcome == 'success'" in push["if"]
-    assert "!cancelled()" in push["if"]
+    # What landed is handed over even though the step failed, and the index
+    # and the push run on the walk's success alone.
+    handover = next(s for s in keep if s.get("name") == "Hand the manifest over")
+    assert "!cancelled()" in handover["if"]
+    assert "needs.walk.result == 'success'" in jobs["index"]["if"]
+    assert "needs.index.result == 'success'" in jobs["push"]["if"]
+    for job in ("index", "push"):
+        assert "!cancelled()" in jobs[job]["if"], job
+
+
+def test_the_cards_token_never_shares_a_job_with_third_party_code() -> None:
+    """The walk runs the integration, its PDF readers and the OCR package,
+    and the token that writes be_price_cards was withheld from its step
+    only: later steps on the same runner held it, where a git hook, a git
+    config entry or a GITHUB_ENV line the walk left would have run with it.
+    A job that installs or runs Python must not see the token, in its env
+    or in a checkout credential; a job that sees it runs only gh, git and
+    jq on files handed over as artifacts."""
+    import re
+
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
+        ).read_text()
+    )
+    secret = "secrets.BE_ELECTRICITY_CARDS"
+    assert secret not in json.dumps(workflow.get("env", {}))
+    holders = set()
+    for name, job in workflow["jobs"].items():
+        assert secret not in json.dumps(job.get("env", {})), name
+        steps = job["steps"]
+        holds = any(
+            secret in json.dumps(s.get("env", {}))
+            or secret in json.dumps(s.get("with", {}))
+            for s in steps
+        )
+        runs_python = any(
+            "setup-python" in s.get("uses", "")
+            or re.search(r"\b(python|pip)\b", s.get("run", ""))
+            for s in steps
+        )
+        assert not (holds and runs_python), name
+        for step in steps:
+            if step.get("uses", "").startswith("actions/checkout"):
+                assert secret not in json.dumps(step.get("with", {})), name
+                assert step["with"]["persist-credentials"] is False, name
+        if holds:
+            holders.add(name)
+    assert {"keep", "push"} <= holders
+    # The walk's output reaches the token jobs only as artifacts.
+    assert any(
+        s.get("uses", "").startswith("actions/upload-artifact")
+        for s in workflow["jobs"]["walk"]["steps"]
+    )

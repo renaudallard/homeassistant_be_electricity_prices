@@ -1081,7 +1081,7 @@ the professional ones. A month gets a `rate` only when at least three suppliers 
 none states another; a disagreement is written as `disputed` and a lone rate as `too_few`, and
 an installation reads neither (`vat_rates.py` keeps the last month that agreed).
 `_write_listings` writes the sheets and the VAT table and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
-The workflow rewrites them once more after the upload step (`--index-only`, no fetch) so the
+The workflow rewrites them once more after the uploads (`--index-only`, no fetch) so the
 day's new files are linked the day they are uploaded, writes the two READMEs itself (`Write the
 two READMEs`: the root one names the namespaces, the `electricity/` one the layout) and pushes
 the lot with the day's rows (`Commit and push what changed`), so a person on that repository's
@@ -1415,19 +1415,31 @@ step now runs under `shell: bash`, which sets pipefail
 ### archive_cards.yml - Archive tariff cards
 
 Runs on the daily `cron: "41 5 * * *"` (before the live check, off the hour for the same reason)
-and on manual dispatch (`.github/workflows/archive_cards.yml`), with `contents: write` because
-it pushes. The dispatch takes three inputs: `backfill_months`, passed to the script as `--backfill`, and
+and on manual dispatch (`.github/workflows/archive_cards.yml`). The dispatch takes three inputs: `backfill_months`, passed to the script as `--backfill`, and
 the two booleans `reparse` and `rerender`, passed as the flags of the same names. The schedule
 runs with a 12-month backfill and neither boolean, inside the usual hour. A dispatch asking for
 a backfill or a re-render gets a six-hour job timeout instead, since either is far more work than the daily walk: a
 backfill is one archived card per supplier, contract, region and month, a re-render downloads
-and renders every kept card. The install line adds `freezegun` for the replay's clock. It checks out `main` for the script and
-clones `be_price_cards` shallow under `tmp/cards`, which `.gitignore` covers, without
-credentials: the repository is public, and the walk runs third-party code that must not find a
-token able to write to it on disk (`.github/workflows/archive_cards.yml`). It then runs
-`scripts/archive_cards.py --out tmp/cards/electricity`, and commits and pushes to that
-repository only when its tree changed, the push and its rebase getting the
-`BE_ELECTRICITY_CARDS` token as an authorization header on their own command line.
+and renders every kept card. The install line adds `freezegun` for the replay's clock.
+
+The run is four jobs, so the `BE_ELECTRICITY_CARDS` token that writes `be_price_cards` never
+shares a runner with third-party code. The integration, its PDF readers and the OCR package run
+in `walk` and `index`, and either could leave a git hook, a git config entry or a `GITHUB_ENV`
+line behind for any later step on its runner; withholding the token from the walk's own step
+alone, as the workflow once did, left it to every step after. Neither job is given the token, in
+its env or as a checkout credential (both check out with `persist-credentials: false`). The two
+jobs that hold it, `keep` and `push`, run only gh, git and jq, and take what the others wrote as
+artifacts, plain files and never a `.git` directory
+(`test_the_cards_token_never_shares_a_job_with_third_party_code`):
+
+| Job | Token | Does |
+| --- | --- | --- |
+| `walk` | no | clones `be_price_cards` shallow and without credentials under `tmp/cards`, runs `scripts/archive_cards.py --out tmp/cards/electricity`, hands the tree and `tmp/pdfs` over |
+| `keep` | yes | uploads the PDFs to the releases and hands the updated `pdfs.json` over |
+| `index` | no | rewrites the sheets with that manifest (`--index-only`), writes the two READMEs, hands the lot over |
+| `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token as an authorization header on their own command line |
+
+The token-expiry warning and the failure issue run in two small jobs after these.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
@@ -1444,10 +1456,10 @@ water integrations' are not this job's. Where each file landed is merged into th
 directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
 whole manifest for each took longer than some of the uploads. An upload that fails stops the
 uploads and fails the step, but only once the month's files that did land are in the manifest,
-and the index, README and push steps still run whenever the walk itself succeeded: skipped, they
-threw the day's rows and texts away with the runner, and a card a supplier replaces at a fixed
-URL was lost for good. The next run offers the PDFs that did not land again
-(`test_a_failed_upload_still_records_what_landed`).
+which is handed over all the same, and the `index` and `push` jobs still run whenever the walk
+itself succeeded: skipped, they threw the day's rows and texts away with the runner, and a card
+a supplier replaces at a fixed URL was lost for good. The next run offers the PDFs that did not
+land again (`test_a_failed_upload_still_records_what_landed`).
 
 The `Warn before the upload token expires` step asks GitHub for the token's expiry (a fine-grained
 token reports it in the `github-authentication-token-expiration` response header) and, from two
@@ -1487,13 +1499,14 @@ not permanent; either way Mega has its own archive and the month cache rarely ne
 repository's copy for it.
 
 A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml`),
-which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
+which is why the workflow also has `issues: write`: nobody watches the Actions tab, and a walk that
 stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
 most) would otherwise end the archive quietly. The same `scripts/file_ci_issue.sh` the live check
 uses, label `archive-cards`: one open issue per problem, the failed step's name as the fingerprint
 so the same step failing again within the week adds nothing and a different one is posted at once,
-and a body that names that step so the token case is told from the others. A job cancelled
-by its timeout runs no further step, which is what the give-up rule above is for.
+and a body that names the job that failed so the token case is told from the others. A walk
+cancelled by its timeout leaves nothing for the jobs after it, which is what the give-up rule
+above is for.
 
 ### autorelease.yml - Autorelease
 
