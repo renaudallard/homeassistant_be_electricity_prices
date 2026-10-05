@@ -704,6 +704,32 @@ def test_exclusive_night_routes_through_supplier_exclusive_night_rate() -> None:
     assert energy == pytest.approx(0.10)
 
 
+@pytest.mark.parametrize("hour", [22, 0, 3, 6])
+def test_exclusive_night_on_impact_bills_its_own_variable_rate(hour: int) -> None:
+    """A night circuit on an Impact connection bills the card's exclusive-night
+    rate, not the main meter's Impact bands, on a variable card printing both
+    (Bolt's Walloon variable cards). The network leg already does so."""
+    energy = VariableRates(
+        current=0.19,
+        peak=0.21,
+        offpeak=0.17,
+        exclusive_night=0.1815,
+        impact_pic=0.26,
+        impact_medium=0.2077,
+        impact_eco=0.1447,
+    )
+    when = datetime(2026, 10, 14, hour)
+    rate = energy_eur_per_kwh(
+        energy, when, None, meter="exclusive_night", dso_tariff_mode="impact"
+    )
+    assert rate == pytest.approx(0.1815)
+    # The main meter on the same card still follows the bands.
+    main = energy_eur_per_kwh(energy, when, None, meter="bi", dso_tariff_mode="impact")
+    band = dso_impact_band(when)
+    expected = {"pic": 0.26, "medium": 0.2077, "eco": 0.1447}[band]
+    assert main == pytest.approx(expected)
+
+
 def test_exclusive_night_distribution_falls_back_to_offpeak_rate() -> None:
     """The DSO overlay doesn't (yet) expose an exclusive_night
     distribution column; route through distribution_offpeak when

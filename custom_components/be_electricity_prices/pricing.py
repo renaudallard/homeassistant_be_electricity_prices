@@ -316,6 +316,7 @@ def energy_eur_per_kwh(
     if isinstance(energy, VariableRates):
         if (
             dso_tariff_mode == "impact"
+            and meter != "exclusive_night"
             and energy.impact_pic is not None
             and energy.impact_medium is not None
             and energy.impact_eco is not None
@@ -324,6 +325,8 @@ def energy_eur_per_kwh(
             # the incitative one. Its supplier energy moves with the CWaPE
             # band, like the network leg already does; billing the mono or
             # bi-hourly rate here left the two halves on different schedules.
+            # A night circuit is the exception on both legs: it bills its own
+            # rate whatever the main connection's opt-in.
             band = dso_impact_band(when)
             if band == "pic":
                 return energy.impact_pic

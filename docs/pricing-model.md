@@ -854,14 +854,19 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
 
 1. `meter == "exclusive_night"` and the card published an `exclusive_night` rate:
    use it (`pricing.py`).
-2. `bi_capable` (meter is `bi` or `dynamic`) and both `peak` and `offpeak` are
+2. Variable only: under `dso_tariff_mode == "impact"`, a card printing the three
+   `impact_pic` / `impact_medium` / `impact_eco` rates (Bolt's variable cards)
+   bills the band `dso_impact_band` picks. An exclusive-night circuit
+   never takes these bands: it bills its own rate whatever the main
+   connection's opt-in, the same rule the network leg applies.
+3. `bi_capable` (meter is `bi` or `dynamic`) and both `peak` and `offpeak` are
    published: pick one by schedule (`pricing.py`):
    - Under `dso_tariff_mode == "impact"`: ECO band bills off-peak, MEDIUM/PIC bill
      peak (`pricing.py`). This aligns the energy side with the Impact-banded
      distribution when an SMR3 meter registers in CWaPE bands.
    - Otherwise: `is_offpeak(when, region)` picks off-peak vs peak
      (`pricing.py`).
-3. Fall back to the single/current `base` rate (`pricing.py`).
+4. Fall back to the single/current `base` rate (`pricing.py`).
 
 `FixedRates` fields: `single`, optional `peak`/`offpeak`/`exclusive_night`, plus
 `yearly_fixed_fee` and `yearly_fixed_fee_exclusive_night`
