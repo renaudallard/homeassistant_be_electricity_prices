@@ -5110,6 +5110,45 @@ assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
 )
 
 
+async def _render_noting_ocr(
+    cache: StoredTexts,
+    seen: set[tuple[str, str]],
+    variant: str,
+    url: str,
+    payload: bytes,
+    renderer: Callable[[bytes], str],
+) -> str:
+    """``cache.render``, noting each card it served the archive's OCR text for.
+
+    Such a card has no text layer: the integration's own reader raises
+    CardNotReadableError on it, and an installation is priced from this same
+    OCR text through the archive. Served it here, every row of the card
+    passed and the report never said the card is page images, until its bytes
+    changed and the rows flipped to unreadable. The parse still runs on the
+    OCR text, since that is what is billed, and _record_read_by_ocr reports
+    the card besides.
+    """
+    text = await cache.render(variant, url, payload, renderer)
+    digest = cache.digest_for(url)
+    if digest in cache.ocr and (variant, digest) not in cache.fresh:
+        seen.add((_CURRENT_SUPPLIER.get() or "_texts", url))
+    return text
+
+
+def _record_read_by_ocr(seen: Iterable[tuple[str, str]]) -> None:
+    """One unreadable row per card that was parsed from the archive's OCR
+    text, so it is counted and listed with the other unreadable cards."""
+    for supplier, url in sorted(seen):
+        name = url.rstrip("/").rsplit("/", 1)[-1]
+        _record(
+            f"{supplier}: {name} has a text layer",
+            False,
+            f"{_UNREADABLE_MARKER}: published as page images; parsed from the "
+            f"archive's OCR text, which is what an installation is priced "
+            f"from ({url})",
+        )
+
+
 async def _run(texts: Path | None = None) -> int:
     modules = _load_providers()
     # With the card archive checked out, a card whose bytes it already holds is
@@ -5121,9 +5160,12 @@ async def _run(texts: Path | None = None) -> int:
     # below keeps its shape.
     hooks = ExitStack()
     cache: StoredTexts | None = None
+    read_by_ocr: set[tuple[str, str]] = set()
     if texts is not None:
         cache = StoredTexts(texts)
-        hooks.enter_context(_render_through(cache.render))
+        hooks.enter_context(
+            _render_through(partial(_render_noting_ocr, cache, read_by_ocr))
+        )
     # Index every contract so _expected_injection_shape can derive a shape
     # for cards not explicitly listed in _INJECTION_SHAPE.
     for _mod in modules.values():
@@ -5146,6 +5188,7 @@ async def _run(texts: Path | None = None) -> int:
                 for supplier in _SUPPLIERS
             )
         )
+        _record_read_by_ocr(read_by_ocr)
         # Catalog probes fan out across suppliers; attribute them
         # to a synthetic bucket so they don't double-count against
         # any one supplier's per-card timing.

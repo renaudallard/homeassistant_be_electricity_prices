@@ -4149,6 +4149,60 @@ def test_a_supplier_stating_its_vat_rate_is_held_to_it(
     assert not row.expected
 
 
+def test_a_card_served_its_ocr_text_is_reported_unreadable(tmp_path: Path) -> None:
+    """Ecofix publishes its cards as page images, and the archive keeps the
+    text OCR read off them. Served that text, every Ecofix row passed and the
+    report never said the card has no text layer, until its bytes changed and
+    the rows flipped to unreadable. The parse still runs on the OCR text, the
+    reading an installation is priced from, and the card is reported with
+    the unreadable cards."""
+    import hashlib
+
+    from card_texts import StoredTexts  # type: ignore[import-not-found]
+
+    ocr_pdf, text_pdf = b"%PDF images", b"%PDF text"
+    rows = tmp_path / "cards" / "ecofix" / "ecofix_flexy" / "flanders"
+    rows.mkdir(parents=True)
+    (tmp_path / "texts").mkdir()
+    sources = []
+    for payload, ocr in ((ocr_pdf, "1"), (text_pdf, "")):
+        digest = hashlib.sha256(payload).hexdigest()
+        (tmp_path / "texts" / f"{digest}.txt").write_text(f"stored {digest}")
+        sources.append(
+            {"pdf": digest, "text": f"texts/{digest}.txt", "variant": "layout"}
+            | ({"ocr": ocr} if ocr else {})
+        )
+    (rows / "2026-10.json").write_text(json.dumps({"_sources": sources}))
+    cache = StoredTexts(tmp_path)
+    seen: set[tuple[str, str]] = set()
+
+    def _renderer(_payload: bytes) -> str:
+        raise AssertionError("a stored text is served, not rendered")
+
+    async def _read(url: str, payload: bytes) -> str:
+        with lc._attributed("ecofix"):
+            return str(
+                await lc._render_noting_ocr(
+                    cache, seen, "layout", url, payload, _renderer
+                )
+            )
+
+    ocr_url = "https://portal.example/docs/prices/current/EL_Ecofix_Flexy_NL.pdf"
+    assert asyncio.run(_read(ocr_url, ocr_pdf)).startswith("stored ")
+    assert asyncio.run(_read("https://x/plain.pdf", text_pdf)).startswith("stored ")
+    assert seen == {("ecofix", ocr_url)}
+
+    lc.CHECKS.clear()
+    lc._record_read_by_ocr(seen)
+    (row,) = lc.CHECKS
+    assert row.label == "ecofix: EL_Ecofix_Flexy_NL.pdf has a text layer"
+    assert not row.ok and row.expected
+    report = lc._render_report(lc.CHECKS)
+    assert "1 unreadable (expected)" in report
+    assert "## Unreadable cards" in report
+    lc.CHECKS.clear()
+
+
 @pytest.mark.parametrize("marker", lc._EXPECTED_MARKERS)
 def test_every_expected_marker_is_counted_and_listed(marker: str) -> None:
     """_record took the VAT marker as expected and the report had no place

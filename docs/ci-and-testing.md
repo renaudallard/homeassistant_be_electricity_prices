@@ -863,6 +863,15 @@ published rather than a hardcoded supplier list: a supplier that goes back to pu
 starts gating again by itself, with no edit here. The rows still appear in the report, under their
 own heading and counted separately in the headline, so a green run never hides them.
 
+With `--texts` a card whose bytes the archive holds is served the archive's text, and for a card
+published as page images that is the text the archive walk read by OCR. Its rows parse and pass,
+which is right as far as it goes: an installation is priced from that same reading, through the
+archive, once its own reader has raised `CardNotReadableError`. But the report then never said
+the card has no text layer, and the rows flipped to unreadable on the day its bytes changed. So
+`_render_noting_ocr` notes each card served an OCR text, and `_record_read_by_ocr` gives it an
+unreadable row of its own, `<supplier>: <file> has a text layer`, beside the rows that passed
+(`test_a_card_served_its_ocr_text_is_reported_unreadable`).
+
 ### Telling a slow supplier from a blocked runner
 
 `scripts/probe_endpoint.py` and the `Endpoint probe` workflow exist for one
