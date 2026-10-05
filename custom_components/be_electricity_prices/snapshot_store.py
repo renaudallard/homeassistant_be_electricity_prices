@@ -134,7 +134,7 @@ class SharedFetch:
     contract. Neither is served by an exception unwinding the caller, so the
     exception rides back as a value. It is the object rather than just its
     text, because the coordinator classifies on the type: transient against
-    unreadable, and re-raises the ones it did not expect with their original
+    unreadable, and logs the ones it did not expect with their original
     traceback.
     """
 

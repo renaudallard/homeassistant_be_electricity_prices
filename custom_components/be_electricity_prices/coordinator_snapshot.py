@@ -685,6 +685,12 @@ class _SnapshotMixin:
             )
         elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
             self._sync_extractor_issue(result.error_message, transient=True)
+        # An error no extractor raises on purpose is a parser meeting a layout
+        # it does not expect. Its traceback is logged for the bug report, but
+        # it is not raised: that escaped the tick and made every entity
+        # unavailable although the cached card could still price them. With
+        # no card in hand the tick fails anyway, on "no supplier snapshot".
+        expected = isinstance(err, (ExtractorError, asyncio.TimeoutError))
         _LOGGER.warning(
             "snapshot refresh failed for %s/%s: %s; %s (consecutive failure %d)",
             self.entry.data.get(CONF_SUPPLIER),
@@ -692,9 +698,8 @@ class _SnapshotMixin:
             result.error_message,
             "keeping cached" if self._snapshot is not None else "no card to price with",
             result.fail_count,
+            exc_info=None if expected else err,
         )
-        if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
-            raise err
 
     async def _serve_card_read_by_ocr(self) -> bool:
         """Price this month off the archive's reading of an unreadable card.

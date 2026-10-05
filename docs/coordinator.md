@@ -631,7 +631,7 @@ The config-flow consequence: because shape (c) needs a key that the dynamic ener
 
 ## 9. Error handling, backoff, and Repairs
 
-The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py`); a bad card thus keeps the last good data alive.
+The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and raises nothing: an exception that is neither `ExtractorError` (`base.py`) nor `TimeoutError` is logged with its traceback, since it is a parser bug, and the cached card keeps pricing. A bad card thus keeps the last good data alive; with no card at all the tick fails on `_update_body`'s "no supplier snapshot available".
 
 Repairs issues, all keyed by `entry_id`:
 

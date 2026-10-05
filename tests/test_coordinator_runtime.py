@@ -2873,6 +2873,55 @@ async def test_failing_fetch_keeps_extractor_failed_issue(
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
 
+async def test_a_parser_crash_keeps_the_cached_card_pricing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A parser that raises something other than ExtractorError on a new
+    card, an IndexError off a table that lost a row, used to escape the tick:
+    every entity went unavailable on each refetch although the cached card
+    could still price them. The tick now succeeds on the held card, and the
+    failure still reaches the Repairs card."""
+    freezer.move_to("2026-10-04 10:00:00+00:00")
+    entry = make_entry(supplier="engie", contract="x", region="wallonia")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry, defer_meter_reads=True)
+    coord._store.async_save = AsyncMock()  # type: ignore[method-assign]
+    coord._costs_store.async_save = AsyncMock()  # type: ignore[method-assign]
+    good = make_snapshot(supplier="engie", contract="x")
+    crash = False
+
+    async def _fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        if crash:
+            raise IndexError("list index out of range")
+        return good
+
+    extractor = replace(
+        make_stub_extractor(extractor_id="engie", fetch=_fetch), probe=None
+    )
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=extractor,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick.get_extractor",
+            return_value=extractor,
+        ),
+    ):
+        await coord.async_refresh()
+        assert coord.last_update_success
+        crash = True
+        # Past the 24 h TTL, so the tick asks the supplier again.
+        freezer.move_to("2026-10-05 11:00:00+00:00")
+        await coord.async_refresh()
+
+    assert coord.last_update_success
+    assert coord._snapshot_raw is good
+    assert coord._last_error == "list index out of range"
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
+
+
 async def test_transient_failure_defers_extractor_issue_until_threshold(
     hass: HomeAssistant,
 ) -> None:
