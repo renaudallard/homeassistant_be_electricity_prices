@@ -267,16 +267,23 @@ def _cohort_energy_from_archived(
         # Essentia, the first spot-monthly contract with a wired-up archive;
         # before that no supplier of this kind kept one.
         return energy
+    if (
+        isinstance(energy, VariableRates)
+        and energy.quarter_indexed
+        and energy.formula_factor is not None
+    ):
+        return _quarter_leg(energy, energy.formula_factor)
     if isinstance(energy, VariableRates) and energy.formula_factor is not None:
         if energy.impact_pic is not None and (
             getattr(energy, "formula_factor_pic", None) is None
         ):
             # Impact bands printed as resolved rates with no formula of their
-            # own: Bolt derives each from one formula on a per-band index, so
-            # no pair re-priced on one month mean reproduces them, and the
-            # leg below would bill the mono formula in every CWaPE band and
-            # on both bi-hourly registers. The current card keeps them, the
-            # same as an entry that names no signing month.
+            # own and no quarterly index table behind them (a Bolt card whose
+            # table did not read): no pair re-priced on one month mean
+            # reproduces them, and the leg below would bill the mono formula
+            # in every CWaPE band and on both bi-hourly registers. The current
+            # card keeps them, the same as an entry that names no signing
+            # month.
             return None
         return SpotMonthlyRates(
             factor=energy.formula_factor,
@@ -317,6 +324,60 @@ def _cohort_energy_from_archived(
             yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         )
     return None
+
+
+def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
+    """The monthly leg of a card indexed on a quarter's per-register indices.
+
+    Bolt prints one formula and bills it on a separate index per meter
+    register and per CWaPE band, "Belpex Q3 2026" 139,36 mono, 147,78 day,
+    132,12 night and 102,42 / 153,31 / 180,89 Eco / Medium / Pic. The leg
+    resolves against the quarter's mono index, and each register keeps the
+    spread the card prints between its index and the mono one: a printed
+    rate less the printed mono rate is the factor times that spread, so it
+    rides on the register's base. Those spreads are the last closed
+    quarter's, which is what the card prints; they moved by 0,6 to 2,4
+    EUR/MWh between the second and third quarter of 2026 (0,06 to 0,32
+    c/kWh, the most on the Eco band), against 39 EUR/MWh for the index.
+    """
+    base = energy.formula_base or 0.0
+
+    def pair(rate: float | None) -> tuple[float | None, float | None]:
+        if rate is None:
+            return None, None
+        return factor, base + rate - energy.current
+
+    (f_peak, b_peak), (f_off, b_off), (f_night, b_night) = (
+        pair(energy.peak),
+        pair(energy.offpeak),
+        pair(energy.exclusive_night),
+    )
+    (f_pic, b_pic), (f_medium, b_medium), (f_eco, b_eco) = (
+        pair(energy.impact_pic),
+        pair(energy.impact_medium),
+        pair(energy.impact_eco),
+    )
+    return SpotMonthlyRates(
+        factor=factor,
+        base=base,
+        factor_peak=f_peak,
+        base_peak=b_peak,
+        factor_offpeak=f_off,
+        base_offpeak=b_off,
+        factor_exclusive_night=f_night,
+        base_exclusive_night=b_night,
+        factor_pic=f_pic,
+        base_pic=b_pic,
+        factor_medium=f_medium,
+        base_medium=b_medium,
+        factor_eco=f_eco,
+        base_eco=b_eco,
+        rlp_indexed=energy.rlp_indexed,
+        rlp_blend=energy.rlp_blend,
+        quarter_indexed=True,
+        yearly_fixed_fee=energy.yearly_fixed_fee,
+        yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
+    )
 
 
 def _cohort_injection_from_archived(

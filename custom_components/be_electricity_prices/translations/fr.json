@@ -97,7 +97,7 @@
       },
       "injection_api_key": {
         "title": "Clé API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
           "api_key": "Clé API ENTSO-E"
         }
@@ -443,7 +443,7 @@
       },
       "injection_api_key": {
         "title": "Clé API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
           "api_key": "Clé API ENTSO-E"
         }

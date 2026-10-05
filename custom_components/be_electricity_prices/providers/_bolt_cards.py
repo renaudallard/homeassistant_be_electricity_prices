@@ -161,9 +161,10 @@ def _extract_energy(
     text: str, kind: TariffKind, *, professional: bool = False
 ) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
-    # Bolt's 'Prix mensuel' line is the current month's price for all
-    # contract kinds. Static cards have only this; variable cards also
-    # show 'Prix annuel estimé' which we ignore.
+    # Bolt's 'Prix mensuel' line is what a fixed card bills. On a variable
+    # card it is the formula at the last closed quarter's index ("Belpex Q3
+    # 2026"), an indicative for the quarter being billed (see the variable
+    # branch below). Variable cards also show 'Prix annuel estimé', ignored.
     #
     # The row renders in one of two shapes, and which one is a property of
     # the individual card render rather than of the product: either two
@@ -251,19 +252,25 @@ def _extract_energy(
             if professional
             else vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT),
         )
-        # ``current`` is the printed Prix mensuel, which is what a household
-        # settling against the RLP-weighted month is billed. The coefficients
-        # beside it are the same formula read per quarter-hour, which is the
-        # other settlement the card sells; resolve_settlement_grid builds the
-        # dynamic leg out of them when the entry says so. Carried on every
-        # variable card, not only where the box is ticked, because the parser
-        # has no entry to consult and the pair is free to read.
+        # ``current`` is the printed Prix mensuel: the formula at the last
+        # closed quarter's RLP-weighted index, "Belpex Q3 2026 139,36" on the
+        # October 2026 card, which the card calls "le prix de vente base sur
+        # la valeur Belpex la plus recente". The bill is "calcule sur base de
+        # l'indice applicable pendant la periode pour laquelle vous etes
+        # facture", so the leg is quarter indexed: an entry with an ENTSO-E
+        # key re-prices the formula on the delivery quarter's index, and the
+        # printed rates are what a keyless one keeps. The coefficients are
+        # also the other settlement the card sells, per quarter-hour, which
+        # resolve_settlement_grid builds when the entry says so. Carried on
+        # every variable card, not only where the box is ticked, because the
+        # parser has no entry to consult and the pair is free to read.
         #
         # A card with no formula table still prices: the printed rate is the
         # whole variable contract, and only the quarter-hourly settlement
         # needs the pair. It goes inert rather than taking the entry down.
         coefficients = _consumption_formula(text, professional=professional)
         factor, base = coefficients or (None, None)
+        quarterly = coefficients is not None and _QUARTER_INDEX_RE.search(text)
         return VariableRates(
             current=mono,
             peak=peak,
@@ -278,6 +285,10 @@ def _extract_energy(
             impact_pic=bands.get("pic"),
             impact_medium=bands.get("medium"),
             impact_eco=bands.get("eco"),
+            month_indexed=bool(quarterly),
+            quarter_indexed=bool(quarterly),
+            rlp_indexed=bool(quarterly),
+            rlp_blend="wallonia",
         )
     # Bolt sells no tou / tou_impact product, and its dynamic settlement is a
     # per-entry reading of the variable card rather than a kind of its own, so
@@ -439,6 +450,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
 _BELPEX_FORMULA_RE = re.compile(
     rf"Belpex\s*\*\s*([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)"
 )
+# The variable card's index table, "Type de compteur Belpex Q3 2026 Formule
+# tarifaire". Its rows are the RLP-weighted quarter means of the Walloon
+# DSOs' curve, one per meter register and CWaPE band, which the card says is
+# "la moyenne ponderee par le RLP des prix par quart d'heure belges".
+_QUARTER_INDEX_RE = re.compile(r"Belpex\s+Q[1-4]\s+\d{4}")
 # The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
 #   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
 # printed price, that band's own quarterly index, then the shared formula.

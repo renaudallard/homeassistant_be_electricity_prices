@@ -140,6 +140,13 @@ class _PricesMixin:
         def _monthly_spot_mean(
             self, year: int, month: int, extra_spots: dict[datetime, float]
         ) -> float | None: ...
+        def _quarter_index(
+            self,
+            energy: EnergyRates,
+            year: int,
+            month: int,
+            extra_spots: dict[datetime, float],
+        ) -> float | None: ...
         def _rlp_weighted_month_mean(
             self,
             year: int,
@@ -421,7 +428,14 @@ class _PricesMixin:
                 now_local.year, now_local.month, spot_prices
             )
             energy_mean = plain_mean
-            if rlp_weighted:
+            if getattr(priced.energy, "quarter_indexed", False):
+                # Bolt bills the quarter's index, to date while it runs.
+                quarter = self._quarter_index(
+                    priced.energy, now_local.year, now_local.month, spot_prices
+                )
+                if quarter is not None:
+                    energy_mean = quarter
+            elif rlp_weighted:
                 weighted = self._rlp_weighted_month_mean(
                     now_local.year, now_local.month, spot_prices
                 )

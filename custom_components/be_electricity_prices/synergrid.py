@@ -570,8 +570,12 @@ def _weights_for_blend(groups: "_RlpGroups", blend: str) -> RlpWeights:
         distributienetbeheerders" read literally.
       - "flanders": the Fluvius curve alone, identified by name. Energy Knights
         sells in Flanders only and bills on the customer's DSO.
+      - "wallonia": the Walloon DSOs' curve alone (ORES and the DSOs sharing
+        its curve), identified by name. Bolt's printed quarterly Belpex index
+        is this curve's RLP-weighted quarter mean, in every region.
 
-    Raises ``ValueError`` when the flanders blend finds no Fluvius column, or
+    Raises ``ValueError`` when the flanders or wallonia blend finds no column
+    of its own, or
     when the weights do not sum to about one over the year.
     """
     chosen = _blend_curves(groups.curves, groups.counts, groups.names, blend)
@@ -592,11 +596,12 @@ def _blend_curves(
 ) -> list[float]:
     """Reduce the distinct DSO groups to one per-quarter curve for ``blend``."""
     length = len(group_curves[0])
-    if blend == "flanders":
+    named = {"flanders": "Fluvius", "wallonia": "ORES"}.get(blend)
+    if named is not None:
         for curve, names in zip(group_curves, group_names, strict=True):
-            if any(name.strip().lower().startswith("fluvius") for name in names):
+            if any(n.strip().lower().startswith(named.lower()) for n in names):
                 return curve
-        raise ValueError("RLP sheet has no Fluvius curve for the flanders blend")
+        raise ValueError(f"RLP sheet has no {named} curve for the {blend} blend")
     if blend == "columns":
         total_cols = float(sum(group_counts))
         return [

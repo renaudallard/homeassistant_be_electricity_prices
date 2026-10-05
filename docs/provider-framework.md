@@ -251,7 +251,8 @@ EUR/kWh, re-published monthly.
 | `formula` | `str \| None` | `None` | Indexation expression text for diagnostics, when published. |
 | `index_realised` | `float \| None` | `None` | The value the card's index settled at for the card's OWN month, in EUR/kWh, once the supplier published it. Eneco footnotes each month's realised Belpex-RLP-M on the next card; `fetch_for_month` settles the archived month on it and `current` is then that figure. `None` while the next card is not out. |
 | `rlp_indexed` | `bool` | `False` | The index is an RLP-weighted month mean, not the plain one; the coordinator resolves the coefficients against Synergrid's residential load profile. Meaningful only with `month_indexed`. |
-| `rlp_blend` | `RlpBlend` | `"distinct"` | Which DSO reduction of that profile: `"distinct"` (Eneco's equal mean of the three regional curves), `"columns"` (the column-weighted mean of energie.be, Mega and Luminus BasicFlex), or `"flanders"` (Energy Knights and Trevion's Fluvius curve). Read only with `rlp_indexed`. |
+| `rlp_blend` | `RlpBlend` | `"distinct"` | Which DSO reduction of that profile: `"distinct"` (Eneco's equal mean of the three regional curves), `"columns"` (the column-weighted mean of energie.be, Mega and Luminus BasicFlex), `"flanders"` (Energy Knights and Trevion's Fluvius curve), or `"wallonia"` (Bolt's, the Walloon DSOs' curve). Read only with `rlp_indexed`. |
+| `quarter_indexed` | `bool` | `False` | The index is the delivery QUARTER's, not the month's: Bolt's variable cards print "Belpex Q3 2026" and bill the quarter. The monthly leg resolves on the quarter's mean, quarter to date while it runs, each register keeping the spread the card prints (`cohort_legs._quarter_leg`). Meaningful only with `month_indexed`. |
 
 ### DynamicRates
 

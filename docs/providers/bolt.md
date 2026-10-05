@@ -254,9 +254,10 @@ source and not the operator's.
 The `spot_indexed_injection` column is the registry flag verbatim, and it reads the way it does
 because the flag answers "does this product's feed-in need spots its ENERGY leg never fetches".
 Every fixed and variable Bolt card sets it: they print the quarter-hourly Belpex injection formula
-beside the illustrative figure and settle on it, while their energy leg is a printed rate that asks
-for no spot at all. The column used to read `no` down the whole non-dynamic half, which is the
-exact inverse of `bolt.py`.
+beside the illustrative figure and settle on it, while a fixed card's energy leg is a printed rate
+that asks for no spot at all. On the variable cards it is redundant beside `month_indexed_energy`,
+which they also set (see [Quarterly index](#quarterly-index)). The column used to read `no` down
+the whole non-dynamic half, which is the exact inverse of `bolt.py`.
 
 `test_bolt_is_registered` (`tests/test_bolt.py`) pins the count at exactly twelve, so adding or
 removing a product must update that test. `test_every_variable_card_offers_the_settlement_choice`
@@ -266,8 +267,8 @@ pins that the four slugs resolve to four different documents, which is how the m
 would come back.
 
 The variable branch of `_extract_energy` reads both halves of the card. The printed `Prix mensuel`
-becomes `VariableRates.current`, which is what a household settling against the RLP-weighted month
-is billed; `_consumption_formula` reads the `Belpex * <factor> <sign> <base>` row beside it into
+becomes `VariableRates.current`: the formula at the last closed quarter's index, which is what an
+entry without an ENTSO-E key keeps (see [Quarterly index](#quarterly-index)); `_consumption_formula` reads the `Belpex * <factor> <sign> <base>` row beside it into
 `formula_factor` / `formula_base`, converted to the EUR/kWh basis applied against the EUR/kWh spot
 (factor stays a ratio, base is EUR/MWh -> EUR/kWh, both VAT-baked since `vat_rate=0`).
 `resolve_settlement_grid` turns that pair into a `DynamicRates(quarter_hourly=True)` for an entry
@@ -457,7 +458,9 @@ Bolt's price model has two convention quirks the parser normalizes:
    parses. `test_fix_yearly_fee_is_monthly_x_12` (`tests/test_bolt.py`) asserts `10.99 * 12`
    (illustrative).
 
-2. **`Prix mensuel` is the current month's price for every kind.** The line prints two adjacent
+2. **`Prix mensuel` is the price a fixed card bills, and a variable card's last closed quarter.**
+   On a variable card it is the formula at the index of the quarter before (see
+   [Quarterly index](#quarterly-index)). The line prints two adjacent
    numbers: mono, then the **exclusive-night** rate (group 2 is the dedicated night-circuit rate,
    NOT a day/peak rate) (`_bolt_cards.py`). Values are in c/kWh, so the parser divides by 100.
 
@@ -755,13 +758,49 @@ incitative network tariff should know that its energy stops being banded when it
 switches settlement. The network leg and the Walloon terme fixe still follow
 `dso_tariff_mode`, which is the connection and does not move with the contract.
 
-**A contract start date does not re-price the bands.** For an entry naming a past signing month,
-`_cohort_energy_from_archived` (`cohort_legs.py`) re-prices a variable card's formula on the
-delivery month's mean, and that leg has no per-band or per-register pair to put Bolt's bands on:
-they come from one formula on three per-band indices, and the Jour / Nuit rates from per-register
-ones. Re-priced, a Walloon Impact entry was billed the mono formula in every band (on the
-September 2026 card Eco hours 4,3 c/kWh high, Pic hours 5,1 low) and a bi-hourly meter the
-same rate on both registers. A variable card whose Impact bands carry no formula of their own
-therefore returns `None` there, and the entry keeps the current card, as one without a start
-date does. Bolt's formula was the same on the September and October 2026 cards, so the lock on
-the signing month's coefficients gives up nothing measurable.
+**A re-priced card keeps the bands.** The bands come from one formula on three per-band indices,
+and the Jour / Nuit rates from per-register ones, so the monthly leg a variable card is re-priced
+through (`_cohort_energy_from_archived`, `cohort_legs.py`) carries each as the formula with the
+spread the card prints between that index and the mono one (see [Quarterly index](#quarterly-index)).
+Before that leg existed, a Walloon Impact entry with a contract start date was billed the mono
+formula in every band (on the September 2026 card Eco hours 4,3 c/kWh high, Pic hours 5,1 low)
+and a bi-hourly meter the same rate on both registers. A variable card whose Impact bands carry
+no formula and that prints no quarterly index table is still left un-re-priced, and the entry
+keeps the current card, as one without a start date does.
+
+## Quarterly index
+
+The variable cards are not indexed monthly. They print one formula, `Belpex * 1,168 + 16,90` in
+October 2026, beside a table headed `Belpex Q3 2026`: 139,36 EUR/MWh for a single meter, 147,78
+day, 132,12 night and exclusive night, and 102,42 / 153,31 / 180,89 for the Eco / Medium / Pic
+bands. The card defines the index as "la moyenne pondérée par le RLP des prix par quart d'heure
+belges", calls the printed rates "le prix de vente basé sur la valeur Belpex la plus récente", and
+bills on "l'indice applicable pendant la période pour laquelle vous êtes facturé". So the printed
+`Prix mensuel` is last quarter's index, and the bill is the delivery quarter's.
+
+Of the RLP blends, the Walloon DSOs' curve alone (`rlp_blend = "wallonia"`, the ORES columns,
+`synergrid.py`) reproduces every one of the third quarter's six printed indices to 0,01 EUR/MWh
+at quarter-hour resolution, in every region; Fluvius misses by up to 1,0 and the distinct-curve
+mean by 2,6. The day register is Monday to Friday 07:00 to 22:00 with no public-holiday exception.
+The engine's spot cache is hourly, which leaves 139,14 against the printed 139,36 for the third
+quarter and 100,00 against 100,09 for the second, 0,03 and 0,01 c/kWh.
+
+`_extract_energy` (`_bolt_cards.py`) marks a variable card that prints the table
+`month_indexed`, `quarter_indexed` and `rlp_indexed` on that blend, and the registry flags the
+variable contracts `month_indexed_energy`, so the flow offers the ENTSO-E key. With a key,
+`_quarter_leg` (`cohort_legs.py`) builds the monthly leg: the formula on the mono index, and each
+register and band on the same formula with the spread the card prints between its index and the
+mono one, read as its printed rate less the printed mono rate. `_energy_month_spot`
+(`spot_stats.py`) resolves it on the quarter's RLP-weighted mean, quarter to date while it runs,
+for the year-to-date walk, the backfill and, through `_quarter_index` (`coordinator_spots.py`), the
+live price, the projections and the comparison page's own row. A closed month of the quarter too
+thinly cached falls back to the month's own mean. The Impact bands bill only on the Impact
+configuration and a night circuit keeps its own rate (`energy_eur_per_kwh`, `pricing.py`).
+
+The spreads are the last closed quarter's, the only ones the card prints. They moved by 0,6 to
+2,4 EUR/MWh between the second and third quarter of 2026: priced on the October card, the second
+quarter comes out 0,06 c/kWh high by day, 0,13 low at night, 0,32 low on Eco and 0,26 high on
+Medium, against about 4,9 c/kWh on every register in the third quarter before, when the
+second quarter's printed rates were billed. Without a
+key the printed rates stand. The quarter-hour settlement box is unaffected: it bills the same
+formula per quarter-hour.

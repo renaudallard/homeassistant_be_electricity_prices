@@ -420,6 +420,14 @@ formulas become a `SpotMonthlyRates` leg carrying `factor_pic` / `factor_medium`
 September 2026 card printed August's BELIX of 129,32 in every band; the month
 to the 7th ran at 136,24, which moves PIC from 19,0079 to 19,7414 c/kWh.
 
+Bolt's variable cards index on the QUARTER: the October 2026 card prints its
+rates at "Belpex Q3 2026", the RLP-weighted mean of the Walloon DSOs' curve, one
+index per meter register and CWaPE band, and bills the quarter it delivers in.
+`VariableRates.quarter_indexed` marks them, `_quarter_leg` (`cohort_legs.py`)
+carries each register's spread from the mono index on its base, and
+`_energy_month_spot` resolves the leg on the quarter's mean, quarter to date
+while it runs. See [providers/bolt.md](providers/bolt.md#quarterly-index).
+
 ### Monthly-indexed feed-in credits
 
 The same lag applies to a feed-in credit. Eneco Power Fix, Fix One, Flex and Flex One

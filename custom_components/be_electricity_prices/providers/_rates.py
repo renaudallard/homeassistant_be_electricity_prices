@@ -52,8 +52,10 @@ TariffKind = Literal[
 # each region by its number of sub-areas, which is energie.be's Belpex_RLP and
 # the closest of the three to the EPEX RLP Ecopower prints;
 # "flanders" is the Fluvius curve alone, which Energy Knights, a Flanders-only
-# supplier, bills on. Meaningful only where ``rlp_indexed`` is set.
-RlpBlend = Literal["distinct", "columns", "flanders"]
+# supplier, bills on; "wallonia" is the Walloon DSOs' curve alone, which Bolt's
+# printed quarterly Belpex index reproduces in every region. Meaningful only
+# where ``rlp_indexed`` is set.
+RlpBlend = Literal["distinct", "columns", "flanders", "wallonia"]
 
 # The three Belgian regions, as a Contract.regions default and for the
 # extractors whose every product serves all of them. Public: mega and
@@ -235,6 +237,10 @@ class VariableRates:
     # Which DSO blend of the RLP profile the weighting uses (see ``RlpBlend``).
     # Only read when ``rlp_indexed``; the default is Eneco's distinct-curve mean.
     rlp_blend: RlpBlend = "distinct"
+    # True when the index is the delivery QUARTER's rather than the month's:
+    # Bolt prints "Belpex Q3 2026" and settles the quarter on its RLP-weighted
+    # mean. Meaningful only with ``month_indexed``, which the re-price keys on.
+    quarter_indexed: bool = False
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
@@ -404,6 +410,9 @@ class SpotMonthlyRates:
     # Which DSO blend of the RLP profile the weighting uses (see ``RlpBlend``);
     # carried from the card, meaningful only with ``rlp_indexed``.
     rlp_blend: RlpBlend = "distinct"
+    # Carried from the variable card: the mean is the delivery QUARTER's,
+    # quarter to date while it runs (``_energy_month_spot``).
+    quarter_indexed: bool = False
     # The supplier's own published value of the index for the ONE delivery
     # month this leg is being applied to, in EUR/kWh. Set by the month splice
     # (``_effective_snapshot_for_month``) from that month's archived card, never

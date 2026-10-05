@@ -449,6 +449,7 @@ _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
 # TimeOfUseRates and on the monthly leg it re-prices through. Every one
 # defaults to None, so a row carries them only when its card prints the band.
 # ``index_realised`` joined it when a time-of-use leg could be settled too.
+# Bolt's quarterly index flag defaults to False and is left out the same way.
 _ENERGY_OPTIONAL_KEYS = (
     "index_realised",
     "sunday",
@@ -463,6 +464,7 @@ _ENERGY_OPTIONAL_KEYS = (
     "formula_base_medium",
     "formula_factor_eco",
     "formula_base_eco",
+    "quarter_indexed",
 )
 
 
@@ -487,7 +489,7 @@ def _energy_to_dict(energy: EnergyRates) -> dict[str, Any]:
     (see ``_INJECTION_OPTIONAL_KEYS`` for why)."""
     data = dict(energy.__dict__)
     for key in _ENERGY_OPTIONAL_KEYS:
-        if key in data and data[key] is None:
+        if key in data and (data[key] is None or data[key] is False):
             del data[key]
     return data
 

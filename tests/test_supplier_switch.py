@@ -797,6 +797,8 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
         # 53,42 EUR of its 108,27 with no spots.
         (_held("engie", "engie_direct_online", api_key="OLDKEY"), True),
         (_held("mega", "mega_online_flex", api_key="OLDKEY"), True),
+        # And one indexed on the delivery quarter's.
+        (_held("bolt", "bolt_variable", api_key="OLDKEY"), True),
         # A variable signing cohort, re-priced off its archived card's formula.
         (
             _held(
@@ -810,7 +812,7 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
         # The walk keeps the printed figure without a key, and a variable card
         # that names no cohort month and is not month indexed prints its rate.
         (_held("engie", "engie_direct_online"), False),
-        (_held("bolt", "bolt_variable", api_key="OLDKEY"), False),
+        (_held("engie", "engie_easy_variable", api_key="OLDKEY"), False),
         (_held("engie", "engie_easy_fixed", api_key="OLDKEY"), False),
     ],
 )

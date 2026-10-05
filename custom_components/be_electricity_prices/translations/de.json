@@ -97,7 +97,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schlüssel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
           "api_key": "ENTSO-E API-Schlüssel"
         }
@@ -443,7 +443,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schlüssel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
           "api_key": "ENTSO-E API-Schlüssel"
         }

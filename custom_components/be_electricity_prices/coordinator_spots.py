@@ -54,11 +54,15 @@ from .injection import (
     _injection_needs_spot_quarters,
 )
 from .spot_stats import (
+    _bucket_by_local_month,
     _bucket_spots_by_hour,
     _drop_future_spots,
     _energy_is_quarter_hourly,
+    _energy_is_rlp_indexed,
+    _energy_month_spot,
     _group_spot_quarters_by_hour,
     _mean_of_month,
+    _rlp_blend_for,
 )
 from .synergrid import (
     RlpWeights,
@@ -73,6 +77,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .providers.base import SupplierSnapshot
+from .providers._rates import EnergyRates
 from .snapshot_store import cached_month_card
 from .coordinator_profiles import _ProfilesMixin
 
@@ -823,6 +828,31 @@ class _SpotsMixin(_ProfilesMixin):
         when no spot for that month is available yet (cold start).
         """
         return _mean_of_month(self._billable_spots(extra_spots), year, month)
+
+    def _quarter_index(
+        self,
+        energy: EnergyRates,
+        year: int,
+        month: int,
+        extra_spots: dict[datetime, float],
+    ) -> float | None:
+        """The index a quarter-indexed energy leg bills (year, month) on: its
+        quarter's mean to date, through the resolver the year-to-date walk
+        uses, so the live price and the walk agree on the running quarter."""
+        weights = (
+            self.rlp_weights_for_blend(_rlp_blend_for(energy))
+            if _energy_is_rlp_indexed(energy)
+            else None
+        )
+        return _energy_month_spot(
+            energy,
+            _bucket_by_local_month(self._billable_spots(extra_spots)),
+            year,
+            month,
+            dt_util.now().date(),
+            weights,
+            {},
+        )
 
     def _prune_historical_spots(self) -> None:
         """Drop cached spots older than the trailing year.

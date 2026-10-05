@@ -24,6 +24,7 @@ from custom_components.be_electricity_prices.flow_contracts import (
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
     aspiravi,
+    bolt,
     cociter,
     ebem,
     ecopower,
@@ -57,6 +58,22 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
             fixture_text("ecopower_dynamische_burgerstroom_jan.pdf", layout=True),
             "t",
             "2026-01",
+        ),
+    ),
+    (
+        "bolt",
+        "bolt_online",
+        lambda: bolt.parse_snapshot(
+            "bolt_online",
+            fixture_text("bolt_online_oct.pdf", layout=True),
+            REGION_WALLONIA,
+        ),
+    ),
+    (
+        "bolt",
+        "bolt_fix",
+        lambda: bolt.parse_snapshot(
+            "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), REGION_FLANDERS
         ),
     ),
     (

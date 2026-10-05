@@ -441,6 +441,30 @@ class _HouseholdMixin:
             troughs at midday. A month-mean leg takes its delivery month's own
             index, which is a published number and not a shape question.
             """
+            if (
+                snapshot is not None
+                and _needs_month_mean(snapshot)
+                and getattr(snapshot.energy, "quarter_indexed", False)
+            ):
+                # Bolt bills the quarter's index, so the quarter is fetched,
+                # into a copy, and resolved the way the live price is.
+                view = _detached_spot_view(coord, isolate=False)
+                first = today_local.replace(
+                    month=(today_local.month - 1) // 3 * 3 + 1, day=1
+                )
+                try:
+                    await view._ensure_historical_spots(
+                        first,
+                        today_local,
+                        self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY),
+                    )
+                except Exception:  # noqa: BLE001 - degrade to the month mean below
+                    pass
+                quarter: float | None = view._quarter_index(
+                    snapshot.energy, today_local.year, today_local.month, spot_dict
+                )
+                if quarter is not None:
+                    return quarter
             if snapshot is not None and _needs_month_mean(snapshot):
                 month = await _month_spot()
                 if _energy_is_rlp_indexed(snapshot.energy):

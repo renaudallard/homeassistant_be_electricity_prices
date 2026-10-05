@@ -97,7 +97,7 @@ Each of these has a section of its own further down; this is the scan.
 | Supplier | Contracts | Source |
 | --- | --- | --- |
 | **Aspiravi Energy** | Eco Plus Flex *(monthly Belpex mean, mono / bi / excl. night, for members of its partner cooperatives)* | Flanders only · [`aspiravi.py`](./custom_components/be_electricity_prices/providers/aspiravi.py) · [notes](./docs/providers/aspiravi.md)
-| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
+| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
 | **Cociter** | Tarif Variable (BELIX) · Tarif Variable Trihoraire *(BELIX on the CWaPE 3-band schedule)* · Tarif Dynamique (quarter-hourly BELPEX) | Wallonia only · [`cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) · [notes](./docs/providers/cociter.md)
 | **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | Flanders + Wallonia · [`dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) · [notes](./docs/providers/dats24.md)
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | Flanders only · [`ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) · [notes](./docs/providers/ebem.md)
@@ -638,9 +638,12 @@ Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Va
 Flex and Basic Online, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, TotalEnergies Electricité Variable,
 Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
-card). Both stay off without a key rather than failing the entry: a feed-in
-credit settled per hour goes unavailable, while a monthly one and the re-price
-keep the card's printed figure, which is the previous month's. The token is free but ENTSO-E does not auto-grant it —
+card), and of Bolt's variable cards (Variable, Plenty, Online and Plenty
+Online, residential and pro) on the delivery quarter's, which is what Bolt
+indexes them on. Both stay off without a key rather than failing the entry: a
+feed-in credit settled per hour goes unavailable, while a monthly one and the
+re-price keep the card's printed figure, which is the previous month's, or on
+Bolt the previous quarter's. The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
 
 1. **Register** an account on the

@@ -1486,10 +1486,14 @@ def test_a_signing_cohort_keeps_the_card_s_impact_bands() -> None:
     billed the mono formula in every CWaPE band and on both bi-hourly
     registers: Eco hours 4,3 c/kWh high and Pic hours 5,1 low on the
     September 2026 card. The bands come from one formula on separate
-    per-band indices, so no re-priced pair reproduces them, and the cohort
-    keeps the current card instead, as an entry without a start date does."""
+    per-band indices. A card printing its quarterly index table re-prices
+    with each band's spread kept; one without it keeps the current card, as
+    an entry without a start date does."""
     from custom_components.be_electricity_prices.cohort_legs import (
         _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
     )
 
     snap = parse_snapshot(
@@ -1501,4 +1505,127 @@ def test_a_signing_cohort_keeps_the_card_s_impact_bands() -> None:
     assert isinstance(energy, VariableRates)
     assert energy.formula_factor is not None
     assert energy.impact_pic is not None
-    assert _cohort_energy_from_archived(snap) is None
+    leg = _cohort_energy_from_archived(snap)
+    assert isinstance(leg, SpotMonthlyRates)
+    index = (energy.current - (energy.formula_base or 0.0)) / energy.formula_factor
+    for band, rate in (
+        ("pic", energy.impact_pic),
+        ("medium", energy.impact_medium),
+        ("eco", energy.impact_eco),
+    ):
+        resolved = getattr(leg, f"factor_{band}") * index + getattr(leg, f"base_{band}")
+        assert resolved == pytest.approx(rate)
+    bare = replace(snap, energy=replace(energy, quarter_indexed=False))
+    assert _cohort_energy_from_archived(bare) is None
+
+
+def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
+    """Bolt's variable cards print the formula at the last closed quarter's
+    index ("Belpex Q3 2026" 139,36 mono, 147,78 day, 132,12 night, 102,42 /
+    153,31 / 180,89 Eco / Medium / Pic) and bill "l'indice applicable pendant
+    la periode pour laquelle vous etes facture". With a key the leg resolves
+    on the delivery quarter's mono index, each register keeping the card's
+    spread: at the printed index it gives back every printed rate, the Impact
+    bands only on the Impact configuration. Without a key the printed rates
+    stand."""
+    from types import SimpleNamespace
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    snap = parse_snapshot(
+        "bolt_online", fixture_text("bolt_online_oct.pdf", layout=True), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and energy.quarter_indexed and energy.rlp_indexed
+    assert energy.rlp_blend == "wallonia"
+    assert _month_indexed_leg(snap, SimpleNamespace(data={})) is None  # type: ignore[arg-type]
+    leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates) and leg.quarter_indexed
+    tz = dt_util.DEFAULT_TIME_ZONE
+    wednesday = datetime(2026, 10, 14, tzinfo=tz)
+    index = 0.13936
+
+    def rate(hour: int, meter: str, mode: str, region: str = "wallonia") -> float:
+        return energy_eur_per_kwh(
+            leg,  # type: ignore[arg-type]
+            wednesday.replace(hour=hour),
+            index,
+            meter=meter,  # type: ignore[arg-type]
+            region=region,
+            dso_tariff_mode=mode,  # type: ignore[arg-type]
+        )
+
+    assert rate(15, "mono", "simple") == pytest.approx(energy.current, abs=5e-5)
+    assert rate(15, "bi", "bi_horaire", "flanders") == pytest.approx(
+        energy.peak, abs=5e-5
+    )
+    assert rate(3, "bi", "bi_horaire", "flanders") == pytest.approx(
+        energy.offpeak, abs=5e-5
+    )
+    assert rate(15, "exclusive_night", "impact") == pytest.approx(
+        energy.exclusive_night, abs=5e-5
+    )
+    assert rate(13, "dynamic", "impact") == pytest.approx(energy.impact_eco, abs=5e-5)
+    assert rate(9, "dynamic", "impact") == pytest.approx(energy.impact_medium, abs=5e-5)
+    assert rate(19, "dynamic", "impact") == pytest.approx(energy.impact_pic, abs=5e-5)
+    # The bands are an option of the Walloon card: the bi-hourly configuration
+    # bills the day and night registers.
+    assert rate(19, "bi", "bi_horaire", "flanders") == pytest.approx(
+        energy.peak, abs=5e-5
+    )
+
+
+def test_the_live_tick_bills_the_running_quarter_to_date() -> None:
+    """The live price, the projections and the compare page's own row take
+    the tick's energy mean, which for a quarter-indexed leg is the quarter's
+    RLP-weighted mean to date, resolved by the walk's own resolver."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.coordinator_prices import (
+        _PricesMixin,
+    )
+    from custom_components.be_electricity_prices.coordinator_spots import (
+        _SpotsMixin,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    def hours(month: int, price: float) -> dict[datetime, float]:
+        return {
+            datetime(2026, month, day, 10, tzinfo=UTC): price for day in range(1, 29)
+        }
+
+    spots = {**hours(4, 0.08), **hours(5, 0.10), **hours(6, 0.12)}
+    weights = {
+        (m, d, 12): (2.0 if m == 6 else 1.0) for m in (4, 5, 6) for d in range(1, 29)
+    }
+    leg = SpotMonthlyRates(
+        factor=1.0,
+        base=0.0,
+        quarter_indexed=True,
+        rlp_indexed=True,
+        rlp_blend="wallonia",
+    )
+    coord = SimpleNamespace(
+        _billable_spots=lambda extra: spots,
+        rlp_weights_for_blend=lambda blend: weights if blend == "wallonia" else None,
+    )
+    quarter = _SpotsMixin._quarter_index(coord, leg, 2026, 5, {})  # type: ignore[arg-type]
+    assert quarter == pytest.approx((28 * 0.08 + 28 * 0.10 + 56 * 0.12) / 112)
+
+    coord._monthly_spot_mean = lambda year, month, extra: 0.10
+    coord._quarter_index = lambda energy, year, month, extra: quarter
+    coord._rlp_weighted_month_mean = lambda year, month, extra: 0.11
+    priced = SimpleNamespace(energy=leg, injection=None)
+    plain, energy_mean = _PricesMixin._tick_month_means(coord, priced, {}, True)  # type: ignore[arg-type]
+    assert (plain, energy_mean) == (0.10, pytest.approx(quarter))

@@ -674,7 +674,7 @@ async def test_the_older_one_curve_blob_is_adopted_for_the_blend_it_names(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """Before 0.23.2 the blob held one curve under "weights" with its blend
-    beside it. That one blend is adopted; the other two were never on disk, so
+    beside it. That one blend is adopted; the others were never on disk, so
     they are still fetched, which is the one file the old code would have paid
     for a blend change anyway."""
     freezer.move_to("2026-09-15 12:00:00+02:00")
@@ -708,7 +708,7 @@ async def test_the_older_one_curve_blob_is_adopted_for_the_blend_it_names(
     # The adopted curve is kept; only what was missing is asked for.
     assert mock.await_count == 1
     assert mock.await_args is not None
-    assert sorted(mock.await_args.args[2]) == ["distinct", "flanders"]
+    assert sorted(mock.await_args.args[2]) == ["distinct", "flanders", "wallonia"]
     assert coord.rlp_weights_for_blend("columns") == {(9, 15, 10): 2.0}
 
 
@@ -891,3 +891,67 @@ def test_day_register_weights_sum_the_days_hours_per_register() -> None:
     assert sum(
         _day_register_weights(autumn_weights, autumn, False, "wallonia").values()
     ) == pytest.approx(25.0)
+
+
+def test_rlp_weights_wallonia_blend_is_the_ores_curve_alone() -> None:
+    """Bolt's printed quarterly index is the Walloon DSOs' curve, identified
+    by its ORES columns, whatever the customer's region."""
+    weights = _rlp_weights_from_rows(_BLEND_ROWS, "wallonia")
+    assert weights[(7, 1, 0)] == pytest.approx(0.8)
+    assert weights[(7, 1, 1)] == pytest.approx(0.2)
+    no_ores = _sheet([_FLUVIUS, _SIBELGA], 2, ["Fluvius Antwerpen", "SIBELGA"])
+    with pytest.raises(ValueError, match="no ORES curve"):
+        _rlp_weights_from_rows(no_ores, "wallonia")
+
+
+def test_a_quarter_indexed_leg_takes_its_quarter_to_date() -> None:
+    """Bolt settles on the delivery quarter's RLP-weighted index. Every hour
+    of the quarter to date counts, the months already closed and the one
+    running alike; a closed month too thinly cached to average sends the
+    leg back to its own month's mean rather than a skewed quarter."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.spot_stats import _energy_month_spot
+
+    def hours(month: int, days: int, price: float) -> dict[datetime, float]:
+        return {
+            datetime(2026, month, day, hour, tzinfo=UTC): price
+            for day in range(1, days + 1)
+            for hour in range(8, 12)
+        }
+
+    spots = {**hours(7, 10, 0.10), **hours(8, 10, 0.20), **hours(9, 5, 0.30)}
+    bucket = _bucket_by_local_month(spots)
+    leg = SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=True)
+    month_leg = SpotMonthlyRates(factor=1.0, base=0.0)
+    today = date(2026, 9, 5)
+    cache: dict[tuple[int, int], float | None] = {}
+    quarter = (40 * 0.10 + 40 * 0.20 + 20 * 0.30) / 100
+    for month in (7, 8, 9):
+        assert _energy_month_spot(leg, bucket, 2026, month, today, None, cache) == (
+            pytest.approx(quarter)
+        )
+    assert cache == {(2026, -3): pytest.approx(quarter)}
+    assert _energy_month_spot(month_leg, bucket, 2026, 8, today, None, {}) == (
+        pytest.approx(0.20)
+    )
+    # Weighted by the profile when the leg names one: July's hours weigh
+    # three times August's and September's.
+    weights = {
+        (m, d, h): (3.0 if m == 7 else 1.0)
+        for m in (7, 8, 9)
+        for d in range(1, 11)
+        for h in range(10, 14)
+    }
+    rlp_leg = SpotMonthlyRates(
+        factor=1.0, base=0.0, quarter_indexed=True, rlp_indexed=True
+    )
+    assert _energy_month_spot(rlp_leg, bucket, 2026, 9, today, weights, {}) == (
+        pytest.approx((120 * 0.10 + 40 * 0.20 + 20 * 0.30) / 180)
+    )
+    # A closed month with too few hours: the month's own mean instead.
+    thin = _bucket_by_local_month({**hours(7, 2, 0.10), **hours(8, 10, 0.20)})
+    assert _energy_month_spot(leg, thin, 2026, 8, date(2026, 8, 20), None, {}) == (
+        pytest.approx(0.20)
+    )

@@ -711,13 +711,13 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             professional=c.professional,
             # Every Bolt card bills injection per quarter-hour off the Belpex
-            # index, so the credit needs spots the fixed or variable energy leg
-            # never fetches. Set on the variable cards too, settlement box or
-            # not: with it unticked the energy leg is a printed monthly rate
-            # that asks for no spot, and the feed-in still needs one. With it
-            # ticked the energy formula collects the key anyway and this is
-            # merely redundant, which is the harmless direction.
+            # index, so the credit needs spots the fixed energy leg never
+            # fetches. Set on the variable cards too, where it is redundant
+            # beside the flag below, which is the harmless direction.
             spot_indexed_injection=True,
+            # The variable cards settle on the delivery quarter's index, which
+            # an entry holding a key is re-priced on (``quarter_indexed``).
+            month_indexed_energy=c.settlement,
             quarter_hourly_option=c.settlement,
         )
         for c in _CONTRACTS

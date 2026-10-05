@@ -381,10 +381,26 @@ def _energy_month_spot(
 
     Shared by the year-to-date walk, the backfill and the live tick so all
     three resolve a month-indexed energy leg against the same number.
+
+    A quarter-indexed leg (Bolt) takes its delivery quarter's mean instead,
+    memoised under ``(year, -quarter)`` so it never meets a month's key, and
+    falls back to the month's own when the quarter is too thinly cached.
     """
     realised = getattr(energy, "index_realised", None)
     if realised is not None:
         return float(realised)
+    if getattr(energy, "quarter_indexed", False):
+        quarter_key = (year, -((month - 1) // 3 + 1))
+        if quarter_key not in cache:
+            cache[quarter_key] = _quarter_mean(
+                bucket,
+                rlp_weights if getattr(energy, "rlp_indexed", False) else None,
+                year,
+                month,
+                today,
+            )
+        if cache[quarter_key] is not None:
+            return cache[quarter_key]
     key = (year, month)
     if key not in cache:
         mean: float | None = None
@@ -398,6 +414,51 @@ def _energy_month_spot(
             mean = _covered_month_mean(bucket, year, month, today)
         cache[key] = mean
     return cache[key]
+
+
+def _quarter_mean(
+    bucket: _SpotMonthBucket,
+    rlp_weights: RlpWeights | None,
+    year: int,
+    month: int,
+    today: date,
+) -> float | None:
+    """The mean of the quarter holding (year, month), to date while it runs.
+
+    RLP-weighted when ``rlp_weights`` is given, else plain. Bolt settles its
+    variable cards on "la moyenne ponderee par le RLP des prix par quart
+    d'heure belges" of the quarter, and on the cards of September and October
+    2026 the Walloon DSOs' curve reproduces every printed index of the third
+    quarter to 0,01 EUR/MWh at quarter-hour resolution. The cache is hourly,
+    which leaves 139,14 against a printed 139,36 in the third quarter and
+    100,00 against 100,09 in the second, 0,03 and 0,01 c/kWh on the bill.
+
+    ``None`` when a month of the quarter that has closed is thinly cached,
+    the same guard the month mean applies, and the caller falls back to the
+    month's own mean.
+    """
+    first = (month - 1) // 3 * 3 + 1
+    months = [
+        (year, m)
+        for m in range(first, first + 3)
+        if (year, m) <= (today.year, today.month)
+    ]
+    if any(_month_is_thinly_cached(bucket, y, m, today) for y, m in months):
+        return None
+    entries = [entry for ym in months for entry in bucket.get(ym, ())]
+    if not entries:
+        return None
+    if rlp_weights:
+        num = den = 0.0
+        for ts, price in entries:
+            weight = _rlp_hour_weight(rlp_weights, dt_util.as_local(ts))
+            if weight is None:
+                continue
+            num += price * weight
+            den += weight
+        if den:
+            return num / den
+    return fmean([price for _, price in entries])
 
 
 def _energy_needs_spot(energy: EnergyRates) -> bool:
