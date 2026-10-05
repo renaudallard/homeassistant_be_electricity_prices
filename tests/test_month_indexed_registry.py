@@ -210,6 +210,15 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
     ),
     (
         "luminus",
+        "luminus_basicflex",
+        lambda: luminus.parse_snapshot(
+            "luminus_basicflex",
+            fixture_text("luminus_basicflex_w_oct.pdf"),
+            REGION_WALLONIA,
+        ),
+    ),
+    (
+        "luminus",
         "luminus_comfyflex",
         lambda: luminus.parse_snapshot(
             "luminus_comfyflex",

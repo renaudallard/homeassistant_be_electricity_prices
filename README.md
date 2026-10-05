@@ -463,7 +463,7 @@ different, as long as the edit keeps the same supplier, contract and region
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Aspiravi Eco Plus
-   Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
+   Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
    OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic
    Online, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
@@ -627,7 +627,7 @@ other static cards), 74 contracts across 15 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
 Eco Plus Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards,
-Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost
+Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost
 Flex and Basic Online, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, TotalEnergies Electricité Variable,
 Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact

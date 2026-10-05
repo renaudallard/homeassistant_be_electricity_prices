@@ -96,7 +96,7 @@ class Contract:
     # True when this (non-spot-priced) product's ENERGY is indexed on the
     # delivery month's mean and its card prints last month's figure: Cociter
     # Variable and Trihoraire, EBEM Groen Variabel and B@sic+, Engie's EPEXDAM
-    # cards, Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable / Flux / Eco
+    # cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable / Flux / Eco
     # Flux / Boost Flex / Eco Boost Flex / Basic Online, Eneco Flex and Flex One, TotalEnergies's five BELPEXM_RLP variable
     # cards, and every Mega Flex plus Off-peak Impact, whose cards name the
     # settled month outright ("pour le mois de <MONTH>"). The re-price needs

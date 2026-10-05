@@ -375,8 +375,59 @@ def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
         assert energy.month_indexed is False, cid
         assert energy.formula_factor is None, cid
 
-    assert _monthly_energy_coefficients(fixture_text("luminus_smartflex_w.pdf")) == {}
-    assert _monthly_energy_coefficients(fixture_text("luminus_comfy_w.pdf")) == {}
+    assert _monthly_energy_coefficients(fixture_text("luminus_smartflex_w.pdf")) == (
+        {},
+        False,
+    )
+    assert _monthly_energy_coefficients(fixture_text("luminus_comfy_w.pdf")) == (
+        {},
+        False,
+    )
+
+
+def test_basicflex_energy_is_indexed_on_the_delivery_months_rlp_belpex() -> None:
+    """BasicFlex prints "Compteur mono-horaire = 0,1043 x Belpex RLP M +
+    1,4519" and indexes it "pendant le mois de livraison avec une ponderation
+    RLP"; the rate it prints is that formula at the previous month's value.
+    Read as a resolved rate, every month was billed on the index before it,
+    3,26 c/kWh under in September 2026, and no key could correct it."""
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
+
+    snap = parse_snapshot(
+        "luminus_basicflex", fixture_text("luminus_basicflex_w_oct.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.rlp_indexed is True
+    # "la moyenne arithmetique des profils de consommation RLP des differents
+    # gestionnaires": every DSO column alike.
+    assert energy.rlp_blend == "columns"
+    assert energy.formula_factor == pytest.approx(0.1043 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(1.4519 / 100.0 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(0.1263 * 10.0 * 1.06)
+    assert energy.formula_base_peak == pytest.approx(1.6003 / 100.0 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.0913 * 10.0 * 1.06)
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.0913 * 10.0 * 1.06)
+    # Each printed rate is its formula at "Belpex RLP M = 164,42 (valeur de
+    # l'indice de septembre 2026)".
+    for printed, factor, base in (
+        (energy.current, energy.formula_factor, energy.formula_base),
+        (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.offpeak, energy.formula_factor_offpeak, energy.formula_base_offpeak),
+    ):
+        assert factor is not None and base is not None
+        assert factor * 0.16442 + base == pytest.approx(printed, abs=1e-4)
+    assert any(
+        c.id == "luminus_basicflex" and c.month_indexed_energy
+        for c in EXTRACTORS["luminus"].contracts
+    )
+    # MaxxFlex's bare Belpex is still the plain mean.
+    maxx = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w_oct.pdf"), "wallonia"
+    ).energy
+    assert isinstance(maxx, VariableRates)
+    assert maxx.month_indexed is True and maxx.rlp_indexed is False
 
 
 def test_monthly_cards_carry_the_injection_formula() -> None:

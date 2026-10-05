@@ -520,11 +520,11 @@ _MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
     }
 )
 # Contracts whose ENERGY is a monthly formula too: MaxxFlex prints one per
-# meter and SmartFlex one per band, both on the delivery month's Belpex.
-# ComfyFlex, ComfyFlex+ and BasicFlex print resolved rates (ComfyFlex on a
-# quarterly index), so their energy is billed as printed.
+# meter and SmartFlex one per band, both on the delivery month's Belpex, and
+# BasicFlex one per meter on the delivery month's Belpex RLP M. ComfyFlex and
+# ComfyFlex+ index theirs on a quarter, so their energy is billed as printed.
 _MONTHLY_ENERGY_CONTRACTS: frozenset[str] = frozenset(
-    {"luminus_maxxflex", "luminus_smartflex"}
+    {"luminus_maxxflex", "luminus_smartflex", "luminus_basicflex"}
 )
 
 

@@ -205,6 +205,20 @@ def _band_formula_re(label: str) -> re.Pattern[str]:
     )
 
 
+def _rlp_band_formula_re(label: str) -> re.Pattern[str]:
+    """BasicFlex's per-meter row, "x Belpex RLP M", with the same tail guards.
+
+    A pattern of its own rather than a looser :func:`_band_formula_re`, whose
+    bare-Belpex requirement is what keeps the other indices out of MaxxFlex,
+    SmartFlex and ComfyFlex.
+    """
+    return re.compile(
+        rf"{label}\s*=\s*({_NUM})\s*x\s*Belpex\s+RLP\s+M\s*"
+        rf"([{SIGN_CHARS}])\s*({_NUM})(?![\d,])(?!\s*x)",
+        re.S,
+    )
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     fee = _extract_yearly_fee(text)
     if kind == "tou":
@@ -306,9 +320,17 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         yearly_fixed_fee=fee,
         yearly_fixed_fee_exclusive_night=excl_night_fee,
     )
-    coefs = _monthly_energy_coefficients(text)
+    coefs, rlp = _monthly_energy_coefficients(text)
     if not coefs:
         return rates
+    if rlp:
+        # BasicFlex's index is the month's Belpex weighted by "la moyenne
+        # arithmetique des profils de consommation RLP des differents
+        # gestionnaires", every DSO column alike: the columns blend, which
+        # reproduces the Belpex RLP M Luminus published for January to
+        # September 2026 to 0,01 EUR/MWh where the distinct one is up to
+        # 1,95 off.
+        rates = replace(rates, rlp_indexed=True, rlp_blend="columns")
     none2: tuple[float | None, float | None] = (None, None)
     return replace(
         rates,
@@ -354,19 +376,30 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
     return out if all(key in out for key, _ in _TOU_BANDS) else {}
 
 
-def _monthly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
-    """Per-meter ``(factor, base)`` for a card that indexes energy monthly.
+def _monthly_energy_coefficients(
+    text: str,
+) -> tuple[dict[str, tuple[float, float]], bool]:
+    """Per-meter ``(factor, base)`` for a card that indexes energy monthly,
+    and whether the index is the RLP-weighted one.
 
-    Empty unless the card carries the arithmetic-mean sentence AND its energy
+    Empty unless the card carries a delivery-month sentence AND its energy
     block yields a mono row. Both halves matter: ComfyFlex has the block but
     quotes a QUARTERLY index, SmartFlex has a MaxxFlex-identical block for a
     non-SMR3 meter but not the sentence, and a fixed card has neither.
+
+    Two sentences, two indices. MaxxFlex's arithmetic mean is the bare
+    "Belpex"; BasicFlex's weighted one is "Belpex RLP M", each with its own
+    row pattern, so neither card's rows can be read on the other's index.
     """
-    if _MONTHLY_ARITHMETIC_RE.search(text) is None:
-        return {}
+    if _MONTHLY_RLP_RE.search(text) is not None:
+        row, rlp = _rlp_band_formula_re, True
+    elif _MONTHLY_ARITHMETIC_RE.search(text) is not None:
+        row, rlp = _band_formula_re, False
+    else:
+        return {}, False
     block = _ENERGY_FORMULA_BLOCK_RE.search(text)
     if block is None:
-        return {}
+        return {}, False
     # The row prints c/kWh HTVA against an index in EUR/MWh, while the energy
     # row itself is TVAC, so both coefficients take the x10 / 100 conversion
     # and the VAT multiplier. Round-trips to the printed 14,41 at the card's
@@ -374,14 +407,14 @@ def _monthly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
     vat = _vat_multiplier(text)
     out: dict[str, tuple[float, float]] = {}
     for key, label in _ENERGY_BANDS:
-        match = _band_formula_re(label).search(block.group(0))
+        match = row(label).search(block.group(0))
         if match is None:
             continue
         out[key] = (
             to_float(match.group(1)) * 10.0 * vat,
             parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
         )
-    return out if "single" in out else {}
+    return (out, rlp) if "single" in out else ({}, False)
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
@@ -569,6 +602,17 @@ _INJECTION_MONTHLY_RE = re.compile(
 # may be swept in by the formula shape.
 _MONTHLY_ARITHMETIC_RE = re.compile(
     r"moyenne\s+arithm[ée]tique.{0,200}?pendant\s+le\s+mois\s+de\s+livraison",
+    re.S,
+)
+# BasicFlex indexes on the delivery month as well, but weighted: "la moyenne
+# ponderee des cotations journalieres Day Ahead Belpex Baseload ... pendant le
+# mois de livraison avec une ponderation RLP". The arithmetic sentence above
+# misses it, and its rows print "x Belpex RLP M". It printed the previous
+# month's figure as its rate on every 2026 card, so the month was billed on
+# the index before it: 3,26 c/kWh under in September.
+_MONTHLY_RLP_RE = re.compile(
+    r"moyenne\s+pond[ée]r[ée]e.{0,200}?pendant\s+le\s+mois\s+de\s+livraison"
+    r"\s+avec\s+une\s+pond[ée]ration\s+RLP",
     re.S,
 )
 # The ENERGY block only. Scoping matters: searched over the whole document the

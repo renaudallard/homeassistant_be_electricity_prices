@@ -62,8 +62,9 @@ Ten user-selectable products, all available in both Flanders and Wallonia (each
 `{flanders, wallonia}`). Seven set `spot_indexed_injection` (Comfy, Comfy Plus,
 MaxxFix, MaxxFlex, BasicFix, BasicFlex, SmartFlex), so the flow offers the ENTSO-E
 key on the injection regime; ComfyFlex and ComfyFlex Plus leave it off, and Dynamic
-collects the key through its energy formula already. MaxxFlex and SmartFlex also
-carry `month_indexed_energy`, which offers the key on every solar regime.
+collects the key through its energy formula already. MaxxFlex, SmartFlex and
+BasicFlex also carry `month_indexed_energy`, which offers the key on every solar
+regime.
 
 | Contract id | Label | Kind | Slug | Notes |
 | --- | --- | --- | --- | --- |
@@ -74,13 +75,20 @@ carry `month_indexed_energy`, which offers the key on every solar regime.
 | `luminus_maxxfix` | Luminus MaxxFix | fixed | `maxxfix` | Fixed variant |
 | `luminus_maxxflex` | Luminus MaxxFlex | variable | `maxxflex` | Variable variant |
 | `luminus_basicfix` | Luminus BasicFix | fixed | `basicfix` | Fixed variant |
-| `luminus_basicflex` | Luminus BasicFlex | variable | `basicflex` | Variable variant |
+| `luminus_basicflex` | Luminus BasicFlex | variable | `basicflex` | Monthly-indexed on the delivery month's Belpex RLP M |
 | `luminus_smartflex` | Luminus SmartFlex | tou | `smartflex` | Time-of-use (3 seasonal bands), needs SMR3 |
 | `luminus_dynamic` | Luminus Dynamic | dynamic | `dynamic` | `factor*Belpex H + base`, hourly billing |
 
-MaxxFlex and SmartFlex carry `month_indexed_energy`, the registry twin of the parsed
-`month_indexed`, which offers the optional ENTSO-E key on every solar regime;
-ComfyFlex, ComfyFlex+ and BasicFlex print resolved rates and do not.
+MaxxFlex, SmartFlex and BasicFlex carry `month_indexed_energy`, the registry twin of
+the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar
+regime; ComfyFlex and ComfyFlex+ index on a quarter and do not. MaxxFlex and
+SmartFlex index on the plain monthly Belpex. BasicFlex prints "x Belpex RLP M" and
+weights the month "avec une ponderation RLP ... basee sur la moyenne arithmetique des
+profils de consommation RLP des differents gestionnaires", so its leg is
+`rlp_indexed` on the `columns` blend, which reproduces the Belpex RLP M Luminus
+published for January to September 2026 to 0,01 EUR/MWh. Its rows have a pattern
+of their own (`_rlp_band_formula_re`), so the bare-Belpex rows stay as narrow as
+they were.
 
 Declared in `_CONTRACTS` (`luminus.py`); `_CONTRACTS_BY_ID` indexes them
 (`luminus.py`); `EXTRACTOR.contracts` is built from them (`luminus.py`).
