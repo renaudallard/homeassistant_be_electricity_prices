@@ -1210,6 +1210,33 @@ def test_variable_index_is_rlp_weighted_when_the_card_says_so() -> None:
     assert plain.rlp_indexed is False
 
 
+def test_the_rlp_index_is_the_columns_blend() -> None:
+    """Mega weights every DSO column of the profile alike. Resolved on the
+    distinct-curve mean, Eneco's, a keyed Cosy, Online, Off-peak or Smart
+    Flex month ran 0,1 to 0,25 c/kWh under what Mega settled it at; the
+    columns blend lands within 0,03 c/kWh of it in every month whose card
+    kept its coefficients. The SME cards name no RLP and stay plain."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.spot_stats import _rlp_blend_for
+
+    snap = parse_snapshot(
+        "mega_cosy_flex", fixture_text("mega_cosy_flex_v_2026-10.pdf"), "flanders"
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.rlp_indexed is True
+    assert snap.energy.rlp_blend == "columns"
+    leg = _month_indexed_leg(
+        snap,
+        SimpleNamespace(data={CONF_API_KEY: "k"}),  # type: ignore[arg-type]
+    )
+    assert _rlp_blend_for(leg) == "columns"
+
+
 def test_a_collided_value_token_is_refused_not_truncated() -> None:
     """The June 2026 Flanders cards collide two runs in the text layer.
 

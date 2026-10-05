@@ -178,7 +178,11 @@ the injection formula beside it. So the offtake leg carries `rlp_indexed` and
 the credit keeps the SPP weighting. `_rlp_indexed()` reads the clause from the
 card rather than listing products, because the SME cards drop it and settle on
 the plain arithmetic mean; reading every card as a plain mean billed 2,4 to 7,6
-percent low, about 21 EUR a year at 3500 kWh.
+percent low, about 21 EUR a year at 3500 kWh. The weighting is the `columns`
+blend of the profile (`_RLP_BLEND`, `_mega_cards.py`), every DSO column alike:
+it reproduces the rates Mega settled January to September 2026 to within
+0,03 c/kWh in each month whose card kept the previous month's coefficients,
+where the `distinct` default ran up to 0,25 c/kWh under.
 
 SME Fixed and SME Flex are "Carte tarifaire PME" cards, added for the
 September 2026 month and flagged by the catalog check the day they appeared

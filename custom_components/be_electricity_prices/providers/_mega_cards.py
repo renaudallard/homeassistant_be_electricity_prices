@@ -54,6 +54,7 @@ from ._rates import (
     FixedRates,
     ImpactRates,
     InjectionRates,
+    RlpBlend,
     TariffKind,
     VariableRates,
 )
@@ -160,6 +161,14 @@ _IMPACT_BAND_RES = {
 _RLP_CLAUSE_RE = re.compile(
     r"pond[\u00e9e]r[\u00e9e]e?\s+par\s+le\s+RLP", re.IGNORECASE
 )
+
+
+# Mega's index weights every DSO column of the Synergrid workbook alike. The
+# columns blend reproduces the rates Mega settled January to September 2026
+# at to within 0,03 c/kWh on every RLP-indexed variable card, in each month
+# whose card kept the coefficients of the month before; the distinct blend,
+# Eneco's, ran up to 0,25 c/kWh under in those same months.
+_RLP_BLEND: RlpBlend = "columns"
 
 
 def _rlp_indexed(text: str) -> bool:
@@ -385,6 +394,7 @@ def _extract_energy(
         # alone decide.
         month_indexed=f_factor is not None,
         rlp_indexed=_rlp_indexed(text),
+        rlp_blend=_RLP_BLEND,
         formula_factor=f_factor,
         formula_base=f_base,
         formula_factor_peak=bands.get("peak", (None, None))[0],
