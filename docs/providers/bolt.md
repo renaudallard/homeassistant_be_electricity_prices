@@ -797,7 +797,9 @@ mono one, read as its printed rate less the printed mono rate. `_energy_month_sp
 (`spot_stats.py`) resolves it on the quarter's RLP-weighted mean, quarter to date while it runs,
 for the year-to-date walk, the backfill and, through `_quarter_index` (`coordinator_spots.py`), the
 live price, the projections and the comparison page's own row. A closed month of the quarter too
-thinly cached falls back to the month's own mean. The Impact bands bill only on the Impact
+thinly cached falls back to the month's own mean, so the day-ahead history is fetched from the
+quarter's first day even for an entry billing from a later start date (`index_window_start`,
+`spot_stats.py`). The Impact bands bill only on the Impact
 configuration and a night circuit keeps its own rate (`energy_eur_per_kwh`, `pricing.py`).
 
 The spreads are the last closed quarter's, the only ones the card prints. They moved by 0,6 to

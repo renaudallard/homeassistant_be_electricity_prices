@@ -416,6 +416,19 @@ def _energy_month_spot(
     return cache[key]
 
 
+def index_window_start(start: date, energy: object) -> date:
+    """The first day the day-ahead history has to cover for a window opening
+    on ``start``: ``start`` itself, or the first day of its quarter for a leg
+    billed on the quarter's index (Bolt). Bolt bills a household that signed
+    in the quarter's second month on the whole quarter's mean, so the earlier
+    month is read although none of its hours is billed; without it
+    ``_quarter_mean`` finds that month thin and the leg falls back to its own
+    month's mean for the rest of the quarter."""
+    if getattr(energy, "quarter_indexed", False):
+        return start.replace(month=(start.month - 1) // 3 * 3 + 1, day=1)
+    return start
+
+
 def _quarter_mean(
     bucket: _SpotMonthBucket,
     rlp_weights: RlpWeights | None,

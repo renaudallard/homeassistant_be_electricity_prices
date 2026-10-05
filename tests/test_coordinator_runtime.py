@@ -5148,6 +5148,43 @@ async def test_the_tick_bakes_each_cost_sensor_its_own_reset(
     assert data.current_year_cost_reset != data.current_month_cost_reset
 
 
+@pytest.mark.parametrize(
+    ("quarter_indexed", "first"),
+    [(True, date(2026, 10, 1)), (False, date(2026, 11, 10))],
+)
+async def test_a_quarter_index_fetches_its_whole_quarter(
+    hass: HomeAssistant, freezer: Any, quarter_indexed: bool, first: date
+) -> None:
+    """Bolt bills a household that signed in the quarter's second month on the
+    whole quarter's mean. Billing from that start date fetched the day-ahead
+    from it, so the quarter's first month was never cached, read as thin, and
+    the leg fell back to its own month's mean for the rest of the quarter. A
+    month-indexed leg still fetches nothing before the start date."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-11-20 12:00:00+01:00")
+    entry = make_entry(
+        contract_start_date="2026-11-10", ytd_from_contract_start=True, api_key="k"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=quarter_indexed)
+    )
+    coord._year_spots_deferred = False
+    fetch = AsyncMock()
+    coord._ensure_historical_spots = fetch  # type: ignore[method-assign]
+    await coord._tick_profiles(coord._snapshot, {})
+    assert fetch.await_args is not None
+    assert fetch.await_args.args == (first, date(2026, 11, 20))
+    fetch.reset_mock()
+    await coord._fill_year_spots()
+    assert fetch.await_args is not None
+    assert fetch.await_args.args == (first, date(2026, 11, 20))
+
+
 async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
     hass: HomeAssistant, freezer: Any
 ) -> None:

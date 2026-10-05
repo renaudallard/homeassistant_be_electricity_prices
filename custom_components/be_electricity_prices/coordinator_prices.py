@@ -84,6 +84,7 @@ from .spot_stats import (
     _injection_on_month_mean,
     _rlp_blend_for,
     _spp_weighting_enabled,
+    index_window_start,
 )
 import asyncio
 from homeassistant.util import dt as dt_util
@@ -347,8 +348,11 @@ class _PricesMixin:
             today_local = dt_util.now().date()
             # An entry billing from its contract start date has no use for a
             # spot before it: nothing prices those hours, so fetching them is
-            # the one thing issue #84 asked not to happen.
-            spots_from = ytd_window_start(self.entry, today_local)
+            # the one thing issue #84 asked not to happen. Bar a quarter
+            # index, which reads the whole quarter it opens in.
+            spots_from = index_window_start(
+                ytd_window_start(self.entry, today_local), priced.energy
+            )
             if self._year_spots_deferred:
                 # FIRST tick only, and it is the one the user is watching:
                 # async_config_entry_first_refresh runs inside setup, which the
@@ -654,7 +658,13 @@ class _PricesMixin:
         """
         today = dt_util.now().date()
         before = (len(self._historical_spots), len(self._historical_spot_quarters))
-        await self._ensure_historical_spots(ytd_window_start(self.entry, today), today)
+        await self._ensure_historical_spots(
+            index_window_start(
+                ytd_window_start(self.entry, today),
+                getattr(self._snapshot, "energy", None),
+            ),
+            today,
+        )
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
         if self._unloaded or after == before:
             return
