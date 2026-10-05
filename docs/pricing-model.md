@@ -761,8 +761,8 @@ Two rules the cards make necessary:
 What a past month can be credited is bounded by what was CAPTURED. Luminus's own archive
 endpoint serves a month's tariff without its campaign, so a signing before the project's
 archive began capturing live texts cannot be recovered: the promo exists only on the live
-card during its own month. The archive has captured since September 2026, `_month_cache`
-asks it before the supplier's own archive, and `archive_cards.py` replays every stored
+card during its own month. The archive has captured since September 2026, `_snapshot_for_month`
+(`snapshot_months.py`) asks it before the supplier's own archive, and `archive_cards.py` replays every stored
 text through the current extractor whenever the parser changes, so months from then on
 resolve for every entry whatever date it was installed. A future card that pro-rates without a cap, or caps a
 lump, is what would split them.

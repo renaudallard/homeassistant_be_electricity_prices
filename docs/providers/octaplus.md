@@ -471,7 +471,7 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   **The residual, stated plainly:** `Epex RLP M` weights the day-ahead by the
   residual load profile, and we resolve it against the plain arithmetic month
   mean, which sits about 3–4% below because consumption leans into the
-  expensive hours. The profile is now fetched (`synergrid.fetch_rlp_weights`,
+  expensive hours. The profile is now fetched (`synergrid.fetch_rlp_blends`,
   the all-DSO `.xlsb` read with `pyxlsb`) and Eneco's Flex cards resolve on it,
   reproducing Eneco's published values to the cent; OCTA+ stays on the plain
   mean until its own `Epex RLP M` is validated the same way against a published

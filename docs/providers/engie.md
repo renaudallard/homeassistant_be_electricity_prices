@@ -130,7 +130,7 @@ the 21%, since nothing else on that card is grossed either
 (`_vat_multiplier`, `_engie_cards.py`). A professional card that stops printing
 `Prix tva exclue` raises rather than silently under-pricing by 21%.
 
-Tier bounds are parsed with `_tier_bound_kwh` rather than `to_float`: the dot in
+Tier bounds are parsed with `_parse.tier_bound_kwh` rather than `to_float`: the dot in
 `20.000` is a thousands separator, and reading it as a decimal point would band
 every site into the top tranche.
 

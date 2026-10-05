@@ -305,7 +305,7 @@ words, the RLP-weighted mean of the DELIVERY month's Belpex quotations, known
 only at month end, and the printed Maandprijs is the formula at the PREVIOUS
 month's value. With an ENTSO-E key the coordinator therefore re-prices the
 running month on its RLP-weighted mean to date (Synergrid's profile,
-`synergrid.fetch_rlp_weights`), which is also how Eneco settles a bill that
+`synergrid.fetch_rlp_blends`), which is also how Eneco settles a bill that
 falls inside a month, and each closed month on the value the next card publishes
 (see `fetch_for_month` above). The injection leg stays on the plain mean:
 Belpex-injectie is the arithmetic one. `test_flex_is_month_indexed_on_the_rlp_weighted_mean`

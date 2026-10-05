@@ -197,7 +197,7 @@ pro lane is just `_ContractDef.segment` feeding `_document_url`. Three things di
 - **No residential card states its VAT rate either.** The variable cards' settlement formula and
   Impact bands are grossed by the residential rate (`_RESIDENTIAL_VAT`), recorded on the snapshot
   as `TaxOverlay.assumed_vat_rate`; a fixed card grosses nothing and records none.
-- **The `N% TVA` phrase is gone.** `_extract_dynamic_energy` reads it to scale the Belpex formula,
+- **The `N% TVA` phrase is gone.** `_consumption_formula` (`_bolt_cards.py`) reads it to scale the Belpex formula,
   and `vat_multiplier` falls back to 6% when it is missing, which would have scaled an already
   ex-VAT formula and then let `vat_rate` scale it again. The professional branch asserts `HTVA`
   and scales by 1.0 instead.

@@ -555,7 +555,7 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
 - **The injection indicative can print NEGATIVE** (below 1,33 c€/kWh Belpex_SPP). Its
   column pattern captures the sign; dropping that does not mis-credit, it takes the whole
   card offline, because a missing indicative is fatal.
-- **`_resolve_variable_card_url` must raise `ExtractorError` and nothing else.** Callers
+- **`_resolve_card_url` must raise `ExtractorError` and nothing else.** Callers
   catch only that. A well-formed-JSON-but-wrong-shape payload used to escape as a bare
   `TypeError`, and a non-string `tariffDocument` was `str()`-ed into a nonsense URL and
   fetched.
@@ -586,8 +586,8 @@ contribution 0), so the pair covers both sides of that change.
 | "could not parse energie.be variable energy formula" | `_ENERGY_RE` | same row on the variable card; check the `Belpex_RLP` parameter name first |
 | "could not parse energie.be fixed energy price" | `_FIXED_ENERGY_RE` | the "Energieprijs" column label on the fixed card changed |
 | "fixed contract served an indexed (variable/dynamic) card" / "does not print a 'vaste prijs'" | `_resolve_card_url` or the card itself | the contracts API pointed the Fixed entry at another product's PDF, or the fixed card started printing a formula |
-| "energie.be: no residential variable card in contracts API" | `_resolve_variable_card_url` | the contracts API changed its `tariffType` / `contractTypeElRes` shape, or dropped the product |
-| "energie.be contracts API parse error" | `_resolve_variable_card_url` | the endpoint stopped returning JSON (an HTML error page, a login wall) |
+| "energie.be: no residential Variable card in contracts API" (or `Fixed`) | `_resolve_card_url` | the contracts API changed its `tariffType` / `contractTypeElRes` shape, or dropped the product |
+| "energie.be contracts API parse error" | `_resolve_card_url` | the endpoint stopped returning JSON (an HTML error page, a login wall) |
 | "energie.be: injection indicative row not found" | `_INJECTION_CURRENT_RE` | the variable card's "Zonnestroom" column label changed |
 | Variable price plausible but consistently off | the `spot_monthly` mean, not the parser | the month is still filling in, or the ENTSO-E cache has gaps; the rate firms up as the month completes |
 | Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` | energie.be switched Belpex units (to EUR/MWh) or the VAT treatment changed |

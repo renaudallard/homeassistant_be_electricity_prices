@@ -702,14 +702,15 @@ cards index on: Eneco's Belpex-RLP-M is "het gewogen gemiddelde van de Belpex
 Day Ahead Market noteringen voor de betreffende maand, waarbij de
 wegingscoefficienten worden bepaald door het RLP verbruiksprofiel", the profile
 itself being "een rekenkundig gemiddelde van de RLP verbruiksprofielen voor alle
-distributienetbeheerders". `fetch_rlp_weights` downloads
+distributienetbeheerders". `fetch_rlp_blends` downloads
 `synergrid.be/images/downloads/SLP-RLP-SPP/<year>/RLP0N <year> Electricity all DSOs.xlsb`
 (the 2026 address; Synergrid has moved the file every year, so when that address
 answers an HTTP error `_listed_url` reads the year's link off Synergrid's download
-page instead; about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime dependency
-added for it) and `_rlp_weights_from_rows` reduces its `RLP96UbyDGO` sheet to
-one hourly curve keyed by LOCAL (month, day, hour), for the DSO **blend** the
-caller asks for.
+page instead; about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime
+dependency added for it), `_rlp_groups_from_rows` reduces its `RLP96UbyDGO` sheet
+to its distinct DSO curves, and each DSO **blend** the caller asks for is built
+from those as one hourly curve keyed by LOCAL (month, day, hour), all from the one
+download.
 
 The workbook lists one column per DSO sub-area but only three curves are
 distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga); the same
