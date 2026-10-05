@@ -326,6 +326,10 @@ class _HouseholdMixin:
         # side actually bills on it, and the target's snapshot is not retrieved
         # until further down.
         month_spot_resolved: list[float | None] = []
+        # The copy _month_spot fetched the month into. The weighted means are
+        # taken on it too: the coordinator never sees what it fetched, so on
+        # an entry holding no spots of its own they averaged today alone.
+        month_view: list[Any] = []
 
         async def _month_spot() -> float | None:
             if month_spot_resolved:
@@ -336,6 +340,7 @@ class _HouseholdMixin:
             # whoever asks, so whatever the entry has already cached is valid
             # input, and it is what still answers when the fetch fails.
             view = _detached_spot_view(coord, isolate=False)
+            month_view.append(view)
             try:
                 await view._ensure_historical_spots(
                     today_local.replace(day=1), today_local, key
@@ -365,9 +370,9 @@ class _HouseholdMixin:
             """
             if spp_spot_resolved:
                 return spp_spot_resolved[0]
-            await _month_spot()  # fills the month's spots in the cache
+            await _month_spot()  # fetches the month into month_view
             spp_spot_resolved.append(
-                coord._spp_weighted_month_mean(
+                month_view[0]._spp_weighted_month_mean(
                     today_local.year, today_local.month, spot_dict
                 )
             )
@@ -431,7 +436,7 @@ class _HouseholdMixin:
                     # curve moves it 2,2 EUR/MWh against what it bills, which
                     # is enough to reorder neighbouring rows on a page whose
                     # whole job is the order.
-                    weighted: float | None = coord._rlp_weighted_month_mean(
+                    weighted: float | None = month_view[0]._rlp_weighted_month_mean(
                         today_local.year,
                         today_local.month,
                         spot_dict,

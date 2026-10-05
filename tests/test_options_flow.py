@@ -9854,3 +9854,70 @@ async def test_compare_ytd_quotes_the_target_on_the_settlement_asked(
     assert [target.data.get("quarter_hourly") for target in seen] == [
         quoted_quarter_hourly
     ] * len(seen)
+
+
+async def test_compare_weights_the_month_it_fetched_on_the_load_profile(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An RLP-indexed card is quoted on the load-weighted mean of the month
+    the page fetched. The plain mean was taken on the copy the fetch filled
+    and the weighted one on the coordinator, which never sees that fetch, so
+    an entry holding no spots of its own priced the card on today alone."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _rlp_weighted_month_mean,
+    )
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    entry.runtime_data = coord
+    weights = {
+        (9, day, hour): 2.0 if hour == 19 else 1.0
+        for day in range(1, 31)
+        for hour in range(24)
+    }
+    coord._rlp_weights = weights
+    coord._rlp_blend = "distinct"
+    coord._rlp_blend_weights = {"distinct": weights}
+    first = dt_util.start_of_local_day(date(2026, 9, 1)).astimezone(UTC)
+    today = dt_util.start_of_local_day(date(2026, 9, 20)).astimezone(UTC)
+    month = {
+        first + timedelta(hours=h): (
+            0.30 if dt_util.as_local(first + timedelta(hours=h)).hour == 19 else 0.05
+        )
+        for h in range(int((today - first).total_seconds() // 3600))
+    }
+    coord._spot_cache = {today + timedelta(hours=h): 0.01 for h in range(24)}
+    assert not coord._historical_spots
+
+    async def _fetch(self: Any, start: Any, end: Any, api_key: Any = None) -> None:
+        self._historical_spots.update(month)
+
+    card = replace(
+        _stub_snapshot("energyvision", "x", 0.2),
+        energy=SpotMonthlyRates(factor=1.0, base=0.0, rlp_indexed=True),
+    )
+    engine = _SweepEngine(hass, entry, {"api_key": "key"})  # type: ignore[arg-type]
+    with patch.object(BePricesCoordinator, "_ensure_historical_spots", _fetch):
+        household = await engine._resolve_household(
+            coord, candidates=[("energyvision", "x", False)], meter="mono"
+        )
+        quoted = await household.spot_for(card)
+
+    # The month to date with today's curve, which is what the plain mean
+    # beside it averages.
+    expected = _rlp_weighted_month_mean(
+        {**month, **coord._spot_cache}, weights, 2026, 9
+    )
+    assert expected is not None
+    assert quoted == pytest.approx(expected)
