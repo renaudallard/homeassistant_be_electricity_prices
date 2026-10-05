@@ -33,10 +33,10 @@ Related docs:
 | --- | --- | --- |
 | `_WizardStepsMixin` | - | The shared step chain (`async_step_contract` through `async_step_meters`) plus the branch helpers (`flow_wizard.py`) |
 | `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py`) |
-| `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled), `switch` (records a supplier switch, then re-runs the chain), `compare` (throwaway quote) or `compare_all` (ranking) (`config_flow.py`) |
+| `BePricesOptionsFlow` | `_WizardStepsMixin, _SweepStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled), `switch` (records a supplier switch, then re-runs the chain), `remove_switch` (only while a switch from the running year is recorded), `compare` (throwaway quote) or `compare_all` (ranking) (`config_flow.py`). `_SweepStepsMixin` (`compare_sweep_flow.py`) extends `_CompareStepsMixin` |
 
 Both flows walk the *same* chain: `supplier/region -> contract -> (settlement) ->
-(signed_rate) -> dso -> meter ->
+(signed_rate) -> dso -> meter -> (professional) -> (direct_debit) ->
 (dso_tariff_mode) -> (api_key) -> (custom_energy) -> (capacity) ->
 (connection_power) -> solar -> (injection_api_key) -> (custom_injection) ->
 (custom_dso) -> (custom_tax) -> meters`. The four `custom_*` steps run only for
@@ -64,6 +64,7 @@ the "Shown when" column gives the gate.
 | `dso` | `async_step_dso` (`flow_wizard.py`) | Distribution operator | `CONF_DSO` | Always |
 | `settlement` | `async_step_settlement` (`flow_wizard.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
 | `meter` | `async_step_meter` (`flow_wizard.py`) | Meter type | `CONF_METER` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved |
+| `professional` | `async_step_professional` (`flow_wizard.py`) | Whether prices include VAT, and the estimated yearly consumption | `CONF_INCLUDE_VAT`, `CONF_ANNUAL_CONSUMPTION_KWH` | Only on a professional contract (`Contract.professional`, through `_contract_is_professional`); runs after `meter`. Not asked means both keys are DROPPED (`_ask_professional`) |
 | `direct_debit` | `async_step_direct_debit` (`flow_wizard.py`) | Whether this household pays by direct debit | `CONF_DIRECT_DEBIT` | Only on a contract whose card prices a direct-debit payer (`Contract.direct_debit_discount`); runs after `meter` and after the professional step, where nothing downstream reads it. Not asked means the stored key is DROPPED (`_ask_direct_debit`), so an answer given on one contract cannot come back into force on another the day the user switches to a card that does grant a reduction |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`flow_wizard.py`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`flow_wizard.py`) |
 | `api_key` | `async_step_api_key` (`flow_wizard.py`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
@@ -86,7 +87,7 @@ the "Shown when" column gives the gate.
                   └───────────────────────┬──────────────────────┘
                                           │
                           async_step_contract  (region-filtered)
-                                          │  abort if no contract in region
+                                          │
       _after_contract → _needs_manual_rate? ┼── yes → async_step_signed_rate
                                           │              │ (all fields optional)
                           async_step_dso  ◄─────────────┘
@@ -140,9 +141,11 @@ Schema `_user_schema` (`flow_schemas.py`). Two dropdowns:
   has announced it is leaving the residential market -- you cannot sign up for a
   contract being transferred away). The contract step drops a product its supplier
   has stopped selling (`Contract.withdrawn`, through `_contracts_for`) unless it is
-  the entry's own. Region filtering happens at the *contract* step
-  instead, so a supplier with no product in the chosen region aborts there with a
-  clear message rather than being hidden.
+  the entry's own. Region filtering happens on submit instead: a supplier
+  with no product in the chosen region re-shows this form with
+  `supplier_region_unavailable` on the supplier field (`_region_mismatch_error`,
+  `flow_contracts.py`) rather than being hidden, and the answers typed stay in
+  place.
 
   `_user_schema` serves BOTH the install step and the options-flow `edit` step, so
   it passes `keep=defaults.get(CONF_SUPPLIER)` and the filter re-admits the entry's
@@ -167,9 +170,11 @@ Schema `_contract_schema` (`flow_schemas.py`). Contracts come from
 `providers/_rates.py`; its `kind` is one of the `TariffKind` literals
 `fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/_rates.py`).
 
-Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
-filtered list is empty (`flow_wizard.py`), for example a Flanders-only supplier
-selected with region Wallonia. The default is pre-selected only when the stored
+Guard: the entry step catches a supplier with no contract in the region, for
+example a Flanders-only supplier selected with region Wallonia, and re-shows its
+form with `supplier_region_unavailable` (`_region_mismatch_error`).
+`async_step_contract` keeps an abort of the same name for an empty filtered list
+(`flow_wizard.py`) as a backstop. The default is pre-selected only when the stored
 `CONF_CONTRACT` still exists in the filtered set (`flow_schemas.py`); a stale id
 leaves the field unset so the user must repick.
 
@@ -213,12 +218,24 @@ the VAT treatment. Left behind, a stored `True` sits inert on the new card and c
 into force the day the user switches to a supplier that does offer the choice, for a
 reason they long since forgot agreeing to.
 
+### `professional`: VAT treatment and yearly volume, pro contracts only
+
+Schema `_professional_schema` (`flow_schemas.py`), gated on `_contract_is_professional`
+(`flow_contracts.py`) reading `Contract.professional`. A professional card is published
+excluding VAT and may band the federal excise by annual volume, so the step asks whether
+prices should include VAT (`CONF_INCLUDE_VAT`, default on) and the estimated yearly
+consumption (`CONF_ANNUAL_CONSUMPTION_KWH`, default 3500 kWh). The volume is what
+`entry_annual_kwh` (`snapshot_resolve.py`) falls back to until a full year has been
+measured. On a residential contract `_ask_professional` pops both keys, so a switch back
+from a professional contract cannot leave an ex-VAT preference in force.
+
 ### `direct_debit`: how the household pays, where the card prices it
 
 Schema `_direct_debit_schema` (`flow_schemas.py`), one box, gated on
 `offers_direct_debit` (`providers/__init__.py`) reading `Contract.direct_debit_discount`.
-Only Brusol's Groene stroom carries it today: 250 EUR/yr standing charge, 230 on
-domiciliëring.
+Brusol's Groene stroom prices it as a lower standing charge, 250 EUR/yr and 230 on
+domiciliëring; on the Mega cards that carry it, the first-year ristourne depends on it
+instead (`welcome_credit_requires_direct_debit`, `welcome_credit_direct_debit_eur`).
 
 Its own step for the reason the settlement box has one, the contract step's schema being
 built before the contract is picked. It sits after `meter`, and after the professional step
@@ -450,11 +467,9 @@ kind has no key step of its own (dynamic or spot-monthly energy collects one on
 
 1. `_contract_is_month_indexed(supplier, contract)` is true: the contract's ENERGY
    is indexed on the delivery month's mean and its card prints last month's figure
-   (`Contract.month_indexed_energy`: Cociter Variable and Trihoraire, Ecopower
-   Groene Burgerstroom, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and
-   BasicFlex, OCTA+ Smart Variable, Flux,
-   Eco Flux, Boost Flex, Eco Boost Flex and Basic Online, Eneco Flex and Flex One, EBEM Groen Variabel and B@sic+, and every
-   Mega Flex plus Off-peak Impact, whose cards name the settled month outright). Offered on EVERY solar regime, since the key
+   (`Contract.month_indexed_energy`; the README's
+   [ENTSO-E key section](../README.md#getting-an-entso-e-api-key) lists the
+   contracts). Offered on EVERY solar regime, since the key
    is what lets `_month_indexed_leg` bill the running month on its own mean; or
 2. `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` and
    `_contract_has_spot_injection(supplier, contract)` is true.
@@ -546,7 +561,7 @@ Anything pre-filled stays editable (`strings.json`).
 
 | Rule | Where | Reason |
 | --- | --- | --- |
-| Supplier has no contract in region -> abort `supplier_region_unavailable` | `flow_wizard.py` | Region filtering deferred from the supplier step to here |
+| Supplier has no contract in region -> form error `supplier_region_unavailable` on the supplier field | `flow_contracts.py` (`_region_mismatch_error`) | Judged on the step where both are picked, so the options flow keeps every other edit |
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `flow_schemas.py` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `flow_wizard.py` | Impact is CWaPE-only; other regions bill differently |
 | `capacity` step only in Flanders | `flow_wizard.py` | Only Flanders has the capaciteitstarief |
