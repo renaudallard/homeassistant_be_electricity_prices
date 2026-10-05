@@ -581,8 +581,9 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         # Numeric coefficients for signing-cohort re-pricing, in the same
         # VAT-baked EUR/kWh basis as the dynamic path (snapshot vat_rate is 0).
         # The index is the RLP-weighted Belpex; the coordinator applies these
-        # against the plain arithmetic monthly mean, a close (few-percent)
-        # approximation of the RLP weighting.
+        # against the month's mean weighted by Synergrid's Flemish profile
+        # (rlp_blend below), and against the plain arithmetic mean only while
+        # that profile is not loaded.
         f_factor, f_base = _formula_to_dynamic(
             factor_pdf, base_pdf_cents, _vat_multiplier(text)
         )
@@ -621,8 +622,8 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         )
     yearly_fee = _extract_yearly_fee_variable(text)
     # Signing-cohort coefficients, VAT-baked to the EUR/kWh basis (as the
-    # dynamic path does; snapshot vat_rate is 0). The RLP index is approximated
-    # by the plain arithmetic monthly mean.
+    # dynamic path does; snapshot vat_rate is 0). They resolve against the
+    # RLP-weighted monthly mean, the plain one only while no profile is loaded.
     #
     # All four rows are converted, not just the mono one. They were parsed and
     # then dropped, so a bi-hourly cohort was billed the mono pair around the
@@ -758,9 +759,9 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
     # spot. The card prints the realized monthly indicative right after the
     # formula (e.g. "... Belpex - 1,25 1,3354 4,3252", where 1,3354 =
     # factor*last_month_SPP0 + base and 4,3252 is the VNR yearly forecast).
-    # Surface only that indicative as ``current``; emitting factor/base
-    # would make the pricing engine apply monthly coefficients to the
-    # hourly spot (mirrors Ecofix Flexy's BELPEX-SPP-M).
+    # Both are kept: the coefficients carry spp_indexed (below), which
+    # resolves them against the month's SPP-weighted mean and never against
+    # the hourly spot, and the printed indicative is the fallback.
     match = re.search(
         rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
         rf"(?:\s+([\d,.]+))?",

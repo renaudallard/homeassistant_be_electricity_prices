@@ -85,11 +85,14 @@ Notes:
   (`_extract_variable`, `eneco.py`).
 - **Power Flex One** is the second variable card, and a distinct SKU rather
   than a relabel: its own text sells a "contract van 1 jaar" against Flex's
-  "contract van onbepaalde duur". Same layout, same 0,102 factor and the same
-  65,00 EUR yearly fee, on a lower base (1,462 against 3,001), so the September
-  2026 cards price it at 15,98 c/kWh against Flex's 17,61: a Flex One household
-  billed on Flex overpays 57,05 EUR a year at 3500 kWh. It parses on Flex's own
-  energy block, so only the dispatch in `_extract_energy` knows the difference.
+  "contract van onbepaalde duur". Same layout and the same 0,102 factor; its
+  base and yearly fee are its own and are read off each card. On the September
+  2026 cards it had the same 65,00 EUR fee on a lower base (1,462 against
+  3,001), pricing 15,98 c/kWh against Flex's 17,61, so a Flex One household
+  billed on Flex overpaid 57,05 EUR a year at 3500 kWh; the October cards print
+  a 50,00 EUR fee on a 0,371 base against Flex's 65,00 and 2,986. It parses on
+  Flex's own energy block, so only the dispatch in `_extract_energy` knows the
+  difference.
 - **Power Dynamic** is an hourly dynamic contract indexed on the hourly spot
   (Belpex-H). Until September 2026 it was sold in Flanders only (*"beschikbaar in
   Vlaanderen"*) and its Walloon DSO rows were reference only. The October 2026 card

@@ -497,8 +497,9 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         # Fix One is the one-year twin of Fix on the same card layout.
         return _extract_fixed(text)
     if contract_id in ("power_flex", "power_flex_one"):
-        # Flex One is the same variable card with a lower base coefficient
-        # (1,462 against Flex's 3,001), so it parses on the same block.
+        # Flex One is the same variable card with its own base and fee
+        # (1,462 against Flex's 3,001 on the September 2026 cards), so it
+        # parses on the same block.
         return _extract_variable(text)
     if contract_id == "power_dynamic":
         return _extract_dynamic(text)
@@ -938,10 +939,11 @@ EXTRACTOR = SupplierExtractor(
         Contract(
             # A second variable card, not a relabel: its own text sells a
             # "contract van 1 jaar" against Flex's "contract van onbepaalde
-            # duur". Same layout, same 0,102 factor and same 65,00 EUR fee,
-            # with a lower base (1,462 against 3,001), so on the September
-            # 2026 cards it prices 15,98 c/kWh against Flex's 17,61: a Flex
-            # One household forced onto Flex overpays 57,05 EUR a year at
+            # duur". Same layout and the same 0,102 factor; the base and the
+            # fee are its own and move per card. On the September 2026 cards
+            # the base was 1,462 against 3,001 on the same 65,00 EUR fee, so
+            # it priced 15,98 c/kWh against Flex's 17,61 and a Flex One
+            # household forced onto Flex overpaid 57,05 EUR a year at
             # 3500 kWh. Injection is identical, hence the same flag.
             id="power_flex_one",
             label="Eneco Zon & Wind Flex One",
