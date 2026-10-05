@@ -68,14 +68,14 @@ relative to that package directory.
 | Module | Responsibility |
 | --- | --- |
 | `__init__.py` | Integration entry point. Registers domain services once at `async_setup`, sets up and tears down each config entry (`async_setup_entry` / `async_unload_entry` / `async_remove_entry`), owns the slot-boundary push and one-shot backfill scheduling, and implements the `refresh`, `cheapest_window`, `most_expensive_window`, and `backfill_statistics` service handlers. |
-| `coordinator.py` | The `DataUpdateCoordinator` subclass. Owns `__init__`, the framework hook `_async_update_data` and the forced refresh; the six mixins below carry the rest of the class, and the leaf modules under them are plain functions the tick calls. |
+| `coordinator.py` | The `DataUpdateCoordinator` subclass. Owns `__init__`, the framework hook `_async_update_data` and the forced refresh; the eight mixins it is composed from, and the `_ProfilesMixin` that `_SpotsMixin` mixes in, carry the rest of the class, and the leaf modules under them are plain functions the tick calls. |
 | `coordinator_data.py` | `CoordinatorData`, the record every sensor reads, and the year and month window helpers that say which day a running total started from. A leaf, so a mixin that builds one can import it. |
 | `coordinator_tick.py` | `_TickMixin`: one update tick start to finish, assembling `CoordinatorData` from what the two mixins below return. |
 | `coordinator_prices.py` | `_PricesMixin`: the tick's day-ahead curve, profiles and month means, the per-slot price table, the feed-in leg, and the background fills of the year's spots and the profiles that the first tick defers so setup fits Home Assistant's stage-2 budget. |
 | `coordinator_costs.py` | `_CostsMixin`: the year and month to date, the projections and the year end, the background fill of the archived month cards, and the pricing of earlier contracts. |
 | `coordinator_persist.py` | `_PersistMixin`: what the entry keeps in its Store between restarts and how each row is re-checked against the schema version and the clock before it is trusted. |
 | `coordinator_snapshot.py` | `_SnapshotMixin`: the snapshot fetch / freshness state machine. Probe, TTL, the shared cross-entry cache and its adoption, and the negative-fetch cache. |
-| `coordinator_issues.py` | `_IssuesMixin`: the seven Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
+| `coordinator_issues.py` | `_IssuesMixin`: the Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
 | `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill. |
 | `coordinator_profiles.py` | `_ProfilesMixin`: the Synergrid load and production profiles, shared across entries and persisted, and the weighted monthly means they buy. |
 | `coordinator_peak.py` | `_PeakMixin`: the Flemish capacity peak (`_track_monthly_peak`) and its 12-month history. |
@@ -131,7 +131,7 @@ relative to that package directory.
 | `sensor.py` | The sensor platform: current price, next-hour price, year-to-date cost, injection price, fixed-fee and energy-fund sensors, and diagnostic sensors. |
 | `sensor_values.py` | What the price sensors read off `CoordinatorData`: the current and next slot, the day's and tomorrow's average, minimum and maximum, the cheapest and dearest hours, and the today / tomorrow tables. |
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
-| `button.py` | A refresh button entity that forces an immediate snapshot re-fetch for the entry. |
+| `button.py` | The `reset_monthly_peak` diagnostic button, Flemish entries only: drops the persisted monthly peak so the next tick rebuilds it. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key. |
 | `providers/base.py` | The extractor protocol and what a parsed card amounts to: `SupplierExtractor`, `SupplierSnapshot`, `DsoOverlay`, `TaxOverlay`, and the fetch / probe / archive callable types. |
 | `providers/_rates.py` | The shapes a card can print: `Contract`, the six `EnergyRates` shapes and `InjectionRates`. Data only, so an extractor can build one without reaching into the pricing engine. |
