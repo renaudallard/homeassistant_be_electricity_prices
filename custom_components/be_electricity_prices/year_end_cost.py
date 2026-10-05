@@ -182,4 +182,20 @@ async def _compute_year_end_cost(
         breakdown["previous_contracts_eur"] = previous_eur
     if stats.get("injection_hours_uncredited"):
         breakdown["injection_hours_uncredited"] = stats["injection_hours_uncredited"]
+    # The walk's coverage, as current_year_cost shows its own: a day the
+    # recorder lost is billed without its energy here as it is there, and
+    # this is where that shows. The per-day walk counts days, the hourly
+    # walks hours.
+    if "days_seen" in stats:
+        breakdown.update(
+            days_seen=stats["days_seen"],
+            days_priced=stats["days_priced"],
+            days_elapsed=stats["days_elapsed"],
+        )
+    if "hours_seen" in stats:
+        breakdown.update(
+            hours_seen=stats["hours_seen"],
+            hours_priced=stats["hours_priced"],
+            hours_elapsed=stats["hours_elapsed"],
+        )
     return cost + previous_eur

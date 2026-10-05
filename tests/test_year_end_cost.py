@@ -337,6 +337,28 @@ async def test_the_contract_end_is_measured_against_the_calendar_year(
         assert want in diag["contract_basis"]
 
 
+async def test_a_day_the_recorder_lost_shows_in_the_coverage(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Ten days of this year with no bucket are billed without their energy,
+    as current_year_cost bills them, and the year-end says so the way the
+    year to date does: days seen and priced against the days walked."""
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    snap = make_snapshot(energy=FixedRates(single=0.25))
+    entry = make_entry(consumption_kwh="sensor.cons")
+
+    def gapped(entity_id: str, day: date) -> float | None:
+        if date(2026, 2, 1) <= day <= date(2026, 2, 10):
+            return None
+        return _seasonal(entity_id, day)
+
+    got, diag = await _year_end(hass, entry, snap, gapped)
+    assert got is not None, diag
+    assert diag["days_elapsed"] == 365.0
+    assert diag["days_seen"] == 355.0
+    assert diag["days_priced"] == 355.0
+
+
 async def test_a_summer_surplus_is_spent_on_the_winter_after_it(
     hass: HomeAssistant, freezer: Any
 ) -> None:
