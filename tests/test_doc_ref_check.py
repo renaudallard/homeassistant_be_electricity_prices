@@ -120,6 +120,29 @@ def test_an_anchor_with_an_underscore_is_checked(
     assert out.count("MISSING") == 1
 
 
+def test_a_heading_is_slugged_the_way_github_slugs_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """GitHub turns each space into a hyphen once the punctuation is gone and
+    does not collapse the runs, so ``factor * monthly_mean(spot) + base`` is
+    ``factor--monthly_meanspot--base`` there. The check collapsed them, and
+    passed the EBEM doc's single-hyphen link while GitHub dropped the reader
+    at the top of the page. A repeated heading takes ``-1``."""
+    root = _tree(
+        tmp_path,
+        (
+            "guide.md",
+            "# Guide\n\n## Spot: `factor * mean(spot) + base`\n\n## Rows\n\n## Rows\n\n"
+            "See [ok](#spot-factor--meanspot--base), [again](#rows-1) "
+            "and [collapsed](#spot-factor-meanspot-base).\n",
+        ),
+    )
+    assert _run(monkeypatch, root) == 1
+    out = capsys.readouterr().out
+    assert "MISSING ANCHOR guide.md:9 #spot-factor-meanspot-base" in out
+    assert out.count("MISSING") == 1
+
+
 # A line pin after a file name, in the spellings the docs have used: a colon
 # and the number (after the closing backtick too), a GitHub #L anchor, the
 # word line or lines and the number, or the number in backticks of its own

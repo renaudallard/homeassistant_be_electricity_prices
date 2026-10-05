@@ -276,7 +276,7 @@ a year at 3.500 kWh against 64. So both contracts carry `month_indexed` and
 printed figure kept as the fallback for an entry with no ENTSO-E key. That blend
 is a FIT, not a settlement: no blend reproduces EBEM's published index and every
 one under-states it (see
-[../pricing-model.md](../pricing-model.md#spot-monthly-factor-monthly_meanspot-base)).
+[../pricing-model.md](../pricing-model.md#spot-monthly-factor--monthly_meanspot--base)).
 
 It is not what a CLOSED month is billed at. The card of the following month
 names what the month just closed settled at ("vorige maand bedroeg deze index

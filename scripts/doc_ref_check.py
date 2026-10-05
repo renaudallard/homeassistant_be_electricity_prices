@@ -17,9 +17,9 @@ rot:
      cross-link without backticks, so a renamed doc used to break every
      link into it while the check stayed green.
 
-Both fail the run, because both are provably wrong rather than a judgement
-call. A third thing is reported and never gated: a backticked symbol named
-beside a file, which is defined nowhere in the tree. Some of those are
+All three fail the run, because each is provably wrong rather than a
+judgement call. One more thing is reported and never gated: a backticked
+symbol named beside a file, which is defined nowhere in the tree. Some of those are
 renames the prose did not follow; most are prose words, Home Assistant's own
 names and service ids, and no rule separates them. Gating a count of those
 would put the docs back to needing an edit whenever they grow, which is what
@@ -127,14 +127,21 @@ def resolve_link(doc: Path, rel: str) -> Path | None:
 
 
 def anchors_of(path: Path) -> set[str]:
-    """Every heading in a markdown file, as GitHub slugs it."""
+    """Every heading in a markdown file, as GitHub slugs it: lowercased,
+    punctuation dropped, then each space a hyphen. Runs are not collapsed,
+    so ``a * b`` is ``a--b``, and a heading seen before gets ``-1``, ``-2``."""
     out: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
         found = HEADING.match(line)
         if not found:
             continue
-        text = re.sub(r"[^\w\s-]", "", found.group(1).replace("`", ""))
-        out.add(re.sub(r"\s+", "-", text.strip()).lower())
+        text = re.sub(r"[^\w\- ]", "", found.group(1).replace("`", "").lower())
+        slug = text.replace(" ", "-")
+        anchor, n = slug, 0
+        while anchor in out:
+            n += 1
+            anchor = f"{slug}-{n}"
+        out.add(anchor)
     return out
 
 
