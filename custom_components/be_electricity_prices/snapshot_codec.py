@@ -414,7 +414,17 @@ class _MigratingStore(Store[dict[str, Any]]):
 # formula and Impact bands, which its Dutch edition prints beside the same
 # monthly prices; the French card prints the professional ones. A v75 row
 # carries the professional formula and prices re-derived from it.
-_SNAPSHOT_SCHEMA_VERSION = 76
+# v77: a v76 row holds what several parsers no longer store. TotalEnergies'
+# October cards gain the feed-in leg of their separate injection card; Bolt's
+# variable cards are flagged quarter-indexed; Luminus BasicFlex is
+# month-indexed and its campaigns name their signing month; Mega's RLP index
+# is the column blend, Off-peak Impact's included, and a band the next card
+# leaves unread is priced from the others; OCTA+'s Walloon variable cards
+# carry their Impact bands. Closed months are settled on the following card
+# for Engie, Cociter and Eneco's feed-in, in place for Luminus, and on the
+# month's own card for Ecopower, whose Groene Burgerstroom energy is now
+# month-indexed; EnergyVision's past months read the upload sold that month.
+_SNAPSHOT_SCHEMA_VERSION = 77
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
