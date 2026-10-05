@@ -1727,8 +1727,8 @@ cards), Engie (the EPEXDAM cards), Mega (the Flex and Impact range) or Trevion
 (the monthly contracts) prints last month's index while it runs, and the
 supplier settles the month on the card after it. Ecopower's Groene
 Burgerstroom card is published once its month has closed and prints that
-month's settled feed-in index, which only the month lookup applies, since the
-live card stands in for the running month. A month the archive caught live on such a card is
+month's settled energy and feed-in indices, which only the month lookup
+applies, since the live card stands in for the running month. A month the archive caught live on such a card is
 therefore read from the supplier once it has closed, and billed on the
 archive's copy, re-asked daily, until that card is out; the daily run then
 replaces the archive's copy with the settled one. Luminus (MaxxFlex,
