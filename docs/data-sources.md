@@ -714,10 +714,10 @@ download.
 
 The workbook lists one column per DSO sub-area but only three curves are
 distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga); the same
-Fluvius curve appears eight times. Three suppliers read that sheet three ways,
-and each reproduces its OWN published values to the cent, so the blend is a
-parameter rather than a single rule (all three checked against the published
-2026 tables, January to August):
+Fluvius curve appears eight times. Suppliers read that sheet four ways, and
+each reproduces its OWN published values, so the blend is a parameter rather
+than a single rule (the first three checked to the cent against the published
+2026 tables, January to August, the fourth against Bolt's printed quarters):
 
 - `distinct` weights the three distinct curves equally. This is Eneco's
   Belpex-RLP-M; averaging the columns as printed instead weights Flanders eight
@@ -729,6 +729,11 @@ parameter rather than a single rule (all three checked against the published
 - `flanders` is the Fluvius curve alone, found by a column name starting
   "Fluvius". Energy Knights sells in Flanders only and bills the customer's own
   DSO; a sheet with no Fluvius column is refused rather than guessed.
+- `wallonia` is the Walloon DSOs' curve alone, found by a column name starting
+  "ORES". Bolt's variable cards print a quarterly index, "Belpex Q3 2026", that
+  this curve's quarter mean reproduces in every region, to 0,01 EUR/MWh at
+  quarter-hour resolution for all six indices of the third quarter; a sheet
+  with no ORES column is refused the same way.
 
 Two further choices, common to every blend, were settled the same way:
 
@@ -775,7 +780,7 @@ restart after an upgrade still has them. Removing the last entry deletes the
 store (`async_remove_profile_store`, called from `async_remove_entry`); removing
 any other leaves it for the entries still using it.
 
-Every blend comes out of one download. The three are reductions of the same
+Every blend comes out of one download. The four are reductions of the same
 sheet and the read is the expensive half (16 s against 2 s apiece on a Raspberry
 Pi 5 over the 2026 file), so `fetch_rlp_blends` groups the sheet into its
 distinct DSO curves once and combines them per blend, and the coordinator keeps
@@ -784,9 +789,9 @@ and persists all of them. The entry's own blend is its energy leg's
 RLP energy leg; that one is what every sensor beside it reads.
 
 The others exist for the compare page, which prices cards the household is not
-on. A card is billed on the index its own card names, and the three are
-different indices rather than one at three resolutions: on the August 2026
-Belgian day-ahead curve they stood at 133,44 (`distinct`), 134,93 (`columns`)
+on. A card is billed on the index its own card names, and the blends are
+different indices rather than one at several resolutions: on the August 2026
+Belgian day-ahead curve three of them stood at 133,44 (`distinct`), 134,93 (`columns`)
 and 135,66 (`flanders`) EUR/MWh, against a plain arithmetic mean of 129,32. All
 three sit in a single Flanders ranking, so reading the entry's own for every row
 priced most of them 2,2 EUR/MWh away from what they bill, which is enough to
