@@ -64,6 +64,39 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
+# How far a probe's restamp has to move the card's fetch time before the blob
+# is written for it alone. See _keep_written_stamp.
+_RESTAMP_WRITE_STEP = timedelta(days=1)
+
+
+def _keep_written_stamp(
+    snap: dict[str, Any], written: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The card to store, with the fetch time already on disk while only a
+    probe has moved it.
+
+    A probe that finds the card unchanged restamps it on every tick, which is
+    what keeps snapshot_age honest in memory. Written through, that one
+    timestamp made every blob differ from the last, so the whole of it, spots
+    and month cards included, was written again each hour on every supplier
+    with a probe. On disk the stamp only has to place the card within a day:
+    it seeds the age, the TTL and the stale check after a restart, and the
+    first probe after it restamps the card in memory again.
+    """
+    if written is None:
+        return snap
+    try:
+        moved = datetime.fromisoformat(snap["_cached_at"]) - datetime.fromisoformat(
+            written["_cached_at"]
+        )
+    except (KeyError, TypeError, ValueError):
+        return snap
+    if not timedelta(0) <= moved < _RESTAMP_WRITE_STEP:
+        return snap
+    if {**snap, "_cached_at": None} != {**written, "_cached_at": None}:
+        return snap
+    return {**snap, "_cached_at": written["_cached_at"]}
+
 
 class _PersistMixin:
     """Mixed into BePricesCoordinator."""
@@ -526,6 +559,12 @@ class _PersistMixin:
                 # Restored with the card, so a restart keeps saying where the
                 # figures came from until a readable card lands.
                 payload["snapshot"]["_read_by_ocr"] = True
+            payload["snapshot"] = _keep_written_stamp(
+                payload["snapshot"],
+                None
+                if self._saved_payload is None
+                else self._saved_payload.get("snapshot"),
+            )
         # Prune in memory (not just in the serialized copy) so a long-running
         # coordinator keeps a trailing year of hours and no more.
         self._prune_historical_spots()

@@ -5925,6 +5925,51 @@ async def test_a_tick_that_changed_nothing_writes_nothing(
     assert saved.await_count == 4
 
 
+async def test_a_probe_restamp_alone_does_not_rewrite_the_blob(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A probe that finds the card unchanged restamps its fetch time on every
+    tick, so the blob never compared equal to the one written before and the
+    whole of it, spots and month cards included, was written every hour on
+    every supplier with a probe. The restamp stays in memory and reaches the
+    disk once it has moved the stamp by a day."""
+    freezer.move_to("2026-10-04 10:00:00+00:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    snap = _fake_snapshot()
+
+    async def _probe(*_a: object, **_k: object) -> str:
+        return "same-card"
+
+    extractor = replace(
+        make_stub_extractor(fetch=AsyncMock(return_value=snap)), probe=_probe
+    )
+    saved = AsyncMock()
+    coord._store.async_save = saved  # type: ignore[method-assign]
+    coord._costs_store.async_save = AsyncMock()  # type: ignore[method-assign]
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        for hour in range(4):
+            freezer.move_to(f"2026-10-04 {10 + hour}:00:00+00:00")
+            await coord._maybe_refresh_snapshot()
+            await coord._save_persistent()
+        # Restamped in memory, so snapshot_age reads the last probe.
+        assert coord._snapshot_fetched_at == dt_util.utcnow()
+        assert saved.await_count == 1
+        written = saved.await_args_list[0].args[0]
+        assert written["snapshot"]["_cached_at"] == "2026-10-04T10:00:00+00:00"
+
+        freezer.move_to("2026-10-05 10:00:00+00:00")
+        await coord._maybe_refresh_snapshot()
+        await coord._save_persistent()
+    assert saved.await_count == 2
+    written = saved.await_args_list[1].args[0]
+    assert written["snapshot"]["_cached_at"] == "2026-10-05T10:00:00+00:00"
+
+
 def _mega_ristourne_card() -> SupplierSnapshot:
     return make_snapshot(
         supplier="mega",
