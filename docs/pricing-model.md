@@ -476,7 +476,8 @@ EPEXDAM formula per Flextime slot on the injection side as well, so its triplet
 carries `factor_peak` / `base_peak` and the two sibling pairs beside the printed
 figures, and `_bake_monthly_injection` bakes the three slots on the delivery
 month's mean while `_tou_injection_rate` resolves them the same way in the
-historical walks. The slot is chosen by the energy leg's weekend rule whichever
+historical walks, on either month flag (`month_indexed`, or `spp_indexed` for a
+triplet indexed on the month's Belpex_SPP), as the bake does. The slot is chosen by the energy leg's weekend rule whichever
 shape that leg took this tick: `_tou_weekend_rule` reads it off a
 `TimeOfUseRates` card or off the `SpotMonthlyRates` leg the card re-prices
 through, so a Flextime entry holding a key does not fall off the slot rate onto

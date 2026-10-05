@@ -894,6 +894,49 @@ def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
     )
 
 
+def test_an_spp_indexed_triplet_replays_on_the_month_like_the_live_bake() -> None:
+    """A per-slot feed-in indexed on the month's Belpex_SPP rather than its
+    plain mean is resolved on that mean by the live bake, so the year-to-date
+    walk must resolve it too instead of crediting the printed triplet."""
+    from dataclasses import replace
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _injection_on_month_mean,
+    )
+
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    assert snap.injection is not None
+    snap = replace(
+        snap,
+        injection=replace(snap.injection, month_indexed=False, spp_indexed=True),
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert _injection_on_month_mean(snap)
+    mean = 0.08
+    baked = _bake_monthly_injection(snap, mean).injection
+    assert baked is not None
+    tz = dt_util.DEFAULT_TIME_ZONE
+    for when, slot_rate in (
+        (datetime(2026, 4, 15, 19, tzinfo=tz), baked.peak),
+        (datetime(2026, 4, 15, 13, tzinfo=tz), baked.transition),
+        (datetime(2026, 4, 15, 3, tzinfo=tz), baked.offpeak),
+    ):
+        assert _historical_injection_rate(
+            inj, mean, energy=snap.energy, when=when
+        ) == pytest.approx(slot_rate)
+
+
 # ---- month archive (fetch_for_month) ------------------------------------------
 
 

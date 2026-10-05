@@ -318,12 +318,14 @@ def _tou_injection_rate(
     ``current``, which is the rate its card prints for it. A pair without
     the flag is not read at all, so no other supplier's credit changes.
 
-    ``month_mean`` is the delivery month's mean for a month-indexed triplet:
-    the slot's own coefficient pair is resolved against it, and the printed
-    slot rate is the answer without one. Only ever a MONTH mean, never an
-    hour's spot: the historical walks pass what ``_injection_on_month_mean``
-    says the credit settles on, and the live path passes nothing because the
-    coordinator has already baked the triplet for the tick.
+    ``month_mean`` is the delivery month's mean for a triplet indexed on one,
+    whether ``month_indexed`` or ``spp_indexed`` (the month's Belpex_SPP), as
+    the live bake reads it: the slot's own coefficient pair is resolved
+    against it, and the printed slot rate is the answer without one. Only
+    ever a MONTH mean, never an hour's spot: the historical walks pass what
+    ``_injection_on_month_mean`` says the credit settles on, and the live path
+    passes nothing because the coordinator has already baked the triplet for
+    the tick.
 
     Every rate it answers is clamped at the contract's floor here, the one
     place the live and historical credits both ask: a guaranteed minimum holds
@@ -340,7 +342,7 @@ def _tou_injection_rate(
             inj.offpeak if is_offpeak(when, region) else inj.peak, inj
         )
     slot = tou_slot(when, rule)
-    if month_mean is not None and inj.month_indexed:
+    if month_mean is not None and (inj.month_indexed or inj.spp_indexed):
         coefs = _slot_coefficients(inj)
         if coefs is not None:
             (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = coefs
