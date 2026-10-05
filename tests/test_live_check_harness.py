@@ -302,6 +302,28 @@ def test_failed_suppliers_reads_the_supplier_off_the_label() -> None:
     assert lc._failed_suppliers(checks) == frozenset({"ecofix", "totalenergies"})
 
 
+def test_an_allowed_failure_leaves_the_suppliers_drift_budgets_on() -> None:
+    """An expected row is never filed, so it is not the louder signal the
+    drift skip defers to. Counting it switched off Mega's budgets until its
+    card defect allowance ran out, and TotalEnergies' until 2027."""
+    checks = [
+        lc.Check(
+            "mega/mega_smart_flex/wallonia: fetch",
+            False,
+            f"{lc._ALLOWED_CARD_MARKER}: the URL serves another card",
+            expected=True,
+        ),
+        lc.Check("totalenergies/te_variable/flanders: fetch", False, "boom"),
+    ]
+    failed = lc._failed_suppliers(checks)
+    assert failed == frozenset({"totalenergies"})
+    metrics = {**_blown("mega"), **_blown("totalenergies")}
+    assert [key for key, _ in lc._drift_alerts(metrics, failed)] == [
+        "mega latency",
+        "mega bytes",
+    ]
+
+
 def test_failure_labels_carry_only_the_regressions(tmp_path: Path) -> None:
     """The workflow intersects this file across its retry attempts, so an
     unreadable card in it would intersect with itself and refile an issue

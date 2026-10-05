@@ -748,8 +748,10 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py`). The
-failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py`). Only a
+failure that gates CI counts: an expected one, an allowance or an unreadable card, is never filed,
+and counting it switched Mega's and TotalEnergies' budgets off for as long as an allowance on one
+of their cards ran. The failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
 attempt landed last. Issue #55 is the worked example: Ecofix rasterised its August 2026 cards, which

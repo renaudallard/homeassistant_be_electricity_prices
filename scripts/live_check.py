@@ -5472,12 +5472,19 @@ def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
 
 
 def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:
-    """Suppliers carrying at least one failed check.
+    """Suppliers carrying at least one failed check that gates CI.
 
     Labels are `<supplier>: <what>` or `<supplier>/<contract>[/<region>]:
     <what>`, so the supplier is whatever precedes the first separator.
+
+    An expected failure is left out: it is never filed, so it is not the
+    louder signal the drift skip defers to, and counting it switched off
+    Mega's and TotalEnergies' budgets for as long as an allowance on one of
+    their cards ran.
     """
-    return frozenset(_supplier_of(check.label) for check in checks if not check.ok)
+    return frozenset(
+        _supplier_of(check.label) for check in _extractor_regressions(checks)
+    )
 
 
 def _drift_warnings(
