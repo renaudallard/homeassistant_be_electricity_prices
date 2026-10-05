@@ -42,8 +42,10 @@ standing charge consistent, since a sensor that says "at today's tariffs" and
 then bills half the year off an archived card would contradict itself.
 
 What is refused is a leg carried as a FORMULA over an index nobody has yet:
-DynamicRates and SpotMonthlyRates. ENTSO-E publishes day-ahead only and there
-is no free forward curve, so those report no value and say why.
+DynamicRates, and SpotMonthlyRates unless the caller passes the running
+month's index, which the live coordinator does and which is then held for the
+year like any resolved rate. ENTSO-E publishes day-ahead only and there is no
+free forward curve, so a leg left without one reports no value and says why.
 
 The test is the shape the rate is stored in, not whether the product is called
 indexed. A Variable or Impact card is monthly-indexed in the market sense, but
@@ -51,9 +53,10 @@ its extractor has already RESOLVED this month's rate, and holding a resolved
 rate flat is the same assumption the whole sensor rests on. A contract start
 date can move a card across that line: the signing-cohort splice rewrites a
 Variable card with parsed coefficients into SpotMonthlyRates, which genuinely
-is a formula over a future index, so such an entry reports no value and the
-basis says the cohort re-price is why. An ENTSO-E key does the same on a
-month-indexed card without any start date, and the basis names the key then.
+is a formula over a future index, so such an entry holds the running month's
+index, or reports no value without one and the basis says the cohort re-price
+is why. An ENTSO-E key does the same on a month-indexed card without any start
+date, and the basis names the key then.
 """
 
 from __future__ import annotations

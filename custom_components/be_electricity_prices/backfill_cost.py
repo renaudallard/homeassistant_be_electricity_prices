@@ -203,15 +203,16 @@ async def _backfill_cost_sensor(
     end-of-day number, so the recorder can render the YTD bill as a
     growing line on the Energy dashboard / Statistics card.
 
-    Per-hour fee proration uses ``annual_for_this_month / hours_in_year``
-    (vs. the live ``days_in_ytd / days_in_year`` per-day proration);
-    the two converge at end-of-day, but the hourly variant gives a
-    smoother in-day curve. Per-month tariff archives are honoured the
-    same way as in the live path. So is a welcome credit: subtracted per
-    day off the signing month's card through the same ``_welcome_credit_eur``
-    the live walk calls, capped against the same three running components,
-    so the imported series and the sensor agree at the end of every day
-    rather than meeting at a step of everything credited so far.
+    Fees accrue per hour, each local day's ``annual / days_in_year`` share
+    spread evenly over that day's own hours (23 or 25 on the clock-change
+    days), so every day ends on the live ``days_in_ytd / days_in_year``
+    proration while the line still grows smoothly through it. Per-month
+    tariff archives are honoured the same way as in the live path. So is a
+    welcome credit: subtracted per day off the signing month's card through
+    the same ``_welcome_credit_eur`` the live walk calls, capped against the
+    same three running components, so the imported series and the sensor
+    agree at the end of every day rather than meeting at a step of everything
+    credited so far.
 
     ``current_year_cost`` is a cumulative ``TOTAL`` sensor that resets on
     Jan 1. ``hours`` MUST stay within a single calendar year, anchored at

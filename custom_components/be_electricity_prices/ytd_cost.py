@@ -30,8 +30,8 @@ that month's own archived card, and sums the energy, the standing charges, the
 capacity tariff, the prosumer forfait and the feed-in credit into the running
 bill the current_year_cost sensor publishes.
 
-The same figure is built by two other paths: backfill.py per hour and the
-options flow's compare quote, so a change here that is not mirrored there
+The same figure is built by two other paths: backfill_cost.py per hour and
+the options flow's compare quote, so a change here that is not mirrored there
 shows up as a seam, not an exception."""
 
 from __future__ import annotations
@@ -193,8 +193,9 @@ async def _compute_current_year_cost(
     walk against each month's DSO overlay. The running bill grows day
     by day instead of jumping to the full annual on Jan 1.
 
-    ``inj_m`` is each month's snapshot's ``injection.current`` (the
-    printed monthly indicative).
+    ``inj_m`` is the feed-in rate the month's own card credits each register
+    (:func:`injection._historical_injection_rate`): the printed indicative,
+    or a month-indexed formula resolved on that month's mean.
 
     **Time-of-Use contracts** (Engie Empower Flextime, Luminus
     SmartFlex) take a per-hour path: the recorder's hourly kWh deltas
@@ -217,10 +218,9 @@ async def _compute_current_year_cost(
     on the fees floor plus the grid and tax cost of every metered kWh
     rather than on fees alone.
 
-    Returns ``None`` only when there is no meter input wired at all
-    AND no snapshot to show fees against. In every other case the
-    function returns a number, falling back to the fees-only floor
-    rather than exposing ``unknown`` to the user.
+    Always returns a number: with no meter input wired, or none that can be
+    billed, it falls back to the fees-only floor rather than exposing
+    ``unknown`` to the user.
 
     The whole year is recomputed from scratch on every coordinator tick
     by design: today's cost grows each hour, and prior days are NOT safely
@@ -232,12 +232,11 @@ async def _compute_current_year_cost(
 
     ``breakdown`` is an optional diagnostic out-dict. When passed (only the
     live coordinator does; the compare / backfill callers leave it ``None``),
-    the static per-day branch records the YTD and today kWh totals, the
-    pre-clamp raw energy term and the fees floor into it, so the
+    every branch records the fees floor and its legs into it, and a branch
+    whose walk ran also the window's kWh and its coverage counters (hours on
+    the hourly branches, days and today's kWh on the per-day one), so the
     current_year_cost sensor can surface them as attributes. This piggybacks
     on the walk already happening here rather than reading the recorder twice.
-    It stays empty for the dynamic / spot-monthly / TOU (hourly) branches,
-    which don't produce daily kWh totals.
 
     ``cached_only`` prices every past month off whatever archived cards the
     process already holds, fetching none. Only the coordinator's FIRST tick

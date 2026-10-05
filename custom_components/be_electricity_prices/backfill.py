@@ -640,15 +640,16 @@ async def backfill_if_missing(
     """Run :func:`backfill_range` only when no statistics exist at Jan 1, or
     when a run that left days out is still to be retried.
 
-    Probe is intentionally narrow (one hour at the year anchor) so a
-    user who deletes their HA database mid-year still triggers a
-    fresh backfill on next restart, while the steady-state restart
-    path adds zero work. The probe finds the rows a run that left days out
-    did write, so the retry is kept in the coordinator's store
-    (``_backfill_retry_from``) rather than only in the task waiting for it,
-    which a restart or a reload cancels. It runs until those days are
-    written: the live sensor prices them on their own cards again once those
-    can be read, and a stand-in written here would stay in the recorder.
+    Probe is intentionally narrow (the two days from the year anchor,
+    :func:`backfill_window._existing_stat_window`) so a user who deletes
+    their HA database mid-year still triggers a fresh backfill on next
+    restart, while the steady-state restart path adds zero work. The probe
+    finds the rows a run that left days out did write, so the retry is kept
+    in the coordinator's store (``_backfill_retry_from``) rather than only in
+    the task waiting for it, which a restart or a reload cancels. It runs
+    until those days are written: the live sensor prices them on their own
+    cards again once those can be read, and a stand-in written here would stay
+    in the recorder.
 
     Tolerates entry removal mid-flight: this runs as a fire-and-forget
     background task, and the user can delete the entry between scheduling
