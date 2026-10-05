@@ -408,25 +408,47 @@ async def _query_rows(
     return rows
 
 
-def _reset_since(state: State, midnight: datetime) -> bool:
-    """Did this meter start a new cycle after ``midnight``?
+def _last_reset(attributes: Any) -> datetime | None:
+    """The ``last_reset`` a meter published, in UTC, or ``None``.
 
     ``last_reset`` is what a cycling meter publishes to say "my total went
     back to zero at this instant", and it is the only signal that survives
     both state classes: HA's ``utility_meter`` reports ``TOTAL`` when
     ``net_consumption`` is set and ``TOTAL_INCREASING`` otherwise, and cycles
-    either way. Anything unparseable reads as "no reset", which keeps the
-    caller on the plain delta.
+    either way. Anything unparseable reads as no reset.
     """
-    raw = state.attributes.get(ATTR_LAST_RESET)
+    raw = attributes.get(ATTR_LAST_RESET) if attributes else None
     if raw is None:
-        return False
+        return None
     parsed = raw if isinstance(raw, datetime) else dt_util.parse_datetime(str(raw))
     if parsed is None:
-        return False
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return parsed >= midnight
+    return parsed
+
+
+def _cycled_by_reset(
+    readings: list[tuple[float, datetime | None]], midnight: datetime
+) -> float:
+    """What a meter that publishes ``last_reset`` counted over ``readings``.
+
+    Home Assistant's statistics start a new cycle from zero on every change of
+    ``last_reset`` (sensor/recorder.py), and the cycle it ends keeps what it
+    counted up to its last reading. Only a reset after ``midnight`` starts a
+    cycle here: the one in force at midnight is the opening reading's, whatever
+    the rows carry. The first reading is the opening one.
+    """
+    start = prev = readings[0][0]
+    cycle: datetime | None = None
+    total = 0.0
+    for value, reset in readings[1:]:
+        if reset is not None and reset >= midnight and reset != cycle:
+            total += prev - start
+            start = 0.0
+            cycle = reset
+        prev = value
+    return total + prev - start
 
 
 def _cycled_total(readings: list[float]) -> float:
@@ -467,14 +489,14 @@ async def _live_today_kwh(
 
     A ``total_increasing`` meter is walked through today's states the way
     Home Assistant's statistics walk them (:func:`_cycled_total`): a reading
-    below 0.9 x the one before it is a reset, a smaller fall a dip. Any other
-    meter reads ``current - midnight``, and a fall below the midnight reading
-    is a reset only when the meter says so (``last_reset``). A day that nets
-    below zero reads as zero, the same answer the past days get:
-    :func:`_recorder_deltas` drops a negative ``change``, because a sum-chain
-    restart looks exactly like one. A register netting export against
-    consumption is therefore not supported, and today must not bill it signed
-    only to have midnight take the figure back.
+    below 0.9 x the one before it is a reset, a smaller fall a dip. A meter
+    publishing ``last_reset`` is walked on it (:func:`_cycled_by_reset`), each
+    cycle started today counted from zero. Any other meter reads ``current -
+    midnight``. A day that nets below zero reads as zero, the same answer the
+    past days get: :func:`_recorder_deltas` drops a negative ``change``,
+    because a sum-chain restart looks exactly like one. A register netting
+    export against consumption is therefore not supported, and today must not
+    bill it signed only to have midnight take the figure back.
 
     Served from the memo inside a ``memoise_meter_reads`` block, keyed on the
     meter and the day: the walk reads every state since midnight, and the
@@ -515,9 +537,16 @@ async def _read_live_today_kwh(
         )
     except ImportError:
         return None
+    # A meter publishing ``last_reset`` (a utility_meter with net_consumption
+    # reports state_class TOTAL, not TOTAL_INCREASING, and still cycles) is
+    # walked on it, which takes each row's attributes. Any other meter keeps
+    # the minimal response, which leaves the rows after the first one light.
+    cycling = (
+        state_class != SensorStateClass.TOTAL_INCREASING
+        and _last_reset(state.attributes) is not None
+    )
     # The whole day, not only the midnight reading: a reset is judged against
     # the reading before it, so it can only be found by walking the states.
-    # The minimal response keeps the rows after the first one light.
     try:
         history = await get_instance(hass).async_add_executor_job(
             partial(
@@ -528,8 +557,8 @@ async def _read_live_today_kwh(
                 [entity_id],
                 include_start_time_state=True,
                 significant_changes_only=False,
-                minimal_response=True,
-                no_attributes=True,
+                minimal_response=not cycling,
+                no_attributes=not cycling,
             )
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
@@ -542,47 +571,41 @@ async def _read_live_today_kwh(
         opening = float(rows[0].state)
     except (TypeError, ValueError):
         return None
-    delta = current - opening
+    readings = [(opening, _last_reset(rows[0].attributes))]
+    for row in rows[1:]:
+        raw: Any = row.state if isinstance(row, State) else row.get("state")
+        attributes: Any = row.attributes if isinstance(row, State) else None
+        try:
+            readings.append((float(str(raw)), _last_reset(attributes)))
+        except ValueError:
+            continue
+    readings.append((current, _last_reset(state.attributes)))
     if state_class == SensorStateClass.TOTAL_INCREASING:
         # Walked state by state as the statistics walk it, so a reset that
         # climbed back to within 10% of the midnight reading, or past it, reads
         # today what it reads after midnight. Comparing the current reading
         # with the midnight one alone read the first as a dip and the second
         # as the difference. The class promises the meter cannot fall, so only
-        # this class is walked for resets.
+        # this class is walked for falls.
         #
         # A ``total`` register that nets injection against consumption (a
         # utility_meter with net_consumption, a bidirectional meter) can be
         # wired, since the picker accepts any device_class=energy sensor, and
         # it falls whenever the site exports more than it draws. Walking it for
-        # resets would bill its whole lifetime total as one day.
-        readings = [opening]
-        for row in rows[1:]:
-            raw = row.state if isinstance(row, State) else row.get("state")
-            try:
-                readings.append(float(str(raw)))
-            except ValueError:
-                continue
-        readings.append(current)
-        # A day that nets below zero reads as zero, as the past days drop a
-        # negative change.
-        delta = max(_cycled_total(readings), 0.0)
-    elif delta < 0.0 and _reset_since(state, midnight):
-        # The meter published a ``last_reset`` later than local midnight, so
-        # it started a new cycle today and everything it has counted since is
-        # today's consumption. This is the signal that actually generalises:
-        # a utility_meter with net_consumption reports state_class TOTAL, not
-        # TOTAL_INCREASING (HA returns one or the other on exactly that
-        # option), and it still cycles. Gating on the class alone read its
-        # monthly rollover as a genuine fall and returned minus the whole
-        # previous cycle as today's kWh. A net_consumption cycle can itself
-        # stand below zero after a day of export, and that reads as zero like
-        # any other fall.
-        delta = max(current, 0.0)
-    elif delta < 0.0:
-        # Any other fall, a dip included, is what the past days drop, so today
-        # drops it too.
-        delta = 0.0
+        # falls would bill its whole lifetime total as one day.
+        delta = _cycled_total([value for value, _ in readings])
+    elif cycling:
+        # Each cycle that started today counts from zero, as the statistics
+        # count it. Comparing the current reading with the midnight one read a
+        # daily cycle that had passed yesterday's total as the difference, and
+        # a cycle shorter than a day as its last one alone.
+        delta = _cycled_by_reset(readings, midnight)
+    else:
+        delta = current - opening
+    # A day that nets below zero reads as zero, a dip included, as the past
+    # days drop a negative change. A net_consumption cycle can stand below
+    # zero after a day of export.
+    delta = max(delta, 0.0)
     if unit == UnitOfEnergy.KILO_WATT_HOUR:
         return delta
     try:

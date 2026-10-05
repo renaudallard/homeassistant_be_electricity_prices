@@ -4877,6 +4877,83 @@ async def test_live_today_kwh_ignores_a_stale_last_reset(
     assert kwh == 0.0
 
 
+def _cycle_attrs(last_reset: str) -> dict[str, str]:
+    return {
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "state_class": "total",
+        "last_reset": last_reset,
+    }
+
+
+async def test_live_today_kwh_counts_a_daily_cycle_past_yesterdays_total(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A daily utility_meter resets a moment after midnight, so the reading
+    in force at midnight is yesterday's closing total. Once today's count
+    passes it, current minus that reading lost yesterday's whole total; the
+    statistics count the new cycle from zero, and so does today."""
+    freezer.move_to("2026-08-16 20:00:00+02:00")
+    today = "2026-08-16T00:00:00.200000+02:00"
+    hass.states.async_set("sensor.meter", "11.0", _cycle_attrs(today))
+    history = {
+        "sensor.meter": [
+            State("sensor.meter", "10.0", _cycle_attrs("2026-08-15T00:00:00+02:00")),
+            State("sensor.meter", "0.0", _cycle_attrs(today)),
+            State("sensor.meter", "5.0", _cycle_attrs(today)),
+        ]
+    }
+    inst = _midnight_instance(history)
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 16))
+    assert kwh == pytest.approx(11.0)
+    # The rows' attributes are what tell the cycles apart, so they are read.
+    read = inst.async_add_executor_job.await_args.args[0]
+    assert read.keywords["no_attributes"] is False
+    assert read.keywords["minimal_response"] is False
+
+
+async def test_live_today_kwh_sums_the_cycles_of_an_hourly_meter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A meter cycling every hour reads every cycle completed today, not the
+    running one alone."""
+    freezer.move_to("2026-08-16 02:30:00+02:00")
+    hours = [f"2026-08-16T0{h}:00:00+02:00" for h in range(3)]
+    hass.states.async_set("sensor.meter", "0.2", _cycle_attrs(hours[2]))
+    history = {
+        "sensor.meter": [
+            State("sensor.meter", "0.4", _cycle_attrs("2026-08-15T23:00:00+02:00")),
+            State("sensor.meter", "0.0", _cycle_attrs(hours[0])),
+            State("sensor.meter", "0.3", _cycle_attrs(hours[0])),
+            State("sensor.meter", "0.5", _cycle_attrs(hours[0])),
+            State("sensor.meter", "0.1", _cycle_attrs(hours[1])),
+            State("sensor.meter", "0.6", _cycle_attrs(hours[1])),
+            State("sensor.meter", "0.0", _cycle_attrs(hours[2])),
+        ]
+    }
+    inst = _midnight_instance(history)
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 16))
+    # 0.5 + 0.6 + 0.2: what each cycle counted from zero.
+    assert kwh == pytest.approx(1.3)
+
+
+async def test_live_today_kwh_reads_a_plain_meter_without_attributes(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A meter publishing no last_reset keeps the light read."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "105.0", _meter_attrs("kWh"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh == pytest.approx(5.0)
+    read = inst.async_add_executor_job.await_args.args[0]
+    assert read.keywords["no_attributes"] is True
+    assert read.keywords["minimal_response"] is True
+
+
 async def test_top_up_today_hourly_adds_the_uncompiled_remainder(
     hass: HomeAssistant, freezer: Any
 ) -> None:
