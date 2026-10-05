@@ -98,21 +98,23 @@ class Contract:
     # ``test_every_month_indexed_card_can_collect_a_key`` pins the agreement.
     spot_indexed_injection: bool = False
     # True when this (non-spot-priced) product's ENERGY is indexed on the
-    # delivery month's mean and its card prints last month's figure: Cociter
-    # Variable and Trihoraire, Ecopower Groene Burgerstroom (whose card is
-    # published once its month is over), EBEM Groen Variabel and B@sic+,
-    # Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+
-    # Smart Variable / Flux / Eco Flux / Boost Flex / Eco Boost Flex / Basic
-    # Online, Eneco Flex and Flex One, TotalEnergies's five BELPEXM_RLP
-    # variable cards, and every Mega Flex plus Off-peak Impact, whose cards
-    # name the settled month outright ("pour le mois de <MONTH>"). The
-    # re-price needs ENTSO-E spots the kind never collects a key for, so the
-    # config flow offers the optional key step on EVERY solar regime,
-    # not only the injection one the flag above serves. Same registry-versus-
-    # parser agreement as that flag: the live check holds each fetched card's
-    # ``month_indexed`` against it, since a flag set here with no formula
-    # parsed offers a key nothing resolves, and a formula parsed with no flag
-    # here is a re-price no flow step can ever switch on.
+    # delivery month's mean and its card prints last month's figure: Aspiravi
+    # Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene
+    # Burgerstroom (whose card is published once its month is over), EBEM
+    # Groen Variabel and B@sic+, Engie's EPEXDAM cards, Luminus MaxxFlex,
+    # SmartFlex and BasicFlex, OCTA+ Smart Variable / Flux / Eco Flux / Boost
+    # Flex / Eco Boost Flex / Basic Online, Eneco Flex and Flex One,
+    # TotalEnergies's five BELPEXM_RLP variable cards, and every Mega Flex plus
+    # Off-peak Impact, whose cards name the settled month outright ("pour le
+    # mois de <MONTH>"). Bolt's variable cards are the same on the delivery
+    # quarter. The re-price needs ENTSO-E spots the kind never collects a key
+    # for, so the config flow offers the optional key step on EVERY solar
+    # regime, not only the injection one the flag above serves. Same
+    # registry-versus-parser agreement as that flag: the live check holds each
+    # fetched card's ``month_indexed`` (or ``quarter_indexed``) against it,
+    # since a flag set here with no formula parsed offers a key nothing
+    # resolves, and a formula parsed with no flag here is a re-price no flow
+    # step can ever switch on.
     month_indexed_energy: bool = False
     # True when the supplier lets the customer settle this product on the
     # 15-minute grid instead of the hourly one, and the card says so. Frank

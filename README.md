@@ -475,7 +475,7 @@ different, as long as the edit keeps the same supplier, contract and region
    Online, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
    myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
-   card — and on
+   card, and Bolt's variable cards on the delivery quarter's mean — and on
    the injection regime for a contract whose injection is itself
    index-linked, which is most static cards and not the handful it once was
    — every Bolt card and both Cociter variable cards index it per hour, while
