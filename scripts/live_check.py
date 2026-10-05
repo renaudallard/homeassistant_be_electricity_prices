@@ -4568,7 +4568,11 @@ def _expect_month_indexed_registry(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or energy is None:
         return
-    parsed = bool(getattr(energy, "month_indexed", False))
+    # Bolt's variable cards are quarter indexed, which the re-price reads as
+    # it reads month_indexed.
+    parsed = bool(getattr(energy, "month_indexed", False)) or bool(
+        getattr(energy, "quarter_indexed", False)
+    )
     flagged = bool(getattr(contract, "month_indexed_energy", False))
     _expect(
         f"{prefix}: month-indexed energy matches the registry flag",

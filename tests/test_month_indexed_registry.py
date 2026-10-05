@@ -377,7 +377,10 @@ def test_registry_flag_matches_what_the_card_parses(
     supplier: str, contract_id: str, parse: Callable[[], SupplierSnapshot]
 ) -> None:
     contract = next(c for c in EXTRACTORS[supplier].contracts if c.id == contract_id)
-    parsed = bool(getattr(parse().energy, "month_indexed", False))
+    energy = parse().energy
+    parsed = bool(getattr(energy, "month_indexed", False)) or bool(
+        getattr(energy, "quarter_indexed", False)
+    )
     assert parsed == contract.month_indexed_energy, (
         f"{contract_id}: card parses month_indexed={parsed}, "
         f"registry says {contract.month_indexed_energy}"

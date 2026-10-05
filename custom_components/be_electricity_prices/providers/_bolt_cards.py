@@ -285,7 +285,10 @@ def _extract_energy(
             impact_pic=bands.get("pic"),
             impact_medium=bands.get("medium"),
             impact_eco=bands.get("eco"),
-            month_indexed=bool(quarterly),
+            # Quarter indexed and NOT month indexed: a version that predates
+            # the quarter flag reads month_indexed alone and would re-price
+            # the card on one month mean with no per-register spread, so it
+            # keeps billing the printed rates instead.
             quarter_indexed=bool(quarterly),
             rlp_indexed=bool(quarterly),
             rlp_blend="wallonia",

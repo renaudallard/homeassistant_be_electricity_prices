@@ -480,6 +480,10 @@ def _month_indexed_leg(
     formula each, and its September 2026 card printed August's index too, so
     it takes the same leg with the bands in place of the mono pair.
 
+    Bolt's variable cards are the same on the delivery quarter and carry
+    ``quarter_indexed`` instead, leaving ``month_indexed`` False so a version
+    that predates the quarter flag keeps billing their printed rates.
+
     Returns ``None`` without an ENTSO-E key, which keeps the printed
     indicative: the key is offered as optional to every contract flagged
     ``month_indexed_energy`` in the registry, and an entry that skipped it is
@@ -489,7 +493,7 @@ def _month_indexed_leg(
     energy = snapshot.energy
     if not isinstance(energy, (VariableRates, TimeOfUseRates, ImpactRates)):
         return None
-    if not energy.month_indexed:
+    if not (energy.month_indexed or getattr(energy, "quarter_indexed", False)):
         return None
     if not entry.data.get(CONF_API_KEY):
         return None

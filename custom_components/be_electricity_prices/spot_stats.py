@@ -526,7 +526,9 @@ def _energy_is_rlp_indexed(energy: EnergyRates | None) -> bool:
     a month-indexed variable or Impact card that names one, or the
     SpotMonthlyRates leg it is re-priced through. What decides whether the
     Synergrid RLP profile is worth fetching for an entry."""
-    if isinstance(energy, (VariableRates, ImpactRates)):
+    if isinstance(energy, VariableRates):
+        return (energy.month_indexed or energy.quarter_indexed) and energy.rlp_indexed
+    if isinstance(energy, ImpactRates):
         return energy.month_indexed and energy.rlp_indexed
     if isinstance(energy, SpotMonthlyRates):
         return energy.rlp_indexed

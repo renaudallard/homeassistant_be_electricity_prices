@@ -442,10 +442,20 @@ def _card_caveats(snapshot: Any, label: str, *, read_by_ocr: bool = False) -> li
     # by design, since an alternative has no signing history to price at. The
     # refreshed leg comes back as SpotMonthlyRates and so carries no
     # month_indexed flag, which is what keeps this off a side that did get it.
-    if getattr(getattr(snapshot, "energy", None), "month_indexed", False):
+    # Bolt's variable card is the same on the quarter, and its refreshed leg
+    # keeps quarter_indexed, so that one is asked of the card's own kind.
+    from .providers._rates import VariableRates
+
+    energy = getattr(snapshot, "energy", None)
+    if getattr(energy, "month_indexed", False):
         out.append(
             f"{label}'s rate is the one printed on its card, computed on last "
             "month's index"
+        )
+    elif isinstance(energy, VariableRates) and energy.quarter_indexed:
+        out.append(
+            f"{label}'s rate is the one printed on its card, computed on last "
+            "quarter's index"
         )
     taxes = getattr(snapshot, "taxes", None)
     if taxes is not None and getattr(taxes, "region_connection_fee_unavailable", False):

@@ -1545,7 +1545,7 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     )
     energy = snap.energy
     assert isinstance(energy, VariableRates)
-    assert energy.month_indexed and energy.quarter_indexed and energy.rlp_indexed
+    assert energy.quarter_indexed and energy.rlp_indexed
     assert energy.rlp_blend == "wallonia"
     assert _month_indexed_leg(snap, SimpleNamespace(data={})) is None  # type: ignore[arg-type]
     leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
@@ -1582,6 +1582,56 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     assert rate(19, "bi", "bi_horaire", "flanders") == pytest.approx(
         energy.peak, abs=5e-5
     )
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture"),
+    [
+        ("bolt_variable", "bolt_variable.pdf"),
+        ("bolt_variable", "bolt_variable_impact_w.pdf"),
+        ("bolt_online", "bolt_online_oct.pdf"),
+        ("bolt_pro_variable", "bolt_pro_variable.pdf"),
+    ],
+)
+def test_a_variable_card_is_quarter_indexed_and_not_month_indexed(
+    contract: str, fixture: str
+) -> None:
+    """A version that predates the quarter flag drops it from a stored card
+    and reads month_indexed alone. Had the card set that too, such a version
+    re-priced it on one month's plain mean with no per-register spread and the
+    Impact bands in every configuration, 1 to 5 c/kWh off the printed rates.
+    So the card stores quarter_indexed only, and every reader that re-prices,
+    loads the RLP profile or warns about a stale index takes that flag as it
+    takes month_indexed."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.compare_table import _card_caveats
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _energy_to_dict,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _energy_is_rlp_indexed,
+    )
+
+    region = "wallonia" if "impact" in fixture else "flanders"
+    snap = parse_snapshot(contract, fixture_text(fixture, layout=True), region)
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.quarter_indexed and not energy.month_indexed
+    assert not _energy_to_dict(energy).get("month_indexed")
+    assert _energy_is_rlp_indexed(energy)
+    leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates) and leg.quarter_indexed
+    assert _card_caveats(snap, "Bolt") == [
+        "Bolt's rate is the one printed on its card, computed on last quarter's index"
+    ]
+    assert _card_caveats(replace(snap, energy=leg), "Bolt") == []
 
 
 def test_the_live_tick_bills_the_running_quarter_to_date() -> None:

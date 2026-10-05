@@ -786,8 +786,11 @@ The engine's spot cache is hourly, which leaves 139,14 against the printed 139,3
 quarter and 100,00 against 100,09 for the second, 0,03 and 0,01 c/kWh.
 
 `_extract_energy` (`_bolt_cards.py`) marks a variable card that prints the table
-`month_indexed`, `quarter_indexed` and `rlp_indexed` on that blend, and the registry flags the
-variable contracts `month_indexed_energy`, so the flow offers the ENTSO-E key. With a key,
+`quarter_indexed` and `rlp_indexed` on that blend, and the registry flags the variable contracts
+`month_indexed_energy`, so the flow offers the ENTSO-E key. The card leaves `month_indexed`
+False: a version that predates `quarter_indexed` reads that flag alone and would re-price the
+card on one month's mean with no per-register spread and the Impact bands in every
+configuration, so it keeps billing the printed rates instead. With a key,
 `_quarter_leg` (`cohort_legs.py`) builds the monthly leg: the formula on the mono index, and each
 register and band on the same formula with the spread the card prints between its index and the
 mono one, read as its printed rate less the printed mono rate. `_energy_month_spot`

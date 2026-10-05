@@ -232,14 +232,16 @@ class VariableRates:
     # weighted by Synergrid's residential load profile. The coordinator then
     # resolves the coefficients against that weighted mean, which sits 3 to 6
     # percent above the plain mean on the 2026 months because households draw
-    # in the expensive hours. Meaningful only with ``month_indexed``.
+    # in the expensive hours. Meaningful only with ``month_indexed`` or
+    # ``quarter_indexed``.
     rlp_indexed: bool = False
     # Which DSO blend of the RLP profile the weighting uses (see ``RlpBlend``).
     # Only read when ``rlp_indexed``; the default is Eneco's distinct-curve mean.
     rlp_blend: RlpBlend = "distinct"
     # True when the index is the delivery QUARTER's rather than the month's:
     # Bolt prints "Belpex Q3 2026" and settles the quarter on its RLP-weighted
-    # mean. Meaningful only with ``month_indexed``, which the re-price keys on.
+    # mean. The re-price keys on it as on ``month_indexed``, which such a card
+    # leaves False so a version without this flag bills the printed rates.
     quarter_indexed: bool = False
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak

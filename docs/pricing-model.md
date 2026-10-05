@@ -423,7 +423,10 @@ to the 7th ran at 136,24, which moves PIC from 19,0079 to 19,7414 c/kWh.
 Bolt's variable cards index on the QUARTER: the October 2026 card prints its
 rates at "Belpex Q3 2026", the RLP-weighted mean of the Walloon DSOs' curve, one
 index per meter register and CWaPE band, and bills the quarter it delivers in.
-`VariableRates.quarter_indexed` marks them, `_quarter_leg` (`cohort_legs.py`)
+`VariableRates.quarter_indexed` marks them, and `_month_indexed_leg` re-prices
+on it as on `month_indexed`, which these cards leave False: a version that
+predates the quarter flag then keeps billing the printed rates rather than one
+month's mean with no per-register spread. `_quarter_leg` (`cohort_legs.py`)
 carries each register's spread from the mono index on its base, and
 `_energy_month_spot` resolves the leg on the quarter's mean, quarter to date
 while it runs. See [providers/bolt.md](providers/bolt.md#quarterly-index).
