@@ -455,7 +455,11 @@ window it is accumulating over.
 One consequence worth knowing: under the **compensation regime** the month is
 netted as its own window, per register and clamped at zero, so twelve monthly
 figures do not add up to `current_year_cost` on such an entry. On every other
-regime they do. The annual netting is what the supplier actually settles, so
+regime they do, but for a percentage welcome credit
+(`welcome_credit_pct_of_energy`): each window takes it on the energy rate it
+billed, a mean weighted by that window's own consumption, so on a card whose
+rate moves month to month the months' credits and the year's differ by around
+a euro. The annual netting is what the supplier actually settles, so
 the yearly sensor stays the authority and the monthly one answers "what did
 this month cost, on its own".
 
