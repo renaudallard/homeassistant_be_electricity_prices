@@ -470,7 +470,7 @@ different, as long as the edit keeps the same supplier, contract and region
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Aspiravi Eco Plus
-   Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
+   Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
    OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic
    Online, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
@@ -633,8 +633,8 @@ card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
 other static cards), 74 contracts across 15 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
-Eco Plus Flex, Cociter Variable and Trihoraire, Engie's EPEXDAM cards,
-Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost
+Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
+Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost
 Flex and Basic Online, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, TotalEnergies Electricité Variable,
 Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
@@ -702,7 +702,7 @@ opens a menu of four options, five once a supplier switch has been recorded this
   **Each row is priced on the index its own card names.** Several Flemish cards
   settle on a monthly Belpex weighted by the residential load profile, and they
   do not all weight it the same way: Eneco averages the three regional curves,
-  energie.be weights every DSO column, Energy Knights and Trevion read the
+  energie.be and Ecopower weight every DSO column, Energy Knights and Trevion read the
   Flemish curve alone. Those are three different indices, about 2 €/MWh apart,
   and all three can sit in one table, so the ranking resolves each card against
   its own rather than against yours.

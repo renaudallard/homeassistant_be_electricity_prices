@@ -450,8 +450,9 @@ kind has no key step of its own (dynamic or spot-monthly energy collects one on
 
 1. `_contract_is_month_indexed(supplier, contract)` is true: the contract's ENERGY
    is indexed on the delivery month's mean and its card prints last month's figure
-   (`Contract.month_indexed_energy`: Cociter Variable and Trihoraire, Engie's
-   EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Flux,
+   (`Contract.month_indexed_energy`: Cociter Variable and Trihoraire, Ecopower
+   Groene Burgerstroom, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and
+   BasicFlex, OCTA+ Smart Variable, Flux,
    Eco Flux, Boost Flex, Eco Boost Flex and Basic Online, Eneco Flex and Flex One, EBEM Groen Variabel and B@sic+, and every
    Mega Flex plus Off-peak Impact, whose cards name the settled month outright). Offered on EVERY solar regime, since the key
    is what lets `_month_indexed_leg` bill the running month on its own mean; or

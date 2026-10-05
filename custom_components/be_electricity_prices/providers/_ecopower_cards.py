@@ -32,8 +32,8 @@ fixed-price note. The grid and levy overlays live in
 ``_ecopower_overlays.py``; ``ecopower.py`` keeps the URL resolution, the
 archive and the two ``parse_*`` entry points, which call into both.
 
-No behaviour change: every function here is byte-identical to the one it
-replaced.
+The split itself changed no behaviour; the energy formula and the printed
+indices were read here later.
 """
 
 from __future__ import annotations
@@ -53,6 +53,8 @@ from .base import ExtractorError
 # Dutch month names for archive_validity_check; the helper indexes into
 # this tuple as month_names[year_month.month - 1].
 _NL_MONTHS = NL_MONTHS
+_NL_MONTH_INDEX = {name: i + 1 for i, name in enumerate(_NL_MONTHS)}
+_MONTH_ALT = "|".join(_NL_MONTHS)
 
 
 # ---- energy ------------------------------------------------------------------
@@ -99,15 +101,72 @@ _ENERGY_VARIABEL_RE = re.compile(
 )
 
 
-def _extract_energy(text: str) -> EnergyRates:
-    """Parse the "Groene burgerstroom" effective rate (HTVA, EUR/kWh).
+# The formula behind that rate: a fixed share at a fixed price and a variable
+# share at the month's RLP-weighted EPEX mean, in EUR/kWh before VAT.
+#   <= Jun 2026: "(50% vast aan 0,17 euro + 50% variabel aan 0,09810780 1 euro)"
+#   >= Jul 2026: "VAST 50% x 0,17 euro" / "VARIABEL +50% x 0,11444616 euro
+#                 deze waarde is gelijk aan [EPEX RLP 1]."
+# The second figure on each is the index the card resolved the rate at. The
+# RLP on the VARIABEL row keeps the feed-in rows, which print SPP, out.
+_ENERGY_FORMULA_RES = (
+    re.compile(
+        r"\(\s*(\d+)\s*%\s*vast\s+aan\s+([\d,]+)\s*euro\s*\+\s*"
+        r"(\d+)\s*%\s*variabel\s+aan\s+([\d,]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
+        r"\s*VARIABEL\s*\+?\s*(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*RLP",
+        re.IGNORECASE,
+    ),
+)
+# Footnote 1, naming the month the printed index is for. A card resolved on
+# an estimate says so instead ("Dit is de inschatting die de VNR ...").
+_RLP_MONTH_RE = re.compile(
+    rf"werkelijke\s+RLP\s+gewogen\s+gemiddelde[^\n]*?voor\s+de\s+maand\s+"
+    rf"({_MONTH_ALT})",
+    re.IGNORECASE,
+)
 
-    The card prints the formula breakdown
-    ``(50% vast aan 0,17 euro + 50% variabel aan 0,08472117 euro)``
-    followed by the resolved ``0,1274 euro/kWh`` figure. We use the
-    resolved number because (a) we don't have a Belpex feed at parse
-    time, and (b) supporting Ecopower's variable cost without a live
-    spot is exactly what ``VariableRates`` is for.
+
+def _energy_formula(text: str) -> tuple[float, float, float] | None:
+    """``(factor, base, printed index)`` of the card's formula, or None."""
+    for pattern in _ENERGY_FORMULA_RES:
+        match = pattern.search(text)
+        if match is not None:
+            vast, fixed, variabel, index = match.groups()
+            return (
+                to_float(variabel) / 100.0,
+                to_float(vast) / 100.0 * to_float(fixed),
+                to_float(index),
+            )
+    return None
+
+
+def printed_rlp_index(text: str) -> tuple[int, float] | None:
+    """``(month, EUR/kWh)`` of the settled RLP index the card prints, or None
+    when the card does not say the figure is a month's settled value."""
+    formula = _energy_formula(text)
+    month = _RLP_MONTH_RE.search(text)
+    if formula is None or month is None:
+        return None
+    return _NL_MONTH_INDEX[month.group(1).lower()], formula[2]
+
+
+def _extract_energy(text: str) -> EnergyRates:
+    """Parse the "Groene burgerstroom" rate (HTVA, EUR/kWh) and its formula.
+
+    The card prints ``50% x 0,17 + 50% x <index>`` and the rate it resolves
+    to, where the index is the RLP-weighted EPEX mean of the card's own
+    month. Ecopower publishes a definitive card only once that month has
+    ended, so the card served while a month runs is last month's, and its
+    rate is last month's settled one. The formula is therefore carried
+    ``month_indexed``, so the running month resolves against its own mean
+    and the printed rate is the fallback for an entry without a key.
+
+    The index is RLP-weighted on the "columns" blend: over July to September
+    2026 it reproduces the printed values to within 0,3 EUR/MWh, where the
+    Flemish curve alone runs 0,5 above and the distinct-curve mean 2 below.
     """
     match = (
         _ENERGY_RE.search(text)
@@ -116,7 +175,19 @@ def _extract_energy(text: str) -> EnergyRates:
     )
     if not match:
         raise ExtractorError("could not parse Ecopower 'Groene burgerstroom' rate")
-    return VariableRates(current=to_float(match.group(1)))
+    current = to_float(match.group(1))
+    formula = _energy_formula(text)
+    if formula is None:
+        return VariableRates(current=current)
+    factor, base, _index = formula
+    return VariableRates(
+        current=current,
+        formula_factor=factor,
+        formula_base=base,
+        month_indexed=True,
+        rlp_indexed=True,
+        rlp_blend="columns",
+    )
 
 
 # ---- dynamic energy ----------------------------------------------------------
@@ -232,8 +303,6 @@ _INJECTION_FIXED_RE = re.compile(
     re.IGNORECASE,
 )
 
-_NL_MONTH_INDEX = {name: i + 1 for i, name in enumerate(_NL_MONTHS)}
-_MONTH_ALT = "|".join(_NL_MONTHS)
 _FIXED_NOTE_EXPIRY_RE = re.compile(rf"t\.e\.m\.\s+\d+\s+({_MONTH_ALT})", re.IGNORECASE)
 _CARD_MONTH_RE = re.compile(rf"Tariefkaart\s+({_MONTH_ALT})\s+\d{{4}}", re.IGNORECASE)
 

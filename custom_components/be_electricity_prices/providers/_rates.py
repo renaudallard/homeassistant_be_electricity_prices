@@ -49,7 +49,8 @@ TariffKind = Literal[
 # published value to the cent: "distinct" is the equal mean of the three
 # distinct regional curves (Fluvius, the Walloon DSOs, Sibelga), which is
 # Eneco's Belpex-RLP-M; "columns" is the mean over every DSO column, weighting
-# each region by its number of sub-areas, which is energie.be's Belpex_RLP;
+# each region by its number of sub-areas, which is energie.be's Belpex_RLP and
+# the closest of the three to the EPEX RLP Ecopower prints;
 # "flanders" is the Fluvius curve alone, which Energy Knights, a Flanders-only
 # supplier, bills on. Meaningful only where ``rlp_indexed`` is set.
 RlpBlend = Literal["distinct", "columns", "flanders"]
@@ -95,13 +96,15 @@ class Contract:
     spot_indexed_injection: bool = False
     # True when this (non-spot-priced) product's ENERGY is indexed on the
     # delivery month's mean and its card prints last month's figure: Cociter
-    # Variable and Trihoraire, EBEM Groen Variabel and B@sic+, Engie's EPEXDAM
-    # cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable / Flux / Eco
-    # Flux / Boost Flex / Eco Boost Flex / Basic Online, Eneco Flex and Flex One, TotalEnergies's five BELPEXM_RLP variable
-    # cards, and every Mega Flex plus Off-peak Impact, whose cards name the
-    # settled month outright ("pour le mois de <MONTH>"). The re-price needs
-    # ENTSO-E spots the kind never collects a key for,
-    # so the config flow offers the optional key step on EVERY solar regime,
+    # Variable and Trihoraire, Ecopower Groene Burgerstroom (whose card is
+    # published once its month is over), EBEM Groen Variabel and B@sic+,
+    # Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+
+    # Smart Variable / Flux / Eco Flux / Boost Flex / Eco Boost Flex / Basic
+    # Online, Eneco Flex and Flex One, TotalEnergies's five BELPEXM_RLP
+    # variable cards, and every Mega Flex plus Off-peak Impact, whose cards
+    # name the settled month outright ("pour le mois de <MONTH>"). The
+    # re-price needs ENTSO-E spots the kind never collects a key for, so the
+    # config flow offers the optional key step on EVERY solar regime,
     # not only the injection one the flag above serves. Same registry-versus-
     # parser agreement as that flag: the live check holds each fetched card's
     # ``month_indexed`` against it, since a flag set here with no formula

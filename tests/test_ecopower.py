@@ -48,6 +48,7 @@ from custom_components.be_electricity_prices.providers._ecopower_cards import (
     _extract_energy,
     _extract_injection,
 )
+from custom_components.be_electricity_prices.providers import ecopower
 from custom_components.be_electricity_prices.providers.ecopower import (
     _card_stamp_keys,
     _resolve_latest_dbs_pdf,
@@ -586,6 +587,62 @@ def test_the_live_card_leaves_its_index_to_the_running_month() -> None:
     )
     assert snap.injection is not None
     assert snap.injection.index_realised is None
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.index_realised is None
+
+
+@pytest.mark.parametrize(
+    ("name", "index"),
+    [
+        ("ecopower_burgerstroom_feb.pdf", 0.08744530),
+        ("ecopower_burgerstroom_apr.pdf", 0.08472117),
+        ("ecopower_burgerstroom_may.pdf", 0.09810780),
+        ("ecopower_burgerstroom_jun_split.pdf", 0.10558785),
+        ("ecopower_burgerstroom_jul.pdf", 0.11444616),
+    ],
+)
+def test_the_energy_price_is_indexed_on_the_delivery_month(
+    name: str, index: float
+) -> None:
+    """ "50% vast aan 0,17 euro + 50% variabel aan <index>": half the price is
+    the RLP-weighted EPEX mean of the card's own month, and the card served
+    while a month runs is last month's. The formula reproduces the rate each
+    card prints at the index it prints."""
+    energy = parse_snapshot(fixture_text(name, layout=True), "t://x", "x").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and energy.rlp_indexed
+    assert energy.rlp_blend == "columns"
+    factor, base = energy.formula_factor, energy.formula_base
+    assert factor is not None and base is not None
+    assert (factor, base) == pytest.approx((0.5, 0.085))
+    assert factor * index + base == pytest.approx(energy.current, abs=5e-5)
+
+
+def test_a_closed_month_settles_the_energy_on_the_rlp_its_card_prints() -> None:
+    snap = _july_for_month(fixture_text("ecopower_burgerstroom_jul.pdf", layout=True))
+    assert snap is not None and not snap.provisional
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.index_realised == pytest.approx(0.11444616)
+    assert snap.energy.current == pytest.approx(0.085 + 0.5 * 0.11444616)
+
+
+def test_a_card_resolved_on_an_estimate_settles_nothing() -> None:
+    """The early June 2026 card resolved its rate on the regulator's yearly
+    estimate ("Dit is de inschatting die de VNR maandelijks maakt"), not on
+    June's settled index."""
+    text = fixture_text("ecopower_burgerstroom_jun_split.pdf", layout=True)
+    snap = ecopower._settled(
+        parse_snapshot(text, "t://x", "2026-06"), text, date(2026, 6, 1)
+    )
+    assert snap.provisional
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.index_realised is None
+
+
+def test_groene_burgerstroom_is_flagged_month_indexed() -> None:
+    contracts = {c.id: c for c in ecopower.EXTRACTOR.contracts}
+    assert contracts["ecopower_burgerstroom"].month_indexed_energy
+    assert not contracts["ecopower_dynamische_burgerstroom"].month_indexed_energy
 
 
 def test_a_card_that_does_not_name_its_index_month_is_asked_again() -> None:

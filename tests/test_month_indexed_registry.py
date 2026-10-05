@@ -26,6 +26,7 @@ from custom_components.be_electricity_prices.providers import (
     aspiravi,
     cociter,
     ebem,
+    ecopower,
     eneco,
     engie,
     luminus,
@@ -42,6 +43,22 @@ def _aligned(name: str) -> str:
 
 
 _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
+    (
+        "ecopower",
+        "ecopower_burgerstroom",
+        lambda: ecopower.parse_snapshot(
+            fixture_text("ecopower_burgerstroom_jul.pdf", layout=True), "t", "2026-07"
+        ),
+    ),
+    (
+        "ecopower",
+        "ecopower_dynamische_burgerstroom",
+        lambda: ecopower.parse_dbs_snapshot(
+            fixture_text("ecopower_dynamische_burgerstroom_jan.pdf", layout=True),
+            "t",
+            "2026-01",
+        ),
+    ),
     (
         "aspiravi",
         "aspiravi_eco_plus_flex",

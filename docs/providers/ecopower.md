@@ -72,11 +72,22 @@ Constants: `_CONTRACT_ID` / `_CONTRACT_LABEL` (`ecopower.py`), `_DBS_CONTRACT_ID
 
 Notes:
 
-- **Groene burgerstroom** is a `variable` contract even though it is 50% fixed. The card resolves
-  the blended rate against the current month's Belpex average and prints the resolved number; the
-  extractor takes that resolved figure into `VariableRates.current` rather than re-deriving it,
-  because there is no Belpex feed at parse time (`_extract_energy` docstring,
-  `_ecopower_cards.py`).
+- **Groene burgerstroom** is a `variable` contract even though it is 50% fixed: `0,5 × 0,17 +
+  0,5 × EPEX RLP`, the RLP-weighted EPEX DA mean of the card's own month. A definitive card is
+  published only once its month is over, so the card served while a month runs is last month's
+  and the rate it prints is last month's settled one. `_extract_energy` (`_ecopower_cards.py`)
+  therefore keeps the printed rate as `current` and carries the formula (`formula_factor` 0,5,
+  `formula_base` 0,085, both before VAT like every figure on the card) flagged `month_indexed`
+  and `rlp_indexed` on the `columns` blend, and the registry sets `month_indexed_energy`, so an
+  entry with an ENTSO-E key bills the running month on its own RLP mean and one without falls
+  back to the printed rate. The `columns` blend reproduced Ecopower's printed EPEX RLP to within
+  0,3 EUR/MWh over July to September 2026 (114,28 against 114,45, 134,93 against 135,11, 164,42
+  against 164,69), where the Flemish curve alone ran 0,5 above and the distinct-curve mean 2
+  below. A closed month is settled on the card's own figure: `fetch_for_month` reads the printed
+  index and footnote 1's month (`printed_rlp_index`) into `index_realised`, the energy
+  counterpart of the feed-in settlement below. A card resolved on the regulator's estimate
+  rather than a settled month (the early June 2026 card, "Dit is de inschatting die de VNR
+  maandelijks maakt") names no month and is flagged `provisional`.
 - **Dynamische burgerstroom** sets `quarter_hourly=True` (`_ecopower_cards.py`). Ecopower's card
   multiplies the 15-minute EPEX DA spot, so the live price table, current / next-slot sensors and
   the cheapest-window service keep the native 15-minute slots. YTD billing stays hourly regardless
@@ -109,7 +120,8 @@ fetch(session, contract_id, region)              ecopower.py
 - **gbs** (`_resolve_latest_pdf`, `ecopower.py`): GET the price page HTML, run `_CARD_RE`
   (`ecopower.py`) over it to collect every `(sort_key, YYYYMM, url)` triple, **drop any URL
   containing `inschatting`** (the next-month estimation preview), sort ascending and take the
-  highest. That is the card billing today. Label is `YYYY-MM`.
+  highest. A definitive card is published in arrears, so this is last month's card standing in
+  for the running month (in October, September's). Label is `YYYY-MM`.
 - **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py`): GET the dynamic product page, run
   `_DBS_CARD_RE` (`ecopower.py`), sort and take the highest. The dynamic formula is
   stable across months, so the newest card is the one in effect.
@@ -383,7 +395,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 
 | Aspect | Groene burgerstroom (variable) | Dynamische burgerstroom (dynamic) |
 | --- | --- | --- |
-| Energy | resolved monthly blended rate -> `VariableRates.current` | `factor × spot + base` (EUR/kWh), `quarter_hourly=True`, plus `yearly_fixed_fee` |
+| Energy | `0,5 × EPEX RLP + 0,085`, `month_indexed` on the `columns` blend, the printed (last month's) rate as `VariableRates.current`; settled on the card's own index in `fetch_for_month` | `factor × spot + base` (EUR/kWh), `quarter_hourly=True`, plus `yearly_fixed_fee` |
 | Fixed fee | none | Abonnementskost, VAT-incl 12-month total |
 | DSO coverage | all 8 Fluvius sub-areas, digital-meter block | all 8 Fluvius sub-areas, digital-only block |
 | Capacity / databeheer | flat euro fees, 6% VAT baked in | same |

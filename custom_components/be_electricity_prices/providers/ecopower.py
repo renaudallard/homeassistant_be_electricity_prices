@@ -37,8 +37,11 @@ Ecopower sells two residential electricity products in Flanders only:
    month (``cdn.nimbu.io/.../<YYYYMM>_gbs_tariefkaart.pdf``); the public
    price page at ``ecopower.be/groene-stroom/prijs-nieuw`` lists the
    most recent four or so months. We scrape that page to find the latest
-   definitive card (Ecopower also publishes a *next-month* "inschatting"
-   / estimation card that we deliberately ignore until it's finalized).
+   definitive card (Ecopower also publishes an "inschatting" / estimation
+   card for the running month that we deliberately ignore). A definitive
+   card is published in arrears, once its month is over, and prints that
+   month's settled index, so the newest one stands in for the running
+   month.
 
 2. "Dynamische burgerstroom": a quarter-hourly EPEX Day-Ahead dynamic
    tariff (quarter-hourly since the SDAC 15-minute market switch of
@@ -69,6 +72,7 @@ import logging
 import re
 from dataclasses import replace
 from datetime import date
+from typing import Any
 
 import aiohttp
 
@@ -79,6 +83,7 @@ from ._ecopower_cards import (
     _extract_dbs_injection,
     _extract_energy,
     _extract_injection,
+    printed_rlp_index,
     printed_spp_index,
 )
 from ._ecopower_overlays import (
@@ -102,7 +107,7 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from ._rates import Contract
+from ._rates import Contract, VariableRates
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -243,26 +248,48 @@ async def fetch_for_month(
 
 
 def _settled(snap: SupplierSnapshot, text: str, year_month: date) -> SupplierSnapshot:
-    """The month's card settled on the index it prints for that month.
+    """The month's card settled on the indices it prints for that month.
 
     A definitive card is published once its month has ended and prints the
-    month's settled SPP-weighted mean in its feed-in formula, so a closed
-    month is credited at the figure Ecopower invoices rather than the
-    engine's hourly mean, which ran 0,04 to 0,06 c€/kWh above it over July
+    month's settled RLP-weighted mean in its energy formula and its settled
+    SPP-weighted mean in its feed-in formula, so a closed month is billed on
+    the figures Ecopower invoices rather than the engine's own means: the
+    hourly SPP mean ran 0,04 to 0,06 c€/kWh above the card's credit over July
     to September 2026. Only here: the live fetch serves that same card for
-    the running month, which settles on its own index.
+    the running month, which settles on its own indices.
 
     A leg indexed on the month whose figure the card does not tie to the
-    month is left as parsed and flagged ``provisional``, so the month is
-    asked again rather than filed unsettled.
+    month is left as parsed and the card flagged ``provisional``, so the
+    month is asked again rather than filed unsettled.
     """
+    changed: dict[str, Any] = {}
+    unsettled = False
+    energy = snap.energy
+    if (
+        isinstance(energy, VariableRates)
+        and energy.month_indexed
+        and energy.formula_factor is not None
+        and energy.formula_base is not None
+    ):
+        rlp = printed_rlp_index(text)
+        if rlp is None or rlp[0] != year_month.month:
+            unsettled = True
+        else:
+            changed["energy"] = replace(
+                energy,
+                current=energy.formula_factor * rlp[1] + energy.formula_base,
+                index_realised=rlp[1],
+            )
     injection = snap.injection
-    if injection is None or not injection.spp_indexed:
-        return snap
-    found = printed_spp_index(text)
-    if found is None or found[0] != year_month.month:
+    if injection is not None and injection.spp_indexed:
+        spp = printed_spp_index(text)
+        if spp is None or spp[0] != year_month.month:
+            unsettled = True
+        else:
+            changed["injection"] = settled_injection(injection, spp[1])
+    if unsettled:
         return replace(snap, provisional=True)
-    return replace(snap, injection=settled_injection(injection, found[1]))
+    return replace(snap, **changed) if changed else snap
 
 
 async def probe(
@@ -384,11 +411,13 @@ async def _resolve_latest_pdf(
 ) -> tuple[str, str]:
     """Find the latest definitive tariff card PDF on the public price page.
 
-    Ecopower's price page lists the current month plus a few historical
-    months, and (around end-of-month) a *next-month* "inschatting" card
-    whose URL contains ``inschatting``. We strip those and pick the
-    highest YYYYMM among the definitive cards; that's the card whose
-    rates are actually being billed today.
+    Ecopower's price page lists the definitive cards of the last few
+    closed months and an "inschatting" (estimate) card for the running one,
+    whose URL contains ``inschatting``. We strip those and pick the highest
+    YYYYMM among the definitive cards. A definitive card is published only
+    once its month has ended, so in October this is September's card: it
+    stands in for the running month, whose month-indexed legs resolve
+    against the running month's own means.
     """
     html = await fetch_text(session, _PRICE_PAGE)
 
@@ -498,6 +527,10 @@ EXTRACTOR = SupplierExtractor(
             # SPP-weighted EPEX DA mean, which the variable energy leg fetches
             # no spots for.
             spot_indexed_injection=True,
+            # Half the energy price is the delivery month's RLP-weighted EPEX
+            # mean, and the card served while a month runs prints last
+            # month's.
+            month_indexed_energy=True,
         ),
         Contract(
             id=_DBS_CONTRACT_ID,
