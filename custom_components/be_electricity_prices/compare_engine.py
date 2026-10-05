@@ -33,7 +33,7 @@ code, and how they are shown is somebody else's job.
 
 from __future__ import annotations
 
-from .compare_household import _HouseholdMixin
+from .compare_household import _HouseholdMixin, _meters_rewired
 from .compare_inputs import (
     _HouseholdQuote,
     _candidate_label,
@@ -265,6 +265,10 @@ class _SweepEngine(_HouseholdMixin):
         # so nothing a candidate replays can be held against it. A contract
         # with no closed month yet has nothing to fail.
         proxied = bool(own_closed) and not baseline
+        # A candidate replays the window on the entry's sensors, which hold
+        # nothing for an earlier contract's days when they were rewired at the
+        # switch: it would bill those days at its fees alone.
+        rewired = _meters_rewired(self.config_entry, today)
         if not proxied:
             baseline |= {
                 (month.year, month.month) for month in closed if month < own_first
@@ -295,7 +299,7 @@ class _SweepEngine(_HouseholdMixin):
                 else None
             )
             snap = held[0] if held is not None else None
-            if row.annual is None or pair is None or snap is None or proxied:
+            if row.annual is None or pair is None or snap is None or proxied or rewired:
                 rows.append(row)
                 continue
             supplier, contract, quarter_hourly = pair

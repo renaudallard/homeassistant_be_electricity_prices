@@ -849,6 +849,10 @@ none: the inverter's capacity in kVA (a copy holding 0 counts as none), the
 ENTSO-E API key and the connection's kVA tier. One you enter after recording
 the switch, for instance when a Repairs card asks for it, then reaches the
 months before it as well; one the earlier contract already held is kept.
+When the meter sensors changed at the switch, the comparison pages leave out
+the year to date of the contracts they quote, and the compare page says so:
+those are replayed on the entry's sensors, which hold nothing for the earlier
+contract's days.
 
 The meter checks run on each earlier contract's own sensors over its own days,
 and on the entry's sensors from the switch on, so a register rewired at the

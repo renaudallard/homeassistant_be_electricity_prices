@@ -531,8 +531,12 @@ async def test_a_household_billing_from_its_start_date_gets_a_year_to_date_too(
     assert min(cache["engie_easy_fixed"]) == date(2026, 4, 1)
 
 
+@pytest.mark.parametrize(
+    ("old_sensor", "candidate_ytd"),
+    [("sensor.cons", 1000.0), ("sensor.old_cons", None)],
+)
 async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
-    hass: HomeAssistant,
+    hass: HomeAssistant, old_sensor: str, candidate_ytd: float | None
 ) -> None:
     """After a recorded switch the own walk starts on the switch day, so the
     own contract's cards are fetched only from that month on, while each
@@ -540,6 +544,10 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     alone, no candidate could ever match and the whole column went blank. The
     months before the switch are the earlier contract's, priced on its own
     cards, and a candidate is asked to replay every one of them.
+
+    Unless the switch rewired the meter: a candidate replays the window on
+    the entry's sensors, which then hold none of the earlier contract's days,
+    and it billed them at its fees alone. Its column is left blank.
     """
     from custom_components.be_electricity_prices import (
         compare_engine,
@@ -549,7 +557,10 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
     from tests import make_snapshot
 
     today = date(2026, 9, 16)
-    held = {**make_entry(supplier="engie", contract="engie_easy_fixed").data}
+    held = {
+        **make_entry(supplier="engie", contract="engie_easy_fixed").data,
+        "consumption_kwh": old_sensor,
+    }
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -559,6 +570,7 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
             "dso": "ores",
             "meter": "mono",
             "solar_regime": "none",
+            "consumption_kwh": "sensor.cons",
             "contract_start_date": "2026-06-15",
             "previous_contracts": [{"until": "2026-06-15", "data": held}],
         },
@@ -649,7 +661,9 @@ async def test_a_household_that_switched_supplier_keeps_its_year_to_date(
         ),
     ):
         rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
-        assert [r.ytd for r in rows] == [1250.0, 1000.0]
+        assert [r.ytd for r in rows] == [1250.0, candidate_ytd]
+        if candidate_ytd is None:
+            return
         # A candidate covers the own row's days, which after a switch the
         # entry's settings no longer give it.
         assert walked_from["engie_easy_fixed"] == household.ytd_from

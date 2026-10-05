@@ -50,6 +50,7 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
     METER_DYNAMIC,
+    METER_SENSOR_KEYS,
     METER_MONO,
     SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIME_COMPENSATION,
@@ -82,7 +83,7 @@ from .meter_hourly import (
     _measured_hourly,
 )
 from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
-from .contract_periods import billed_from
+from .contract_periods import billed_from, previous_periods
 from .compare_table import _solar_note
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from datetime import date, datetime, timedelta
@@ -106,6 +107,25 @@ from homeassistant.core import HomeAssistant
 import logging
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
+    """Whether an earlier contract in this year's window read other meter
+    sensors than the entry does now.
+
+    The own row prices each earlier contract on the sensors kept with it, and
+    a quoted contract can only be replayed on the entry's own. When those were
+    rewired at the switch they hold nothing for the earlier contract's days,
+    so the alternative billed them at its fees alone and the page printed a
+    saving of most of those days' bill. The year-to-date of a quoted side is
+    left out instead.
+    """
+    data = entry.data
+    return any(
+        (period.data.get(key) or None) != (data.get(key) or None)
+        for period in previous_periods(data, ytd_window_start(entry, today), today)
+        for key in METER_SENSOR_KEYS
+    )
 
 
 class _HouseholdMixin:
@@ -551,7 +571,15 @@ class _HouseholdMixin:
             # was recorded under the configured regime, so both are left
             # blank rather than mixing the two.
             "ytd_from": ytd_from.strftime("%d/%m/%Y"),
-            "ytd_kwh": ("-" if volumes_typed or ytd_kwh is None else f"{ytd_kwh:.0f}"),
+            # Not on rewired meters either: the entry's sensors hold none of
+            # an earlier contract's days, so the window's kWh would be short.
+            "ytd_kwh": (
+                "-"
+                if volumes_typed
+                or ytd_kwh is None
+                or _meters_rewired(self.config_entry, today_local)
+                else f"{ytd_kwh:.0f}"
+            ),
             "annual_chart": "",
             "ytd_chart": "",
             "ytd_injection_kwh": (

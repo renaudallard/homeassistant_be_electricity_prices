@@ -10071,3 +10071,65 @@ async def test_compare_ytd_fallback_credits_the_welcome_credit_the_engine_does(
     # 205 of 365 days of 200 EUR, on both paths.
     assert engine == pytest.approx(200.0 * 205 / 365, abs=0.02)
     assert fallback == pytest.approx(engine, abs=0.02)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("old_sensor", "quoted"), [("sensor.cons", "123.00"), ("sensor.old_cons", "-")]
+)
+async def test_compare_leaves_the_year_to_date_out_after_rewired_meters(
+    hass: HomeAssistant, freezer: Any, old_sensor: str, quoted: str
+) -> None:
+    """The own row prices an earlier contract on the sensors kept with it; the
+    quoted side can only replay the entry's own. Rewired at the switch, those
+    hold none of the earlier contract's days, which the quote then billed at
+    its fees alone: hundreds of euros of saving that do not exist. The page
+    leaves the year to date out and says why."""
+    from custom_components.be_electricity_prices import contract_periods
+
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = {
+        "supplier": "engie",
+        "contract": "engie_easy_fixed",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "none",
+        "consumption_kwh": old_sensor,
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **held,
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "consumption_kwh": "sensor.cons",
+            "contract_start_date": "2026-06-15",
+            "previous_contracts": [{"until": "2026-06-15", "data": held}],
+        },
+        title="Eneco after a switch",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    with (
+        patch.object(
+            contract_periods, "price_previous_periods", AsyncMock(return_value=[])
+        ),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ),
+    ):
+        page = await _drive_compare(
+            hass,
+            entry,
+            other_snap=_stub_snapshot("mega", "mega_online_fixed", 0.16),
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+
+    assert page["compare_ytd"] == quoted
+    assert ("other meter sensors" in page["card_note"]) is (quoted == "-")

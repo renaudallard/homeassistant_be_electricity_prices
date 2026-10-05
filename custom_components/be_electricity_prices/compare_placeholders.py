@@ -68,6 +68,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from .providers import get as get_extractor, settlement_answer
 from .compare_engine import _SweepEngine
+from .compare_household import _meters_rewired
 from .compare_inputs import (
     _detached_spot_view,
     _coordinator_rlp_index_weights,
@@ -496,6 +497,12 @@ class _PlaceholdersMixin(OptionsFlow):
                 _label_for_supplier(self._compare[CONF_SUPPLIER]),
                 read_by_ocr=other_read_by_ocr,
             )
+        rewired = _meters_rewired(self.config_entry, today_local)
+        if rewired:
+            caveats.append(
+                "the year to date is left out, as an earlier contract this "
+                "year read other meter sensors"
+            )
         vintage = _vintage_note(
             current_snapshot,
             _label_for_supplier(current[CONF_SUPPLIER]),
@@ -544,8 +551,10 @@ class _PlaceholdersMixin(OptionsFlow):
         # which was recorded under the configured regime and whose
         # consumption register may already be netted. Typed volumes are a
         # yearly hypothesis with no history behind them, so the legs stay
-        # blank rather than mixing a what-if with a measured past.
-        if volumes_typed:
+        # blank rather than mixing a what-if with a measured past. So do
+        # meters rewired at a switch: the quoted side reads the entry's
+        # sensors, which hold nothing for the earlier contract's days.
+        if volumes_typed or rewired:
             _populate_charts(
                 placeholders,
                 current_label=_chart_labels(current, self._compare)[0],
