@@ -2520,9 +2520,10 @@ async def _check_mega_professional(
                 try:
                     async with session.head(url, allow_redirects=True) as resp:
                         ctype = resp.headers.get("Content-Type", "")
-                except aiohttp.ClientError as err:
+                except (aiohttp.ClientError, TimeoutError) as err:
                     # A transport failure is not a publication signal, and the
                     # supplier's own extractor rows already report a real break.
+                    # aiohttp raises a bare TimeoutError past the total timeout.
                     _record(label, True, f"HEAD failed: {type(err).__name__}: {err}")
                     return
                 if "pdf" in ctype.lower():

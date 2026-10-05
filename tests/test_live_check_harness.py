@@ -849,13 +849,24 @@ def test_every_supplier_that_discovers_has_a_catalog_baseline() -> None:
     assert discovering - set(lc._CATALOG_BASELINES) == set()
 
 
-def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
+@pytest.mark.parametrize(
+    "err",
+    [
+        pytest.param(aiohttp.ClientError("connection reset"), id="client-error"),
+        # aiohttp's total timeout is a bare TimeoutError, not a ClientError.
+        # Escaping, it took every freshness row after Mega down with it.
+        pytest.param(TimeoutError(), id="total-timeout"),
+    ],
+)
+def test_mega_professional_transport_failure_is_not_a_publication_signal(
+    err: Exception,
+) -> None:
     """A dead network is not Mega failing to publish, and the extractor rows
     already report a real break."""
 
     class _Boom:
         def head(self, _url: str, **_kw: object) -> _FakeHead:
-            raise aiohttp.ClientError("connection reset")
+            raise err
 
     mega = _mega_module()
     asyncio.run(lc._check_mega_professional(_Boom(), mega))  # type: ignore[arg-type]
