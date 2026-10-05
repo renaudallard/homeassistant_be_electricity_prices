@@ -444,10 +444,10 @@ class _IssuesMixin:
         flow settles it for good, and the notice clears the moment an answer
         of either value is stored.
 
-        Raised for all eighteen products the question is offered on, not only
-        the four exclusive ones: on the fourteen that state a supplement the
-        missing answer costs a payer that supplement rather than the whole
-        credit, which is smaller and still wrong.
+        Raised for every product the question is offered on, not only the
+        four exclusive ones: on the others the missing answer costs a payer
+        what the card adds for direct debit rather than the whole credit,
+        which is smaller and still wrong.
 
         But only while an answer can still move the bill. A welcome credit is
         placed in the first year from the contract start date, so an entry

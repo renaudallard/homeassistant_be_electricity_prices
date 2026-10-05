@@ -936,6 +936,33 @@ async def test_options_flow_flanders_branch_asks_capacity(
     assert entry.data["solar_regime"] == "injection"
 
 
+def test_the_direct_debit_help_names_no_count_of_mega_products() -> None:
+    """The help said Mega had seventeen such products after the two Dynamic
+    cards made it nineteen. The count moves with the range, and the box is
+    only shown where a card asks, so the text names none."""
+    import json
+    import re
+    from pathlib import Path
+
+    patterns = {
+        "strings.json": r"Mega's (\S+ )?products",
+        "translations/en.json": r"Mega's (\S+ )?products",
+        "translations/fr.json": r"les (\S+ )?produits de Mega",
+        "translations/nl.json": r"de (\S+ )?producten van Mega",
+        "translations/de.json": r"Megas (\S+ )?Produkten",
+    }
+    root = Path("custom_components/be_electricity_prices")
+    for name, pattern in patterns.items():
+        data = json.loads((root / name).read_text(encoding="utf-8"))
+        for flow in ("config", "options"):
+            text = data[flow]["step"]["direct_debit"]["data_description"][
+                "direct_debit"
+            ]
+            found = re.search(pattern, text)
+            assert found is not None, (name, flow)
+            assert found.group(1) is None, (name, flow, found.group(0))
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_brussels_branch_asks_connection_power(
     hass: HomeAssistant,
