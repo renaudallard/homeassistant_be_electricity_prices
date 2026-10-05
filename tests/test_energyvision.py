@@ -1022,14 +1022,16 @@ def test_brussels_archive_tries_both_upload_directories() -> None:
     """Brusol files a card under the month it uploaded it, which is usually
     the month before delivery and sometimes the delivery month: the April
     2026 card sits under 2026-04 and the May one under 2026-04 as well. One
-    candidate would lose a month, so both are tried."""
+    candidate would lose a month, so both are tried, the delivery month's
+    first: a card in both was uploaded again, and the August 2026 cards in
+    the July folder are the drafts."""
     from custom_components.be_electricity_prices.providers import energyvision as ev
 
     contract = ev._CONTRACTS_BY_ID[_TIERED_1800]
     urls = ev._archive_card_urls(contract, contract.cards["brussels"], date(2026, 5, 1))
     assert urls == (
-        "https://www.brusol.be/sites/default/files/2026-04/EV-0526-GS1800V-BXL-nl.pdf",
         "https://www.brusol.be/sites/default/files/2026-05/EV-0526-GS1800V-BXL-nl.pdf",
+        "https://www.brusol.be/sites/default/files/2026-04/EV-0526-GS1800V-BXL-nl.pdf",
     )
     # Flanders keeps the flat folder, where the filename locates the month.
     assert ev._archive_card_urls(
@@ -1038,6 +1040,152 @@ def test_brussels_archive_tries_both_upload_directories() -> None:
         "https://www.energyvision.be/sites/default/files/inline-files/"
         "EV-0526-GS1800V-nl.pdf",
     )
+
+
+async def test_an_archived_month_reads_the_newest_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EnergyVision corrects a card by uploading it again, which Drupal files
+    as <name>_0.pdf, _1, ... beside the first draft. The March 2026 GS3JV
+    card was uploaded five times after the plain one; the draft says 285 EUR
+    of welcome credit where the reissue the listing linked says 300."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    plain = (
+        "https://www.energyvision.be/sites/default/files/inline-files/"
+        "EV-0326-GS3JV-nl.pdf"
+    )
+    uploaded = {plain.replace(".pdf", f"_{n}.pdf") for n in range(5)}
+    read: list[str] = []
+
+    async def head(_session: Any, url: str, **_kw: Any) -> None:
+        if url not in uploaded:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    async def text(_session: Any, url: str) -> str:
+        read.append(url)
+        return url
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: t)
+    monkeypatch.setattr(ev, "archive_validity_check", lambda snap, *_a: snap)
+    snap = await ev.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _FIXED,
+        "flanders",
+        date(2026, 3, 1),
+    )
+    assert snap == plain.replace(".pdf", "_4.pdf")
+    assert read == [snap]
+
+
+async def test_a_reupload_of_another_month_falls_back_to_the_older_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The newest upload is only taken when it is the month's card: one that
+    holds another month's is passed over for the next newest."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    plain = (
+        "https://www.energyvision.be/sites/default/files/inline-files/"
+        "EV-0326-GS3JV-nl.pdf"
+    )
+    uploaded = {plain.replace(".pdf", f"_{n}.pdf") for n in range(2)}
+
+    async def head(_session: Any, url: str, **_kw: Any) -> None:
+        if url not in uploaded:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    async def text(_session: Any, url: str) -> str:
+        return url
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: t)
+    monkeypatch.setattr(
+        ev,
+        "archive_validity_check",
+        lambda snap, *_a: None if snap.endswith("_1.pdf") else snap,
+    )
+    snap = await ev.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _FIXED,
+        "flanders",
+        date(2026, 3, 1),
+    )
+    assert snap == plain.replace(".pdf", "_0.pdf")
+
+
+async def test_an_upload_made_after_the_month_ended_is_not_its_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On 1 April 2026 the Walloon March card was uploaded again with a
+    standing charge the uploads made during March did not print. The month
+    ends at midnight in Brussels: an upload at 22:48 GMT on 31 March is
+    already April there."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    plain = (
+        "https://www.energyvision.be/sites/default/files/inline-files/"
+        "EV-0326-GS3JV-nl.pdf"
+    )
+    stamps = {
+        plain.replace(".pdf", "_0.pdf"): "Sun, 01 Mar 2026 11:38:42 GMT",
+        plain.replace(".pdf", "_1.pdf"): "Tue, 31 Mar 2026 21:59:59 GMT",
+        plain.replace(".pdf", "_2.pdf"): "Tue, 31 Mar 2026 22:48:05 GMT",
+        plain.replace(".pdf", "_3.pdf"): "Sat, 07 Mar 2026 10:11:07 -0000",
+    }
+
+    async def head(_session: Any, url: str, **_kw: Any) -> str:
+        if url not in stamps:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return stamps[url]
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    uploads = await ev._uploads_newest_first(
+        None,  # type: ignore[arg-type]
+        plain,
+        date(2026, 3, 1),
+    )
+    assert uploads == [
+        plain.replace(".pdf", "_3.pdf"),
+        plain.replace(".pdf", "_1.pdf"),
+        plain.replace(".pdf", "_0.pdf"),
+        plain,
+    ]
+
+
+async def test_a_transient_probe_failure_is_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout says nothing about the month, so it is not settled on the
+    draft: the month cache asks again."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    async def head(_session: Any, url: str, **_kw: Any) -> None:
+        raise ExtractorError(f"network error fetching {url}: timeout")
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    with pytest.raises(ExtractorError, match="network error"):
+        await ev.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            _FIXED,
+            "flanders",
+            date(2026, 3, 1),
+        )
 
 
 @pytest.mark.parametrize(

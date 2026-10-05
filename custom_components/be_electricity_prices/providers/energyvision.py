@@ -83,7 +83,9 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from email.utils import parsedate_to_datetime
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -97,6 +99,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    head_or_raise,
     is_transient_fetch_error,
     printed_vat_rate,
 )
@@ -137,6 +140,9 @@ from ._energyvision_cards import (
 from .energiebe import _NUM
 
 _SITE_BASE = "https://www.energyvision.be"
+# The supplier's months end at midnight in Brussels, whatever zone Home
+# Assistant runs in.
+_BRUSSELS = ZoneInfo("Europe/Brussels")
 # One listing page carries every card on the EnergyVision site, Flemish and
 # Walloon alike, so the freshness probe covers both.
 _LISTING_URL = f"{_SITE_BASE}/nl-be/tariefkaart"
@@ -421,9 +427,12 @@ async def fetch_for_month(
 
     The live fetch has to scrape the listing because the CURRENT card carries
     Drupal's dedup suffix (``EV-0726-GS3JV-nl_0.pdf``), but a past month is not
-    on that listing at all and its plain filename resolves directly: every
+    on that listing at all. Its plain filename resolves directly (every
     product answered 200 for every month it existed, measured across GSDYN /
-    GS3JV / GS1800V / GSVI3 / GSLP and March to September 2026.
+    GS3JV / GS1800V / GSVI3 / GSLP and March to September 2026), but that is
+    the FIRST upload of the month's card, and EnergyVision corrects a card by
+    uploading it again: the listing then links the reissue, and the plain
+    file keeps the draft. ``_uploads_newest_first`` reads the reissues first.
 
     Each product has its own horizon rather than a shared one (GS1800V reaches
     back to March 2026, GSDYN only to June), and there is nothing on the site
@@ -457,25 +466,86 @@ async def _archived_card(
     """The card filed for the month starting ``first``, or None when none of
     the places it could be filed holds it."""
     contract = _CONTRACTS_BY_ID[contract_id]
-    for url in _archive_card_urls(contract, card, first):
+    for plain in _archive_card_urls(contract, card, first):
+        for url in await _uploads_newest_first(session, plain, first):
+            try:
+                text = await fetch_pdf_text_layout(session, url)
+                snap = parse_snapshot(contract_id, text, url, region=region)
+            except ExtractorError as err:
+                # A timeout, a reset or a 5xx says nothing about the month:
+                # raise, so the month cache retries it instead of caching it
+                # as absent.
+                if is_transient_fetch_error(str(err)):
+                    raise
+                continue
+            # Every card prints "geldig ... tot en met" so valid_until is
+            # parsed and the authoritative tier of the cross-check applies. It
+            # is what catches a CDN serving the current card under an archived
+            # name. A candidate that turns out to hold another month's card is
+            # not the end of the search: try the next one before giving the
+            # month up.
+            checked = archive_validity_check(snap, text, first)
+            if checked is not None:
+                return checked
+    return None
+
+
+# Where the walk up the dedup suffixes gives up. The most measured is eight
+# reissues of one card (EV-0126-GS1800V-nl_0 to _7).
+_MAX_REUPLOADS = 20
+
+
+async def _uploads_newest_first(
+    session: aiohttp.ClientSession, url: str, first: date
+) -> list[str]:
+    """The uploads of the card filed at ``url`` that were online while the
+    month starting ``first`` ran, newest first, then the plain name.
+
+    Drupal never overwrites a file: uploading a card again stores it as
+    ``<name>_0.pdf``, then ``_1``, ``_2`` and so on, and leaves the earlier
+    files where they were. EnergyVision corrects a card that way, so the
+    plain name is its first draft: the March 2026 GS3JV card is 285 EUR of
+    welcome credit there and 300 on the reissue the listing linked. The
+    suffixes are walked up with HEAD requests until one is missing, before
+    any card is downloaded.
+
+    An upload made after the month ended is left out, because it is not the
+    card the month was sold on: on 1 April 2026 the Walloon March 1.800 kWh
+    card was uploaded three more times with a 50 EUR standing charge, where
+    the uploads made during March print none. What is left is the card the
+    listing linked when the month closed. The month ends at midnight in
+    Brussels, against the ``Last-Modified`` the server gives each upload;
+    one it gives none for is kept, since nothing says it came late.
+
+    A transient failure is raised, like a failed download, so the month is
+    asked again rather than settled on a draft.
+    """
+    following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+    month_end = datetime.combine(following, time(), _BRUSSELS)
+    stem = url.removesuffix(".pdf")
+    found: list[str] = []
+    for n in range(_MAX_REUPLOADS):
+        candidate = f"{stem}_{n}.pdf"
         try:
-            text = await fetch_pdf_text_layout(session, url)
-            snap = parse_snapshot(contract_id, text, url, region=region)
+            modified = await head_or_raise(session, candidate)
         except ExtractorError as err:
-            # A timeout, a reset or a 5xx says nothing about the month: raise,
-            # so the month cache retries it instead of caching it as absent.
             if is_transient_fetch_error(str(err)):
                 raise
-            continue
-        # Every card prints "geldig ... tot en met" so valid_until is parsed and
-        # the authoritative tier of the cross-check applies. It is what catches
-        # a CDN serving the current card under an archived name. A candidate
-        # that turns out to hold another month's card is not the end of the
-        # search: try the next one before giving the month up.
-        checked = archive_validity_check(snap, text, first)
-        if checked is not None:
-            return checked
-    return None
+            break
+        if modified is None or _http_date(modified) < month_end:
+            found.append(candidate)
+    return [*reversed(found), url]
+
+
+def _http_date(value: str) -> datetime:
+    """An HTTP date header, or the epoch for one that does not read, so an
+    unreadable stamp counts as early rather than dropping the upload."""
+    try:
+        stamp = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return datetime.fromtimestamp(0, UTC)
+    # HTTP dates are GMT; one written "-0000" parses without a zone.
+    return stamp if stamp.tzinfo is not None else stamp.replace(tzinfo=UTC)
 
 
 async def probe(
@@ -563,13 +633,16 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 def _archive_card_urls(
     contract: _ContractDef, card: _CardDef, first: date
 ) -> tuple[str, ...]:
-    """The URLs an archived card for ``first`` could sit at, in order.
+    """The plain URLs an archived card for ``first`` could sit at, newest
+    upload first. Each is then walked for its reissues.
 
     EnergyVision keeps every month in one ``inline-files`` folder, so the
     filename locates the card on its own. Brusol files each card under the
     month it UPLOADED it, which is usually the month before delivery and
     sometimes the delivery month itself, so both are tried; measured over
-    March to September 2026, the pair covers every card published.
+    March to September 2026, the pair covers every card published. The
+    delivery month's folder goes first: a card in both is one uploaded again,
+    and the August 2026 cards in the July folder are the drafts.
     """
     stamp = f"{first.month:02d}{first.year % 100:02d}"
     name = f"EV-{stamp}-{contract.code}-{card.token}.pdf"
@@ -578,7 +651,7 @@ def _archive_card_urls(
     previous = date(first.year, first.month, 1) - timedelta(days=1)
     return tuple(
         f"{card.site}/sites/default/files/{folder:%Y-%m}/{name}"
-        for folder in (previous, first)
+        for folder in (first, previous)
     )
 
 

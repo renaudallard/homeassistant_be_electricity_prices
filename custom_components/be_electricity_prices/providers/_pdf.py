@@ -543,8 +543,11 @@ async def head_freshness_key(
 
 async def head_or_raise(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 10
-) -> None:
+) -> str | None:
     """HEAD ``url`` and raise the way the fetch helpers do when it fails.
+
+    Returns the answer's ``Last-Modified``, or None when it sends none, for
+    a lookup that has to tell one upload of a file from a later one.
 
     ``HTTP <status>`` at 400 and above, ``network error fetching`` on a
     client error or a timeout (the bare ``TimeoutError`` aiohttp's total
@@ -563,6 +566,7 @@ async def head_or_raise(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+            return resp.headers.get("Last-Modified")
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
             f"network error fetching {url}: {error_text(err)}"

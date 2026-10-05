@@ -174,11 +174,14 @@ ever sold as a new SKU.
 | card | layout | candidates tried |
 | --- | --- | --- |
 | EnergyVision (`nl`, `WAL-fr`) | one flat folder | `inline-files/EV-<MMYY>-<CODE>-<token>.pdf` |
-| Brusol (`BXL-nl`) | filed by UPLOAD month | `<delivery month - 1>/…` then `<delivery month>/…` |
+| Brusol (`BXL-nl`) | filed by UPLOAD month | `<delivery month>/…` then `<delivery month - 1>/…` |
 
 Brusol's upload month is usually the month before delivery and sometimes the delivery month
 itself: measured over March to September 2026, the April card sits under `2026-04` and the
-May one under `2026-04` as well, so one candidate would lose a month and both are tried. A
+May one under `2026-04` as well, so one candidate would lose a month and both are tried.
+The delivery month's folder goes first because a card in both was uploaded again there:
+the August 2026 cards in `2026-07` are the drafts with the old levy block. Each candidate
+is then walked for its reissues, newest first (see Month archive). A
 month before the product existed answers Drupal's HTML 404, which `fetch_pdf_text_layout`
 rejects on the magic bytes, and that becomes "no archive here". Every card prints its
 validity, so `archive_validity_check`'s authoritative tier applies in both regions; a
@@ -497,12 +500,34 @@ subtracts it through the one finaliser every branch returns by. Three gates matt
 
 ## Month archive
 
-`fetch_for_month` reads a past month by its plain filename,
-`EV-<MMYY>-<CODE>-<token>.pdf`. The live fetch cannot do that (the CURRENT card carries
-Drupal's dedup suffix, `EV-0726-GS3JV-nl_0.pdf`, so it has to be scraped off the listing),
-but a past month is not on the listing at all and its plain name resolves directly:
-measured across GSDYN / GS3JV / GS1800V / GSVI3 / GSLP for March to September 2026, every
-month a product existed answered 200.
+`fetch_for_month` builds a past month's filename, `EV-<MMYY>-<CODE>-<token>.pdf`, because
+a past month is not on the listing at all. The plain name resolves for every month a
+product existed (measured across GSDYN / GS3JV / GS1800V / GSVI3 / GSLP for March to
+September 2026), but it is the FIRST upload of that month's card. EnergyVision corrects a
+card by uploading it again, Drupal files the reissue as `<name>_0.pdf`, then `_1`, `_2`,
+and never removes the earlier files, and the listing links the newest. The drafts differ:
+GS3JV March 2026 prints 285 EUR of welcome credit on the plain file and 300 on the
+reissues, April 200 against 250, July 230 against 240, and GS1800V Flanders August 200
+against 250. So `_uploads_newest_first` walks the suffixes up with HEAD requests until one
+is missing, at most `_MAX_REUPLOADS`, and the uploads are read newest first, the plain
+name last; the first one `archive_validity_check` accepts for the month wins. The most
+measured is eight reissues of one card (`EV-0126-GS1800V-nl_0` to `_7`).
+
+Only uploads made while the month ran count: EnergyVision also uploads a month's cards
+again after it has ended (every February 2026 card on 7 March, every January one on
+2 February), and those are not what the month was sold on. On 1 April the Walloon March
+1.800 kWh card went back to the plain file's 50 EUR standing charge where the uploads made
+during March print none. What is read is therefore the card the listing linked when the
+month closed, which is not always the one it opened with: the February GS3JV card printed
+165 EUR of welcome credit until 11 February and 285 after. The cut-off is midnight in
+Brussels at the end of the month, read
+against each upload's `Last-Modified` (`head_or_raise` returns it); an upload the server
+dates with no header is kept. A transient HEAD failure is raised like a failed download,
+so the month is asked again rather than settled on a draft.
+
+Rows the card archive filed `via archive` before this came from the plain file, and a
+replay of the archive's stored texts reproduces them (its offline session answers 404 for
+the reissues), so they move only when the month is fetched again.
 
 Each product has its own horizon and the site states none: GS1800V reaches back to March
 2026, GSDYN only to June. A month before it answers Drupal's 404 page, which is HTML
