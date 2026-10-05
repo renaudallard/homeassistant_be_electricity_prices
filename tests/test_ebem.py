@@ -710,3 +710,21 @@ def test_the_settled_feed_in_index_is_what_the_pricing_engine_bills() -> None:
         index_realised=0.02795,
         **kwargs,  # type: ignore[arg-type]
     ) == pytest.approx(0.02795)
+
+
+async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
+    """The listing sends neither Last-Modified nor ETag, so a header probe
+    always answered None and a new card waited on the 24 h TTL. The key is
+    the card URL the fetcher picks, whose media hash changes per upload."""
+    from custom_components.be_electricity_prices.providers.ebem import probe
+
+    session = make_text_session(_LISTING_HTML)
+    elek = await probe(session, "ebem_variable", "flanders")
+    assert elek is not None
+    assert elek.startswith("https://www.ebem.be/media/")
+    assert "elek" in elek
+    assert await probe(session, "ebem_basic_plus", "flanders") == elek
+    dynamic = await probe(session, "ebem_dynamic", "flanders")
+    assert dynamic is not None and "dynamic" in dynamic
+    assert await probe(make_text_session(""), "ebem_variable", "flanders") is None
+    assert await probe(session, "unknown", "flanders") is None

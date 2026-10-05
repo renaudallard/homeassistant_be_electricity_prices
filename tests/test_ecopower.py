@@ -763,3 +763,22 @@ def test_the_optional_maximumtarief_column_is_kept() -> None:
     assert imewo.network_ceiling_eur_per_kwh == pytest.approx(0.3276168)
     # A row without the column keeps None rather than borrowing a neighbour's.
     assert snap.dsos["fluvius_antwerpen"].network_ceiling_eur_per_kwh is None
+
+
+async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
+    """The price pages send a Last-Modified that is the time of the request,
+    so a header key never matched and every tick refetched the card. The key
+    is the card URL the fetcher picks: stable while nothing is published, and
+    None when the page cannot be read, which leaves the TTL in charge."""
+    from custom_components.be_electricity_prices.providers.ecopower import probe
+
+    gbs = make_text_session(_GBS_LISTING_DATED)
+    first = await probe(gbs, "ecopower_burgerstroom", "flanders")
+    assert first == "https://cdn.example/20260715_gbs_tariefkaart.pdf"
+    assert await probe(gbs, "ecopower_burgerstroom", "flanders") == first
+    dbs = make_text_session(_DBS_LISTING_HTML_DATED)
+    assert await probe(dbs, "ecopower_dynamische_burgerstroom", "flanders") == (
+        "https://cdn.example/20260801_dbs_tariefkaart.pdf"
+    )
+    assert await probe(make_text_session(""), "ecopower_burgerstroom", "x") is None
+    assert await probe(gbs, "unknown", "flanders") is None

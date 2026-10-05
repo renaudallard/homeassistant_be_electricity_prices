@@ -88,7 +88,6 @@ from ._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     fetch_text,
-    head_freshness_key,
     is_transient_fetch_error,
 )
 from ._validity import (
@@ -244,17 +243,25 @@ async def probe(
     contract_id: str,
     region: str,  # noqa: ARG001 - Ecopower is Flanders-only, but signature is shared.
 ) -> str | None:
-    """Cheap freshness probe: HEAD the price page, return its Last-Modified.
+    """Cheap freshness probe: the card URL the fetcher would resolve.
 
-    The page returns a stable Last-Modified header (server-side cache key),
-    so a HEAD round-trip is enough to detect a publication. Falls back to
-    None on transport / missing-header so the coordinator's TTL takes over.
+    The pages' Last-Modified is the time of the request, not of a change, so a
+    header key never matched and every tick downloaded and parsed the card.
+    The URL is the signal instead: each upload gets its own file id and query
+    token, and the stamp moves with each publication. ``None`` on a failed
+    resolve, so the coordinator's TTL takes over.
     """
-    if contract_id == _CONTRACT_ID:
-        return await head_freshness_key(session, _PRICE_PAGE)
-    if contract_id == _DBS_CONTRACT_ID:
-        return await head_freshness_key(session, _DBS_PAGE)
-    return None
+    resolve = {
+        _CONTRACT_ID: _resolve_latest_pdf,
+        _DBS_CONTRACT_ID: _resolve_latest_dbs_pdf,
+    }.get(contract_id)
+    if resolve is None:
+        return None
+    try:
+        url, _label = await resolve(session)
+    except ExtractorError:
+        return None
+    return url
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:

@@ -67,7 +67,6 @@ from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
     fetch_text,
-    head_freshness_key,
     is_transient_fetch_error,
     printed_vat_rate,
     vat_multiplier,
@@ -379,16 +378,25 @@ def _settleable(energy: EnergyRates, injection: InjectionRates | None) -> bool:
 
 async def probe(
     session: aiohttp.ClientSession,
-    contract_id: str,  # noqa: ARG001 - listing key covers every contract.
+    contract_id: str,
     region: str,  # noqa: ARG001 - EBEM only sells in Flanders.
 ) -> str | None:
-    """HEAD the listing page; return its ``Last-Modified`` / ``ETag``.
+    """The card URL the fetcher would resolve for ``contract_id``.
 
-    EBEM publishes new monthly cards by editing the listing page (the
-    opaque media-hash URL changes for every month), so the listing's
-    freshness header is the right key for every contract at once.
+    The listing sends neither ``Last-Modified`` nor ``ETag``, so a header
+    probe always came back ``None`` and the card waited on the 24 h TTL. The
+    URL carries an opaque media hash that changes with every upload, so it
+    is the signal instead. ``None`` on a failed resolve, so the TTL takes
+    over.
     """
-    return await head_freshness_key(session, _LISTING_URL)
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None:
+        return None
+    try:
+        url, _label = await _find_latest(session, contract.pdf_kind)
+    except ExtractorError:
+        return None
+    return url
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:

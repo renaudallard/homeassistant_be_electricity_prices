@@ -465,8 +465,8 @@ async def test_unsupported_contracts_and_regions_do_not_fetch(
 ) -> None:
     from custom_components.be_electricity_prices.providers import trevion
 
-    freshness = AsyncMock(return_value="etag")
-    monkeypatch.setattr(trevion, "head_freshness_key", freshness)
+    listing = AsyncMock(return_value="")
+    monkeypatch.setattr(trevion, "fetch_text", listing)
     with pytest.raises(ExtractorError, match="unknown or unsupported Trevion contract"):
         await fetch(None, "groene_energie_vast", "wallonia")  # type: ignore[arg-type]
     assert (
@@ -479,7 +479,27 @@ async def test_unsupported_contracts_and_regions_do_not_fetch(
         is None
     )
     assert await probe(None, "groene_energie_vast", "wallonia") is None  # type: ignore[arg-type]
-    freshness.assert_not_awaited()
+    listing.assert_not_awaited()
+
+
+async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
+    """The listing sends neither Last-Modified nor ETag, so a header probe
+    always answered None and a new card waited on the 24 h TTL. The key is
+    the card URL the fetcher picks: the newest month, a re-upload's suffix
+    included, and None when nothing resolves."""
+    session = make_text_session(_flex_listing("202608", "202609"))
+    url = await probe(session, "groene_stroom_flex", REGION_FLANDERS)
+    assert url == (
+        "https://trevion.be/tariefkaarten/"
+        "Trevion-tariefkaart-Groene-Stroom-Flex-particulier-202609.pdf"
+    )
+    assert await probe(session, "groene_stroom_flex", REGION_FLANDERS) == url
+    republished = make_text_session(_flex_listing("202608", "202609-1"))
+    assert await probe(republished, "groene_stroom_flex", REGION_FLANDERS) == (
+        url.replace("202609.pdf", "202609-1.pdf")
+    )
+    empty = make_text_session("")
+    assert await probe(empty, "groene_stroom_flex", REGION_FLANDERS) is None
 
 
 def test_may_flex_card_writes_its_feed_in_formula_with_an_x() -> None:

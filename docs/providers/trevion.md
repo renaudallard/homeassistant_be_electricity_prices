@@ -19,7 +19,7 @@ Read this with [the provider framework](../provider-framework.md) and
 | Listing URL | `https://trevion.be/tariefkaarten/` |
 | Publication | One PDF per product and month |
 | Archive | The listing retains month-stamped cards |
-| Probe | HEAD the listing page for `Last-Modified` / `ETag` |
+| Probe | The card URL `_find_card` resolves (the listing sends no `Last-Modified` or `ETag`) |
 | PDF reader | `fetch_pdf_text_layout` (`pdfplumber`) |
 
 The filenames end in `YYYYMM.pdf` or `YYYYMM-N.pdf`. `_find_card` scrapes the

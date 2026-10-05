@@ -129,12 +129,13 @@ captured so ordering stays numeric (comment `ecopower.py`).
 
 ### Probe (freshness key)
 
-`probe()` (`ecopower.py`) HEADs the relevant price page and returns its `Last-Modified`
-header via `head_freshness_key` (`_pdf.py`). The gbs contract probes `_PRICE_PAGE`, the dbs
-contract probes `_DBS_PAGE`. The page returns a stable `Last-Modified` (server-side cache key), so
-a HEAD round-trip detects a publication. On transport error or a missing header the helper returns
-`None` and the coordinator's time-based TTL takes over (probe is not `None` for Ecopower; only its
-failure path falls back to TTL).
+`probe()` (`ecopower.py`) returns the card URL the fetcher would resolve:
+`_resolve_latest_pdf` for the gbs contract, `_resolve_latest_dbs_pdf` for the dbs one. Both price
+pages send a `Last-Modified` equal to the response's own `Date`, so a header key changed on every
+call and every tick downloaded and parsed the card. The URL only moves with a publication: each
+upload gets its own file id and query token, and the stamp moves with the month. On a failed
+resolve the probe returns `None` and the coordinator's time-based TTL takes over.
+`test_probe_keys_on_the_card_the_fetcher_resolves` (`tests/test_ecopower.py`) pins it.
 
 ### Historical fetch (`fetch_for_month`)
 

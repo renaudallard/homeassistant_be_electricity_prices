@@ -24,7 +24,7 @@ distinct PDF cards. Read this alongside the framework and pricing references:
 | Listing URL | `https://www.ebem.be/tarieven/` | `_LISTING_URL`, `ebem.py` |
 | PDF base | `https://www.ebem.be` | `_PDF_BASE`, `ebem.py` |
 | Archive | Yes, on the listing page (>= 6 months at last check) | `ebem.py` |
-| Probe | HEAD the listing page (`Last-Modified` / `ETag`) | `probe`, `ebem.py` |
+| Probe | The card URL `_find_latest` resolves for the contract | `probe`, `ebem.py` |
 
 Every contract's `regions` is `frozenset({REGION_FLANDERS})`, so
 `EXTRACTOR.regions()` is `{"flanders"}`. The `region` argument to `fetch`,
@@ -107,12 +107,15 @@ block (`ebem.py`).
 
 ### `probe` (`ebem.py`)
 
-HEADs the listing page via `head_freshness_key` (`_pdf.py`) and returns its
-`Last-Modified` (preferred) or `ETag`. EBEM publishes a new monthly card by
-editing the listing page (the opaque media-hash URL changes for every month),
-so the listing's freshness header is the right key for *every* contract at once;
-`probe` ignores `contract_id`. It returns `None` on any 4xx/5xx, network error,
-or missing header, in which case the coordinator's time-based TTL takes over.
+Returns the card URL `_find_latest` resolves for the contract's PDF kind, the
+same one `fetch` downloads. The listing sends neither `Last-Modified` nor
+`ETag`, so a `HEAD` probe always answered `None` and a new card waited on the
+24 h TTL. The URL is the signal instead: its opaque media hash changes with
+every upload (`/media/c1bb5li4/ebem_tariefkaart-elek-10-2026.pdf`), and the two
+contracts on the `elek` card share one key. It returns `None` when the listing
+cannot be read or links no card, in which case the coordinator's time-based TTL
+takes over. `test_probe_keys_on_the_card_the_fetcher_resolves`
+(`tests/test_ebem.py`) pins it.
 
 ### `fetch_for_month` (`ebem.py`)
 

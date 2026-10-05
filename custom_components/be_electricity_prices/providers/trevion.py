@@ -48,7 +48,6 @@ from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
     fetch_text,
-    head_freshness_key,
     is_transient_fetch_error,
     printed_vat_rate,
 )
@@ -346,11 +345,22 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 async def probe(
     session: aiohttp.ClientSession, contract_id: str, region: str
 ) -> str | None:
-    return (
-        await head_freshness_key(session, _LISTING_URL)
-        if contract_id in _BY_ID and region == REGION_FLANDERS
-        else None
-    )
+    """The card URL the fetcher would resolve for ``contract_id``.
+
+    The listing sends neither ``Last-Modified`` nor ``ETag``, so a header
+    probe always came back ``None`` and a new card waited on the 24 h TTL.
+    The filename carries the month and WordPress's ``-N`` re-upload suffix,
+    so the URL is the signal instead. ``None`` on a failed resolve, so the
+    TTL takes over.
+    """
+    contract = _BY_ID.get(contract_id)
+    if contract is None or region != REGION_FLANDERS:
+        return None
+    try:
+        url, _label = await _find_card(session, contract)
+    except ExtractorError:
+        return None
+    return url
 
 
 def _extract_validity(text: str) -> date | None:
