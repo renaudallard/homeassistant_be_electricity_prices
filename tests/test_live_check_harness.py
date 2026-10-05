@@ -347,9 +347,10 @@ def test_failure_labels_carry_only_the_regressions(tmp_path: Path) -> None:
     assert path.read_text() == "eneco/power_flex: fetch\n"
 
 
-def test_failure_labels_are_sorted_for_comm(tmp_path: Path) -> None:
-    """comm -12 in the workflow needs both sides sorted, and it re-sorts
-    under LC_ALL=C; emit the same order here so the two agree."""
+def test_failure_labels_are_sorted_like_the_workflow_sorts_them(tmp_path: Path) -> None:
+    """The workflow re-sorts this list under LC_ALL=C and keeps the
+    persistent failures in that order; emit the same order here so the two
+    agree."""
     checks = [
         lc.Check(label="mega/mega_smart_fixed: fetch", ok=False, detail="boom"),
         lc.Check(label="bolt/bolt_online: fetch", ok=False, detail="boom"),
@@ -3302,6 +3303,69 @@ def test_the_retry_loop_still_files_a_persistent_failure(tmp_path: Path) -> None
     assert _run_retry_loop(tmp_path / "failing", failing) == "rc=1"
     green = ": > extractor_failures.txt; exit 0"
     assert _run_retry_loop(tmp_path / "green", green) == "rc=0"
+
+
+def test_the_retry_loop_keeps_a_failure_an_attempt_could_not_judge(
+    tmp_path: Path,
+) -> None:
+    """The loop kept only what failed in every attempt, so a parse regression
+    whose card did not fetch on one attempt lost its label there, the
+    intersection emptied and the run ended green. An attempt that could not
+    judge the card no longer counts against the failure, while failures that
+    merely rotate between attempts still clear."""
+    persistent = "eneco/power_fix: federal excise > 0"
+    blip = (
+        "n=$(cat count 2>/dev/null || echo 0); n=$((n + 1)); echo $n > count\n"
+        'if [ "$n" -eq 2 ]; then\n'
+        "  printf 'eneco/power_fix: fetch\\n' > extractor_failures.txt\n"
+        "  printf 'eneco/power_fix\\n' > unevaluated.txt\n"
+        "else\n"
+        f"  printf '{persistent}\\n' > extractor_failures.txt\n"
+        "  : > unevaluated.txt\n"
+        "fi\n"
+        "exit 1"
+    )
+    assert _run_retry_loop(tmp_path / "blip", blip) == "rc=1"
+    work = tmp_path / "blip" / "work"
+    assert (work / "persistent_failures.txt").read_text() == f"{persistent}\n"
+    assert (work / "count").read_text().strip() == "7"
+
+    # A supplier-wide timeout covers every label of the supplier.
+    timeout = blip.replace("eneco/power_fix: fetch", "eneco: hard timeout").replace(
+        "printf 'eneco/power_fix\\n'", "printf 'eneco\\n'"
+    )
+    assert _run_retry_loop(tmp_path / "timeout", timeout) == "rc=1"
+
+    rotating = (
+        "n=$(cat count 2>/dev/null || echo 0); n=$((n + 1)); echo $n > count\n"
+        'printf "host$n/card: fetch\\n" > extractor_failures.txt\n'
+        'printf "host$n/card\\n" > unevaluated.txt\n'
+        "exit 1"
+    )
+    assert _run_retry_loop(tmp_path / "rotating", rotating) == "rc=0"
+    assert (tmp_path / "rotating" / "work" / "count").read_text().strip() == "2"
+
+
+def test_unevaluated_scopes_name_what_an_attempt_could_not_judge() -> None:
+    checks = [
+        lc.Check("eneco/power_fix: fetch", False, "TimeoutError"),
+        lc.Check("bolt/var/flanders: fetch", False, "HTTP 503"),
+        lc.Check("ebem: hard timeout", False, "exceeded 600s"),
+        lc.Check("luminus: unexpected error", False, "KeyError"),
+        lc.Check("spot/fallback: check crashed", False, "x"),
+        lc.Check("mega/zen: energy populated", False, "parse"),
+        lc.Check("ecofix/flexy: fetch", True),
+    ]
+    assert lc._unevaluated_scopes(checks) == [
+        "bolt/var/flanders",
+        "ebem",
+        "eneco/power_fix",
+        "luminus",
+        "spot/fallback",
+    ]
+    crashed = lc._unevaluated_scopes([lc.Check("_freshness: probe crashed", False)])
+    assert "frank/freshness" in crashed
+    assert len(crashed) == len(lc._SUPPLIERS)
 
 
 def test_a_withdrawn_suppliers_catalog_failure_does_not_set_the_exit_bit() -> None:

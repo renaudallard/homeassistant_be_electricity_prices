@@ -82,6 +82,7 @@ NOT_OURS = frozenset(
         "sensor/recorder.py",
         "tax_failures.txt",
         "tax_report.md",
+        "unevaluated.txt",
         "unparsed.json",
         "vat.json",
     }

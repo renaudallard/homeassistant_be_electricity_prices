@@ -5343,7 +5343,11 @@ async def _run(texts: Path | None = None) -> int:
     )
     regressions = _extractor_regressions(extractor_checks)
     # Side-channel: this attempt's failing check labels for the workflow's
-    # retry loop to intersect across attempts.
+    # retry loop to intersect across attempts, and what it could not judge.
+    # Written first, so a failure list on disk always has its scopes.
+    (ROOT / "unevaluated.txt").write_text(
+        "".join(f"{scope}\n" for scope in _unevaluated_scopes(extractor_checks))
+    )
     _write_failure_labels(ROOT / "extractor_failures.txt", regressions)
     extractor_failed = bool(regressions)
     # One bit for both: neither fails a pull request, and the workflow tells
@@ -5510,13 +5514,41 @@ def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
     times out on a different random subset of suppliers, so no attempt is
     green and the loop used to file whichever hosts were unlucky on the
     last one (issue #61); a parse error or a withdrawn card fails the same
-    checks every attempt and still files.
+    checks every attempt and still files. An attempt that could not judge a
+    check, its card not fetched, does not count against it: the loop keeps
+    what _unevaluated_scopes names.
 
     Only pass regressions here. An unreadable card fails every attempt by
     definition, so feeding it in would intersect with itself and refile
     daily - the exact noise _extractor_regressions exists to drop.
     """
     path.write_text("".join(f"{label}\n" for label in sorted(c.label for c in checks)))
+
+
+def _unevaluated_scopes(checks: Iterable[Check]) -> list[str]:
+    """What this attempt could not judge, as label scopes for the retry loop.
+
+    A label is in a scope when it is the scope followed by ``:`` or ``/``. A
+    card that did not fetch never reaches its assertions, a supplier that hit
+    its hard timeout or an unexpected error none of its own, and a freshness
+    phase that crashed no freshness row. The loop keeps a failure it already
+    holds when its scope is listed here, rather than reading the missing
+    label as a pass: otherwise one fetch timeout on a card in one of up to
+    seven attempts dropped a real parse regression on it, and the run ended
+    green.
+    """
+    scopes: set[str] = set()
+    for check in checks:
+        if check.ok:
+            continue
+        scope, _, what = check.label.partition(": ")
+        if what in ("fetch", "hard timeout", "unexpected error"):
+            scopes.add(scope)
+        elif check.label == "_freshness: probe crashed":
+            scopes.update(f"{supplier}/freshness" for supplier in _SUPPLIERS)
+        elif check.label == "spot/fallback: check crashed":
+            scopes.add("spot/fallback")
+    return sorted(scopes)
 
 
 def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:

@@ -114,7 +114,10 @@ jobs:
           # every one of them fetched fine off-runner). Intersecting the
           # per-attempt failures keeps a real regression (a parse error or
           # a withdrawn card fails the same checks every time) and drops
-          # rotating network noise.
+          # rotating network noise. A check an attempt could not judge, its
+          # card not fetched or its supplier timed out, is kept rather than
+          # read as a pass: unevaluated.txt names those scopes, and one fetch
+          # timeout used to drop a real parse regression and end green.
           : > persistent_failures.txt
           seeded=0
           for i in $(seq 1 "$attempts"); do
@@ -122,7 +125,7 @@ jobs:
             # Drop the previous attempt's list so a harness death that
             # skips writing it can never be intersected as if it were
             # this attempt's result.
-            rm -f extractor_failures.txt
+            rm -f extractor_failures.txt unevaluated.txt
             python scripts/live_check.py $texts > report.md
             rc=$?
             cat report.md
@@ -154,14 +157,28 @@ jobs:
               break
             fi
             # extractor_failures.txt is this attempt's failing check labels,
-            # written by live_check.py alongside report.md. LC_ALL is pinned
-            # because comm needs both inputs sorted in the same collation.
+            # written by live_check.py alongside report.md. Sorted under a
+            # pinned LC_ALL, so the persistent list the awk below keeps in
+            # order reads the same on every runner, and so does its
+            # fingerprint.
             LC_ALL=C sort -u extractor_failures.txt > attempt_failures.txt
             if [ "$seeded" -eq 0 ]; then
               cp attempt_failures.txt persistent_failures.txt
               seeded=1
             else
-              LC_ALL=C comm -12 persistent_failures.txt attempt_failures.txt \
+              # A label stays if it failed again, or if its scope (the
+              # label up to a ':' or '/') went unjudged this attempt. Kept
+              # in order, so the file stays sorted.
+              touch unevaluated.txt
+              awk 'FILENAME == ARGV[1] { scope[$0] = 1; next }
+                   FILENAME == ARGV[2] { failed[$0] = 1; next }
+                   ($0 in failed) { print; next }
+                   {
+                     for (s in scope)
+                       if (index($0, s ":") == 1 || index($0, s "/") == 1) {
+                         print; next
+                       }
+                   }' unevaluated.txt attempt_failures.txt persistent_failures.txt \
                 > persistent_failures.tmp
               mv persistent_failures.tmp persistent_failures.txt
             fi

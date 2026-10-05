@@ -1261,12 +1261,25 @@ whichever hosts were unlucky on the last one: issue #61 ran six attempts and pro
 all `TimeoutError`, all transient, and every card fetched fine off-runner. So the loop also
 intersects the per-attempt failures and only a check that failed in **every** attempt is filed.
 `scripts/live_check.py` writes each attempt's failing check labels to `extractor_failures.txt`
-alongside `report.md`, and the loop folds them with `comm -12` under `LC_ALL=C`. When the
+alongside `report.md`, and the loop folds them with `awk`. When the
 intersection empties it stops retrying (there is nothing persistent left to confirm) and clears
 bit 0 from `rc`, leaving the catalog and drift bits alone. A real regression - a parse error, a
-withdrawn card - fails the same checks every attempt and still files. The trade-off is that a
-genuinely intermittent regression, say a CDN serving two card layouts round-robin, is suppressed
-until it becomes consistent.
+withdrawn card - fails the same checks every attempt and still files.
+
+An attempt that could not judge a check does not count against it. A card that did not fetch never
+reaches its assertions, and a supplier that hit its hard timeout or an unexpected error none of
+its own, so a plain intersection read the missing label as a pass: one fetch timeout in one of
+the seven attempts dropped a real parse regression on that card and ended the run green.
+`_unevaluated_scopes` writes what the attempt could not judge to `unevaluated.txt`, as scopes (a
+`<prefix>: fetch` covers that prefix, a `<supplier>: hard timeout` or `unexpected error` the
+supplier, a crashed freshness phase every `<supplier>/freshness`), and the loop keeps a label it
+holds when the attempt failed it again or left its scope unjudged
+(`test_the_retry_loop_keeps_a_failure_an_attempt_could_not_judge`). The fetch and timeout labels
+are held to the same rule, so a card that 404s on every attempt still files, and timeouts that
+rotate between hosts still clear. Two trade-offs remain. A genuinely intermittent
+regression, say a CDN serving two card layouts round-robin, is suppressed until it becomes
+consistent. And a failure judged on one attempt only, its card unfetched on every other, is filed
+on that one sighting.
 
 The extractor issue body leads with those persistent failures, because the report under them is the
 last attempt's and on a slow runner also lists checks that failed only that once.
