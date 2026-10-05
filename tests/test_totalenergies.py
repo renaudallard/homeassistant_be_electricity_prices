@@ -874,3 +874,28 @@ def test_the_french_error_stands_when_the_dutch_card_fails_too(
         asyncio.run(
             totalenergies.fetch(None, "totalenergies_myessential", "wallonia")  # type: ignore[arg-type]
         )
+
+
+def test_a_dutch_card_that_did_not_arrive_is_reported_as_such(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout at the Dutch address says nothing about the French card's
+    layout. Reporting the French parse error raised the extractor_failed card
+    on the first blip; the network error lets the coordinator wait it out."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_transient_fetch_error,
+    )
+
+    async def text(_session: object, url: str) -> str:
+        if url.endswith("_NL.pdf"):
+            raise ExtractorError(f"network error fetching {url}: TimeoutError")
+        return "Carte tarifaire Injection"
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
+    with pytest.raises(ExtractorError) as caught:
+        asyncio.run(
+            totalenergies.fetch(None, "totalenergies_mycomfort_fixed", "brussels")  # type: ignore[arg-type]
+        )
+    assert is_transient_fetch_error(str(caught.value))
+    assert "MYCOMFORT-FIXED_ELECTRICITY_BXL_NL.pdf" in str(caught.value)

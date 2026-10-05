@@ -41,8 +41,10 @@ of `VL` / `WAL` / `BXL` (`_REGION_TO_CODE`, `totalenergies.py`). All cards
 are fetched in the French (`_FR`) edition.
 
 When the French card does not parse, `fetch` reads the same card's Dutch
-edition (`_NL.pdf`) and reports the French error when that fails too: in
-October 2026 the French address of myComfort Fixe in Brussels served the
+edition (`_NL.pdf`) and reports the French error when that fails too, unless
+the Dutch fetch failed transiently (a timeout, a 5xx), which is reported as
+that network error so the coordinator waits it out instead of asking for a
+layout report: in October 2026 the French address of myComfort Fixe in Brussels served the
 injection card, and myEssential in Flanders a card with its green contribution
 left blank, while both Dutch addresses served the right card. The probe still
 HEADs the French address, which TotalEnergies rewrites with every new month.

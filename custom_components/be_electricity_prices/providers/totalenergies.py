@@ -62,6 +62,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_transient_fetch_error,
     printed_vat_rate,
 )
 from ._parse import require_contract
@@ -274,12 +275,16 @@ async def fetch(
         # in Flanders a card with its green contribution left blank, while
         # the Dutch address served the right card. The Dutch card is read
         # when the French one does not parse, and the French error stands
-        # when neither does.
+        # when neither does. A Dutch fetch that failed transiently is
+        # reported as such instead: it says nothing about either card, and
+        # the French parse error would ask for a layout report on one blip.
         dutch = _document_url(contract.slug, region, "NL")
         try:
             text = await fetch_pdf_text_layout(session, dutch)
             return parse_snapshot(contract_id, text, region, dutch)
-        except ExtractorError:
+        except ExtractorError as dutch_err:
+            if is_transient_fetch_error(str(dutch_err)):
+                raise
             raise err from None
 
 
