@@ -3219,6 +3219,68 @@ def _editions(
     return [(c.label, c.ok, c.detail) for c in lc.CHECKS if c.kind == "edition"]
 
 
+def _te_variable(rates: list[float], bases: list[float]) -> Any:
+    """A parsed TotalEnergies variable leg: printed c/kWh incl. VAT and the
+    card's ``factor * BELPEXM_RLP + base`` pairs, HTVA, at 6 % VAT."""
+    factors = (0.1098, 0.1223, 0.0989, 0.1034)
+    names = ("", "_peak", "_offpeak", "_exclusive_night")
+    leg: dict[str, float] = {}
+    for column, rate, factor, base, name in zip(
+        ("current", "peak", "offpeak", "exclusive_night"),
+        rates,
+        factors,
+        bases,
+        names,
+        strict=True,
+    ):
+        leg[column] = rate / 100.0
+        leg[f"formula_factor{name}"] = factor * 1.06 * 10.0
+        leg[f"formula_base{name}"] = base * 1.06 / 100.0
+    return SimpleNamespace(energy=SimpleNamespace(**leg))
+
+
+def test_an_indicative_block_off_the_cards_own_formula_fails() -> None:
+    """Electricité Variable in Brussels printed myComfort's indicative block,
+    26,43 / 28,61 / 24,53 / 25,21, under its own bases of 7.52 where
+    myComfort's are 7.01. Every figure is a price at some index, so the
+    parser took it, and keyless entries billed it: at the index the rest of
+    the range was priced at, its own formula gives 26,97 under Compteur
+    Simple. The cards of 1 October 2026, as printed."""
+    printed = [26.43, 28.61, 24.53, 25.21]
+    cards = [
+        (
+            "totalenergies/totalenergies_electricite_variable/brussels",
+            _te_variable(printed, [7.52, 7.52, 7.52, 7.42]),
+        ),
+        (
+            "totalenergies/totalenergies_mycomfort/brussels",
+            _te_variable(printed, [7.01, 7.01, 7.01, 6.91]),
+        ),
+        (
+            "totalenergies/totalenergies_mycomfort/flanders",
+            _te_variable([23.18, 25.37, 21.28, 21.96], [3.88, 3.88, 3.88, 3.78]),
+        ),
+        (
+            "totalenergies/totalenergies_mycomfort/wallonia",
+            _te_variable([25.17, 27.33, 23.28, 23.98], [5.88, 5.88, 5.88, 5.78]),
+        ),
+        # A fixed card has no formula and takes no part.
+        ("totalenergies/totalenergies_fixe/wallonia", SimpleNamespace(energy=None)),
+    ]
+    lc.CHECKS.clear()
+    lc._expect_indicatives_at_the_range_index(cards)
+    rows = {c.label.split(":")[0]: c for c in lc.CHECKS}
+    assert set(rows) == {prefix for prefix, _ in cards[:4]}
+    bad = rows["totalenergies/totalenergies_electricite_variable/brussels"]
+    assert not bad.ok and not bad.expected
+    assert "current 26.43 c/kWh printed solves to 158.6" in bad.detail
+    assert "this card's formula gives 26.97" in bad.detail
+    assert all(
+        row.ok for prefix, row in rows.items() if "electricite_variable" not in prefix
+    )
+    lc.CHECKS.clear()
+
+
 def test_a_cards_two_editions_are_compared_on_what_is_billed() -> None:
     """Electricité Variable in Wallonia charged a 100,00 EUR fee in French and
     94,34 in Dutch in October 2026. Where each edition was fetched from and the

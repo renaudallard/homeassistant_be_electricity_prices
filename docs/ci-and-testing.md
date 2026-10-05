@@ -1311,6 +1311,16 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update card-editions issue | `live-check-editions` | `[live-check] a supplier's French and Dutch cards disagree` |
 
+A TotalEnergies variable card's "A titre indicatif" block, which a keyless entry bills as
+printed, is held to the card's own formula at the index it names, last month's BELPEX_M_RLP. That
+index is one number for the whole range, so each card's figures, solved through its own formula,
+must land within `_INDICATIVE_INDEX_SPREAD` (2,5 EUR/MWh) of the median of the other variable
+cards (`_expect_indicatives_at_the_range_index`). In October 2026 every card solved to within 1,7
+of the rest, except the Brussels Electricité Variable card of 1 October, which printed myComfort's
+block under its own bases and solved about 5 below, until TotalEnergies reprinted it. It is an
+extractor row with no allowance: such a card bills wrong until it is reprinted, so it files
+(`test_an_indicative_block_off_the_cards_own_formula_fails`).
+
 TotalEnergies' cards are also read in Dutch and compared with the French edition
 (`_compare_totalenergies_editions`, `scripts/live_check.py`), into `edition_report.md` and its
 own issue. The French card is billed and the Dutch one stands in only when the French one does

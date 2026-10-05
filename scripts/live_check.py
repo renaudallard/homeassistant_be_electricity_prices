@@ -1952,14 +1952,16 @@ async def _check_totalenergies(
     # One memo for the walk, so the edition comparison reads the French card
     # the fetch already read instead of downloading and parsing it again.
     with _memoise_text_fetches({}):
-        await _walk_totalenergies(session, totalenergies, card_valid_until)
+        cards = await _walk_totalenergies(session, totalenergies, card_valid_until)
+    _expect_indicatives_at_the_range_index(cards)
 
 
 async def _walk_totalenergies(
     session: aiohttp.ClientSession,
     totalenergies: types.ModuleType,
     card_valid_until: Callable[..., date | None],
-) -> None:
+) -> list[tuple[str, Any]]:
+    cards: list[tuple[str, Any]] = []
     for contract in totalenergies._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
@@ -1973,6 +1975,7 @@ async def _walk_totalenergies(
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
+            cards.append((prefix, snap))
             _expect_region_basics(prefix, region_key, snap)
             _expect(
                 f"{prefix}: publication label",
@@ -1990,6 +1993,83 @@ async def _walk_totalenergies(
             await _compare_totalenergies_editions(
                 session, totalenergies, contract, region_key
             )
+    return cards
+
+
+# How far, in EUR/MWh, a variable card's indicative figures may solve from the
+# index the rest of the range solves to. Every TotalEnergies variable card
+# prints its "A titre indicatif" block at the same index, last month's
+# BELPEX_M_RLP, and in October 2026 each card's columns solved to within 1,3
+# of each other and every card to within 1,7 of the rest of the range. The
+# Electricité Variable card in Brussels of 1 October printed myComfort's block
+# to the cent under its own bases, 0,51 c/kWh higher, and solved about 5
+# below until TotalEnergies reprinted it.
+_INDICATIVE_INDEX_SPREAD = 2.5
+_INDICATIVE_COLUMNS = (
+    ("current", "formula_factor", "formula_base"),
+    ("peak", "formula_factor_peak", "formula_base_peak"),
+    ("offpeak", "formula_factor_offpeak", "formula_base_offpeak"),
+    (
+        "exclusive_night",
+        "formula_factor_exclusive_night",
+        "formula_base_exclusive_night",
+    ),
+)
+
+
+def _indicative_indices(energy: object) -> list[tuple[str, float, float, float, float]]:
+    """Each printed column of a variable leg with its formula, as
+    ``(column, rate, factor, base, index)``, the index in EUR/MWh the rate
+    solves to. Empty for a leg with no month formula."""
+    out: list[tuple[str, float, float, float, float]] = []
+    for column, factor_name, base_name in _INDICATIVE_COLUMNS:
+        rate = getattr(energy, column, None)
+        factor = getattr(energy, factor_name, None)
+        base = getattr(energy, base_name, None)
+        if rate is not None and factor and base is not None:
+            out.append((column, rate, factor, base, (rate - base) / factor * 1000.0))
+    return out
+
+
+def _expect_indicatives_at_the_range_index(cards: list[tuple[str, Any]]) -> None:
+    """A variable card's printed indicative prices are its own formula at the
+    index it names, which is the index every card of the range names.
+
+    A keyless entry bills that block as printed, so a block that does not
+    follow from the card's formula bills wrong for as long as the card is
+    current. The parser cannot see it: the block solves to an index, just
+    not the one the card says it used. The month's value of that index is
+    what the rest of the range solves to, so each card is held to the median
+    of the others, one vote per card. The cards are read as the parser left
+    them, contribution and all, so a card whose formula leaves out the
+    contribution its footnote names solves on the same footing as the rest.
+    """
+    solved = {
+        prefix: columns
+        for prefix, snap in cards
+        if (columns := _indicative_indices(getattr(snap, "energy", None)))
+    }
+    for prefix, columns in solved.items():
+        others = sorted(
+            sorted(c[4] for c in other)[len(other) // 2]
+            for name, other in solved.items()
+            if name != prefix
+        )
+        if len(others) < 3:
+            continue
+        index = others[len(others) // 2]
+        off = [c for c in columns if abs(c[4] - index) > _INDICATIVE_INDEX_SPREAD]
+        _expect(
+            f"{prefix}: indicative prices are the formula at the range's index",
+            not off,
+            "; ".join(
+                f"{column} {rate * 100:.2f} c/kWh printed solves to "
+                f"{solved_at:.1f} EUR/MWh, where the rest of the range solves "
+                f"to {index:.1f}, at which this card's formula gives "
+                f"{(factor * index / 1000.0 + base) * 100:.2f}"
+                for column, rate, factor, base, solved_at in off
+            ),
+        )
 
 
 # What a card's two editions may differ in without either being wrong: where

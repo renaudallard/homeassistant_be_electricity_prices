@@ -324,8 +324,13 @@ the card is refused. Read as the price, the broken block billed 2,30 c/kWh in
 Flanders where the card prints 22,87, and 4,16 c/kWh on myComfort in Brussels
 where it prints 24,83. TotalEnergies filled the blocks in on its afternoon
 republications (26,43 under "Compteur Simple" on the Brussels Electricité
-Variable card, the formula at 158,6 EUR/MWh), and those are billed again. A
-card stating its contribution in a footnote always prints the formula, so one
+Variable card, the formula at 158,6 EUR/MWh), and those are billed again. That
+Brussels block is myComfort's to the cent under Electricité Variable's own
+bases, 7.52 against 7.01, so it solved about 5 EUR/MWh below the rest of the
+range and billed keyless entries 0,54 c/kWh low, as printed, until TotalEnergies
+reprinted the card with myComfort's bases by 5 October. The live check fails on
+such a block (`_expect_indicatives_at_the_range_index`, `scripts/live_check.py`).
+A card stating its contribution in a footnote always prints the formula, so one
 that does not is refused rather than billed unchecked. The block also no longer has an injection column, and
 `_realized_monthly_injection` only reads a block headed `Injection`: the last
 `Compteur Simple` of a consumption-only block credited 3,87 c/kWh of feed-in on
