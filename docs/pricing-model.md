@@ -989,6 +989,17 @@ from October 2026, `TimeOfUseRates.sunday` and its monthly formula) bills it ins
 Sundays 11:00-17:00 of the spring/summer season (`is_happy_sunday`, `pricing.py`),
 ahead of the slot rule; the card names no public holiday, so only Sundays take it.
 
+Because the cheap midday band is a summer one, the annual estimates
+(`projected_year_cost`, the compare page and the ranking) weight a
+`smartflex_seasonal` card's year walk (`_year_avg_all_in`, `compare_weighting.py`)
+on the household's measured shape per season, the kWh an average day of each
+season drew in each hour (`HourShares.by_season`, `meter_hourly.py`), when the
+trailing year measured both seasons. One hour-of-day shape for the year gave
+the summer midday the load of a winter one, and on the Synergrid profile quoted
+the card about 13 EUR a year under what the same load is billed hour by hour.
+Every other card keeps the year-wide shape, which is exact for bands that do
+not move with the season.
+
 ### Impact: `dso_impact_band`
 
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU

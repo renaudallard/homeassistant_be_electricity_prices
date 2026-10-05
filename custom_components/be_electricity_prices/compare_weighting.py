@@ -632,10 +632,23 @@ def _year_avg_all_in(
     of the day. With it, each hour carries the kWh actually recorded in it,
     which is how the bill beside this figure is computed. Without it the hours
     weigh equally, which assumes a household that consumes uniformly around
-    the clock. Returns None on any compute failure so the caller can fall back.
+    the clock. On a card whose bands move with the season each day takes its
+    own season's shape instead (``HourShares.by_season``), which carries how
+    much more a winter day draws as well: one shape for the year gave the
+    summer-only cheap midday of Luminus SmartFlex the kWh of a winter one.
+    Returns None on any compute failure so the caller can fall back.
     """
+    from .injection import _tou_weekend_rule
+    from .meter_hourly import HourShares
     from .pricing import _is_smartflex_summer, compute_breakdown, is_belgian_holiday
     from .spot_stats import _register_for
+
+    seasons = (
+        hour_weights.by_season
+        if isinstance(hour_weights, HourShares)
+        and _tou_weekend_rule(snapshot.energy) == "smartflex_seasonal"
+        else None
+    )
 
     counts: dict[tuple[bool, int, bool], int] = {}
     representative: dict[tuple[bool, int, bool], date] = {}
@@ -650,6 +663,7 @@ def _year_avg_all_in(
         midnight = datetime.combine(
             representative[key], time(), tzinfo=dt_util.get_default_time_zone()
         )
+        shape = hour_weights if seasons is None else seasons[key[0]]
         for hour in range(24):
             # Wall-clock arithmetic on purpose: the breakdown reads the local
             # hour, and a seam day still yields 24 distinct ones this way.
@@ -665,7 +679,7 @@ def _year_avg_all_in(
                 )
             except Exception:  # noqa: BLE001
                 return None
-            w = (1.0 if hour_weights is None else hour_weights.get(hour, 0.0)) * days
+            w = (1.0 if shape is None else shape.get(hour, 0.0)) * days
             total += float(getattr(bd, component)) * w
             weight_sum += w
     return total / weight_sum if weight_sum else None

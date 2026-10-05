@@ -496,17 +496,50 @@ async def _measured_hourly(
     return metered.kwh
 
 
+class HourShares(dict[int, float]):
+    """Share of the kWh falling in each hour of the local day.
+
+    ``by_season`` is the same reading per season, as the kWh an average day of
+    that season drew in each hour, keyed by ``pricing._is_smartflex_summer``
+    of the day, or ``None`` unless both seasons were measured. One shape for
+    the year counts a winter hour as much as a summer one. That is exact for
+    a card whose bands do not move with the season, and not for one whose do:
+    Luminus SmartFlex prices 11:00-17:00 at super-creuses only in summer, and
+    a household that draws more in winter puts fewer of its kWh there than a
+    year-wide shape says, about 13 EUR a year on the Synergrid profile.
+    """
+
+    by_season: dict[bool, dict[int, float]] | None = None
+
+
 def _hour_of_day_shares(
     kwh_by_hour: Mapping[datetime, float] | None,
-) -> dict[int, float] | None:
-    """Share of the kWh falling in each hour of the local day, or ``None``."""
+) -> HourShares | None:
+    """Share of the kWh falling in each hour of the local day, or ``None``.
+
+    With the per-season shape beside it (``HourShares.by_season``).
+    """
+    from .pricing import _is_smartflex_summer
+
     if not kwh_by_hour:
         return None
     per_hour: dict[int, float] = {}
+    per_season: dict[bool, dict[int, float]] = {True: {}, False: {}}
+    days: dict[bool, set[date]] = {True: set(), False: set()}
     for when, kwh in kwh_by_hour.items():
-        hour = dt_util.as_local(when).hour
-        per_hour[hour] = per_hour.get(hour, 0.0) + kwh
+        local = dt_util.as_local(when)
+        per_hour[local.hour] = per_hour.get(local.hour, 0.0) + kwh
+        summer = _is_smartflex_summer(local.date())
+        season = per_season[summer]
+        season[local.hour] = season.get(local.hour, 0.0) + kwh
+        days[summer].add(local.date())
     total = sum(per_hour.values())
     if total <= 0:
         return None
-    return {hour: kwh / total for hour, kwh in per_hour.items()}
+    shares = HourShares({hour: kwh / total for hour, kwh in per_hour.items()})
+    if days[True] and days[False]:
+        shares.by_season = {
+            summer: {hour: kwh / len(days[summer]) for hour, kwh in season.items()}
+            for summer, season in per_season.items()
+        }
+    return shares

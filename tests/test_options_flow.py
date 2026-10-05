@@ -4000,6 +4000,80 @@ def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
     assert 0.10 < (a - constants) < 0.30
 
 
+def test_compare_smartflex_weights_each_season_on_its_own_load() -> None:
+    """SmartFlex's cheap midday is a summer band, so the kWh it gets has to
+    be the summer days' own. One hour-of-day shape for the year gave it a
+    winter day's midday too, and quoted the card under what the same load is
+    billed hour by hour: about 13 EUR a year on the Synergrid profile."""
+    from datetime import time
+
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.meter_hourly import (
+        _hour_of_day_shares,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        _is_smartflex_summer,
+        compute_breakdown,
+    )
+    from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        supplier="luminus",
+        contract="luminus_smartflex",
+        energy=TimeOfUseRates(
+            peak=0.30,
+            transition=0.20,
+            offpeak=0.10,
+            yearly_fixed_fee=60.0,
+            weekend_rule="smartflex_seasonal",
+        ),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    zone = dt_util.get_default_time_zone()
+
+    def load(day: date, hour: int) -> float:
+        # A winter day draws more, and most of it at midday.
+        if _is_smartflex_summer(day):
+            return 0.4 + (0.2 if 11 <= hour < 17 else 0.0)
+        return 1.0 + (1.0 if 11 <= hour < 17 else 0.0)
+
+    def hours(first: date) -> Iterator[tuple[date, int, datetime]]:
+        for offset in range(365):
+            day = first + timedelta(days=offset)
+            midnight = datetime.combine(day, time(), tzinfo=zone)
+            for hour in range(24):
+                yield day, hour, midnight + timedelta(hours=hour)
+
+    measured = {
+        when.astimezone(UTC): load(day, hour)
+        for day, hour, when in hours(date(2025, 10, 1))
+    }
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=zone)
+    quoted = _tou_weighted_per_kwh(
+        snap,
+        "ores",
+        "wallonia",
+        now,
+        None,
+        "dynamic",
+        "bi_horaire",
+        _hour_of_day_shares(measured),
+    )
+    billed = 0.0
+    kwh = 0.0
+    for day, hour, when in hours(now.date()):
+        rate = compute_breakdown(
+            snap, "ores", "wallonia", when, None, "dynamic", "bi_horaire"
+        ).all_in
+        billed += load(day, hour) * rate
+        kwh += load(day, hour)
+    assert quoted == pytest.approx(billed / kwh, rel=1e-5)
+
+
 def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
     # A Fixed/Variable contract compared on a bi-hourly meter must time-
     # weight peak vs off-peak, not return whichever slot the dialog opened
