@@ -55,8 +55,12 @@ from custom_components.be_electricity_prices import snapshot_months
 from custom_components.be_electricity_prices.api import EntsoeError
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers._rates import (
+    FixedRates,
+    InjectionRates,
+)
 from custom_components.be_electricity_prices.providers.frank import parse_snapshot
-from tests import fixture_text
+from tests import fixture_text, make_snapshot
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _METERS = {
@@ -120,6 +124,7 @@ class _Recorder:
                 "fn": fn,
                 "ids": sorted(ids),
                 "in_setup": "async_setup_entry" in stack,
+                "year_end": "_compute_year_end_cost" in stack,
             }
         )
 
@@ -260,16 +265,7 @@ def _a_frank_entry(
     frank = replace(
         EXTRACTORS["frank"], fetch=_fetch, probe=_probe, fetch_for_month=_month
     )
-    for eid in _METERS:
-        hass.states.async_set(
-            eid,
-            str(recorder.series(eid)[1][-1]),
-            {
-                "device_class": "energy",
-                "state_class": "total_increasing",
-                "unit_of_measurement": "kWh",
-            },
-        )
+    _set_meter_states(hass, recorder)
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Frank Energie Dynamisch Korting (Flanders)",
@@ -292,25 +288,97 @@ def _a_frank_entry(
         for cm in (
             patch.object(snapshot_months, "_archived_card_from_github", _archive),
             patch.dict(EXTRACTORS, {"frank": frank}),
-            patch(
-                "homeassistant.components.recorder.get_instance",
-                lambda _h: recorder,
-            ),
-            patch(
-                "homeassistant.components.recorder.statistics.statistics_during_period",
-                recorder.statistics_during_period,
-            ),
-            patch(
-                "homeassistant.components.recorder.history.get_significant_states",
-                recorder.get_significant_states,
-            ),
-            patch(
-                "homeassistant.components.recorder.statistics.async_import_statistics",
-                recorder.async_import_statistics,
-            ),
+            *_recorder_patches(recorder),
             patch(_SPOTS + ".fetch_day_ahead_or_fallback", _wrapper),
             patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _method),
             patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _no_fallback),
+        ):
+            stack.enter_context(cm)
+        yield entry
+
+
+def _recorder_patches(recorder: _Recorder) -> tuple[Any, ...]:
+    return (
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            lambda _h: recorder,
+        ),
+        patch(
+            "homeassistant.components.recorder.statistics.statistics_during_period",
+            recorder.statistics_during_period,
+        ),
+        patch(
+            "homeassistant.components.recorder.history.get_significant_states",
+            recorder.get_significant_states,
+        ),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            recorder.async_import_statistics,
+        ),
+    )
+
+
+def _set_meter_states(hass: HomeAssistant, recorder: _Recorder) -> None:
+    for eid in _METERS:
+        hass.states.async_set(
+            eid,
+            str(recorder.series(eid)[1][-1]),
+            {
+                "device_class": "energy",
+                "state_class": "total_increasing",
+                "unit_of_measurement": "kWh",
+            },
+        )
+
+
+@contextmanager
+def _a_fixed_entry(
+    hass: HomeAssistant, recorder: _Recorder
+) -> Iterator[MockConfigEntry]:
+    """A static contract, whose year-end cost is walked every day."""
+    snap = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.12, peak=0.14, offpeak=0.10),
+        injection=InjectionRates(current=0.03),
+    )
+
+    async def _fetch(*_a: Any) -> Any:
+        return snap
+
+    async def _probe(*_a: Any) -> str:
+        return "probe-key"
+
+    async def _none(*_a: Any, **_k: Any) -> None:
+        return None
+
+    eneco = replace(
+        EXTRACTORS["eneco"], fetch=_fetch, probe=_probe, fetch_for_month=_none
+    )
+    _set_meter_states(hass, recorder)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Eneco Zon & Wind Vast (Wallonia)",
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "solar_regime": "injection",
+            "card_archive": False,
+            "day_consumption_kwh": "sensor.cons_day",
+            "night_consumption_kwh": "sensor.cons_night",
+            "day_injection_kwh": "sensor.inj_day",
+            "night_injection_kwh": "sensor.inj_night",
+        },
+    )
+    entry.add_to_hass(hass)
+    with ExitStack() as stack:
+        for cm in (
+            patch.object(snapshot_months, "_archived_card_from_github", _none),
+            patch.dict(EXTRACTORS, {"eneco": eneco}),
+            *_recorder_patches(recorder),
         ):
             stack.enter_context(cm)
         yield entry
@@ -385,6 +453,32 @@ async def test_setup_reads_no_meter_and_the_figures_follow(
         assert await hass.config_entries.async_remove(entry.entry_id)
         await hass.async_block_till_done()
         assert f"{DOMAIN}_costs_{entry.entry_id}" not in hass_storage
+
+
+async def test_the_year_end_walk_reads_no_meter_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The year-end cost walks the year to date and last year's same days,
+    both inside the hours the tick read once per meter: served from them, as
+    every other figure is, rather than read a second and a third time."""
+    freezer.move_to("2026-06-20 10:30:00+02:00")
+    recorder = _Recorder()
+    with _a_fixed_entry(hass, recorder) as entry:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await _settle(hass, freezer)
+        assert entry.runtime_data.data.year_end_cost_eur is not None
+        read = [r for r in recorder.meter_reads() if r["fn"] == "statistics"]
+        assert sorted(r["ids"][0] for r in read) == sorted(_METERS)
+        # The first tick of a day walks the year end again.
+        recorder.reads.clear()
+        freezer.move_to("2026-06-21 01:40:00+02:00")
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+        assert entry.runtime_data.data.year_end_cost_eur is not None
+        assert recorder.meter_reads()
+        assert [r for r in recorder.meter_reads() if r["year_end"]] == []
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
 
 
 async def test_a_held_figure_covers_only_its_own_window(

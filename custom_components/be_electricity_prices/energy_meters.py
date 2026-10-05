@@ -734,11 +734,21 @@ def memoise_meter_reads(store: dict[Any, Any]) -> Iterator[None]:
 def reading_year_ahead(ahead: YearAhead) -> Iterator[None]:
     """Read the days from ``ahead.pivot`` off last year inside this block.
 
-    Outside any memo: the memo keys on the window, which a read ahead
-    answers differently.
+    The memo's day, hour and live entries key on the window, which a read
+    ahead answers differently, so the block starts without them. Its raw
+    recorder rows are real windows, the year to date and last year's same
+    days among them (``warm_meter_reads``), and every window a read ahead
+    asks the recorder for lies inside them: kept, they spare the year-end
+    walk a second read of a year of hours per meter. A window the block
+    reads that they do not cover is added to them, and is as true outside it.
     """
     ahead_token = YEAR_AHEAD.set(ahead)
-    memo_token = _METER_MEMO.set(None)
+    outer = _METER_MEMO.get()
+    memo_token = _METER_MEMO.set(
+        None
+        if outer is None
+        else {key: rows for key, rows in outer.items() if key[0] == "rows"}
+    )
     try:
         yield
     finally:
