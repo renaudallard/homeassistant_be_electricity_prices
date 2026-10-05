@@ -52,6 +52,8 @@ REMOTE_DIR="be_gate/gate-$SHA.$$"
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5
   -o ServerAliveCountMax=3)
 shipped=""
+names=()
+pids=()
 
 [ -x "$PYTHON" ] || { echo "no interpreter at $PYTHON" >&2; exit 1; }
 
@@ -61,7 +63,13 @@ cleanup() {
   rm -rf "$LOGS"
   [ -n "$shipped" ] && "${SSH[@]}" "$REMOTE" "rm -rf $REMOTE_DIR" >/dev/null 2>&1
 }
-trap cleanup EXIT INT TERM
+# An interrupt stops the checks and the gate. Trapped like EXIT, cleanup ran
+# and the script carried on: it waited for every check, which run in the
+# background and so ignore SIGINT, then reported each one FAILED from logs
+# cleanup had removed. The checks are stopped here, since nothing else
+# would, and the exit runs cleanup once.
+trap cleanup EXIT
+trap 'kill -TERM "${pids[@]}" 2>/dev/null; exit 130' INT TERM
 
 mkdir -p "$LOGS"
 git worktree add --detach --quiet "$WORKTREE" "$FULL_SHA" || exit 1
@@ -86,14 +94,13 @@ remote_ready() {
     echo $want > be_gate/.venv/requirements.sha256"
 }
 
-names=()
-pids=()
 # Start one check in the background, its output in LOGS under its position.
 start() {
   local n=${#names[@]}
   names+=("$1")
   shift
-  ( cd "$WORKTREE" && "$@" ) > "$LOGS/$n.log" 2>&1 &
+  # exec, so the pid kept is the check's own and the trap can stop it.
+  ( cd "$WORKTREE" && exec "$@" ) > "$LOGS/$n.log" 2>&1 &
   pids+=($!)
 }
 
