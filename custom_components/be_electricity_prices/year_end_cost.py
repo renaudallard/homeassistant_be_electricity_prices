@@ -164,8 +164,12 @@ async def _compute_year_end_cost(
             else ""
         )
     )
+    # On 1 January nothing of the year is metered yet: naming last year's
+    # 31 December as the end of the metered part read as if it were.
     breakdown["volume_basis"] = (
-        f"metered to {today - timedelta(days=1)}, then last year's same days"
+        "nothing metered yet this year, last year's same days"
+        if (today.month, today.day) == (1, 1)
+        else f"metered to {today - timedelta(days=1)}, then last year's same days"
     )
     breakdown["contract_basis"] = _contract_basis(entry, today)
     breakdown["consumption_kwh"] = stats.get("consumption_ytd_kwh", 0.0)

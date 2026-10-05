@@ -303,6 +303,22 @@ async def test_the_year_end_is_the_walk_over_the_year_to_come(
     assert diag["volume_basis"] == "metered to 2026-11-01, then last year's same days"
 
 
+async def test_on_1_january_nothing_is_metered_yet(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No day of the new year has closed, so the basis names no metered end:
+    last year's 31 December is not part of this year's bill."""
+    freezer.move_to("2027-01-01 12:00:00+01:00")
+    snap = make_snapshot(energy=FixedRates(single=0.25))
+    got, diag = await _year_end(
+        hass, make_entry(consumption_kwh="sensor.cons"), snap, _seasonal
+    )
+    assert got is not None, diag
+    assert diag["volume_basis"] == (
+        "nothing metered yet this year, last year's same days"
+    )
+
+
 async def test_a_summer_surplus_is_spent_on_the_winter_after_it(
     hass: HomeAssistant, freezer: Any
 ) -> None:
