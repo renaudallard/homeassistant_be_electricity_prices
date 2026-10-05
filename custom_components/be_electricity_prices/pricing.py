@@ -32,8 +32,8 @@ Meter types follow the Belgian convention:
   - ``mono``    - single-rate meter (compteur simple / enkelvoudige meter).
                   Energy and distribution billed at the supplier's single rate.
   - ``bi``      - bi-hourly meter (compteur bi-horaire / tweevoudige meter).
-                  Day rate weekdays 07:00-22:00, night rate the rest of the
-                  time and full weekends.
+                  Day and night rates on each region's own schedule, see
+                  ``is_offpeak``.
   - ``dynamic`` - smart meter (digitale meter) capable of hourly readings.
                   For dynamic contracts, energy is computed as
                   ``factor x spot + base`` per hour. A smart meter also
