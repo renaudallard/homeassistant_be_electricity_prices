@@ -73,6 +73,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
+from ._settle import settled_injection
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -154,6 +155,15 @@ _NUM = r"(\d{1,3}(?:[\xa0\u2009\u202f]\d{3})+(?:,\d{1,4})?|\d+(?:[\.,]\d{1,4})?)
 # August's realised value, which is what August is billed at.
 _INDEX_FOOTNOTE_RE = re.compile(
     r"Belpex-RLP-M\s*\((\d{2})/(\d{4}):\s*€\s*([\d.,]+)\s*/MWh\)"
+)
+# The same footnote for the feed-in credit, on the injection page of every
+# card but Dynamic: "laatst gekende waarde van Belpex-injectie (09/2026:
+# €156,4069/MWh)". A different index from the one above (162,88 against
+# 156,4069 for September), so it has a pattern of its own. The yearly
+# estimate beside it, "Belpex-injectie (€122,1988/MWh)", names no month and
+# does not match.
+_INJECTION_FOOTNOTE_RE = re.compile(
+    r"Belpex-injectie\s*\((\d{2})/(\d{4}):\s*€\s*([\d.,]+)\s*/MWh\)"
 )
 _WS = r"[\s\xa0]"
 # Horizontal whitespace only: the space variants pypdf prints between two
@@ -264,7 +274,21 @@ def published_index(text: str) -> tuple[date, float] | None:
     of the delivery month, known only at month end, so this figure is what the
     named month is finally billed at. Four decimals, straight from Eneco.
     """
-    match = _INDEX_FOOTNOTE_RE.search(text)
+    return _footnoted_index(_INDEX_FOOTNOTE_RE, text)
+
+
+def published_injection_index(text: str) -> tuple[date, float] | None:
+    """The Belpex-injectie value a card prints, as ``(month, EUR/kWh)``.
+
+    The feed-in twin of :func:`published_index`: the printed Maandprijs of the
+    credit is its formula at the previous month's Belpex-injectie, and the
+    card for the month after names what the month settled at.
+    """
+    return _footnoted_index(_INJECTION_FOOTNOTE_RE, text)
+
+
+def _footnoted_index(pattern: re.Pattern[str], text: str) -> tuple[date, float] | None:
+    match = pattern.search(text)
     if match is None:
         return None
     return (
@@ -281,7 +305,7 @@ async def _settle_on_published_index(
     snap: SupplierSnapshot,
     year_month: date,
 ) -> SupplierSnapshot:
-    """Re-resolve an archived Flex month on the index Eneco published for it.
+    """Re-resolve an archived month on the indices Eneco published for it.
 
     The card for ``year_month`` prints its Maandprijs on the PREVIOUS month's
     Belpex-RLP-M, so billing that figure bills last month's index: measured on
@@ -291,6 +315,13 @@ async def _settle_on_published_index(
     the archived month takes it: ``current`` becomes the card's own formula at
     the realised index and ``index_realised`` records the value.
 
+    The feed-in credit of every card but Dynamic works the same way on its own
+    index, Belpex-injectie, which the next card footnotes too, so it is
+    settled from the same fetch with the month's own coefficients. That holds
+    for Fix and Fix One as well: their energy is fixed, their credit is not.
+    Measured on the 2026 cards, the printed credit ran between 1,87 c/kWh
+    over and 2,28 c/kWh under the settled one.
+
     While that next card is not out yet (the running month, or the first days
     after it closes) the printed estimate stands and the snapshot is flagged
     ``provisional`` so the monthly cache asks again after its TTL rather than
@@ -298,9 +329,14 @@ async def _settle_on_published_index(
     names some other month is left alone: nothing on it settles this one.
     """
     energy = snap.energy
-    if not isinstance(energy, VariableRates):
-        return snap
-    if energy.formula_factor is None or energy.formula_base is None:
+    settles_energy = (
+        isinstance(energy, VariableRates)
+        and energy.formula_factor is not None
+        and energy.formula_base is not None
+    )
+    injection = snap.injection
+    settles_injection = injection is not None and injection.month_indexed
+    if not settles_energy and not settles_injection:
         return snap
     following = date(
         year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
@@ -309,17 +345,31 @@ async def _settle_on_published_index(
     if found is None:
         return replace(snap, provisional=True)
     published = published_index(found[1])
-    if published is None or published[0] != year_month:
-        return snap
-    index = published[1]
-    return replace(
-        snap,
-        energy=replace(
-            energy,
-            current=energy.formula_factor * index + energy.formula_base,
-            index_realised=index,
-        ),
-    )
+    if (
+        isinstance(energy, VariableRates)
+        and energy.formula_factor is not None
+        and energy.formula_base is not None
+        and published is not None
+        and published[0] == year_month
+    ):
+        index = published[1]
+        snap = replace(
+            snap,
+            energy=replace(
+                energy,
+                current=energy.formula_factor * index + energy.formula_base,
+                index_realised=index,
+            ),
+        )
+    published = published_injection_index(found[1])
+    if (
+        injection is not None
+        and injection.month_indexed
+        and published is not None
+        and published[0] == year_month
+    ):
+        snap = replace(snap, injection=settled_injection(injection, published[1]))
+    return snap
 
 
 async def probe(

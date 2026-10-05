@@ -423,7 +423,8 @@ retroactively. `InjectionRates.month_indexed` marks that, and the credit then
 resolves against the delivery month's mean on the live tick, in both
 year-to-date walks and in the backfill. Measured on the August 2026 card, the
 printed 6,38 c/kWh against 8,0649 that August settles at: a 20,9%
-under-credit.
+under-credit. A closed month is settled on the value the next card prints
+(below), and that is also what an entry without a key is credited.
 
 Belpex-injectie is the plain arithmetic monthly mean of the Belgian day-ahead.
 Checked against the real 2026 series it reproduces the card's own published
@@ -432,8 +433,13 @@ values to four decimals (March 92,6102 against the card's 92,6114, July
 the solar-weighted sibling for cards that name Belpex_SPP; a card is one or the
 other, never both.
 
-A supplier that publishes its solar-weighted index settles the credit outright,
-the way Eneco's footnote settles the consumption leg. Two do. Trevion names the
+A supplier that publishes the credit's index settles it outright, the way
+Eneco's footnote settles the consumption leg. Eneco does it for the credit too:
+the next card footnotes the month's Belpex-injectie beside its Belpex-RLP-M
+("Belpex-injectie (09/2026: €156,4069/MWh)"), so `eneco.fetch_for_month`
+settles the feed-in leg of every card but Dynamic on it, Fix and Fix One
+included, with the month's own coefficients. Two publish a solar-weighted one.
+Trevion names the
 month in as many words on every card since March 2026, and settles both of its
 legs that way (`docs/providers/trevion.md`). EBEM prints the month just closed
 on every following card ("Voor de injectie is dit op basis van het

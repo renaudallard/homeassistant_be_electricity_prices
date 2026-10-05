@@ -806,7 +806,7 @@ def test_published_index_is_the_index_the_printed_price_was_computed_at() -> Non
             pytest.approx(energy.current, abs=5e-5)
         ), name
     # The Fix card prices energy at a fixed rate and footnotes only its
-    # injection index, so there is nothing to settle on.
+    # injection index, so there is no energy index to settle on.
     assert published_index(fixture_text("eneco_fix.pdf")) is None
 
 
@@ -860,6 +860,13 @@ def test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index() -> Non
     assert energy.formula_base == pytest.approx(3.058 * 1.06 / 100)
     assert august.provisional is False
     assert august.publication_label == "augustus 2026"
+    # The feed-in credit settles from the same card on its own index, the
+    # Belpex-injectie of August, 129,3186, with August's own coefficients:
+    # 0,084 x 129,3186 - 2,8 = 8,06 c/kWh against the 6,38 printed on July's.
+    inj = august.injection
+    assert inj is not None
+    assert inj.index_realised == pytest.approx(0.1293186)
+    assert inj.current == pytest.approx(0.84 * 0.1293186 - 0.028)
 
 
 def test_fetch_for_month_keeps_the_estimate_and_flags_it_while_the_next_card_is_out() -> (
@@ -906,15 +913,23 @@ def test_fetch_for_month_keeps_the_estimate_and_flags_it_while_the_next_card_is_
     assert energy.current == pytest.approx(0.1541)
 
 
-def test_fetch_for_month_leaves_a_fixed_card_alone() -> None:
-    """Power Fix prices energy at a fixed rate; the next card's footnote
-    settles nothing on it, so the archived month is neither re-resolved nor
-    flagged provisional."""
+def _fix_may_card() -> str:
+    """The April Fix card relabelled as May's, footnoting April's index."""
+    return (
+        fixture_text("eneco_fix.pdf")
+        .replace("april 2026", "mei 2026")
+        .replace("03/2026: €92,6114", "04/2026: €78,9354")
+    )
+
+
+def test_fetch_for_month_settles_a_fixed_cards_feed_in_on_the_next_card() -> None:
+    """Power Fix prices energy at a fixed rate, but its feed-in credit is
+    indexed on the delivery month's Belpex-injectie and printed at the
+    previous month's: the April card credits 0,08 x 92,6114 - 2,65 = 4,76
+    c/kWh on March's index. The May card footnotes April's, 78,9354, and that
+    is what April is credited at: 3,66 c/kWh. The energy leg is untouched."""
     head, pdf = _archive_of(
-        {
-            "012604": fixture_text("eneco_fix.pdf"),
-            "012605": fixture_text("eneco_fix.pdf"),
-        }
+        {"012604": fixture_text("eneco_fix.pdf"), "012605": _fix_may_card()}
     )
     with (
         patch(
@@ -929,7 +944,58 @@ def test_fetch_for_month_leaves_a_fixed_card_alone() -> None:
         april = _run(fetch_for_month(None, "power_fix", "flanders", date(2026, 4, 1)))  # type: ignore[arg-type]
     assert april is not None
     assert isinstance(april.energy, FixedRates)
+    inj = april.injection
+    assert inj is not None
+    assert inj.index_realised == pytest.approx(0.0789354)
+    assert inj.factor == pytest.approx(0.8)
+    assert inj.base == pytest.approx(-0.0265)
+    assert inj.current == pytest.approx(0.8 * 0.0789354 - 0.0265)
     assert april.provisional is False
+
+
+def test_a_fixed_month_waits_for_the_next_card_and_dynamic_never_does() -> None:
+    """With no May card yet, April's credit is the printed estimate and the
+    month is provisional, so it is asked again. Power Dynamic credits the
+    hourly Belpex-H, which no card settles: no second card is asked for and
+    the month is final."""
+    head, pdf = _archive_of({"012604": fixture_text("eneco_fix.pdf")})
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        april = _run(fetch_for_month(None, "power_fix", "flanders", date(2026, 4, 1)))  # type: ignore[arg-type]
+    assert april is not None
+    assert april.provisional is True
+    assert april.injection is not None
+    assert april.injection.index_realised is None
+    assert april.injection.current == pytest.approx(0.0476)
+
+    head, pdf = _archive_of({"012604": fixture_text("eneco_dyn.pdf")})
+    pdf_mock = AsyncMock(side_effect=pdf)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf_mock,
+        ),
+    ):
+        dynamic = _run(
+            fetch_for_month(None, "power_dynamic", "flanders", date(2026, 4, 1))  # type: ignore[arg-type]
+        )
+    assert dynamic is not None
+    assert dynamic.provisional is False
+    assert dynamic.injection is not None
+    assert dynamic.injection.index_realised is None
+    assert pdf_mock.await_count == 1
 
 
 def test_flex_is_month_indexed_on_the_rlp_weighted_mean() -> None:

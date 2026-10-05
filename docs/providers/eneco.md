@@ -193,13 +193,21 @@ Walloon caller gets the Flemish energy fund zeroed on the archived card too.
    archived month's `current` becomes its own formula at that value and
    `VariableRates.index_realised` records it, since the figure the card itself
    printed is the formula at the month BEFORE (measured in 2026: 1,50 c/kWh over
-   in April, 2,50 under in June). When the next card is not published yet the
-   estimate stands and the snapshot is returned `provisional=True`, so the
-   monthly cache re-asks after its TTL. Fix cards are left alone: the energy is
-   fixed and the footnote names only the injection index.
+   in April, 2,50 under in June). The feed-in leg of every card but Dynamic,
+   Fix and Fix One included, settles from the same next card on its own
+   footnote, "Belpex-injectie (08/2026: €129,3186/MWh)":
+   `published_injection_index` reads it, and `settled_injection` rebuilds
+   `current` from the month's own coefficients and records
+   `InjectionRates.index_realised` (measured in 2026: 1,87 c/kWh over to
+   2,28 under the printed credit). When the next card is not published yet
+   the estimates stand and the snapshot is returned `provisional=True`, so the
+   monthly cache re-asks after its TTL. Dynamic asks for no next card: its
+   energy and feed-in both follow the hourly Belpex-H.
    `test_published_index_is_the_index_the_printed_price_was_computed_at` proves
-   the footnote on five cards, and `test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index`
-   the settlement of August 2026 on the September card.
+   the footnote on five cards, `test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index`
+   the settlement of August 2026 on the September card, and
+   `test_fetch_for_month_settles_a_fixed_cards_feed_in_on_the_next_card` a
+   Fix month's credit.
 
 ### `discover`
 
@@ -460,6 +468,9 @@ Injection taxonomy (the three-shape rule, `_rates.py`):
   stops printing. Without them the credit was the printed indicative, which the
   card computes from the LAST KNOWN (previous) month's index: on the August 2026
   card, 6,38 c/kWh against the 8,0649 August settles at, a 20,9% under-credit.
+  A closed month is settled on the Belpex-injectie the next card prints (see
+  `fetch_for_month` above), so a keyless entry is credited that figure rather
+  than the lagged one.
   Illustrative: `current = 0.0476`, `factor = 0.8`, `base = -0.0265`
   (`tests/test_eneco.py`).
 - **Power Dynamic is hourly `factor * spot + base`**: it indexes on Belpex-H, so it
