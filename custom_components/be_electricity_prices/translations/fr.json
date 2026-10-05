@@ -238,6 +238,7 @@
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût de l'année ne peut pas répartir votre consommation et se limite aux frais fixes.",
+      "meter_sensor_reused": "Ce capteur est déjà choisi dans un autre champ. Chaque champ demande son propre compteur, sinon ses kWh sont comptés deux fois.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région."
     }
@@ -262,6 +263,7 @@
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
       "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
       "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou renseignez plutôt le compteur total, ou laissez les trois vides. Avec un seul registre de la paire et aucun total, le coût de l'année ne peut pas répartir votre consommation et se limite aux frais fixes.",
+      "meter_sensor_reused": "Ce capteur est déjà choisi dans un autre champ. Chaque champ demande son propre compteur, sinon ses kWh sont comptés deux fois.",
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
       "whatif_volumes_required": "Chiffrer un autre régime demande vos volumes annuels prélevés et injectés en kWh: aucun compteur d'injection n'est associé à cette entrée, ils ne peuvent donc pas être lus.",

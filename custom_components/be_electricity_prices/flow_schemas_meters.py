@@ -169,6 +169,27 @@ def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
     return errors
 
 
+def _reused_meter_sensors(data: dict[str, Any]) -> dict[str, str]:
+    """Report a kWh sensor picked in more than one of the six fields.
+
+    No wiring needs one entity twice, and every reader takes the fields at
+    their word: the same sensor as day and night register is a healthy pair
+    reporting the same days, so each day is billed twice, and the same sensor
+    on both sides credits a feed-in equal to the consumption. Keyed on the
+    later field, in the order the form renders them.
+    """
+    errors: dict[str, str] = {}
+    seen: set[str] = set()
+    for key in _METER_SENSOR_KEYS:
+        entity_id = data.get(key)
+        if not entity_id:
+            continue
+        if entity_id in seen:
+            errors[key] = "meter_sensor_reused"
+        seen.add(entity_id)
+    return errors
+
+
 def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Cumulative-kWh sensors for the current_year_cost computation.
 

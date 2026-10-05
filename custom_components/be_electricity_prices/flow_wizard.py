@@ -65,6 +65,7 @@ from .flow_schemas_meters import (
     _METER_SENSOR_KEYS,
     _capacity_schema,
     _incomplete_register_pairs,
+    _reused_meter_sensors,
     _meters_schema,
     _solar_schema,
 )
@@ -633,8 +634,10 @@ class _WizardStepsMixin:
             # _hourly_consumption_sensors both give up when one half is
             # missing, and the year cost then silently collapses to the
             # fees-only floor with no error, no repair and nothing in the log
-            # a user would see. Catch it at the point the mistake is made.
+            # a user would see. Catch it at the point the mistake is made, and
+            # the same for one sensor picked twice, which bills its kWh twice.
             errors = _incomplete_register_pairs(self._data)
+            errors.update(_reused_meter_sensors(self._data))
             if errors:
                 defaults = dict(self._data)
                 return self.async_show_form(

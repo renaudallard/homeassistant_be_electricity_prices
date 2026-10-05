@@ -585,6 +585,8 @@ different, as long as the edit keeps the same supplier, contract and region
      in which case the odd register is ignored, so a missing band can't
      silently undercount. Without a solar regime the injection meters are
      not read at all, so a half-wired injection pair is let through.
+     One sensor picked in two of the six fields is rejected too: it
+     would be counted twice.
    - When both wirings are filled for the same side the day/night
      registers win while they report whole; the total stands in for a
      pair with a dead, frozen or late half, or halves reporting different

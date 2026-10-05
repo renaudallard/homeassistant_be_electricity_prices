@@ -238,6 +238,7 @@
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de kost van dit jaar uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "meter_sensor_reused": "Deze sensor is al gekozen in een ander veld. Elk veld heeft zijn eigen meter nodig, anders worden de kWh dubbel geteld.",
       "compensation_kva_missing": "Het Waalse prosumententarief van het compensatieregime wordt op het omvormervermogen berekend: vul het in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     }
@@ -262,6 +263,7 @@
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de kost van dit jaar uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "meter_sensor_reused": "Deze sensor is al gekozen in een ander veld. Elk veld heeft zijn eigen meter nodig, anders worden de kWh dubbel geteld.",
       "compensation_kva_missing": "Het Waalse prosumententarief van het compensatieregime wordt op het omvormervermogen berekend: vul het in kVA in.",
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
       "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze invoer is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden.",

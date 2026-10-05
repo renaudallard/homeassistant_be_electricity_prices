@@ -238,6 +238,7 @@
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "meter_sensor_reused": "This sensor is already picked in another field. Each field needs its own meter, or its kWh are counted twice.",
       "compensation_kva_missing": "The Walloon prosumer tariff of the compensation regime is worked out from the inverter capacity: enter it in kVA.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
     }
@@ -262,6 +263,7 @@
       "card_date_in_future": "The tariff card month cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "meter_sensor_reused": "This sensor is already picked in another field. Each field needs its own meter, or its kWh are counted twice.",
       "compensation_kva_missing": "The Walloon prosumer tariff of the compensation regime is worked out from the inverter capacity: enter it in kVA.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region.",
       "whatif_volumes_required": "Quoting a different regime needs your yearly consumption and injection in kWh: this entry has no injection meter wired, so they cannot be read from your meters.",

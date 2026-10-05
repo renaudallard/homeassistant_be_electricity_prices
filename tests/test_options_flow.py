@@ -205,6 +205,56 @@ async def test_an_impact_product_is_not_asked_which_tariff_mode(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_meters_step_refuses_one_sensor_in_two_fields(
+    hass: HomeAssistant,
+) -> None:
+    """Every reader takes the six kWh fields at their word: one sensor as both
+    the day and the night register is a healthy pair, so each day was billed
+    twice, and nothing on the form or in the log said so."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_variable"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "bi"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "day_consumption_kwh": "sensor.meter_total",
+            "night_consumption_kwh": "sensor.meter_total",
+        },
+    )
+    assert result["step_id"] == "meters"
+    assert result["errors"] == {"night_consumption_kwh": "meter_sensor_reused"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "day_consumption_kwh": "sensor.meter_day",
+            "night_consumption_kwh": "sensor.meter_night",
+        },
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
