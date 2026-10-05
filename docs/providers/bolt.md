@@ -221,7 +221,12 @@ in Python source: every number in a `SupplierSnapshot` comes from a live fetch. 
 from the regulator that sets it. **Closed**: `brugel.py` fetches Brugel's published "Grille
 tarifaire - Electricite" for the year, one small PDF stating "prix hors TVA", and reads the two
 `Puissance mise a disposition` rows out of its "Sans mesure de pointe" block (47,24 and 94,48
-EUR/year for 2026). `resolve_brussels_power_term` adds them to a Sibelga overlay that is missing
+EUR/year for 2026). When the year's final sheet is not served, the year's page of the
+2025 to 2027 grid Brugel published with its tariff methodology is read instead
+(`_indicative_term`, `_parse_grid`: 53,22 and 106,43 for 2027), which Brugel calls indicative;
+the figure is flagged (`power_term_is_indicative`), the `brussels_power_term_missing` card
+says so under its `brussels_power_term_indicative` wording, and the final sheet, asked for
+again on the six-hour failure schedule, replaces it once served. `resolve_brussels_power_term` adds them to a Sibelga overlay that is missing
 them, on the card's own VAT basis, and `_resolve_snapshot` applies it, so every path prices the
 same completed overlay.
 

@@ -78,10 +78,12 @@ def _clear_brugel_cache() -> Iterator[None]:
     brugel._cache.clear()
     brugel._failed_at.clear()
     brugel._locks.clear()
+    brugel._indicative.clear()
     yield
     brugel._cache.clear()
     brugel._failed_at.clear()
     brugel._locks.clear()
+    brugel._indicative.clear()
 
 
 def test_the_power_term_is_read_off_the_published_sheet() -> None:
@@ -116,6 +118,104 @@ def _row_sheet(low: str, high: str) -> str:
         f"Puissance mise à disposition inférieure ou égale à 13 kVA {low}\n"
         f"Puissance mise à disposition supérieure à 13 kVA {high}\n"
     )
+
+
+# The 2025 to 2027 grid as it reads: its first page prints label and figures
+# on one line like the yearly sheet, the later pages print the labels and then
+# the figures on rows of their own, each annual term followed by its per-day
+# figure. Abridged from the published file.
+_GRID_LABELS = (
+    "1.2. Sans mesure de pointe (**)\n"
+    "Puissance mise à disposition inférieure ou égale à 13 kVA EUR / an (°)\n"
+    "EUR / jour\n"
+    "Puissance mise à disposition supérieure à 13 kVA EUR / an (°)\n"
+    "EUR / jour\n"
+)
+_GRID = (
+    "Grille tarifaire - Electricité\n"
+    "Distribution Électricité Année 2025\n"
+    "Puissance mise à disposition inférieure ou égale à 13 kVA EUR / an (°)"
+    " - - - 41,41 41,41\n"
+    "EUR / jour - - - 0,1134521 0,1134521\n"
+    "Puissance mise à disposition supérieure à 13 kVA EUR / an (°)"
+    " - - - 82,83 82,83\n"
+    "EUR / jour - - - 0,2269315 0,2269315\n"
+    + _GRID_LABELS
+    + "Grille tarifaire - Electricité\n"
+    "Année 2026\n"
+    "59,98 29,99 66,87 - -\n"
+    "- - - 47,24 47,24\n"
+    "- - - 0,1294270 0,1294270\n"
+    "- - - 94,48 94,48\n"
+    "- - - 0,2588540 0,2588540\n"
+    "- - - 0,0572329 0,0572329\n" + _GRID_LABELS + "Grille tarifaire - Electricité\n"
+    "Année 2027\n"
+    "60,80 30,40 68,42 - -\n"
+    "- - - 53,22 53,22\n"
+    "- - - 0,1457997 0,1457997\n"
+    "- - - 106,43 106,43\n"
+    "- - - 0,2915994 0,2915994\n"
+    "- - - 0,0588215 0,0588215\n"
+)
+
+
+def test_the_grid_is_read_on_the_page_of_the_year_asked() -> None:
+    """Read whole, the grid gave its first page, 2025's figures, whatever year
+    was asked, which would have billed 2027 on 2025's term."""
+    assert brugel._parse(_GRID) == (pytest.approx(41.41), pytest.approx(82.83))
+    assert brugel._parse_grid(_GRID, 2025) == (41.41, 82.83)
+    assert brugel._parse_grid(_GRID, 2026) == (47.24, 94.48)
+    assert brugel._parse_grid(_GRID, 2027) == (53.22, 106.43)
+    assert brugel._parse_grid(_GRID, 2028) is None
+    # The per-day rows have to match the annual ones, or nothing is taken.
+    shifted = _GRID.replace("- - - 0,1457997 0,1457997\n", "")
+    assert brugel._parse_grid(shifted, 2027) is None
+
+
+async def test_without_the_final_sheet_the_indicative_figure_is_billed(
+    freezer: Any,
+) -> None:
+    """Brugel has published no final 2027 sheet. The grid's 2027 page is
+    billed meanwhile and flagged as indicative, and the final sheet replaces it
+    once it is served."""
+    freezer.move_to("2027-01-05 12:00:00+01:00")
+    served: dict[str, str | None] = {"final": None}
+    asked: list[str] = []
+
+    async def _pdf(_session: object, url: str) -> str | None:
+        asked.append(url)
+        if url == brugel._GRID_URL:
+            return _GRID
+        return served["final"]
+
+    with patch.object(brugel, "_pdf_text", _pdf):
+        got = await brugel.ensure_power_term(cast(Any, None), 2027)
+        assert got == (53.22, 106.43)
+        assert brugel.power_term_is_indicative(2027)
+        assert brugel.cached_power_term(2027) == (53.22, 106.43)
+        assert asked[0].endswith("Tarif-distribution-Elec-2027.pdf"), "final first"
+
+        # Within the back-off nothing is downloaded and the figure holds.
+        asked.clear()
+        assert await brugel.ensure_power_term(cast(Any, None), 2027) == (
+            53.22,
+            106.43,
+        )
+        assert asked == []
+
+        # The final sheet appears: it wins at the next attempt.
+        served["final"] = _SHEET.replace("47,24", "53,10").replace("94,48", "106,20")
+        freezer.move_to("2027-01-05 19:00:00+01:00")
+        assert await brugel.ensure_power_term(cast(Any, None), 2027) == (
+            53.10,
+            106.20,
+        )
+        assert not brugel.power_term_is_indicative(2027)
+
+    # A year the grid does not cover still yields nothing.
+    served["final"] = None
+    with patch.object(brugel, "_pdf_text", _pdf):
+        assert await brugel.ensure_power_term(cast(Any, None), 2028) is None
 
 
 def test_a_sheet_that_cannot_be_read_yields_nothing() -> None:
@@ -517,6 +617,59 @@ async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> N
     coord._snapshot = resolve_brussels_power_term(
         _brussels_card(fixed_term=14.73, vat_rate=0.0), terms=None
     )
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_an_indicative_power_term_is_disclosed(hass: Any, freezer: Any) -> None:
+    """Billing on the grid's indicative figure is priced, but the household is
+    told so until the final sheet is read, under the same issue id."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_brussels_power_term,
+    )
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    freezer.move_to("2027-01-05 12:00:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "region": "brussels",
+            "dso": DSO_SIBELGA,
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"brussels_power_term_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    card = _brussels_card(fixed_term=14.73, vat_rate=0.0)
+    brugel._cache[2027] = (53.22, 106.43)
+    brugel._indicative.add(2027)
+    coord._snapshot_raw = card
+    coord._snapshot = resolve_brussels_power_term(card, terms=(53.22, 106.43))
+    coord._sync_brussels_power_term_issue()
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "brussels_power_term_indicative"
+
+    # The final sheet lands: the notice clears.
+    brugel._indicative.discard(2027)
+    coord._sync_brussels_power_term_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # A card printing the whole charge is never told about it.
+    brugel._indicative.add(2027)
+    whole = _brussels_card(fixed_term=64.80, vat_rate=0.0, above=114.88)
+    coord._snapshot_raw = whole
+    coord._snapshot = whole
     coord._sync_brussels_power_term_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 

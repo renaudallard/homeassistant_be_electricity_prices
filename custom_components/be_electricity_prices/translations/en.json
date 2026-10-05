@@ -841,6 +841,10 @@
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) is billed without Sibelga's power term",
       "description": "Sibelga's yearly fixed charge has two regulated parts, a metering one and a power one (\"puissance mise a disposition\"). The card for {contract} prints only the metering half, so the integration completes it from the figure Brugel publishes, and that sheet could not be read.\n\nPrices for this entry therefore exclude the power part, which under-bills by about €50 a year. Everything else on the card is priced normally. The sheet is retried every six hours and this notice clears by itself as soon as it can be read."
+    },
+    "brussels_power_term_indicative": {
+      "title": "{supplier} ({contract}) is billed on Brugel's indicative power term",
+      "description": "Sibelga's yearly fixed charge has two regulated parts, a metering one and a power one (\"puissance mise a disposition\"). The card for {contract} prints only the metering half, so the integration completes it from the figure Brugel publishes. Brugel has not published this year's final tariff sheet yet, so the power part comes from its 2025-2027 tariff grid, which gives this year's figure as indicative.\n\nThe final figure may differ slightly. The final sheet is retried every six hours; it replaces the indicative figure as soon as it can be read, and this notice then clears by itself."
     }
   },
   "entity": {

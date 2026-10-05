@@ -841,6 +841,10 @@
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) wird ohne Sibelgas Leistungsentgelt berechnet",
       "description": "Sibelgas jährliche Grundgebühr besteht aus zwei regulierten Teilen, einem für die Messung und einem für die bereitgestellte Leistung. Die Karte von {contract} druckt nur die Messhälfte, daher ergänzt die Integration den Rest mit der von Brugel veröffentlichten Zahl, und dieses Blatt konnte nicht gelesen werden.\n\nDie Preise dieses Eintrags schließen den Leistungsteil daher aus, was rund 50 € pro Jahr zu wenig berechnet. Alles übrige auf der Karte wird normal berechnet. Das Blatt wird alle sechs Stunden erneut versucht, und dieser Hinweis verschwindet, sobald es gelesen werden kann."
+    },
+    "brussels_power_term_indicative": {
+      "title": "{supplier} ({contract}) wird mit Brugels Richtwert für das Leistungsentgelt berechnet",
+      "description": "Sibelgas jährliche Grundgebühr besteht aus zwei regulierten Teilen, einem für die Messung und einem für die bereitgestellte Leistung. Die Karte von {contract} druckt nur die Messhälfte, daher ergänzt die Integration den Rest mit der von Brugel veröffentlichten Zahl. Brugel hat das endgültige Tarifblatt dieses Jahres noch nicht veröffentlicht, daher stammt der Leistungsteil aus seinem Tarifraster 2025-2027, das die Zahl dieses Jahres als Richtwert angibt.\n\nDie endgültige Zahl kann leicht abweichen. Das endgültige Blatt wird alle sechs Stunden erneut versucht; es ersetzt den Richtwert, sobald es gelesen werden kann, und dieser Hinweis verschwindet dann von selbst."
     }
   },
   "entity": {

@@ -34,7 +34,11 @@ way for the user to clear it."""
 
 from __future__ import annotations
 
-from .brugel import any_cached_power_term, cached_power_term
+from .brugel import (
+    any_cached_power_term,
+    cached_power_term,
+    power_term_is_indicative,
+)
 from .providers import get as get_extractor, offers_direct_debit
 
 from .providers._rates import Contract
@@ -431,16 +435,32 @@ class _IssuesMixin:
         Says what the cost excludes rather than inventing it, like the four
         sibling gaps, and clears the moment Brugel answers, which the tick
         retries every six hours.
+
+        A card completed from the indicative figure of Brugel's multi-year
+        grid, because the year's final sheet is not out, is priced but says
+        so under the same id with its own wording
+        (``brussels_power_term_indicative``). The card as parsed is asked,
+        since the resolved one carries the completed band.
         """
         if self.entry.data.get(CONF_REGION) != REGION_BRUSSELS:
             self._sync_issue("brussels_power_term_missing", False)
             return
         year = dt_util.now().year
         terms = cached_power_term(year) or any_cached_power_term()
+        if self._snapshot is not None and omits_brussels_power_term(
+            self._snapshot, terms=terms
+        ):
+            self._sync_issue("brussels_power_term_missing", True)
+            return
+        indicative = (
+            power_term_is_indicative(year)
+            and self._snapshot_raw is not None
+            and omits_brussels_power_term(self._snapshot_raw, terms=terms)
+        )
         self._sync_issue(
             "brussels_power_term_missing",
-            self._snapshot is not None
-            and omits_brussels_power_term(self._snapshot, terms=terms),
+            indicative,
+            translation_key="brussels_power_term_indicative",
         )
 
     def _sync_direct_debit_unanswered_issue(

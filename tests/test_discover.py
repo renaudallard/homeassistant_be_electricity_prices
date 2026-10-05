@@ -696,6 +696,7 @@ def test_readme_documents_every_repairs_issue() -> None:
         "supplier_deprecated_ended",
         "supplier_deprecated_ended_no_successor",
         "register_pair_covered",
+        "brussels_power_term_indicative",
     }
     raised = {key for key in strings["issues"] if key not in variants}
 

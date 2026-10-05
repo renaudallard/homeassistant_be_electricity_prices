@@ -4193,12 +4193,14 @@ def test_repair_issue_kinds_match_the_declared_strings() -> None:
     )
     # The three supplier_deprecated variants share ONE issue id and differ
     # only in translation_key, so only the base name is a removable kind, and
-    # register_pair_covered is register_pair_incomplete's second wording.
+    # register_pair_covered is register_pair_incomplete's second wording, as
+    # brussels_power_term_indicative is brussels_power_term_missing's.
     declared = set(strings["issues"]) - {
         "supplier_deprecated_no_successor",
         "supplier_deprecated_ended",
         "supplier_deprecated_ended_no_successor",
         "register_pair_covered",
+        "brussels_power_term_indicative",
     }
     assert declared == set(_REPAIR_ISSUE_KINDS)
 

@@ -841,6 +841,10 @@
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) wordt aangerekend zonder de vermogensterm van Sibelga",
       "description": "De jaarlijkse vaste vergoeding van Sibelga bestaat uit twee gereglementeerde delen, een voor de meting en een voor het ter beschikking gestelde vermogen. De kaart van {contract} drukt enkel de meethelft af, dus vult de integratie de rest aan met het cijfer dat Brugel publiceert, en die fiche kon niet gelezen worden.\n\nDe prijzen voor deze invoer sluiten het vermogensdeel daarom uit, wat ongeveer €50 per jaar te weinig aanrekent. Al de rest op de kaart wordt normaal berekend. De fiche wordt om de zes uur opnieuw geprobeerd en deze melding verdwijnt zodra ze gelezen kan worden."
+    },
+    "brussels_power_term_indicative": {
+      "title": "{supplier} ({contract}) wordt aangerekend met de indicatieve vermogensterm van Brugel",
+      "description": "De jaarlijkse vaste vergoeding van Sibelga bestaat uit twee gereglementeerde delen, een voor de meting en een voor het ter beschikking gestelde vermogen. De kaart van {contract} drukt enkel de meethelft af, dus vult de integratie de rest aan met het cijfer dat Brugel publiceert. Brugel heeft de definitieve tariefkaart van dit jaar nog niet gepubliceerd, dus komt het vermogensdeel uit zijn tariefrooster 2025-2027, dat het cijfer van dit jaar als indicatief vermeldt.\n\nHet definitieve cijfer kan licht afwijken. De definitieve fiche wordt om de zes uur opnieuw geprobeerd; ze vervangt het indicatieve cijfer zodra ze gelezen kan worden, en deze melding verdwijnt dan vanzelf."
     }
   },
   "entity": {

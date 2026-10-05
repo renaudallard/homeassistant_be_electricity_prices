@@ -841,6 +841,10 @@
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) est facturé sans le terme de puissance de Sibelga",
       "description": "La redevance fixe annuelle de Sibelga comporte deux parties réglementées, une pour le comptage et une pour la puissance mise à disposition. La carte de {contract} n'imprime que la moitié comptage, l'intégration complète donc le reste avec le chiffre publié par Brugel, et cette fiche n'a pas pu être lue.\n\nLes prix de cette entrée excluent donc la partie puissance, ce qui sous-facture d'environ 50 € par an. Tout le reste de la carte est facturé normalement. La fiche est réessayée toutes les six heures et cet avis disparaît dès qu'elle peut être lue."
+    },
+    "brussels_power_term_indicative": {
+      "title": "{supplier} ({contract}) est facturé sur le terme de puissance indicatif de Brugel",
+      "description": "La redevance fixe annuelle de Sibelga comporte deux parties réglementées, une pour le comptage et une pour la puissance mise à disposition. La carte de {contract} n'imprime que la moitié comptage, l'intégration complète donc le reste avec le chiffre publié par Brugel. Brugel n'a pas encore publié la fiche tarifaire définitive de cette année : la partie puissance est donc reprise de sa grille tarifaire 2025-2027, qui donne le chiffre de cette année à titre indicatif.\n\nLe chiffre définitif peut légèrement différer. La fiche définitive est réessayée toutes les six heures ; elle remplace le chiffre indicatif dès qu'elle peut être lue, et cet avis disparaît alors de lui-même."
     }
   },
   "entity": {
