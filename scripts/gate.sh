@@ -36,7 +36,11 @@ ROOT=$(git rev-parse --show-toplevel) || exit 1
 cd "$ROOT" || exit 1
 PYTHON="$ROOT/.venv/bin/python"
 ACTIONLINT="$ROOT/tmp/actionlint"
-SHA=$(git rev-parse --short HEAD)
+# HEAD read once: another session may commit in this checkout while the
+# gate starts, and the worktree and the remote snapshot read it seconds
+# apart, so each names the commit instead.
+FULL_SHA=$(git rev-parse HEAD) || exit 1
+SHA=$(git rev-parse --short "$FULL_SHA")
 WORKTREE="$ROOT/tmp/gate/$SHA.$$"
 LOGS="$ROOT/tmp/gate/$SHA.$$.logs"
 REMOTE=${GATE_REMOTE-maci7}
@@ -60,7 +64,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 mkdir -p "$LOGS"
-git worktree add --detach --quiet "$WORKTREE" HEAD || exit 1
+git worktree add --detach --quiet "$WORKTREE" "$FULL_SHA" || exit 1
 echo "gating $SHA in $WORKTREE"
 
 # Ship the snapshot and bring the remote venv in step with the pins. Any
@@ -68,7 +72,7 @@ echo "gating $SHA in $WORKTREE"
 remote_ready() {
   [ -n "$REMOTE" ] || return 1
   "${SSH[@]}" "$REMOTE" "test -x be_gate/.venv/bin/python" 2>/dev/null || return 1
-  git archive HEAD |
+  git archive "$FULL_SHA" |
     "${SSH[@]}" "$REMOTE" "mkdir -p $REMOTE_DIR && tar -xf - -C $REMOTE_DIR" ||
     return 1
   shipped=1
