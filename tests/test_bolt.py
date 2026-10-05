@@ -1478,3 +1478,27 @@ def test_a_fixed_card_bills_its_one_price_in_every_impact_band() -> None:
     snap = parse_snapshot("bolt_plenty_fix", text, "wallonia")
     assert isinstance(snap.energy, FixedRates)
     assert not hasattr(snap.energy, "impact_eco")
+
+
+def test_a_signing_cohort_keeps_the_card_s_impact_bands() -> None:
+    """A Bolt variable entry with a contract start date and an ENTSO-E key
+    re-priced its archived card through a one-formula monthly leg, which
+    billed the mono formula in every CWaPE band and on both bi-hourly
+    registers: Eco hours 4,3 c/kWh high and Pic hours 5,1 low on the
+    September 2026 card. The bands come from one formula on separate
+    per-band indices, so no re-priced pair reproduces them, and the cohort
+    keeps the current card instead, as an entry without a start date does."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+
+    snap = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor is not None
+    assert energy.impact_pic is not None
+    assert _cohort_energy_from_archived(snap) is None

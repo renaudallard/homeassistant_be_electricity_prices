@@ -217,8 +217,9 @@ def _cohort_energy_from_archived(
     other consumer ignores the field. Said out loud because the paragraph
     above reads as though the leg carried no index at all.
     ``None`` when the archived card exposes no re-priceable rate (a variable
-    card whose coefficients couldn't be parsed, or a TOU / Impact card that
-    prints resolved bands without a monthly formula behind them).
+    card whose coefficients couldn't be parsed, a TOU / Impact card that
+    prints resolved bands without a monthly formula behind them, or a
+    variable card whose Impact bands are resolved rates beside its formula).
     """
     energy = archived.energy
     if isinstance(energy, ImpactRates) and energy.month_indexed:
@@ -267,6 +268,16 @@ def _cohort_energy_from_archived(
         # before that no supplier of this kind kept one.
         return energy
     if isinstance(energy, VariableRates) and energy.formula_factor is not None:
+        if energy.impact_pic is not None and (
+            getattr(energy, "formula_factor_pic", None) is None
+        ):
+            # Impact bands printed as resolved rates with no formula of their
+            # own: Bolt derives each from one formula on a per-band index, so
+            # no pair re-priced on one month mean reproduces them, and the
+            # leg below would bill the mono formula in every CWaPE band and
+            # on both bi-hourly registers. The current card keeps them, the
+            # same as an entry that names no signing month.
+            return None
         return SpotMonthlyRates(
             factor=energy.formula_factor,
             base=energy.formula_base if energy.formula_base is not None else 0.0,

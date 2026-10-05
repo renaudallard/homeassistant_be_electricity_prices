@@ -754,3 +754,14 @@ box rather than by picking a different product, so a Walloon household on the
 incitative network tariff should know that its energy stops being banded when it
 switches settlement. The network leg and the Walloon terme fixe still follow
 `dso_tariff_mode`, which is the connection and does not move with the contract.
+
+**A contract start date does not re-price the bands.** For an entry naming a past signing month,
+`_cohort_energy_from_archived` (`cohort_legs.py`) re-prices a variable card's formula on the
+delivery month's mean, and that leg has no per-band or per-register pair to put Bolt's bands on:
+they come from one formula on three per-band indices, and the Jour / Nuit rates from per-register
+ones. Re-priced, a Walloon Impact entry was billed the mono formula in every band (on the
+September 2026 card Eco hours 4,3 c/kWh high, Pic hours 5,1 low) and a bi-hourly meter the
+same rate on both registers. A variable card whose Impact bands carry no formula of their own
+therefore returns `None` there, and the entry keeps the current card, as one without a start
+date does. Bolt's formula was the same on the September and October 2026 cards, so the lock on
+the signing month's coefficients gives up nothing measurable.
