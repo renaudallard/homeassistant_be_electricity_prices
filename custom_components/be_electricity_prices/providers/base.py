@@ -45,11 +45,11 @@ Two REGULATED figures are the exception and they are typed in on purpose,
 because no card is their source: the flat federal excise
 (``FEDERAL_EXCISE_RESIDENTIAL_TVAC``) and the VREG network ceiling
 (``VREG_NETWORK_CEILING_HTVA``), each reaching a snapshot through a resolver
-below. Both are set by a regulator for the whole country or region, both are
-cross-checked against what the fleet prints, and both carry an explicit
-``KNOWN_FROM`` / ``KNOWN_UNTIL`` window so they expire into "read the card"
-rather than going stale. A figure that cannot meet all three tests does not
-belong here.
+in ``providers/_resolve.py``. Both are set by a regulator for the whole
+country or region, both are cross-checked against what the fleet prints, and
+both carry an explicit ``KNOWN_FROM`` / ``KNOWN_UNTIL`` window so they expire
+into "read the card" rather than going stale. A figure that cannot meet all
+three tests does not belong here.
 """
 
 from __future__ import annotations
@@ -150,13 +150,14 @@ def walloon_dso_overlay(
     PIC | MEDIUM | ECO and EnergyVision prints them ECO | MEDIUM | PIC, and
     both map onto the same call.
 
-    Luminus and Eneco build :class:`DsoOverlay` directly, and only for one
-    reason: their cards leave the Impact ``pic`` / ``medium`` / ``eco``
-    triplet nullable, which these parameters are not. (An earlier version of
-    this note also exempted providers that "index the row positionally
-    (Engie, DATS24)" and ones whose cards "print values already in EUR/kWh
-    (Eneco)". Neither held: all three of those call this helper now, and
-    Eneco divides by 100 like everyone else.)
+    Luminus, Eneco and Cociter build :class:`DsoOverlay` directly, because
+    their rows do not always carry every column these parameters require:
+    the Impact ``pic`` / ``medium`` / ``eco`` triplet is nullable on their
+    cards, and Cociter's trihoraire table prints no mono or bi-hourly rate at
+    all. (An earlier version of this note also exempted providers that "index
+    the row positionally (Engie, DATS24)" and ones whose cards "print values
+    already in EUR/kWh (Eneco)". Neither held: Engie and DATS24 call this
+    helper now, and Eneco divides by 100 like everyone else.)
     """
     return DsoOverlay(
         distribution_single=mono / 100.0,
