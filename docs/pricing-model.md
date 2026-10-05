@@ -972,13 +972,12 @@ Shared weekday schedule:
 | transition | 11:00-17:00 and 22:00-01:00 |
 | offpeak | 01:00-07:00 |
 
-Federal Belgian holidays follow the weekend rule, not the weekday rule
-(`pricing.py`). The weekend rule differs by product (`pricing.py`):
+The weekend rule differs by product (`pricing.py`):
 
 | `weekend_rule` | Weekend/holiday behaviour |
 | --- | --- |
-| `weekend_offpeak` (generic CWaPE default) | Whole weekend off-peak. |
-| `weekend_no_peak` (Engie Empower Flextime) | Never peak; transition 07:00-11:00 + 17:00-01:00, offpeak 01:00-07:00 + 11:00-17:00. |
+| `weekend_offpeak` (generic CWaPE default) | Whole weekend off-peak; federal holidays follow it. |
+| `weekend_no_peak` (Engie Empower Flextime) | Never peak on Saturday and Sunday; transition 07:00-11:00 + 17:00-01:00, offpeak 01:00-07:00 + 11:00-17:00. A weekday holiday keeps the weekday bands: the card defines its slots only "du lundi au vendredi" and "du samedi au dimanche". |
 | `smartflex_seasonal` (Luminus SmartFlex) | Seasonal bands applied every day, no weekend exception. |
 
 The `smartflex_seasonal` rule ignores weekday/weekend entirely and keys on season
@@ -1196,8 +1195,9 @@ rule has no representative week at all: Luminus SmartFlex moves its 11:00-17:00
 block between super-creuses and creuses on 21 March and 20 September, so the
 weekly triple this replaced answered the generic rule for it and put the whole
 midday block, which is when a solar household exports, in creuses all year.
-Federal holidays land in the weekend slot the cards give them, worth 2,7 hours a
-week off the weekday slots. And a weekend rule added later is weighted without
+Federal holidays land in the slot the rule gives them, the weekend one under the
+generic rule (2,7 hours a week off the weekday slots) and the weekday one on
+Flextime, whose card names no holiday. And a weekend rule added later is weighted without
 anyone remembering to come back, which is how the third one went unweighted.
 
 ### The four injection shapes

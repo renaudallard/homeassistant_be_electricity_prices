@@ -68,8 +68,9 @@ def _tou_slot_hours(weekend_rule: str, year: int) -> tuple[dict[int, float], ...
       single week describes it, and a week anchored in January (which is what
       this walked) put the whole midday block in creuses all year. That block
       is when a solar household exports.
-    * federal holidays land in the slot the cards give them, which is the
-      weekend one. Ten days a year is 2,7 hours a week off the weekday slots.
+    * federal holidays land in the slot the rule gives them: the weekend one
+      under the generic rule, which is 2,7 hours a week off the weekday slots
+      for ten days a year, and the weekday one on Flextime.
     * a rule added later is weighted correctly without anyone remembering to
       come back here. The triple covered two of the three rules that existed.
 

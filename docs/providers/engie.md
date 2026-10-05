@@ -315,7 +315,10 @@ Empower row; the parser raises if it is asked for Flextime on a card that does
 not carry the triplet (a 4-price row, `_engie_cards.py`). Its weekend rule is
 `weekend_no_peak` (peak never applies at weekends; transition/offpeak split is
 kept), distinct from the generic CWaPE `weekend_offpeak` default, per the CWaPE
-Engie publication (`engie.py`, framework schedule `pricing.py`).
+Engie publication (`engie.py`, framework schedule `pricing.py`). A weekday
+public holiday bills on the weekday bands: footnote 18 of the card defines the
+slots only "du lundi au vendredi" and "du samedi au dimanche", and neither the
+card nor the product page names a holiday.
 
 ## DSO overlay coverage
 

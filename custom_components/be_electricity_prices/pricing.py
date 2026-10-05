@@ -213,16 +213,17 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
       transition : 11:00-17:00 + 22:00-01:00
       offpeak    : 01:00-07:00
 
-    Federal Belgian holidays follow the same rule as a weekend day,
-    the supplier's published TOU bands explicitly call out weekends
-    plus public holidays (TGEPRESC for Engie, equivalent CWaPE
-    document for Luminus). Weekend rule depends on the contract:
+    Weekend rule depends on the contract:
 
-      weekend_offpeak  Sat/Sun + holidays all off-peak (generic CWaPE
-        default).
-      weekend_no_peak  Engie Empower Flextime, never peak;
+      weekend_offpeak  Sat/Sun + federal holidays all off-peak (generic
+        CWaPE default).
+      weekend_no_peak  Engie Empower Flextime, never peak on Saturday and
+        Sunday;
         transition 07:00-11:00 + 17:00-01:00,
         offpeak    01:00-07:00 + 11:00-17:00.
+        A weekday public holiday keeps the weekday bands: the card defines
+        its slots only "du lundi au vendredi" and "du samedi au dimanche",
+        and neither it nor Engie's product page names a holiday.
       smartflex_seasonal  Luminus SmartFlex: seasonal bands applied
         every day (the card lists no weekend exception; its Happy Sunday
         column is a fourth rate the energy price picks before this rule,
@@ -239,7 +240,10 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
         if 11 <= h < 17:
             return "offpeak" if _is_smartflex_summer(when.date()) else "transition"
         return "transition"
-    if when.weekday() >= 5 or is_belgian_holiday(when.date()):
+    # Flextime's card names no public holiday, so only the generic rule moves
+    # one onto the weekend bands.
+    holiday = weekend_rule != "weekend_no_peak" and is_belgian_holiday(when.date())
+    if when.weekday() >= 5 or holiday:
         if weekend_rule == "weekend_no_peak":
             if 7 <= h < 11 or h >= 17 or h < 1:
                 return "transition"

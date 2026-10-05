@@ -190,12 +190,17 @@ def test_tou_slot_holiday_treated_as_weekend_default_rule() -> None:
     assert tou_slot(datetime(2026, 5, 1, 19, 0)) == "offpeak"
 
 
-def test_tou_slot_holiday_treated_as_weekend_no_peak_rule() -> None:
-    # Same day under Engie's weekend_no_peak rule: 09:00 is transition
-    # (would be peak on a non-holiday weekday), 13:00 is offpeak.
+def test_tou_slot_holiday_keeps_weekday_bands_on_weekend_no_peak_rule() -> None:
+    # Same day under Engie's weekend_no_peak rule. The Flextime card defines
+    # its slots "du lundi au vendredi" and "du samedi au dimanche" only, so a
+    # weekday holiday keeps the weekday bands: 09:00 peak, 13:00 transition.
     rule = "weekend_no_peak"
-    assert tou_slot(datetime(2026, 5, 1, 9, 0), rule) == "transition"
-    assert tou_slot(datetime(2026, 5, 1, 13, 0), rule) == "offpeak"
+    assert tou_slot(datetime(2026, 5, 1, 9, 0), rule) == "peak"
+    assert tou_slot(datetime(2026, 5, 1, 13, 0), rule) == "transition"
+    assert tou_slot(datetime(2026, 5, 1, 3, 0), rule) == "offpeak"
+    # The real weekend still has no peak.
+    assert tou_slot(datetime(2026, 5, 2, 9, 0), rule) == "transition"
+    assert tou_slot(datetime(2026, 5, 2, 13, 0), rule) == "offpeak"
 
 
 def test_tou_slot_weekend_offpeak_at_hour_boundaries() -> None:
