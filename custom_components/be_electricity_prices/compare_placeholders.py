@@ -202,8 +202,17 @@ class _PlaceholdersMixin(OptionsFlow):
             quarter_hourly=settlement_answer(self._compare),
         )
         other_dso_mode = _target_dso_mode(other_kind, dso_mode)
+        # On the settlement asked for the target, as the ranking's
+        # _target_side builds it. The year-to-date engine resolves every
+        # archived month against this entry, and the household's own answer
+        # turned a Bolt card quoted on monthly settlement back into a dynamic
+        # one there, which the static walk then dropped month by month.
         target_entry = _quote_entry(
-            self.config_entry, regime, other_dso_mode, meter=meter
+            self.config_entry,
+            regime,
+            other_dso_mode,
+            quarter_hourly=settlement_answer(self._compare),
+            meter=meter,
         )
         other_export_per_kwh: float | None = None
 

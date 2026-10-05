@@ -9767,3 +9767,90 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
     assert sensor is not None
     assert page["current_ytd"] == f"{sensor:.2f}"
     assert page["compare_ytd"] != "-"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("own_quarter_hourly", "quoted_quarter_hourly"), [(True, False), (False, True)]
+)
+async def test_compare_ytd_quotes_the_target_on_the_settlement_asked(
+    hass: HomeAssistant,
+    freezer: Any,
+    own_quarter_hourly: bool,
+    quoted_quarter_hourly: bool,
+) -> None:
+    """The settlement step answers for the quoted side, and the year-to-date
+    engine has to bill that side on it. The entry it was handed kept the
+    household's own answer, so a quarter-hourly household quoting a Bolt card
+    on monthly settlement had every archived month resolved as dynamic: the
+    static walk dropped them all and the quoted year came out at its fees."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    freezer.move_to("2026-03-10 12:00:00+01:00")
+    entry = make_entry(
+        supplier="bolt",
+        contract="bolt_plenty",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="dynamic",
+        quarter_hourly=own_quarter_hourly,
+        solar_regime="none",
+        api_key="key",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("bolt", "bolt_plenty", 0.18))
+    start = datetime(2025, 12, 31, 23, tzinfo=UTC)
+    coord._historical_spots = {start + timedelta(hours=h): 0.1 for h in range(24 * 70)}
+    entry.runtime_data = coord
+    fake = replace(
+        EXTRACTORS["bolt"],
+        fetch=AsyncMock(return_value=_stub_snapshot("bolt", "bolt_plenty", 0.16)),
+        probe=None,
+    )
+    seen: list[Any] = []
+
+    async def _engine(*args: Any, **kwargs: Any) -> float:
+        if "contract_override" in kwargs:
+            seen.append(args[4])
+        return 100.0
+
+    with (
+        patch.dict(EXTRACTORS, {"bolt": fake}),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _engine,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.contract_periods"
+            ".with_previous_contracts",
+            AsyncMock(side_effect=lambda *a, **k: a[5]),
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "bolt"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "bolt_plenty"}
+        )
+        assert result["step_id"] == "compare_settlement"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"quarter_hourly": quoted_quarter_hourly}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": "dynamic"}
+            )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_result", result
+
+    assert seen, "the quoted side never reached the year-to-date engine"
+    assert [target.data.get("quarter_hourly") for target in seen] == [
+        quoted_quarter_hourly
+    ] * len(seen)
