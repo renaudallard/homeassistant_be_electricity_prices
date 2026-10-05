@@ -231,10 +231,10 @@ of a plain average — much closer for a solar prosumer, since the plain mean
 over-credits injection by weighting the cheap midday hours the same as the rest.
 It uses the published *ex-ante* profile, which is the one the suppliers' own
 settled indices are computed on: measured over January to August 2026 this
-reproduces the Belpex-SPP-M Energy Knights publishes to 0,007%. Two suppliers
-weight the quarter-hour prices instead of the hourly ones and so publish a value
-about 0,9 EUR/MWh lower; their contracts are settled on the figure their own card
-prints rather than on this mean. It falls back to the plain mean if the profile
+reproduces the Belpex-SPP-M Energy Knights publishes to 0,007%. Three suppliers
+(EBEM, Trevion and Ecopower) weight the quarter-hour prices instead of the hourly
+ones and so publish a value about 1 EUR/MWh lower; their closed months are settled
+on the figure their own card prints rather than on this mean. It falls back to the plain mean if the profile
 can't be fetched.
 
 ### How often the integration polls
@@ -1719,7 +1719,10 @@ card indexed on its own month at Cociter (Variable and Trihoraire), Eneco
 (Flex, and the feed-in credit of every card but Dynamic), EBEM (the variable
 cards), Engie (the EPEXDAM cards), Mega (the Flex and Impact range) or Trevion
 (the monthly contracts) prints last month's index while it runs, and the
-supplier settles the month on the card after it. A month the archive caught live on such a card is
+supplier settles the month on the card after it. Ecopower's Groene
+Burgerstroom card is published once its month has closed and prints that
+month's settled feed-in index, which only the month lookup applies, since the
+live card stands in for the running month. A month the archive caught live on such a card is
 therefore read from the supplier once it has closed, and billed on the
 archive's copy, re-asked daily, until that card is out; the daily run then
 replaces the archive's copy with the settled one. Luminus (MaxxFlex,

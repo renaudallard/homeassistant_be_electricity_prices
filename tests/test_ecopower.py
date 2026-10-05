@@ -550,6 +550,56 @@ def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     assert isinstance(snap.energy, VariableRates)
 
 
+def _july_for_month(text: str) -> SupplierSnapshot | None:
+    listing = '<a href="https://cdn.example/202607_gbs_tariefkaart.pdf">July</a>'
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        return asyncio.run(
+            fetch_for_month(
+                make_text_session(listing),  # type: ignore[arg-type]
+                "ecopower_burgerstroom",
+                "flanders",
+                date(2026, 7, 1),
+            )
+        )
+
+
+def test_a_closed_month_settles_the_credit_on_the_spp_its_card_prints() -> None:
+    """The definitive card is published once its month has ended and prints
+    that month's settled SPP: "0,9 x 0,06264597 [EPEX SPP 2]", footnote 2
+    naming July. The engine's own hourly mean runs above it."""
+    snap = _july_for_month(fixture_text("ecopower_burgerstroom_jul.pdf", layout=True))
+    assert snap is not None and not snap.provisional
+    inj = snap.injection
+    assert inj is not None
+    assert inj.index_realised == pytest.approx(0.06264597)
+    assert inj.current == pytest.approx(0.45 * 0.06264597 + 0.005)
+
+
+def test_the_live_card_leaves_its_index_to_the_running_month() -> None:
+    """fetch() serves last month's card for the running month, whose own
+    index is not that one."""
+    snap = parse_snapshot(
+        fixture_text("ecopower_burgerstroom_jul.pdf", layout=True), "t://x", "2026-07"
+    )
+    assert snap.injection is not None
+    assert snap.injection.index_realised is None
+
+
+def test_a_card_that_does_not_name_its_index_month_is_asked_again() -> None:
+    text = fixture_text("ecopower_burgerstroom_jul.pdf", layout=True)
+    footnote = (
+        "SPP gewogen gemiddelde van de Day Ahead EPEX (EPEX DA) voor de maand juli"
+    )
+    assert footnote in text
+    snap = _july_for_month(text.replace(footnote, "SPP gewogen gemiddelde"))
+    assert snap is not None and snap.provisional
+    assert snap.injection is not None
+    assert snap.injection.index_realised is None
+
+
 def test_fetch_for_month_skips_inschatting_preview() -> None:
     """The next-month preview (gbs_inschatting) is on the listing but
     is not a billable card. fetch_for_month must not return it as the

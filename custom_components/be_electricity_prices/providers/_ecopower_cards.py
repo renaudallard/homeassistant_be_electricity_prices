@@ -344,6 +344,37 @@ def _extract_injection(text: str) -> InjectionRates | None:
     )
 
 
+# The value a card prints for its feed-in index, and the footnote naming the
+# month that value is for:
+#   "VARIABEL +50% x 0,08046773 euro deze waarde volgt de formule 0,9 x
+#    0,10051971 [EPEX SPP 2] - 0,01. -0,0502 euro/kWh"
+#   "2 Dit is het werkelijke SPP gewogen gemiddelde van de Day Ahead EPEX
+#    (EPEX DA) voor de maand september."
+_SPP_PRINTED_RE = re.compile(
+    r"formule\s+[\d,]+\s*[×xX*]\s*([\d,]+)\s*\[[^\]]*SPP", re.IGNORECASE
+)
+_SPP_MONTH_RE = re.compile(
+    rf"werkelijke\s+SPP\s+gewogen\s+gemiddelde[^\n]*?voor\s+de\s+maand\s+"
+    rf"({_MONTH_ALT})",
+    re.IGNORECASE,
+)
+
+
+def printed_spp_index(text: str) -> tuple[int, float] | None:
+    """``(month, EUR/kWh)`` of the settled SPP index the card prints, or None.
+
+    Ecopower publishes a definitive card only once its month has ended, so the
+    figure in its feed-in formula is that month's settled SPP-weighted mean,
+    and footnote 2 names the month. Both are needed: a figure whose month the
+    card does not name settles nothing.
+    """
+    value = _SPP_PRINTED_RE.search(text)
+    month = _SPP_MONTH_RE.search(text)
+    if value is None or month is None:
+        return None
+    return _NL_MONTH_INDEX[month.group(1).lower()], to_float(value.group(1))
+
+
 # The dynamic card prints the injection formula like the consumption one,
 # on the same grid:
 #   "Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015 euro/kWh"

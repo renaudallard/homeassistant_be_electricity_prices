@@ -332,7 +332,21 @@ because treating them as optional would let a relabel silently drop a per-kWh ch
 **gbs** injection is a **monthly indicative** (`current`); from the July 2026 card the
 credit is half fixed and half indexed on the month's SPP-weighted EPEX mean, and the two
 halves are blended into one `factor`/`base` pair carrying `spp_indexed`, the printed
-figure staying the fallback. `_extract_injection` (`_ecopower_cards.py`). The terugleververgoeding is a
+figure staying the fallback. `_extract_injection` (`_ecopower_cards.py`).
+
+A definitive card is published once its month has ended, so the SPP it prints in that
+formula ("0,9 × 0,10051971 [EPEX SPP 2]") is the month's settled value, and footnote 2
+names the month. `fetch_for_month` settles the closed month on it (`_settled`,
+`ecopower.py`, through `printed_spp_index` and `settled_injection`): `index_realised`
+carries the figure and the engine credits it instead of its own hourly SPP mean, which ran
+0,04 to 0,06 c€/kWh above Ecopower's over July to September 2026. A card whose footnote
+does not name the month asked for is flagged `provisional` and asked again. The live
+`fetch` never settles: it serves last month's card for the running month, whose own index
+is not that one. Since the archive's live capture of a month is therefore unsettled, the
+extractor sets `settles_on_next_card` so such a row is asked again through
+`fetch_for_month`.
+
+The terugleververgoeding is a
 feed-in credit the customer *receives*; Ecopower states it is never negative, but the card prints
 it as a negative EUR/kWh figure because it sits in the energy/cost column where a credit shows as a
 negative cost. The parser takes the magnitude (`abs`) so `current` holds a positive credit,

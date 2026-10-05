@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 from datetime import date
 
 import aiohttp
@@ -78,6 +79,7 @@ from ._ecopower_cards import (
     _extract_dbs_injection,
     _extract_energy,
     _extract_injection,
+    printed_spp_index,
 )
 from ._ecopower_overlays import (
     _extract_dbs_dsos,
@@ -90,6 +92,7 @@ from ._pdf import (
     fetch_text,
     is_transient_fetch_error,
 )
+from ._settle import settled_injection
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -235,7 +238,31 @@ async def fetch_for_month(
     # if the CDN ever serves the current card under a historical URL
     # the validity / title check rejects it instead of mis-billing past
     # consumption at current rates.
-    return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+    checked = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+    return None if checked is None else _settled(checked, text, year_month)
+
+
+def _settled(snap: SupplierSnapshot, text: str, year_month: date) -> SupplierSnapshot:
+    """The month's card settled on the index it prints for that month.
+
+    A definitive card is published once its month has ended and prints the
+    month's settled SPP-weighted mean in its feed-in formula, so a closed
+    month is credited at the figure Ecopower invoices rather than the
+    engine's hourly mean, which ran 0,04 to 0,06 c€/kWh above it over July
+    to September 2026. Only here: the live fetch serves that same card for
+    the running month, which settles on its own index.
+
+    A leg indexed on the month whose figure the card does not tie to the
+    month is left as parsed and flagged ``provisional``, so the month is
+    asked again rather than filed unsettled.
+    """
+    injection = snap.injection
+    if injection is None or not injection.spp_indexed:
+        return snap
+    found = printed_spp_index(text)
+    if found is None or found[0] != year_month.month:
+        return replace(snap, provisional=True)
+    return replace(snap, injection=settled_injection(injection, found[1]))
 
 
 async def probe(
@@ -482,4 +509,7 @@ EXTRACTOR = SupplierExtractor(
     fetch=fetch,
     probe=probe,
     fetch_for_month=fetch_for_month,
+    # The live capture of a closed month carries the estimate the running
+    # month needs; fetch_for_month settles it on the card's own index.
+    settles_on_next_card=True,
 )
