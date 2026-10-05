@@ -173,16 +173,20 @@ class _PricesMixin:
         # this tick (sibling-cache adoption, self-fresh probe match,
         # or a fresh fetch). Reaching this point with no live
         # ``_last_error`` means the extractor produced a clean
-        # snapshot; the cycle-7 entsoe_auth_failed clear is
-        # unconditional because that issue can only ever be set by
-        # one of the two spot fetches below, each on its own failure.
+        # snapshot. The entsoe_auth_failed issue can only ever be set by
+        # one of the two spot fetches below, each on its own failure, so
+        # it is settled where the tick leaves: raised on a refused key,
+        # cleared on every other way out, a static contract that fetches
+        # nothing included. Clearing it here first and raising it again
+        # a moment later deleted and recreated it every tick, which threw
+        # away the user's "Ignore" and rewrote the issue registry.
         #
         # The extractor clear is gated on ``_last_error`` because
         # _maybe_refresh_snapshot raises the same Repairs issue when
         # a fresh fetch fails but a cached snapshot is still usable
         # (the kept-cached path). Without the gate the unconditional
         # clear immediately undoes that legitimate alert.
-        self._sync_entsoe_auth_issue(False)
+        auth_error: str | None = None
         if not self._last_error:
             self._sync_extractor_issue(None)
         if isinstance(priced.energy, (DynamicRates, SpotMonthlyRates)):
@@ -213,6 +217,7 @@ class _PricesMixin:
                 _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
                 spot_prices = self._fallback_spots()
                 if not spot_prices:
+                    self._sync_entsoe_auth_issue(False)
                     raise UpdateFailed(f"ENTSO-E: {err}") from err
         elif _injection_needs_spot(
             self._snapshot, self.entry
@@ -234,8 +239,9 @@ class _PricesMixin:
                     # A rejected key is not an outage: the credit stays out
                     # until the key is replaced, and the key step promised a
                     # notice when that happens.
-                    self._sync_entsoe_auth_issue(True, str(err))
+                    auth_error = str(err)
                 spot_prices = self._fallback_spots()
+        self._sync_entsoe_auth_issue(auth_error is not None, auth_error or "")
         return spot_prices
 
     async def _tick_profiles(

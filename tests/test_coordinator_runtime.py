@@ -2781,8 +2781,8 @@ async def test_static_contract_clears_stuck_entsoe_auth_issue(
 ) -> None:
     """Regression for f085501: a previously-set ENTSO-E auth issue must
     auto-resolve on the next successful tick when the coordinator is
-    holding a static (non-Dynamic) snapshot. Without the unconditional
-    clear, the issue lingers in Repairs forever after the user
+    holding a static (non-Dynamic) snapshot. Without the clear on a tick
+    that fetches no spots, the issue lingers in Repairs forever after the user
     switches a stuck dynamic entry to a static contract via OptionsFlow."""
     entry = _entry()
     entry.add_to_hass(hass)
@@ -2990,6 +2990,65 @@ async def test_a_rejected_key_for_a_spot_indexed_credit_raises_the_notice(
     issue_id = f"entsoe_auth_failed_{entry.entry_id}"
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
     assert data.hourly
+
+
+async def test_an_ignored_key_notice_stays_ignored_while_the_key_is_refused(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The tick cleared the notice before every fetch and raised it again on
+    the refusal, which deleted and recreated it each hour: "Ignore" never
+    stuck and the issue registry was rewritten every tick."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    freezer.move_to("2026-10-05 07:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "BADKEY",
+        },
+        title="Cociter Variable injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        side_effect=EntsoeAuthError("401 Unauthorized")
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    issue_id = f"entsoe_auth_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+        AsyncMock(return_value=0.0),
+    ):
+        await coord._async_update_data()
+        first = registry.async_get_issue(DOMAIN, issue_id)
+        assert first is not None
+        ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
+        freezer.move_to("2026-10-05 08:00:00+02:00")
+        await coord._async_update_data()
+
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.dismissed_version is not None
+    assert issue.created == first.created
 
 
 async def test_the_projection_is_handed_the_day_ahead_history(

@@ -112,9 +112,10 @@ _update_body (coordinator.py)
  ├─ _maybe_refresh_snapshot()            probe / TTL / fetch, may adopt sibling cache
  ├─ _track_monthly_peak()                Flanders capacity peak (rolling max)
  ├─ if self._snapshot is None: raise UpdateFailed("no supplier snapshot ...")
- ├─ clear entsoe_auth issue; clear extractor issue if _last_error empty
+ ├─ clear extractor issue if _last_error empty
  ├─ if energy is DynamicRates:           fetch ENTSO-E spot (hard: auth fails the tick)
  │    elif _injection_needs_spot(...):   fetch ENTSO-E spot (soft: failure only drops injection)
+ ├─ raise entsoe_auth issue on a refused key, clear it otherwise (never both in one tick)
  ├─ hourly = _build_hourly(spot_prices)  KeyError(DSO) -> UpdateFailed
  ├─ capacity_cost   = _compute_capacity(...)   (Flanders only)
  ├─ prosumer_cost   = _compute_prosumer(...)
