@@ -271,6 +271,19 @@ class VariableRates:
     impact_pic: float | None = None
     impact_medium: float | None = None
     impact_eco: float | None = None
+    # The formula behind each of those bands, on a card that prints one per
+    # band: OCTA+'s Walloon variable cards price "Impact Pic : Epex RLP *
+    # 1,366 + 6,770" against a mono "Epex RLP M * 1,066 + 6,770". Same basis
+    # as ``formula_factor``. A monthly leg built from the card carries them as
+    # ``factor_pic`` ..., so an entry holding a key bills the bands on the
+    # delivery month's index too. None where the bands have no formula of
+    # their own (Bolt derives its bands from one formula and per-band indices).
+    formula_factor_pic: float | None = None
+    formula_base_pic: float | None = None
+    formula_factor_medium: float | None = None
+    formula_base_medium: float | None = None
+    formula_factor_eco: float | None = None
+    formula_base_eco: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -559,11 +572,12 @@ def vat_grossed_fields(energy: EnergyRates) -> tuple[str, ...]:
     one, and its coefficients are grossed onto the VAT-inclusive basis the rest
     of the card is on: ``factor`` / ``base`` and their per-band forms, the
     ``formula_factor`` / ``formula_base`` pair and its forms, and the Impact
-    pairs (``pic_factor`` ...). Bolt's variable Impact bands too, the only
-    ``impact_*`` a parser fills, derived from a formula at the card's index.
-    Printed rates, ceilings, fees and tier rates are left out: a card prints
-    them VAT-inclusive. Only the fields holding a value are named, so an
-    empty tuple means nothing on the leg was grossed.
+    pairs (``pic_factor`` ...). Bolt's variable Impact bands too, derived from
+    a formula at the card's index; OCTA+ prints its bands, with a formula per
+    band beside them, so there the formulas are grossed and the printed bands
+    are not. Printed rates, ceilings, fees and tier rates are left out: a card
+    prints them VAT-inclusive. Only the fields holding a value are named, so
+    an empty tuple means nothing on the leg was grossed.
     """
     names = []
     for f in fields(energy):
@@ -574,7 +588,11 @@ def vat_grossed_fields(energy: EnergyRates) -> tuple[str, ...]:
             name in ("factor", "base")
             or name.startswith(("factor_", "base_", "formula_factor", "formula_base"))
             or name.endswith(("_factor", "_base"))
-            or (isinstance(energy, VariableRates) and name.startswith("impact_"))
+            or (
+                isinstance(energy, VariableRates)
+                and name.startswith("impact_")
+                and energy.formula_factor_pic is None
+            )
         ):
             names.append(name)
     return tuple(names)

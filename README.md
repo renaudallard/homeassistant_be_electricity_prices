@@ -457,7 +457,9 @@ different, as long as the edit keeps the same supplier, contract and region
    it, so it cannot come back into force later.
 7. **DSO billing mode** *(Wallonia only, and skipped for the contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, Boost Fix Impact and Eco Boost Fix Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-hourly* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-hourly follow the existing
-   meter convention.
+   meter convention. A card that prices the same product on the bands too
+   (Bolt's variable cards, OCTA+ Boost Flex, Eco Boost Flex and Basic Online
+   in Wallonia) bills its energy on them under Tarif Impact.
 8. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every

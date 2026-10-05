@@ -87,8 +87,9 @@ Notes:
   Impact comptage is a Walloon CWaPE concept and the Flanders fixed cards
   carry no Impact block. `test_octaplus_is_registered` pins this: fifteen
   contract ids, and `impact.regions == frozenset({"wallonia"})` for each.
-  The variable cards print per-band Impact formulas in Wallonia too; no
-  variable Impact contract is registered, as before the October range.
+  The variable cards price Impact in Wallonia too, without a contract of
+  their own: the same product is billed on the three bands when the entry is
+  on the Impact configuration (see the variable section below).
 - Both dynamic products set `quarter_hourly=True` on every card from 2026
   (`octaplus.py`), because OCTA+ indexes on the 15-minute EPEX spot (`Epex 15'`);
   a card from before 2026 names `Belpex Hourly` and sets `False`. Billing thus
@@ -448,6 +449,25 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   parses the four per-meter `Epex RLP M` formulas and sets `month_indexed`, with
   the printed figure kept as the keyless fallback.
 
+  In Wallonia the same card prices Tarif Impact on its own: page one prints
+  `Impact Pic` / `Impact Medium` / `Impact Eco` rows beside the meters, and the
+  formula paragraph one formula per band, *"Impact Eco : Epex RLP * 0,830 +
+  6,770 ; Impact Medium : Epex RLP * 1,142 + 6,770 ; Impact Pic : Epex RLP *
+  1,366 + 6,770"* on the October 2026 Boost Flex card (the lines wrap inside a
+  formula, so the gaps take a newline). `_with_impact_bands` reads the rows into
+  `VariableRates.impact_*` and `_RLP_IMPACT_RES` the formulas into
+  `formula_factor_pic` ... `formula_base_eco`, which the monthly leg carries as
+  `factor_pic` .... An entry on the Impact configuration is then billed per
+  band, on the printed rows without a key and on the formulas with one; on any
+  other configuration nothing changes, and a night circuit keeps its own
+  formula. The bands are kept only when all three rows and all three formulas
+  read: the June 2026 cards print the rows with no formulas and keep their
+  meter rates, Smart Variable prints `-` in each row, and the Flemish cards
+  print none. Routed onto the meter rates, the October cards billed an Impact
+  entry about 29 EUR a year too much on Boost Flex and Basic Online and 52 on
+  Eco Boost Flex at 3500 kWh, cheap in the PIC hours and dear in the others.
+  `test_a_walloon_variable_card_prices_the_impact_bands_it_prints` pins it.
+
   **The residual, stated plainly:** `Epex RLP M` weights the day-ahead by the
   residual load profile, and we resolve it against the plain arithmetic month
   mean, which sits about 3–4% below because consumption leans into the
@@ -528,6 +548,7 @@ cards unless the row names another month):
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
+| `octaplus_boostflex_w_oct.pdf` | OCTA+ Boost Flex, Wallonia, **October 2026**. Impact rows and one `Epex RLP` formula per CWaPE band beside the per-meter ones. |
 | `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`

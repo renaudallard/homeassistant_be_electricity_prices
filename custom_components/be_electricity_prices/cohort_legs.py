@@ -279,6 +279,15 @@ def _cohort_energy_from_archived(
             base_offpeak=energy.formula_base_offpeak,
             factor_exclusive_night=energy.formula_factor_exclusive_night,
             base_exclusive_night=energy.formula_base_exclusive_night,
+            # And the CWaPE bands' own formulas, where the card prints them
+            # (OCTA+ in Wallonia), or an Impact entry holding a key is billed
+            # the mono or day/night pair in every band.
+            factor_pic=energy.formula_factor_pic,
+            base_pic=energy.formula_base_pic,
+            factor_medium=energy.formula_factor_medium,
+            base_medium=energy.formula_base_medium,
+            factor_eco=energy.formula_factor_eco,
+            base_eco=energy.formula_base_eco,
             # From the SIGNING-month card, which is the one that priced this
             # cohort's guarantee.
             ceiling_single=energy.ceiling_single,

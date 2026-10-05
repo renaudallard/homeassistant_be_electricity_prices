@@ -1104,3 +1104,74 @@ async def test_archive_swallows_bad_payloads_and_unsold_combinations(
     assert octaplus._archive_name_key("2026-04 E OCTA+DYNAMIC RE WL FR.pdf") == (
         octaplus._archive_name_key("2026-04_E_OCTA_DYNAMIC_RE_WL_FR.PDF")
     )
+
+
+def test_a_walloon_variable_card_prices_the_impact_bands_it_prints() -> None:
+    """The Walloon variable cards price the product a second way, on the
+    three CWaPE bands: "Impact Pic 22,57 / Medium 18,99 / Eco 14,00" on page
+    one and "Impact Pic : Epex RLP * 1,366 + 6,770" in the formula paragraph.
+    Ignored, an Impact entry was billed the mono or day/night rate in every
+    band, about 30 EUR a year too much on Boost Flex at 3500 kWh, and the
+    hourly prices pointed the load the wrong way."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    snap = parse_snapshot(
+        "octaplus_boostflex", _text("octaplus_boostflex_w_oct.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert (energy.impact_pic, energy.impact_medium, energy.impact_eco) == (
+        pytest.approx(0.2257),
+        pytest.approx(0.1899),
+        pytest.approx(0.1400),
+    )
+    vat = 1.06
+    assert energy.formula_factor_pic == pytest.approx(1.366 * vat)
+    assert energy.formula_factor_medium == pytest.approx(1.142 * vat)
+    assert energy.formula_factor_eco == pytest.approx(0.830 * vat)
+    assert energy.formula_base_pic == pytest.approx(6.770 / 1000 * vat)
+
+    pic = datetime(2026, 10, 7, 18)
+    region = "wallonia"
+    # No key: the printed band on Impact, the printed meter rate otherwise.
+    assert energy_eur_per_kwh(energy, pic, None, "dynamic", region, "impact") == (
+        pytest.approx(0.2257)
+    )
+    assert energy_eur_per_kwh(energy, pic, None, "mono", region, "bi_horaire") == (
+        pytest.approx(energy.current)
+    )
+    # With a key: the band's own formula on the month's index.
+    leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates)
+    spot = 0.16288
+    assert energy_eur_per_kwh(leg, pic, spot, "dynamic", region, "impact") == (
+        pytest.approx((1.366 * 162.88 + 6.770) / 1000 * vat)
+    )
+    assert energy_eur_per_kwh(leg, pic, spot, "mono", region, "bi_horaire") == (
+        pytest.approx((1.066 * 162.88 + 6.770) / 1000 * vat)
+    )
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "region"),
+    [
+        ("octaplus_smartvariable", "octaplus_smartvariable_w.pdf", "wallonia"),
+        ("octaplus_ecoboostflex", "octaplus_ecoboostflex_v_oct.pdf", "flanders"),
+    ],
+)
+def test_a_card_without_impact_prices_keeps_no_bands(
+    contract: str, fixture: str, region: str
+) -> None:
+    """Smart Variable prints "-" in its Impact rows and the Flemish cards
+    print none: neither carries bands."""
+    energy = parse_snapshot(contract, _text(fixture), region).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.impact_pic is None
+    assert energy.formula_factor_pic is None

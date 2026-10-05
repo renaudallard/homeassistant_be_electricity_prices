@@ -575,6 +575,16 @@ _RLP_METER_RES: dict[str, re.Pattern[str]] = {
     ),
 }
 
+# The CWaPE bands the Walloon variable cards price on their own formula, one
+# per band, after the per-meter ones: "Impact Eco : Epex RLP * 0,830 + 6,770 ;
+# Impact Medium : Epex RLP * 1,142 + 6,770 ; Impact Pic : Epex RLP * 1,366 +
+# 6,770". The lines wrap inside a formula, so the gaps take a newline. The
+# feed-in paragraph names the same bands on "Epex SPP", which RLP keeps out.
+_RLP_IMPACT_RES: dict[str, re.Pattern[str]] = {
+    band: re.compile(rf"Impact\s+{label}\s*:\s*{_RLP_FORMULA}", re.I)
+    for band, label in (("pic", "Pic"), ("medium", "Medium"), ("eco", "Eco"))
+}
+
 _INJECTION_LEAD = (
     r"(?:Le\s+prix\s+de\s+votre\s+injection"
     r"|prix\s+de\s+l['’]électricité\s+injectée\s+sont\s+indexés)"
@@ -735,6 +745,32 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # and silently billing the V-test estimate is what this exists to
         # stop, so leave the printed rates and let the live check say so.
         return rates
+    impact = {band: pattern.search(text) for band, pattern in _RLP_IMPACT_RES.items()}
+    banded = _with_impact_bands(text, rates)
+    if (
+        banded.impact_pic is not None
+        and "peak" in coefs
+        and "offpeak" in coefs
+        and all(impact.values())
+    ):
+        vat = _vat_multiplier(text)
+        bands = {
+            band: (
+                to_float(m.group(1)) * vat,
+                parse_sign(m.group(2)) * to_float(m.group(3)) / 1000.0 * vat,
+            )
+            for band, m in impact.items()
+            if m is not None
+        }
+        rates = replace(
+            banded,
+            formula_factor_pic=bands["pic"][0],
+            formula_base_pic=bands["pic"][1],
+            formula_factor_medium=bands["medium"][0],
+            formula_base_medium=bands["medium"][1],
+            formula_factor_eco=bands["eco"][0],
+            formula_base_eco=bands["eco"][1],
+        )
     return replace(
         rates,
         month_indexed=True,
@@ -747,6 +783,28 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         formula_factor_exclusive_night=coefs.get("exclusive_night", (None, None))[0],
         formula_base_exclusive_night=coefs.get("exclusive_night", (None, None))[1],
     )
+
+
+def _with_impact_bands(text: str, rates: VariableRates) -> VariableRates:
+    """``rates`` with the CWaPE bands a Walloon variable card prints beside
+    its meters: "Impact Pic 22,57", "Impact Medium 18,99", "Impact Eco 14,00".
+
+    The card prices the product two ways and the customer picks one, so an
+    entry on the Impact configuration bills these rather than the mono or
+    day/night rate: routed onto those, the October 2026 Boost Flex billed
+    about 30 EUR a year too much at 3500 kWh, Eco Boost Flex about 52.
+    Smart Variable prints "-" in each row and the Flemish cards print no
+    rows, which leaves the bands unset. All three or none, and the caller
+    keeps them only beside the bands' own formulas: June 2026's cards print
+    the rows with none, and bands no index can re-price are bands a signing
+    cohort cannot carry, so such a card keeps billing its meter rates.
+    """
+    pic = _meter_value(text, r"Impact Pic")
+    medium = _meter_value(text, r"Impact Medium")
+    eco = _meter_value(text, r"Impact Eco")
+    if pic is None or medium is None or eco is None:
+        return rates
+    return replace(rates, impact_pic=pic, impact_medium=medium, impact_eco=eco)
 
 
 def _meter_value(text: str, label_pattern: str) -> float | None:

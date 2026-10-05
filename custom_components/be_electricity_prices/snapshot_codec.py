@@ -456,6 +456,13 @@ _ENERGY_OPTIONAL_KEYS = (
     "formula_base_sunday",
     "factor_sunday",
     "base_sunday",
+    # And OCTA+'s per-band Impact formulas on a variable card.
+    "formula_factor_pic",
+    "formula_base_pic",
+    "formula_factor_medium",
+    "formula_base_medium",
+    "formula_factor_eco",
+    "formula_base_eco",
 )
 
 

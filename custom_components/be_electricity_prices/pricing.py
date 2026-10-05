@@ -390,10 +390,15 @@ def energy_eur_per_kwh(
             energy.factor_pic is not None
             and energy.factor_medium is not None
             and energy.factor_eco is not None
+            and meter != "exclusive_night"
+            and (dso_tariff_mode == "impact" or energy.factor_peak is None)
         ):
             # A Tarif Impact card re-priced on the month: the band is the
             # CWaPE one, every day of the week, and the cap is per band, the
-            # same routing ``ImpactRates`` gets below.
+            # same routing ``ImpactRates`` gets below. A card that prints the
+            # bands beside a mono and day/night pair (OCTA+ in Wallonia)
+            # bills them only on the Impact configuration, and a night
+            # circuit keeps its own formula on either.
             band = dso_impact_band(when)
             if band == "pic":
                 band_coefs = (energy.factor_pic, energy.base_pic, energy.ceiling_pic)
@@ -575,11 +580,15 @@ def _static_monthly(
 
     The band is chosen the way ``energy_eur_per_kwh`` bills it: the per-meter
     pair when the card prints both halves, the mono pair otherwise. A
-    time-of-use or Tarif Impact schedule has no day and night band to report.
+    time-of-use or Tarif Impact schedule has no day and night band to report;
+    a card printing Impact bands beside its pairs still has those pairs, and
+    ``static_breakdown`` already refuses the Impact configuration.
     """
     if month_mean is None:
         return None
-    if energy.factor_transition is not None or energy.factor_pic is not None:
+    if energy.factor_transition is not None or (
+        energy.factor_pic is not None and energy.factor_peak is None
+    ):
         return None
     factor, base = energy.factor, energy.base
     if (

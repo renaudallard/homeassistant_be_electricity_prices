@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from custom_components.be_electricity_prices.pricing import (
+    DsoTariffMode,
     MeterType,
     compute_breakdown,
     dso_impact_band,
@@ -1035,3 +1036,67 @@ def test_spot_monthly_impact_bands_follow_the_cwape_schedule() -> None:
     # The mean is mandatory, as for every month-priced leg.
     with pytest.raises(ValueError):
         energy_eur_per_kwh(leg, datetime(2026, 9, 15, 19, tzinfo=tz), None)
+
+
+def test_a_monthly_leg_with_impact_bands_beside_its_pairs() -> None:
+    """OCTA+'s Walloon variable cards print a formula per CWaPE band beside
+    the mono, day/night and night ones. The bands are billed on the Impact
+    configuration only, and a night circuit keeps its own formula on either.
+    A leg with bands and no day/night pair (Cociter's trihoraire card) bills
+    its bands whatever the mode, as before."""
+    from custom_components.be_electricity_prices.pricing import (
+        static_energy_eur_per_kwh,
+    )
+
+    spot = 0.1
+    leg = SpotMonthlyRates(
+        factor=1.0,
+        base=0.0,
+        factor_peak=1.2,
+        base_peak=0.0,
+        factor_offpeak=0.9,
+        base_offpeak=0.0,
+        factor_exclusive_night=0.95,
+        base_exclusive_night=0.0,
+        factor_pic=1.4,
+        base_pic=0.0,
+        factor_medium=1.1,
+        base_medium=0.0,
+        factor_eco=0.8,
+        base_eco=0.0,
+    )
+    pic = datetime(2026, 10, 7, 18)  # a weekday peak hour, PIC on Impact
+    assert dso_impact_band(pic) == "pic"
+    region = "wallonia"
+    assert energy_eur_per_kwh(leg, pic, spot, "dynamic", region, "impact") == (
+        pytest.approx(0.14)
+    )
+    assert energy_eur_per_kwh(leg, pic, spot, "bi", region, "bi_horaire") == (
+        pytest.approx(0.12)
+    )
+    assert energy_eur_per_kwh(leg, pic, spot, "mono", region, "bi_horaire") == (
+        pytest.approx(0.10)
+    )
+    modes: tuple[DsoTariffMode, ...] = ("impact", "bi_horaire")
+    for mode in modes:
+        assert energy_eur_per_kwh(
+            leg, pic, spot, "exclusive_night", region, mode
+        ) == pytest.approx(0.095)
+    # The day and night sensors keep the pair outside Impact.
+    assert static_energy_eur_per_kwh(leg, "peak", spot) == pytest.approx(0.12)
+
+    trihoraire = SpotMonthlyRates(
+        factor=1.4,
+        base=0.0,
+        factor_pic=1.4,
+        base_pic=0.0,
+        factor_medium=1.1,
+        base_medium=0.0,
+        factor_eco=0.8,
+        base_eco=0.0,
+    )
+    for mode in modes:
+        assert energy_eur_per_kwh(
+            trihoraire, pic, spot, "dynamic", region, mode
+        ) == pytest.approx(0.14)
+    assert static_energy_eur_per_kwh(trihoraire, "peak", spot) is None
