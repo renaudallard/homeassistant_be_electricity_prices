@@ -6,7 +6,7 @@ from __future__ import annotations
 import zlib
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -308,11 +308,37 @@ async def test_midnight_rebuild_second_is_stable_and_spread(
         )
     # Two separate entries, so two independently derived offsets; each run is
     # deterministic for its own entry id.
-    assert all(s in range(60) for s in seconds)
+    assert all(s in range(15, 60) for s in seconds)
     assert all(
-        zlib.crc32(e.entry_id.encode()) % 60 == s
+        15 + zlib.crc32(e.entry_id.encode()) % 45 == s
         for e, s in zip(hass.config_entries.async_entries(DOMAIN), seconds, strict=True)
     )
+
+
+async def test_the_midnight_rebuild_waits_for_yesterdays_last_hour(
+    hass: HomeAssistant,
+) -> None:
+    """Yesterday is read off the long-term statistics, and the recorder
+    compiles its last hour at 00:00:10 and commits it when its queue gets
+    there. A rebuild before that left the hour out of the year-to-date until
+    the next tick, on one entry in six and on any slow database. The rebuild
+    fires after the compile is queued and waits for the recorder's commit."""
+    import asyncio
+
+    registered, refresh = await _setup_capturing_time_listeners(hass)
+    _spec, action = next((s, fn) for s, fn in registered if s["hour"] == 0)
+    committed: asyncio.Future[None] = hass.loop.create_future()
+    recorder = MagicMock()
+    recorder.async_get_commit_future.return_value = committed
+    hass.config.components.add("recorder")
+    with patch("homeassistant.components.recorder.get_instance", return_value=recorder):
+        rebuild = hass.async_create_task(action(dt_util.now()))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert refresh.await_count == 0
+        committed.set_result(None)
+        await rebuild
+    assert refresh.await_count == 1
 
 
 async def test_setup_keeps_the_hourly_slot_boundary_push(hass: HomeAssistant) -> None:

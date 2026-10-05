@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import zlib
 from datetime import datetime, timedelta
@@ -84,6 +86,39 @@ from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 
 _LOGGER = logging.getLogger(__name__)
+
+# The recorder compiles the hour that just closed at 00:00:10 (UTC minute 0,
+# second 10, which Brussels shares) and commits it when its queue reaches the
+# task. The midnight rebuild fires no earlier than this second, so the compile
+# is queued by then, and waits at most this long for the commit.
+_ROLLOVER_FIRST_SECOND: Final = 15
+_RECORDER_COMMIT_WAIT_SECONDS: Final = 60
+
+
+async def _recorder_caught_up(hass: HomeAssistant) -> None:
+    """Wait until the recorder has committed every task queued so far.
+
+    The yesterday part of the year-to-date reads the long-term statistics,
+    and the midnight rebuild ran before the recorder had compiled
+    yesterday's last hour on one entry in six (each whose second fell
+    before 00:00:10) and on any install with a slow database. That hour was
+    missing from current_year_cost, the month cost and the volumes until
+    the next tick. Bounded, because a recorder with a backlog of minutes is
+    a reason to price late, not to stop pricing.
+    """
+    if "recorder" not in hass.config.components:
+        return
+    from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+        get_instance,
+    )
+
+    future = get_instance(hass).async_get_commit_future()
+    if future is None:
+        return
+    with contextlib.suppress(TimeoutError):
+        async with asyncio.timeout(_RECORDER_COMMIT_WAIT_SECONDS):
+            await future
+
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CHEAPEST_WINDOW = "cheapest_window"
@@ -437,10 +472,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     # the same second would put the whole user base on a supplier's doorstep at
     # once. Spread the rebuild over the first minute using a stable per-entry
     # offset: crc32 rather than hash() because the latter is salted per process
-    # and would move the entry to a different second on every restart.
-    rollover_second = zlib.crc32(entry.entry_id.encode()) % 60
+    # and would move the entry to a different second on every restart. Past
+    # the recorder's compile of yesterday's last hour, which the rebuild then
+    # waits for (_recorder_caught_up).
+    rollover_second = _ROLLOVER_FIRST_SECOND + zlib.crc32(entry.entry_id.encode()) % (
+        60 - _ROLLOVER_FIRST_SECOND
+    )
 
     async def _rebuild_on_local_day_rollover(_now: datetime) -> None:
+        await _recorder_caught_up(hass)
         await coordinator.async_request_refresh_after_tick()
 
     entry.async_on_unload(
