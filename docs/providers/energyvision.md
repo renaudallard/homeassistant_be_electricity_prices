@@ -32,7 +32,7 @@ integration tracks these:
 - **GS1800V** ("Goedkope stroom met 1.800 kWh vast", all three regions) - the tiered
   shape: the year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
   `1,12 x Belpex-RLP-M + 20 EUR/MWh`. All three cards price that leg identically; only
-  the standing charge differs, and only in Wallonia, which pays none.
+  the standing charge differs, and only in Wallonia, whose card prints its own (see below).
 - **GSVI3** ("Goedkope stroom met vaste injectieprijs 3 jaar", Flanders) - the same shape
   on a 1.000 kWh tranche at 9,54 c€/kWh with a `1,15` coefficient, and a feed-in price
   fixed for the term instead of indexed.
@@ -401,9 +401,10 @@ its patterns as arguments: the two publications share no wording, and merging th
 bilingual alternations would cost each set the fail-loud guarantee it gives on its own
 card. Three things are the Walloon card's own:
 
-- **No standing charge.** "Frais fixes 0 €/an" where Flanders and Brussels print 50. A
-  figure to read, not a row to treat as missing. It was 50 on the March 2026 card and zero
-  from April, which the archive bills correctly.
+- **Its own standing charge.** Flanders and Brussels print 50 €/yr; the Walloon card was
+  50 in March 2026, "Frais fixes 0 €/an" from April to September and 70 from October. Read
+  off each month's card like any other figure, and a zero is a figure to read, not a row to
+  treat as missing.
 - **The blend is not readable off it.** It says only "les différents gestionnaires de
   réseau de distribution", naming no region, where the Dutch cards say "van Vlaanderen".
   Settled by the figures rather than the prose: EnergyVision publishes its Belpex-RLP-M

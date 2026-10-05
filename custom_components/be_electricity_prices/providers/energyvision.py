@@ -56,12 +56,12 @@ The residential electricity products supported:
   VAT is baked into both. The injection coefficient is exactly 1,0.
 * ``GS3JV`` (Goedkope stroom 3 jaar vast, Flanders): a flat fixed rate for
   3 years; its injection is indexed monthly (Belpex-SPP-M, known at
-  month-end), so the printed monthly indicative is billed rather than a
-  live spot formula.
+  month-end), so the credit is resolved against the delivery month's own
+  SPP-weighted mean, and the printed monthly indicative is only the
+  fallback for a month whose mean is not available.
 * ``GS1JV`` (Électricité bon marché 1 an fixe, Wallonia): the same fixed
   shape on a 1-year lock, off a French card that shares no wording with the
-  Dutch ones. Parsed by the ``*_fr`` helpers below. This is where DATS 24's
-  Walloon customers land after the 2026-08-31 transfer.
+  Dutch ones. Parsed by the ``*_fr`` helpers below.
 
 * ``GS1800V`` (Flanders and Brussels) / ``GSVI3`` / ``GSLP`` (Flanders):
   the tiered range, which bills a first tranche of the YEAR at a flat rate
@@ -249,7 +249,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # figure for figure, so it goes through the same parser; only the network
     # and tax blocks are the region's own. The Walloon card is the separate
     # French publication and needs the *_fr anchors, but the same body behind
-    # them, and it charges NO standing charge where the other two charge 50.
+    # them, and its standing charge is its own: none on the April to
+    # September 2026 cards and 70 from October, where the other two charge 50.
     #
     # Who may take it differs too, which the config flow cannot express and
     # the README says instead: Flanders and Wallonia sell it to any

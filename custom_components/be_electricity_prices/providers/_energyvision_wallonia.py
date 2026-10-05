@@ -97,10 +97,11 @@ def _publication_label_fr(text: str) -> str:
 def _extract_tiered_fr(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     """The Walloon 1.800 kWh card, on the French publication.
 
-    Its standing charge is zero where the Flemish and Brussels cards of the
-    same product charge 50 EUR/yr, which is a figure to read rather than a
-    row to treat as missing: ``_FEE_FR_RE`` matching "Frais fixes 0 €/an" is
-    the card saying nothing is owed.
+    Its standing charge is its own and moves from card to card: none from
+    April to September 2026 and 70 EUR/yr from October, where the Flemish
+    and Brussels cards of the same product charge 50. A zero is a figure to
+    read rather than a row to treat as missing: ``_FEE_FR_RE`` matching
+    "Frais fixes 0 €/an" is the card saying nothing is owed.
     """
     fee = _FEE_FR_RE.search(text)
     if fee is None:

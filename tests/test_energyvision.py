@@ -1223,8 +1223,8 @@ def _wal_1800() -> SupplierSnapshot:
 
 def test_wallonia_tiered_energy_leg_matches_the_dutch_cards() -> None:
     """The three regions price this product identically on the energy leg.
-    Only the standing charge differs, and only in Wallonia: the card prints
-    "Frais fixes 0 €/an" where Flanders and Brussels charge 50."""
+    Only the standing charge differs, and only in Wallonia: the September
+    card prints "Frais fixes 0 €/an" where Flanders and Brussels charge 50."""
     wal, vl = _wal_1800().energy, _tiered_1800().energy
     assert isinstance(wal, SpotMonthlyRates) and isinstance(vl, SpotMonthlyRates)
     assert (wal.factor, wal.base) == (vl.factor, vl.base)
