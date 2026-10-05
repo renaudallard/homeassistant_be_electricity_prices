@@ -37,6 +37,7 @@ from custom_components.be_electricity_prices.providers.base import ExtractorErro
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
+    InjectionRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers._totalenergies_cards import (
@@ -883,6 +884,8 @@ def test_the_dutch_card_stands_in_for_a_french_one_that_does_not_parse(
 
     async def text(_session: object, url: str) -> str:
         asked.append(url)
+        if "INJECTION_" in url:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
         return dutch if url.endswith("_NL.pdf") else "Carte tarifaire Injection"
 
     monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
@@ -892,6 +895,8 @@ def test_the_dutch_card_stands_in_for_a_french_one_that_does_not_parse(
     assert [url.rsplit("/", 1)[1] for url in asked] == [
         "MYCOMFORT_ELECTRICITY_WAL_FR.pdf",
         "MYCOMFORT_ELECTRICITY_WAL_NL.pdf",
+        "INJECTION_MYCOMFORT_ELECTRICITY_WAL_FR.pdf",
+        "INJECTION_MYCOMFORT_ELECTRICITY_WAL_NL.pdf",
     ]
     assert snap.source_url.endswith("MYCOMFORT_ELECTRICITY_WAL_NL.pdf")
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
@@ -940,3 +945,241 @@ def test_a_dutch_card_that_did_not_arrive_is_reported_as_such(
         )
     assert is_transient_fetch_error(str(caught.value))
     assert "MYCOMFORT-FIXED_ELECTRICITY_BXL_NL.pdf" in str(caught.value)
+
+
+def _feed_in(fixture: str, contract: str, region: str) -> InjectionRates | None:
+    from custom_components.be_electricity_prices.providers.totalenergies import (
+        parse_injection_card,
+    )
+
+    leg, _month = parse_injection_card(
+        contract, fixture_text(fixture, layout=True), region
+    )
+    return leg
+
+
+def test_the_feed_in_card_carries_the_october_2026_credit() -> None:
+    """Since October 2026 the product cards print no feed-in block, and the
+    offer is on a card of its own beside each: "0.02151 * BELPEXM -0.625" with
+    2,74 c/kWh as the month's figure on myComfort in Flanders. The fixed
+    products take the same "Injection Variable" offer their cards printed
+    until September."""
+    leg = _feed_in(
+        "totalenergies_injection_mycomfort_v_2026-10.pdf",
+        "totalenergies_mycomfort",
+        "flanders",
+    )
+    assert leg is not None
+    assert leg.current == pytest.approx(0.0274)
+    assert leg.factor == pytest.approx(0.2151)
+    assert leg.base == pytest.approx(-0.00625)
+    assert leg.month_indexed
+    assert leg == _feed_in(
+        "totalenergies_injection_mycomfort_v_2026-10.pdf",
+        "totalenergies_mycomfort_fixed",
+        "flanders",
+    )
+
+
+def test_the_dynamic_feed_in_card_keeps_the_hourly_formula() -> None:
+    """myDynamic's feed-in card prints 10,92 as its estimate and 14,34 as the
+    month's figure; the hour's BELPEXH formula is what is billed."""
+    leg = _feed_in(
+        "totalenergies_injection_mydynamic_w_2026-10.pdf",
+        "totalenergies_mydynamic",
+        "wallonia",
+    )
+    assert leg is not None
+    assert (leg.factor, leg.base) == pytest.approx((1.0, -0.013))
+    assert not leg.month_indexed
+    # The variable offer is not the dynamic one, nor another region's.
+    with pytest.raises(ExtractorError, match="is not Injection Variable"):
+        _feed_in(
+            "totalenergies_injection_mydynamic_w_2026-10.pdf",
+            "totalenergies_mycomfort",
+            "wallonia",
+        )
+    with pytest.raises(ExtractorError, match="is not the brussels"):
+        _feed_in(
+            "totalenergies_injection_mydynamic_w_2026-10.pdf",
+            "totalenergies_mydynamic",
+            "brussels",
+        )
+
+
+def test_a_dutch_feed_in_card_reads_as_its_french_edition() -> None:
+    from custom_components.be_electricity_prices.providers.totalenergies import (
+        parse_injection_card,
+    )
+
+    french = parse_injection_card(
+        "totalenergies_electricite_fixe",
+        fixture_text(
+            "totalenergies_injection_electricite_fixe_v_2026-09.pdf", layout=True
+        ),
+        "flanders",
+    )
+    dutch = parse_injection_card(
+        "totalenergies_electricite_fixe",
+        fixture_text(
+            "totalenergies_injection_electricite_fixe_v_2026-10_nl.pdf", layout=True
+        ),
+        "flanders",
+    )
+    assert french[1] == "septembre 2026"
+    assert dutch[1] == "octobre 2026"
+    assert dutch[0] == french[0]
+    leg = _feed_in(
+        "totalenergies_injection_mydynamic_v_2026-10_nl.pdf",
+        "totalenergies_mydynamic",
+        "flanders",
+    )
+    assert leg is not None
+    assert (leg.factor, leg.base) == pytest.approx((1.0, -0.013))
+
+
+def _serve(cards: dict[str, str]) -> object:
+    async def text(_session: object, url: str) -> str:
+        name = url.rsplit("/", 1)[1]
+        if name not in cards:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return fixture_text(cards[name], layout=True)
+
+    return text
+
+
+_FIXE_V = "totalenergies_electricite_fixe_v_2026-10.pdf"
+
+
+@pytest.mark.parametrize(
+    ("cards", "label"),
+    [
+        (
+            {
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-09.pdf"
+                ),
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_NL.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-10_nl.pdf"
+                ),
+            },
+            "NL",
+        ),
+        (
+            {
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-09.pdf"
+                ),
+            },
+            "FR",
+        ),
+    ],
+    ids=["the-month-s-dutch-edition", "an-older-card-over-none"],
+)
+def test_fetch_reads_the_feed_in_card_beside_the_tariff_card(
+    monkeypatch: pytest.MonkeyPatch, cards: dict[str, str], label: str
+) -> None:
+    """The October 2026 cards credited no export at all. On 5 October the
+    French feed-in card of Electricité Fixe in Flanders still said September
+    and its Dutch edition October: the edition of the tariff card's month is
+    read, and the older card rather than none when it is all there is."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    asked: list[str] = []
+    serve = _serve({"ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": _FIXE_V, **cards})
+
+    async def text(session: object, url: str) -> str:
+        asked.append(url.rsplit("_", 1)[1])
+        return await serve(session, url)  # type: ignore[operator, no-any-return]
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
+    snap = asyncio.run(
+        totalenergies.fetch(None, "totalenergies_electricite_fixe", "flanders")  # type: ignore[arg-type]
+    )
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0274)
+    assert snap.injection.factor == pytest.approx(0.2151)
+    assert snap.injection.month_indexed
+    assert asked == ["FR.pdf", "FR.pdf", "NL.pdf"]
+
+
+def test_no_feed_in_card_leaves_no_feed_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    monkeypatch.setattr(
+        totalenergies,
+        "fetch_pdf_text_layout",
+        _serve({"ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": _FIXE_V}),
+    )
+    snap = asyncio.run(
+        totalenergies.fetch(None, "totalenergies_electricite_fixe", "flanders")  # type: ignore[arg-type]
+    )
+    assert snap.injection is None
+
+
+def test_a_feed_in_card_that_did_not_arrive_fails_the_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout on the feed-in card keeps the snapshot already held rather
+    than storing one that credits nothing."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    card = fixture_text(_FIXE_V, layout=True)
+
+    async def text(_session: object, url: str) -> str:
+        if "INJECTION_" in url:
+            raise ExtractorError(f"network error fetching {url}: TimeoutError")
+        return card
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", text)
+    with pytest.raises(ExtractorError, match="network error"):
+        asyncio.run(
+            totalenergies.fetch(None, "totalenergies_electricite_fixe", "flanders")  # type: ignore[arg-type]
+        )
+
+
+def test_the_probe_covers_the_feed_in_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The feed-in card is uploaded on its own; a key off the tariff card alone
+    kept a snapshot without its new feed-in until the tariff card next moved."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    keys = {
+        "MYCOMFORT_ELECTRICITY_VL_FR.pdf": "a",
+        "INJECTION_MYCOMFORT_ELECTRICITY_VL_FR.pdf": "b",
+    }
+
+    async def head(_session: object, url: str) -> str | None:
+        return keys.get(url.rsplit("/", 1)[1])
+
+    def probe() -> str | None:
+        return asyncio.run(
+            totalenergies.probe(None, "totalenergies_mycomfort", "flanders")  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr(totalenergies, "head_freshness_key", head)
+    first = probe()
+    keys["INJECTION_MYCOMFORT_ELECTRICITY_VL_FR.pdf"] = "c"
+    assert first is not None
+    assert probe() not in (None, first)
+
+
+def test_discover_counts_a_feed_in_card_as_its_product(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The listing links a feed-in card per product since October 2026. The
+    prefix is not a product, and a product listed only through its feed-in
+    card is still one."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    listing = (
+        '<a href="/tariff-card/latest/MYCOMFORT_ELECTRICITY_VL_FR.pdf">a</a>'
+        '<a href="/tariff-card/latest/INJECTION_MYCOMFORT_ELECTRICITY_VL_FR.pdf">b</a>'
+        '<a href="/tariff-card/latest/INJECTION_NEWPRODUCT_ELECTRICITY_WAL_FR.pdf">c</a>'
+    )
+
+    async def fetch_text(_session: object, _url: str) -> str:
+        return listing
+
+    monkeypatch.setattr(totalenergies, "fetch_text", fetch_text)
+    found = asyncio.run(totalenergies.discover(None))  # type: ignore[arg-type]
+    assert found == {"MYCOMFORT", "NEWPRODUCT"}

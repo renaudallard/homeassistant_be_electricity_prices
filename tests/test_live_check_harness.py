@@ -4409,36 +4409,46 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
 
 
 @pytest.mark.parametrize(
-    ("fixture", "cid"),
+    ("fixture", "feed_in", "cid", "shape"),
     [
         (
             "totalenergies_electricite_variable_v_2026-10.pdf",
+            "totalenergies_injection_mycomfort_v_2026-10.pdf",
             "totalenergies_electricite_variable",
+            "month-indexed injection",
         ),
-        ("totalenergies_mydynamic_v_2026-10.pdf", "totalenergies_mydynamic"),
+        (
+            "totalenergies_mydynamic_v_2026-10.pdf",
+            "totalenergies_injection_mydynamic_v_2026-10_nl.pdf",
+            "totalenergies_mydynamic",
+            "injection rates present",
+        ),
     ],
 )
-def test_a_totalenergies_card_from_october_2026_expects_no_feed_in(
-    fixture: str, cid: str
+def test_a_totalenergies_card_from_october_2026_is_checked_for_its_feed_in(
+    fixture: str, feed_in: str, cid: str, shape: str
 ) -> None:
-    """TotalEnergies republishes product by product, and its cards from
-    October 2026 on print no feed-in offer, variable, fixed and dynamic alike.
-    The shape follows the card's month: the October variable card passes with
-    no injection leg, where the contract's pre-October "month" shape would
-    have failed it, and so does myDynamic, which was "derived" until then."""
+    """From October 2026 a TotalEnergies product card prints no feed-in
+    block, and the offer is on the feed-in card the fetch reads beside it.
+    The walk holds the result to the contract's own shape again, where it
+    used to expect no feed-in at all of a card from October on."""
     from dataclasses import replace as dc_replace
 
     from custom_components.be_electricity_prices.providers import totalenergies
     from tests import fixture_text
 
     text = fixture_text(fixture, layout=True)
+    leg, _month = totalenergies.parse_injection_card(
+        cid, fixture_text(feed_in, layout=True), "flanders"
+    )
     contract = dc_replace(
         totalenergies._CONTRACTS_BY_ID[cid],
         regions=frozenset({"flanders"}),
     )
 
     async def _fetch(_session: object, cid: str, region: str) -> object:
-        return totalenergies.parse_snapshot(cid, text, region)
+        snap = totalenergies.parse_snapshot(cid, text, region)
+        return dc_replace(snap, injection=leg)
 
     async def _text(_session: object, _url: str) -> str:
         return text
@@ -4454,8 +4464,9 @@ def test_a_totalenergies_card_from_october_2026_expects_no_feed_in(
     )
     asyncio.run(lc._check_totalenergies(None, module))  # type: ignore[arg-type]
     rows = _rows(f"totalenergies/{cid}/flanders")
-    (absent,) = [r for r in rows if "injection" in r.label]
-    assert absent.ok and "injection absent" in absent.label
+    assert [r.label for r in rows if "injection absent" in r.label] == []
+    (checked,) = [r for r in rows if shape in r.label]
+    assert checked.ok, checked.detail
 
 
 def test_energy_knights_catalog_names_no_product_gone() -> None:

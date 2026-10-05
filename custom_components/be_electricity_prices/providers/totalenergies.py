@@ -35,6 +35,13 @@ The ``/latest/`` segment auto-rolls each month so no listing scrape is
 needed. All nine residential electricity products are registered, and
 every one but Impact (Wallonia only) is published in all three regions.
 
+Since October 2026 the feed-in offer is a card of its own beside each
+product's, ``INJECTION_<PRODUCT>_ELECTRICITY_<REGION>_FR.pdf``, and the
+product card prints no feed-in block. The listing links it for the variable
+and dynamic products only, but the address answers for the fixed ones too,
+with the same "Injection Variable" offer their cards printed until
+September, so it is built rather than looked up.
+
 The PDFs include rotated DSO / tax columns that pypdf cannot extract
 ('Rotated text discovered. Output will be incomplete.'). The extractor
 uses pdfplumber for the layout-aware extraction it needs to read those
@@ -49,7 +56,7 @@ pattern as Engie/Luminus.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -62,6 +69,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_missing_card_error,
     is_transient_fetch_error,
     printed_vat_rate,
 )
@@ -77,6 +85,7 @@ from .base import (
 from ._rates import (
     ALL_REGIONS,
     Contract,
+    InjectionRates,
     TariffKind,
 )
 from ._totalenergies_cards import (
@@ -216,16 +225,24 @@ def _document_url(slug: str, region: str, language: str = "FR") -> str:
     return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_{language}.pdf"
 
 
+def _injection_url(slug: str, region: str, language: str = "FR") -> str:
+    """The product's feed-in card, published beside it since October 2026."""
+    return _document_url(f"INJECTION_{slug}", region, language)
+
+
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
     region: str,
 ) -> str | None:
-    """Cheap freshness probe: HEAD the per-(contract, region) PDF.
+    """Cheap freshness probe: HEAD the per-(contract, region) PDF and its
+    feed-in card.
 
     TotalEnergies serves every card under ``/tariff-card/latest/<SLUG>_...``
     and overwrites in place, so the file's Last-Modified header is the
-    right freshness signal.
+    right freshness signal. The feed-in card is uploaded on its own, and a
+    key from the product card alone would keep a snapshot holding last
+    month's feed-in, or none, until the product card next moved.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if (
@@ -234,17 +251,24 @@ async def probe(
         or region not in contract.regions
     ):
         return None
-    return await head_freshness_key(session, _document_url(contract.slug, region))
+    card = await head_freshness_key(session, _document_url(contract.slug, region))
+    if card is None:
+        return None
+    feed_in = await head_freshness_key(session, _injection_url(contract.slug, region))
+    return card if feed_in is None else f"{card} {feed_in}"
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return every electricity-product slug from the cartes-tarifaires page.
 
     The listing page links each card as
-    ``tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR.pdf``. Strip
-    the regulated TARIFF_SOCIAL entry (not a residential-market product
-    and excluded from the registry). live_check diffs the result
-    against ``{c.slug for c in _CONTRACTS}``.
+    ``tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR.pdf`` and its
+    feed-in card as ``INJECTION_<SLUG>_ELECTRICITY_<REGION>_FR.pdf``. A
+    feed-in card names its product's slug, so a product the listing shows
+    only through one still counts, and the prefix is never taken for a
+    product of its own. Strip the regulated TARIFF_SOCIAL entry (not a
+    residential-market product and excluded from the registry). live_check
+    diffs the result against ``{c.slug for c in _CONTRACTS}``.
     """
     try:
         html = await fetch_text(session, _LISTING_URL)
@@ -253,7 +277,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     return {
         slug
         for slug in re.findall(
-            r"tariff-card/latest/([A-Z0-9\-]+)_ELECTRICITY_(?:VL|WAL|BXL)_FR",
+            r"tariff-card/latest/(?:INJECTION_)?([A-Z0-9\-]+)"
+            r"_ELECTRICITY_(?:VL|WAL|BXL)_FR",
             html,
         )
         if slug != "TARIFF_SOCIAL"
@@ -268,7 +293,8 @@ async def fetch(
     contract_id: str,
     region: str,
 ) -> SupplierSnapshot:
-    """Fetch the configured region's PDF for ``contract_id``."""
+    """Fetch the configured region's PDF for ``contract_id``, and its
+    feed-in card when the product card prints no feed-in block."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
     if region not in _REGION_TO_CODE:
         raise ExtractorError(f"TotalEnergies: unknown region {region!r}")
@@ -276,6 +302,21 @@ async def fetch(
         raise ExtractorError(
             f"TotalEnergies {contract_id}: not available in region {region!r}"
         )
+    snapshot = await _fetch_card(session, contract, region)
+    if snapshot.injection is not None:
+        return snapshot
+    injection = await _fetch_injection(
+        session, contract, region, snapshot.publication_label
+    )
+    return snapshot if injection is None else replace(snapshot, injection=injection)
+
+
+async def _fetch_card(
+    session: aiohttp.ClientSession, contract: _ContractDef, region: str
+) -> SupplierSnapshot:
+    """The product card, French first and Dutch when the French one is
+    wrong."""
+    contract_id = contract.contract_id
     url = _document_url(contract.slug, region)
     text = await fetch_pdf_text_layout(session, url)
     try:
@@ -299,16 +340,97 @@ async def fetch(
             raise err from None
 
 
+async def _fetch_injection(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    month: str,
+) -> InjectionRates | None:
+    """The feed-in leg off the product's feed-in card, or ``None`` where
+    neither edition of it is published.
+
+    The French card first and the Dutch one when the French one is not the
+    right card or not of ``month``, the tariff card's: on 5 October 2026 the
+    French feed-in card of Electricité Fixe in Flanders still said September
+    and the Dutch one October. Where no edition is of that month, the first
+    one that is the right card is read all the same: its formula is the
+    offer as last published, and refusing it would hold back the tariff card
+    too. A fetch that failed transiently is raised as itself, and a card
+    that is the wrong one in both editions raises the French card's error.
+    """
+    error: ExtractorError | None = None
+    stale: InjectionRates | None = None
+    read = False
+    for language in ("FR", "NL"):
+        url = _injection_url(contract.slug, region, language)
+        try:
+            text = await fetch_pdf_text_layout(session, url)
+        except ExtractorError as err:
+            if not is_missing_card_error(str(err)):
+                raise
+            continue
+        try:
+            leg, printed = parse_injection_card(contract.contract_id, text, region)
+        except ExtractorError as err:
+            error = error or err
+            continue
+        if printed.casefold() == month.casefold():
+            return leg
+        if not read:
+            stale, read = leg, True
+    if read:
+        return stale
+    if error is not None:
+        raise error
+    return None
+
+
+def parse_injection_card(
+    contract_id: str, text: str, region: str
+) -> tuple[InjectionRates | None, str]:
+    """The feed-in leg a product's feed-in card prints, and the card's month.
+
+    The same block the product cards printed until September 2026: a
+    "Tarif mensuel" estimate, an ``f * BELPEXM + b`` formula (``BELPEXH``
+    on myDynamic's "Injection Dynamique") and the month's "Compteur Simple"
+    figure, so :func:`_extract_injection` reads it unchanged. The card must
+    be the offer the contract takes, for its region: the variable one for
+    every product but myDynamic, the fixed products included, as their
+    cards printed it until September.
+    """
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
+    dynamic = contract.kind == "dynamic"
+    if is_dutch_card(text):
+        title = "Injectie Dynamic" if dynamic else "Variabel Injectie"
+        place = (
+            rf"I\s?njectie\s+voor\s+elektriciteit\s+in\s+het\s+{_DUTCH_PLACES[region]}"
+        )
+        _check_card(text, title, place, region)
+        text = in_french(text)
+    else:
+        title = "Injection Dynamique" if dynamic else "Injection Variable"
+        place = (
+            r"Injection\s+pour\s+l.{1,2}lectricit[ée]\s+en\s+R[ée]gion\s+"
+            + _FRENCH_PLACES[region]
+        )
+        _check_card(text, title, place, region)
+    words = r"\s+".join(map(re.escape, title.split()))
+    dated = re.search(rf"Total\s?Energies\s+{words}\s*\n\s*(\w+\s+\d{{4}})", text)
+    return _extract_injection(text, contract.kind), dated.group(1) if dated else ""
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
     if is_dutch_card(text):
-        _check_card(text, contract.dutch_title, _DUTCH_REGIONS[region], region)
+        place = rf"Elektriciteit\s+in\s+het\s+{_DUTCH_PLACES[region]}"
+        _check_card(text, contract.dutch_title, place, region)
         text = in_french(text)
     else:
-        _check_card(text, contract.french_title, _FRENCH_REGIONS[region], region)
+        place = rf"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+{_FRENCH_PLACES[region]}"
+        _check_card(text, contract.french_title, place, region)
 
     columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
@@ -371,17 +493,19 @@ def parse_snapshot(
     )
 
 
-# How each edition names the region in its "Elektriciteit in het ..." or
-# "Électricité en Région ..." line.
-_DUTCH_REGIONS: dict[str, str] = {
-    REGION_FLANDERS: r"Elektriciteit\s+in\s+het\s+Vlaamse\s+Gewest",
-    REGION_WALLONIA: r"Elektriciteit\s+in\s+het\s+Waalse\s+Gewest",
-    REGION_BRUSSELS: r"Elektriciteit\s+in\s+het\s+Brussels\s+Hoofdstedelijk\s+Gewest",
+# How each edition names the region, after "Électricité en Région" on a
+# French card and "Elektriciteit in het" on a Dutch one, and the same after
+# the feed-in cards' "Injection pour l'électricité" and "Injectie voor
+# elektriciteit".
+_FRENCH_PLACES: dict[str, str] = {
+    REGION_FLANDERS: "flamande",
+    REGION_WALLONIA: "wallonne",
+    REGION_BRUSSELS: r"de\s+Bruxelles-Capitale",
 }
-_FRENCH_REGIONS: dict[str, str] = {
-    REGION_FLANDERS: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+flamande",
-    REGION_WALLONIA: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+wallonne",
-    REGION_BRUSSELS: r"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+de\s+Bruxelles-Capitale",
+_DUTCH_PLACES: dict[str, str] = {
+    REGION_FLANDERS: r"Vlaamse\s+Gewest",
+    REGION_WALLONIA: r"Waalse\s+Gewest",
+    REGION_BRUSSELS: r"Brussels\s+Hoofdstedelijk\s+Gewest",
 }
 
 

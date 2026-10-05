@@ -557,9 +557,10 @@ def _realized_monthly_injection(text: str) -> float | None:
     card). Returns None when the block is absent.
     """
     block = _MONTHLY_BLOCK_RE.search(text)
-    # The October 2026 variable cards offer no feed-in and head the block
-    # with "Consommation" alone. Its last "Compteur Simple" is then a
-    # consumption figure, which credited 3,87 c/kWh of feed-in no card offers.
+    # From October 2026 the product cards print no feed-in block and head
+    # theirs with "Consommation" alone, the offer moving to a card of its own.
+    # Its last "Compteur Simple" is then a consumption figure, which credited
+    # 3,87 c/kWh of feed-in the product card does not print.
     if block is None or "Injection" not in block.group(0):
         return None
     # Injection is the last "Compteur Simple" value (standard cards) or the
@@ -606,9 +607,9 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     month_indexed = False
     if kind == "dynamic":
         if "injection" not in text.lower():
-            # The October 2026 myDynamic cards, like every other card
-            # republished that month, offer no feed-in price and do not
-            # mention injection anywhere: nothing to credit.
+            # From October 2026 the product card does not mention injection
+            # at all: the offer is on the feed-in card beside it, which
+            # totalenergies.fetch reads when this returns None.
             return None
         # Injection block always prints the formula cleanly on one line
         # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
@@ -704,6 +705,13 @@ _DUTCH_LABELS: tuple[tuple[str, str], ...] = (
         "Droit pour le financement des Obligations de Service Public",
     ),
     (r"maandelijkse prijzen", "prix mensuels"),
+    # The feed-in cards published beside the product cards since October 2026.
+    (
+        r"Injectie\*\s*\(Vergoeding voor de overdracht\)",
+        "Injection* (Compensation pour la rétrocession)",
+    ),
+    (r"(?m)^Injectie$", "Injection"),
+    (r"maandelijkse injectieprijzen", "prix mensuels de l'injection"),
     (r"Enkelvoudige Meter:", "Compteur Simple :"),
     (r"Piekuren:", "Heures Pleines :"),
     (r"Daluren:", "Heures Creuses :"),

@@ -1936,30 +1936,20 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
             _validate_snapshot(prefix, cid, snap, region=region_key)
 
 
-# The first month whose TotalEnergies cards print no feed-in offer.
-_TE_NO_FEED_IN_FROM = date(2026, 10, 1)
-
-
 async def _check_totalenergies(
     session: aiohttp.ClientSession, totalenergies: types.ModuleType
 ) -> None:
     # TotalEnergies serves all 3 regions for every product. Walk every
     # (contract, region) pair against the real /latest/ PDFs.
-    # Read off the package the module came from, which a test swaps.
-    card_valid_until = importlib.import_module(
-        totalenergies.__name__.rpartition(".")[0] + "._validity"
-    ).card_valid_until
     # One memo for the walk, so the edition comparison reads the French card
     # the fetch already read instead of downloading and parsing it again.
     with _memoise_text_fetches({}):
-        cards = await _walk_totalenergies(session, totalenergies, card_valid_until)
+        cards = await _walk_totalenergies(session, totalenergies)
     _expect_indicatives_at_the_range_index(cards)
 
 
 async def _walk_totalenergies(
-    session: aiohttp.ClientSession,
-    totalenergies: types.ModuleType,
-    card_valid_until: Callable[..., date | None],
+    session: aiohttp.ClientSession, totalenergies: types.ModuleType
 ) -> list[tuple[str, Any]]:
     cards: list[tuple[str, Any]] = []
     for contract in totalenergies._CONTRACTS:
@@ -1982,14 +1972,7 @@ async def _walk_totalenergies(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            # TotalEnergies republishes product by product, and a card from
-            # October 2026 on offers no feed-in price, myDynamic's included,
-            # so the shape follows the card's month rather than the contract.
-            ends = card_valid_until(None, snap.publication_label)
-            shape = "none" if ends is not None and ends >= _TE_NO_FEED_IN_FROM else None
-            _validate_snapshot(
-                prefix, cid, snap, region=region_key, injection_shape=shape
-            )
+            _validate_snapshot(prefix, cid, snap, region=region_key)
             await _compare_totalenergies_editions(
                 session, totalenergies, contract, region_key
             )
@@ -3944,12 +3927,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     "engie_pro_empower_variable": "month",
     "engie_pro_flow": "month",
     "engie_pro_empty_house": "month",
-    # Until September 2026 every non-dynamic TotalEnergies card printed
-    # "f * BELPEXM - b" beside a figure the card says is computed from "la
-    # derniere valeur connue du Belpex_M". The cards republished since
-    # October offer no feed-in price at all, which _check_totalenergies
-    # expects of them by their month. myDynamic indexed its feed-in per hour
-    # on BELPEXH until September and offers none from October either.
+    # Every non-dynamic TotalEnergies feed-in offer prints "f * BELPEXM - b"
+    # beside a figure the card says is computed from "la derniere valeur
+    # connue du Belpex_M": on the product card until September 2026, on the
+    # feed-in card read beside it since October. myDynamic's is per hour on
+    # BELPEXH and is derived.
     "totalenergies_electricite_fixe": "month",
     "totalenergies_electricite_variable": "month",
     "totalenergies_impact": "month",

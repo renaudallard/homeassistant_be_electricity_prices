@@ -316,10 +316,10 @@ async def fetch_pdf_text(
 
 
 # A tariff card that carries a text layer is never anywhere near this small:
-# measured across all 82 shipped fixtures the LEAST texty is 6134 characters,
-# while Ecofix's rasterized August 2026 cards yield 172 and 342. Anything in
-# between separates the two cleanly, and 600 leaves an order of magnitude of
-# headroom on both sides. Raising here only changes WHICH error the user is
+# across all 162 shipped fixtures the LEAST texty is a one-page TotalEnergies
+# feed-in card at 2435 characters, while Ecofix's rasterized August 2026 cards
+# yield 172 and 342. Anything in between separates the two cleanly, and 600
+# leaves a factor of four of headroom above it. Raising here only changes WHICH error the user is
 # shown: a card with no text layer was already going to fail its parse.
 _MIN_TEXT_LAYER_CHARS = 600
 

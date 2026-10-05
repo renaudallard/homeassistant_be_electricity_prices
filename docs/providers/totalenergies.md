@@ -46,8 +46,32 @@ the Dutch fetch failed transiently (a timeout, a 5xx), which is reported as
 that network error so the coordinator waits it out instead of asking for a
 layout report: in October 2026 the French address of myComfort Fixe in Brussels served the
 injection card, and myEssential in Flanders a card with its green contribution
-left blank, while both Dutch addresses served the right card. The probe still
-HEADs the French address, which TotalEnergies rewrites with every new month.
+left blank, while both Dutch addresses served the right card.
+
+Since October 2026 the feed-in offer is a card of its own,
+`INJECTION_<SLUG>_ELECTRICITY_<REGION>_FR.pdf` (`_injection_url`), and the product
+card prints no feed-in block. When the product card carries no injection leg,
+`fetch` reads that card (`_fetch_injection`, `parse_injection_card`). The listing
+links it for the variable and dynamic products only, but the address answers for
+all nine, the fixed ones serving the same "Injection Variable" offer their cards
+printed until September, so the URL is built rather than looked up. The card must
+be "TotalEnergies Injection Variable" (myDynamic: "Injection Dynamique") for the
+entry's region, `Injection pour l'électricité en Région ...`; the Dutch edition
+(`Variabel Injectie`, `Injectie Dynamic`) stands in when the French one is the
+wrong card or not of the tariff card's month, and is read through the same
+`in_french` labels. On 5 October 2026 the French card of Electricité Fixe in
+Flanders still said September and its Dutch edition October. Where neither
+edition is of the tariff card's month, the first right card is read anyway, since
+refusing it would hold back the tariff card too. A missing feed-in card (a 404 or
+a web page in both languages) leaves no feed-in leg; a transient failure fails the
+fetch, so the coordinator keeps the snapshot it holds. The French myComfort Fixe
+card in Brussels is dated October but prints September's `0.024 * BELPEXM`, where
+its Dutch edition and every other Brussels card print `0.0244`; it is billed as
+printed.
+
+The probe HEADs the French product card, which TotalEnergies rewrites with every
+new month, and the French feed-in card, which it uploads on its own, and joins
+the two keys, so a feed-in card that changes alone is fetched again.
 
 A Dutch card is read too. TotalEnergies prints every card in both languages on
 the same layout, so `parse_snapshot` puts the labels the parsers anchor on in
@@ -285,10 +309,9 @@ law reaches a fixed contract. The figure is the one the earlier cards printed in
 column of their own (1,57 and 2,85 on both), on the same VAT-inclusive basis. A card
 without the footnote takes the old path unchanged.
 
-The same cards dropped the injection block and the page of feed-in conditions, so
-their snapshot carries no injection leg and an export is measured but not credited.
-The registry keeps `spot_indexed_injection` on them, because a contract start date
-names a card from before October, whose feed-in is a `BELPEXM` formula. The
+The same cards dropped the injection block and the page of feed-in conditions,
+which moved to the feed-in card read beside them (above). Its feed-in is the same
+`BELPEXM` formula, so the registry keeps `spot_indexed_injection` on them. The
 October myComfort Fixe card in Flanders spells the brand "Total Energies" in its
 title, which `_extract_publication_month` allows.
 
@@ -341,10 +364,8 @@ A card stating its contribution in a footnote always prints the formula, so one
 that does not is refused rather than billed unchecked. The block also no longer has an injection column, and
 `_realized_monthly_injection` only reads a block headed `Injection`: the last
 `Compteur Simple` of a consumption-only block credited 3,87 c/kWh of feed-in on
-a card that offers none. Like the fixed cards, these print no feed-in offer, so
-their snapshot carries no injection leg. The live check expects none of a
-non-dynamic card from October 2026 on, by the card's month, since
-TotalEnergies republishes product by product.
+a card that offers none. Like the fixed cards, these take their feed-in from the
+feed-in card beside them.
 
 The footnote says the formulas include the contribution as well, and on every
 card of the range but one they do. The myEssential card in Brussels of 1 October
@@ -373,7 +394,10 @@ mensuel`, with the yearly fee alone on the next line. `_meter_columns`
 (`totalenergies.py`) reads how many columns a dynamic card prints off that header.
 The formula carries the contribution like the rest of the range, and the card does
 not mention injection anywhere, so a dynamic card without the word has no
-injection leg rather than failing for want of a `BELPEXH` feed-in formula.
+injection leg of its own rather than failing for want of a `BELPEXH` feed-in
+formula, and takes the hourly one from its "Injection Dynamique" card, `0.1 *
+BELPEXH -1.3`. That card prints 10,92 as its estimate and 14,34 under
+"Compteur Simple"; the hour's formula is what is billed.
 
 The myComfort cards first served in Flanders and Brussels on 1 October 2026
 were empty templates, with the rates left blank, and were refused. Both were
@@ -501,8 +525,8 @@ Two shapes, selected on `kind` in `_extract_injection` (`_totalenergies_cards.py
 
 This placed TotalEnergies in two of the three injection taxonomy shapes until
 September 2026: shape (b) hourly factor*spot+base for myDynamic, shape (a)
-monthly-indicative-only for every other product. The cards republished from October
-2026 on offer no feed-in price at all, myDynamic's included. Shape (c) spot-indexed-variable is not used, which is a statement
+monthly-indicative-only for every other product. From October 2026 the same two
+shapes come off the separate feed-in cards. Shape (c) spot-indexed-variable is not used, which is a statement
 about the INDEX and not about the flag: 8 of the 9 contracts set
 `spot_indexed_injection`, because a monthly-mean credit needs spots the energy leg
 never fetches.
@@ -576,7 +600,7 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_mycomfort_fixed_w.pdf` | myComfort Fixe, Wallonia (bi-hourly fixed rates) |
 | `totalenergies_mycomfort_v.pdf` | myComfort, Flanders (realized monthly indicative vs annual estimate) |
 | `totalenergies_electricite_fixe_v_2026-10.pdf` | Electricité Fixe, Flanders, October 2026 (fee on the consumption row, CEV in the price) |
-| `totalenergies_myessential_fixed_w_2026-10.pdf` | myEssential Fixe, Wallonia, October 2026 (the same layout, no feed-in offer) |
+| `totalenergies_myessential_fixed_w_2026-10.pdf` | myEssential Fixe, Wallonia, October 2026 (the same layout, no feed-in block) |
 | `totalenergies_electricite_variable_v_2026-10.pdf` | Electricité Variable, Flanders, October 2026 (fee on the row, indicative block at a zero index) |
 | `totalenergies_electricite_variable_b_2026-10.pdf` | Electricité Variable, Brussels, October 2026 (fee on the line below the rates) |
 | `totalenergies_impact_w_2026-10.pdf` | Impact, Wallonia, October 2026 (three bands, fee below) |
@@ -584,9 +608,14 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_mycomfort_b_2026-10.pdf` | myComfort, Brussels, October 2026 (block at no index, 7.01 against a 6.91 base) |
 | `totalenergies_electricite_variable_b_2026-10_filled.pdf` | Electricité Variable, Brussels, October 2026 afternoon (block filled in, billed) |
 | `totalenergies_impact_w_2026-10_template.pdf` | Impact, Wallonia, October 2026 morning (unfilled, the fee in every rate column: refused) |
-| `totalenergies_mydynamic_v_2026-10.pdf` | myDynamic, Flanders, October 2026 (three meter columns, fee below, no feed-in) |
+| `totalenergies_mydynamic_v_2026-10.pdf` | myDynamic, Flanders, October 2026 (three meter columns, fee below, no feed-in block) |
 | `totalenergies_mydynamic_w_2026-10.pdf` | myDynamic, Wallonia, October 2026 (the same, base printed `5,40`) |
 | `totalenergies_myessential_b_2026-10.pdf` | myEssential, Brussels, October 2026 (formula bases printed without the contribution its footnote names) |
+| `totalenergies_injection_mycomfort_v_2026-10.pdf` | myComfort feed-in card, Flanders, October 2026 ("Injection Variable", `0.02151 * BELPEXM -0.625`, 2,74 for the month) |
+| `totalenergies_injection_electricite_fixe_v_2026-09.pdf` | Electricité Fixe feed-in card, Flanders, as still served on 5 October 2026 (dated September) |
+| `totalenergies_injection_electricite_fixe_v_2026-10_nl.pdf` | its Dutch edition, dated October |
+| `totalenergies_injection_mydynamic_w_2026-10.pdf` | myDynamic feed-in card, Wallonia, October 2026 ("Injection Dynamique", `0.1 * BELPEXH -1.3`) |
+| `totalenergies_injection_mydynamic_v_2026-10_nl.pdf` | myDynamic feed-in card, Flanders, October 2026, Dutch edition |
 
 ## When the card changes, look here
 

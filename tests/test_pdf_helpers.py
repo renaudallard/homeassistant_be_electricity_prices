@@ -731,9 +731,10 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
 def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     """The threshold must clear every card we actually ship.
 
-    Measured across all fixtures the least texty readable card carries 6134
-    characters against 172 and 342 for the rasterized Ecofix ones, so the
-    600-character line has an order of magnitude of headroom either side.
+    Measured across all fixtures the least texty readable card, a one-page
+    TotalEnergies feed-in card, carries 2435 characters against 172 and 342
+    for the rasterized Ecofix ones, so the 600-character line has a factor of
+    four of headroom either side.
     This asserts the margin rather than the constant, so shrinking the
     threshold toward real data fails here.
 
