@@ -323,10 +323,33 @@ async def _ytd_hourly_energy(
     dropped_cons = 0.0
     dropped_inj = 0.0
     netting = _NetAllocation()
+    # The window's end: the running hour for a window that runs to today, the
+    # midnight after its last day for one that closed earlier.
+    until = (
+        dt_util.now()
+        if window_end is None
+        else dt_util.start_of_local_day(window_end + timedelta(days=1))
+    )
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
-    for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
-        hours_seen += 1
+    recorded = cons_per_hour.keys() | inj_per_hour.keys()
+    walked: set[datetime] = set(recorded)
+    if regime == SOLAR_REGIME_COMPENSATION and rlp_weights is not None:
+        # The supplier spreads the net over every hour of the period by the
+        # profile, metered or not, and so do the per-day walk and the
+        # backfill. Weighting only the hours the recorder returned moved each
+        # register's rate whenever the history had a gap or began after the
+        # window opened, a few euro off the backfilled series at the seam.
+        # An hour with no row adds its weight and rate and nothing else: it
+        # is not seen, not priced, and no month is dropped for it.
+        hour = dt_util.as_utc(dt_util.start_of_local_day(window_start))
+        while hour < until:
+            walked.add(hour)
+            hour += timedelta(hours=1)
+    for utc_hour in walked:
+        unrecorded = utc_hour not in recorded
+        if not unrecorded:
+            hours_seen += 1
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
         # The HOUR's own leg decides, not the branch the caller dispatched on:
@@ -368,11 +391,14 @@ async def _ytd_hourly_energy(
                 bd = compute_breakdown(
                     snap_h, dso, region, local, spot, meter, dso_mode
                 )
-                hours_priced += 1
+                if not unrecorded:
+                    hours_priced += 1
         except (KeyError, ValueError) as err:
             # The month's card lacks the entry's DSO row (a supplier renamed
             # it, or a regex missed it that month): the hour cannot be billed
             # at all, and stays out of hours_priced like one with no spot.
+            if unrecorded:
+                continue
             month_first = date(local.year, local.month, 1)
             if month_first not in dropped_months:
                 dropped_months.add(month_first)
@@ -508,15 +534,9 @@ async def _ytd_hourly_energy(
         # window's buckets, so an entry billing from its contract start date
         # was reporting 1560 hours seen against 5892 elapsed and inviting its
         # owner to go looking for a recorder fault that was not there.
-        # To the window's end: the running hour for a window that runs to
-        # today, the midnight after its last day for one that closed earlier.
-        until = (
-            dt_util.now()
-            if window_end is None
-            else dt_util.start_of_local_day(window_end + timedelta(days=1))
-        )
-        # In UTC: two datetimes sharing one zone subtract on the wall clock,
-        # which counts an hour too many between the spring and autumn changes.
+        # To the window's end (``until`` above), in UTC: two datetimes
+        # sharing one zone subtract on the wall clock, which counts an hour
+        # too many between the spring and autumn changes.
         elapsed = dt_util.as_utc(until) - dt_util.as_utc(
             dt_util.start_of_local_day(window_start)
         )

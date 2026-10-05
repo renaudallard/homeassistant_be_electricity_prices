@@ -1347,7 +1347,12 @@ context):
   rekenvoorbeeld: "Synthetic Load Profiles om de spreiding van het verbruik over
   het jaar heen te simuleren"). Netting the metered hours as they happen priced a
   summer surplus at summer rates against a winter draw at winter rates, a
-  different number whenever the tariff moves within the year. Without the
+  different number whenever the tariff moves within the year. The average
+  takes in every hour (or day) of the window, the ones the meter did not
+  report included, on the hourly walk as on the per-day walk and the backfill,
+  since the supplier spreads the DSO's figure over the whole period; the
+  hourly walk weighed only the hours it had rows for, so a meter added in June
+  priced the year's net on the summer months alone. Without the
   profile loaded the slices are priced as metered, still clamped per register.
   The coordinator fetches the profile for every compensation entry.
 

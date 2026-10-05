@@ -1447,6 +1447,7 @@ async def _live_and_backfill(
     spots: dict[datetime, float] | None = None,
     quarters: dict[datetime, list[float]] | None = None,
     rlp: dict[tuple[int, int, int], float] | None = None,
+    breakdown: dict[str, float] | None = None,
 ) -> tuple[float, float]:
     """The live year-to-date and the backfilled series' last row, over 1
     January to ``last`` on one recorder, one set of month cards and one
@@ -1543,6 +1544,7 @@ async def _live_and_backfill(
             historical_spots=dict(spots),
             spot_quarters=dict(quarters or {}),
             rlp_weights=rlp or None,
+            breakdown=breakdown,
         )
     assert captured, "the backfill imported nothing"
     assert live is not None
@@ -1646,6 +1648,94 @@ async def test_a_month_indexed_credit_ignores_the_hours_quarters(
         quarters=quarters,
     )
     assert live == pytest.approx(backfill, abs=1e-3)
+
+
+def _winter_heavy_profile(year: int) -> dict[tuple[int, int, int], float]:
+    """A load profile for ``year`` keyed like Synergrid's, heavier in winter
+    and in the evening, summing to one."""
+    weights: dict[tuple[int, int, int], float] = {}
+    day = date(year, 1, 1)
+    while day.year == year:
+        for hour in range(24):
+            weights[(day.month, day.day, hour)] = (
+                2.0 if day.month in (1, 2, 11, 12) else 1.0
+            ) * (1.5 if 17 <= hour <= 21 else 1.0)
+        day += timedelta(days=1)
+    total = sum(weights.values())
+    return {key: value / total for key, value in weights.items()}
+
+
+@pytest.mark.parametrize("history", ["from_june", "february_gap"])
+async def test_compensation_allocates_over_every_hour_of_the_window(
+    hass: HomeAssistant, history: str
+) -> None:
+    """A compensation net is spread over every hour of the window by the load
+    profile, metered or not, on the live walk as on the backfill.
+
+    The supplier allocates the DSO's yearly figure over the whole period, and
+    the per-day walk and the backfill weight every hour of the window. The
+    live hourly walk weighted only the hours the recorder returned, so a meter
+    added in June priced each register's net on the summer months' rates
+    alone and the imported series met the live sensor at a step. The hours it
+    has no row for still count as neither seen nor priced."""
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    last = date(2026, 9, 30)
+    overlay = DsoOverlay(
+        distribution_single=0.10,
+        distribution_pic=0.15,
+        distribution_medium=0.10,
+        distribution_eco=0.06,
+        transport=0.0145,
+        prosumer_eur_per_kva_year=60.0,
+    )
+
+    def card(month: date) -> SupplierSnapshot:
+        # A tariff that climbs through the year, so the months the profile
+        # weighs decide the rate.
+        return make_snapshot(
+            energy=FixedRates(single=0.10 + 0.02 * month.month),
+            dsos={"ores": overlay},
+        )
+
+    def recorded(h: datetime) -> bool:
+        local = dt_util.as_local(h).date()
+        if history == "from_june":
+            return local >= date(2026, 6, 1)
+        return not date(2026, 2, 1) <= local <= date(2026, 2, 21)
+
+    def per_hour(entity_id: str, h: datetime) -> float | None:
+        if not recorded(h):
+            return None
+        return _evening_draw_midday_export(entity_id, h)
+
+    entry = make_entry(
+        meter="mono",
+        dso_tariff_mode="impact",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    stats: dict[str, float] = {}
+    backfill, live = await _live_and_backfill(
+        hass,
+        entry,
+        card(date(2026, 9, 1)),
+        last,
+        per_hour,
+        cards=card,
+        rlp=_winter_heavy_profile(2026),
+        breakdown=stats,
+    )
+    assert live == pytest.approx(backfill, abs=1e-3)
+    # The coverage diagnostic still counts what the recorder holds.
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+    seen = sum(recorded(h) for h in hours)
+    assert stats["hours_seen"] == stats["hours_priced"] == float(seen)
 
 
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
