@@ -136,12 +136,6 @@ _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _CARD_URL_RE = re.compile(
     r"pricelists/(fix|var)/([a-z_]+)_(res|pro)_el_fr_(\w+)\.pdf", re.IGNORECASE
 )
-# Used only when the listing page cannot be read at all. Serving a known
-# version beats failing every Bolt entry on a listing outage, but it is a
-# floor, not a pin: it is the newest version seen when this was last
-# touched, and _resolve_variable_suffix overrides it on every good fetch.
-_VARIABLE_SUFFIX_FALLBACK = "13"
-
 # Bolt's fix cards print "Carte Tarifaire Bolt Fixe <Month> <Year>" in
 # the header but never expose a parseable valid_until, so the archive
 # cross-check falls back to a textual month match on these names.
@@ -272,8 +266,10 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
         # instant the supplier rotates the URL; UTC would mis-key by
         # last month for the first 1-2 hours of every Brussels month.
         suffix = suffix or dt_util.now().strftime("%Y%m")
-    else:
-        suffix = suffix or _VARIABLE_SUFFIX_FALLBACK
+    elif suffix is None:
+        # Only the listing knows the current version; see
+        # _resolve_variable_suffix.
+        raise ValueError(f"Bolt: no version given for the {contract.slug} card")
     return (
         f"{_BASE_URL}/{contract.folder}/"
         f"{contract.slug}_{contract.segment}_el_fr_{suffix}.pdf"
@@ -297,42 +293,33 @@ async def _resolve_variable_suffix(
     into a 404 for that product.
 
     Compared numerically, not lexically: ``"9"`` must not outrank
-    ``"13"``. Falls back to :data:`_VARIABLE_SUFFIX_FALLBACK` when the
-    listing is unreachable or does not advertise this card, so a listing
-    outage degrades to a known version instead of failing every Bolt
-    entry.
+    ``"13"``.
+
+    Raises when the listing cannot be read, in the fetch helper's words, so
+    a timeout or a 5xx stays transient and the coordinator keeps the card it
+    already holds. There is no version to fall back to: any fixed one is
+    the stale card above, and September's ``_13`` billed October at last
+    quarter's prices whenever the listing failed. A listing that advertises
+    no such card raises too, as the catalog change it is.
     """
-    try:
-        html = await fetch_text(session, _LISTING_URL)
-    except ExtractorError:
-        _LOGGER.warning(
-            "Bolt: listing page unreadable; falling back to variable card "
-            "version _%s for %s, which may be superseded",
-            _VARIABLE_SUFFIX_FALLBACK,
-            contract.contract_id,
-        )
-        return _VARIABLE_SUFFIX_FALLBACK
+    html = await fetch_text(session, _LISTING_URL)
     versions: list[str] = [
         version
         for folder, slug, segment, version in _CARD_URL_RE.findall(html)
         # isdigit(): the URL builder and max(key=int) below both need a
         # number. A non-numeric suffix means Bolt reshaped the filename, so
-        # fall back rather than crash, and the live-check freshness gate,
-        # which scans with \w+, fails the run so the reshape gets noticed.
+        # raise rather than crash, and the live-check freshness gate, which
+        # scans with \w+, fails the run so the reshape gets noticed.
         if folder.lower() == "var"
         and slug.lower() == contract.slug
         and segment.lower() == contract.segment
         and version.isdigit()
     ]
     if not versions:
-        _LOGGER.warning(
-            "Bolt: listing page advertises no %s/%s variable card; falling back "
-            "to version _%s, which may be superseded",
-            contract.slug,
-            contract.segment,
-            _VARIABLE_SUFFIX_FALLBACK,
+        raise ExtractorError(
+            f"Bolt: the listing advertises no {contract.slug}/{contract.segment} "
+            "variable card"
         )
-        return _VARIABLE_SUFFIX_FALLBACK
     return max(versions, key=int)
 
 
@@ -595,11 +582,11 @@ def parse_snapshot(
             )
         index_text = index_text.replace("\u2028", "\n")
         # The two cards are looked up on the listing one after the other, and
-        # a listing read that fails falls back to a fixed version. One timeout
-        # between them pairs this month's card with last month's, whose prices
-        # differ, and the card would keep the formula it prints. A refused
-        # pair costs one tick; a mispriced one stands until the listing's ETag
-        # moves, which is usually the next month.
+        # Bolt can list a new version between the two reads. That pairs this
+        # month's card with last month's, whose prices differ, and the card
+        # would keep the formula it prints. A refused pair costs one tick; a
+        # mispriced one stands until the listing's ETag moves, which is
+        # usually the next month.
         month = _extract_publication_month(text).casefold()
         if not month or month != _extract_publication_month(index_text).casefold():
             raise ExtractorError(

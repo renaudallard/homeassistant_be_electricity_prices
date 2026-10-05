@@ -553,15 +553,14 @@ served URL the gate's own pattern cannot read fails the row instead.
 ### What an unreadable page means differs per supplier
 
 It depends on how that supplier's resolver fails, and it is read out of the resolver, never assumed.
-Most of them -- Cociter, EBEM, Ecopower, Eneco, EnergyVision, Frank, Mega -- **raise** when the page
-will not load or carries no card, so their own extractor row already reports the breakage and this
-gate records a pass rather than duplicating it. Bolt's `_resolve_variable_suffix` instead falls back
-to `_VARIABLE_SUFFIX_FALLBACK`: the card still downloads, still parses, and `_check_bolt` stays
-green while that constant quietly becomes the pin this whole gate exists to prevent. So for Bolt an
-unreadable *or* reshaped listing is a **failure** (`resolver_falls_back=True`), and it is the only
-signal that would report it. Two suppliers in this repo have lost or blocked their listing for
-weeks, so this is not hypothetical; a transient blip still files nothing, because the workflow only
-opens an issue for a check that fails every retry.
+All of them -- Bolt, Cociter, EBEM, Ecopower, Eneco, EnergyVision, Frank, Mega -- **raise** when the
+page will not load or carries no card, so their own extractor row already reports the breakage and
+this gate records a pass rather than duplicating it. A resolver that fell back to a constant or an
+older card instead would leave every other check green, so for it an unreadable *or* reshaped
+listing would be a **failure** (`resolver_falls_back=True`), the only signal that would report it.
+Bolt's `_resolve_variable_suffix` used to fall back to a fixed version, `_13`, which by October 2026
+was September's card, still served and still parsing; it raises since. A transient blip still files
+nothing, because the workflow only opens an issue for a check that fails every retry.
 
 That rule governs whether an issue is filed; it now governs what the issue *shows* as well. The body
 carries the **last** attempt's report, which on a slow runner also lists checks that failed only that

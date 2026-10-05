@@ -46,9 +46,12 @@ Fixed cards roll monthly via a `YYYYMM` suffix. Variable cards carry a version n
 bumps in place on no fixed schedule, leaving every superseded file served, so a pinned version
 keeps returning 200 and parsing cleanly while billing an old formula. `_resolve_variable_suffix`
 (`bolt.py`) therefore reads the version off the listing on every fetch rather than trusting a
-constant; `_VARIABLE_SUFFIX_FALLBACK` (`bolt.py`) is used only when the listing is unreadable
-or does not advertise that card. A pinned `_11` billed June's formula for ten weeks after `_13`
-shipped on 2026-08-01.
+constant. A pinned `_11` billed June's formula for ten weeks after `_13` shipped on 2026-08-01.
+When the listing cannot be read the fetch fails in the fetch helper's words, so a timeout or a
+5xx stays transient and the coordinator keeps the card it holds; a listing that advertises no
+such card fails as the catalog change it is. Up to 0.34.8 both fell back to a fixed version,
+`_13`, which on 1 October 2026 was September's card: still served, still parsing, and billing
+last quarter's 14,18 c/kWh where October's card prints 19,05.
 
 The version is resolved **per (slug, segment)**, not once for the whole variable family. The four
 slugs and both segments happen to sit on the same version today, but nothing enforces that, and a
@@ -119,9 +122,8 @@ prints 19,05, and a quarter-hourly entry was billed that formula: both about 0,3
 EUR a year at 3500 kWh, too low. `parse_snapshot` refuses to price the contract without the
 Online card's text rather than fall back to the professional formula, and the live check hands
 it the card it already fetched. It also refuses a pair whose `<Month> <Year>` headers differ:
-each card's version comes off its own listing read, and a read that fails falls back to a fixed
-version, so one timeout between the two would pair October's card with September's, whose
-prices differ, and leave the professional formula in place, and Bolt's probe key, the
+each card's version comes off its own listing read, and Bolt can list a new version between the
+two, which would pair October's card with September's, whose prices differ, and leave the professional formula in place, and Bolt's probe key, the
 listing's ETag, would keep that snapshot until the listing next changes. The refusal's message
 opens with `OUT_OF_STEP` (`_pdf.py`), which `is_transient_fetch_error` counts as transient: the
 next fetch pairs the cards again, so it is held to the softer "could not reach the supplier"

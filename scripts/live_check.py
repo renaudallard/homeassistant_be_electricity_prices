@@ -3408,11 +3408,8 @@ async def _check_card_freshness(
             r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf",
             _bolt_served,
             key=_version_key,
-            # Bolt's resolver returns _VARIABLE_SUFFIX_FALLBACK when the
-            # listing will not load, so the card still downloads and parses
-            # and nothing else fails. Through such an outage that constant
-            # IS the hardcoded pin this gate exists to prevent.
-            resolver_falls_back=True,
+            # Bolt's resolver raises when the listing will not load or lists
+            # no such card, so the extractor rows already report it.
         )
 
     ecopower = modules.get("ecopower")

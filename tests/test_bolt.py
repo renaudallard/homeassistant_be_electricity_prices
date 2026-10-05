@@ -53,6 +53,9 @@ from custom_components.be_electricity_prices.providers._rates import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
+from custom_components.be_electricity_prices.providers._pdf import (
+    is_transient_fetch_error,
+)
 
 
 def test_bolt_is_registered() -> None:
@@ -456,9 +459,8 @@ def test_pro_document_url_swaps_the_segment() -> None:
     )
 
 
-# Deliberately a version AHEAD of _VARIABLE_SUFFIX_FALLBACK. Pinning the
-# fixture to the fallback value made every assertion below satisfiable by
-# the fallback itself, so deleting the resolver outright still passed.
+# Deliberately a version ahead of any card the tests below read, so only a
+# working resolver satisfies them.
 _LISTING_HTML = """
 <a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202608.pdf">fix</a>
 <a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_9.pdf">old</a>
@@ -492,42 +494,58 @@ def test_variable_suffix_is_resolved_numerically_from_the_listing() -> None:
                 _var("bolt_variable"),
             )
             assert suffix == "14"
-            # Not the fallback: a resolver that silently stopped working
-            # would return that and this assertion must not accept it.
-            assert suffix != bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
     asyncio.run(_run())
 
 
 @pytest.mark.parametrize(
-    "listing",
+    ("listing", "transient"),
     [
-        pytest.param(ExtractorError("listing down"), id="unreadable"),
         pytest.param(
-            "<a href='/pricelists/fix/fix_res_el_fr_202608.pdf'>f</a>", id="no-var-card"
+            ExtractorError(
+                "network error fetching https://www.boltenergie.be/fr/listes-des-prix:"
+                " TimeoutError"
+            ),
+            True,
+            id="unreadable",
+        ),
+        pytest.param(
+            "<a href='/pricelists/fix/fix_res_el_fr_202608.pdf'>f</a>",
+            False,
+            id="no-var-card",
         ),
     ],
 )
-def test_variable_suffix_falls_back_when_the_listing_gives_nothing(
-    listing: str | ExtractorError,
+def test_variable_suffix_raises_when_the_listing_gives_nothing(
+    listing: str | ExtractorError, transient: bool
 ) -> None:
-    # A listing outage must degrade to a known version, not fail every
-    # Bolt entry: the card itself is still being served.
+    """A listing outage used to fall back to a fixed version, "13", which on
+    1 October 2026 was September's card: Bolt leaves superseded cards served,
+    so the fetch succeeded and billed last quarter's prices, 14,18 c/kWh
+    where October's card prints 19,05. The outage now fails the fetch the way
+    a supplier outage does, so the coordinator keeps the card it holds."""
     mock = (
         AsyncMock(side_effect=listing)
         if isinstance(listing, ExtractorError)
         else AsyncMock(return_value=listing)
     )
+    seen: list[str] = []
+
+    async def _capture(_session: object, url: str, **_kw: object) -> str:
+        seen.append(url)
+        return fixture_text("bolt_variable.pdf", layout=True)
 
     async def _run() -> None:
-        with patch.object(bolt_mod, "fetch_text", new=mock):
-            resolved = await bolt_mod._resolve_variable_suffix(
-                None,  # type: ignore[arg-type]
-                _var("bolt_variable"),
-            )
-            assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
+        with (
+            patch.object(bolt_mod, "fetch_text", new=mock),
+            patch.object(bolt_mod, "fetch_pdf_text_layout", new=_capture),
+        ):
+            await bolt_mod.fetch(None, "bolt_variable", "flanders")  # type: ignore[arg-type]
 
-    asyncio.run(_run())
+    with pytest.raises(ExtractorError) as caught:
+        asyncio.run(_run())
+    assert is_transient_fetch_error(str(caught.value)) is transient
+    assert seen == []
 
 
 @pytest.mark.parametrize(
@@ -557,18 +575,18 @@ def test_variable_suffix_is_resolved_per_slug(contract_id: str, expected: str) -
 
 def test_variable_suffix_does_not_borrow_the_other_segment() -> None:
     # res and pro are separate files at the same path. A pro card missing
-    # from the listing must fall back, not silently take the res version.
+    # from the listing must fail, not silently take the res version.
     res_only = '<a href="/pricelists/var/bolt_res_el_fr_13.pdf">res</a>'
 
     async def _run() -> None:
         with patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=res_only)):
-            resolved = await bolt_mod._resolve_variable_suffix(
+            await bolt_mod._resolve_variable_suffix(
                 None,  # type: ignore[arg-type]
                 _var("bolt_pro_variable"),
             )
-            assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
-    asyncio.run(_run())
+    with pytest.raises(ExtractorError, match="no bolt/pro variable card"):
+        asyncio.run(_run())
 
 
 def test_variable_fetch_uses_the_resolved_version_not_a_pin() -> None:
@@ -981,18 +999,19 @@ def test_discover_still_sees_a_reshaped_or_uppercased_card_url() -> None:
 
 def test_a_non_numeric_version_does_not_break_the_resolver() -> None:
     # The resolver needs a number for the URL and for max(key=int), so it
-    # filters rather than crashing on the wider pattern discover() needs.
+    # filters rather than crashing on the wider pattern discover() needs, and
+    # reports the card it can no longer find.
     listing = '<a href="/pricelists/var/bolt_res_el_fr_11b.pdf">reshaped</a>'
 
     async def _run() -> None:
         with patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=listing)):
-            resolved = await bolt_mod._resolve_variable_suffix(
+            await bolt_mod._resolve_variable_suffix(
                 None,  # type: ignore[arg-type]
                 _var("bolt_variable"),
             )
-        assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
-    asyncio.run(_run())
+    with pytest.raises(ExtractorError, match="no bolt/res variable card"):
+        asyncio.run(_run())
 
 
 def test_wallonia_impact_energy_bands_are_derived_from_the_formula() -> None:
