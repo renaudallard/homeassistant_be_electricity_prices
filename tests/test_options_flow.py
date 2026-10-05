@@ -9888,6 +9888,7 @@ async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
             historical_spots=coord._historical_spots,
             spot_quarters=coord._historical_spot_quarters,
             billed_peak_kw=coord._peak_kw,
+            snapshot_raw=coord._snapshot_raw,
         )
     assert sensor is not None
     assert page["current_ytd"] == f"{sensor:.2f}"
@@ -9983,6 +9984,7 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
             historical_spots=coord._historical_spots,
             spot_quarters=coord._historical_spot_quarters,
             billed_peak_kw=coord._peak_kw,
+            snapshot_raw=coord._snapshot_raw,
         )
     assert sensor is not None
     assert page["current_ytd"] == f"{sensor:.2f}"

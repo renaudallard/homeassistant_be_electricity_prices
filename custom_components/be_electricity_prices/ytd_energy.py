@@ -154,6 +154,7 @@ async def _ytd_hourly_energy(
     breakdown: dict[str, float] | None = None,
     cached_only: bool = False,
     window_end: date | None = None,
+    snapshot_raw: SupplierSnapshot | None = None,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -203,6 +204,10 @@ async def _ytd_hourly_energy(
     for a contract the household left during the year. ``today`` stays the
     calendar's: it decides whether a month is still running, which is a fact
     about the date and not about the window.
+
+    ``snapshot_raw`` is the card ``snapshot`` was resolved from. With it, a
+    month no archive holds bills its own month's federal levies on the
+    current card rather than today's, as the per-day walk does.
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
@@ -255,6 +260,7 @@ async def _ytd_hourly_energy(
         snapshot,
         entry,
         cached_only=cached_only,
+        current_raw=snapshot_raw,
     )
 
     # Spot-monthly contracts bill every hour of a delivery month at that

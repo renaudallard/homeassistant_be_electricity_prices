@@ -526,6 +526,7 @@ async def _compute_current_year_cost(
             rlp_weights=rlp_weights,
             rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
+            snapshot_raw=snapshot_raw,
         )
         if dyn_energy is None:
             return _bill(0.0)
@@ -554,6 +555,7 @@ async def _compute_current_year_cost(
             rlp_weights=rlp_weights,
             rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
+            snapshot_raw=snapshot_raw,
         )
         if monthly_energy is None:
             return _bill(0.0)
@@ -592,6 +594,7 @@ async def _compute_current_year_cost(
             rlp_weights=rlp_weights,
             rlp_index_weights=rlp_index_weights,
             cached_only=cached_only,
+            snapshot_raw=snapshot_raw,
         )
         if hourly_energy is None:
             return _bill(0.0)

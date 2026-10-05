@@ -3032,6 +3032,88 @@ async def test_a_month_no_archive_holds_owes_its_own_federal_levies(
     assert september is today
 
 
+async def test_an_hourly_billed_month_no_archive_holds_owes_its_own_levies(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The hourly walk bills a month no archive holds on the current card too,
+    and must resolve that month's own contribution and excise as the per-day
+    walk does. It was not handed the card as parsed, so a time-of-use, Impact
+    or exclusive-night entry billed January to July on today's levies and read
+    some euros below the same consumption on a single-rate card."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.meter_hourly import (
+        MeteredHours,
+        MeteredSides,
+    )
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.providers._rates import (
+        TimeOfUseRates,
+        VariableRates,
+    )
+    from custom_components.be_electricity_prices.ytd_cost import (
+        _compute_current_year_cost,
+    )
+
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "ecofix",
+            "contract": "ecofix_flexy",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.c",
+        },
+    )
+    entry.add_to_hass(hass)
+    march = date(2026, 3, 1)
+    hour = dt_util.as_utc(dt_util.start_of_local_day(march))
+    end = dt_util.as_utc(dt_util.start_of_local_day(date(2026, 4, 1)))
+    hours: dict[datetime, float] = {}
+    while hour < end:
+        hours[hour] = 1.0
+        hour += timedelta(hours=1)
+    days: dict[date, tuple[float, float, float, float]] = {}
+    for h in hours:
+        d = dt_util.as_local(h).date()
+        days[d] = (days.get(d, (0.0,))[0] + 1.0, 0.0, 0.0, 0.0)
+    sides = MeteredSides(MeteredHours(hours, ("sensor.c",)), MeteredHours({}, ()))
+
+    async def _cost(energy: Any, with_raw: bool) -> float:
+        raw = make_snapshot(supplier="ecofix", contract="ecofix_flexy", energy=energy)
+        with (
+            patch(
+                "custom_components.be_electricity_prices.ytd_energy._metered_sides",
+                AsyncMock(return_value=sides),
+            ),
+            patch(
+                "custom_components.be_electricity_prices.ytd_cost._resolve_daily_kwh",
+                AsyncMock(return_value=days),
+            ),
+        ):
+            cost = await _compute_current_year_cost(
+                hass,
+                MagicMock(),
+                get("ecofix"),
+                _resolve_snapshot(entry, raw),
+                entry,
+                window_start_override=march,
+                window_end=date(2026, 3, 31),
+                snapshot_raw=raw if with_raw else None,
+            )
+        assert cost is not None
+        return cost
+
+    flat = 0.20
+    per_day = await _cost(VariableRates(current=flat), True)
+    tou = TimeOfUseRates(peak=flat, transition=flat, offpeak=flat)
+    hourly = await _cost(tou, True)
+    assert hourly > await _cost(tou, False)
+    assert hourly == pytest.approx(per_day, abs=1e-6)
+
+
 async def test_a_rejected_key_for_a_spot_indexed_credit_raises_the_notice(
     hass: HomeAssistant,
 ) -> None:
