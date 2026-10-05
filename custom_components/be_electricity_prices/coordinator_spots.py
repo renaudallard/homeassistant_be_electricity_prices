@@ -425,6 +425,7 @@ class _SpotsMixin(_ProfilesMixin):
         # limit, so the whole year is one request either way.
         entsoe = EntsoeClient(api_key, self._session)
         unanswered: list[tuple[date, date, bool]] = []
+        short: list[tuple[date, date, bool]] = []
         primary: EntsoeError | None = None
         for r_start, r_end in missing_ranges:
             # One run per grid, so a month billed per quarter-hour inside an
@@ -485,10 +486,17 @@ class _SpotsMixin(_ProfilesMixin):
                         self._remark_spot_days(
                             chunk_start, chunk_end, want_quarters, now, stable_before
                         )
+                        # A stable past day ENTSO-E answered short is a gap at
+                        # the source, which the keyless one may not share.
+                        short.extend(
+                            (day, day + timedelta(days=1), on_quarters)
+                            for day in _dates_in(chunk_start, chunk_end)
+                            if day in self._spot_day_retry_at
+                        )
                     chunk_start = chunk_end
-        if unanswered:
+        if unanswered or short:
             await self._fill_spots_from_fallback(
-                unanswered, primary, want_quarters, now, stable_before
+                unanswered, short, primary, want_quarters, now, stable_before
             )
 
     def _note_spot_grid(self, start: date, end: date, on_quarters: bool) -> None:
@@ -556,6 +564,7 @@ class _SpotsMixin(_ProfilesMixin):
     async def _fill_spots_from_fallback(
         self,
         unanswered: list[tuple[date, date, bool]],
+        short: list[tuple[date, date, bool]],
         primary: EntsoeError | None,
         want_quarters: bool,
         now: datetime,
@@ -566,14 +575,22 @@ class _SpotsMixin(_ProfilesMixin):
         the other, which gets its own request."""
         for on_quarters in (False, True):
             chunks = [(s, e) for s, e, grid in unanswered if grid == on_quarters]
-            if chunks:
+            gaps = [(s, e) for s, e, grid in short if grid == on_quarters]
+            if chunks or gaps:
                 await self._fill_spots_from_fallback_on(
-                    chunks, primary, want_quarters, on_quarters, now, stable_before
+                    chunks,
+                    gaps,
+                    primary,
+                    want_quarters,
+                    on_quarters,
+                    now,
+                    stable_before,
                 )
 
     async def _fill_spots_from_fallback_on(
         self,
         unanswered: list[tuple[date, date]],
+        short: list[tuple[date, date]],
         primary: EntsoeError | None,
         want_quarters: bool,
         quarter_hourly: bool,
@@ -593,16 +610,25 @@ class _SpotsMixin(_ProfilesMixin):
         overwriting them with a second source's view of the same auction is a
         difference nobody asked for.
 
+        ``short`` holds stable past days ENTSO-E did answer, under 20 hours.
+        They ride the same request and take only the hours ENTSO-E left out,
+        so it stays the source of record for the rest; they keep their grid
+        and their short-day TTL whatever the fallback does, since ENTSO-E is
+        asked about them again when it expires.
+
         ``_spot_source`` is deliberately left alone. It describes the curve
         current_price was built from, and this runs AFTER the live fetch in the
         tick: letting the backfill write it would relabel a live ENTSO-E price
         because one historical chunk had to fall back. The two are answered
         independently and may legitimately come from different sources.
         """
-        span_start = min(start for start, _ in unanswered)
-        span_end = max(end for _, end in unanswered)
+        span_start = min(start for start, _ in unanswered + short)
+        span_end = max(end for _, end in unanswered + short)
         start_utc = dt_util.start_of_local_day(span_start).astimezone(UTC)
         end_utc = dt_util.start_of_local_day(span_end).astimezone(UTC)
+        # Short days alone are retried on ENTSO-E's own schedule, so only a
+        # chunk nothing answered is worth a warning.
+        log = _LOGGER.warning if unanswered else _LOGGER.debug
         try:
             prices = await EnergyChartsClient(self._session).fetch_day_ahead(
                 start_utc, end_utc, quarter_hourly=quarter_hourly
@@ -611,7 +637,7 @@ class _SpotsMixin(_ProfilesMixin):
             # Both messages travel together: the ENTSO-E half is the half that
             # explains the outage, and reporting only the fallback's own error
             # sends the reader after the wrong service entirely.
-            _LOGGER.warning(
+            log(
                 "historical spot fetch failed for %s..%s: ENTSO-E: %s; fallback: %s",
                 span_start,
                 span_end,
@@ -621,7 +647,7 @@ class _SpotsMixin(_ProfilesMixin):
             self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
             return
         if not prices:
-            _LOGGER.warning(
+            log(
                 "historical spot fetch failed for %s..%s: ENTSO-E: %s; "
                 "fallback returned no prices for the window",
                 span_start,
@@ -639,6 +665,17 @@ class _SpotsMixin(_ProfilesMixin):
         for chunk_start, chunk_end in unanswered:
             self._note_spot_grid(chunk_start, chunk_end, quarter_hourly)
         for chunk_start, chunk_end in unanswered:
+            self._remark_spot_days(
+                chunk_start, chunk_end, want_quarters, now, stable_before
+            )
+        gap_days = {day for start, end in short for day in _dates_in(start, end)}
+        extra = _spots_for_local_days(prices, gap_days)
+        for hour, value in _bucket_spots_by_hour(extra).items():
+            self._historical_spots.setdefault(hour, value)
+        if want_quarters:
+            for hour, slots in _group_spot_quarters_by_hour(extra).items():
+                self._historical_spot_quarters.setdefault(hour, slots)
+        for chunk_start, chunk_end in short:
             self._remark_spot_days(
                 chunk_start, chunk_end, want_quarters, now, stable_before
             )

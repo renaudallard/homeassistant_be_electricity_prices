@@ -701,6 +701,57 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
     assert refetched == 0, "a filled day is not short, so there is nothing to retry"
 
 
+async def test_a_day_entsoe_answers_short_is_completed_from_the_fallback(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A stable past day ENTSO-E answers with a gap was only ever asked of
+    ENTSO-E again, so a gap at the source left those hours unpriced for the
+    year although energy-charts holds the same auction. The fallback fills
+    only the missing hours: ENTSO-E stays the source of record."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    day_start = dt_util.start_of_local_day(date(2026, 8, 20)).astimezone(UTC)
+    missing = {day_start + timedelta(hours=h) for h in range(10, 24)}
+    calls: list[tuple[datetime, datetime]] = []
+
+    async def _entsoe_short(
+        _self: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        hours = int((end - start).total_seconds() // 3600)
+        slots = (start + timedelta(hours=h) for h in range(hours))
+        return {slot: 0.10 for slot in slots if slot not in missing}
+
+    async def _keyless(
+        _self: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        calls.append((start, end))
+        hours = int((end - start).total_seconds() // 3600)
+        return {start + timedelta(hours=h): 0.20 for h in range(hours)}
+
+    with (
+        patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_short),
+        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless),
+    ):
+        await coord._ensure_historical_spots(date(2026, 8, 20), date(2026, 8, 21))
+
+    assert len(calls) == 1, "one keyless request for the gap"
+    day = [day_start + timedelta(hours=h) for h in range(24)]
+    assert all(hour in coord._historical_spots for hour in day)
+    assert coord._historical_spots[day_start] == 0.10, "ENTSO-E's hours are kept"
+    assert coord._historical_spots[day_start + timedelta(hours=12)] == 0.20
+    assert date(2026, 8, 20) not in coord._spot_day_retry_at
+
+
 async def test_ensure_historical_spots_records_and_skips_complete_days(
     hass: HomeAssistant, freezer: Any
 ) -> None:
