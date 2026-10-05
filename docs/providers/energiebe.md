@@ -299,7 +299,7 @@ for it to leak into. The fee is 35 EUR/jaar against the dynamic card's 25.
 
 ### The index parameter is a discriminator, not a spelling
 
-`_ENERGY_RE` CAPTURES the `_RLP` suffix rather than merely tolerating it, and each parser
+`_ENERGY_RE` CAPTURES the "_RLP" suffix rather than merely tolerating it, and each parser
 asserts its own: the dynamic leg rejects a `Belpex_RLP` card, the variable leg rejects one
 without it, and the variable injection requires `Belpex_SPP`. That name is the only thing
 in the card text saying which product the document is for - the two cards print an

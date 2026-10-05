@@ -527,8 +527,8 @@ publish the next year's tariffs, so a new disagreement still files and these two
 Wallonia (`_extract_wallonia_dsos`, `_mega_overlays.py`, `_WALLONIA_LABELS` `_mega_overlays.py`)
 maps AIEG, AIESH, ORES (Brabant wallon), RESA, and Régie de Wavre (`DSO_REW`). Each
 row is a 9-number vertical block: mono, jour, nuit, excl_nuit, terme_fixe (€/an),
-PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic` / `_medium` /
-`_eco`) is always populated here because every Wallonia card prints the three CWaPE
+PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic`,
+`distribution_medium`, `distribution_eco`) is always populated here because every Wallonia card prints the three CWaPE
 bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` table
 further down and are cross-referenced onto each overlay
 (`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py`).

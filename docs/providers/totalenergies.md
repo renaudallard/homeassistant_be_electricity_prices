@@ -38,7 +38,7 @@ https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/
 
 where `<SLUG>` is the per contract file prefix (see table) and `<REGION>` is one
 of `VL` / `WAL` / `BXL` (`_REGION_TO_CODE`, `totalenergies.py`). All cards
-are fetched in the French (`_FR`) edition.
+are fetched in the French (FR) edition.
 
 When the French card does not parse, `fetch` reads the same card's Dutch
 edition (`_NL.pdf`) and reports the French error when that fails too, unless
@@ -124,8 +124,8 @@ Notes on the kind mapping:
   TotalEnergies does not register a `tou` or `tou_impact` product.
 - **Impact is declared `variable`, not `tou_impact`, on purpose.** The supplier
   energy on an Impact card is flat (the PIC/MEDIUM/ECO columns are all equal);
-  the three band split lives entirely on the DSO side (`DsoOverlay.distribution_pic`
-  / `_medium` / `_eco`, applied under `dso_tariff_mode=impact`). See
+  the three band split lives entirely on the DSO side (`DsoOverlay.distribution_pic`,
+  `distribution_medium` and `distribution_eco`, applied under `dso_tariff_mode=impact`). See
   `test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands`
   (`tests/test_totalenergies.py`).
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
@@ -623,7 +623,7 @@ Ordered by how likely a card change is to break them:
 
 1. **URL pattern**: `_BASE_URL` / `_document_url` (`totalenergies.py`)
    and `_REGION_TO_CODE`. If TotalEnergies renames the `/latest/` path, a product
-   slug, or a `_FR` suffix, every fetch and probe 404s.
+   slug, or an FR suffix, every fetch and probe 404s.
 2. **Consumption table regex**: `_extract_energy` (`_totalenergies_cards.py`). New
    asterisk counts, a new intervening label, or a changed column count breaks fixed
    and variable parsing.

@@ -17,13 +17,20 @@ rot:
      cross-link without backticks, so a renamed doc used to break every
      link into it while the check stayed green.
 
-All three fail the run, because each is provably wrong rather than a
-judgement call. One more thing is reported and never gated: a backticked
-symbol named beside a file, which is defined nowhere in the tree. Some of those are
-renames the prose did not follow; most are prose words, Home Assistant's own
-names and service ids, and no rule separates them. Gating a count of those
-would put the docs back to needing an edit whenever they grow, which is what
-this replaced.
+  4. Every private name a doc or the README spells in backticks, ``_name``
+     or ``module._name``, is defined somewhere in the tree: a function,
+     class, assignment, attribute, argument, string key or module. A
+     leading underscore is never a prose word, so a miss is a rename the
+     prose did not follow. Test helpers count, since the docs describe the
+     tests too.
+
+All four fail the run, because each is provably wrong rather than a
+judgement call. One more thing is reported and never gated: any other
+backticked symbol named beside a file, which is defined nowhere in the tree.
+Some of those are renames the prose did not follow; most are prose words,
+Home Assistant's own names and service ids, and no rule separates them.
+Gating a count of those would put the docs back to needing an edit whenever
+they grow, which is what this replaced.
 
 Usage:  doc_ref_check.py [--verbose]
 """
@@ -55,6 +62,13 @@ ANCHOR_REF = re.compile(r"\b([A-Za-z0-9_./-]+\.md)#([a-z0-9_-]+)")
 LINK_REF = re.compile(rf"\]\(([A-Za-z0-9_./-]+\.(?:{SOURCE_EXT}))(?:#([a-z0-9_-]+))?\)")
 SELF_ANCHOR = re.compile(r"\]\(#([a-z0-9_-]+)\)")
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
+# A private name, bare or behind a dotted module path, with or without the
+# call parentheses: the part after the last dot is what must exist. It ends
+# on a letter or digit, so a URL piece such as `_pro_` is not one.
+PRIVATE_REF = re.compile(
+    r"`(?:[A-Za-z_][A-Za-z0-9_]*\.)*(_[A-Za-z](?:[A-Za-z0-9_]*[A-Za-z0-9])?)(?:\(\))?`"
+)
+PRIVATE_KEY = re.compile(r"_[A-Za-z][A-Za-z0-9_]*")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 
 # Names that are not files in this repository and never will be: what a
@@ -162,8 +176,25 @@ def symbols_of(path: Path) -> set[str]:
             out.add(node.name)
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             out.add(node.id)
+        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
+            out.add(node.attr)
         elif isinstance(node, ast.arg):
             out.add(node.arg)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # A stored key the code writes, "_schema_version" or "_via".
+            if PRIVATE_KEY.fullmatch(node.value):
+                out.add(node.value)
+    return out
+
+
+def defined_anywhere() -> set[str]:
+    """Every name the tree defines, test helpers and module names included,
+    for the private-name check."""
+    out: set[str] = set()
+    for folder in ("custom_components", "scripts", "tests"):
+        for source in (ROOT / folder).rglob("*.py"):
+            out.add(source.stem)
+            out |= symbols_of(source)
     return out
 
 
@@ -179,6 +210,15 @@ def main() -> int:
                 everywhere |= symbol_cache.setdefault(source, symbols_of(source))
 
     files_seen = anchors_seen = 0
+    defined = defined_anywhere()
+    missing_private: list[str] = []
+    for doc in [*sorted(DOCS.rglob("*.md")), ROOT / "README.md"]:
+        if not doc.is_file():
+            continue
+        for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+            for name in PRIVATE_REF.findall(line):
+                if name not in defined:
+                    missing_private.append(f"{doc.name}:{number} `{name}`")
     missing_files: list[str] = []
     missing_anchors: list[str] = []
     unknown_symbols: list[str] = []
@@ -235,12 +275,15 @@ def main() -> int:
         print(f"    MISSING FILE   {line}")
     for line in missing_anchors:
         print(f"    MISSING ANCHOR {line}")
-    if missing_files or missing_anchors:
+    for line in missing_private:
+        print(f"    MISSING NAME   {line}")
+    if missing_files or missing_anchors or missing_private:
         print(
-            f"\nFAIL: {len(missing_files)} file reference(s) and "
-            f"{len(missing_anchors)} anchor(s) name something that is not there. "
-            "A file was renamed or removed and the prose did not follow; fix the "
-            "name, or add it to NOT_OURS if it is something a workflow writes."
+            f"\nFAIL: {len(missing_files)} file reference(s), "
+            f"{len(missing_anchors)} anchor(s) and {len(missing_private)} private "
+            "name(s) name something that is not there. A file or a symbol was "
+            "renamed or removed and the prose did not follow; fix the name, or "
+            "add a file to NOT_OURS if it is something a workflow writes."
         )
         return 1
     return 0

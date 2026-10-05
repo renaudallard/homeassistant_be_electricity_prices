@@ -206,9 +206,10 @@ What is left is what a RENAME breaks, which is the only way these can still rot:
 | a file a doc names does not exist | yes | the name is provably wrong: it was renamed or removed and the prose did not follow |
 | a `file.md#anchor` names no heading | yes | same, for the pins into README the glossary carries |
 | a markdown link names a `.md` file, or an anchor in one, that is not there | yes | the docs cross-link without backticks, so a renamed doc used to break every link into it while the check stayed green; resolved relative to the linking doc first, as a browser reads it |
-| a symbol named beside a file that this tree does not define | no | printed for a human; most are prose words, Home Assistant's own names and service ids, and no rule separates those from a rename |
+| a private name in backticks, `_name` or `module._name`, that nothing in the tree defines | yes | a leading underscore is never a prose word, so a miss is a rename; read in every doc and the README, and a test helper, attribute, stored key or module name counts as defined, since the docs describe the tests too |
+| any other symbol named beside a file that this tree does not define | no | printed for a human; most are prose words, Home Assistant's own names and service ids, and no rule separates those from a rename |
 
-The fourth is deliberately not gated. Gating a count of it would put the docs back to needing an
+The last is deliberately not gated. Gating a count of it would put the docs back to needing an
 edit whenever they grow, which is the thing this replaced.
 
 An anchor is matched against its heading slugged the way GitHub slugs it: lowercased, punctuation
@@ -216,7 +217,7 @@ dropped, then each space a hyphen without collapsing the runs, and a repeated he
 `-1`, `-2`. Collapsing the runs passed a link from the EBEM doc into `docs/pricing-model.md`
 that GitHub could not follow (`test_a_heading_is_slugged_the_way_github_slugs_it`).
 
-A symbol written with its module, `module.symbol`, is checked where the fourth row cannot be:
+A symbol written with its module, `module.symbol`, is checked where the last row cannot be:
 `test_a_module_named_beside_a_symbol_still_binds_it` (`tests/test_doc_ref_check.py`) reads the
 comments and strings of every Python file and every doc, and fails when the module named does not
 bind the symbol and another module does. The 0.27.5 and August splits moved symbols out of their
@@ -495,7 +496,7 @@ withdrawn product shares the supplier's marker but has a section of its own
 rather than the supplier-deprecated card, and it has no successor to name.
 
 The point of deriving it is that the allowance ends when the withdrawal does. A supplier name
-listed in `_PERIOD_EXEMPT` would go on suppressing the check long after the reason for it expired,
+kept in a hand-written exemption list would go on suppressing the check long after the reason for it expired,
 and nobody would notice.
 
 A card its supplier published broken gets a marker of its own, `KnownCardDefect`, from

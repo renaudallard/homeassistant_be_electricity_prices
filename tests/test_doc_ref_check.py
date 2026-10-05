@@ -314,3 +314,36 @@ def test_a_module_named_beside_a_symbol_still_binds_it() -> None:
         and not (found[1] == "coordinator" and found[2] in methods)
     ]
     assert not stale, stale
+
+
+def test_a_private_name_the_tree_does_not_define_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A leading underscore is never a prose word: a private name a doc spells
+    in backticks that nothing defines is a rename the prose did not follow.
+    A test helper, an attribute, a stored key and a module name all count as
+    defined, and so does a name behind a dotted module path."""
+    root = _tree(
+        tmp_path,
+        (
+            "guide.md",
+            "# Guide\n\n"
+            "`_kept` and `pricing._kept()` and `self_check._attr` stand.\n"
+            "`_helper` lives in the tests, `_via` is a key, `_pdf` a module, `_pro_` a URL piece.\n"
+            "`_renamed` is gone.\n",
+        ),
+    )
+    package = root / "custom_components" / "be_electricity_prices"
+    package.mkdir(parents=True)
+    (package / "pricing.py").write_text(
+        "def _kept():\n    pass\n\n\nclass C:\n    def f(self):\n"
+        "        self._attr = 1\n        return {'_via': 1}\n",
+        encoding="utf-8",
+    )
+    (package / "_pdf.py").write_text("", encoding="utf-8")
+    (root / "tests").mkdir()
+    (root / "tests" / "test_x.py").write_text("_helper = 1\n", encoding="utf-8")
+    assert _run(monkeypatch, root) == 1
+    out = capsys.readouterr().out
+    assert "MISSING NAME   guide.md:5 `_renamed`" in out
+    assert out.count("MISSING NAME") == 1

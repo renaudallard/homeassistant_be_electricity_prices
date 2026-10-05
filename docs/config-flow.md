@@ -551,7 +551,7 @@ helper:
   **exactly** against `f"{entry_id}_{tariff}"`, the shape HA's `utility_meter`
   builds. It used to test `endswith(f"_{tariff}")`, which binds the wrong child
   whenever one tariff name ends with another across an underscore: with the common
-  `["off_peak", "peak"]` pair, `<entry>_off_peak` also ends with `_peak`, so the day
+  `["off_peak", "peak"]` pair, `<entry>_off_peak` also ends with "_peak", so the day
   slot took the off-peak register and night kWh got billed at the day rate. As a
   backstop it also refuses a result where both slots resolved to the same entity.
 

@@ -581,7 +581,7 @@ the general case, but Bolt still exposes a prosumer column, which is read into
 **Wallonia (`_extract_wallonia_dsos`, `_bolt_overlays.py`).** Five DSOs via `_WALLONIA_LABELS`
 (`_bolt_overlays.py`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
 terme_fixe (EUR/an), prosumer (EUR/kVA/an). PIC/MEDIUM/ECO populate the CWaPE Tarif Impact band
-columns (`distribution_pic` / `_medium` / `_eco`); `terme_fixe` becomes `data_management_per_year`.
+columns (`distribution_pic`, `distribution_medium`, `distribution_eco`); `terme_fixe` becomes `data_management_per_year`.
 
 The Wallonia parser carries the module's single largest land mine, the **RESA/REW label swap**
 (`_bolt_overlays.py`). In Bolt's `pdfplumber` text extraction the rows labeled `TECTEO RESA` and `WAVRE`
