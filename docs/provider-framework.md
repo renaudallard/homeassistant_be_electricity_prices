@@ -78,6 +78,7 @@ class SupplierExtractor:
 | `probe` | `SnapshotProbe \| None` | Optional cheap freshness check; `None` means "no probe, use TTL only". |
 | `fetch_for_month` | `ArchivedSnapshotFetcher \| None` | Optional historical fetch for time-correct yearly-cost billing; `None` means "no archive". |
 | `settles_on_next_card` | `bool` | Set where `fetch_for_month` settles a month-indexed month on the card that follows it and flags it provisional until then (Eneco, EBEM, Trevion, Mega, Engie). Only these are asked again about a closed month the card archive caught while it ran, at runtime and by the daily archive run; any other supplier answers with the same card, and asking cost the compare page a supplier fetch per candidate after every restart. |
+| `settle_month` | `MonthSettler \| None` | Set where a month is settled IN PLACE (Luminus): the card held for a closed month, live capture or archive answer, keeps every field and only its month-indexed rates are re-priced on the index the next card names, with `index_realised` recorded (`providers/_settle.py`). `fetch_for_month` is then never asked to replace a held card, at runtime or by the daily archive run, because Luminus's archive serves a month without its campaign. Provisional while the next card is not out. |
 | `deprecated_until` | `date \| None` | Set when the supplier has announced it is leaving the residential market: the date its contracts stop being supplied. Drops the supplier from the config flow's new-setup and compare pickers, and raises the `supplier_deprecated` Repairs card on every entry using it. Hiding takes effect as soon as the flag ships, ahead of the date, because you cannot sign up today for a contract being transferred away. The date itself is compared to the clock in two places once it passes: the coordinator stops asking the supplier for a card and swaps the Repairs card for the supply-ended variant, and the archive walk drops the supplier from its targets. |
 | `deprecated_successor` | `str \| None` | Registry id of the supplier taking the contracts over; named in the Repairs card so the user knows what to switch to. It is only named when it has a contract in the entry's own region: a withdrawal names one successor nationally, while our coverage is per region, so an entry we cannot route anywhere gets the `supplier_deprecated_no_successor` variant instead of advice the config flow would refuse. |
 
@@ -177,7 +178,9 @@ month at the current rate. Return-value semantics:
   row holds the estimate the card printed and the supplier's path is what
   settles the month on the next card: a settled answer replaces the row, one
   still provisional or a failure leaves the row billing but provisional, and
-  `None` leaves it as it is.
+  `None` leaves it as it is. An extractor with `settle_month` is never asked
+  for a replacement: whichever tier gave the month's card, it is re-priced in
+  place until its month-indexed legs carry `index_realised` (`is_settled`).
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
 has no archive at all; its past months come from the repository archive alone.

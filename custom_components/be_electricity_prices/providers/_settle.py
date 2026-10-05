@@ -37,6 +37,7 @@ from dataclasses import replace
 from typing import Any
 
 from ._rates import EnergyRates, InjectionRates, TimeOfUseRates, VariableRates
+from .base import SupplierSnapshot
 
 
 def settled_injection(inj: InjectionRates, index: float) -> InjectionRates:
@@ -83,9 +84,9 @@ def settled_energy(energy: EnergyRates, index: float) -> EnergyRates:
     Every rate the card prints with a formula behind it is rebuilt from its
     own pair, one per meter or band: rewriting the mono rate alone would
     settle a mono meter and leave a bi-hourly or time-of-use one on the
-    printed estimate. A variable leg records the index as ``index_realised``,
-    so a keyed entry bills the supplier's figure too. Any other leg, or one
-    with no formula, comes back as it was.
+    printed estimate. The leg records the index as ``index_realised``, so a
+    keyed entry bills the supplier's figure too. Any other leg, or one with
+    no formula, comes back as it was.
     """
     if not getattr(energy, "month_indexed", False):
         return energy
@@ -118,6 +119,47 @@ def settled_energy(energy: EnergyRates, index: float) -> EnergyRates:
         and base is not None
         and getattr(energy, field) is not None
     }
-    if isinstance(energy, VariableRates):
-        rates["index_realised"] = index
-    return replace(energy, **rates)
+    return replace(energy, index_realised=index, **rates)
+
+
+def _indexed_legs(snap: SupplierSnapshot) -> list[EnergyRates | InjectionRates]:
+    """The legs of ``snap`` its card indexes on the month, and so settles."""
+    legs: list[EnergyRates | InjectionRates] = []
+    if getattr(snap.energy, "month_indexed", False):
+        legs.append(snap.energy)
+    inj = snap.injection
+    if inj is not None and (inj.month_indexed or inj.spp_indexed):
+        legs.append(inj)
+    return legs
+
+
+def is_settled(snap: SupplierSnapshot) -> bool:
+    """Whether every leg ``snap`` indexes on the month carries the index the
+    month settled at."""
+    legs = _indexed_legs(snap)
+    return bool(legs) and all(
+        getattr(leg, "index_realised", None) is not None for leg in legs
+    )
+
+
+def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSnapshot:
+    """``snap`` re-priced on the indices ``settled``, the same month's card,
+    was settled at.
+
+    A card re-parsed after a parser change comes back as printed; this puts
+    back what its month settled at, read off the stored row rather than off
+    a next card that may no longer be served. A leg ``settled`` holds no
+    index for is left as it is.
+    """
+    index = getattr(settled.energy, "index_realised", None)
+    energy = snap.energy if index is None else settled_energy(snap.energy, index)
+    injection = snap.injection
+    held = settled.injection
+    if (
+        injection is not None
+        and held is not None
+        and held.index_realised is not None
+        and (injection.month_indexed or injection.spp_indexed)
+    ):
+        injection = settled_injection(injection, held.index_realised)
+    return replace(snap, energy=energy, injection=injection)

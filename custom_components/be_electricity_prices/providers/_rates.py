@@ -475,6 +475,10 @@ class TimeOfUseRates:
     sunday: float | None = None
     formula_factor_sunday: float | None = None
     formula_base_sunday: float | None = None
+    # The index this card's own month settled at, once the next card names
+    # it; same meaning as ``VariableRates.index_realised``. The bands above
+    # are then that formula at it.
+    index_realised: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -155,6 +155,28 @@ on August's Belpex, where the live cards had been corrected on the 2nd to
 September's, 4,3 c/kWh apart on ComfyFlex. The month cache then takes the live
 card for the running month, as it does for Mega.
 
+### Settling a closed month in place
+
+The month-indexed rates (MaxxFlex, SmartFlex and BasicFlex energy, and the monthly
+feed-in of every card but ComfyFlex, ComfyFlex+ and Dynamic) are printed at the
+previous month's index, and the next card names the month's own: "Belpex = 156,41
+EUR/MWh (valeur de l'indice de septembre 2026)", and "Belpex RLP M = 164,42" on
+BasicFlex (`published_indices`, `_luminus_cards.py`). `settle_month` (`luminus.py`)
+re-prices the card held for a closed month on that index, through `settled_energy`
+and `settled_injection` (`_settle.py`), and records it as `index_realised`. The
+next card is the live one while its month runs and the archive's after it. Not out
+yet, or naming another month while it is the live one, the month stays
+`provisional`; a closed next card naming another month settles nothing.
+
+It is IN PLACE (`EXTRACTOR.settle_month`), never a replacement by
+`fetch_for_month`'s answer: the archive serves a month without its new-customer
+campaign, and served the uncorrected first October edition for days. The month
+cache and the daily archive run both keep the captured card whole and move only
+those rates. Replayed over every archived 2026 month, the settled rates match the
+keyed engine's month mean to 0,001 c/kWh, where the printed ones ran a month
+behind: BasicFlex 3,26 c/kWh under in September, MaxxFlex 3,15, SmartFlex's peak
+band 3,74, the feed-in 1,30.
+
 This is what makes a contract start date work on a Luminus entry: until it was
 wired the signing-cohort splice had no card to read, so the entry stayed on the
 current card whatever date was set, and every past month of the year-to-date was

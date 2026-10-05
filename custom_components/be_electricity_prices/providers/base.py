@@ -480,6 +480,14 @@ ArchivedSnapshotFetcher = Callable[
     [aiohttp.ClientSession, str, str, "date"], Awaitable["SupplierSnapshot | None"]
 ]
 
+# In-place settlement: a month's card as held, re-priced on the index the
+# next card names, everything else on it kept. Provisional while that card
+# is not out.
+MonthSettler = Callable[
+    [aiohttp.ClientSession, str, str, "date", "SupplierSnapshot"],
+    Awaitable["SupplierSnapshot"],
+]
+
 
 def with_vat_basis(
     snapshot: SupplierSnapshot,
@@ -524,6 +532,13 @@ class SupplierExtractor:
     # month the card archive caught while it ran worth asking it about
     # again: every other one answers with the same card.
     settles_on_next_card: bool = False
+    # Set where a month is settled IN PLACE instead (Luminus): the card held
+    # for it, live capture or archive answer, keeps every field and only its
+    # month-indexed rates move to the index the next card names. Its own
+    # archive serves a month without its campaign and kept serving a first
+    # edition after the live card was corrected, so its answer must never
+    # replace a captured card.
+    settle_month: MonthSettler | None = None
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry
     # id of the supplier taking them over. Two effects, both deliberate:

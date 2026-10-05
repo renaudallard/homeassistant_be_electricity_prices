@@ -1714,7 +1714,11 @@ monthly contracts) prints last month's index while it runs, and the supplier
 settles the month on the card after it. A month the archive caught live on such a card is
 therefore read from the supplier once it has closed, and billed on the
 archive's copy, re-asked daily, until that card is out; the daily run then
-replaces the archive's copy with the settled one. The request names the supplier, contract, region and month
+replaces the archive's copy with the settled one. Luminus (MaxxFlex,
+SmartFlex, BasicFlex and the monthly feed-in) is settled the same way but in
+place: its own archive drops the new-customer campaign a live card carries,
+so the card kept for the month stays whole and only its indexed rates move
+to the index the next card names. The request names the supplier, contract, region and month
 and nothing else, and it is only made for a month the archive can hold: a
 closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach. A signing month older than

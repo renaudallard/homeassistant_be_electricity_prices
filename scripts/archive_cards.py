@@ -66,7 +66,11 @@ integration would otherwise bill for good. The row is re-asked through
 ``fetch_for_month`` until that answers settled, and from then on it is the
 supplier's answer, filed as ``archive``; the live walk does not write a card
 it still serves for such a month back over it. Any other supplier answers
-with the card the row already holds, so it is not asked.
+with the card the row already holds, so it is not asked. A supplier that
+settles in place (``settle_month``, Luminus, whose archive drops the
+campaign a live card carries) keeps the row it holds and has only its
+month-indexed rates re-priced on the index the next card names; a replay
+puts that index back on the re-parsed card (``settled_as``).
 
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the
@@ -121,8 +125,14 @@ from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E4
     memoise_text_fetches,
     render_through,
 )
+from custom_components.be_electricity_prices.providers._settle import (  # noqa: E402
+    is_settled,
+    settled_as,
+)
 from custom_components.be_electricity_prices.providers.base import (  # noqa: E402
+    ArchivedSnapshotFetcher,
     CardNotReadableError,
+    MonthSettler,
     SupplierExtractor,
     SupplierSnapshot,
 )
@@ -927,7 +937,7 @@ def _write_card(
     return True
 
 
-def _awaits_settlement(row: dict[str, Any] | None) -> bool:
+def _awaits_settlement(row: dict[str, Any] | None, in_place: bool = False) -> bool:
     """Whether a held row of a closed month is still the live estimate.
 
     A card indexed on its own month prints last month's index while it runs,
@@ -938,14 +948,18 @@ def _awaits_settlement(row: dict[str, Any] | None) -> bool:
     estimate. A row that no longer decodes is left to the replay. Only a
     supplier flagged ``settles_on_next_card`` is asked again about such a
     row; the backfill checks that before calling this.
+
+    ``in_place`` is a supplier that settles the row it holds rather than
+    replacing it (``settle_month``): any row of its, live or from its archive,
+    waits until its month-indexed legs carry the index they settled at.
     """
-    if row is None or row.get("_via", "live") != "live":
+    if row is None or (not in_place and row.get("_via", "live") != "live"):
         return False
     try:
         snap = _snapshot_from_dict(row, min_schema_version=0)
     except (KeyError, TypeError, ValueError):
         return False
-    return _settles_after_its_month(snap)
+    return _settles_after_its_month(snap) and not (in_place and is_settled(snap))
 
 
 def _read_row(path: Path) -> dict[str, Any] | None:
@@ -1328,6 +1342,28 @@ def _transient(err: BaseException) -> bool:
     return isinstance(err, TimeoutError) or is_transient_fetch_error(str(err))
 
 
+async def _settle_held(
+    settle: MonthSettler,
+    fetch_for_month: ArchivedSnapshotFetcher,
+    session: Any,
+    contract: str,
+    region: str,
+    first: date,
+    held: dict[str, Any] | None,
+) -> SupplierSnapshot | None:
+    """A month settled in place: the row held for it, or what the supplier's
+    archive answers where none is held, re-priced on the index its next card
+    names."""
+    snap = (
+        await fetch_for_month(session, contract, region, first)
+        if held is None
+        else _snapshot_from_dict(held, min_schema_version=0)
+    )
+    if snap is None or not _settles_after_its_month(snap):
+        return snap
+    return await settle(session, contract, region, first, snap)
+
+
 async def _fetch_card(
     fetch: Callable[[], Awaitable[_T]],
     sleep: Callable[[float], Any] = asyncio.sleep,
@@ -1551,6 +1587,9 @@ async def _replay_row(
                 snap = await fetch_for_month(session, contract, region, first)
             else:
                 snap = await extractor.fetch(session, contract, region)
+            if snap is not None and extractor.settle_month is not None:
+                # A month settled in place keeps the index it settled at.
+                snap = settled_as(snap, _snapshot_from_dict(row, min_schema_version=0))
         except Exception as err:  # noqa: BLE001 - a row that will not replay is reported, not fatal
             summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
             return
@@ -1845,8 +1884,10 @@ async def archive(
                     held = _read_row(
                         out / _ROWS / ex.id / contract / region / f"{month_id}.json"
                     )
+                    settle = ex.settle_month
                     if held is not None and not (
-                        ex.settles_on_next_card and _awaits_settlement(held)
+                        ex.settles_on_next_card
+                        and _awaits_settlement(held, in_place=settle is not None)
                     ):
                         continue
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
@@ -1855,10 +1896,28 @@ async def archive(
                     cards.calls.clear()
                     cards.seen.clear()
                     try:
-                        past = await _fetch_card(
-                            lambda: fetch_for_month(session, contract, region, first),
-                            sleep,
-                        )
+                        if settle is not None:
+                            # Settled in place, the card held kept whole.
+                            past = await _fetch_card(
+                                functools.partial(
+                                    _settle_held,
+                                    settle,
+                                    fetch_for_month,
+                                    session,
+                                    contract,
+                                    region,
+                                    first,
+                                    held,
+                                ),
+                                sleep,
+                            )
+                        else:
+                            past = await _fetch_card(
+                                lambda: fetch_for_month(
+                                    session, contract, region, first
+                                ),
+                                sleep,
+                            )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
                         summary.failed.append(f"{label}: {type(err).__name__}: {err}")
                         read = _unparsed_sources(cards)
@@ -1878,6 +1937,15 @@ async def archive(
                             summary.absent += 1
                         continue
                     sources = _sources_of(memo, cards, out, seen_month)
+                    via, seen = "archive", None
+                    if settle is not None and held is not None:
+                        # The card's own sources: the next card only named an
+                        # index, which the row now carries, and under the live
+                        # address it would replay as this month's card.
+                        sources = held.get("_sources", [])
+                        via = held.get("_via", "live")
+                        if held.get("_seen_on"):
+                            seen = date.fromisoformat(held["_seen_on"])
                     _write_card(
                         out,
                         ex.id,
@@ -1887,7 +1955,8 @@ async def archive(
                         past,
                         sources,
                         now,
-                        "archive",
+                        via,
+                        seen,
                     )
                     if held is None:
                         summary.backfilled += 1

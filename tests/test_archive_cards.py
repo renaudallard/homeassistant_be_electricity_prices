@@ -515,6 +515,110 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
     assert json.loads(row.read_text())["energy"]["current"] == 0.2079
 
 
+async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Luminus's own archive serves a month without its new-customer campaign
+    and kept serving a first edition after the live card was corrected, so
+    its answer must never replace a card caught live. Such a supplier settles
+    the row it holds: only the month-indexed rates move, to the index the
+    next card names, and the campaign, the sources and the capture day stay.
+    A settled row is not asked again, and a replay after a parser change puts
+    the index back on the re-parsed card."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_energy,
+    )
+
+    asked: list[str] = []
+    serving = ["august"]
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        # A replay runs on the day the row was caught.
+        august = serving[0] == "august" or dt_util.now().month == 8
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=VariableRates(
+                current=0.1761 if august else 0.25,
+                formula_factor=1.0,
+                formula_base=0.0,
+                month_indexed=True,
+            ),
+            publication_label="augustus 2026" if august else "september 2026",
+            source_url=CARD_URL,
+            welcome_credit_kwh=675.0,
+        )
+
+    async def fetch_for_month(*_a: object) -> SupplierSnapshot | None:
+        asked.append("archive")
+        return None
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        asked.append(f"settle {month:%Y-%m}")
+        return replace(held, energy=settled_energy(held.energy, 0.2079))
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        fetch_for_month=fetch_for_month,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    caught = json.loads(row.read_text())
+    serving[0] = "september"
+    asked.clear()
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == ["settle 2026-08"]
+    assert summary.settled == 1
+    settled = json.loads(row.read_text())
+    assert settled["_via"] == "live"
+    assert settled["energy"]["current"] == pytest.approx(0.2079)
+    assert settled["energy"]["index_realised"] == pytest.approx(0.2079)
+    assert settled["welcome_credit_kwh"] == 675.0
+    assert settled["_sources"] == caught["_sources"]
+    assert settled["_seen_on"] == caught["_seen_on"] == "2026-08-20"
+
+    asked.clear()
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == []
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep
+    )
+    assert summary.unreplayable == []
+    replayed = json.loads(row.read_text())
+    assert replayed["energy"]["current"] == pytest.approx(0.2079)
+    assert replayed["energy"]["index_realised"] == pytest.approx(0.2079)
+    assert replayed["publication_label"] == "augustus 2026"
+
+
 async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:
     """A month past --keep-months would be stored only to be pruned at the
     end of the run, and its PDFs uploaded only for the workflow to delete

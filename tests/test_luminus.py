@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -942,6 +943,110 @@ async def test_archive_swallows_failures_and_unsold_regions(
     )
     assert len(asked) == 1
     assert EXTRACTORS["luminus"].fetch_for_month is luminus.fetch_for_month
+
+
+async def test_a_closed_month_is_settled_in_place_on_the_index_the_next_card_names(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A card prints its month-indexed rates at the previous month's index,
+    and the next card names the month's own: "Belpex = 78,94 EUR/MWh (valeur
+    de l'indice de avril 2026)" on May's. A keyless MaxxFlex April was billed
+    at March's 92,61 for good. The card held for the month is re-priced in
+    place, energy and feed-in, and keeps its 750 kWh campaign, which the
+    archive's copy of the same month does not print."""
+    from custom_components.be_electricity_prices.providers import luminus
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+
+    held = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w.pdf"), "wallonia"
+    )
+    assert held.welcome_credit_kwh == 750.0
+    energy0, inj0 = held.energy, held.injection
+    assert isinstance(energy0, VariableRates) and inj0 is not None
+    may = "Index (HTVA) : Belpex = 78,94 €/MWh (valeur de l'indice de avril 2026)"
+    asked: list[str] = []
+
+    async def _next_card(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return may
+
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _next_card)
+    freezer.move_to("2026-05-10 12:00:00+02:00")
+    out = await luminus.settle_month(
+        None,  # type: ignore[arg-type]
+        "luminus_maxxflex",
+        "wallonia",
+        date(2026, 4, 1),
+        held,
+    )
+    # May runs, so its card is the live one.
+    assert asked and "documentSlug=maxxflex&" in asked[0]
+    energy, inj = out.energy, out.injection
+    assert isinstance(energy, VariableRates) and inj is not None
+    assert energy0.formula_factor is not None and energy0.formula_base is not None
+    assert energy.current == pytest.approx(
+        energy0.formula_factor * 0.07894 + energy0.formula_base
+    )
+    assert energy.current < energy0.current
+    assert energy.index_realised == pytest.approx(0.07894)
+    assert inj0.factor is not None and inj0.base is not None
+    assert inj.current == pytest.approx(inj0.factor * 0.07894 + inj0.base)
+    assert is_settled(out) and not out.provisional
+    assert replace(out, energy=energy0, injection=inj0) == held
+
+    # BasicFlex settles its energy on Belpex RLP M and its feed-in on Belpex.
+    basic = parse_snapshot(
+        "luminus_basicflex", fixture_text("luminus_basicflex_w_oct.pdf"), "wallonia"
+    )
+    may = (
+        "Index (HTVA) : Belpex RLP M = 180,00 €/MWh (valeur de l'indice de "
+        "octobre 2026) Index (HTVA): Belpex = 170,00 €/MWh (valeur de l'indice "
+        "de octobre 2026)"
+    )
+    freezer.move_to("2026-11-03 12:00:00+01:00")
+    out = await luminus.settle_month(
+        None,  # type: ignore[arg-type]
+        "luminus_basicflex",
+        "wallonia",
+        date(2026, 10, 1),
+        basic,
+    )
+    assert isinstance(out.energy, VariableRates) and out.injection is not None
+    assert out.energy.index_realised == pytest.approx(0.18)
+    assert out.injection.index_realised == pytest.approx(0.17)
+
+    # The live card of the 1st was itself a month behind in October 2026: a
+    # running next card naming another month leaves the month to be asked
+    # again, while a closed one naming another month settles nothing.
+    may = "Index (HTVA) : Belpex = 92,61 €/MWh (valeur de l'indice de mars 2026)"
+    freezer.move_to("2026-05-01 08:00:00+02:00")
+    waiting = await luminus.settle_month(
+        None,  # type: ignore[arg-type]
+        "luminus_maxxflex",
+        "wallonia",
+        date(2026, 4, 1),
+        held,
+    )
+    assert waiting == replace(held, provisional=True)
+
+    async def _product(*_a: object) -> str:
+        return "id-maxxflex"
+
+    monkeypatch.setattr(luminus, "_resolve_archive_product_id", _product)
+    freezer.move_to("2026-07-10 12:00:00+02:00")
+    asked.clear()
+    kept = await luminus.settle_month(
+        None,  # type: ignore[arg-type]
+        "luminus_maxxflex",
+        "wallonia",
+        date(2026, 4, 1),
+        held,
+    )
+    assert kept == held
+    assert "productId=id-maxxflex&" in asked[0] and "date=2026-05" in asked[0]
+    assert EXTRACTORS["luminus"].settle_month is luminus.settle_month
 
 
 def test_the_new_customer_campaign_is_read_off_the_card() -> None:

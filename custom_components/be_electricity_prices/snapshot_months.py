@@ -48,9 +48,11 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .providers._pdf import fetch_text, is_transient_fetch_error
+from .providers._settle import is_settled
 from .providers.base import (
     ArchivedSnapshotFetcher,
     ExtractorError,
+    MonthSettler,
     SupplierExtractor,
     SupplierSnapshot,
 )
@@ -407,6 +409,34 @@ async def _settled_by_supplier(
     return own
 
 
+async def _settled_in_place(
+    session: aiohttp.ClientSession,
+    settle: MonthSettler,
+    contract: str,
+    region: str,
+    year_month: date,
+    held: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """``held`` re-priced in place on its month's index (``settle``), or
+    ``held`` provisional when that cannot be had yet or failed, so it bills
+    now and is asked again. Whatever made ``held`` provisional still holds."""
+    try:
+        settled = await settle(
+            session, contract, region, year_month, replace(held, provisional=False)
+        )
+    except Exception as err:  # noqa: BLE001 - the held card still bills the month
+        _LOGGER.debug(
+            "settling %s/%s/%04d-%02d in place failed: %s",
+            contract,
+            region,
+            year_month.year,
+            year_month.month,
+            err,
+        )
+        return replace(held, provisional=True)
+    return replace(settled, provisional=settled.provisional or held.provisional)
+
+
 async def _archived_card_from_github(
     session: aiohttp.ClientSession,
     supplier: str,
@@ -711,9 +741,11 @@ async def month_card(
     card, so that month falls to the current snapshot. It is also asked over a
     row the archive caught live on a card indexed on its own month, which
     holds the estimate the card printed rather than what the month settled
-    at (``_awaits_settlement``). None when neither has the month: the
-    current card is then the proxy, and it is the running month's card by
-    definition, so that month never reaches the repository.
+    at (``_awaits_settlement``); a supplier that settles in place
+    (``settle_month``, Luminus) re-prices the row it holds instead, whichever
+    tier gave it. None when neither has the month: the current card is then
+    the proxy, and it is the running month's card by definition, so that
+    month never reaches the repository.
     A blip reading the archive is not "no card": the supplier is still
     asked, and a month neither could give is retried on the failure marker
     rather than cached. Both answer None, so a caller that keeps what it
@@ -840,6 +872,7 @@ async def month_card(
             if (
                 extractor.fetch_for_month is not None
                 and extractor.settles_on_next_card
+                and extractor.settle_month is None
                 and _awaits_settlement(archived)
             ):
                 snap = await _settled_by_supplier(
@@ -866,6 +899,15 @@ async def month_card(
                 )
                 snap = None
                 fetch_failed = True
+        if (
+            snap is not None
+            and extractor.settle_month is not None
+            and _settles_after_its_month(snap)
+            and not is_settled(snap)
+        ):
+            snap = await _settled_in_place(
+                session, extractor.settle_month, contract, region, year_month, snap
+            )
         if snap is None and archive_failed:
             # The archive may well hold the month; ask again on the failure
             # marker rather than cache a None the TTL would hold for a day.

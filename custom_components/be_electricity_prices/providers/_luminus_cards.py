@@ -686,6 +686,37 @@ def _vat_multiplier(text: str) -> float:
     return vat_multiplier(text, *_VAT_PATTERNS)
 
 
+# "Index (HTVA) : Belpex RLP M = 164,42 EUR/MWh (valeur de l'indice de
+# septembre 2026)": the month the card's own figures were computed on. The
+# SmartFlex card writes "de de septembre" and "156,4100000" in places, and
+# ComfyFlex's "du 3ieme trimestre" names no month, so it is not read.
+_PUBLISHED_INDEX_RE = re.compile(
+    r"Index\s*\(HTVA\)\s*:?\s*(Belpex(?:\s+RLP\s+M)?)\s*=\s*(\d+,\d+)\s*€/MWh\s*"
+    r"\(valeur\s+de\s+l['\u2019]indice\s+(?:de\s+)+([^\W\d_]+)\s+(20\d{2})\)"
+)
+
+
+def published_indices(text: str) -> dict[str, tuple[date, float]]:
+    """The indices a card names for the month before its own, by name
+    ("Belpex", "Belpex RLP M"), as ``(month, EUR/kWh)``.
+
+    Luminus computes a card's figures on the last value known, which is the
+    previous month's, and says which: that is what the previous month is
+    billed on. Two different values under one name make the name unusable.
+    """
+    found: dict[str, set[tuple[date, float]]] = {}
+    for match in _PUBLISHED_INDEX_RE.finditer(" ".join(text.split())):
+        number = _MONTH_NAMES.get(match.group(3).lower())
+        if number is None:
+            continue
+        found.setdefault(" ".join(match.group(1).split()), set()).add(
+            (date(int(match.group(4)), number, 1), to_float(match.group(2)) / 1000.0)
+        )
+    return {
+        name: next(iter(values)) for name, values in found.items() if len(values) == 1
+    }
+
+
 def _extract_yearly_fee(text: str) -> float:
     """Capture the 'Redevance fixe' line.
 

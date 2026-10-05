@@ -5284,6 +5284,83 @@ async def _september_from_a_live_row(
     return snap, asked
 
 
+async def test_a_supplier_settling_in_place_keeps_the_card_the_archive_holds(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Luminus's own archive serves a month without its campaign and kept
+    serving a first edition after the live card was corrected, so for it the
+    held card is re-priced in place on the index the next card names, never
+    replaced by that answer: the campaign stays, the month-indexed rate
+    moves, and the settled row is kept. A failure to settle bills the held
+    card and asks again; a row already settled is not asked."""
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    caught = replace(
+        _month_indexed_card(0.1761, "septembre 2026"), welcome_credit_kwh=675.0
+    )
+    settled_at: list[SupplierSnapshot] = []
+
+    async def settle_month(
+        _s: object, _c: str, _r: str, _m: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        settled_at.append(held)
+        energy = held.energy
+        assert isinstance(energy, VariableRates)
+        return replace(
+            held, energy=replace(energy, current=0.2079, index_realised=0.2079)
+        )
+
+    async def _fetch_for_month(*_a: object) -> SupplierSnapshot | None:
+        raise AssertionError("the supplier's archive must not replace the card")
+
+    def _extractor(settle: Any) -> SupplierExtractor:
+        return SupplierExtractor(
+            id="test",
+            label="Test",
+            contracts=(),
+            fetch=AsyncMock(),
+            fetch_for_month=_fetch_for_month,
+            settles_on_next_card=True,
+            settle_month=settle,
+        )
+
+    async def _september(extractor: SupplierExtractor, row: SupplierSnapshot) -> Any:
+        github = AsyncMock(
+            return_value=ArchivedCard(
+                snapshot=row, read_by_ocr=False, captured_live=True
+            )
+        )
+        _monthly_snapshots(hass).clear()
+        _monthly_fetched_at(hass).clear()
+        with patch.object(snapshot_months, "_archived_card_from_github", github):
+            return await _snapshot_for_month(
+                hass,
+                MagicMock(),
+                extractor,
+                "test",
+                "flanders",
+                date(2026, 9, 1),
+                _month_indexed_card(0.30, "octobre 2026"),
+            )
+
+    snap = await _september(_extractor(settle_month), caught)
+    assert snap.welcome_credit_kwh == 675.0
+    assert snap.publication_label == "septembre 2026"
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.2079)
+    assert not snap.provisional
+    assert settled_at == [caught]
+
+    settled_at.clear()
+    again = await _september(_extractor(settle_month), snap)
+    assert again is snap and settled_at == []
+
+    async def _down(*_a: object) -> SupplierSnapshot:
+        raise ExtractorError("HTTP 503 fetching the next card")
+
+    failed = await _september(_extractor(_down), caught)
+    assert failed.energy == caught.energy and failed.provisional
+
+
 async def test_a_live_row_of_a_month_indexed_card_is_settled_by_the_supplier(
     hass: HomeAssistant, freezer: Any
 ) -> None:

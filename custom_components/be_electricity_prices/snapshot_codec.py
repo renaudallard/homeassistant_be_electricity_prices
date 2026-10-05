@@ -448,7 +448,9 @@ _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
 # And for the energy leg: SmartFlex's Happy Sunday band, on the card's
 # TimeOfUseRates and on the monthly leg it re-prices through. Every one
 # defaults to None, so a row carries them only when its card prints the band.
+# ``index_realised`` joined it when a time-of-use leg could be settled too.
 _ENERGY_OPTIONAL_KEYS = (
+    "index_realised",
     "sunday",
     "formula_factor_sunday",
     "formula_base_sunday",

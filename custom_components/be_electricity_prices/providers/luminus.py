@@ -97,7 +97,9 @@ from ._luminus_cards import (
     _extract_injection,
     _extract_promo,
     _VAT_PATTERNS,
+    published_indices,
 )
+from ._settle import settled_energy, settled_injection
 
 _API_URL = "https://www.luminus.be/api-next/get-pricelist/"
 
@@ -434,6 +436,88 @@ async def fetch_for_month(
     return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
 
 
+async def settle_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+    held: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """``held``, the card of a closed month, re-priced on the index the next
+    card names for it.
+
+    The cards print their month-indexed rates at the previous month's
+    index, "Les prix affiches sont calcules sur la base de la derniere
+    valeur Belpex connue (mois precedent)", and the next card names the
+    month's own: "Belpex = 156,41 EUR/MWh (valeur de l'indice de septembre
+    2026)", and "Belpex RLP M" for BasicFlex. A keyless entry billed every
+    closed month a month behind: BasicFlex 3,26 c/kWh under in September
+    2026, 2,61 over in February.
+
+    In place, never by replacing the card: Luminus's archive serves a month
+    without its new-customer campaign, and on 5 October 2026 it still served
+    the first October edition the live card had corrected. So the energy
+    formula rows (MaxxFlex, SmartFlex, BasicFlex) and the monthly feed-in
+    are re-priced, and every other field of ``held`` stays.
+
+    The next card is the live one while its month runs and the archive's
+    after. Not out yet, or naming another month while it is the live one
+    (the live card of the 1st was a month behind in October 2026), and the
+    month is ``provisional`` so it is asked again. A next card of a closed
+    month that names another month, or no index a leg needs, settles nothing.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region not in _REGION_TO_TAB:
+        return held
+    first = date(year_month.year, year_month.month, 1)
+    following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+    running = dt_util.now().date().replace(day=1)
+    if following > running:
+        return replace(held, provisional=True)
+    live = following == running
+    try:
+        if live:
+            text = await fetch_pdf_text(session, _document_url(contract.slug, region))
+        else:
+            product_id = await _resolve_archive_product_id(
+                session, contract, region, following
+            )
+            if product_id is None:
+                return held
+            text = await fetch_pdf_text(
+                session, _archive_pdf_url(product_id, following, region)
+            )
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return replace(held, provisional=True) if live else held
+    named = {
+        name: value
+        for name, (month, value) in published_indices(text).items()
+        if month == first
+    }
+    energy, injection = held.energy, held.injection
+    energy_index = injection_index = None
+    if getattr(energy, "month_indexed", False):
+        rlp = getattr(energy, "rlp_indexed", False)
+        energy_index = named.get("Belpex RLP M" if rlp else "Belpex")
+        if energy_index is None:
+            return replace(held, provisional=True) if live else held
+    if injection is not None and injection.month_indexed:
+        injection_index = named.get("Belpex")
+        if injection_index is None:
+            return replace(held, provisional=True) if live else held
+    return replace(
+        held,
+        energy=energy if energy_index is None else settled_energy(energy, energy_index),
+        injection=(
+            injection
+            if injection is None or injection_index is None
+            else settled_injection(injection, injection_index)
+        ),
+    )
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _API_URL
 ) -> SupplierSnapshot:
@@ -545,4 +629,6 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     fetch_for_month=fetch_for_month,
+    settles_on_next_card=True,
+    settle_month=settle_month,
 )
