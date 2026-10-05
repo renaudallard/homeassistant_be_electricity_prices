@@ -269,6 +269,8 @@ Columns map to `DsoOverlay` (`_ecopower_overlays.py`):
 - `capacity_eur_per_kw_year` = capacity (as printed, HTVA; `apply_vat` grosses it)
 - `distribution_single` = enkelvoudig (unscaled)
 - `distribution_exclusive_night` = uitsluitend-nacht (unscaled)
+- `network_ceiling_eur_per_kwh` = maximumtarief (as printed, HTVA; optional, None on a row without
+  one)
 - `transport = 0.0` (Elia transport is rolled into distribution on Ecopower's card; there is no
   separate transport line, so it stays 0 rather than being double-counted by a guess,
   `test_ecopower.py`)
@@ -282,8 +284,10 @@ databeheer | capacity | afname enkelvoudig | afname uitsluitend-nacht | [maximum
 ```
 
 The row is asked for at six figures and then at five (`_ecopower_overlays.py`); the four columns
-read lead the row either way, and the optional maximumtarief and the trailing injection network
-tariff are ignored (`DsoOverlay` does not model them). Column mapping (`_ecopower_overlays.py`):
+read lead the row either way. The optional maximumtarief is skipped because
+`resolve_vreg_network_ceiling` (`_resolve.py`) fills the VREG ceiling at read time, and the trailing
+injection network tariff because `DsoOverlay` does not model it. Column mapping
+(`_ecopower_overlays.py`):
 `distribution_single` = column 3, `distribution_exclusive_night` = column 4,
 `capacity_eur_per_kw_year` = column 2, `data_management_per_year` = column 1 (both as printed,
 HTVA; `apply_vat` grosses them), `transport = 0.0`.
@@ -439,7 +443,8 @@ Every non-obvious hazard the source comments flag:
   the parser takes `abs()` so a card that ever prints it positive is not flipped into a debit
   (`_ecopower_cards.py`).
 - **`Maximumtarief` optional 7th column.** Slides into a DSO row where Fluvius publishes a maximum
-  (Imewo April 2026). The regex skips it; misreading it would mis-align the distribution rate
+  (Imewo April 2026). The parser stores it in `network_ceiling_eur_per_kwh`; misreading it as a
+  rate would mis-align the distribution rate
   (`_ecopower_overlays.py`; `test_april_card_extracts_imewo_with_optional_max_column`,
   `test_ecopower.py`).
 - **Wrapped `Fluvius Midden-Vlaanderen` label on the dbs card.** pdfplumber splits the long label

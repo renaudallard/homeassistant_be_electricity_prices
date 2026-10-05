@@ -150,8 +150,10 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
     enkelvoudig (EUR/kWh) | afname uitsluitend-nacht (EUR/kWh) |
     [maximumtarief] | injectietarief``, with no separating dashes. We
     read the first four numeric columns: the same four the gbs parser
-    keeps, and ignore the optional maximumtarief and the injection
-    network tariff, which ``DsoOverlay`` does not model.
+    keeps. The optional maximumtarief is skipped because
+    ``_resolve.resolve_vreg_network_ceiling`` fills the VREG ceiling at
+    read time, and the injection network tariff because ``DsoOverlay``
+    does not model it.
     """
     section = _slice_between(text, "Nettarieven", "Heffingen")
     if section is None:
