@@ -57,7 +57,6 @@ from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
     _compensation_kva,
-    _dso_prosumer_monthly_fee,
     _prosumer_monthly_fee,
     _welcome_credit_eur,
     bills_gross_network,
@@ -89,6 +88,7 @@ from .spot_stats import (
     _spp_injection_spot,
 )
 from .synergrid import SppWeights
+from .ytd_legs import _dso_prosumer_day
 from collections.abc import Callable
 from datetime import date, datetime
 from homeassistant.config_entries import ConfigEntry
@@ -361,9 +361,14 @@ async def _accrue_cost(
         if sides is not None:
             cons_per_hour = sides.consumption.kwh
             inj_per_hour = sides.injection.kwh
-    # Article 81's cap on a double-flow meter (fees.gross_network_rebate).
+    # Article 81's cap on a double-flow meter (fees.gross_network_rebate),
+    # compared with the prosumer fee of the days the meter reported, as the
+    # live walks compare it (ytd_legs._dso_prosumer_day).
     network_cap = bills_gross_network(entry.data)
     running_prosumer_network = 0.0
+    reported_days = {
+        dt_util.as_local(h).date() for h in cons_per_hour.keys() | inj_per_hour.keys()
+    }
 
     _snap_for = ctx.snap_for
     spp_weights = ctx.spp_weights
@@ -572,12 +577,11 @@ async def _accrue_cost(
                     / days_in_full_month
                     / hours_per_local_date[local.date()]
                 )
-                if network_cap:
-                    running_prosumer_network += (
-                        _dso_prosumer_monthly_fee(overlay, kva)
-                        / days_in_full_month
-                        / hours_per_local_date[local.date()]
-                    )
+        if network_cap and bd is not None and local.date() in reported_days:
+            running_prosumer_network += (
+                _dso_prosumer_day(snap_h, entry, local.date())
+                / hours_per_local_date[local.date()]
+            )
 
         # Compensation regime clamps the YTD energy term at zero
         # (Walloon meter forfeits surplus injection past

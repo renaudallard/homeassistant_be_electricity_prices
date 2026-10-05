@@ -1536,7 +1536,11 @@ either) and the gross side is summed as metered. The year-to-date walk
 totals per register (`_annual_network_rebate`, `compare_quote.py`, with the
 register network rates from `_register_network_rates`). A window with no gross
 draws at all gets no rebate: that is a meter that reported nothing, not one
-that drew nothing. The live `prosumer_cost` sensor keeps showing the flat fee,
+that drew nothing. For the same reason the walks take `prosumer_dso` over the
+days the meter reported alone (`_dso_prosumer_day`, `ytd_legs.py`), each day
+its month's fee over the month's days: summed over the whole window, a meter
+added in June took five months of tariff off the bill with no network billed
+against them. The days it did not report keep the flat fee. The live `prosumer_cost` sensor keeps showing the flat fee,
 which is the cap. The capacity is required all the same
 (`compensation_lacks_kva`, `fees.py`): at 0 neither option is billed, and the
 solar step refuses it.

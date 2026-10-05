@@ -55,7 +55,7 @@ from .meter_hourly import (
     _metered_sides,
     _top_up_today_hourly,
 )
-from .fees import bills_gross_network, in_first_contract_year
+from .fees import bills_gross_network, gross_network_rebate, in_first_contract_year
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
@@ -82,6 +82,7 @@ from .spot_stats import (
     _spp_injection_spot,
 )
 from .synergrid import RlpWeights, SppWeights
+from .ytd_legs import _dso_prosumer_day
 from collections.abc import Awaitable, Callable, Collection
 from datetime import date, datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
@@ -115,16 +116,22 @@ def _record_network(
     entry: ConfigEntry,
     *,
     allocated: bool,
+    prosumer: float,
 ) -> None:
-    """Keep the window's network charges beside its netted bill, on the net
-    draws and on the gross ones, for an entry whose network article 81 caps
-    (:func:`fees.gross_network_rebate`). Both walks fill them the same way, and
-    the bill subtracts the rebate only where they are present: a window no
-    meter reported has no gross draws to compare the prosumer tariff with."""
+    """Settle the article 81 cap (:func:`fees.gross_network_rebate`) for an
+    entry whose network it caps, and keep its terms beside the netted bill:
+    the window's network charges on the net draws and on the gross ones,
+    against ``prosumer``, the DSO's half of the prosumer fee over the days the
+    meter reported. Both walks fill them the same way, and the bill subtracts
+    the rebate only where they are present: a window no meter reported has no
+    gross draws to compare the prosumer tariff with."""
     if not bills_gross_network(entry.data):
         return
     stats["net_network_ytd_eur"] = netting.net_network(allocated=allocated)
     stats["gross_network_ytd_eur"] = netting.gross_network()
+    stats["network_cap_rebate_eur"] = gross_network_rebate(
+        prosumer, stats["net_network_ytd_eur"], stats["gross_network_ytd_eur"]
+    )
 
 
 async def _ytd_hourly_energy(
@@ -323,6 +330,9 @@ async def _ytd_hourly_energy(
     dropped_cons = 0.0
     dropped_inj = 0.0
     netting = _NetAllocation()
+    # The days the meter reported, whose prosumer fee alone the article 81
+    # cap is compared with (ytd_legs._dso_prosumer_day).
+    reported_days: set[date] = set()
     # The window's end: the running hour for a window that runs to today, the
     # midnight after its last day for one that closed earlier.
     until = (
@@ -436,6 +446,8 @@ async def _ytd_hourly_energy(
                 network=bd.network,
                 gross_kwh=kwh_cons,
             )
+            if not unrecorded:
+                reported_days.add(local.date())
             d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
@@ -518,7 +530,14 @@ async def _ytd_hourly_energy(
         energy_cost = netting.billed(allocated=allocated)
         if breakdown is not None:
             breakdown["energy_ytd_raw_eur"] = netting.raw(allocated=allocated)
-            _record_network(breakdown, netting, entry, allocated=allocated)
+            prosumer = 0.0
+            if bills_gross_network(entry.data):
+                for day in reported_days:
+                    snap_d = await _snap_for(date(day.year, day.month, 1))
+                    prosumer += _dso_prosumer_day(snap_d, entry, day)
+            _record_network(
+                breakdown, netting, entry, allocated=allocated, prosumer=prosumer
+            )
     if breakdown is not None:
         breakdown["hours_seen"] = float(hours_seen)
         breakdown["hours_priced"] = float(hours_priced)

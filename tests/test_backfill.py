@@ -1738,6 +1738,68 @@ async def test_compensation_allocates_over_every_hour_of_the_window(
     assert stats["hours_seen"] == stats["hours_priced"] == float(seen)
 
 
+async def test_the_network_cap_weighs_only_the_hours_the_meter_reported(
+    hass: HomeAssistant,
+) -> None:
+    """The hourly walk and the backfill compare the prosumer tariff of the
+    days the meter reported with their network, and agree.
+
+    Both summed the tariff over the whole window, so a meter added in June
+    took five months of tariff off the bill with nothing billed against it;
+    they agreed only because they shared the mistake."""
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    last = date(2026, 9, 30)
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_pic=0.15,
+                distribution_medium=0.10,
+                distribution_eco=0.06,
+                transport=0.0145,
+                prosumer_eur_per_kva_year=60.0,
+            )
+        },
+    )
+
+    def per_hour(entity_id: str, h: datetime) -> float | None:
+        if dt_util.as_local(h).date() < date(2026, 6, 1):
+            return None
+        return _evening_draw_midday_export(entity_id, h)
+
+    entry = make_entry(
+        meter="mono",
+        dso_tariff_mode="impact",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        double_flow_meter=True,
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    stats: dict[str, float] = {}
+    backfill, live = await _live_and_backfill(
+        hass,
+        entry,
+        snap,
+        last,
+        per_hour,
+        rlp=_winter_heavy_profile(2026),
+        breakdown=stats,
+    )
+    assert live == pytest.approx(backfill, abs=1e-3)
+    # June to September: four months of 5 kVA x 60 EUR / 12.
+    reported = 4 * 25.0
+    assert stats["network_cap_rebate_eur"] == pytest.approx(
+        max(
+            0.0,
+            reported + stats["net_network_ytd_eur"] - stats["gross_network_ytd_eur"],
+        )
+    )
+    assert stats["network_cap_rebate_eur"] > 0.0
+
+
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
     hass: HomeAssistant,
 ) -> None:

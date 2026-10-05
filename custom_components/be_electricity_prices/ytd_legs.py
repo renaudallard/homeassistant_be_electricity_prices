@@ -211,14 +211,10 @@ async def _ytd_prosumer(
     window_start: date,
     contract: str | None = None,
     cached_only: bool = False,
-    network_only: bool = False,
 ) -> float:
     """Sum the monthly prosumer fee across YTD using each month's archived
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
-    honoured for the months it applies to.
-
-    ``network_only`` sums the DSO's half alone, leaving out the supplier's
-    forfait: that is the half article 81 caps (fees.gross_network_rebate)."""
+    honoured for the months it applies to."""
     kva = _compensation_kva(entry)
     if not kva:
         return 0.0
@@ -236,16 +232,27 @@ async def _ytd_prosumer(
         contract=contract,
         cached_only=cached_only,
     ):
-        overlay = snap_m.dsos.get(dso)
-        monthly_fee = (
-            _dso_prosumer_monthly_fee(overlay, kva)
-            if network_only
-            else _prosumer_monthly_fee(overlay, snap_m, kva)
-        )
+        monthly_fee = _prosumer_monthly_fee(snap_m.dsos.get(dso), snap_m, kva)
         if monthly_fee == 0.0:
             continue
         total += monthly_fee * (days_in_ytd / days_in_full_month)
     return total
+
+
+def _dso_prosumer_day(
+    snapshot: SupplierSnapshot, entry: ConfigEntry, day: date
+) -> float:
+    """``day``'s share of the DSO's half of the prosumer fee on ``snapshot``,
+    the half article 81 caps (fees.gross_network_rebate), prorated by the
+    month's own days as :func:`_ytd_prosumer` prorates the whole fee.
+
+    Every walk compares it against the network of the days its meter
+    reported and those alone: summed over the whole window it took the fee of
+    the days no meter read off the bill without billing any network on them,
+    the fees-only floor of a household that set Home Assistant up in June."""
+    overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
+    monthly = _dso_prosumer_monthly_fee(overlay, _compensation_kva(entry))
+    return monthly / calendar.monthrange(day.year, day.month)[1]
 
 
 async def _ytd_capacity(

@@ -12029,6 +12029,59 @@ async def test_a_double_flow_meter_bills_the_cheaper_network_option(
     assert await _year(cheap, 1.0, double_flow_meter=True) == pytest.approx(capped)
 
 
+async def test_the_network_cap_weighs_only_the_days_the_meter_reported(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Article 81's cap compares the prosumer tariff of the days the meter
+    reported with the network those same days drew.
+
+    Summed over the whole window, the tariff of the days no meter read came
+    off the bill with no network billed against it: a household whose meter
+    history starts in March lost January's and February's tariff, 50 EUR on
+    a first quarter. Those days keep the tariff, which is the cap."""
+    freezer.move_to("2026-03-31 12:00:00+02:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.02,
+                prosumer_eur_per_kva_year=60.0,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    march = _days_through(date(2026, 3, 1), dt_util.now().date())
+    entry = _yearly_entry(
+        meter="mono",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        double_flow_meter=True,
+    )
+    diag: dict[str, float] = {}
+    with _patch_recorder_per_entity(
+        {
+            "sensor.day_cons": {d: 10.0 for d in march},
+            "sensor.night_cons": {d: 0.0 for d in march},
+            "sensor.day_inj": {d: 6.0 for d in march},
+            "sensor.night_inj": {d: 0.0 for d in march},
+        }
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            breakdown=diag,
+        )
+    # March alone: 310 kWh drawn, 124 net, and March's 25 EUR of tariff.
+    rebate = 25.0 + 124 * 0.12 - 310 * 0.12
+    assert diag["network_cap_rebate_eur"] == pytest.approx(rebate)
+    # The quarter's tariff, 75 EUR, stays billed less that rebate.
+    assert cost == pytest.approx(124 * 0.32 + 75.0 - rebate)
+
+
 def _flat_month_spots(today: date, value: float = 0.06) -> dict[datetime, float]:
     """One flat month of hourly spots up to ``today``.
 

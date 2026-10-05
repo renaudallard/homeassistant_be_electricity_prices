@@ -530,7 +530,9 @@ different, as long as the edit keeps the same supplier, contract and region
      charges on your net draws would cost (article 81 of the 2025-2029 tariff
      methodology). The running bill, the backfilled series and the compare
      page bill the lower of the two; energy and the levies stay netted either
-     way. Leave it off for a meter that runs backwards. `prosumer_cost` keeps
+     way. Days your meter has no readings for keep the prosumer tariff: only
+     the days it reported are compared. Leave it off for a meter that runs
+     backwards. `prosumer_cost` keeps
      showing the tariff, which is the cap; `current_year_cost` carries
      `net_network_ytd_eur`, `gross_network_ytd_eur` and
      `network_cap_rebate_eur`, the difference taken off.
