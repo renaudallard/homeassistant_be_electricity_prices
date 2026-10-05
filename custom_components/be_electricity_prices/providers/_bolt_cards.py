@@ -242,8 +242,9 @@ def _extract_energy(
         # A Walloon card prices this product two ways and lets the customer
         # pick; the incitative bands ride on the same contract, selected by
         # dso_tariff_mode, exactly as the DSO side already is.
-        # The Impact block is residential and Walloon; a professional card
-        # is HTVA and carries no such block.
+        # The professional cards print the Walloon Impact block too, priced
+        # HTVA like the rest of the card, so their bands are read with a 1.0
+        # factor and the snapshot's vat_rate carries the VAT.
         bands = _impact_energy_bands(
             text,
             1.0

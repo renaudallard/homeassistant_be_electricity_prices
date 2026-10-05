@@ -32,8 +32,8 @@ region) at stable URLs:
         latest/<PRODUCT>_ELECTRICITY_<REGION>_FR.pdf
 
 The ``/latest/`` segment auto-rolls each month so no listing scrape is
-needed. All nine residential electricity products are registered. Each
-is available in V/W/B (TotalEnergies serves all three regions).
+needed. All nine residential electricity products are registered, and
+every one but Impact (Wallonia only) is published in all three regions.
 
 The PDFs include rotated DSO / tax columns that pypdf cannot extract
 ('Rotated text discovered. Output will be incomplete.'). The extractor

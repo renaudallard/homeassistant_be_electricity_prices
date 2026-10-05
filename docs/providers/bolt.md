@@ -253,10 +253,8 @@ The `spot_indexed_injection` column is the registry flag verbatim, and it reads 
 because the flag answers "does this product's feed-in need spots its ENERGY leg never fetches".
 Every fixed and variable Bolt card sets it: they print the quarter-hourly Belpex injection formula
 beside the illustrative figure and settle on it, while their energy leg is a printed rate that asks
-for no spot at all. The dynamic contracts leave it `False` and are marked *via energy* here: their
-own formula already collects the ENTSO-E key, so the flag would offer a second time what the entry
-has. The column used to read `no` down the whole non-dynamic half, which is the exact inverse of
-`bolt.py`.
+for no spot at all. The column used to read `no` down the whole non-dynamic half, which is the
+exact inverse of `bolt.py`.
 
 `test_bolt_is_registered` (`tests/test_bolt.py`) pins the count at exactly twelve, so adding or
 removing a product must update that test. `test_every_variable_card_offers_the_settlement_choice`
