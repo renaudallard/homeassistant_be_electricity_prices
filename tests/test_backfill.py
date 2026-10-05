@@ -29,9 +29,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import math
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 from custom_components.be_electricity_prices import energy_meters
@@ -1433,6 +1434,218 @@ async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
     assert flat_live - capped_live == pytest.approx(
         37.5 + net_network - gross_network, abs=1e-6
     )
+
+
+async def _live_and_backfill(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    snap: SupplierSnapshot,
+    last: date,
+    per_hour: Callable[[str, datetime], float | None],
+    *,
+    cards: Callable[[date], SupplierSnapshot | None] = lambda _m: None,
+    spots: dict[datetime, float] | None = None,
+    quarters: dict[datetime, list[float]] | None = None,
+    rlp: dict[tuple[int, int, int], float] | None = None,
+) -> tuple[float, float]:
+    """The live year-to-date and the backfilled series' last row, over 1
+    January to ``last`` on one recorder, one set of month cards and one
+    day-ahead cache, frozen in the last minute of ``last``.
+
+    ``per_hour`` answers a sensor's kWh in one UTC hour, ``None`` for an hour
+    the recorder holds no row for. ``cards`` answers a month's archived card,
+    ``None`` for one billed on ``snap``.
+    """
+    from custom_components.be_electricity_prices import cohort, ytd_cost
+
+    first = date(last.year, 1, 1)
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(first).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+    spots = spots or {}
+
+    async def fake_deltas(
+        _h: Any, entity_id: str, start: date, end: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        lo = dt_util.start_of_local_day(start).astimezone(UTC)
+        hi = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+        rows = [
+            (h, kwh)
+            for h in hours
+            if lo <= h < hi and (kwh := per_hour(entity_id, h)) is not None
+        ]
+        if period == "hour":
+            return rows
+        days: dict[datetime, float] = {}
+        for h, kwh in rows:
+            day = dt_util.start_of_local_day(dt_util.as_local(h)).astimezone(UTC)
+            days[day] = days.get(day, 0.0) + kwh
+        return sorted(days.items())
+
+    async def fake_card(*args: Any, **_k: Any) -> SupplierSnapshot:
+        month, current = args[5], args[6]
+        return cards(month) or current
+
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots=dict(spots),
+        _historical_spot_quarters=dict(quarters or {}),
+        _spp_weights={},
+        _rlp_weights=rlp or {},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+    captured: list[dict[str, Any]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.extend(stats)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_read_deltas", new=fake_deltas),
+        patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
+        patch.object(cohort, "_snapshot_for_month", new=fake_card),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: dt_util.start_of_local_day(last) + timedelta(hours=23, minutes=59),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            dict(spots),
+            dict(quarters or {}),
+        )
+        live = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+            spot_quarters=dict(quarters or {}),
+            rlp_weights=rlp or None,
+        )
+    assert captured, "the backfill imported nothing"
+    assert live is not None
+    return captured[-1]["sum"], live
+
+
+def _sine_spot(h: datetime) -> float:
+    """A day-ahead curve that troughs at midday, as a sunny one does."""
+    hour = dt_util.as_local(h).hour
+    return (
+        0.07
+        + 0.05 * math.sin((hour - 6) / 24 * 2 * math.pi)
+        - 0.05 * (11 <= hour <= 14)
+    )
+
+
+def _evening_draw_midday_export(entity_id: str, h: datetime) -> float | None:
+    hour = dt_util.as_local(h).hour
+    if entity_id == "sensor.cons":
+        return 0.3 + 0.3 * (18 <= hour <= 21)
+    if entity_id == "sensor.inj":
+        return 0.8 if 10 <= hour <= 15 else 0.0
+    return None
+
+
+@pytest.mark.parametrize("walk", ["dynamic", "impact"])
+@pytest.mark.parametrize("index", ["month_indexed", "spp_indexed"])
+async def test_a_month_indexed_credit_ignores_the_hours_quarters(
+    hass: HomeAssistant, walk: str, index: str
+) -> None:
+    """A feed-in credit settled on a month index is credited at that index
+    by the live walk too, whatever the hour's 15-minute spots did.
+
+    The quarters are kept only for a floored per-slot feed-in, so they reach
+    a walk whose current card has one, or a comparison handing the household's
+    own to a candidate. The live walk handed them on whenever the WALK was not
+    a month-mean one, which a dynamic or a per-hour walk never is, and a month
+    whose own card indexes its credit on the month was credited quarter by
+    quarter. The backfill asks the hour's own card and credits the month."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    last = date(2026, 3, 31)
+    month_credit = InjectionRates(
+        current=0.03,
+        factor=1.0,
+        base=-0.01,
+        floor_at_zero=True,
+        month_indexed=index == "month_indexed",
+        spp_indexed=index == "spp_indexed",
+    )
+    overlay = DsoOverlay(
+        distribution_single=0.10,
+        distribution_peak=0.12,
+        distribution_offpeak=0.08,
+        distribution_pic=0.15,
+        distribution_medium=0.10,
+        distribution_eco=0.06,
+        transport=0.0145,
+    )
+    if walk == "dynamic":
+        # Today's card keeps the quarters for its floored per-slot credit;
+        # January and February were held on a month-indexed one.
+        snap = make_snapshot(
+            energy=DynamicRates(factor=1.0, base=0.02, quarter_hourly=True),
+            dsos={"ores": overlay},
+            injection=InjectionRates(factor=1.0, base=-0.01, floor_at_zero=True),
+        )
+        old = replace(snap, injection=month_credit)
+    else:
+        snap = old = make_snapshot(
+            energy=FixedRates(single=0.18, peak=0.21, offpeak=0.15),
+            dsos={"ores": overlay},
+            injection=month_credit,
+        )
+    entry = make_entry(
+        meter="mono",
+        dso_tariff_mode="bi_horaire" if walk == "dynamic" else "impact",
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+    )
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+    spots = {h: _sine_spot(h) for h in hours}
+    quarters = {h: [v - 0.05, v - 0.015, v + 0.015, v + 0.05] for h, v in spots.items()}
+    backfill, live = await _live_and_backfill(
+        hass,
+        entry,
+        snap,
+        last,
+        _evening_draw_midday_export,
+        cards=lambda month: old if month < date(2026, 3, 1) else None,
+        spots=spots,
+        quarters=quarters,
+    )
+    assert live == pytest.approx(backfill, abs=1e-3)
 
 
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(

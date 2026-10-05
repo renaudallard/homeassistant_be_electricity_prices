@@ -466,9 +466,12 @@ async def _ytd_hourly_energy(
             inj_rate = _historical_injection_rate(
                 snap_h.injection,
                 inj_spot,
+                # Asked of the hour's own card, as the backfill asks it: a
+                # month whose credit settles on a month index is not priced by
+                # what one hour's quarters did, whatever walk it falls in.
                 quarters=(
                     quarters.get(utc_hour)
-                    if hourly_injection or not monthly_mean
+                    if hourly_injection or not _injection_on_month_mean(snap_h)
                     else None
                 ),
                 energy=snap_h.energy,
