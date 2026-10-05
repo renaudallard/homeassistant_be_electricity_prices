@@ -1580,7 +1580,7 @@ local, and pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a
 quick pass.
 
 Tests run against fixture PDFs and HTML snippets in
-[`tests/fixtures/`](./tests/fixtures/) (real supplier cards spanning June 2025 to September 2026, one or more
+[`tests/fixtures/`](./tests/fixtures/) (real supplier cards from June 2025 on, one or more
 per card-publishing supplier — the expert custom supplier has no card —
 plus tiny HTML snippets under `tests/fixtures/discover/` for
 catalog-discovery tests). Refresh a current-month fixture with the
