@@ -216,7 +216,7 @@ the `Contract`s it sells (`providers/_rates.py`), each carrying a `TariffKind`
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/_rates.py`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
 | `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/_rates.py`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
 | `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/_rates.py`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. Cociter's card prints last month's BELIX per band and flags `month_indexed`, so `_month_indexed_leg` re-prices it through a banded `SpotMonthlyRates`. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/_rates.py`) | energie.be Variabel, Energy Knights Essentia Online, Trevion Groene Stroom Flex / LifePowr / FlexiO Max (all Belpex_RLP), and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/_rates.py`) | energie.be Variabel, Energy Knights Essentia Online, Trevion Groene Stroom Flex / LifePowr / FlexiO Max, EnergyVision 1.800 kWh vast / vaste injectieprijs 3 jaar / Laadpunt / Groene stroom (all Belpex_RLP), and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. Also the leg a month-indexed variable, TOU or Impact card re-prices through, carrying per-meter, per-slot or per-band coefficient pairs. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
 their home region) and `spot_indexed_injection` (`providers/_rates.py`), a flag for the
@@ -358,9 +358,23 @@ shared rows are evicted on unload only when no sibling entry still references th
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py`), so
 a single transient CDN timeout does not false-alarm.
 
-The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the
-spot-indexed-injection case (the Cociter variable cards on the injection regime). Static, variable, and TOU
-contracts never touch ENTSO-E for their consumption price.
+The ENTSO-E spot curve is fetched only for contracts whose price reads it (`coordinator_prices.py`):
+
+- a dynamic contract, for each slot's own price;
+- a `spot_monthly` contract, for the delivery month's mean;
+- a month-indexed variable, TOU or Impact card (`Contract.month_indexed_energy`), which with
+  a key is re-priced on the delivery month's mean through a `SpotMonthlyRates` leg
+  (`cohort_legs._month_indexed_leg`) and without one keeps the figure it prints, which is
+  last month's;
+- on the injection regime, a card whose feed-in credit is index-linked while its energy leg
+  fetches no spots (`Contract.spot_indexed_injection`), fixed cards included: per slot
+  (`_injection_needs_spot`) or on the month's mean, plain or SPP-weighted
+  (`_injection_needs_month_spot`, both in `injection.py`). The README's ENTSO-E key section
+  says how many contracts that is.
+
+An earlier contract recorded through a supplier switch can ask for them too
+(`periods_need_spots`, `contract_periods.py`). Every other contract, a fixed card with a fixed
+feed-in credit for one, never touches ENTSO-E.
 
 ## Adding a new supplier
 
