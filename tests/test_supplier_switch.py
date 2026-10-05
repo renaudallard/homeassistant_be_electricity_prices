@@ -1136,6 +1136,76 @@ async def test_an_old_card_published_as_page_images_prices_on_the_archive_readin
     assert priced_from_dict(priced_to_dict(priced)) == priced
 
 
+async def test_a_flemish_pricing_is_redone_when_the_billed_peak_moves(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The earlier contracts' capacity term is priced on the billed peak. It
+    stood for the day, so a peak that moved restated the entry's own days on
+    the next tick and the old contract's only at the next day's pricing,
+    then stepped. The pricing stands only on the peak it was priced on; a
+    Walloon one carries no peak and is not redone."""
+    freezer.move_to("2026-10-14 23:30:00+02:00")
+    today = date(2026, 10, 14)
+    flemish: dict[str, Any] = {"region": "flanders", "dso": "fluvius_imewo"}
+    entry = make_entry(
+        **flemish,
+        previous_contracts=[
+            {"until": "2026-03-01", "data": _held("eneco", "power_fix", **flemish)}
+        ],
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    periods = previous_periods(entry.data, date(2026, 1, 1), today)
+    row = PricedPeriod(
+        start=date(2026, 1, 1),
+        end=date(2026, 2, 28),
+        supplier="eneco",
+        contract="power_fix",
+        cost=180.0,
+        month_cost=None,
+        stand_in=False,
+    )
+    peak = 3.1
+    coord._billed_peak_kw = lambda: peak  # type: ignore[method-assign]
+    pricing = AsyncMock(return_value=[row])
+    with patch(f"{_COSTS}.price_previous_periods", pricing):
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+        assert coord._previous_priced is not None
+        # The same peak: the day's pricing stands.
+        coord._schedule_previous_pricing(periods, today)
+        assert pricing.await_count == 1
+        # A higher one minutes later is priced at once.
+        freezer.tick(timedelta(minutes=5))
+        peak = 3.4
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+        assert pricing.await_count == 2
+    assert coord._previous_priced.peak_kw == 3.4
+    # Stored and read back with it; a blob from before it reads no peak.
+    stored = priced_to_dict(coord._previous_priced)
+    assert priced_from_dict(stored) == coord._previous_priced
+    del stored["peak_kw"]
+    restored = priced_from_dict(stored)
+    assert restored is not None and restored.peak_kw == 0.0
+    # Outside Flanders the peak prices nothing and is not watched.
+    walloon = make_entry(
+        previous_contracts=[
+            {"until": "2026-03-01", "data": _held("eneco", "power_fix")}
+        ]
+    )
+    walloon.add_to_hass(hass)
+    other = BePricesCoordinator(hass, walloon)
+    other._billed_peak_kw = lambda: peak  # type: ignore[method-assign]
+    assert (
+        other._previous_peak_kw(previous_periods(walloon.data, date(2026, 1, 1), today))
+        == 0.0
+    )
+
+
 async def test_a_stand_in_keeps_the_pricing_on_its_own_cards_and_is_asked_again(
     hass: HomeAssistant, freezer: Any
 ) -> None:

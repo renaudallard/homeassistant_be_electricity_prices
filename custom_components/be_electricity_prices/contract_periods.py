@@ -155,12 +155,15 @@ class PricedPeriods:
     pricing ran and ``month`` the first day of the month the ``month_cost``
     parts belong to. Kept by the coordinator and in its store, so a restart the
     same day serves it rather than fetching the old supplier's cards again.
+    ``peak_kw`` is the billed capacity peak a Flemish period was priced on,
+    0.0 when none is: the day's pricing stands only while it holds.
     """
 
     key: str
     day: date
     month: date
     rows: tuple[PricedPeriod, ...]
+    peak_kw: float = 0.0
 
 
 def priced_to_dict(priced: PricedPeriods) -> dict[str, Any]:
@@ -168,6 +171,7 @@ def priced_to_dict(priced: PricedPeriods) -> dict[str, Any]:
         "key": priced.key,
         "day": priced.day.isoformat(),
         "month": priced.month.isoformat(),
+        "peak_kw": priced.peak_kw,
         "rows": [
             {
                 "start": row.start.isoformat(),
@@ -209,6 +213,7 @@ def priced_from_dict(blob: Mapping[str, Any]) -> PricedPeriods | None:
             day=date.fromisoformat(blob["day"]),
             month=date.fromisoformat(blob["month"]),
             rows=rows,
+            peak_kw=float(blob.get("peak_kw", 0.0)),
         )
     except (KeyError, TypeError, ValueError):
         return None

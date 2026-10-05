@@ -811,7 +811,9 @@ one, starting from what you have now. From then on:
   CD-14d03, section 5.1.2): a surplus banked before the switch does not offset
   consumption after it.
 - The earlier contracts are priced once a day in the background, because that
-  means fetching the old supplier's cards. After you record a switch,
+  means fetching the old supplier's cards, and again as soon as the billed
+  capacity peak moves in Flanders, so the old contract's capacity term follows
+  your peak as your current contract's does. After you record a switch,
   `current_year_cost` reads unknown until that pricing lands, usually within
   minutes, rather than a year missing a whole contract. It stays unknown while
   an earlier contract cannot be priced at all, and is tried again every hour:

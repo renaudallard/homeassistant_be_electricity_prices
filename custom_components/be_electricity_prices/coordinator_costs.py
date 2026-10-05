@@ -42,6 +42,7 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
+    REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
@@ -189,6 +190,7 @@ class _CostsMixin:
         ) -> None: ...
         async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
         async def async_request_refresh(self) -> "None": ...
+        def _billed_peak_kw(self) -> float: ...
         def _ytd_months(self, today: date) -> list[date]: ...
 
     async def _tick_costs(
@@ -578,11 +580,14 @@ class _CostsMixin:
         """Price the earlier contracts in the background, at most once a day.
 
         A contract the household has left is a closed window: its figure moves
-        only when an archive publishes one of its months, or the day-ahead cache
-        fills an hour it lacked, so a day old is as good as an hour old, and
-        pricing it means fetching the old supplier's cards, which neither the
-        tick nor config-entry setup should wait on. Stale pricing for the same
-        periods keeps being served until the new one lands.
+        only when an archive publishes one of its months, the day-ahead cache
+        fills an hour it lacked, or, in Flanders, the billed capacity peak
+        moves. Pricing it means fetching the old supplier's cards, which
+        neither the tick nor config-entry setup should wait on, so a day old
+        stands for the first two, and a peak other than the one it was priced
+        on is priced again at once, as the entry's own contract takes it on the
+        tick. Stale pricing for the same periods keeps being served until the
+        new one lands.
 
         A pricing that could not price one of the periods at all, or priced
         it on the entry's current card because a read failed just now, is not
@@ -596,26 +601,42 @@ class _CostsMixin:
         seconds.
         """
         key = periods_key(periods)
+        peak = self._previous_peak_kw(periods)
         priced = self._previous_priced
         if (
             priced is not None
             and priced.key == key
             and priced.day == today
+            and priced.peak_kw == peak
             and all(row.settled for row in priced.rows)
         ):
             return
         if self._previous_pricing is not None and not self._previous_pricing.done():
             return
+        # The wait is per peak: a new one is priced at once, and a pricing that
+        # failed on this one waits like any other.
+        attempt = f"{key} {peak!r}"
         now = dt_util.utcnow()
         tried = self._previous_tried
-        if tried is not None and tried[0] == key and now - tried[1] < _PREVIOUS_RETRY:
+        if (
+            tried is not None
+            and tried[0] == attempt
+            and now - tried[1] < _PREVIOUS_RETRY
+        ):
             return
-        self._previous_tried = (key, now)
+        self._previous_tried = (attempt, now)
         self._previous_pricing = self.entry.async_create_background_task(
             self.hass,
             self._price_previous(periods, today),
             f"{DOMAIN}_previous_contracts_{self.entry.entry_id}",
         )
+
+    def _previous_peak_kw(self, periods: list[ContractPeriod]) -> float:
+        """The billed peak the earlier contracts are priced on: the household's
+        own in Flanders, as ``price_previous_periods`` takes it, else none."""
+        if any(p.data.get(CONF_REGION) == REGION_FLANDERS for p in periods):
+            return self._billed_peak_kw()
+        return 0.0
 
     async def _price_previous(self, periods: list[ContractPeriod], today: date) -> None:
         """Price the earlier contracts, keep the result and ask for a refresh.
@@ -654,6 +675,9 @@ class _CostsMixin:
             # an old card's index is reduced from the same workbook read, and
             # asking for its blend here would move the live coordinator's.
             await self._ensure_rlp_weights(self._rlp_blend)
+        # Read before the pricing reads it, so a peak that moves meanwhile is
+        # priced again on the next tick rather than taken as priced.
+        peak = self._previous_peak_kw(periods)
         try:
             month_start = month_window_start(self.entry, today)
             rows = await price_previous_periods(
@@ -679,5 +703,6 @@ class _CostsMixin:
             day=today,
             month=month_start,
             rows=keep_settled(self._previous_priced, key, rows),
+            peak_kw=peak,
         )
         await self.async_request_refresh()

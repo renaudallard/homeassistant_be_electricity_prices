@@ -523,7 +523,10 @@ was credited to a contract that never signed it.
 
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,
-`_price_previous`), or on the next hourly tick while a contract could not be
+`_price_previous`), again as soon as the billed capacity peak a Flemish
+period was priced on moves (`PricedPeriods.peak_kw`, `_previous_peak_kw`; a
+pricing stored before it reads 0.0, so a Flemish one is redone once and
+served meanwhile), or on the next hourly tick while a contract could not be
 priced at all or stands in because a read failed just now (`PricedPeriod.settled`,
 `read_failed`; `_PREVIOUS_RETRY`: not on the tick its own refresh asks for,
 which would price it again every few seconds),
