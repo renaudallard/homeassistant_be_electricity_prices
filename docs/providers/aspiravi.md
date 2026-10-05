@@ -111,6 +111,12 @@ exclusive-night and capacity rates, then the classic meter's four columns, of
 which only the prosumer rate is used. The figures include VAT: for Imewo they
 match Frank Energie's VAT-inclusive card to the cent.
 
+An area the card does not print is left out, which is how the 2024 cards (see
+Archive) parse. An area it prints whose row does not read, or a table where no
+row reads at all, raises: a partial table would be adopted as the card and an
+entry on the missing area would fail every tick until the next good one
+(`test_a_network_table_that_does_not_read_is_refused`, `test_aspiravi.py`).
+
 Green power and WKK are Aspiravi's own certificate costs, printed before VAT
 (1,078 and 0,406 c€/kWh on the September 2026 card), so they are grossed by the
 card's VAT after `regional_tax_overlay` has read them.

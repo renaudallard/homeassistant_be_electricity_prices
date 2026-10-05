@@ -412,11 +412,21 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     meter's distribution and exclusive-night rates and its capacity rate, and
     the classic meter's four columns, of which only the prosumer rate is
     used.
+
+    An area the card does not print is left out: the 2024 cards still name
+    the ten areas of that year, and only five of them read as one of today's.
+    An area it prints and this cannot read is a layout change, and so is a
+    table nothing could be read from. Both raise, because a partial table is
+    worse than none: the card would be adopted and an entry on the missing
+    area would fail every tick until the next good card.
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in FLUVIUS_CARD_LABELS.items():
-        row = numeric_row(text, label.replace("Fluvius ", "Fluvius (", 1) + ")", 8)
+        printed = label.replace("Fluvius ", "Fluvius (", 1) + ")"
+        row = numeric_row(text, printed, 8)
         if row is None:
+            if printed in text:
+                raise ExtractorError(f"Aspiravi: network row {printed!r} not read")
             continue
         data, single, excl_night, capacity, _, _, prosumer, _ = (
             to_float(value) for value in row
@@ -429,6 +439,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer,
         )
+    if not out:
+        raise ExtractorError("Aspiravi: no network row read")
     return out
 
 

@@ -186,6 +186,33 @@ def test_an_exclusive_night_fee_of_its_own_is_kept() -> None:
     assert energy.yearly_fixed_fee_exclusive_night == pytest.approx(30.0)
 
 
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # One column more on one row: the card prints the area and the row no
+        # longer reads.
+        ("Fluvius (West) 18,92", "Fluvius (West) 0,00 18,92"),
+        # Every area relabelled: nothing reads at all.
+        ("Fluvius (", "Netgebied ("),
+    ],
+)
+def test_a_network_table_that_does_not_read_is_refused(old: str, new: str) -> None:
+    """A partial table would be adopted as the card and an entry on a missing
+    area would fail every tick until the next good one."""
+    text = fixture_text(_SEPTEMBER)
+    assert old in text
+    with pytest.raises(ExtractorError, match="network row"):
+        aspiravi.parse_snapshot(_CID, text.replace(old, new))
+
+
+def test_an_area_the_card_does_not_print_is_left_out() -> None:
+    """The 2024 cards name the ten areas of that year, five of which read as
+    one of today's, and those cards still price their months."""
+    text = fixture_text(_SEPTEMBER).replace("Fluvius (Zenne-Dijle)", "Fluvius (PBE)")
+    snap = aspiravi.parse_snapshot(_CID, text)
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_zenne_dijle"}
+
+
 async def test_fetch_reads_the_card_linked_as_current(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
