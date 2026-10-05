@@ -696,7 +696,9 @@ wegingscoefficienten worden bepaald door het RLP verbruiksprofiel", the profile
 itself being "een rekenkundig gemiddelde van de RLP verbruiksprofielen voor alle
 distributienetbeheerders". `fetch_rlp_weights` downloads
 `synergrid.be/images/downloads/SLP-RLP-SPP/<year>/RLP0N <year> Electricity all DSOs.xlsb`
-(about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime dependency
+(the 2026 address; Synergrid has moved the file every year, so when that address
+answers an HTTP error `_listed_url` reads the year's link off Synergrid's download
+page instead; about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime dependency
 added for it) and `_rlp_weights_from_rows` reduces its `RLP96UbyDGO` sheet to
 one hourly curve keyed by LOCAL (month, day, hour), for the DSO **blend** the
 caller asks for.
@@ -817,8 +819,10 @@ ENTSO-E prices it already caches.
 ### What it fetches and how
 
 Synergrid publishes the profile as a public, no-login workbook at
-`synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx`.
-The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
+`synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx`,
+the 2026 address, with the same fallback to the download page's link as the RLP
+file. The 2025 workbook found that way has no `SPP_ex-ante` sheet and parses to
+`{}`, so the fallback only helps a year that keeps the 2026 layout. The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
 `fetch_spp_weights` streams the download to a temp file (never into memory) and
 parses only the small `SPP_ex-ante` sheet with the stdlib `zipfile` +
 `ElementTree` (no new dependency), keeping peak memory around 20 MB. The sheet is
@@ -831,8 +835,13 @@ not-yet-published year) returns `{}` so the caller falls back to the plain mean.
 ### Caching and use
 
 The coordinator refreshes the profile at most monthly (`_SPP_REFRESH_DAYS`; the
-ex-ante file is revised in-year) via `_ensure_spp_weights`, and persists the
-weights in the entry's Store blob so a restart does not force a fresh download.
+ex-ante file is revised in-year) via `_ensure_spp_weights`, and keeps the
+weights in the shared `{DOMAIN}_profiles` store so a restart does not force a
+fresh download. When the current year cannot be fetched and the entry holds
+nothing, as after a restart, it takes the newest earlier year that store keeps
+(`_stored_year`, the RLP profile does the same), which is the curve a process
+that never restarted would still hold. That year stays the one held, so the
+current year is asked for again after `_SPP_RETRY_TTL`.
 An entry that adopts the shared row rather than downloading carries the row's own
 stamp (`_shared_profile` hands it back beside the weights, as `_shared_rlp_blends`
 does per blend), so it asks again when the row is due and not thirty days after the
@@ -848,9 +857,8 @@ has. **And one file serves every entry**: `_shared_profile`
 behind a lock, so N entries scheduling their fill at the same moment cost one
 download rather than N. The row carries the instant it was fetched and is
 re-used only inside the caller's own refresh window, so an entry set up a month
-later still gets a fresh file. Each entry keeps persisting its own copy: the
-shared row is a process-lifetime convenience, the Store blob is what survives a
-restart.
+later still gets a fresh file. The rows are written to the shared
+`{DOMAIN}_profiles` store, which is what survives a restart.
 `_spp_weighted_month_mean` then computes `sum(price * weight) / sum(weight)` over
 the delivery month for the injection index, while energy keeps the plain mean.
 Both the live injection sensor and the year-to-date credit use it.

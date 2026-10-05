@@ -606,6 +606,37 @@ async def test_the_spp_profile_survives_a_restart_through_the_shared_store(
     assert reloaded._spp_weights_year == 2026
 
 
+async def test_a_restart_in_a_new_year_keeps_last_years_spp_profile(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The SPP sibling of the RLP rollover: after a restart in a year whose
+    workbook is not out, the stored year stands in rather than nothing."""
+    freezer.move_to("2026-12-20 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    fake = {(6, 15, 10): 2.0}
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_spp_weights",
+        new=AsyncMock(return_value=fake),
+    ):
+        await coord._ensure_spp_weights()
+
+    hass.data.pop(const.DOMAIN, None)
+    freezer.move_to("2027-01-05 12:00:00+01:00")
+    reloaded = BePricesCoordinator(hass, entry)
+    await reloaded.async_load_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_spp_weights",
+        new=AsyncMock(return_value={}),
+    ) as mock:
+        await reloaded._ensure_spp_weights()
+    assert mock.await_count == 1
+    assert reloaded._spp_weights == fake
+    assert reloaded._spp_weights_year == 2026
+    assert reloaded._spp_failed_at is not None
+
+
 async def test_an_spp_blob_written_before_the_shared_store_is_adopted(
     hass: HomeAssistant, freezer: Any
 ) -> None:

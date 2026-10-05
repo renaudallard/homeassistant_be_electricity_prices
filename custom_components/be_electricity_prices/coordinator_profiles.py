@@ -120,7 +120,9 @@ class _ProfilesMixin:
         whatever we already have (the opt-in caller then degrades to the plain
         arithmetic mean, an SPP-indexed card to its printed indicative) and
         back off ``_SPP_RETRY_TTL`` so a persistent failure
-        doesn't re-download the 52 MB workbook every tick.
+        doesn't re-download the 52 MB workbook every tick. Holding nothing,
+        as after a restart, it takes the newest year the shared store keeps
+        (``_stored_year``).
         """
         now = dt_util.utcnow()
         year = dt_util.now().year
@@ -146,6 +148,11 @@ class _ProfilesMixin:
             self._spp_failed_at = None
         else:
             self._spp_failed_at = now
+            stored = _stored_year(self.hass, "spp", year, "")
+            if not self._spp_weights and stored is not None:
+                cache = _profile_cache(self.hass)
+                self._spp_weights, self._spp_fetched_at = cache[("spp", stored, "")]
+                self._spp_weights_year = stored
 
     async def _shared_rlp_blends(
         self, year: int
@@ -198,7 +205,9 @@ class _ProfilesMixin:
         every sensor beside it reads; the others come off the same read and are
         held for the compare page. Soft-fail like the SPP profile: on error keep
         what is held, back off ``_RLP_RETRY_TTL``, and the caller prices the
-        plain mean, or the metered slices, meanwhile.
+        plain mean, or the metered slices, meanwhile. Holding nothing for the
+        blend, as after a restart, it takes the newest year the shared store
+        keeps (``_stored_year``).
         """
         now = dt_util.utcnow()
         year = dt_util.now().year
@@ -227,6 +236,19 @@ class _ProfilesMixin:
             self._rlp_failed_at = None
         else:
             self._rlp_failed_at = now
+            stored = _stored_year(self.hass, "rlp", year, blend)
+            if not (self._rlp_blend == blend and self._rlp_weights) and (
+                stored is not None
+            ):
+                cache = _profile_cache(self.hass)
+                self._rlp_blend_weights = {
+                    b: row[0]
+                    for b in RLP_BLENDS
+                    if (row := cache.get(("rlp", stored, b))) is not None and row[0]
+                }
+                self._rlp_weights, self._rlp_fetched_at = cache[("rlp", stored, blend)]
+                self._rlp_weights_year = stored
+                self._rlp_blend = blend
 
     def rlp_weights_for_blend(self, blend: str) -> RlpWeights | None:
         """The held RLP curve for ``blend``, or ``None`` when it is not held.
@@ -298,6 +320,25 @@ def _profile_cache(
 ) -> dict[tuple[str, int, str], tuple[Any, datetime]]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_PROFILE_CACHE_KEY, {})  # type: ignore[no-any-return]
+
+
+def _stored_year(hass: HomeAssistant, kind: str, year: int, blend: str) -> int | None:
+    """The newest year up to ``year`` the shared store holds a curve for.
+
+    Whatever its age: this is only read after a download failed with nothing
+    held. A process that never restarted keeps the curve it last fetched, so
+    a restarted one has to find the same curve rather than drop to the plain
+    mean, and Synergrid has moved each year's file so far, which made the
+    first restart of a new year lose last year's curve though the store still
+    had it. The caller keeps that year as the one held, so its freshness
+    check goes on asking for the current one.
+    """
+    years = [
+        held_year
+        for (k, held_year, b), row in _profile_cache(hass).items()
+        if k == kind and b == blend and held_year <= year and row[0]
+    ]
+    return max(years, default=None)
 
 
 def _profile_lock(hass: HomeAssistant, key: tuple[str, int, str]) -> asyncio.Lock:

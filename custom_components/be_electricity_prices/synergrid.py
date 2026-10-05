@@ -32,7 +32,9 @@ module downloads that profile so the coordinator can compute the weighted
 average against the ENTSO-E prices it already caches.
 
 Synergrid publishes it as a public, no-login workbook at
-``synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx``.
+``synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx``
+in 2026; the address has changed every year, so when it is not served the
+year's file is looked up on Synergrid's download page (``_listed_url``).
 The file is ~52 MB, almost entirely the ex-post sheet, which we never touch: we
 stream the download to a temp file and parse only the ex-ante sheet (a few MB of
 XML) with the stdlib, keeping peak memory around 20 MB. The ex-post half lags by
@@ -53,6 +55,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import struct
 import tempfile
 import zipfile
@@ -61,6 +64,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Final, get_args
+from urllib.parse import unquote, urljoin
 
 # The four parses below run over a REMOTE workbook. The stdlib parser
 # already refuses an EXTERNAL entity (it raises ParseError rather than
@@ -81,6 +85,14 @@ from .providers._rates import RlpBlend
 _LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://www.synergrid.be/images/downloads/SLP-RLP-SPP"
+# The download page lists every edition. The folder and the file name changed
+# every year from 2022 to 2026, so the address built from _BASE_URL is only a
+# guess for the next year; the page is read when that guess is not served.
+_SITE = "https://www.synergrid.be/"
+_PAGE_URL = f"{_SITE}nl/documentencentrum/statistieken-gegevens/profielen-slp-spp-rlp"
+_HREF_RE = re.compile(r'href="([^"]+)"', re.IGNORECASE)
+_RLP_TOKENS = ("rlp", "elec", "all", "dso")
+_SPP_TOKENS = ("spp", "ex-ante")
 # The ex-ante sheet name and its value column header. Resolved by prefix / text
 # rather than hardcoded position so a minor layout change doesn't silently break.
 _SHEET_PREFIX = "SPP_ex-ante"
@@ -153,7 +165,9 @@ async def fetch_rlp_blends(
         return {}
     url = f"{_BASE_URL}/{year}/RLP0N%20{year}%20Electricity%20all%20DSOs.xlsb"
     try:
-        path = await _download(session, url, suffix=".xlsb")
+        path, url = await _download_edition(
+            session, url, year, _RLP_TOKENS, suffix=".xlsb"
+        )
     except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
         _LOGGER.warning("Synergrid RLP download failed (%s): %s", url, err)
         return {}
@@ -184,7 +198,7 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
     """
     url = f"{_BASE_URL}/{year}/SPP_ex-ante_and_ex-post_{year}.xlsx"
     try:
-        path = await _download(session, url)
+        path, url = await _download_edition(session, url, year, _SPP_TOKENS)
     except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
         _LOGGER.warning("Synergrid SPP download failed (%s): %s", url, err)
         return {}
@@ -208,6 +222,64 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
     finally:
         # Syscall: off the loop like every other filesystem call here.
         await asyncio.to_thread(path.unlink, True)
+
+
+async def _download_edition(
+    session: aiohttp.ClientSession,
+    url: str,
+    year: int,
+    tokens: tuple[str, ...],
+    **kwargs: str,
+) -> tuple[Path, str]:
+    """Download the year's workbook from ``url``, or from where the page lists it.
+
+    Only an HTTP error sends it to the page: a timeout or a reset says nothing
+    about the address. Returns the file and the address it came from, so a
+    later log line names the one that was read.
+    """
+    try:
+        return await _download(session, url, **kwargs), url
+    except aiohttp.ClientResponseError:
+        listed = await _listed_url(session, year, tokens, kwargs.get("suffix", ".xlsx"))
+        if listed is None or listed == url:
+            raise
+    return await _download(session, listed, **kwargs), listed
+
+
+async def _listed_url(
+    session: aiohttp.ClientSession, year: int, tokens: tuple[str, ...], suffix: str
+) -> str | None:
+    """The download page's link to the year's workbook, or None.
+
+    A link qualifies when it stays on Synergrid's site and its file name,
+    lower-cased, carries the year, every token and the suffix. The page lists
+    a year's revisions oldest first (spp-2023-...-v1.0, then v1.1), so the
+    last match is the current one.
+    """
+    try:
+        async with session.get(
+            _PAGE_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            html = await resp.text()
+    except (aiohttp.ClientError, TimeoutError, UnicodeDecodeError) as err:
+        _LOGGER.debug("Synergrid download page unavailable: %s", err)
+        return None
+    found: str | None = None
+    for href in _HREF_RE.findall(html):
+        url = urljoin(_PAGE_URL, href)
+        name = unquote(url.rsplit("/", 1)[-1]).lower()
+        if (
+            url.startswith(_SITE)
+            and name.endswith(suffix)
+            and str(year) in name
+            and all(token in name for token in tokens)
+        ):
+            found = url
+    return found
 
 
 # Bytes buffered in memory before a write is handed to the executor. The file

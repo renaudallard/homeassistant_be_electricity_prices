@@ -480,6 +480,104 @@ async def test_ensure_rlp_weights_backs_off_after_failure(
     assert coord._rlp_weighted_month_mean(2026, 9, {}) is None
 
 
+async def test_a_restart_in_a_new_year_keeps_last_years_curve(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A process running at midnight on 31 December keeps last year's curve
+    while the new year's file is missing; a restart asked only for the new
+    year and priced the plain mean, though the store still held last year's.
+    It now takes the stored year and keeps asking for the current one."""
+    freezer.move_to("2026-12-20 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=_fake_blends(distinct=1.0, columns=2.0, flanders=3.0),
+    ):
+        await coord._ensure_rlp_weights("distinct")
+
+    hass.data.pop(const.DOMAIN, None)
+    freezer.move_to("2027-01-05 12:00:00+01:00")
+    reloaded = BePricesCoordinator(hass, entry)
+    await reloaded.async_load_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=AsyncMock(return_value={}),
+    ) as mock:
+        await reloaded._ensure_rlp_weights("distinct")
+        await reloaded._ensure_rlp_weights("distinct")
+    assert mock.await_count == 1, "the 12 h back-off still applies"
+    assert reloaded._rlp_weights == {(9, 15, 10): 1.0}
+    assert reloaded._rlp_weights_year == 2026, "so the current year is retried"
+    assert reloaded.rlp_weights_for_blend("flanders") == {(9, 15, 10): 3.0}
+
+    freezer.move_to("2027-01-06 01:00:00+01:00")
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=_fake_blends(distinct=5.0),
+    ):
+        await reloaded._ensure_rlp_weights("distinct")
+    assert reloaded._rlp_weights == {(9, 15, 10): 5.0}
+    assert reloaded._rlp_weights_year == 2027
+
+
+class _Page:
+    def __init__(self, status: int, body: str) -> None:
+        self.status = status
+        self._body = body
+
+    async def text(self) -> str:
+        return self._body
+
+    async def __aenter__(self) -> _Page:
+        return self
+
+    async def __aexit__(self, *_: object) -> bool:
+        return False
+
+
+async def test_a_moved_workbook_is_found_on_the_download_page() -> None:
+    """Synergrid has put each year's file under a new folder and name, so the
+    address built for a year is a guess. When it is not served, the download
+    page's link for that year is read instead."""
+    page = (
+        '<a href="/images/downloads/SLP-RLP-SPP/2026/RLP0N%202026%20Electricity.xlsb">'
+        '<a href="/images/downloads/rlp0n2027-electricity-all-dsos.xlsb">'
+        '<a href="https://elsewhere.example/rlp0n2027-electricity-all-dsos.xlsb">'
+        '<a href="/images/downloads/SLP-RLP-SPP/2026/RLP0N%202026%20Electricity%20all%20DSOs.xlsb">'
+    )
+    session = MagicMock()
+    session.get = MagicMock(return_value=_Page(200, page))
+    asked: list[str] = []
+
+    async def fake_download(_session: Any, url: str, **_kw: Any) -> Path:
+        asked.append(url)
+        if len(asked) == 1:
+            raise aiohttp.ClientResponseError(MagicMock(), (), status=404)
+        return Path("x")
+
+    with (
+        patch.object(synergrid, "_download", new=fake_download),
+        patch.object(
+            synergrid,
+            "_parse_rlp_blends",
+            new=lambda _p, b: {x: {(1, 1, 0): 1.0} for x in b},
+        ),
+        patch.object(
+            synergrid.asyncio,
+            "to_thread",
+            new=AsyncMock(side_effect=lambda f, *a: f(*a)),
+        ),
+        patch.object(synergrid, "Path"),
+    ):
+        out = await synergrid.fetch_rlp_blends(session, 2027, ("distinct",))
+    assert out == {"distinct": {(1, 1, 0): 1.0}}
+    assert asked[1] == (
+        "https://www.synergrid.be/images/downloads/rlp0n2027-electricity-all-dsos.xlsb"
+    )
+
+
 async def test_the_profiles_are_not_in_the_hourly_blob(hass: HomeAssistant) -> None:
     """The per-entry cache is rewritten whole on every tick, and the Synergrid
     curves change once a month, so they do not belong in it. At 193 KB a curve
