@@ -215,6 +215,7 @@ async def fetch_shared(
     *,
     supplier: str,
     local: _SharedSnapshot | None = None,
+    local_is_stale: bool = False,
     force: bool = False,
     record_failure: bool = True,
 ) -> SharedFetch:
@@ -232,6 +233,14 @@ async def fetch_shared(
     standing and consulted after the shared one. It is what keeps this a
     single policy: without it the coordinator has to keep its own freshness
     rule and run its own probe.
+
+    ``local_is_stale`` says ``local`` was read by an older parser: a card
+    the schema gate refused on load and the caller replayed because nothing
+    replaced it. It still stands on a probe match, so a card no parser can
+    read is not downloaded again while the supplier keeps the same file, but
+    it is neither restamped, since the probe says nothing about how old its
+    parse is, nor seeded into the shared cache, where a sibling would adopt
+    it as a card the running parser read and save it under that schema.
 
     ``supplier`` is the registry id, passed rather than read off the extractor
     so the cache key is derived in exactly one place: the caller that looked
@@ -287,6 +296,8 @@ async def fetch_shared(
         return SharedFetch(row, "shared", probe_key, confirmed)
 
     if not force and local is not None and _row_is_fresh(local, probe_key, now, ttl):
+        if local_is_stale:
+            return SharedFetch(local, "local", probe_key, confirmed)
         row = _adopted(local, probe_key, now)
         # Seed the shared cache when this caller is the first to verify a
         # disk-loaded row after a restart, so siblings adopt instead of each

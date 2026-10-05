@@ -1695,6 +1695,119 @@ async def test_a_card_naming_only_its_month_is_asked_for_again(
         assert fetch_calls == 2
 
 
+async def test_a_card_replayed_after_a_failed_fetch_is_asked_for_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """After an upgrade across a schema bump whose first fetch fails, the
+    refused blob is served so the entry keeps its prices. Offered back as the
+    entry's own row, a supplier with no probe kept it for the rest of the TTL
+    from its original fetch although the supplier answered again, and it was
+    written back under the running schema. The next tick past the backoff
+    asks the supplier, and a sibling never adopts the old parse."""
+    freezer.move_to("2026-10-04 10:00:00+00:00")
+    entry = make_entry(supplier="engie", contract="x", region="wallonia")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    old = make_snapshot(supplier="engie", contract="x")
+    new = make_snapshot(
+        supplier="engie", contract="x", publication_label="Octobre 2026"
+    )
+    blob = {
+        "entry_supplier": "engie",
+        "entry_contract": "x",
+        "entry_region": "wallonia",
+        "snapshot": _snapshot_to_dict(
+            old,
+            dt_util.utcnow() - timedelta(hours=2),
+            None,
+            schema_version=_SNAPSHOT_SCHEMA_VERSION - 1,
+        ),
+    }
+    coord._store.async_load = AsyncMock(return_value=blob)  # type: ignore[method-assign]
+    await coord.async_load_persistent()
+    assert coord._snapshot is None and coord._stale_snapshot is not None
+
+    fail = True
+    calls = 0
+
+    async def _fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal calls
+        calls += 1
+        if fail:
+            raise ExtractorError("network error fetching https://x.pdf: TimeoutError")
+        return new
+
+    extractor = replace(
+        make_stub_extractor(extractor_id="engie", fetch=_fetch), probe=None
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+        assert coord._snapshot_raw == old
+        assert coord._snapshot_schema_version == _SNAPSHOT_SCHEMA_VERSION - 1
+        assert coord._shared_key() not in _shared_snapshots(hass)
+        fail = False
+        freezer.move_to("2026-10-04 11:00:00+00:00")
+        await coord._maybe_refresh_snapshot()
+    assert calls == 2
+    assert coord._snapshot_raw is new
+    assert coord._snapshot_schema_version == _SNAPSHOT_SCHEMA_VERSION
+
+
+async def test_a_probe_match_keeps_a_replayed_card_old(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card published as page images is replayed from the refused blob with
+    its probe key, so it is not downloaded again while the supplier keeps the
+    same file. A probe match then restamped it, which set snapshot_age to zero
+    and cleared the seven-day stale card, and seeded the shared cache with it,
+    so the next tick adopted it as a card the running parser had read and
+    wrote it back under the running schema."""
+    freezer.move_to("2026-10-04 10:00:00+00:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    old = _fake_snapshot()
+    cached_at = dt_util.utcnow() - timedelta(days=20)
+    blob = {
+        "entry_supplier": entry.data["supplier"],
+        "entry_contract": entry.data["contract"],
+        "entry_region": entry.data["region"],
+        "snapshot": _snapshot_to_dict(
+            old, cached_at, "K", schema_version=_SNAPSHOT_SCHEMA_VERSION - 1
+        ),
+    }
+    coord._store.async_load = AsyncMock(return_value=blob)  # type: ignore[method-assign]
+    await coord.async_load_persistent()
+
+    async def _probe(*_a: object, **_k: object) -> str:
+        return "K"
+
+    async def _fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        raise CardNotReadableError("no text layer")
+
+    extractor = replace(make_stub_extractor(fetch=_fetch), probe=_probe)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=extractor,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.card_for_unreadable_month",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        for hour in range(3):
+            freezer.move_to(f"2026-10-04 {10 + hour}:00:00+00:00")
+            await coord._maybe_refresh_snapshot()
+    assert coord._snapshot_fetched_at == cached_at
+    assert coord._snapshot_overdue()
+    assert coord._snapshot_schema_version == _SNAPSHOT_SCHEMA_VERSION - 1
+    assert coord._shared_key() not in _shared_snapshots(hass)
+
+
 async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
     """When extractor.probe returns the same key on a subsequent refresh,
     the coordinator must NOT call extractor.fetch again."""

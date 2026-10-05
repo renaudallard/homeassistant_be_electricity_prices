@@ -474,8 +474,11 @@ class _SnapshotMixin:
         and counts on the next fetch, and a card the parser cannot read that
         day made that every entity unavailable: TotalEnergies served its
         Dutch myComfort card at the French address in October 2026. The
-        replayed card then leaves its probe key behind, so the next refresh
-        asks the supplier again and a readable card still replaces it.
+        replayed card then leaves its probe key behind, and a card with no
+        probe key is not offered back as the entry's own row
+        (``_maybe_refresh_snapshot``), so the next refresh past the failure
+        backoff asks the supplier again, with a probe or without, and a
+        readable card still replaces it.
 
         Refused below ``_DEGRADED_MIN_SCHEMA_VERSION``, where the stored fields
         do not mean what they say any more. Above it the replayed card is
@@ -535,6 +538,11 @@ class _SnapshotMixin:
         same way: a probe-key match against a sibling coordinator's
         snapshot adopts it without doing any work.
         """
+        # A card replayed from the blob the schema gate refused was read by
+        # an older parser. It stands only on its probe key, never on age: on
+        # age a supplier with no probe kept it for the rest of the day from
+        # its original fetch although the supplier answered again.
+        replayed = self._snapshot_schema_version < _SNAPSHOT_SCHEMA_VERSION
         # Cleared per attempt, not per supplier, for the same reason
         # CardNotReadableError is raised per download: a supplier that goes
         # back to publishing text has to stop being unreadable on its own.
@@ -581,8 +589,10 @@ class _SnapshotMixin:
                 # text card. Offered, a probe-less supplier kept it for the
                 # whole TTL and its siblings took it with the notice cleared.
                 and not self._card_read_by_ocr
+                and not (replayed and self._snapshot_probe_key is None)
                 else None
             ),
+            local_is_stale=replayed,
             force=self._force_refresh,
         )
 
