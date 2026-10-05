@@ -424,7 +424,7 @@ requiring four pairs left it alone on the previous month's row.
 
 | Region | Sub-areas mapped | Row width | Fields surfaced |
 |---|---|---|---|
-| Flanders | 8 Fluvius sub-areas (`_FLANDERS_LABELS`) | 9 numbers | `distribution_single` (digital, includes transport), `capacity_eur_per_kw_year`, `data_management_per_year` (digital meter col), `prosumer_eur_per_kva_year` |
+| Flanders | 8 Fluvius sub-areas (`_FLANDERS_LABELS`) | 9 numbers | `distribution_single` (digital, includes transport), `capacity_eur_per_kw_year`, `data_management_per_year` (the quarter-hourly read column, equal to the annual or monthly read one on every card so far), `prosumer_eur_per_kva_year` |
 | Wallonia | AIEG, AIESH, ORES (Namur), REW, RESA (`_WALLONIA_LABELS`) | 12 numbers | `distribution_single/peak/offpeak/exclusive_night`, Impact `pic/medium/eco`, `transport`, `data_management_per_year` (terme fixe), `prosumer_eur_per_kva_year` |
 | Brussels | Sibelga | 7 numbers + power term | `distribution_single/peak/offpeak/exclusive_night`, `transport`, `data_management_per_year` (metering + power term), `brussels_osp_by_tier` |
 

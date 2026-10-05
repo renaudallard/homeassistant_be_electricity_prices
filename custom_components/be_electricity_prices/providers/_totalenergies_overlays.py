@@ -242,10 +242,13 @@ def _extract_renewables(text: str) -> float:
 def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """Flanders Fluvius rows (9 numbers each).
 
-    Layout:
-      dist_digital_mono | capacity_digital | dist_classic_mono |
-      dist_classic_excl_night | data_mgmt_classic | data_mgmt_digital |
-      tarif_capacity_max | cotisation_energie | prosumer
+    Layout, as the card heads it:
+      dist_digital (c/kWh) | capacity_digital (EUR/kW/yr) |
+      dist_classic (c/kWh) | capacity_classic (EUR/month) |
+      data_mgmt_annual_or_monthly_read (EUR/yr) |
+      data_mgmt_quarter_hourly_read (EUR/yr) |
+      transport (c/kWh, 0: included in distribution) |
+      cotisation_energie (c/kWh) | prosumer (EUR/kVA/yr)
 
     Distribution already includes transport (same convention as
     Engie/Luminus/Mega Flanders).
@@ -257,7 +260,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             continue
         dist_digital = to_float(row[0])
         capacity = to_float(row[1])
-        data_mgmt = to_float(row[5])  # digital meter column
+        data_mgmt = to_float(row[5])  # quarter-hourly read; both equal so far
         prosumer = to_float(row[8])
         out[key] = DsoOverlay(
             distribution_single=dist_digital / 100.0,
