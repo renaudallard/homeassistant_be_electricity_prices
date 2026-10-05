@@ -698,7 +698,9 @@ _MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fix
 
 # Contracts whose card prices a direct-debit payer differently, so the config
 # flow asks how the household pays. Only Brusol's Groene stroom does, at
-# 20 EUR/yr off a 250 EUR standing charge. A registry flag beside the parsed
+# 20 EUR/yr off a 250 EUR standing charge on its cards up to September 2026.
+# The October card dropped that footnote, but the months before it still bill
+# on cards that print it, so the flag stays. A registry flag beside the parsed
 # figure, and they must agree: with this unset no step ever asks, nothing is
 # stored and the discount is billed to nobody. ``test_direct_debit_registry_
 # matches_the_cards`` holds the two against each other.

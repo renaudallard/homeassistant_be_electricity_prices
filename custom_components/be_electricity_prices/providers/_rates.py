@@ -127,7 +127,8 @@ class Contract:
     quarter_hourly_option: bool = False
     # True when this product's card prices a direct-debit payer differently,
     # so the config flow asks how the household pays. Brusol's Groene stroom
-    # is the case: 250 EUR/yr standing charge, 230 on domiciliering.
+    # is the case: 250 EUR/yr standing charge, 230 on domiciliering, on its
+    # cards up to September 2026.
     #
     # Same registry-versus-parser agreement as the two flags above, and the
     # same failure if they disagree: with this False no step ever asks, the

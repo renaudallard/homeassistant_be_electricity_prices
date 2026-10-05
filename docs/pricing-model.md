@@ -502,8 +502,9 @@ spot, which is the 0.6.7 mis-credit and is silent.
 
 ### The direct-debit reduction
 
-Brusol's Groene stroom charges 250 EUR/yr and 230 on domiciliëring, the only card in the
-registry that prices how the invoice is settled. `SupplierSnapshot` carries the REDUCTION
+Brusol's Groene stroom charged 250 EUR/yr and 230 on domiciliëring on its cards up to
+September 2026, the only card in the registry that prices how the invoice is settled in
+its standing charge. `SupplierSnapshot` carries the REDUCTION
 (`direct_debit_discount_eur`), the config flow asks the household how it pays
 (`CONF_DIRECT_DEBIT`), and `resolve_direct_debit` (`providers/_resolve.py`) takes one off the
 other before the snapshot is priced, clearing the field as it goes.
