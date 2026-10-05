@@ -265,7 +265,12 @@ class _BackfillContext:
     regime: str
     snap_for: Callable[[date], Awaitable[Any]]
     spp_weights: SppWeights | None
+    # The household's load shape, which a compensation net is spread over.
     rlp_weights: RlpWeights | None
+    # The index an RLP-indexed month leg resolves against, which is the card's
+    # own blend and can differ from the entry's for a contract held earlier
+    # in the year; ``rlp_weights`` where it is the same.
+    rlp_index_weights: RlpWeights | None
     month_spp_cache: dict[tuple[int, int, bool], float | None]
     month_mean_cache: dict[tuple[int, int], float | None]
     # Whether the feed-in leg an hour credits keeps its per-hour index under a
@@ -337,19 +342,18 @@ async def _build_context(
         spp_weights = coordinator._spp_weights
     # The RLP profile serves two things here: the month mean of an energy leg
     # indexed on it, and the allocation of a compensation entry's yearly net
-    # over the year, which is how such a meter is settled.
+    # over the year, which is how such a meter is settled. On the entry's own
+    # card both are the entry's blend. An earlier contract's card names its
+    # own blend for the index while the net is still spread over the entry's,
+    # which is how contract_periods prices it live: one blend for both moved
+    # the earlier contract's share of the imported series off the sensor.
     rlp_weights = None
+    rlp_index_weights = None
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
     if snapshot is not None:
-        rlp_weights = (
-            _coordinator_rlp_index_weights(coordinator.entry, snap)
-            if _energy_is_rlp_indexed(snap.energy)
-            else (
-                coordinator._rlp_weights or None
-                if regime == SOLAR_REGIME_COMPENSATION
-                else None
-            )
-        )
+        rlp_index_weights = _coordinator_rlp_index_weights(coordinator.entry, snap)
+        if _energy_is_rlp_indexed(snap.energy) or regime == SOLAR_REGIME_COMPENSATION:
+            rlp_weights = coordinator._rlp_weights or None
     elif (
         _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY)
     ) or regime == SOLAR_REGIME_COMPENSATION:
@@ -386,6 +390,9 @@ async def _build_context(
         # YTD credit so the backfill meets it at the seam.
         spp_weights=spp_weights,
         rlp_weights=rlp_weights,
+        rlp_index_weights=(
+            rlp_weights if rlp_index_weights is None else rlp_index_weights
+        ),
         month_spp_cache={},
         month_mean_cache={},
         # A card whose injection is a per-hour spot formula with no printed

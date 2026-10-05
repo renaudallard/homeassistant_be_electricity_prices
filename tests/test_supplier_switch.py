@@ -74,6 +74,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     InjectionRates,
+    SpotMonthlyRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
@@ -1773,6 +1774,186 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     # One running total: nothing falls back at the switch.
     assert all(later >= earlier for earlier, later in zip(sums, sums[1:], strict=False))
     assert rows[-1]["sum"] == pytest.approx(old_live + new_live, abs=1e-3)
+
+
+def _profile(slope: float, evening: float) -> dict[tuple[int, int, int], float]:
+    """A 2026 load profile keyed like Synergrid's, summing to one: ``slope``
+    sets how much each month outweighs the one before, ``evening`` how much of
+    each day falls from 17:00 to 21:00."""
+    weights: dict[tuple[int, int, int], float] = {}
+    day = date(2026, 1, 1)
+    while day.year == 2026:
+        for hour in range(24):
+            weights[(day.month, day.day, hour)] = (
+                evening if 17 <= hour <= 21 else 1.0
+            ) * (1.0 + slope * day.month)
+        day += timedelta(days=1)
+    total = sum(weights.values())
+    return {key: value / total for key, value in weights.items()}
+
+
+async def test_an_earlier_card_on_another_blend_nets_on_the_entrys_profile(
+    hass: HomeAssistant,
+) -> None:
+    """An earlier contract's month index resolves on its card's own RLP blend,
+    and its compensation net is spread over the household's profile, on the
+    backfill as on the live pricing.
+
+    The backfill handed the old card's blend to both, so where the two
+    differ (Eneco's distinct mean against the Fluvius curve EnergyVision
+    names) the earlier contract's netted energy was spread differently and
+    the imported series ended off the live sensor."""
+    curves = {"distinct": _profile(0.5, 1.5), "flanders": _profile(0.0, 3.0)}
+    old_card = make_snapshot(
+        energy=SpotMonthlyRates(
+            factor=1.1, base=0.02, rlp_indexed=True, rlp_blend="flanders"
+        )
+    )
+    new_card = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=48.0)
+    )
+    switch = date(2026, 4, 1)
+    last = date(2026, 5, 31)
+    household: dict[str, Any] = {
+        "solar_regime": "compensation",
+        "solar_kva": 5.0,
+        "consumption_kwh": "sensor.cons_total",
+        "injection_kwh": "sensor.inj_total",
+        "api_key": "x",
+    }
+    entry = make_entry(
+        previous_contracts=[
+            {
+                "until": switch.isoformat(),
+                "data": _held("eneco", "power_flex", **household),
+            }
+        ],
+        **household,
+    )
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_current_year_cost",
+        suggested_object_id="blend_current_year_cost",
+        config_entry=entry,
+    )
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+
+    def local_hour(h: datetime) -> int:
+        return dt_util.as_local(h).hour
+
+    # A price that climbs month by month, so how the net is spread over the
+    # months moves the bill, and peaks in the evening, so the two blends
+    # resolve different month indices.
+    spots = {
+        h: 0.04 + 0.02 * dt_util.as_local(h).month + 0.04 * (17 <= local_hour(h) <= 21)
+        for h in hours
+    }
+    cons = {h: 0.3 + 0.5 * (17 <= local_hour(h) <= 21) for h in hours}
+    inj = {h: 0.9 if 10 <= local_hour(h) <= 15 else 0.0 for h in hours}
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _snapshot=new_card,
+        _session=None,
+        _historical_spots=dict(spots),
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights=curves["distinct"],
+        rlp_weights_for_blend=curves.get,
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+    old_entry = cast(
+        ConfigEntry,
+        _QuoteEntry(
+            data=entry.data[CONF_PREVIOUS_CONTRACTS][0]["data"],
+            runtime_data=coordinator,
+        ),
+    )
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, first: date, end: date
+    ) -> dict[datetime, float]:
+        side = {"sensor.cons_total": cons, "sensor.inj_total": inj}.get(entity_id, {})
+        return {
+            h: kwh
+            for h, kwh in side.items()
+            if first <= dt_util.as_local(h).date() <= end
+        }
+
+    def own_card(*args: Any, **_k: Any) -> Any:
+        return args[6]
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.extend(stats)
+
+    old = AsyncMock(
+        return_value=(old_entry, make_stub_extractor(), old_card, False, False, False)
+    )
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+        patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
+        patch.object(
+            cohort, "_effective_snapshot_for_month", new=AsyncMock(side_effect=own_card)
+        ),
+        patch.object(
+            ytd_cost,
+            "_effective_snapshot_for_month",
+            new=AsyncMock(side_effect=own_card),
+        ),
+        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(backfill_window, "period_card", old),
+        patch.object(contract_periods, "period_card", old),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: dt_util.start_of_local_day(last) + timedelta(hours=23, minutes=59),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            dict(spots),
+            {},
+        )
+        priced = await contract_periods.price_previous_periods(
+            hass,
+            None,  # type: ignore[arg-type]
+            coordinator,  # type: ignore[arg-type]
+            contract_periods.previous_periods(entry.data, date(2026, 1, 1), last),
+            month_start=date(2026, 5, 1),
+        )
+        own = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            new_card,
+            entry,
+            historical_spots=dict(spots),
+            rlp_weights=curves["distinct"],
+            window_start_override=switch,
+        )
+    assert len(priced) == 1 and priced[0].cost is not None and own is not None
+    assert captured[-1]["sum"] == pytest.approx(priced[0].cost + own, abs=1e-3)
 
 
 async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(

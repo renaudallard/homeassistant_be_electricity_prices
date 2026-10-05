@@ -431,7 +431,7 @@ async def _accrue_cost(
             month_bucket,
             month_mean_cache,
             today,
-            ctx.rlp_weights,
+            ctx.rlp_index_weights,
         )
 
         # Energy term: an hour the spot cache cannot price is NOT dropped.

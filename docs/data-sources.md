@@ -784,7 +784,11 @@ reorder neighbouring rows on a page whose whole job is the order.
 `_ytd_hourly_energy` takes it as `rlp_index_weights` beside the household's own
 `rlp_weights`: the first is the published index a month leg resolves against,
 the second is the load shape a compensation net is spread over and a bi-hourly
-day split by, and only the entry's own bill wants the same curve for both. A
+day split by, and only the entry's own bill wants the same curve for both. An
+earlier contract after a recorded supplier switch is priced the same way, live
+(`price_previous_periods`, `contract_periods.py`) and in the backfill, whose
+context carries the two as `rlp_index_weights` and `rlp_weights`
+(`_BackfillContext`, `backfill_window.py`). A
 blend this process has not loaded falls back to the plain arithmetic mean, the
 same answer an entry with no profile at all gets; the dialog never downloads.
 

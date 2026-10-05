@@ -291,7 +291,7 @@ async def _backfill_price_sensors(
                 month_bucket,
                 month_mean_cache,
                 today,
-                ctx.rlp_weights,
+                ctx.rlp_index_weights,
             )
             # Dynamic / spot-monthly without a spot for this hour: nothing to
             # write, the formula factor*spot+base (or factor*mean+base) needs both.
