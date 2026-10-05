@@ -140,6 +140,13 @@ the June 2026 Comfy Flanders card parsed whole (`avril`-style label, validity
 date 30 June 2026, all eight DSO rows), and the validity date is the authoritative
 cross-check in `archive_validity_check`, the month name in the title the fallback.
 
+The running month is not asked for, and `fetch_for_month` answers `None` for it.
+The archive keeps serving a month's first edition after the live card is
+reissued: on 5 October 2026 it still served the October cards of the 1st, priced
+on August's Belpex, where the live cards had been corrected on the 2nd to
+September's, 4,3 c/kWh apart on ComfyFlex. The month cache then takes the live
+card for the running month, as it does for Mega.
+
 This is what makes a contract start date work on a Luminus entry: until it was
 wired the signing-cohort splice had no card to read, so the entry stayed on the
 current card whatever date was set, and every past month of the year-to-date was

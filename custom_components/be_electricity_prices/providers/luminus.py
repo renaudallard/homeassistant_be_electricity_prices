@@ -53,6 +53,7 @@ from datetime import date
 from dataclasses import dataclass, replace
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     REGION_FLANDERS,
@@ -104,8 +105,8 @@ _API_URL = "https://www.luminus.be/api-next/get-pricelist/"
 # one call names the products a month had (with the Salesforce-style product
 # id the PDF endpoint wants), the other serves the PDF for one product, month
 # and region. Sixty-one months on the app's own picker, back to September
-# 2021. The current month is on it too, so a miss means the month, region or
-# product genuinely has no card.
+# 2021. The current month is on it too, but it is not asked for: see
+# fetch_for_month.
 _ARCHIVE_PRODUCTS_URL = "https://www.luminus.be/api/pricelist/products"
 _ARCHIVE_PDF_URL = "https://www.luminus.be/api/pricelist/pdf"
 
@@ -389,11 +390,21 @@ async def fetch_for_month(
     the signing-cohort splice had no card to read, and every past month of the
     year-to-date billed on the current card as a proxy. Every failure comes
     back as ``None``, the one-month answer the month cache expects.
+
+    The running month is refused, as Mega's archive refuses it. The archive
+    keeps serving a month's first edition after the live card is corrected:
+    on 5 October 2026 it still had the October cards of the 1st, priced on
+    August's Belpex, where the live ones had been reissued on the 2nd on
+    September's, 4,3 c/kWh apart on ComfyFlex. Answered from here, the month
+    cost billed that first edition while current_price billed the reissue.
+    ``None`` makes the live card the running month's, which it is.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or region not in _REGION_TO_TAB:
         return None
     first = date(year_month.year, year_month.month, 1)
+    if first >= dt_util.now().date().replace(day=1):
+        return None
     try:
         product_id = await _resolve_archive_product_id(session, contract, region, first)
         if product_id is None:

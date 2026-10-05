@@ -706,7 +706,9 @@ async def month_card(
     the first year-to-date fill of a Frank or Bolt entry minutes on a
     Raspberry Pi. The supplier's own archive (``fetch_for_month``) answers
     for what the project's archive does not hold: the running month, a
-    month before its horizon, a row it cannot serve. It is also asked over a
+    month before its horizon, a row it cannot serve. Mega and Luminus refuse
+    the running month, whose archived edition can lag behind a corrected live
+    card, so that month falls to the current snapshot. It is also asked over a
     row the archive caught live on a card indexed on its own month, which
     holds the estimate the card printed rather than what the month settled
     at (``_awaits_settlement``). None when neither has the month: the

@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 from datetime import date
@@ -648,10 +649,12 @@ async def test_smartflex_takes_the_prosumer_rate_its_card_bills_from_a_sibling(
 
 
 async def test_a_past_smartflex_month_takes_the_prosumer_rate_from_that_months_sibling(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """The archive path asks the same month's sibling card, by its own id."""
     from custom_components.be_electricity_prices.providers import luminus
+
+    freezer.move_to("2026-11-05 12:00:00+01:00")
 
     pdfs: list[str] = []
 
@@ -759,6 +762,50 @@ async def test_archive_resolves_the_product_id_then_the_months_card(
     assert luminus._archive_product_name("Luminus Comfy+ Electricité") != (
         luminus._archive_product_name("Luminus Comfy")
     )
+
+
+async def test_archive_is_not_asked_for_the_running_month(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The archive kept serving October's first edition after the live card
+    was reissued on the 2nd: ComfyFlex 0,1575 against the live 0,2008 on
+    5 October 2026, so the month cost billed October 4,3 c/kWh under
+    current_price. The running month is the live card's, and the archive is
+    asked only once the month has closed."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return _archive_products(("Luminus Comfy Electricité", "id-comfy"))
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return fixture_text("luminus_comfy_w.pdf")  # "avril 2026"
+
+    monkeypatch.setattr(luminus, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    freezer.move_to("2026-04-30 23:30:00+02:00")
+    for month in (date(2026, 4, 1), date(2026, 4, 30), date(2026, 5, 1)):
+        assert (
+            await luminus.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "luminus_comfy",
+                "wallonia",
+                month,
+            )
+            is None
+        )
+    assert asked == []
+    freezer.move_to("2026-05-01 00:30:00+02:00")
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_comfy",
+        "wallonia",
+        date(2026, 4, 1),
+    )
+    assert snap is not None and snap.publication_label == "avril 2026"
 
 
 async def test_archive_answers_none_without_the_product_or_for_another_month(
