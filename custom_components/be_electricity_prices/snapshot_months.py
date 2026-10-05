@@ -162,10 +162,15 @@ def monthly_rows_to_store(
     fact, so writing it to disk retires that cost for good rather than merely
     moving it off the setup path.
 
-    Only rows ``_month_row_is_provisional`` calls settled are written: the
-    running month's card can still be corrected, and a row the extractor
-    flagged provisional is waiting on the index the next card prints. Neither
-    is a fact worth outliving the process.
+    The running month's card is never written: it can still be corrected,
+    and it is asked for again on every read anyway. A closed month's row
+    that is still provisional, waiting on the index the next card prints or
+    parsed by the archive under the schema before the running one, is
+    written marked ``_provisional`` and restored as provisional, so it is
+    asked again on its TTL exactly as in memory and never served as settled.
+    Left out, a restart in the day after a schema bump had no card for those
+    months, and its first tick, which reads the meters but may not fetch,
+    billed them on the current card until the fill landed.
 
     A CLOSED month that came back with no card is written too, as a marker
     carrying the instant it was asked. Establishing that costs the same
@@ -206,9 +211,17 @@ def monthly_rows_to_store(
                 continue
             out[month_id] = {"_cached_at": stamp.isoformat(), "_absent": True}
             continue
-        if _month_row_is_provisional(snap, month, today):
+        if (month.year, month.month) >= running:
+            continue
+        if snap.provisional and (
+            stamp is None or _asked_while_it_ran(stamp, month, today)
+        ):
+            # Like the marker above: a row asked while its month ran answers
+            # for the running month and is asked again once it has closed.
             continue
         out[month_id] = _snapshot_to_dict(snap, stamp or dt_util.utcnow())
+        if snap.provisional:
+            out[month_id]["_provisional"] = True
     return out
 
 
@@ -226,9 +239,11 @@ def restore_monthly_rows(
     outranks what the last one wrote. A row that no longer parses, or that was
     written under an older snapshot schema, is dropped rather than migrated,
     the same healing gate the live snapshot uses, so a parser fix reaches
-    these months as soon as ``_SNAPSHOT_SCHEMA_VERSION`` moves. And a row that
-    is no longer settled is dropped too: the file may be older than the clock
-    is, and the running month's card must be re-asked whatever the disk says.
+    these months as soon as ``_SNAPSHOT_SCHEMA_VERSION`` moves. And a row for
+    what is now the running month is dropped too: the file may be older than
+    the clock is, and the running month's card must be re-asked whatever the
+    disk says. A row written as provisional comes back provisional, with the
+    time it was cached, so the month cache asks for it again on its TTL.
     """
     today = dt_util.now().date()
     cache = _monthly_snapshots(hass)
@@ -271,8 +286,10 @@ def restore_monthly_rows(
         except (KeyError, ValueError, TypeError) as err:
             _LOGGER.debug("discarding stored archive row %s: %s", month_id, err)
             continue
-        if _month_row_is_provisional(snap, month, today):
+        if (month.year, month.month) >= (today.year, today.month):
             continue
+        if data.get("_provisional") is True:
+            snap = replace(snap, provisional=True)
         cache[cache_key] = snap
         try:
             stamped[cache_key] = datetime.fromisoformat(data["_cached_at"])
@@ -366,8 +383,8 @@ async def _settled_by_supplier(
     The supplier's own path is what settles a month on the card after it, so
     it is asked. A settled answer replaces the row. An answer still waiting on
     that card, or a failure to ask, keeps the row but marks it provisional, so
-    it bills now, is asked again on the provisional TTL and is never written
-    to disk. A supplier that holds no card for the month has nothing better
+    it bills now, is asked again on the provisional TTL and is never stored
+    as settled. A supplier that holds no card for the month has nothing better
     to offer, and the row stands as it is.
     """
     try:
@@ -437,7 +454,7 @@ async def _archived_card_from_github(
         # run. Good enough to bill until then, not to keep: cached as settled
         # it was persisted under the running schema and served from disk for
         # good, so a fix that reached the archive never reached the entry. A
-        # provisional row is re-asked daily and never written.
+        # provisional row is re-asked daily and stored only as provisional.
         snapshot = replace(snapshot, provisional=True)
     return ArchivedCard(
         snapshot=snapshot,

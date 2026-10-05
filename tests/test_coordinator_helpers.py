@@ -5167,7 +5167,8 @@ async def test_an_archive_row_from_an_older_parser_is_not_kept() -> None:
     an entry that upgraded before the archive's run kept the misread for good:
     a January 2026 OCTA+ Dynamic cohort billed on the AMR clause's formulas,
     about 157 EUR a year too favourable, until the next schema bump. A row
-    older than the running schema is billed, re-asked, and never written."""
+    older than the running schema is billed, re-asked, and never stored as
+    settled."""
     from custom_components.be_electricity_prices.snapshot_codec import (
         _SNAPSHOT_SCHEMA_VERSION,
     )
@@ -5195,7 +5196,7 @@ async def test_an_archive_row_from_an_older_parser_is_not_kept() -> None:
             )
         assert card is not None
         assert card.snapshot.provisional is not kept
-        # Provisional is what keeps it out of the store and re-asks it daily.
+        # Provisional is what keeps it from being settled and re-asks it daily.
         assert (
             _month_row_is_provisional(card.snapshot, date(2026, 1, 1), date(2026, 9, 1))
             is not kept

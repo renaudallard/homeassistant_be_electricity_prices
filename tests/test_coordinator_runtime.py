@@ -6781,6 +6781,82 @@ async def test_archived_month_cards_survive_a_restart(
     )
 
 
+async def test_a_provisional_month_card_bills_the_tick_after_a_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An archive row parsed under the schema before the running one is billed
+    but provisional, asked again daily until the archive's next run re-parses
+    it, and was never written. A restart in that window, which follows every
+    schema bump for about a day, had no card for those months, and its first
+    tick, which reads the meters but may not fetch, billed them on the current
+    card: up to 160 EUR off current_year_cost until the fill landed. It is
+    written marked provisional and comes back as one, so that tick bills it
+    and the first tick that can fetch asks again once its day is up."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        _snapshot_for_month,
+    )
+
+    freezer.move_to("2026-09-30 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    august = replace(make_snapshot(publication_label="2026-08"), provisional=True)
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    _monthly_snapshots(hass)[(*tuple_key, "2026-08")] = august
+    _monthly_fetched_at(hass)[(*tuple_key, "2026-08")] = dt_util.utcnow()
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert saved["monthly_cards"]["2026-08"]["_provisional"] is True
+
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    restored = _monthly_snapshots(hass)[(*tuple_key, "2026-08")]
+    assert restored is not None
+    assert restored.provisional
+    assert restored.publication_label == "2026-08"
+
+    current = make_snapshot(publication_label="2026-09")
+    settled = make_snapshot(publication_label="2026-08 settled")
+    extractor = make_stub_extractor(extractor_id="cociter")
+    github = AsyncMock(return_value=ArchivedCard(snapshot=settled, read_by_ocr=False))
+    month = date(2026, 8, 1)
+    with patch(
+        "custom_components.be_electricity_prices.snapshot_months._archived_card_from_github",
+        github,
+    ):
+        got = await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            *tuple_key[1:],
+            month,
+            current,
+            cached_only=True,
+        )
+        assert got is restored
+        freezer.move_to("2026-10-01 10:00:00+02:00")
+        got = await _snapshot_for_month(
+            hass, MagicMock(), extractor, *tuple_key[1:], month, current
+        )
+    assert got is settled
+    assert github.await_count == 1
+
+
 async def test_restored_month_cards_are_dropped_by_a_schema_bump(
     hass: HomeAssistant, freezer: Any
 ) -> None:
