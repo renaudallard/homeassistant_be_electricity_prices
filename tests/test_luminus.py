@@ -968,6 +968,51 @@ def test_the_standing_loyalty_discount_is_not_read_as_a_campaign() -> None:
 
 
 @pytest.mark.parametrize(
+    ("fixture", "contract"),
+    [
+        # "pour la conclusion d'un contrat Luminus MaxxFix Electricite en
+        # octobre 2026".
+        ("luminus_maxxfix_w_oct.pdf", "luminus_maxxfix"),
+        # "En tant que nouveau client pour Luminus ComfyFlex": no month in
+        # the sentence, so the card's own "(octobre 2026)".
+        ("luminus_comfyflex_w_oct.pdf", "luminus_comfyflex"),
+    ],
+)
+def test_a_campaign_is_tied_to_the_month_it_is_signed_in(
+    fixture: str, contract: str
+) -> None:
+    """Every Luminus campaign is for contracts signed in one month, and the
+    card said so where no field carried it: the compare page and the ranking
+    credited October's 675 kWh to a candidate as if the household had signed
+    it on its own start date, 149 to 174 EUR off a 3500 kWh year-to-date. A
+    contract signed in another month is now credited nothing, as on Bolt."""
+    from custom_components.be_electricity_prices.cohort import _signed_in
+
+    text = fixture_text(fixture)
+    snap = parse_snapshot(contract, text, "wallonia")
+    assert snap.welcome_credit_signing_month == date(2026, 10, 1)
+    assert _signed_in(snap, date(2026, 10, 1)) is snap
+    march = _signed_in(snap, date(2026, 3, 1))
+    assert march.welcome_credit_kwh is None
+    assert march.welcome_credit_pct_of_energy is None
+    if "en octobre 2026" in " ".join(text.split()):
+        # The sentence's month wins over the label where it prints one.
+        moved = parse_snapshot(
+            contract, text.replace("en octobre 2026.", "en novembre 2026."), "wallonia"
+        )
+        assert moved.publication_label == "octobre 2026"
+        assert moved.welcome_credit_signing_month == date(2026, 11, 1)
+
+
+def test_a_card_without_a_campaign_names_no_signing_month() -> None:
+    snap = parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_w_oct.pdf"), "wallonia"
+    )
+    assert snap.welcome_credit_eur is None
+    assert snap.welcome_credit_signing_month is None
+
+
+@pytest.mark.parametrize(
     ("fixture", "contract", "rate"),
     [
         # "le prix unitaire en EUR/kWh TVAC de l'estimation annuelle de

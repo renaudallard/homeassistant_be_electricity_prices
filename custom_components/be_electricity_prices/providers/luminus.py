@@ -474,7 +474,7 @@ def parse_snapshot(
             publication_label=publication_label,
             valid_until=parse_valid_until(text),
             injection=injection,
-            **_extract_promo(text),  # type: ignore[arg-type]
+            **_extract_promo(text, publication_label),  # type: ignore[arg-type]
         ),
         printed_vat_rate(text, *_VAT_PATTERNS),
     )

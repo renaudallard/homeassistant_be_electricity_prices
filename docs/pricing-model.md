@@ -773,7 +773,8 @@ Where no card of the signing month can be had, today's stands in, and a campaign
 it would then reach a contract never offered it. Bolt's Plenty offer is for *"un nouveau
 contrat ... au cours du mois d'octobre 2026"*, and its variable cards are addressed by
 version rather than by month, so a Plenty Online contract signed in March was handed
-October's 9 c€/kWh cut. A card that names its month says so in `welcome_credit_signing_month`,
+October's 9 c€/kWh cut. A card that names its month says so in `welcome_credit_signing_month`
+(Bolt, and Luminus, whose campaign is for contracts concluded in the card's month),
 and `signing_month_snapshot` withholds the credit from any contract whose card month is not
 that one, a compare candidate included, since it is credited as if signed when the household
 signed its own.

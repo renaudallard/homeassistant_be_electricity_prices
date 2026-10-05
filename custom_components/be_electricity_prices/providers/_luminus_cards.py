@@ -45,12 +45,13 @@ from ._rates import (
 )
 from .base import ExtractorError
 from dataclasses import replace
+from datetime import date
 import re
 from ._luminus_overlays import _NUM
-from ._pdf import vat_multiplier
+from ._pdf import _MONTH_NAMES, vat_multiplier
 
 
-def _extract_promo(text: str) -> dict[str, object]:
+def _extract_promo(text: str, card_month: str = "") -> dict[str, object]:
     """Luminus's new-customer campaign, or ``{}`` when the card runs none.
 
     Returned as the snapshot fields it fills, so the caller does not restate
@@ -76,6 +77,13 @@ def _extract_promo(text: str) -> dict[str, object]:
     Luminus Dynamic prints "Reduction unique Cashback de 130 EUR TVA incl.
     apres 12 mois" with no signing condition, so nothing on the card says
     whether an existing customer gets it too.
+
+    The campaign is tied to the month it is signed in, which the sentence
+    names ("en octobre 2026") or, where it drops that phrase, the card the
+    campaign is printed on does: ``card_month`` is that card's own label
+    ("octobre 2026"). It lands in ``welcome_credit_signing_month``, so a
+    household signed in another month is not credited with it, a compare
+    candidate included.
     """
     flat = re.sub(r"\s+", " ", text)
     # The curly apostrophe matters as much as the pairing: April's Comfy closes
@@ -162,7 +170,20 @@ def _extract_promo(text: str) -> dict[str, object]:
         out["welcome_credit_kind"] = WELCOME_CREDIT_PRO_RATA
     if _PROMO_NIGHT_RE.search(sentence):
         out["welcome_credit_excludes_night_meter"] = True
+    signing = _named_month(_PROMO_MONTH_RE.search(sentence)) or _named_month(
+        _LABEL_MONTH_RE.fullmatch(card_month.strip())
+    )
+    if signing is not None:
+        out["welcome_credit_signing_month"] = signing
     return out
+
+
+def _named_month(match: re.Match[str] | None) -> date | None:
+    """The first of the month a "<mois> <annee>" match names, or ``None``."""
+    if match is None:
+        return None
+    number = _MONTH_NAMES.get(match.group(1).lower())
+    return None if number is None else date(int(match.group(2)), number, 1)
 
 
 _TRANSITIONAL_HEADING = "Informations sur le prix transitoire"
@@ -502,6 +523,10 @@ _PROMO_VALUED_AT_ESTIMATE_RE = re.compile(
 _ANNUAL_ESTIMATE_RE = re.compile(
     r"Estimation\s+annuelle\s+de\s+l['\u2019]énergie\s+fournie\s*\(c€/kWh\)\d?\s+(\d+,\d+)"
 )
+# "pour la conclusion d'un contrat Luminus MaxxFix Electricite en octobre
+# 2026", and the card's own "(octobre 2026)" label.
+_PROMO_MONTH_RE = re.compile(r"\ben\s+([^\W\d_]+)\s+(20\d{2})\b")
+_LABEL_MONTH_RE = re.compile(r"([^\W\d_]+)\s+(20\d{2})")
 _PROMO_NIGHT_RE = re.compile(
     r"non[-\s]valable\s+sur\s+un\s+compteur\s+exclusif\s+nuit", re.IGNORECASE
 )
