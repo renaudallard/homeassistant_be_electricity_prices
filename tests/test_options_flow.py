@@ -6757,8 +6757,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # dynamic settlement, in all three regions. Cheap to re-cost: a
         # sibling reads the same document as the variable contract beside it,
         # so the pair is one download and one parse. Trevion's FlexiO Max
-        # adds one more, a monthly card like Groene Stroom Flex.
-        ("flanders", "spot", False): 38,
+        # adds one more, a monthly card like Groene Stroom Flex, and takes
+        # out the LifePowr it replaced.
+        ("flanders", "spot", False): 37,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

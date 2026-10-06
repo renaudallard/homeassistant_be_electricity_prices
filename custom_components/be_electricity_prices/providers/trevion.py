@@ -103,6 +103,8 @@ class _ContractDef:
     label: str
     kind: TariffKind
     card_re: str
+    # The first day Trevion no longer sold it; see ``Contract.withdrawn``.
+    withdrawn: date | None = None
 
 
 _CONTRACTS = (
@@ -122,11 +124,15 @@ _CONTRACTS = (
         "dynamic",
         "Groene-Energie-Dynamisch-Plus",
     ),
+    # Replaced by FlexiO Max in October 2026: the listing carries no LifePowr
+    # card after September and its product pages redirect to FlexiO Max,
+    # whose card prints the same formula, fee and network rows.
     _ContractDef(
         "lifepowr",
         "LifePowr by Trevion",
         "spot_monthly",
         "LifePowrByTrevion",
+        withdrawn=date(2026, 10, 1),
     ),
     _ContractDef("energreen", "Energreen by Trevion", "dynamic", "EnergreenByTrevion"),
     # Launched in October 2026 for households steering their installations
@@ -697,6 +703,7 @@ EXTRACTOR = SupplierExtractor(
             label=item.label,
             kind=item.kind,
             regions=frozenset({REGION_FLANDERS}),
+            withdrawn=item.withdrawn,
         )
         for item in _CONTRACTS
     ),

@@ -81,6 +81,18 @@ def test_trevion_is_registered_with_seven_flemish_contracts() -> None:
     assert all(not contract.spot_indexed_injection for contract in extractor.contracts)
 
 
+def test_lifepowr_is_withdrawn_from_october_2026() -> None:
+    """FlexiO Max replaced LifePowr with the October 2026 cards. The registry
+    must carry the date, or an entry on LifePowr keeps being served the
+    September card as current with nothing said."""
+    withdrawn = {
+        contract.id: contract.withdrawn
+        for contract in EXTRACTORS["trevion"].contracts
+        if contract.withdrawn is not None
+    }
+    assert withdrawn == {"lifepowr": date(2026, 10, 1)}
+
+
 @pytest.mark.parametrize("layout", [False, True])
 def test_fixed_card_parses_both_pdf_text_orders(layout: bool) -> None:
     snap = parse_snapshot("groene_energie_vast", fixture_text(_VAST, layout=layout))

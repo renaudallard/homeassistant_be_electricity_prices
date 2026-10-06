@@ -71,6 +71,14 @@ is "los van de energieprijzen en terugleveringsvergoedingen", depends on the
 imbalance market and on what the household makes available, and is settled
 monthly, so it is not modelled.
 
+LifePowr carries `withdrawn=date(2026, 10, 1)`. FlexiO Max replaced it: the
+listing links no LifePowr card after September 2026, the LifePowr product pages
+redirect to FlexiO Max, and the October FlexiO Max card prints LifePowr's
+formula, fee, network rows and taxes unchanged. The contract stays registered so
+an entry on it keeps pricing on the September card and is told so by the
+`contract_withdrawn` Repairs card; new setups and both compare pages no longer
+offer it.
+
 The three RLP products use `SpotMonthlyRates` with `rlp_indexed=True` and
 `rlp_blend="flanders"`; their contract kind already makes the setup flow require
 an ENTSO-E key. Their feed-in formulas set `spp_indexed=True`, because the
