@@ -4426,7 +4426,7 @@ def test_a_card_stating_another_vat_rate_than_the_fleet_is_filed(
     ],
 )
 def test_a_totalenergies_card_from_october_2026_is_checked_for_its_feed_in(
-    fixture: str, feed_in: str, cid: str, shape: str
+    fixture: str, feed_in: str, cid: str, shape: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """From October 2026 a TotalEnergies product card prints no feed-in
     block, and the offer is on the feed-in card the fetch reads beside it.
@@ -4434,9 +4434,13 @@ def test_a_totalenergies_card_from_october_2026_is_checked_for_its_feed_in(
     used to expect no feed-in at all of a card from October on."""
     from dataclasses import replace as dc_replace
 
+    from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
     from custom_components.be_electricity_prices.providers import totalenergies
     from tests import fixture_text
 
+    # The expected DSOs are bound by _load_providers, which this test does not
+    # run: it only passed after another test had loaded them.
+    monkeypatch.setitem(lc._EXPECTED_DSOS, "flanders", FLUVIUS_KEYS)
     text = fixture_text(fixture, layout=True)
     leg, _month = totalenergies.parse_injection_card(
         cid, fixture_text(feed_in, layout=True), "flanders"
