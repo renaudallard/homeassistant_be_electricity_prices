@@ -105,6 +105,9 @@ class _ContractDef:
     card_re: str
     # The first day Trevion no longer sold it; see ``Contract.withdrawn``.
     withdrawn: date | None = None
+    # The product that replaced it, whose cards go on naming the indices its
+    # last month settles on; see ``_settle_on_published_indices``.
+    successor: str | None = None
 
 
 _CONTRACTS = (
@@ -133,6 +136,7 @@ _CONTRACTS = (
         "spot_monthly",
         "LifePowrByTrevion",
         withdrawn=date(2026, 10, 1),
+        successor="flexio_max",
     ),
     _ContractDef("energreen", "Energreen by Trevion", "dynamic", "EnergreenByTrevion"),
     # Launched in October 2026 for households steering their installations
@@ -267,6 +271,8 @@ async def _settle_on_published_indices(
     Only the legs that are indexed ask. The fixed and dynamic contracts are
     settled by neither, so they never pay for the extra card; the monthly one
     carries an RLP-indexed energy leg and an SPP-indexed credit and takes both.
+    A withdrawn product has no following card for its last month, so that one
+    is read off its successor's, which names the same two market indices.
     While the following card is not out the month is flagged ``provisional``,
     so the month cache re-asks after its TTL and the archive walk leaves the
     row absent rather than filing an estimate as a closed month's fact.
@@ -287,7 +293,12 @@ async def _settle_on_published_indices(
         year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
     )
     try:
-        url, _label = _resolve_card(html, contract, following)
+        try:
+            url, _label = _resolve_card(html, contract, following)
+        except ExtractorError:
+            if contract.successor is None:
+                raise
+            url, _label = _resolve_card(html, _BY_ID[contract.successor], following)
         text = await fetch_pdf_text_layout(session, url)
     except ExtractorError as err:
         # A timeout or a 5xx says nothing about the month, so let the month

@@ -37,7 +37,10 @@ gekende waarde is deze van augustus 2026 (79,11 EUR/MWh)". The sentence appears
 twice in the same words, once for `Belpex_RLP_VL` and once for `Belpex_SPP_BE`,
 so each reader is anchored on its own parameter. Only indexed legs ask, so the
 fixed and dynamic contracts pay for no second card, and a month whose following
-card is not out yet comes back `provisional`.
+card is not out yet comes back `provisional`. A withdrawn product's last month
+has no following card of its own, so it is settled on the card of the product
+`_ContractDef.successor` names, which prints the same indices: LifePowr's
+September 2026 on the October FlexiO Max card.
 
 The card also defines both indices on "het gewogen gemiddelde van de Belgische
 kwartierprijzen", the quarter-hour prices, while the integration computes its
@@ -77,7 +80,7 @@ redirect to FlexiO Max, and the October FlexiO Max card prints LifePowr's
 formula, fee, network rows and taxes unchanged. The contract stays registered so
 an entry on it keeps pricing on the September card and is told so by the
 `contract_withdrawn` Repairs card; new setups and both compare pages no longer
-offer it.
+offer it. Its `successor` is `flexio_max`, which settles its last month.
 
 The three RLP products use `SpotMonthlyRates` with `rlp_indexed=True` and
 `rlp_blend="flanders"`; their contract kind already makes the setup flow require

@@ -758,6 +758,41 @@ async def test_fetch_for_month_flags_a_month_the_next_card_cannot_settle(
     assert may.injection.index_realised is None
 
 
+async def test_lifepowr_last_month_settles_on_the_flexio_max_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LifePowr's last card is September 2026, so no LifePowr card ever names
+    September's indices and the month stayed provisional for good. The
+    October FlexiO Max card that replaced it names both, the market indices
+    every monthly Trevion card prints."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    async def _render(_session: object, url: str, *a: object, **k: object) -> str:
+        if "FlexiO-Max" in url:
+            return _layout("trevion_flexio_max_2026-10.pdf")
+        return _layout("trevion_lifepowr_2026-09.pdf")
+
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", _render)
+    september = await fetch_for_month(
+        make_text_session(
+            '<a href="/tariefkaarten/'
+            'Tariefkaart-LifePowrByTrevion-Particulier-202609.pdf">c</a>'
+            '<a href="/tariefkaarten/'
+            'Tariefkaart-FlexiO-Max-by-Trevion-Particulier-202610.pdf">c</a>'
+        ),
+        "lifepowr",
+        REGION_FLANDERS,
+        date(2026, 9, 1),
+    )
+    assert september is not None
+    assert september.provisional is False
+    energy = september.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.index_realised == pytest.approx(0.16547)
+    assert september.injection is not None
+    assert september.injection.index_realised == pytest.approx(0.10053)
+
+
 async def test_a_card_indexed_on_neither_asks_for_no_second_card(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
