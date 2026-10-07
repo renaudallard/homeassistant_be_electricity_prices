@@ -513,7 +513,9 @@ cards whose Dutch edition disagreed with the French one (issues #115 and #117) w
 same way: three Dutch addresses served another document, one prints its formula with a stray
 comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses on 5 and 6
 October and their entries were removed; the other two stay allowed. The French card is the one
-billed. The report gives these rows their own section.
+billed. The French myEssential card in Flanders, whose green contribution is left blank and
+whose Dutch edition has stood in for it since 1 October, is allowed until the November card.
+The report gives these rows their own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

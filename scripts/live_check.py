@@ -768,6 +768,16 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "the October 2026 Dutch card prints its formula with a stray comma "
         "('7,01'); the French card is billed",
     ),
+    (
+        "totalenergies/totalenergies_myessential/flanders: French and Dutch "
+        "cards agree",
+        "the French card does not read: ExtractorError: TotalEnergies: yearly "
+        "fee + renewables row not found; the Dutch card stands in",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 French card leaves its green contribution blank; the "
+        "Dutch card is billed",
+    ),
 }
 
 
