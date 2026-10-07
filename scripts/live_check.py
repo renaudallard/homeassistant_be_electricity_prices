@@ -760,24 +760,6 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "inbegrepen'; the French card is billed",
     ),
     (
-        "totalenergies/totalenergies_electricite_variable/brussels: French and "
-        "Dutch cards agree",
-        "the Dutch card does not read: ExtractorError: TotalEnergies: the Dutch "
-        "card is not Elektriciteit Variabel",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 Dutch address serves myEssential; the French card is billed",
-    ),
-    (
-        "totalenergies/totalenergies_mycomfort/flanders: French and Dutch cards agree",
-        "the Dutch card does not read: ExtractorError: TotalEnergies: the Dutch "
-        "card is not myComfort Variabel",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 Dutch address serves myComfort Vast; the French card "
-        "is billed",
-    ),
-    (
         "totalenergies/totalenergies_mycomfort/brussels: French and Dutch cards agree",
         "the Dutch card does not read: ExtractorError: TotalEnergies: variable "
         "formula not found",
@@ -785,15 +767,6 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         date(2026, 11, 1),
         "the October 2026 Dutch card prints its formula with a stray comma "
         "('7,01'); the French card is billed",
-    ),
-    (
-        "totalenergies/totalenergies_myessential/brussels: French and Dutch "
-        "cards agree",
-        "the Dutch card does not read: ExtractorError: TotalEnergies: the Dutch "
-        "card is not the brussels electricity card",
-    ): (
-        date(2026, 11, 1),
-        "the October 2026 Dutch address serves a gas card; the French card is billed",
     ),
 }
 

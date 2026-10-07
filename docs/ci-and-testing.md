@@ -509,10 +509,11 @@ The first went once the parser read Dutch cards, the other two once a French car
 parse fell back to its Dutch edition. Mega's Flemish professional Smart Flex card printed no
 price formula in either language the same month, where the Wallonia and Brussels cards do; it
 still parses, so its entries bill the rates it prints. The five October 2026 TotalEnergies
-cards whose Dutch edition disagrees with the French one (issues #115 and #117) are allowed the
-same way: three Dutch addresses serve another document, one prints its formula with a stray
-comma and one prints its fee ex-VAT. The French card is the one billed. The report gives these
-rows their own section.
+cards whose Dutch edition disagreed with the French one (issues #115 and #117) were allowed the
+same way: three Dutch addresses served another document, one prints its formula with a stray
+comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses on 5 and 6
+October and their entries were removed; the other two stay allowed. The French card is the one
+billed. The report gives these rows their own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently
