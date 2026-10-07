@@ -1627,7 +1627,9 @@ changed since the morning's archive walk is rendered again:
   files `[live-check] supplier drift detected`, and a card whose federal tax
   block, stated VAT rate, Flemish network ceiling or regulated network figure
   disagrees with the month's other cards files its own issue, as does a federal
-  or VREG constant whose known window is about to lapse.
+  or VREG constant whose known window is about to lapse. A TotalEnergies card
+  whose Dutch edition reads differently from the French one, or stands in for
+  a French card that does not read, files one too.
 
 ### The card archive
 

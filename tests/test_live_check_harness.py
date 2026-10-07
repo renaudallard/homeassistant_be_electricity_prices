@@ -3186,13 +3186,15 @@ class _EditionCard:
 
 
 def _editions(
-    french: Any, dutch: Any, transient: bool = False
+    french: Any, dutch: Any, transient: bool = False, french_arrives: bool = True
 ) -> list[tuple[str, bool, str]]:
     """Run the edition comparison over two stand-in cards and return the rows
     it recorded. ``french`` and ``dutch`` are a card, or an exception the
-    parse raises."""
+    parse raises. ``french_arrives`` False fails the French card's fetch."""
 
     async def _text(_session: Any, url: str) -> str:
+        if not french_arrives and url.endswith("_FR.pdf"):
+            raise ValueError("HTTP 404")
         return url
 
     def _parse(_cid: str, text: str, _region: str, url: str) -> Any:
@@ -3297,14 +3299,33 @@ def test_a_cards_two_editions_are_compared_on_what_is_billed() -> None:
 
 def test_a_dutch_edition_that_does_not_read_is_reported() -> None:
     """The Dutch card only matters as the French one's stand-in, so it failing
-    is reported, while a French card failing is the extractor check's to say,
-    and a transient failure on the Dutch one says nothing."""
+    is reported, and a transient failure on it says nothing."""
     french = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "fr")
     refused = ValueError("the Dutch card is not myComfort Variabel")
     ((label, ok, detail),) = _editions(french, refused)
     assert not ok and "the Dutch card does not read" in detail
-    assert _editions(ValueError("layout"), french) == []
     assert _editions(french, refused, transient=True) == []
+
+
+def test_a_dutch_edition_standing_in_is_reported() -> None:
+    """On 6 October 2026 the French myEssential address in Brussels started
+    serving a gas card. The fetch read the Dutch card instead and passed, so
+    nothing else said so. A French card that did not arrive, or that fails
+    with the Dutch one, fails the fetch, which the extractor check reports."""
+    label = "totalenergies/te/wallonia: French and Dutch cards agree"
+    dutch = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "nl")
+    gas = ValueError("the card is not the wallonia electricity card")
+    assert _editions(gas, dutch) == [
+        (
+            label,
+            False,
+            "the French card does not read: ValueError: the card is not the "
+            "wallonia electricity card; the Dutch card stands in",
+        )
+    ]
+    assert _editions(gas, ValueError("layout")) == []
+    assert _editions(gas, ValueError("layout"), transient=True) == []
+    assert _editions(None, dutch, french_arrives=False) == []
 
 
 # ---- the workflow's retry loop -----------------------------------------------

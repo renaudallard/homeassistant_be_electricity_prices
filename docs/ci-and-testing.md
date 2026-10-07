@@ -1327,8 +1327,13 @@ TotalEnergies' cards are also read in Dutch and compared with the French edition
 own issue. The French card is billed and the Dutch one stands in only when the French one does
 not parse, so a Dutch card that does not read, or that parses to different billed figures, is a
 fallback that would mislead on the day it is needed. Where each edition was fetched from and the
-VAT rate it states are left out of the comparison. A French card that does not parse is the
-extractor check's to report, and a transient failure on the Dutch one reports nothing. The walk
+VAT rate it states are left out of the comparison. A French card that does not parse while the
+Dutch one does is reported as the Dutch card standing in: the fetch passes on the Dutch card, so
+the extractor check stays green, and on 6 October 2026 the French myEssential address in
+Brussels started serving a gas card the afternoon its Dutch one was corrected
+(`test_a_dutch_edition_standing_in_is_reported`). A French card that did not arrive, or that
+fails along with the Dutch one, fails the fetch and is the extractor check's to report, and a
+transient failure on the Dutch one reports nothing. The walk
 runs under one `memoise_text_fetches`, so the French card the fetch read is not read twice. It
 runs daily, and the issue's fingerprint posts only when the set of disagreeing cards changes,
 which is once a month in practice, when TotalEnergies republishes. On 3 October 2026 it reported

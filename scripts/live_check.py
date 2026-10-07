@@ -2093,30 +2093,49 @@ async def _compare_totalenergies_editions(
     the Dutch card is right. In October 2026 four Dutch addresses served
     another product or a typo, and Electricité Variable in Wallonia charged
     a 100,00 EUR fee in French and 94,34 in Dutch. A French card that does
-    not parse is the extractor check's to report, so it is left alone here.
+    not parse while the Dutch one does is reported too: the fetch succeeds
+    on the Dutch card, so the extractor check stays green, and on 6 October
+    2026 the French myEssential address in Brussels started serving a gas
+    card. A French card that did not arrive, or that fails along with the
+    Dutch one, fails the fetch, which is the extractor check's to report.
     """
     label = (
         f"totalenergies/{contract.contract_id}/{region}: French and Dutch cards agree"
     )
     figures: list[dict[str, Any]] = []
+    french_error: Exception | None = None
     for language in ("FR", "NL"):
         url = totalenergies._document_url(contract.slug, region, language)
+        text = None
         try:
             text = await _fetch_with_retry(
                 partial(totalenergies.fetch_pdf_text_layout, session, url)
             )
             snap = totalenergies.parse_snapshot(contract.contract_id, text, region, url)
         except Exception as err:
-            if language == "FR" or _is_transient_fetch_error(str(err)):
-                return
-            _record(
-                label,
-                False,
-                f"the Dutch card does not read: {type(err).__name__}: {err}",
-                kind="edition",
-            )
+            if language == "FR":
+                if text is None:
+                    return
+                french_error = err
+                continue
+            if french_error is None and not _is_transient_fetch_error(str(err)):
+                _record(
+                    label,
+                    False,
+                    f"the Dutch card does not read: {type(err).__name__}: {err}",
+                    kind="edition",
+                )
             return
         figures.append(asdict(snap))
+    if french_error is not None:
+        _record(
+            label,
+            False,
+            f"the French card does not read: {type(french_error).__name__}: "
+            f"{french_error}; the Dutch card stands in",
+            kind="edition",
+        )
+        return
     french, dutch = figures
     differences = _edition_differences(french, dutch)
     _record(label, not differences, "; ".join(differences), kind="edition")
