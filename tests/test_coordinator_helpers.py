@@ -1058,7 +1058,7 @@ def test_historical_injection_rate_averages_floored_quarters() -> None:
         0.015
     )
     # A 3 kWh hour is 4,5 cents of credit, not zero.
-    assert 3.0 * 0.015 == pytest.approx(0.045)
+    assert pytest.approx(0.045) == 3.0 * 0.015
 
 
 def test_historical_injection_rate_quarters_are_a_no_op_when_linear() -> None:
@@ -12343,7 +12343,7 @@ async def test_a_double_flow_meter_bills_the_cheaper_network_option(
     # cap leaves the prosumer tariff on the net draws standing.
     cheap = _snap(6.0)
     capped = 279 * 0.32 + 2.5
-    assert 279 * 0.20 + 310 * 0.12 > capped
+    assert capped < 279 * 0.20 + 310 * 0.12
     assert await _year(cheap, 1.0, double_flow_meter=True) == pytest.approx(capped)
 
 
@@ -13243,7 +13243,7 @@ def test_the_first_year_volume_nets_only_where_the_meter_nets() -> None:
         3500.0, 1000.0, 800.0, compensation=False
     ) == pytest.approx(3500.0)
     # What the gate is worth on Online Flex, 4,929 c EUR/kWh over 2500 kWh.
-    assert 0.04929 * (3500.0 - 1000.0) == pytest.approx(123.23, abs=0.01)
+    assert pytest.approx(123.23, abs=0.01) == 0.04929 * (3500.0 - 1000.0)
 
 
 def test_an_anniversary_credit_waits_as_long_as_the_card_says() -> None:

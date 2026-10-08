@@ -371,9 +371,7 @@ async def _resolve_daily_kwh(
     for day in feed_in:
         if day in out:
             out[day][2] = out[day][3] = 0.0
-    if not (cons_ok and inj_ok):
-        resolved = None
-    elif not out:
+    if not (cons_ok and inj_ok) or not out:
         resolved = None
     else:
         resolved = {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}

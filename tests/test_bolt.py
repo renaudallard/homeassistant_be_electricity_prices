@@ -901,12 +901,14 @@ async def test_a_textless_card_is_not_treated_as_an_unpublished_one() -> None:
         served.append(url)
         return textless
 
-    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
-        with pytest.raises(CardNotReadableError):
-            await bolt_mod._fetch_pdf_text(
-                None,  # type: ignore[arg-type]
-                bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
-            )
+    with (
+        patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve),
+        pytest.raises(CardNotReadableError),
+    ):
+        await bolt_mod._fetch_pdf_text(
+            None,  # type: ignore[arg-type]
+            bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+        )
     # One fetch only: it must not even try the previous month.
     assert len(served) == 1
 
@@ -972,12 +974,14 @@ async def test_a_transient_failure_is_not_treated_as_an_unpublished_card(
         served.append(url)
         raise ExtractorError(message)
 
-    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
-        with pytest.raises(ExtractorError):
-            await bolt_mod._fetch_pdf_text(
-                None,  # type: ignore[arg-type]
-                bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
-            )
+    with (
+        patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve),
+        pytest.raises(ExtractorError),
+    ):
+        await bolt_mod._fetch_pdf_text(
+            None,  # type: ignore[arg-type]
+            bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+        )
     # One fetch only: it must not even try the previous month.
     assert len(served) == 1
 

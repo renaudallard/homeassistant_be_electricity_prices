@@ -1280,5 +1280,5 @@ def test_the_two_epexdam_sets_are_two_objects() -> None:
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
     known = {c.id for c in EXTRACTORS["engie"].contracts}
-    assert _EPEXDAM_INJECTION_CONTRACTS <= known
-    assert _EPEXDAM_ENERGY_CONTRACTS <= known
+    assert known >= _EPEXDAM_INJECTION_CONTRACTS
+    assert known >= _EPEXDAM_ENERGY_CONTRACTS

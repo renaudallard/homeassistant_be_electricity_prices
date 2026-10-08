@@ -186,7 +186,7 @@ def test_every_latency_budget_stays_under_the_hard_cap() -> None:
         if budget >= cap
     }
     assert not over, f"latency budgets at/above the {cap}s hard cap: {over}"
-    assert lc.LATENCY_WARN_THRESHOLD_S < cap
+    assert cap > lc.LATENCY_WARN_THRESHOLD_S
 
 
 def _blown(supplier: str) -> dict[str, dict[str, float]]:
@@ -1023,7 +1023,7 @@ def test_the_arrears_allowance_carries_a_review_date() -> None:
     declares, so nothing can expire it automatically. The review date is
     enforced by the test below instead of at runtime, because a runtime
     expiry would fail on perfectly normal arrears."""
-    assert lc._PERIOD_LAG_REVIEW_BY > date(2026, 8, 13)
+    assert date(2026, 8, 13) < lc._PERIOD_LAG_REVIEW_BY
 
 
 def test_the_arrears_allowance_is_still_believed() -> None:

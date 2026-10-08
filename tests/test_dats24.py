@@ -396,15 +396,17 @@ def test_fetch_does_not_fall_back_on_a_transient_failure() -> None:
             "Versie%2004%202026": (_APRIL_PDF, 200),
         }
     )
-    with patch.object(dt_util, "now", return_value=_IN_MAY):
-        with pytest.raises(ExtractorError, match="HTTP 503"):
-            asyncio.run(
-                fetch(
-                    cast(aiohttp.ClientSession, session),
-                    "dats24_groen_variabel",
-                    "flanders",
-                )
+    with (
+        patch.object(dt_util, "now", return_value=_IN_MAY),
+        pytest.raises(ExtractorError, match="HTTP 503"),
+    ):
+        asyncio.run(
+            fetch(
+                cast(aiohttp.ClientSession, session),
+                "dats24_groen_variabel",
+                "flanders",
             )
+        )
     # The previous month was never requested.
     assert len(session.requested) == 1
 

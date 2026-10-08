@@ -368,7 +368,7 @@ def test_flex_one_carries_the_full_overlay() -> None:
         "test://flexone",
         REGION_FLANDERS,
     )
-    assert FLUVIUS_KEYS <= set(snap.dsos)
+    assert set(snap.dsos) >= FLUVIUS_KEYS
     assert snap.taxes.federal_excise == pytest.approx(0.048760)
     assert snap.taxes.flanders_renewables == pytest.approx(0.0151)
     assert snap.taxes.wallonia_renewables == pytest.approx(0.0322)

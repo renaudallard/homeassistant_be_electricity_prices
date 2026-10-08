@@ -1688,13 +1688,15 @@ async def test_pro_textless_card_is_not_rolled_back_to_last_month() -> None:
         served.append(url)
         return textless
 
-    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
-        with pytest.raises(CardNotReadableError):
-            await mega_fetch(
-                None,  # type: ignore[arg-type]
-                "mega_pro_dynamic",
-                "wallonia",
-            )
+    with (
+        patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve),
+        pytest.raises(CardNotReadableError),
+    ):
+        await mega_fetch(
+            None,  # type: ignore[arg-type]
+            "mega_pro_dynamic",
+            "wallonia",
+        )
     # It must not have reached for the previous month's card.
     assert len(served) == 1
 
@@ -1716,9 +1718,11 @@ async def test_pro_transient_error_is_not_rolled_back_to_last_month() -> None:
         served.append(url)
         raise ExtractorError(f"network error fetching {url}: TimeoutError")
 
-    with patch.object(mega_mod, "fetch_pdf_text", new=_timing_out):
-        with pytest.raises(ExtractorError, match="network error"):
-            await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+    with (
+        patch.object(mega_mod, "fetch_pdf_text", new=_timing_out),
+        pytest.raises(ExtractorError, match="network error"),
+    ):
+        await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
     assert len(served) == 1
 
     # The control: a card that is not published yet still rolls back a month,
@@ -1839,9 +1843,9 @@ async def test_pro_card_missing_past_the_grace_is_reported_not_rolled_back() -> 
     with (
         patch.object(mega_mod, "fetch_pdf_text", new=_missing),
         patch.object(mega_mod.dt_util, "now", new=_on(late)),
+        pytest.raises(ExtractorError, match="did not return a PDF"),
     ):
-        with pytest.raises(ExtractorError, match="did not return a PDF"):
-            await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
+        await mega_fetch(None, "mega_pro_smart_fixed", "wallonia")  # type: ignore[arg-type]
     assert all("-102026-" in u for u in served)
 
 
@@ -2571,7 +2575,7 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
     # Every id on the list is a real contract, so a rename cannot leave a
     # product silently unflagged.
     known = {c.id for c in EXTRACTORS["mega"].contracts}
-    assert _DIRECT_DEBIT_RISTOURNE <= known
+    assert known >= _DIRECT_DEBIT_RISTOURNE
 
     assert offers_direct_debit("mega", "mega_cosy_fixed") is True
     # The four whose whole ristourne hangs on the answer. Smart Fixed was

@@ -175,7 +175,11 @@ def _annual_bill(
         # DSO publishes no prosumer rate, which zeroes the whole term.
         prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
         fees += prosumer_annual * (prosumer_proration / 12.0 - fee_proration)
-    if capacity_proration is not None and include_capacity:
+    if (
+        capacity_proration is not None
+        and include_capacity
+        and entry.data.get(CONF_REGION) == REGION_FLANDERS
+    ):
         # Same correction for the Flanders capacity tariff, and for the same
         # reason: _ytd_capacity accrues each month by its OWN length
         # (days_in_ytd / days_in_full_month), while fee_proration is a uniform
@@ -188,9 +192,8 @@ def _annual_bill(
         # it uncapped left the correction and the term it corrects on two
         # different numbers, so they no longer cancelled and a capped entry
         # was quoted about half its capacity leg.
-        if entry.data.get(CONF_REGION) == REGION_FLANDERS:
-            capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
-            fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
+        capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
+        fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         # Article 81's cap on a double-flow meter, settled on the same volumes

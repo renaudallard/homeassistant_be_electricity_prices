@@ -180,10 +180,13 @@ def symbols_of(path: Path) -> set[str]:
             out.add(node.attr)
         elif isinstance(node, ast.arg):
             out.add(node.arg)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and PRIVATE_KEY.fullmatch(node.value)
+        ):
             # A stored key the code writes, "_schema_version" or "_via".
-            if PRIVATE_KEY.fullmatch(node.value):
-                out.add(node.value)
+            out.add(node.value)
     return out
 
 

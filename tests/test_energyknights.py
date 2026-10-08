@@ -172,7 +172,7 @@ def test_agilior_injection_is_spot_indexed_and_vat_exempt() -> None:
     # would print 6,21.
     assert injection.factor == pytest.approx(1.0)
     assert injection.base == pytest.approx(-12 / 1000)
-    assert (70.54 - 12) / 10 == pytest.approx(5.85, abs=0.005)
+    assert pytest.approx(5.85, abs=0.005) == (70.54 - 12) / 10
     assert injection.vat_applies is False
     # A dynamic card settles the credit per slot, so the printed figure is an
     # illustration rather than a rate to fall back on.
@@ -760,7 +760,7 @@ def test_the_archive_horizon_refuses_2024() -> None:
         _CONTRACTS_BY_ID,
     )
 
-    assert _ARCHIVE_HORIZON == date(2025, 1, 1)
+    assert date(2025, 1, 1) == _ARCHIVE_HORIZON
     assert _CONTRACTS_BY_ID[_AGILIS].archive_from == _ARCHIVE_HORIZON
     assert _CONTRACTS_BY_ID[_ESSENTIA].archive_from == _ARCHIVE_HORIZON
     # Agilior's predecessor did not exist before September 2025.

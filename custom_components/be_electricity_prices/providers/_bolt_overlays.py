@@ -397,17 +397,16 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             )
             _RESA_REW_LOGGED = True
         return out
-    if resa.distribution_single >= rew.distribution_single:
-        if not _RESA_REW_LOGGED:
-            _LOGGER.error(
-                "Bolt RESA/REW post-swap invariant tripped "
-                "(resa=%.4f rew=%.4f); the upstream PDF may have been "
-                "fixed and the label swap in _WALLONIA_LABELS likely "
-                "needs to be removed",
-                resa.distribution_single,
-                rew.distribution_single,
-            )
-            _RESA_REW_LOGGED = True
+    if resa.distribution_single >= rew.distribution_single and not _RESA_REW_LOGGED:
+        _LOGGER.error(
+            "Bolt RESA/REW post-swap invariant tripped "
+            "(resa=%.4f rew=%.4f); the upstream PDF may have been "
+            "fixed and the label swap in _WALLONIA_LABELS likely "
+            "needs to be removed",
+            resa.distribution_single,
+            rew.distribution_single,
+        )
+        _RESA_REW_LOGGED = True
     return out
 
 

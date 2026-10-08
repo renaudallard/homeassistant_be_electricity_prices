@@ -47,7 +47,7 @@ target-version = "py313"
 [tool.ruff.lint]
 # The rule set is spelled out so a ruff upgrade can never silently expand
 # what is linted for. E501 is left to the formatter.
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.format]

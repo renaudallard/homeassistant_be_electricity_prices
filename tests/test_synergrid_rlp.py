@@ -181,9 +181,8 @@ async def test_fetch_rlp_returns_empty_on_download_error() -> None:
 
 
 async def test_fetch_rlp_returns_empty_on_a_bad_workbook_and_cleans_up() -> None:
-    garbage = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsb")
-    garbage.write(b"not a workbook")
-    garbage.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsb") as garbage:
+        garbage.write(b"not a workbook")
     session = MagicMock()
     with patch.object(
         synergrid, "_download", new=AsyncMock(return_value=Path(garbage.name))

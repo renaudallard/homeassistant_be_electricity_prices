@@ -33,6 +33,7 @@ sits apart from the engine that loops over candidates.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Sequence
 from dataclasses import replace
@@ -363,12 +364,11 @@ class _HouseholdMixin:
             # input, and it is what still answers when the fetch fails.
             view = _detached_spot_view(coord, isolate=False)
             month_view.append(view)
-            try:
+            # A failed fetch degrades to the day-ahead mean.
+            with contextlib.suppress(Exception):
                 await view._ensure_historical_spots(
                     today_local.replace(day=1), today_local, key
                 )
-            except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
-                pass
             resolved = view._monthly_spot_mean(
                 today_local.year, today_local.month, spot_dict
             )
@@ -454,14 +454,13 @@ class _HouseholdMixin:
                 first = today_local.replace(
                     month=(today_local.month - 1) // 3 * 3 + 1, day=1
                 )
-                try:
+                # A failed fetch degrades to the month mean below.
+                with contextlib.suppress(Exception):
                     await view._ensure_historical_spots(
                         first,
                         today_local,
                         self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY),
                     )
-                except Exception:  # noqa: BLE001 - degrade to the month mean below
-                    pass
                 quarter: float | None = view._quarter_index(
                     snapshot.energy, today_local.year, today_local.month, spot_dict
                 )
@@ -650,12 +649,11 @@ class _HouseholdMixin:
             from .providers.custom import build_snapshot
             from .snapshot_resolve import _resolve_snapshot
 
-            try:
+            # A failure keeps the configured snapshot.
+            with contextlib.suppress(Exception):
                 current_snapshot = _resolve_snapshot(
                     quote_entry, build_snapshot(quote_entry.data, region, dso)
                 )
-            except Exception:  # noqa: BLE001 - keep the configured snapshot
-                pass
         if current_snapshot is not None:
             from .cohort import _cohort_legs
 

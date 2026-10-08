@@ -148,9 +148,7 @@ def is_belgian_holiday(d: date) -> bool:
         return True
     if d == easter + timedelta(days=39):  # Ascension (Thursday)
         return True
-    if d == easter + timedelta(days=50):  # Pentecost Monday
-        return True
-    return False
+    return d == easter + timedelta(days=50)  # Pentecost Monday
 
 
 def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:

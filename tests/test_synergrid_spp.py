@@ -129,22 +129,22 @@ def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
         'officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
         "</Relationships>"
     )
-    buf = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    with zipfile.ZipFile(buf, "w") as z:
+    with (
+        tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as buf,
+        zipfile.ZipFile(buf, "w") as z,
+    ):
         z.writestr("xl/workbook.xml", workbook)
         z.writestr("xl/_rels/workbook.xml.rels", wb_rels)
         z.writestr("xl/sharedStrings.xml", shared)
         z.writestr("xl/worksheets/sheet1.xml", sheet)
-    buf.close()
     data = Path(buf.name).read_bytes()
     Path(buf.name).unlink()
     return data
 
 
 def _write_xlsx(rows: list[tuple[datetime, float]]) -> Path:
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    tmp.write(_build_xlsx(rows))
-    tmp.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp.write(_build_xlsx(rows))
     return Path(tmp.name)
 
 
@@ -201,9 +201,8 @@ async def test_fetch_returns_empty_on_download_error() -> None:
 
 
 async def test_fetch_returns_empty_on_bad_payload() -> None:
-    garbage = tempfile.NamedTemporaryFile(delete=False)
-    garbage.write(b"not a zip")
-    garbage.close()
+    with tempfile.NamedTemporaryFile(delete=False) as garbage:
+        garbage.write(b"not a zip")
     session = MagicMock()
     with patch.object(
         synergrid, "_download", new=AsyncMock(return_value=Path(garbage.name))
@@ -216,8 +215,8 @@ async def test_fetch_returns_empty_on_bad_payload() -> None:
 async def test_fetch_returns_empty_on_index_error() -> None:
     # A malformed shared-string index raises IndexError inside the parse; the
     # fetcher must still degrade to {} rather than tear down the tick.
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    tmp.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        pass
     session = MagicMock()
     with (
         patch.object(
@@ -234,8 +233,8 @@ async def test_fetch_returns_empty_on_index_error() -> None:
 async def test_fetch_returns_empty_on_overflow_error() -> None:
     # An out-of-range Excel date serial raises OverflowError; it must degrade
     # to {} (caught via ArithmeticError), not tear down the tick.
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    tmp.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        pass
     session = MagicMock()
     with (
         patch.object(
@@ -949,10 +948,11 @@ def test_workbook_xml_entity_expansion_is_refused() -> None:
         '<!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">'
         "]><r>&d;</r>"
     )
-    buf = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    with zipfile.ZipFile(buf, "w") as z:
+    with (
+        tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as buf,
+        zipfile.ZipFile(buf, "w") as z,
+    ):
         z.writestr("xl/workbook.xml", bomb)
-    buf.close()
     path = Path(buf.name)
     try:
         with pytest.raises(Exception) as excinfo:
@@ -968,14 +968,15 @@ async def test_fetch_spp_weights_still_never_raises_on_a_hostile_payload() -> No
     """fetch_spp_weights promises it never raises. defusedxml's exceptions are
     not ParseError subclasses, so confirm a hostile workbook still degrades to
     an empty mapping and the coordinator falls back to the plain mean."""
-    buf = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    with zipfile.ZipFile(buf, "w") as z:
+    with (
+        tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as buf,
+        zipfile.ZipFile(buf, "w") as z,
+    ):
         z.writestr(
             "xl/workbook.xml",
             '<?xml version="1.0"?>'
             '<!DOCTYPE r [<!ENTITY a "AA"><!ENTITY b "&a;&a;&a;">]><r>&b;</r>',
         )
-    buf.close()
     path = Path(buf.name)
 
     async def _fake_download(_session: object, _url: str) -> Path:
@@ -1044,7 +1045,7 @@ def test_resolve_excise_bills_each_tranche_at_its_own_rate() -> None:
     bands = ((20_000.0, 0.01421), (50_000.0, 0.01209), (1_000_000.0, 0.01139))
     assert blended_excise_rate(bands, 30_000.0) * 30_000 == pytest.approx(405.10)
     # What it used to bill, for the record: the whole volume at one band.
-    assert 30_000 * 0.01209 == pytest.approx(362.70)
+    assert pytest.approx(362.70) == 30_000 * 0.01209
 
 
 def test_resolve_excise_band_is_identity_without_bands() -> None:

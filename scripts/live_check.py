@@ -1659,7 +1659,7 @@ async def _check_flanders_card(
     _expect(f"{prefix}: publication label", bool(snap.publication_label))
     _expect(
         f"{prefix}: all eight Fluvius DSOs present",
-        _FLUVIUS_KEYS <= set(snap.dsos),
+        set(snap.dsos) >= _FLUVIUS_KEYS,
         detail=f"missing: {sorted(_FLUVIUS_KEYS - set(snap.dsos))}",
     )
     _expect(

@@ -40,7 +40,7 @@ INJECTION_BANDS = {"injection_price_peak", "injection_price_offpeak"}
 
 
 def test_a_two_tariff_meter_gets_the_band_prices() -> None:
-    assert BANDS <= _added(make_entry(meter="bi"))
+    assert _added(make_entry(meter="bi")) >= BANDS
 
 
 def test_a_single_rate_meter_does_not() -> None:
@@ -70,7 +70,7 @@ def test_a_digital_meter_on_a_two_rate_card_gets_the_band_prices() -> None:
     """The engine bills a digital meter's day and night registers on the
     card's two rates exactly as it bills a bi-hourly meter, and the Energy
     dashboard's two-tariff grid source needs one constant price for each."""
-    assert BANDS <= _added(make_entry(meter="dynamic"))
+    assert _added(make_entry(meter="dynamic")) >= BANDS
 
 
 def test_the_walloon_impact_tariff_gets_no_band_prices() -> None:
@@ -79,16 +79,16 @@ def test_the_walloon_impact_tariff_gets_no_band_prices() -> None:
     the pair sat unavailable for good. A custom entry left without the bands
     bills one distribution rate and keeps them."""
     assert not (BANDS & _added(make_entry(meter="bi", dso_tariff_mode="impact")))
-    assert BANDS <= _added(make_entry(meter="bi", dso_tariff_mode="bi_horaire"))
+    assert _added(make_entry(meter="bi", dso_tariff_mode="bi_horaire")) >= BANDS
     custom = make_entry(
         meter="bi", supplier="custom", contract="custom_fixed", dso_tariff_mode="impact"
     )
-    assert BANDS <= _added(custom)
+    assert _added(custom) >= BANDS
 
 
 def test_the_feed_in_pair_needs_both_a_two_tariff_meter_and_injection() -> None:
     both = _added(make_entry(meter="bi", solar_regime="injection", solar_kva=5.0))
-    assert INJECTION_BANDS <= both
+    assert both >= INJECTION_BANDS
 
     no_injection = _added(make_entry(meter="bi"))
     assert not (INJECTION_BANDS & no_injection)
@@ -103,7 +103,7 @@ def test_the_feed_in_pair_follows_the_engine_onto_a_digital_meter() -> None:
     only, so a Trevion Vast entry on a digital meter was credited per
     register with no band sensor to show it."""
     both = _added(make_entry(meter="dynamic", solar_regime="injection", solar_kva=5.0))
-    assert INJECTION_BANDS <= both
+    assert both >= INJECTION_BANDS
     assert not (
         INJECTION_BANDS & _added(make_entry(meter="mono", solar_regime="injection"))
     )
