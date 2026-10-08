@@ -89,6 +89,37 @@ async def test_diagnostics_redacts_api_key(hass: HomeAssistant) -> None:
     assert "THIS-IS-A-SECRET" not in str(dump)
 
 
+async def test_diagnostics_redacts_the_household_sensors(hass: HomeAssistant) -> None:
+    """The meters and the capacity peak sensor are the household's own entity
+    ids, kept out of the dump wherever they are stored, a recorded switch's
+    earlier contract included."""
+    meters = {
+        "day_consumption_kwh": "sensor.home_day",
+        "night_consumption_kwh": "sensor.home_night",
+        "day_injection_kwh": "sensor.home_day_out",
+        "night_injection_kwh": "sensor.home_night_out",
+        "consumption_kwh": "sensor.home_total",
+        "injection_kwh": "sensor.home_total_out",
+        "capacity_peak_sensor": "sensor.home_peak",
+    }
+    entry = make_entry(
+        region="flanders",
+        dso="fluvius_antwerpen",
+        options=dict(meters),
+        previous_contracts=[{"supplier": "bolt", **meters}],
+        **meters,
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={}, _historical_spot_quarters={}, data=_coordinator_data()
+    )
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert "sensor." not in str(dump)
+    assert set(meters) <= set(dump["entry"]["data"])
+    assert dump["entry"]["data"]["previous_contracts"][0]["supplier"] == "bolt"
+
+
 async def test_diagnostics_keeps_contract_dates(hass: HomeAssistant) -> None:
     """Contract start/end dates are not secrets and must survive redaction."""
     entry = _entry_with_data()
@@ -523,12 +554,16 @@ async def test_diagnostics_names_the_sensors_the_bill_reads(
     ):
         dump = await async_get_config_entry_diagnostics(hass, entry)
 
-    assert dump["consumption"]["billed_from"] == ["sensor.day", "sensor.night"]
+    assert dump["consumption"]["billed_from"] == [
+        "day_consumption_kwh",
+        "night_consumption_kwh",
+    ]
     assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(480.0)
-    assert dump["injection"]["billed_from"] == ["sensor.inj"]
+    assert dump["injection"]["billed_from"] == ["injection_kwh"]
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(36.0)
-    assert dump["silent_meter"] == ["sensor.inj"]
+    assert dump["silent_meter"] == ["injection_kwh"]
     assert dump["consumption"]["read_once_a_day"] is False
+    assert "sensor." not in str(dump)
 
 
 async def test_diagnostics_billed_kwh_leave_out_a_month_the_bill_dropped(
@@ -594,7 +629,7 @@ async def test_diagnostics_billed_kwh_leave_out_a_month_the_bill_dropped(
         dump = await async_get_config_entry_diagnostics(hass, entry)
     days = (today - date(2026, 1, 1)).days + 1
     assert breakdown["days_priced"] == days - 31
-    assert dump["consumption"]["billed_from"] == ["sensor.cons"]
+    assert dump["consumption"]["billed_from"] == ["consumption_kwh"]
     assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(10.0 * (days - 31))
 
 
@@ -673,9 +708,12 @@ async def test_diagnostics_names_the_sensors_a_per_day_bill_reads(
     ):
         dump = await async_get_config_entry_diagnostics(hass, entry)
 
-    assert dump["consumption"]["billed_from"] == ["sensor.day", "sensor.night"]
+    assert dump["consumption"]["billed_from"] == [
+        "day_consumption_kwh",
+        "night_consumption_kwh",
+    ]
     assert dump["consumption"]["billed_ytd_kwh"] == pytest.approx(100.0)
     assert dump["consumption"]["read_once_a_day"] is None
-    assert dump["injection"]["billed_from"] == ["sensor.inj"]
+    assert dump["injection"]["billed_from"] == ["injection_kwh"]
     assert dump["injection"]["billed_ytd_kwh"] == pytest.approx(1.5)
-    assert dump["silent_meter"] == ["sensor.inj"]
+    assert dump["silent_meter"] == ["injection_kwh"]

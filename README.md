@@ -1268,14 +1268,15 @@ long-term statistics tables are written.
 
 **Settings → Devices & services → Belgian Electricity Prices →** three-dot
 menu **→ Download diagnostics** dumps the active config (with the ENTSO-E
-API key redacted), the snapshot metadata, and the full hourly breakdown
+API key and the entity ids of your meter and capacity peak sensors
+redacted), the snapshot metadata, and the full hourly breakdown
 for today + tomorrow. It also summarises the replayed day-ahead cache per delivery month (hour
 count, mean, min and max), the archived card labels used for past months,
 and the shared-fetch failure marker when the integration has been backing
 off. For each side it gives both the raw kWh of every wired meter sensor
-and what the bill actually reads: the sensors it is billed off
-(`billed_from`, which shows a totals sensor standing in for a day/night
-pair), the kWh the last bill priced off them (`billed_ytd_kwh`, without a
+and what the bill actually reads: the sensors it is billed off, named by
+the setting that holds them (`billed_from`, which shows a totals sensor
+standing in for a day/night pair), the kWh the last bill priced off them (`billed_ytd_kwh`, without a
 month it left out) and whether that side reports once a day and was spread
 over the hours (`read_once_a_day`), plus `silent_meter` when one side stopped
 recording under the other. The year-to-date cost

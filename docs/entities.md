@@ -706,12 +706,12 @@ Top-level dump keys:
 | Key | Contents |
 | --- | --- |
 | `entry.title` | entry title |
-| `entry.data` / `entry.options` | config, with `CONF_API_KEY` redacted via `async_redact_data(..., TO_REDACT)` |
+| `entry.data` / `entry.options` | config, with `CONF_API_KEY` and the sensor settings redacted via `async_redact_data(..., TO_REDACT)` |
 | `coordinator` | live snapshot metadata and the full hourly price table (see below) |
 | `consumption.rolling_year_kwh` / `.ytd_kwh` | raw recorder-summed consumption of every wired sensor over 365 days and year-to-date, the latter from the day `current_year_cost` counts from (`ytd_window_start`: 1 January, or the contract start when the entry bills from it) |
 | `injection.rolling_year_kwh` / `.ytd_kwh` | same for injection |
-| `consumption.billed_from` / `.billed_ytd_kwh` / `.read_once_a_day` and the same under `injection` | the sensors the bill reads each side off and whether the side reports once a day and had each day spread over its hours (`_spread_daily_readings`) after the register pair, totals and silent-side rules, read the way the last bill was, over the days the entry's own contract bills (from the switch, when one is recorded): per day (`_resolve_daily_kwh`) when that bill left `days_seen` in its breakdown, as a fixed or variable contract's does, since the per-day walk decides the pair against the totals sensor on days rather than hours, and otherwise hourly (`_metered_sides`, the only reader with hours to spread, so `read_once_a_day` is `null` on a per-day bill). `billed_ytd_kwh` is the year-to-date kWh that last bill priced, from its breakdown (`consumption_ytd_kwh` / `injection_ytd_kwh`, today's live reading included), so a month it left out whole, which shows as `days_priced` or `hours_priced` under the days or hours seen on the `current_year_cost` attributes, is not in it; `null` when that bill left none. All three are `null` on a side that cannot be billed, an empty list on the injection side of an entry with no solar regime, which does not read it. `rolling_year_kwh` and `ytd_kwh` beside them are the raw sums of every wired sensor, and the two disagreeing is the tell |
-| `silent_meter` | the sensors of a side that stopped recording while the other carried on: a consumption side whose later days the bill leaves out of both sides, or an injection side whose feed-in it leaves out while billing the consumption, which includes one that recorded nothing in the window; empty otherwise |
+| `consumption.billed_from` / `.billed_ytd_kwh` / `.read_once_a_day` and the same under `injection` | the sensors the bill reads each side off, named by the setting that holds each (`consumption_kwh`, `day_consumption_kwh`, ...), and whether the side reports once a day and had each day spread over its hours (`_spread_daily_readings`) after the register pair, totals and silent-side rules, read the way the last bill was, over the days the entry's own contract bills (from the switch, when one is recorded): per day (`_resolve_daily_kwh`) when that bill left `days_seen` in its breakdown, as a fixed or variable contract's does, since the per-day walk decides the pair against the totals sensor on days rather than hours, and otherwise hourly (`_metered_sides`, the only reader with hours to spread, so `read_once_a_day` is `null` on a per-day bill). `billed_ytd_kwh` is the year-to-date kWh that last bill priced, from its breakdown (`consumption_ytd_kwh` / `injection_ytd_kwh`, today's live reading included), so a month it left out whole, which shows as `days_priced` or `hours_priced` under the days or hours seen on the `current_year_cost` attributes, is not in it; `null` when that bill left none. All three are `null` on a side that cannot be billed, an empty list on the injection side of an entry with no solar regime, which does not read it. `rolling_year_kwh` and `ytd_kwh` beside them are the raw sums of every wired sensor, and the two disagreeing is the tell |
+| `silent_meter` | the sensors, named by their settings, of a side that stopped recording while the other carried on: a consumption side whose later days the bill leaves out of both sides, or an injection side whose feed-in it leaves out while billing the consumption, which includes one that recorded nothing in the window; empty otherwise |
 | `consumption.rolling_year_sensor_kwh` / `.rolling` and the same under `injection` | what the rolling-year sensor shows and its `volume_basis`: the bill's reading of the side over the last 365 days, scaled across missing days, where `rolling_year_kwh` is the raw sum |
 | `consumption.projected_year_kwh` / `.projection` and the same under `injection` | the calendar-year projection and its basis (`volume_basis`, `ytd_kwh`, `remaining_kwh`); `ytd_kwh` there counts from 1 January to yesterday whatever the billing window |
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
@@ -739,8 +739,14 @@ the user is looking at.
 
 ### Redaction
 
-`TO_REDACT = {CONF_API_KEY}` (`diagnostics.py`). `async_redact_data` masks
-only known config keys, so free-text error fields (`last_error`,
+`TO_REDACT` (`diagnostics.py`) holds `CONF_API_KEY`, the six kWh sensor
+settings (`METER_SENSOR_KEYS`) and `CONF_CAPACITY_PEAK_SENSOR`: the entity ids
+the household reads are not needed to debug a price and should not travel with
+an issue report. `async_redact_data` recurses, so a recorded switch's earlier
+contract under `previous_contracts` is masked too. Where the dump names the
+sensors a bill read (`billed_from`, `silent_meter`) it gives the setting that
+holds each sensor instead of its entity id (`**REDACTED**` for one no setting
+holds). `async_redact_data` masks only known config keys, so free-text error fields (`last_error`,
 `shared_failure.error`) get a second scrub via `_scrub_secret`
 (`diagnostics.py`), which replaces the API key literal anywhere it appears
 with `**REDACTED**`. This is defence-in-depth: an ENTSO-E transport error string

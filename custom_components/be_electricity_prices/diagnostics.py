@@ -37,9 +37,11 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_API_KEY,
+    CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_REGION,
     CONF_SUPPLIER,
+    METER_SENSOR_KEYS,
 )
 from .cohort import ytd_window_start
 from .contract_periods import current_period_start
@@ -60,7 +62,11 @@ from .snapshot_store import (
 from .pricing import breakdown_row
 from .sensor_values import _current_injection
 
-TO_REDACT = {CONF_API_KEY}
+# The meters the household reads are its own entity ids: not needed to debug
+# a price, they should not travel with an issue report. The dump names a
+# sensor by the setting that holds it instead.
+_SENSOR_KEYS = (*METER_SENSOR_KEYS, CONF_CAPACITY_PEAK_SENSOR)
+TO_REDACT = {CONF_API_KEY, *_SENSOR_KEYS}
 
 
 def _scrub_secret(text: str, secret: str | None) -> str:
@@ -181,6 +187,11 @@ async def async_get_config_entry_diagnostics(
                 "injection": sides.injection.read_daily,
             }
 
+    setting_of = {entry.data[key]: key for key in _SENSOR_KEYS if entry.data.get(key)}
+
+    def _settings(sensors: tuple[str, ...]) -> list[str]:
+        return [setting_of.get(sensor, "**REDACTED**") for sensor in sensors]
+
     def _billed(side: str) -> dict[str, Any]:
         if not billable:
             return {
@@ -190,7 +201,7 @@ async def async_get_config_entry_diagnostics(
             }
         kwh = ytd.get(f"{side}_ytd_kwh")
         return {
-            "billed_from": list(billed_from.get(side, ())),
+            "billed_from": _settings(billed_from.get(side, ())),
             "billed_ytd_kwh": None if kwh is None else round(kwh, 3),
             "read_once_a_day": read_daily.get(side),
         }
@@ -335,7 +346,7 @@ async def async_get_config_entry_diagnostics(
         # The sensors of a meter side that went silent while the other carried
         # on: a consumption side whose days the bill leaves out of both sides,
         # or an injection side whose feed-in it leaves out.
-        "silent_meter": list(billed_from.get("silent", ())) if billable else [],
+        "silent_meter": _settings(billed_from.get("silent", ())) if billable else [],
         "monthly_snapshot_labels": monthly_labels,
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average
         # is the cache, not the card.

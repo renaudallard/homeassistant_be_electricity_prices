@@ -132,7 +132,7 @@ relative to that package directory.
 | `sensor_values.py` | What the price sensors read off `CoordinatorData`: the current and next slot, the day's and tomorrow's average, minimum and maximum, the cheapest and dearest hours, and the today / tomorrow tables. |
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
 | `button.py` | The `reset_monthly_peak` diagnostic button, Flemish entries only: drops the persisted monthly peak so the next tick rebuilds it. |
-| `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key. |
+| `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key and the household's sensor entity ids. |
 | `providers/base.py` | The extractor protocol and what a parsed card amounts to: `SupplierExtractor`, `SupplierSnapshot`, `DsoOverlay`, `TaxOverlay`, and the fetch / probe / archive callable types. |
 | `providers/_rates.py` | The shapes a card can print: `Contract`, the six `EnergyRates` shapes and `InjectionRates`. Data only, so an extractor can build one without reaching into the pricing engine. |
 | `providers/_resolve.py` | Turning a published card into the one a given household is billed on: VAT, the excise band, the direct-debit discount, the VREG ceiling, the Brussels power term, the volume tier and the settlement grid. |
