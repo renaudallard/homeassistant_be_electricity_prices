@@ -654,8 +654,12 @@
   "services": {
     "refresh": {
       "name": "Vernieuwen",
-      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier, de maandkaarten waarop de kost van dit jaar berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de kost van dit jaar niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
+      "description": "Laat elke Belgian Electricity Prices-invoer, of alleen de invoer gekozen onder Entry-ID, meteen de tariefkaart van de leverancier, de maandkaarten waarop de kost van dit jaar berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de kost van dit jaar niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
       "fields": {
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Optioneel. Vernieuw alleen deze invoer; zonder deze waarde wordt elke geladen invoer vernieuwd."
+        },
         "clear_history": {
           "name": "Prijsgeschiedenis wissen",
           "description": "Verwijdert ook de opgeslagen historische uurprijzen die de kost van dit jaar opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de startdatum van het contract, als de invoer daarvan uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een injectievergoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer de kost van dit jaar verkeerd lijkt en een gewone vernieuwing dat niet oplost."

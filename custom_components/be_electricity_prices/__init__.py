@@ -147,7 +147,12 @@ WINDOW_SCHEMA = vol.Schema(
     }
 )
 
-REFRESH_SCHEMA = vol.Schema({vol.Optional("clear_history", default=False): cv.boolean})
+REFRESH_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): cv.string,
+        vol.Optional("clear_history", default=False): cv.boolean,
+    }
+)
 
 
 BACKFILL_SCHEMA = vol.Schema(
@@ -722,7 +727,8 @@ async def _async_options_updated(
 
 
 async def _async_refresh_service(call: ServiceCall) -> None:
-    """Force every loaded entry to re-fetch its supplier snapshot now.
+    """Force every loaded entry, or the one ``entry_id`` names, to re-fetch
+    its supplier snapshot now.
 
     ``clear_history`` also drops the cache of past hourly spot prices that the
     year-to-date walk replays, which nothing else can repair: a cached day that
@@ -730,7 +736,7 @@ async def _async_refresh_service(call: ServiceCall) -> None:
     re-fetches every day since 1 January.
     """
     clear_history = bool(call.data.get("clear_history", False))
-    for entry in call.hass.config_entries.async_loaded_entries(DOMAIN):
+    for entry in _target_entries(call):
         # async_loaded_entries returns entries that have begun setup, but
         # a reload race can leave runtime_data as the UNDEFINED sentinel
         # between platform unload and the new coordinator assignment.
@@ -870,6 +876,23 @@ def _no_loaded_entry_error(target_id: str | None) -> ServiceValidationError:
     )
 
 
+def _target_entries(call: ServiceCall) -> list[BePricesConfigEntry]:
+    """The loaded entries a service call is for: the one its ``entry_id``
+    names, or all of them without one.
+
+    An ``entry_id`` no loaded entry has is refused rather than answered with
+    nothing, so a mistyped id is not taken for a call that did its work.
+    """
+    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
+    target_id = call.data.get("entry_id")
+    if target_id is None:
+        return entries
+    entries = [e for e in entries if e.entry_id == target_id]
+    if not entries:
+        raise _no_loaded_entry_error(target_id)
+    return entries
+
+
 def _resolve_target_coordinator(call: ServiceCall) -> BePricesCoordinator:
     """Resolve the target entry's live coordinator for a service call.
 
@@ -878,12 +901,9 @@ def _resolve_target_coordinator(call: ServiceCall) -> BePricesCoordinator:
     the entry is mid-reload. Callers layer their own readiness checks
     (price table populated, snapshot loaded) on top.
     """
-    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
-    target_id = call.data.get("entry_id")
-    if target_id is not None:
-        entries = [e for e in entries if e.entry_id == target_id]
+    entries = _target_entries(call)
     if not entries:
-        raise _no_loaded_entry_error(target_id)
+        raise _no_loaded_entry_error(None)
     coordinator = getattr(entries[0], "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
         raise ServiceValidationError(

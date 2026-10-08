@@ -549,15 +549,17 @@ any entry finishes loading. Names and field descriptions are declared in
 
 | Service | Handler | Response mode | Targets an entry? |
 | --- | --- | --- | --- |
-| `refresh` | `_async_refresh_service` (`__init__.py`) | none | no, hits every loaded entry |
+| `refresh` | `_async_refresh_service` (`__init__.py`) | none | optional `entry_id`, every loaded entry without it |
 | `cheapest_window` | `_async_cheapest_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
 | `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
 | `backfill_statistics` | `_async_backfill_service` (`__init__.py`) | `OPTIONAL` | optional `entry_id` |
 
 ### `refresh`
 
-One optional field, `clear_history` (boolean, default false). Iterates
-`async_loaded_entries(DOMAIN)` and calls
+Two optional fields, `entry_id` and `clear_history` (boolean, default false).
+Iterates `async_loaded_entries(DOMAIN)`, or only the entry `entry_id` names
+(`_target_entries`, which refuses an id no loaded entry has with the
+translated `no_loaded_entry_with_id` error), and calls
 `coordinator.async_force_refresh(clear_history=...)` on each, skipping any
 entry whose `runtime_data` is still the `UNDEFINED` sentinel mid-reload
 (`__init__.py`). It drops the cached supplier snapshot, the ENTSO-E spot

@@ -616,3 +616,42 @@ async def test_leaving_flanders_removes_the_peak_reset_button(
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert registry.async_get(button) is None
+
+
+async def test_the_refresh_service_can_target_one_entry(hass: HomeAssistant) -> None:
+    """Without entry_id every loaded entry fetches again; with one, only that
+    entry does, and an id no loaded entry has is refused rather than taken
+    for a refresh that happened."""
+    import pytest
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.be_electricity_prices import async_setup
+
+    assert await async_setup(hass, {})
+    entries = []
+    for contract in ("power_fix", "power_dynamic"):
+        entry = make_entry(contract=contract)
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = MagicMock(spec=BePricesCoordinator)
+        entry.runtime_data.async_force_refresh = AsyncMock()
+        entries.append(entry)
+    first, second = (e.runtime_data.async_force_refresh for e in entries)
+
+    await hass.services.async_call(
+        DOMAIN, "refresh", {"entry_id": entries[0].entry_id}, blocking=True
+    )
+    assert first.await_count == 1
+    assert second.await_count == 0
+
+    await hass.services.async_call(DOMAIN, "refresh", {}, blocking=True)
+    assert first.await_count == 2
+    assert second.await_count == 1
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            DOMAIN, "refresh", {"entry_id": "nope"}, blocking=True
+        )
+    assert raised.value.translation_key == "no_loaded_entry_with_id"
+    assert first.await_count == 2
+    assert second.await_count == 1

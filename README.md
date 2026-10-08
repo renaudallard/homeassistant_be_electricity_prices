@@ -1123,13 +1123,14 @@ successful refresh:
 ### `be_electricity_prices.refresh` service
 
 Drops the cached supplier snapshot, the month cards the year-to-date is
-billed on, **and today's** ENTSO-E prices for every loaded entry, then
-re-fetches them immediately. Handy after a tariff card
+billed on, **and today's** ENTSO-E prices for every loaded entry, or only
+the one `entry_id` names, then re-fetches them immediately. Handy after a tariff card
 update or to clear a transient fetch error without waiting for the next
 hourly tick.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
+| `entry_id` | every entry | Refresh only this config entry. An id that matches no loaded entry is refused with an error. |
 | `clear_history` | `false` | Also discard the cached **past** hourly prices that `current_year_cost` replays, and re-fetch them. Off by default because it re-fetches every day since 1 January (or the contract start, if you bill from it) against a rate-limited endpoint. Only those days come back: the days before them, which `projected_year_cost` and the comparison pages credit a per-slot feed-in on, are not fetched again, so that credit is left out until a full year of day-ahead is held again. |
 
 Without `clear_history` the past day-ahead cache is left alone, which is worth

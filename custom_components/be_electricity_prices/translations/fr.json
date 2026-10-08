@@ -654,8 +654,12 @@
   "services": {
     "refresh": {
       "name": "Rafraîchir",
-      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût de l'année est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût de l'année ; pour cela, utilisez Effacer l'historique des prix.",
+      "description": "Force chaque entrée Belgian Electricity Prices, ou seulement celle choisie sous ID de l'entrée, à récupérer immédiatement la fiche tarifaire de son fournisseur, les fiches mensuelles sur lesquelles son coût de l'année est facturé et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût de l'année ; pour cela, utilisez Effacer l'historique des prix.",
       "fields": {
+        "entry_id": {
+          "name": "ID de l'entrée",
+          "description": "Optionnel. Rafraîchit seulement cette entrée ; sans cet identifiant, toutes les entrées chargées sont rafraîchies."
+        },
         "clear_history": {
           "name": "Effacer l'historique des prix",
           "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût de l'année, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier (ou depuis le début du contrat, si l'entrée facture à partir de là) sur un service à débit limité. Les jours antérieurs ne sont pas récupérés à nouveau : une rémunération de l'injection qui suit le prix spot par créneau disparaît du coût annuel glissant et des comparaisons jusqu'à ce qu'une année complète soit de nouveau disponible. À utiliser quand le coût de l'année semble faux et qu'un rafraîchissement ordinaire n'y change rien."

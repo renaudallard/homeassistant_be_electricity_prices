@@ -1,13 +1,23 @@
 refresh:
   name: Refresh
   description: >-
-    Force-refresh every Belgian Electricity Prices entry: drops the cached
+    Force-refresh every Belgian Electricity Prices entry, or only the one
+    chosen under Entry ID: drops the cached
     supplier snapshot, the month cards the year-to-date cost is billed on
     and TODAY's ENTSO-E prices, then re-fetches them immediately. Useful after a tariff card update or to clear a temporary
     fetch error without waiting for the next refresh tick. It does NOT touch
     the cache of past hourly prices that the year-to-date cost replays; that
     needs clear_history below.
   fields:
+    entry_id:
+      name: Entry ID
+      description: >-
+        Refresh only this config entry. Every loaded entry is refreshed
+        when omitted.
+      example: 4f3c8...
+      selector:
+        config_entry:
+          integration: be_electricity_prices
     clear_history:
       name: Clear price history
       description: >-

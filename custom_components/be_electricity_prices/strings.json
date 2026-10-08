@@ -654,8 +654,12 @@
   "services": {
     "refresh": {
       "name": "Refresh",
-      "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot, the month cards its year-to-date cost is billed on and today's ENTSO-E prices immediately, instead of waiting for the next refresh tick. This does not touch the cache of PAST hourly prices behind the year-to-date cost; use Clear price history for that.",
+      "description": "Force every Belgian Electricity Prices entry, or only the one chosen under Entry ID, to re-fetch its supplier snapshot, the month cards its year-to-date cost is billed on and today's ENTSO-E prices immediately, instead of waiting for the next refresh tick. This does not touch the cache of PAST hourly prices behind the year-to-date cost; use Clear price history for that.",
       "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Optional. Refresh only this entry; without it every loaded entry is refreshed."
+        },
         "clear_history": {
           "name": "Clear price history",
           "description": "Also discard the cached past hourly prices that the year-to-date cost replays, and re-fetch them. Off by default: it re-fetches every day since 1 January (or the contract start, if the entry bills from it) against a rate-limited endpoint. The days before that are not fetched again, so a feed-in credit that follows the spot price per slot drops out of the rolling year cost and the comparisons until a full year is held again. Use it when a year-to-date figure looks wrong in a way an ordinary refresh does not fix."
