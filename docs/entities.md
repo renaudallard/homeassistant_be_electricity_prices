@@ -4,7 +4,10 @@ This document covers the read-side of the integration: the sensor,
 binary_sensor and button entities that surface `coordinator.data` to Home
 Assistant, the diagnostics dump a bug reporter downloads, the four services
 (`refresh`, `cheapest_window`, `most_expensive_window`, `backfill_statistics`),
-and the `strings.json` translation catalog that names all of them. Everything
+and the `strings.json` translation catalog that names all of them. Their icons
+are in `icons.json`: every entity has one, except the cost and saving sensors,
+the monthly peak and the contract end date, which keep their device class's
+icon, and so does each service (`tests/test_icons.py`). Everything
 here reads the coordinator's `CoordinatorData` dataclass and never computes a
 price itself; the arithmetic lives upstream in `pricing.compute_breakdown`. All
 `EUR/kWh` figures shown below are illustrative and taken from source comments,

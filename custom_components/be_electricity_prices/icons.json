@@ -1,0 +1,111 @@
+{
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "default": "mdi:flash"
+      },
+      "next_hour_price": {
+        "default": "mdi:flash-outline"
+      },
+      "today_average": {
+        "default": "mdi:chart-line"
+      },
+      "today_min": {
+        "default": "mdi:arrow-down-bold"
+      },
+      "today_max": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "tomorrow_average": {
+        "default": "mdi:chart-line"
+      },
+      "tomorrow_min": {
+        "default": "mdi:arrow-down-bold"
+      },
+      "tomorrow_max": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "energy_component": {
+        "default": "mdi:lightning-bolt"
+      },
+      "network_component": {
+        "default": "mdi:transmission-tower"
+      },
+      "taxes_component": {
+        "default": "mdi:bank"
+      },
+      "capacity_cost": {
+        "default": "mdi:gauge"
+      },
+      "prosumer_cost": {
+        "default": "mdi:solar-panel"
+      },
+      "injection_price": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "injection_price_peak": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "injection_price_offpeak": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "price_peak": {
+        "default": "mdi:weather-sunny"
+      },
+      "price_offpeak": {
+        "default": "mdi:weather-night"
+      },
+      "fixed_fee_eur_per_year": {
+        "default": "mdi:cash-multiple"
+      },
+      "energy_fund_eur_per_month": {
+        "default": "mdi:cash"
+      },
+      "ev_home_charging_rate": {
+        "default": "mdi:ev-station"
+      },
+      "projected_year_cost": {
+        "default": "mdi:chart-line"
+      },
+      "projected_year_end_cost": {
+        "default": "mdi:chart-line"
+      },
+      "projected_year_consumption": {
+        "default": "mdi:home-lightning-bolt-outline"
+      },
+      "projected_year_injection": {
+        "default": "mdi:solar-power-variant-outline"
+      },
+      "rolling_year_consumption": {
+        "default": "mdi:home-lightning-bolt"
+      },
+      "rolling_year_injection": {
+        "default": "mdi:solar-power-variant"
+      }
+    },
+    "binary_sensor": {
+      "tomorrow_prices_available": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "button": {
+      "reset_monthly_peak": {
+        "default": "mdi:restart"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "service": "mdi:refresh"
+    },
+    "cheapest_window": {
+      "service": "mdi:arrow-down-bold-circle-outline"
+    },
+    "most_expensive_window": {
+      "service": "mdi:arrow-up-bold-circle-outline"
+    },
+    "backfill_statistics": {
+      "service": "mdi:history"
+    }
+  }
+}

@@ -134,6 +134,7 @@ relative to that package directory.
 | `sensor_values.py` | What the price sensors read off `CoordinatorData`: the current and next slot, the day's and tomorrow's average, minimum and maximum, the cheapest and dearest hours, and the today / tomorrow tables. |
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
 | `button.py` | The `reset_monthly_peak` diagnostic button, Flemish entries only: drops the persisted monthly peak so the next tick rebuilds it. |
+| `icons.json` | The icons of the entities and services; an entity with a device class keeps the icon Home Assistant gives it. |
 | `repairs.py` | The fix flow of the `snapshot_stale` Repairs card (`RetryFetchFlow`): fetches the entry's card again now and closes the card only when that cleared it. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key and the household's sensor entity ids. |
 | `providers/base.py` | The extractor protocol and what a parsed card amounts to: `SupplierExtractor`, `SupplierSnapshot`, `DsoOverlay`, `TaxOverlay`, and the fetch / probe / archive callable types. |
