@@ -4355,6 +4355,33 @@ async def test_evict_shared_caches_drops_rows_for_tuple(hass: HomeAssistant) -> 
     assert ("bolt", "bolt_fix", "wallonia", "2026-01") in _monthly_snapshots(hass)
 
 
+async def test_a_card_fetch_that_never_returns_fails_within_the_budget(
+    hass: HomeAssistant,
+) -> None:
+    """The per-request timeouts bound the network, not the parse, so a parse
+    that never returned held the tick and the per-key lock for good. It now
+    fails as a timeout, named so last_error says what happened, and the lock
+    is free for the next tick."""
+    from custom_components.be_electricity_prices import snapshot_store
+
+    async def _hang(*args: Any, **kwargs: Any) -> None:
+        await asyncio.Event().wait()
+
+    key = ("eneco", "power_fix", "wallonia")
+    with patch.object(snapshot_store, "_CARD_FETCH_BUDGET_S", 0.05):
+        got = await snapshot_store.fetch_shared(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(fetch=_hang),
+            *key[1:],
+            supplier=key[0],
+        )
+    assert got.source == "failed"
+    assert isinstance(got.error, TimeoutError)
+    assert got.error_message == "eneco: no card within 0.05 s"
+    assert not _shared_lock(hass, key).locked()
+
+
 async def test_evict_shared_caches_keeps_held_lock(hass: HomeAssistant) -> None:
     """A held lock must NOT be popped during eviction; otherwise a
     re-created entry on the same tuple would get a fresh lock and the

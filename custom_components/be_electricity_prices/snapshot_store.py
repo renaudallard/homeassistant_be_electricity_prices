@@ -82,6 +82,14 @@ _SHARED_LOCKS_KEY = "snapshot_locks"
 _SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
 _SHARED_FAILURE_TTL = timedelta(minutes=5)
 
+# How long one card fetch may take, parse included. The per-request timeouts
+# bound the network, not the parse, so a parse that never returned held the
+# tick, and the per-key lock with it, for good. Measured on a Raspberry Pi 4
+# under load on 2026-10-08 across every supplier, contract and region: Bolt is
+# the slowest by far, 42 to 161 s with a median of 59 s, the next Frank at
+# 38 s. Ten minutes leaves that worst case room several times over.
+_CARD_FETCH_BUDGET_S = 600
+
 # How long a card already past its ``valid_until`` is reused before the
 # supplier is asked again: a supplier publishing the new month's card late
 # is checked every tick or so rather than once a day.
@@ -357,7 +365,18 @@ async def fetch_shared(
                     last_fail[2],
                 )
         try:
-            snap = await extractor.fetch(session, contract, region)
+            budget = asyncio.timeout(_CARD_FETCH_BUDGET_S)
+            try:
+                async with budget:
+                    snap = await extractor.fetch(session, contract, region)
+            except TimeoutError as err:
+                if not budget.expired():
+                    raise
+                # Named, since an argless TimeoutError would leave last_error
+                # blank; still a TimeoutError, so it reads as transient.
+                raise TimeoutError(
+                    f"{supplier}: no card within {_CARD_FETCH_BUDGET_S} s"
+                ) from err
             fetched_at = dt_util.utcnow()
             row = _SharedSnapshot(
                 snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
