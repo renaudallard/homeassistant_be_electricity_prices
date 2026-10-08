@@ -16,7 +16,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/renaudallard/homeassistant_be_electricity_prices/test.yml?style=flat-square&label=tests" alt="Tests"/>
   </a>
   <a href="https://www.home-assistant.io/">
-    <img src="https://img.shields.io/badge/Home%20Assistant-2026.4%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
+    <img src="https://img.shields.io/badge/Home%20Assistant-2026.2.3%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
   </a>
   <a href="https://hacs.xyz">
     <img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square" alt="HACS"/>
@@ -51,7 +51,7 @@ mis-prices a bill quietly. Reviewing that costs more than writing it. There is a
 form that asks for the four things it takes: the supplier, the product, a link
 to the card, and the regions it is sold in.
 
-> Targets Home Assistant **2026.4 or newer** (the minimum declared in `hacs.json`).
+> Targets Home Assistant **2026.2.3 or newer** (the minimum declared in `hacs.json`).
 
 ## Highlights
 

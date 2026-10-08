@@ -80,6 +80,7 @@ machinery.
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF text extraction (`providers/_pdf.py`) |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
+| `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
 
 Shared helpers live in `tests/__init__.py`:
 

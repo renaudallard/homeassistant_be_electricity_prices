@@ -58,7 +58,9 @@ From `manifest.json`:
 | `after_dependencies` | `energy`, `recorder` | The integration writes cost statistics into the recorder and plugs into the Energy dashboard, but must not hard-require them, so they load first when present. |
 | `version` | `0.35.1` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
 
-Home Assistant 2026.4 or newer is the declared minimum (README, `hacs.json`).
+Home Assistant 2026.2.3 or newer is the declared minimum (README, `hacs.json`):
+the release the test suite runs on (`requirements-dev.txt`), which
+`tests/test_manifest.py` holds the three to.
 
 ## The module map
 
