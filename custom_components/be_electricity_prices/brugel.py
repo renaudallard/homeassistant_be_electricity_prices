@@ -67,7 +67,7 @@ from typing import Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
-from .providers._pdf import extract_pdf_text
+from .providers._pdf import extract_pdf_text, read_capped
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -269,7 +269,7 @@ async def _pdf_text(session: aiohttp.ClientSession, url: str) -> str | None:
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
             if r.status == 200:
-                payload = await r.read()
+                payload = await read_capped(r, url)
                 return await asyncio.to_thread(extract_pdf_text, payload)
             _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
     except Exception as err:  # noqa: BLE001 - see ensure_power_term

@@ -44,7 +44,7 @@ from custom_components.be_electricity_prices.providers.base import (
 from custom_components.be_electricity_prices.providers._resolve import (
     resolve_brussels_power_term,
 )
-from tests import make_snapshot
+from tests import FakeBody, make_snapshot
 
 # The two rows as the 2026 sheet prints them, under "1.2. Sans mesure de
 # pointe", which is the block a residential connection is billed on. The dashes
@@ -297,14 +297,10 @@ class _Response:
     """Whatever Brugel answered, as an async context manager."""
 
     def __init__(self, body: bytes, status: int = 200) -> None:
-        self._body = body
         self.status = status
-
-    async def read(self) -> bytes:
-        return self._body
-
-    async def text(self) -> str:
-        return self._body.decode("utf-8", "replace")
+        self.content_length = None
+        self.charset = None
+        self.content = FakeBody(body)
 
     async def __aenter__(self) -> "_Response":
         return self

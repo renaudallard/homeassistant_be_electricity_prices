@@ -34,7 +34,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     FixedRates,
     VariableRates,
 )
-from tests import make_snapshot
+from tests import FakeBody, make_snapshot
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -51,12 +51,11 @@ Fetch = Callable[[Any, str, str], Awaitable[SupplierSnapshot]]
 
 class _Response:
     status = 200
+    content_length = None
+    charset = None
 
     def __init__(self, body: str) -> None:
-        self._body = body
-
-    async def text(self) -> str:
-        return self._body
+        self.content = FakeBody(body.encode("utf-8"))
 
     async def __aenter__(self) -> _Response:
         return self
@@ -696,10 +695,7 @@ class _PdfResponse:
     content_length = None
 
     def __init__(self, payload: bytes) -> None:
-        self._payload = payload
-
-    async def read(self) -> bytes:
-        return self._payload
+        self.content = FakeBody(payload)
 
     async def __aenter__(self) -> _PdfResponse:
         return self
@@ -1398,7 +1394,7 @@ def test_replay_session_refuses_what_it_does_not_hold(tmp_path: Path) -> None:
 
     async def run() -> bytes:
         async with replay.get("https://acme.test/card.pdf") as resp:
-            return await resp.read()
+            return await _pdf.read_capped(resp, "https://acme.test/card.pdf")
 
     with pytest.raises(aiohttp.ClientConnectionError):
         asyncio.run(run())
@@ -1554,7 +1550,7 @@ def test_a_kept_card_that_did_not_download_marks_the_replay(
 
     async def run() -> bytes:
         async with replay.get("https://acme.test/card.pdf") as resp:
-            return await resp.read()
+            return await _pdf.read_capped(resp, "https://acme.test/card.pdf")
 
     with pytest.raises((aiohttp.ClientConnectionError, TimeoutError)):
         asyncio.run(run())
@@ -1600,7 +1596,7 @@ def test_a_kept_card_download_is_retried_before_it_holds_the_stamp(
 
     async def run() -> bytes:
         async with replay.get("https://acme.test/card.pdf") as resp:
-            return await resp.read()
+            return await _pdf.read_capped(resp, "https://acme.test/card.pdf")
 
     assert asyncio.run(run()) == b"%PDF kept"
     assert not answers

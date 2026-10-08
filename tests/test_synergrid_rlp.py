@@ -30,6 +30,7 @@ from custom_components.be_electricity_prices.spot_stats import (
 from custom_components.be_electricity_prices.providers._rates import RlpBlend
 from custom_components.be_electricity_prices.coordinator_profiles import _profile_store
 from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
+from tests import FakeBody
 
 
 def _rlp_weights_from_rows(rows: Iterable[list[Any]], blend: str = "distinct") -> Any:
@@ -525,10 +526,9 @@ async def test_a_restart_in_a_new_year_keeps_last_years_curve(
 class _Page:
     def __init__(self, status: int, body: str) -> None:
         self.status = status
-        self._body = body
-
-    async def text(self) -> str:
-        return self._body
+        self.content_length = None
+        self.charset = None
+        self.content = FakeBody(body.encode("utf-8"))
 
     async def __aenter__(self) -> _Page:
         return self

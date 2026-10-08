@@ -63,6 +63,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from .providers._pdf import read_capped
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -274,7 +275,7 @@ async def _csv_text(session: aiohttp.ClientSession) -> str | None:
     try:
         async with session.get(_URL, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
             if r.status == 200:
-                payload = await r.read()
+                payload = await read_capped(r, _URL)
                 # The file opens with a byte-order mark.
                 return payload.decode("utf-8-sig", "replace")
             _LOGGER.debug("CREG rates %s answered %d", _URL, r.status)

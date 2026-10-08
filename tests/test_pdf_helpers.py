@@ -41,10 +41,9 @@ from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
-    _MAX_PDF_BYTES,
+    MAX_RESPONSE_BYTES,
     _MIN_TEXT_LAYER_CHARS,
     _fetch_validated_pdf_bytes,
-    _read_pdf_bytes,
     extract_pdf_text,
     extract_pdf_text_aligned,
     extract_pdf_text_layout,
@@ -71,6 +70,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
 )
 from custom_components.be_electricity_prices.providers._rates import FixedRates
+from tests import FakeBody
 
 
 class _PdfResponse:
@@ -78,10 +78,7 @@ class _PdfResponse:
     content_length = None
 
     def __init__(self, payload: bytes) -> None:
-        self._payload = payload
-
-    async def read(self) -> bytes:
-        return self._payload
+        self.content = FakeBody(payload)
 
     async def __aenter__(self) -> _PdfResponse:
         return self
@@ -372,10 +369,7 @@ class _FakeBodyResp:
     def __init__(self, body: bytes) -> None:
         self.status = 200
         self.content_length = len(body)
-        self._body = body
-
-    async def read(self) -> bytes:
-        return self._body
+        self.content = FakeBody(body)
 
 
 _AZURE_ERROR_BODY = (
@@ -572,26 +566,54 @@ def test_archive_validity_check_no_textual_fallback_when_month_names_none() -> N
 
 
 class _FakeResp:
+    charset = None
+
     def __init__(self, content_length: int | None, body: bytes) -> None:
         self.content_length = content_length
-        self._body = body
-
-    async def read(self) -> bytes:
-        return self._body
+        self.content = FakeBody(body)
 
 
-def test_read_pdf_bytes_rejects_oversize_declared_length() -> None:
-    resp = _FakeResp(_MAX_PDF_BYTES + 1, b"%PDF-fake")
-    with pytest.raises(ExtractorError, match="refusing PDF"):
-        asyncio.run(_read_pdf_bytes(resp, "https://x/big.pdf"))  # type: ignore[arg-type]
+def test_read_capped_rejects_oversize_declared_length() -> None:
+    resp = _FakeResp(MAX_RESPONSE_BYTES + 1, b"%PDF-fake")
+    with pytest.raises(ExtractorError, match="declared"):
+        asyncio.run(_pdf.read_capped(resp, "https://x/big.pdf"))  # type: ignore[arg-type]
 
 
-def test_read_pdf_bytes_allows_normal_and_unknown_length() -> None:
+def test_read_capped_allows_normal_and_unknown_length() -> None:
     within = _FakeResp(1024, b"%PDF-1.7 ok")
-    assert asyncio.run(_read_pdf_bytes(within, "u")) == b"%PDF-1.7 ok"  # type: ignore[arg-type]
+    assert asyncio.run(_pdf.read_capped(within, "u")) == b"%PDF-1.7 ok"  # type: ignore[arg-type]
     # No Content-Length (streamed) still reads through.
     unknown = _FakeResp(None, b"%PDF-stream")
-    assert asyncio.run(_read_pdf_bytes(unknown, "u")) == b"%PDF-stream"  # type: ignore[arg-type]
+    assert asyncio.run(_pdf.read_capped(unknown, "u")) == b"%PDF-stream"  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("pdf", [True, False])
+async def test_a_body_past_the_cap_is_refused_as_it_streams(
+    socket_enabled: None, monkeypatch: pytest.MonkeyPatch, pdf: bool
+) -> None:
+    """Only a declared Content-Length was checked, and on a PDF alone: a
+    chunked answer, or a page of text, was read whole whatever its size."""
+    from aiohttp import web
+    from aiohttp.test_utils import TestServer
+
+    monkeypatch.setattr(_pdf, "MAX_RESPONSE_BYTES", 1000)
+
+    async def chunked(request: web.Request) -> web.StreamResponse:
+        resp = web.StreamResponse()
+        resp.enable_chunked_encoding()
+        await resp.prepare(request)
+        for _ in range(3):
+            await resp.write(b"%PDF" + b"x" * 496)
+        await resp.write_eof()
+        return resp
+
+    app = web.Application()
+    app.router.add_get("/", chunked)
+    async with TestServer(app) as server, aiohttp.ClientSession() as session:
+        url = str(server.make_url("/"))
+        fetch = fetch_pdf_text(session, url) if pdf else fetch_text(session, url)
+        with pytest.raises(ExtractorError, match="more than 1000 bytes"):
+            await fetch
 
 
 _BLANK_PDF = (

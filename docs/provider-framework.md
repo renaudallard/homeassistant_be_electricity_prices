@@ -622,9 +622,17 @@ Internals worth knowing:
   as a 248-byte `PublicAccessNotPermitted` document, which raised the
   `extractor_failed` card on every Luminus entry, asking users to report a layout
   change that had not happened.
-- `_read_pdf_bytes` (`_pdf.py`) refuses a body whose declared Content-Length
-  exceeds `_MAX_PDF_BYTES` (64 MiB, about 12x the largest real card), bounding
-  what a broken or hostile CDN can pull into coordinator memory.
+- `read_capped` (`_pdf.py`) reads every body, card or page, and refuses one
+  past `MAX_RESPONSE_BYTES` (64 MiB, about 12x the largest real card), bounding
+  what a broken or hostile server can pull into coordinator memory. The cap
+  holds on the bytes as they stream, not only on a declared Content-Length,
+  which a chunked answer leaves out and a server can lie about.
+  `read_text_capped` decodes a page under the same cap, in the charset it
+  declares or UTF-8, replacing what does not decode so a mislabelled page is
+  refused by its parser as an `ExtractorError` rather than raised as a
+  `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
+  sheets, the CREG rate file and Synergrid's download page are read through
+  them too.
 - `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
   `ExtractorError` message: `network error fetching` and `storage error fetching`
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient

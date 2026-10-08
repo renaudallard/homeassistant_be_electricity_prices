@@ -97,7 +97,7 @@ import json
 import re
 import sys
 import tempfile
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -439,6 +439,16 @@ class _Cards(StoredTexts):
         self.file(self.seen_month, list(self.pending))
 
 
+class _KeptBody:
+    """A kept card's body, streamed the way the readers read one."""
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def iter_chunked(self, _size: int) -> AsyncIterator[bytes]:
+        yield self._payload
+
+
 class _KeptResponse:
     """The response shape the readers use, over bytes already in hand; a
     probe with nothing behind it answers 404.
@@ -450,21 +460,16 @@ class _KeptResponse:
     """
 
     content_length = None
+    charset = None
 
     def __init__(self, payload: bytes | None, etag: str = "") -> None:
-        self._payload = payload or b""
+        self.content = _KeptBody(payload or b"")
         self.status = 200 if payload is not None else 404
         self.headers: dict[str, str] = (
             {"ETag": f'"{etag}"', "Last-Modified": "Thu, 01 Jan 2026 00:00:00 GMT"}
             if payload is not None
             else {}
         )
-
-    async def read(self) -> bytes:
-        return self._payload
-
-    async def text(self) -> str:
-        return self._payload.decode("utf-8", errors="replace")
 
     async def __aenter__(self) -> _KeptResponse:
         return self

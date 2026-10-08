@@ -28,7 +28,7 @@ from custom_components.be_electricity_prices.sensor import (
     BePriceSensor,
     async_setup_entry,
 )
-from tests import make_entry, make_snapshot
+from tests import FakeBody, make_entry, make_snapshot
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "creg_tariff_ev.csv"
 
@@ -184,11 +184,9 @@ def test_the_history_is_oldest_first() -> None:
 
 class _Response:
     def __init__(self, body: bytes, status: int) -> None:
-        self._body = body
         self.status = status
-
-    async def read(self) -> bytes:
-        return self._body
+        self.content_length = None
+        self.content = FakeBody(body)
 
     async def __aenter__(self) -> "_Response":
         return self

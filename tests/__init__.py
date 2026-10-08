@@ -30,6 +30,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+from collections.abc import AsyncIterator
 from datetime import date
 from functools import lru_cache
 from importlib.metadata import version
@@ -310,12 +311,23 @@ def make_stub_extractor(
 
 
 __all__ = [
+    "FakeBody",
     "FIXTURES",
     "fixture_text",
     "make_entry",
     "make_snapshot",
     "make_stub_extractor",
 ]
+
+
+class FakeBody:
+    """What a fetch helper streams a response body from, over bytes in hand."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    async def iter_chunked(self, _size: int) -> AsyncIterator[bytes]:
+        yield self._body
 
 
 def make_text_session(body: str) -> Any:
@@ -329,9 +341,9 @@ def make_text_session(body: str) -> Any:
 
     class _Resp:
         status = 200
-
-        async def text(self) -> str:
-            return body
+        content_length = None
+        charset = None
+        content = FakeBody(body.encode("utf-8"))
 
         async def __aenter__(self) -> "_Resp":
             return self

@@ -79,8 +79,9 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 
 import aiohttp
 
-from .providers._pdf import USER_AGENT
+from .providers._pdf import USER_AGENT, read_text_capped
 from .providers._rates import RlpBlend
+from .providers.base import ExtractorError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -264,8 +265,8 @@ async def _listed_url(
         ) as resp:
             if resp.status >= 400:
                 return None
-            html = await resp.text()
-    except (aiohttp.ClientError, TimeoutError, UnicodeDecodeError) as err:
+            html = await read_text_capped(resp, _PAGE_URL)
+    except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
         _LOGGER.debug("Synergrid download page unavailable: %s", err)
         return None
     found: str | None = None

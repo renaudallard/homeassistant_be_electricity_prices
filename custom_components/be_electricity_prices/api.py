@@ -56,7 +56,8 @@ from .const import (
     ENTSOE_BASE_URL,
     ENTSOE_BE_DOMAIN,
 )
-from .providers._pdf import error_text
+from .providers._pdf import error_text, read_text_capped
+from .providers.base import ExtractorError
 
 _NS = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
 
@@ -133,12 +134,12 @@ class EntsoeClient:
                 if resp.status == 401:
                     raise EntsoeAuthError("ENTSO-E rejected the API key")
                 if resp.status >= 400:
-                    body = await resp.text()
+                    body = await read_text_capped(resp, ENTSOE_BASE_URL)
                     raise EntsoeError(
                         self._redact(f"ENTSO-E HTTP {resp.status}: {body[:200]}")
                     )
-                payload = await resp.text()
-        except (aiohttp.ClientError, TimeoutError) as err:
+                payload = await read_text_capped(resp, ENTSOE_BASE_URL)
+        except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
             # aiohttp.ClientTimeout fires asyncio.TimeoutError, which is
             # NOT an aiohttp.ClientError on 3.11+; without the second
             # alternative, a slow ENTSO-E response would bubble a bare
@@ -519,10 +520,10 @@ class EnergyChartsClient:
                         f"waiting {cooldown.total_seconds():.0f}s"
                     )
                 if resp.status >= 400:
-                    body = await resp.text()
+                    body = await read_text_capped(resp, ENERGY_CHARTS_URL)
                     raise EntsoeError(f"energy-charts HTTP {resp.status}: {body[:200]}")
-                payload = await resp.text()
-        except (aiohttp.ClientError, TimeoutError) as err:
+                payload = await read_text_capped(resp, ENERGY_CHARTS_URL)
+        except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
             raise EntsoeError(f"energy-charts: {error_text(err)}") from err
 
         return await asyncio.to_thread(

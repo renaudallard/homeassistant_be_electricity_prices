@@ -48,7 +48,7 @@ from custom_components.be_electricity_prices.providers.dats24 import (
     fetch,
     parse_snapshot,
 )
-from tests import FIXTURES, fixture_text
+from tests import FIXTURES, FakeBody, fixture_text
 
 
 def _text() -> str:
@@ -291,10 +291,7 @@ class _CardResponse:
         self.status = status
         self.content_length = len(payload)
         self.headers: dict[str, str] = {}
-        self._payload = payload
-
-    async def read(self) -> bytes:
-        return self._payload
+        self.content = FakeBody(payload)
 
     async def __aenter__(self) -> "_CardResponse":
         return self

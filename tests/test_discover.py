@@ -63,7 +63,7 @@ from custom_components.be_electricity_prices.providers import (
     totalenergies as totalenergies_mod,
 )
 
-from tests import FIXTURES
+from tests import FIXTURES, FakeBody
 
 FIX = FIXTURES / "discover"
 
@@ -73,11 +73,10 @@ class _FakeResponse:
 
     def __init__(self, body: str, status: int = 200) -> None:
         self.status = status
-        self._body = body
         self.headers = {"content-type": "text/html"}
-
-    async def text(self) -> str:
-        return self._body
+        self.content_length = None
+        self.charset = None
+        self.content = FakeBody(body.encode("utf-8"))
 
     async def __aenter__(self) -> "_FakeResponse":
         return self

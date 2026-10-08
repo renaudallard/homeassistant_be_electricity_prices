@@ -49,6 +49,7 @@ from custom_components.be_electricity_prices.api import (
     fetch_day_ahead_or_fallback,
     parse_day_ahead_xml,
 )
+from tests import FakeBody
 
 
 def _ack(text: str) -> str:
@@ -422,11 +423,10 @@ class _Resp:
         self, status: int, body: str, headers: dict[str, str] | None = None
     ) -> None:
         self.status = status
-        self._body = body
         self.headers = headers or {}
-
-    async def text(self) -> str:
-        return self._body
+        self.content_length = None
+        self.charset = None
+        self.content = FakeBody(body.encode("utf-8"))
 
 
 class _CM:

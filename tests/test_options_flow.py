@@ -57,7 +57,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
 )
 from custom_components.be_electricity_prices.cohort import _parse_iso_date
-from tests import make_entry
+from tests import FakeBody, make_entry
 
 
 @pytest.fixture(autouse=True)
@@ -8046,12 +8046,11 @@ async def test_text_memo_collapses_repeat_listing_fetches() -> None:
 
     class _Resp:
         status = 200
+        content_length = None
+        charset = None
 
         def __init__(self, url: str) -> None:
-            self._url = url
-
-        async def text(self) -> str:
-            return f"body of {self._url}"
+            self.content = FakeBody(f"body of {url}".encode())
 
         async def __aenter__(self) -> "_Resp":
             return self
@@ -8168,9 +8167,9 @@ async def test_text_memo_is_shared_across_the_sweep_s_tasks() -> None:
 
     class _Resp:
         status = 200
-
-        async def text(self) -> str:
-            return "listing"
+        content_length = None
+        charset = None
+        content = FakeBody(b"listing")
 
         async def __aenter__(self) -> "_Resp":
             return self
