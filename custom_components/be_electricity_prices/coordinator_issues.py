@@ -44,6 +44,7 @@ from .providers import get as get_extractor, offers_direct_debit
 from .providers._rates import Contract
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .providers._resolve import omits_brussels_power_term
+from .providers._validity import card_valid_until
 
 from .const import (
     CONF_CONTRACT,
@@ -70,7 +71,7 @@ from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
 )
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -176,8 +177,14 @@ class _IssuesMixin:
         )
 
     def _snapshot_overdue(self) -> bool:
-        """Whether the card in hand is older than the stale threshold and a
-        newer one could still replace it.
+        """Whether the card in hand is stale and a newer one could still
+        replace it: fetched more than the stale threshold ago, or past its
+        validity by more than that.
+
+        Age alone missed a supplier that keeps serving an old month's card:
+        each probe match restarts the age, so the card never went stale. Its
+        validity is the date it states, or else the end of the month its
+        title names (``card_valid_until``).
 
         A supplier that has left keeps its final card for good, and so does a
         product its supplier withdrew; each has its own card saying so, and a
@@ -186,7 +193,16 @@ class _IssuesMixin:
         """
         if self._supply_ended() or self._card_is_final():
             return False
-        return self._snapshot_age_hours() > SNAPSHOT_STALE_DAYS * 24
+        if self._snapshot_age_hours() > SNAPSHOT_STALE_DAYS * 24:
+            return True
+        card = self._snapshot_raw
+        if card is None:
+            return False
+        valid_until = card_valid_until(card.valid_until, card.publication_label)
+        return (
+            valid_until is not None
+            and dt_util.now().date() > valid_until + timedelta(days=SNAPSHOT_STALE_DAYS)
+        )
 
     def _sync_stale_issue(self, stale: bool) -> None:
         """Raise or clear the 'snapshot stale' repair issue for this entry."""

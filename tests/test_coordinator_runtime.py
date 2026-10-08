@@ -8340,18 +8340,15 @@ async def _fail_with_archive(
     return read
 
 
-async def test_an_entry_with_no_card_is_priced_off_last_months(
+async def test_an_entry_with_no_card_is_priced_off_the_archives_newest(
     hass: HomeAssistant,
 ) -> None:
     """An entry set up while its supplier's card cannot be read holds no card
-    at all, and every entity was unavailable. Last month's card, read from the
-    card archive, stands in. The failure's Repairs card stays up, and the card
-    is dated to its own month with no probe key, so it reads as old and the
-    next refresh still asks the supplier."""
-    from custom_components.be_electricity_prices.snapshot_months import (
-        ArchivedCard,
-        month_before,
-    )
+    at all, and every entity was unavailable. The card archive's newest row,
+    this month's first, stands in. The failure's Repairs card stays up, and
+    the card is dated to its own month with no probe key, so it reads as old
+    and the next refresh still asks the supplier."""
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -8361,23 +8358,144 @@ async def test_an_entry_with_no_card_is_priced_off_last_months(
         hass, coord, ArchivedCard(snapshot=card, read_by_ocr=False)
     )
 
-    former = month_before(dt_util.now().date())
-    read.assert_awaited_once_with(ANY, "eneco", "power_fix", "wallonia", former)
+    month = dt_util.now().date().replace(day=1)
+    read.assert_awaited_once_with(ANY, "eneco", "power_fix", "wallonia", month)
     assert coord._snapshot is not None
     assert coord._snapshot_fetched_at == datetime(
-        former.year, former.month, 1, tzinfo=UTC
+        month.year, month.month, 1, tzinfo=UTC
     )
     assert coord._snapshot_probe_key is None
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
 
 
-async def test_last_months_card_waits_for_the_archive_box_and_the_entrys_own(
+def _archive_holding(rows: dict[date, SupplierSnapshot]) -> AsyncMock:
+    """The card archive's read, answering a row for the months in ``rows``."""
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
+
+    async def by_month(
+        _session: Any, _supplier: str, _contract: str, _region: str, month: date
+    ) -> ArchivedCard | None:
+        card = rows.get(month)
+        return None if card is None else ArchivedCard(snapshot=card, read_by_ocr=False)
+
+    return AsyncMock(side_effect=by_month)
+
+
+async def _refresh_serving(
+    coord: BePricesCoordinator, served: SupplierSnapshot, archive: AsyncMock
+) -> None:
+    """One refresh against a supplier that answers ``served``, its probe
+    unchanged, with ``archive`` as the card archive."""
+    from custom_components.be_electricity_prices import snapshot_months
+
+    async def _fetch(*args: Any, **kwargs: Any) -> SupplierSnapshot:
+        return served
+
+    async def _probe(*args: Any, **kwargs: Any) -> str:
+        return "same-etag"
+
+    _shared_failed_fetches(coord.hass).clear()
+    _shared_snapshots(coord.hass).clear()
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+            return_value=replace(make_stub_extractor(fetch=_fetch), probe=_probe),
+        ),
+        patch.object(snapshot_months, "_archived_card_from_github", archive),
+    ):
+        await coord._maybe_refresh_snapshot()
+
+
+@pytest.mark.freeze_time("2026-10-20 12:00:00+02:00")
+async def test_a_card_past_its_validity_by_a_week_is_stale(
+    hass: HomeAssistant,
+) -> None:
+    """A probe match restarts the card's age, so a supplier that kept
+    serving September's card never had it go stale. It is stale a week past
+    its validity, however recently it was fetched."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    coord._set_snapshot(make_snapshot(valid_until=date(2026, 9, 30)))
+    assert coord._snapshot_overdue()
+    coord._set_snapshot(make_snapshot(valid_until=date(2026, 10, 14)))
+    assert not coord._snapshot_overdue()
+    # A card dated only by its title, as Bolt's and TotalEnergies' are.
+    coord._set_snapshot(make_snapshot(publication_label="september 2026"))
+    assert coord._snapshot_overdue()
+
+
+@pytest.mark.freeze_time("2026-10-20 12:00:00+02:00")
+async def test_a_supplier_still_serving_last_months_card_gives_way_to_the_archive(
+    hass: HomeAssistant,
+) -> None:
+    """The supplier answers September's card three weeks into October while
+    the card archive holds October's: the archive's card is priced on, dated
+    to its month with no probe key, and a supplier card that is no older
+    than the archive's is left alone."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    september = make_snapshot(
+        supplier="eneco", contract="power_fix", valid_until=date(2026, 9, 30)
+    )
+    october = make_snapshot(
+        supplier="eneco", contract="power_fix", valid_until=date(2026, 10, 31)
+    )
+    archive = _archive_holding({date(2026, 10, 1): october})
+
+    await _refresh_serving(coord, september, archive)
+
+    assert coord._snapshot_raw is not None
+    assert coord._snapshot_raw.valid_until == date(2026, 10, 31)
+    assert coord._snapshot_fetched_at == datetime(2026, 10, 1, tzinfo=UTC)
+    assert coord._snapshot_probe_key is None
+
+    # The supplier is current again: its card is taken and the archive is
+    # not asked.
+    archive.reset_mock()
+    current = make_snapshot(
+        supplier="eneco", contract="power_fix", valid_until=date(2026, 10, 31)
+    )
+    await _refresh_serving(coord, current, archive)
+    archive.assert_not_awaited()
+    assert coord._snapshot_probe_key == "same-etag"
+
+
+@pytest.mark.freeze_time("2026-10-20 12:00:00+02:00")
+async def test_the_archive_is_walked_back_and_only_a_later_card_taken(
+    hass: HomeAssistant,
+) -> None:
+    """The archive is asked this month first, then back a month at a time to
+    the first row it holds, and that row stands in only if it is a later card
+    than the one held."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    july = make_snapshot(valid_until=date(2026, 7, 31))
+    august = make_snapshot(valid_until=date(2026, 8, 31))
+    archive = _archive_holding({date(2026, 8, 1): august})
+
+    await _refresh_serving(coord, july, archive)
+    asked = [call.args[-1] for call in archive.await_args_list]
+    assert asked == [date(2026, 10, 1), date(2026, 9, 1), date(2026, 8, 1)]
+    assert coord._snapshot_raw is not None
+    assert coord._snapshot_raw.valid_until == date(2026, 8, 31)
+
+    # Held card no older than the archive's newest: kept.
+    september = make_snapshot(valid_until=date(2026, 9, 30))
+    await _refresh_serving(coord, september, archive)
+    assert coord._snapshot_raw.valid_until == date(2026, 9, 30)
+
+
+async def test_the_archive_card_waits_for_the_archive_box_and_the_entrys_own(
     hass: HomeAssistant,
 ) -> None:
     """The card-archive box keeps the integration off GitHub, and a card the
-    entry stored itself, set aside by an upgrade, is closer than the archive's
-    copy of last month."""
+    entry stored itself, set aside by an upgrade, is kept over the archive's
+    unless the archive's is a later card."""
     from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     archived = ArchivedCard(
@@ -8406,12 +8524,12 @@ async def test_last_months_card_waits_for_the_archive_box_and_the_entrys_own(
 
     with patch.object(coord._store, "async_load", new=_fake_load):
         await coord.async_load_persistent()
-    read = await _fail_with_archive(hass, coord, archived)
-    read.assert_not_awaited()
+    await _fail_with_archive(hass, coord, archived)
+    # The archive's card names no date, so it is no later card.
     assert coord._snapshot_schema_version == 16
 
 
-async def test_an_entry_starting_in_a_siblings_back_off_gets_last_months_card(
+async def test_an_entry_starting_in_a_siblings_back_off_gets_the_archive_card(
     hass: HomeAssistant,
 ) -> None:
     """A sibling's failure holds the tuple off for a while, and an entry that

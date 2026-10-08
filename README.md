@@ -961,8 +961,12 @@ under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
 
-- **`snapshot_stale_<entry>`** — the cached snapshot is older than **7
-  days**. Not raised once the supplier has left the market (its
+- **`snapshot_stale_<entry>`** — the card in use was last refreshed more
+  than **7 days** ago, or is more than 7 days past its validity (the date it
+  states, or the end of the month its title names), which is what a supplier
+  still serving an old month's card looks like. While it is stale the
+  project's card archive is asked for its newest card, this month's first and
+  back up to a year, and that card is priced on if it is a later one. Not raised once the supplier has left the market (its
   `deprecated_until` has passed): the final card stays stale for good, the
   deprecation notice below already says so, and the entry stops asking the
   supplier for a card that is gone. Nor on a product its supplier withdrew,
@@ -972,9 +976,9 @@ successful refresh:
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
   Raised on the first failure, since a parse error will not self-heal;
   cached prices keep serving, including a card stored by an earlier version
-  that an upgrade would otherwise drop. With no card at all, last month's
-  card from the project's card archive stands in, and only with the archive
-  box unticked or nothing there do the sensors stay unavailable.
+  that an upgrade would otherwise drop. With no card at all, the newest card
+  the project's card archive holds stands in, and only with the archive box
+  unticked or nothing there do the sensors stay unavailable.
 - **`extractor_card_missing_<entry>`** — the supplier's site answered
   that there is no tariff card at the address the integration reads (HTTP
   404 or 410, or a web page where the card should be): the card for the

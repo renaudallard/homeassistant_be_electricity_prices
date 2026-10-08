@@ -761,8 +761,8 @@
   },
   "issues": {
     "snapshot_stale": {
-      "title": "Tarifdaten für {supplier} ({contract}) sind älter als {days} Tage",
-      "description": "Die Integration konnte die Tarifkarte beim Lieferanten nicht aktualisieren und verwendet einen Cache, der älter als {days} Tage ist. Letzter Fehler: {last_error}. Die Preise spiegeln möglicherweise nicht mehr wider, was tatsächlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, prüfen Sie Ihr Netzwerk, oder öffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
+      "title": "Die Tarifkarte für {supplier} ({contract}) ist veraltet",
+      "description": "Die Tarifkarte, nach der dieser Eintrag rechnet, wurde vor mehr als {days} Tagen aktualisiert oder gilt für einen Zeitraum, der seit mehr als {days} Tagen abgelaufen ist; das kommt vor, wenn der Lieferant weiter eine alte Karte anbietet. Hält das Kartenarchiv eine neuere Karte, wird diese verwendet. Letzter Fehler: {last_error}. Die Preise spiegeln möglicherweise nicht mehr wider, was tatsächlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, prüfen Sie Ihr Netzwerk, oder öffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
     },
     "extractor_failed": {
       "title": "Tarifkarte für {supplier} ({contract}) konnte nicht ausgewertet werden",

@@ -761,8 +761,8 @@
   },
   "issues": {
     "snapshot_stale": {
-      "title": "Les données tarifaires de {supplier} ({contract}) ont plus de {days} jours",
-      "description": "L'intégration n'a pas pu rafraîchir la carte tarifaire chez le fournisseur et utilise un cache de plus de {days} jours. Dernière erreur : {last_error}. Les prix peuvent ne plus refléter ce qui est facturé. Essayez le service be_electricity_prices.refresh, vérifiez votre réseau, ou ouvrez un ticket sur GitHub si le problème persiste."
+      "title": "La carte tarifaire de {supplier} ({contract}) n'est plus à jour",
+      "description": "La carte tarifaire sur laquelle cette entrée calcule a été rafraîchie il y a plus de {days} jours, ou porte sur une période terminée depuis plus de {days} jours, ce qui arrive quand le fournisseur continue de servir une ancienne carte. Si l'archive des cartes en détient une plus récente, celle-ci est utilisée. Dernière erreur : {last_error}. Les prix peuvent ne plus refléter ce qui est facturé. Essayez le service be_electricity_prices.refresh, vérifiez votre réseau, ou ouvrez un ticket sur GitHub si le problème persiste."
     },
     "extractor_failed": {
       "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",

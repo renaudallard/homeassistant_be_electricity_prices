@@ -38,6 +38,7 @@ from .vat_rates import residential_vat, standard_vat
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_missing_card_error, is_transient_fetch_error
+from .providers._validity import card_valid_until
 from .providers._rates import Contract
 from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
 
@@ -70,7 +71,7 @@ from .snapshot_months import (
     ArchivedCard,
     card_for_unreadable_month,
     card_of_month_before,
-    month_before,
+    newest_archived_card,
 )
 from .snapshot_resolve import (
     _resolve_snapshot,
@@ -112,6 +113,15 @@ def _vat_now() -> tuple[float, float]:
     return residential_vat(today), standard_vat(today)
 
 
+def _newer_card(card: SupplierSnapshot, held: SupplierSnapshot) -> bool:
+    """Whether ``card`` ends later than ``held``, each by the date it states
+    or else the month its title names (``card_valid_until``). Not when either
+    says neither: a card that cannot be dated is not taken over one held."""
+    mine = card_valid_until(card.valid_until, card.publication_label)
+    theirs = card_valid_until(held.valid_until, held.publication_label)
+    return mine is not None and theirs is not None and mine > theirs
+
+
 class _SnapshotMixin:
     """Mixed into BePricesCoordinator."""
 
@@ -140,6 +150,7 @@ class _SnapshotMixin:
     _snapshot_schema_version: int
     _stale_snapshot: dict[str, Any] | None
     _card_unreadable: bool
+    _archive_asked: bool
     _card_read_by_ocr: bool
     _last_error: str | None
     _supplier_tuple: tuple[str, str, str]
@@ -153,6 +164,7 @@ class _SnapshotMixin:
         hass: HomeAssistant
 
         def _supply_ended(self) -> bool: ...
+        def _snapshot_overdue(self) -> bool: ...
         def _entry_contract(self) -> Contract | None: ...
 
         def _sync_extractor_issue(
@@ -521,6 +533,26 @@ class _SnapshotMixin:
         )
 
     async def _maybe_refresh_snapshot(self) -> None:
+        """Refresh the card from the supplier, then from the card archive if
+        what is held has gone stale.
+
+        A supplier that keeps serving last month's card, or cannot be read
+        for a week, leaves a stale card in hand, and the archive walks every
+        supplier daily: its newest row stands in when it is a later card than
+        the one held, whether or not the fetch failed.
+        """
+        self._archive_asked = False
+        await self._refresh_from_supplier()
+        if (
+            not self._archive_asked
+            and self._snapshot is not None
+            and self._snapshot_overdue()
+        ):
+            await self._serve_archived_card(
+                self._last_error or "the card held is past its validity"
+            )
+
+    async def _refresh_from_supplier(self) -> None:
         """Run a cheap probe; only refetch the full PDF when it says so.
 
         Two paths depending on what the supplier exposes:
@@ -793,46 +825,51 @@ class _SnapshotMixin:
         """
         self._replay_stale_snapshot(f"could not be refreshed ({error})", refetch=True)
         if self._snapshot is None:
-            await self._serve_former_month_card(error)
+            await self._serve_archived_card(error)
 
-    async def _serve_former_month_card(self, error: str) -> None:
-        """Price an entry left with no card off last month's, from the archive.
+    async def _serve_archived_card(self, error: str) -> None:
+        """Price an entry off the card archive's newest row for its card.
 
         Reached when a fetch fails and nothing is held, not even a card an
-        upgrade set aside: an entry set up while its supplier's card cannot
-        be read. The archive's row for the month before is the closest card
-        there is. Unlike a withdrawn product's last card it is no answer, so
-        the failure's Repairs card stays up, and it is dated to the first day
-        of its month with no probe key: the snapshot reads as old, no sibling
-        takes it for a fresh card, and the next refresh asks the supplier.
+        upgrade set aside, and when the card held has gone stale. The row is
+        taken only if nothing is held or it is a later card than the one held
+        (``_newer_card``). Unlike a withdrawn product's last card it is no
+        answer, so a failure's Repairs card stays up, and it is dated to the
+        first day of its month with no probe key: the snapshot reads as old,
+        no sibling takes it for a fresh card, and the next refresh asks the
+        supplier.
         """
-        today = dt_util.now().date()
+        self._archive_asked = True
         try:
-            archived = await card_of_month_before(
+            found = await newest_archived_card(
                 self._session,
                 self.entry.data[CONF_SUPPLIER],
                 self.entry.data[CONF_CONTRACT],
                 self.entry.data[CONF_REGION],
-                today,
+                dt_util.now().date(),
                 self.entry,
             )
         except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
-            _LOGGER.debug("card archive read failed for last month's card: %s", err)
+            _LOGGER.debug("card archive read failed for a stand-in card: %s", err)
             return
-        if archived is None:
+        if found is None:
             return
-        former = month_before(today)
+        month, archived = found
+        if self._snapshot is not None and not _newer_card(
+            archived.snapshot, self._snapshot
+        ):
+            return
         self._set_snapshot(archived.snapshot)
-        self._snapshot_fetched_at = datetime(former.year, former.month, 1, tzinfo=UTC)
+        self._snapshot_fetched_at = datetime(month.year, month.month, 1, tzinfo=UTC)
         self._snapshot_probe_key = None
         self._card_read_by_ocr = archived.read_by_ocr
         self._sync_card_read_by_ocr_issue(archived.read_by_ocr)
         _LOGGER.warning(
             "%s could not be refreshed (%s); serving the card archive's card "
-            "of %s rather than no prices at all",
+            "of %s instead",
             self.entry.data.get(CONF_SUPPLIER),
             error,
-            former.strftime("%Y-%m"),
+            month.strftime("%Y-%m"),
         )
 
     def _adopt_archived_card(self, archived: ArchivedCard) -> None:

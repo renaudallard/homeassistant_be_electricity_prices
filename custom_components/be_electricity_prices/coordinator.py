@@ -275,6 +275,9 @@ class BePricesCoordinator(
         # card that carries no text layer. Set per fetch, never per supplier:
         # it stops being true the moment readable cards return.
         self._card_unreadable = False
+        # Whether this refresh has already asked the card archive for a
+        # stand-in, so a card it just adopted is not looked up again.
+        self._archive_asked = False
         # Whether the prices being served were read off a picture of the
         # card rather than out of it: the archive walk's OCR reading,
         # adopted because the supplier publishes page images. Set when

@@ -761,8 +761,8 @@
   },
   "issues": {
     "snapshot_stale": {
-      "title": "Tariff data for {supplier} ({contract}) is more than {days} days old",
-      "description": "The integration could not refresh the tariff card from the supplier and is serving cached data older than {days} days. Last fetch error: {last_error}. Prices may no longer reflect what is actually billed. Try the be_electricity_prices.refresh service, check your network, or open an issue on GitHub if the problem persists."
+      "title": "Tariff card for {supplier} ({contract}) is out of date",
+      "description": "The tariff card this entry prices on was last refreshed more than {days} days ago, or covers a period that ended more than {days} days ago, which happens when the supplier keeps serving an old card. Where the card archive holds a later card it is used instead. Last fetch error: {last_error}. Prices may no longer reflect what is actually billed. Try the be_electricity_prices.refresh service, check your network, or open an issue on GitHub if the problem persists."
     },
     "extractor_failed": {
       "title": "Could not parse the tariff card for {supplier} ({contract})",
