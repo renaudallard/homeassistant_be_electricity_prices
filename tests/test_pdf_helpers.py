@@ -988,3 +988,22 @@ def test_the_vreg_ceiling_is_read_from_either_language() -> None:
     # A card that does not state it leaves the cap off rather than
     # inventing a ceiling.
     assert parse_vreg_network_ceiling("no ceiling on this card") is None
+
+
+async def test_a_page_that_is_not_utf8_is_read_not_raised(
+    socket_enabled: None,
+) -> None:
+    """A page in another charset than it declares (a maintenance page in
+    Latin-1) decoded strictly raised UnicodeDecodeError, which is no
+    ExtractorError and so escaped every caller that handles one."""
+    from aiohttp import web
+    from aiohttp.test_utils import TestServer
+
+    async def latin1(_request: web.Request) -> web.Response:
+        return web.Response(body=b"Tarif \xe9lectricit\xe9", content_type="text/html")
+
+    app = web.Application()
+    app.router.add_get("/", latin1)
+    async with TestServer(app) as server, aiohttp.ClientSession() as session:
+        text = await fetch_text(session, str(server.make_url("/")))
+    assert text == "Tarif �lectricit�"
