@@ -449,8 +449,9 @@ async def fetch(
     if region_code not in contract.months_per_region:
         raise ExtractorError(f"Engie {contract_id}: not available in region {region!r}")
 
-    text = await fetch_pdf_text(session, _document_url(contract, region_code))
-    return parse_snapshot(contract_id, {region: text})
+    url = _document_url(contract, region_code)
+    text = await fetch_pdf_text(session, url)
+    return parse_snapshot(contract_id, {region: text}, url)
 
 
 async def fetch_for_month(
@@ -496,7 +497,7 @@ async def fetch_for_month(
     url = _document_url(contract, region_code, month_offset=offset)
     try:
         text = await fetch_pdf_text(session, url)
-        snap = parse_snapshot(contract_id, {region: text})
+        snap = parse_snapshot(contract_id, {region: text}, url)
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
@@ -572,7 +573,9 @@ async def _settle_on_published_index(
     )
 
 
-def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSnapshot:
+def parse_snapshot(
+    contract_id: str, region_texts: dict[str, str], source_url: str = _API_URL
+) -> SupplierSnapshot:
     """Pure parser used by tests; takes already-extracted PDF text."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Engie")
 
@@ -632,7 +635,7 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
                 # 21%; _resolve.apply_vat resolves it for the entry.
                 vat_rate=VAT_RATE_STANDARD if professional else 0.0,
             ),
-            source_url=_API_URL,
+            source_url=source_url,
             publication_label=publication_label,
             valid_until=parse_valid_until(any_text),
             injection=injection,

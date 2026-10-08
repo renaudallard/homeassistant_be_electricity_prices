@@ -26,7 +26,7 @@ Related reading:
 | Label | `Engie` (`engie.py`) |
 | Regions served | Flanders, Wallonia, Brussels (union across contracts, `engie.py`) |
 | Publication form | Per (contract, region) PDF behind a REST query endpoint |
-| `source_url` | the bare API base, `engie.py` |
+| `source_url` | the document URL the card was read from, `engie.py` |
 | `probe` | none declared (TTL-only, see below) |
 | `fetch_for_month` | the same endpoint with `monthOffset=N`, N months back from the current card (see below) |
 
@@ -222,8 +222,8 @@ tolerated because the output is a catalog hint only.
 
 ## Parsing
 
-`parse_snapshot(contract_id, region_texts)` (`engie.py`) is the pure parser
-used by both `fetch()` and the tests. Because the energy formula, injection,
+`parse_snapshot(contract_id, region_texts, source_url)` (`engie.py`) is the pure
+parser used by both `fetch()` and the tests. Because the energy formula, injection,
 federal excise, and energy contribution are supplier-set or federal and identical
 across regions, it reads them from any one region's PDF (`engie.py`). It then
 loops over the region texts to gather each region's DSO rows and regional levies

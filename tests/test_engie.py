@@ -967,6 +967,28 @@ async def test_archive_addresses_a_past_month_by_its_offset_from_today(
     assert snap.publication_label == "Avril 2026"
     assert snap.valid_until == date(2026, 4, 30)
     assert len(snap.dsos) == 8
+    assert snap.source_url == urls[0]
+
+
+async def test_fetch_links_the_card_it_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The endpoint answers 400 without a document, so the snapshot names
+    the card's own address."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    urls: list[str] = []
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        urls.append(url)
+        return fixture_text("engie_easy_indexed_v.pdf")
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _fake_pdf)
+    snap = await engie.fetch(
+        None,  # type: ignore[arg-type]
+        "engie_easy_variable",
+        REGION_FLANDERS,
+    )
+    assert urls and "document=E_EASY_R_" in urls[0]
+    assert snap.source_url == urls[0]
 
 
 async def test_archive_refuses_a_future_month_and_a_card_for_another_month(
