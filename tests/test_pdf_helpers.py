@@ -787,6 +787,21 @@ async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:
     assert out == body[3:]
 
 
+@pytest.mark.parametrize("prefix", [b"\n", b"\r\n", b" \t\n", b"\xef\xbb\xbf\r\n"])
+async def test_a_pdf_whose_signature_follows_blank_lines_is_read(
+    prefix: bytes,
+) -> None:
+    """A server that emits a newline ahead of the card had it refused as
+    "expected a PDF"; past the BOM, blank space before %PDF is stripped the
+    same way, since pdfplumber looks for the signature at byte zero."""
+    body = b"%PDF-1.7\nrest of the document"
+    session = _FakeBodySession(prefix + body)
+    assert (
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+        == body
+    )
+
+
 async def test_a_pdf_without_a_bom_is_returned_untouched() -> None:
     """The strip must key on the BOM, not run unconditionally: taking three
     bytes off an ordinary card would corrupt every supplier at once."""

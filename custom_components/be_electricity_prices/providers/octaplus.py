@@ -61,6 +61,7 @@ from ..const import (
 from ._pdf import (
     FR_MONTHS,
     _is_pdf_payload,
+    _strip_pdf_prefix,
     extract_pdf_text_aligned,
     fetch_pdf_text_aligned,
     fetch_text,
@@ -358,7 +359,7 @@ async def _fetch_archive_pdf(session: aiohttp.ClientSession, name: str) -> bytes
         raise ExtractorError(f"OCTA+ archive sheet: bad base64 for {name!r}") from err
     if not _is_pdf_payload(payload):
         raise ExtractorError(f"OCTA+ archive sheet: {name!r} is not a PDF")
-    return payload
+    return _strip_pdf_prefix(payload)
 
 
 async def fetch_for_month(

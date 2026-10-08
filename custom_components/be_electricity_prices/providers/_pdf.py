@@ -183,18 +183,23 @@ async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
-def _is_pdf_payload(payload: bytes) -> bool:
-    """Return True if the bytes look like a PDF.
+def _strip_pdf_prefix(payload: bytes) -> bytes:
+    """The bytes without a UTF-8 BOM, then blank space, ahead of ``%PDF``.
 
-    PDFs start with the magic bytes ``%PDF``. Some publishers prepend
-    a UTF-8 BOM (\\ufeff = 3 bytes EF BB BF): OCTA+'s tariff PDFs do
-    this. Allow the BOM as a one-time prefix.
+    Some publishers prepend the BOM (\\ufeff = 3 bytes EF BB BF): OCTA+'s
+    tariff PDFs do this, and some servers a newline. Either has to come off
+    rather than merely be tolerated: pdfplumber fails such a file with "No
+    /Root object! - Is this really a PDF?", which reads like a corrupt card
+    rather than a few stray bytes. pypdf recovers on its own, so the two
+    aligned/layout variants are the ones this protects.
     """
-    if payload.startswith(b"%PDF"):
-        return True
-    if payload.startswith(b"\xef\xbb\xbf%PDF"):
-        return True
-    return False
+    return payload.removeprefix(b"\xef\xbb\xbf").lstrip(b"\r\n\t ")
+
+
+def _is_pdf_payload(payload: bytes) -> bool:
+    """Return True if the bytes look like a PDF: ``%PDF`` once
+    :func:`_strip_pdf_prefix` has taken off what may precede it."""
+    return _strip_pdf_prefix(payload).startswith(b"%PDF")
 
 
 # An object store that refuses the read answers the proxy in front of it
@@ -267,15 +272,7 @@ async def _fetch_validated_pdf_bytes(
         raise ExtractorError(
             f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
         )
-    # Strip the BOM the validator above deliberately tolerates. Accepting it
-    # there only keeps the download from being rejected; the bytes still have
-    # to parse, and pdfplumber cannot read them: it fails a BOM-prefixed
-    # file with "No /Root object! - Is this really a PDF?", which reads like a
-    # corrupt card rather than three stray bytes. pypdf recovers on its own,
-    # so the two aligned/layout variants are the ones this protects.
-    if payload.startswith(b"\xef\xbb\xbf"):
-        payload = payload[3:]
-    return payload
+    return _strip_pdf_prefix(payload)
 
 
 async def _pdf_text(

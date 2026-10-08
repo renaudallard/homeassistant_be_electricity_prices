@@ -601,14 +601,15 @@ Internals worth knowing:
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
   diagnostics. The ENTSO-E client uses it for the same reason (`api.py`).
 - `_is_pdf_payload` (`_pdf.py`) validates by magic bytes (`%PDF`, allowing a
-  leading UTF-8 BOM that OCTA+ prepends), not Content-Type, because some CDNs
-  return 200 + text/html for a missing PDF, and Engie's API returns
-  octet-stream for valid PDFs. Tolerating the BOM is only half the job, so
-  `_fetch_validated_pdf_bytes` **strips it** before returning: those bytes still
-  have to parse, and pdfplumber cannot read them -- it fails a BOM-prefixed file
-  with `No /Root object! - Is this really a PDF?`, which reads like a corrupt
-  card rather than three stray bytes. pypdf recovers on its own, so this is what
-  keeps the `aligned` and `layout` variants working on such a card.
+  leading UTF-8 BOM that OCTA+ prepends and blank space after it, which some
+  servers emit), not Content-Type, because some CDNs return 200 + text/html for
+  a missing PDF, and Engie's API returns octet-stream for valid PDFs.
+  Tolerating the prefix is only half the job, so `_fetch_validated_pdf_bytes`
+  and OCTA+'s archive **strip it** (`_strip_pdf_prefix`) before returning: those
+  bytes still have to parse, and pdfplumber cannot read them -- it fails such a
+  file with `No /Root object! - Is this really a PDF?`, which reads like a
+  corrupt card rather than a few stray bytes. pypdf recovers on its own, so this
+  is what keeps the `aligned` and `layout` variants working on such a card.
 - `_storage_error_code` (`_pdf.py`) splits one case back out of that
   catch-all. An object store refusing the read answers the proxy in front of it
   with its own XML error document, which the proxy passes through as a 200, so
