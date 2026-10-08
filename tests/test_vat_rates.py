@@ -46,6 +46,10 @@ from custom_components.be_electricity_prices.providers.base import (
 from tests import fixture_text, make_snapshot
 from tests.test_card_vat import _restated
 
+# Lays out real cards, Bolt's among them, which ran past 60 s with no
+# text cached on a loaded Raspberry Pi 4.
+pytestmark = pytest.mark.timeout(300)
+
 OCT, NOV, DEC = date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)
 
 

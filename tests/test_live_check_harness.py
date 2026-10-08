@@ -60,6 +60,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 # imported by dotted path; mypy cannot follow that.
 import live_check as lc  # type: ignore[import-not-found]  # noqa: E402
 
+# Lays out real cards, Bolt's among them, which ran past 60 s with no
+# text cached on a loaded Raspberry Pi 4.
+pytestmark = pytest.mark.timeout(300)
+
 
 @pytest.fixture(autouse=True)
 def _clean_checks() -> None:

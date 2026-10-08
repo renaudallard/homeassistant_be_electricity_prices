@@ -56,6 +56,10 @@ from custom_components.be_electricity_prices.providers._rates import (
 from custom_components.be_electricity_prices.providers.base import SupplierSnapshot
 from tests import fixture_text
 
+# Lays out real cards, Bolt's among them, which ran past 60 s with no
+# text cached on a loaded Raspberry Pi 4.
+pytestmark = pytest.mark.timeout(300)
+
 
 def _layout(name: str) -> str:
     return fixture_text(name, layout=True)

@@ -5,6 +5,10 @@ asyncio_default_fixture_loop_scope = "function"
 # and one-off scripts, and pytest imports every *_test.py it finds there: a
 # bare run once executed an old experiment that rewrote a live provider file.
 testpaths = ["tests"]
+# A parser regression that loops forever fails its test instead of hanging.
+# The tests that lay out real cards with no text cached take longer, and say
+# so with their own mark.
+timeout = 60
 
 [tool.mypy]
 # custom_components/be_electricity_prices and tests/ would otherwise be

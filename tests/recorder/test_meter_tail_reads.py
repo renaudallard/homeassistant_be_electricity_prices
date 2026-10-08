@@ -42,6 +42,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
@@ -63,6 +64,10 @@ from custom_components.be_electricity_prices.const import (
     CONF_SOLAR_REGIME,
     SOLAR_REGIME_NONE,
 )
+
+# Two tests record a year and a half of hourly statistics into a real
+# recorder: 206 s and 126 s on a loaded Raspberry Pi 4, past the suite's 60 s.
+pytestmark = pytest.mark.timeout(600)
 
 DAY = "sensor.import_day"
 NIGHT = "sensor.import_night_wh"

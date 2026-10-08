@@ -60,6 +60,10 @@ from custom_components.be_electricity_prices.providers.frank import (
 )
 from tests import fixture_text
 
+# A Frank card laid out with no text cached took up to 55 s on a loaded
+# Raspberry Pi 4, too close to the suite's 60 s.
+pytestmark = pytest.mark.timeout(180)
+
 
 def _text() -> str:
     return fixture_text("frank_dynamic_apr.pdf", layout=True)

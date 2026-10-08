@@ -679,6 +679,8 @@ def test_parse_sign_covers_canonical_hyphens() -> None:
     assert parse_sign("+") == 1.0
 
 
+# Reads a card of every format; 108 s with none cached on a loaded Raspberry Pi 4.
+@pytest.mark.timeout(300)
 def test_parse_brussels_osp_across_extractor_formats() -> None:
     # The Brussels providers render the OSP table several different ways
     # (label above vs. beside the value; et/Entre/<= phrasings), but the shared
@@ -753,6 +755,8 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
     assert isinstance(excinfo.value, ExtractorError)
 
 
+# Reads every fixture card; 382 s with none cached on a loaded Raspberry Pi 4.
+@pytest.mark.timeout(900)
 def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     """The threshold must clear every card we actually ship.
 

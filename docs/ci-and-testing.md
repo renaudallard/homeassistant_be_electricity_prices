@@ -31,6 +31,17 @@ in `asyncio_mode = "auto"` with `asyncio_default_fixture_loop_scope = "function"
 decorator and each test gets a fresh event loop. `testpaths = ["tests"]` keeps a run given no path
 inside `tests/`: `tmp/` holds scratch worktrees and one-off scripts, and pytest imports every
 `*_test.py` it finds, which once ran an old experiment that rewrote a live provider file.
+`timeout = 60` (pytest-timeout, which the test harness already installs) fails a test that runs
+past a minute, so a parser regression that loops forever fails its test instead of hanging the
+job until its own 15-minute limit. The tests that lay out real cards with no text cached take
+longer and carry their own `pytest.mark.timeout`, sized at about twice what each took on a loaded
+Raspberry Pi 4 with the fixture text cache empty: `tests/test_bolt.py` (up to 254 s),
+`tests/test_frank.py` (55 s), two tests in `tests/test_pdf_helpers.py` that read every
+fixture card (382 s and 108 s), one in `tests/test_coordinator_runtime.py` that lays out two
+Bolt cards, `tests/test_card_vat.py`, `tests/test_vat_rates.py`,
+`tests/test_month_indexed_registry.py` and `tests/test_live_check_harness.py`, which lay out a
+Bolt card among others (up to 73 s), and `tests/recorder/test_meter_tail_reads.py`, two of whose
+tests record a year and a half of hourly statistics into a real recorder (206 s and 126 s).
 
 The integration is a Home Assistant custom component, so the suite depends on
 `pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)

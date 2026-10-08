@@ -9063,6 +9063,9 @@ async def test_a_withdrawn_products_card_gone_keeps_the_entry_priced(
     assert coord._snapshot_schema_version == 73
 
 
+# Lays out two Bolt cards; 60 s and more with no text cached on a loaded
+# Raspberry Pi 4.
+@pytest.mark.timeout(300)
 async def test_a_card_pair_caught_in_two_months_is_not_a_layout_change(
     hass: HomeAssistant,
 ) -> None:

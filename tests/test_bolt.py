@@ -57,6 +57,11 @@ from custom_components.be_electricity_prices.providers._pdf import (
     is_transient_fetch_error,
 )
 
+# pdfplumber takes about a minute to lay out one Bolt card on a Raspberry Pi
+# 4, most of it loading the vector art, and a test reading several cards
+# with none cached took 254 s on a loaded one.
+pytestmark = pytest.mark.timeout(600)
+
 
 def test_bolt_is_registered() -> None:
     assert "bolt" in EXTRACTORS
