@@ -52,7 +52,6 @@ from homeassistant.core import (
 from homeassistant.helpers import (
     config_validation as cv,
     entity_registry as er,
-    issue_registry,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_time_change
@@ -83,6 +82,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .coordinator import BePricesCoordinator
+from .coordinator_issues import clear_issues
 from .coordinator_profiles import async_remove_profile_store
 from .creg_ev import async_remove_store as async_remove_creg_store
 from .compare_engine import evict_sweep_rows
@@ -167,41 +167,6 @@ BACKFILL_SCHEMA = vol.Schema(
 
 CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
-# Every Repairs issue this integration raises, by the kind its id opens with.
-# The ids embed the entry id and only a ticking coordinator resolves them, so
-# an entry that stops ticking has to delete each one or it lingers in the
-# Repairs panel. test_repair_issue_kinds_match_the_declared_strings and the
-# removal test beside it pin the list against strings.json.
-# supplier_deprecated_no_successor is absent on purpose, sharing the
-# supplier_deprecated id.
-_ISSUE_KINDS: Final = (
-    "snapshot_stale",
-    "extractor_failed",
-    "extractor_unreachable",
-    "extractor_unreadable",
-    "extractor_unreadable_no_prices",
-    "extractor_card_missing",
-    "card_read_by_ocr",
-    "entsoe_auth_failed",
-    "supplier_deprecated",
-    "contract_withdrawn",
-    "exclusive_night_rate_missing",
-    "impact_rates_missing",
-    "connection_fee_missing",
-    "prosumer_tariff_missing",
-    "compensation_kva_missing",
-    "register_pair_incomplete",
-    "direct_debit_unanswered",
-    "brussels_power_term_missing",
-)
-
-
-@callback
-def _clear_issues(hass: HomeAssistant, entry_id: str) -> None:
-    """Delete every Repairs card of one entry."""
-    for kind in _ISSUE_KINDS:
-        issue_registry.async_delete_issue(hass, DOMAIN, f"{kind}_{entry_id}")
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001 - HA hook signature
     """Register the integration's services once at startup.
@@ -219,7 +184,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
         # An entry whose setup was retrying is not unloaded when it is
         # disabled, only stopped: its Repairs cards go with it here.
         if entry.domain == DOMAIN and entry.state is ConfigEntryState.NOT_LOADED:
-            _clear_issues(hass, entry.entry_id)
+            clear_issues(hass, entry.entry_id)
 
     async_dispatcher_connect(hass, SIGNAL_CONFIG_ENTRY_CHANGED, _entry_changed)
     hass.services.async_register(
@@ -633,7 +598,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     if unloaded:
         # Nothing resolves this entry's cards once it stops ticking; the next
         # setup raises again whatever still holds.
-        _clear_issues(hass, entry.entry_id)
+        clear_issues(hass, entry.entry_id)
         # The ranking page's scratch belongs to this entry alone, so it goes
         # unconditionally - unlike the shared caches below, which are keyed by
         # supplier tuple and may still be referenced by a sibling entry.
@@ -685,7 +650,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     the entry, and with the last entry the installation-wide profile and
     CREG stores go too.
     """
-    _clear_issues(hass, entry.entry_id)
+    clear_issues(hass, entry.entry_id)
     store: Store[dict[str, Any]] = Store(
         hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
     )

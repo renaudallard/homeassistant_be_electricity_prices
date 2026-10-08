@@ -72,11 +72,46 @@ from .snapshot_store import (
 )
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
+
+# Every Repairs issue this integration raises, by the kind its id opens with.
+# The ids embed the entry id and only a ticking coordinator resolves them, so
+# an entry that stops ticking has to delete each one or it lingers in the
+# Repairs panel. test_repair_issue_kinds_match_the_declared_strings and the
+# removal test beside it pin the list against strings.json.
+# supplier_deprecated_no_successor is absent on purpose, sharing the
+# supplier_deprecated id.
+_ISSUE_KINDS: Final = (
+    "snapshot_stale",
+    "extractor_failed",
+    "extractor_unreachable",
+    "extractor_unreadable",
+    "extractor_unreadable_no_prices",
+    "extractor_card_missing",
+    "card_read_by_ocr",
+    "entsoe_auth_failed",
+    "supplier_deprecated",
+    "contract_withdrawn",
+    "exclusive_night_rate_missing",
+    "impact_rates_missing",
+    "connection_fee_missing",
+    "prosumer_tariff_missing",
+    "compensation_kva_missing",
+    "register_pair_incomplete",
+    "direct_debit_unanswered",
+    "brussels_power_term_missing",
+)
+
+
+@callback
+def clear_issues(hass: HomeAssistant, entry_id: str) -> None:
+    """Delete every Repairs card of one entry."""
+    for kind in _ISSUE_KINDS:
+        ir.async_delete_issue(hass, DOMAIN, f"{kind}_{entry_id}")
 
 
 def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | None:
