@@ -103,9 +103,10 @@ jobs:
 
       - name: Size the walk's budget
         id: budget
-        # A reader that moved since the last replay makes the walk render
-        # every kept card afresh, the six-hour job a dispatched re-render
-        # gets; the script decides from the same stamp.
+        # A kept card whose text other readers or render code made is
+        # rendered afresh, every one after a reader upgrade, the six-hour
+        # job a dispatched re-render gets; the script decides from the same
+        # records on the rows.
         run: |
           due=$(python -c 'import sys; sys.path.insert(0, "scripts"); from pathlib import Path; import archive_cards; print(str(archive_cards.rerender_due(Path("tmp/cards/electricity"))).lower())')
           echo "rerender=$due" >> "$GITHUB_OUTPUT"

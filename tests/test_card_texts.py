@@ -12,7 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # scripts/ is not a package, so it is added to sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
-from card_texts import StoredTexts, digest_of, read_text  # type: ignore[import-not-found]  # noqa: E402
+from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
+    StoredTexts,
+    digest_of,
+    read_text,
+    readers_line,
+)
 
 
 def _branch(tmp_path: Path, payload: bytes, variant: str, text: str) -> Path:
@@ -33,6 +38,7 @@ def _branch(tmp_path: Path, payload: bytes, variant: str, text: str) -> Path:
                         "variant": variant,
                         "text": "texts/2026-09/abc.txt",
                         "pdf": digest,
+                        "readers": readers_line(),
                     }
                 ]
             }

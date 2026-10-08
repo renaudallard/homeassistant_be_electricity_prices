@@ -42,10 +42,11 @@ changed since the archive was last replayed (a digest of them is stamped in
 ``parser.txt``), so a day without a code change replays nothing;
 ``--reparse`` forces it. A parser that now reads a card in the other
 reader mode (plain against layout) finds no stored text for that reading
-and gets the kept PDF back from the cards releases instead. A reader whose
-version moved is stamped beside the digest, and the run that finds it
-moved renders every kept card afresh the same way, since the stored texts
-are the old reader's; ``--rerender`` asks for that on demand.
+and gets the kept PDF back from the cards releases instead. Each PDF
+source names the readers and render code, or the OCR engine, that made its
+text, which is served again only to the same, so after a reader upgrade or
+a render fix the replay renders those cards afresh the same way;
+``--rerender`` does it for every card on demand.
 
 ``--backfill N`` also asks every supplier that keeps an archive of its own
 for the N closed months before this one, at most ``--keep-months``, through
@@ -92,7 +93,6 @@ import base64
 import binascii
 import functools
 import hashlib
-import importlib.metadata
 import json
 import re
 import sys
@@ -148,7 +148,13 @@ from homeassistant.helpers.json import json_dumps  # noqa: E402
 # scripts/ is not a package; the line above puts it on sys.path so the card
 # month is read by the same function the live check's freshness gate uses,
 # and the render cache is the one the live check reads too.
-from card_texts import StoredTexts, digest_of, read_text  # type: ignore[import-not-found]  # noqa: E402
+from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
+    StoredTexts,
+    digest_of,
+    engine_version,
+    read_text,
+    readers_line,
+)
 from live_check import _fetch_with_retry, label_month  # type: ignore[import-not-found]  # noqa: E402
 
 _T = TypeVar("_T")
@@ -203,15 +209,6 @@ _LEGEND = (
 # dataclasses beside them, the constants they key on, and the codec the
 # rows are written with, which the module split moved to snapshot_codec.py.
 _PARSER_SOURCES = ("providers/*.py", "const.py", "snapshot_codec.py")
-# The readers whose installed version is part of what a parse depends on:
-# the two PDF text readers, and the OCR engine every Ecofix row since August
-# 2026 is read with. The engine reads only the cards published as page
-# images, so its moving alone re-renders those and nothing else. It takes a
-# page's pixels from pypdfium2 and matches glyphs with numpy, both installed
-# unpinned beside it, so either moving is the engine moving: pypdfium2 does
-# not feed the text readers.
-_OCR_READERS = ("ocr-price-cards", "pypdfium2", "numpy")
-_READERS = ("pypdf", "pdfplumber", *_OCR_READERS)
 
 
 class _RecordingMemo(dict[str, str]):
@@ -354,9 +351,16 @@ class _Cards(StoredTexts):
         seen_month: str,
         *,
         serve_texts: bool = True,
-        rerender_ocr: bool = False,
     ) -> None:
-        super().__init__(out, serve=serve_texts, rerender_ocr=rerender_ocr)
+        super().__init__(out, serve=serve_texts)
+        # A reading another engine made is read again: a new glyph library
+        # reads more, or reads otherwise.
+        engine = engine_version()
+        for digest, read_with in list(self.ocr.items()):
+            if read_with != engine:
+                del self.ocr[digest]
+                for key in [key for key in self.texts if key[1] == digest]:
+                    del self.texts[key]
         self.out = out
         self.pdf_dir = pdf_dir
         self.seen_month = seen_month
@@ -401,7 +405,7 @@ class _Cards(StoredTexts):
         self.rendered += 1
         self.fresh[(variant, digest)] = text
         self.calls.append((variant, url, digest, text))
-        self.ocr.add(digest)
+        self.ocr[digest] = engine_version()
         return text
 
     def keep(self, digest: str, payload: bytes) -> None:
@@ -634,10 +638,9 @@ def _parser_digest() -> str:
 
     The readers count as sources: a pypdf or pdfplumber release can lay a
     card out differently (a 6.16 against a 6.18 render gave different texts
-    on 2026-09-13), and a stored text is served to every later replay and to
-    the live check for as long as the card's bytes stand, so without the
-    reader version in here a pin bump replayed nothing and the new reader was
-    never run on a card the archive already held.
+    on 2026-09-13), so without the reader versions, the render code and the
+    OCR engine in here a pin bump replayed nothing, and the new reader never
+    ran on a card the walk no longer downloads.
     """
     root = ROOT / "custom_components" / "be_electricity_prices"
     digest = hashlib.sha256()
@@ -645,76 +648,45 @@ def _parser_digest() -> str:
         for path in sorted(root.glob(pattern)):
             digest.update(path.relative_to(root).as_posix().encode("utf-8"))
             digest.update(path.read_bytes())
-    digest.update(_readers_line().encode("utf-8"))
+    digest.update(f"{readers_line()} {engine_version()}".encode())
     return digest.hexdigest()
 
 
-def _readers_line() -> str:
-    """The reader versions a parse runs on, one line for the stamp."""
-    return " ".join(f"{reader}=={_reader_version(reader)}" for reader in _READERS)
-
-
-def _reader_version(name: str) -> str:
-    """One reader's version, with the commit when it was installed from git.
-
-    The OCR engine is installed from its main branch, where a fix does not
-    have to move the version number, so the commit pip recorded is what says
-    it changed. ``absent`` when the reader is not installed, which is only
-    ever a local run: the workflow installs all three.
-    """
-    try:
-        version = importlib.metadata.version(name)
-    except importlib.metadata.PackageNotFoundError:
-        return "absent"
-    try:
-        direct = importlib.metadata.distribution(name).read_text("direct_url.json")
-        commit = json.loads(direct or "{}").get("vcs_info", {}).get("commit_id")
-    except (importlib.metadata.PackageNotFoundError, ValueError, AttributeError):
-        commit = None
-    return f"{version}+{commit[:12]}" if isinstance(commit, str) else version
-
-
-def _readers_of(line: str) -> dict[str, str]:
-    """A readers line back into ``{reader: version}``."""
-    return dict(item.split("==", 1) for item in line.split() if "==" in item)
-
-
-def _read_stamp(stamp: Path, default: str) -> tuple[str, str]:
-    """The sources digest and the readers line of the last replay. A fresh
-    archive reads as replayed by this parser, and a stamp from before the
-    readers were recorded reads as rendered by these readers, so neither
-    starts a replay by itself."""
+def _read_stamp(stamp: Path, default: str) -> str:
+    """The sources digest of the last replay. A fresh archive reads as
+    replayed by this parser, so it does not start a replay by itself."""
     if not stamp.exists():
-        return default, ""
-    lines = stamp.read_text(encoding="utf-8").split("\n")
-    return lines[0].strip(), (lines[1].strip() if len(lines) > 1 else "")
-
-
-def _moved_readers(out: Path) -> set[str]:
-    """The readers whose version moved since the archive was last replayed.
-
-    Reader by reader: one the stamp never named is recorded rather than
-    counted as moved, so adding a reader to the list does not render every
-    kept card again when none of them changed.
-    """
-    _, readers = _read_stamp(out / _PARSER_STAMP, "")
-    now = _readers_of(_readers_line())
-    return {
-        name
-        for name, version in _readers_of(readers).items()
-        if now.get(name) != version
-    }
+        return default
+    return stamp.read_text(encoding="utf-8").split("\n")[0].strip()
 
 
 def rerender_due(out: Path) -> bool:
-    """Whether a text reader moved since the archive was last replayed, which
-    makes the next run render every kept card afresh; the workflow sizes
-    that run's budget on the same answer. The OCR engine moving alone
-    re-renders only the cards read off their pixels, a dozen, which the
-    ordinary budget covers: it is installed from its main branch, so any
-    commit there moves it.
+    """Whether the next run replays the archive and renders kept cards afresh
+    in it, their texts made by other text readers or render code than the
+    installed ones; the workflow sizes that run's budget on the same answer.
+    Only until the replay has run under these readers: a row it could not
+    replay keeps its old texts, and must not hold every later run on the
+    long budget. A card read off its pixels does not count: a new OCR engine
+    reads only those again, a dozen, which the ordinary budget covers, and it
+    is installed from its main branch, so any commit there moves it.
     """
-    return bool(_moved_readers(out) - set(_OCR_READERS))
+    parser = _parser_digest()
+    if _read_stamp(out / _PARSER_STAMP, parser) == parser:
+        return False
+    readers = readers_line()
+    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
+        try:
+            sources = json.loads(path.read_text(encoding="utf-8")).get("_sources", [])
+        except ValueError:
+            continue
+        for source in sources:
+            if (
+                "pdf" in source
+                and not source.get("ocr")
+                and source.get("readers") != readers
+            ):
+                return True
+    return False
 
 
 def _month_id(year: int, month: int) -> str:
@@ -791,11 +763,21 @@ def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     digest = cards.digest_for(url)
     if digest is not None:
         entry["pdf"] = digest
-        if digest in cards.ocr:
-            # Written only for a card read off its pixels, so every other row
-            # on the archive stays byte-identical to what it already holds.
-            entry["ocr"] = "1"
+        _mark_reading(entry, cards)
     return entry
+
+
+def _mark_reading(entry: dict[str, str], cards: _Cards) -> None:
+    """Name what read a PDF source: the OCR engine, which is also how an
+    installation learns that its card was read off an image, or the text
+    readers and render code. A text is only ever stored as the installed
+    ones made it, since one other readers made is neither served nor
+    seeded."""
+    engine = cards.ocr.get(entry["pdf"])
+    if engine is not None:
+        entry["ocr"] = engine
+    else:
+        entry["readers"] = readers_line()
 
 
 def _sources_of(
@@ -823,8 +805,7 @@ def _sources_of(
             "text": _write_text(out, seen_month, text),
             "pdf": digest,
         }
-        if digest in cards.ocr:
-            entry["ocr"] = "1"
+        _mark_reading(entry, cards)
         sources.append(entry)
     return sorted(
         sources, key=lambda s: (s["variant"] != "text", s["variant"], s["url"])
@@ -1490,14 +1471,13 @@ async def _replay_row(
     summary: _Summary,
     *,
     rerender: bool = False,
-    rerender_ocr: bool = False,
 ) -> None:
     """Re-run one stored row through the current parser, offline.
 
-    Under ``rerender`` the PDF texts are not seeded, so every card is
-    fetched back from the kept copy and rendered afresh; the listing pages
-    still come from the archive, since there is nothing to re-render there.
-    ``rerender_ocr`` does the same for the cards read off their pixels only.
+    A PDF text other readers, render code or OCR engine made is not seeded,
+    nor any under ``rerender``, so the card is fetched back from the kept
+    copy and read afresh; the listing pages still come from the archive,
+    since there is nothing to re-render there.
     """
     out = cards.out
     supplier, contract, region = path.parts[-4], path.parts[-3], path.parts[-2]
@@ -1513,6 +1493,7 @@ async def _replay_row(
         return
     memo = _RecordingMemo()
     own = list(row.get("_sources", []))
+    readers, engine = readers_line(), engine_version()
     # A row that settles on the FOLLOWING month's card reads a text this row
     # never did: EBEM takes the index that card publishes for this month and
     # Trevion takes both of its indices. Without the next month's texts the
@@ -1531,7 +1512,7 @@ async def _replay_row(
         if not text_path.exists():
             summary.unreplayable.append(f"{label}: {source['text']} is missing")
             return
-        if _rendered_afresh(source, rerender, rerender_ocr):
+        if _rendered_afresh(source, rerender, readers, engine):
             continue
         key = _memo_key(source)
         # Seeded, not touched: only what the parse actually reads counts.
@@ -1555,7 +1536,10 @@ async def _replay_row(
         key = _memo_key(source)
         if key in memo or not text_path.exists():
             continue
-        if _rendered_afresh(source, rerender, rerender_ocr):
+        # Another row's card, whose kept copy this replay does not hold: its
+        # text is seeded whatever readers made it, and that row renders it
+        # afresh in its own replay. Left out, the row was not replayable.
+        if rerender:
             continue
         stored = read_text(text_path)
         if _CARD_REF.search(stored):
@@ -1712,13 +1696,19 @@ async def _retry_unparsed(
 
 
 def _rendered_afresh(
-    source: dict[str, str], rerender: bool, rerender_ocr: bool
+    source: dict[str, str], rerender: bool, readers: str, engine: str
 ) -> bool:
     """Whether a replay leaves this source's stored text out, so its card is
     fetched back from the kept copy and read again."""
     if source["variant"] == "text":
         return False
-    return rerender or (rerender_ocr and bool(source.get("ocr")))
+    if rerender:
+        return True
+    if "pdf" not in source:
+        return False
+    if source.get("ocr"):
+        return source["ocr"] != engine
+    return source.get("readers") != readers
 
 
 async def _replay_all(
@@ -1730,7 +1720,6 @@ async def _replay_all(
     summary: _Summary,
     *,
     rerender: bool = False,
-    rerender_ocr: bool = False,
 ) -> None:
     """Every stored row, grouped by capture day so the clock is pinned
     once per day rather than once per row."""
@@ -1752,7 +1741,6 @@ async def _replay_all(
                     now,
                     summary,
                     rerender=rerender,
-                    rerender_ocr=rerender_ocr,
                 )
             continue
         # Ticking, so the loop's own timers and the render threads keep
@@ -1767,7 +1755,6 @@ async def _replay_all(
                     now,
                     summary,
                     rerender=rerender,
-                    rerender_ocr=rerender_ocr,
                 )
 
 
@@ -1799,20 +1786,10 @@ async def archive(
     # become. A card that failed on the network read no bytes and leaves
     # nothing here.
     unreadable: dict[str, list[dict[str, str]]] = {}
-    # A reader that changed lays cards out differently, and a stored text is
-    # served to every later parse for as long as the card's bytes stand, so
-    # the replay below has to render the kept cards afresh rather than
-    # re-read the texts the old reader produced. Decided here because the
-    # store is told at construction which texts it may serve.
     stamp = out / _PARSER_STAMP
     parser = _parser_digest()
-    stamped, _ = _read_stamp(stamp, parser)
-    moved = _moved_readers(out)
-    rerender = rerender or bool(moved - set(_OCR_READERS))
-    rerender_ocr = not rerender and bool(moved)
-    cards = _Cards(
-        out, pdf_dir, seen_month, serve_texts=not rerender, rerender_ocr=rerender_ocr
-    )
+    stamped = _read_stamp(stamp, parser)
+    cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
     async with aiohttp.ClientSession() as session:
@@ -1964,8 +1941,7 @@ async def archive(
                         summary.settled += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
         # A fresh archive holds nothing older than this parser, so the first
-        # run only stamps it; from then on a changed digest replays the rows
-        # and a changed reader renders them again.
+        # run only stamps it; from then on a changed digest replays the rows.
         download_failed = False
         if reparse or rerender or stamped != parser:
             replay = _ReplaySession(session, pdf_dir, pdf_base_url, cards.kept)
@@ -1977,7 +1953,6 @@ async def archive(
                 now,
                 summary,
                 rerender=rerender,
-                rerender_ocr=rerender_ocr,
             )
             # Same trigger, same reason: a reader that changed is the only
             # thing that can turn a card nobody could read into a row.
@@ -1995,7 +1970,7 @@ async def archive(
                 "it was so the next run replays the rows again"
             )
         else:
-            stamp.write_text(f"{parser}\n{_readers_line()}\n", encoding="utf-8")
+            stamp.write_text(f"{parser}\n", encoding="utf-8")
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
@@ -2059,7 +2034,7 @@ def main() -> int:
     parser.add_argument(
         "--rerender",
         action="store_true",
-        help="replay every row with its PDFs rendered afresh, for a reader upgrade",
+        help="replay every row with its PDFs rendered afresh, as a reader upgrade does",
     )
     parser.add_argument(
         "--backfill",

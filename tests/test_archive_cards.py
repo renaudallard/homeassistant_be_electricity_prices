@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 # scripts/ is not a package, so it is added to sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
 import archive_cards as ac  # type: ignore[import-not-found]  # noqa: E402
+import card_texts  # type: ignore[import-not-found]  # noqa: E402
 
 NOW = datetime(2026, 9, 11, 6, 0, tzinfo=UTC)
 CARD_URL = "https://acme.test/card"
@@ -119,7 +120,7 @@ async def _no_sleep(_seconds: float) -> None:
     return None
 
 
-# Written out rather than read off _READERS, which is what is being checked:
+# Written out rather than read off card_texts' lists, which is what is being checked:
 # the two text readers the extractors call, and the OCR engine the archiver
 # reads Ecofix's page-image cards with (ocr_price_cards), with the page
 # rasterizer and the array library it reads them through.
@@ -168,29 +169,59 @@ def test_the_parser_digest_covers_the_codec_the_rows_are_written_with() -> None:
     assert "def _snapshot_to_dict(" in hashed
 
 
-def test_a_newly_listed_reader_is_recorded_rather_than_rendered(
+def _readers(monkeypatch: pytest.MonkeyPatch, line: str) -> None:
+    """Install text readers and render code that read ``line``."""
+    monkeypatch.setattr(card_texts, "readers_line", lambda: line)
+    monkeypatch.setattr(ac, "readers_line", lambda: line)
+
+
+def _row_with(out: Path, *sources: dict[str, str]) -> None:
+    row = out / "cards/acme/acme_fix/wallonia/2026-09.json"
+    row.parent.mkdir(parents=True, exist_ok=True)
+    row.write_text(json.dumps({"_sources": list(sources)}))
+
+
+def test_a_text_other_readers_made_is_not_served(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The OCR engine joined the stamped readers. Comparing the whole line
-    would have called that a reader moving and rendered every kept card again
-    with nothing changed, so readers are compared one by one and one the
-    stamp never named only starts being recorded."""
-    (tmp_path / "parser.txt").write_text(
-        "digest\npypdf==6.18.0 pdfplumber==0.11.9\n", encoding="utf-8"
+    """The live check reads the archive through the same cache, so after a
+    reader upgrade or a render fix it renders the card rather than check
+    the old reader's text. It installs no OCR engine and serves the
+    archive's readings as they are."""
+    card = {"url": PDF_URL, "variant": "plain", "text": "texts/a.txt", "pdf": "abc"}
+    image = {"url": PDF_URL, "variant": "layout", "text": "texts/b.txt", "pdf": "def"}
+    _row_with(
+        tmp_path, {**card, "readers": "pypdf==1 render=a"}, {**image, "ocr": "0.4"}
     )
-    monkeypatch.setattr(
-        ac,
-        "_readers_line",
-        lambda: "pypdf==6.18.0 pdfplumber==0.11.9 ocr-price-cards==0.4.0+abc",
-    )
+    _readers(monkeypatch, "pypdf==1 render=a")
+    assert set(card_texts.StoredTexts(tmp_path).texts) == {
+        ("plain", "abc"),
+        ("layout", "def"),
+    }
+    _readers(monkeypatch, "pypdf==2 render=a")
+    assert set(card_texts.StoredTexts(tmp_path).texts) == {("layout", "def")}
+    assert card_texts._version("no-such-reader-installed") == "absent"
+
+
+def test_only_a_text_reader_change_is_a_rerender(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The workflow sizes a run's budget on this answer. A card read off its
+    pixels does not count: a new OCR engine reads only those again. Once the
+    replay ran under these readers it is no longer due, whatever a row it
+    could not replay still holds."""
+    card = {"url": PDF_URL, "variant": "plain", "text": "texts/a.txt", "pdf": "abc"}
+    _row_with(tmp_path, {**card, "readers": "pypdf==1 render=a"})
+    (tmp_path / "parser.txt").write_text("an older parser\n")
+    _readers(monkeypatch, "pypdf==1 render=a")
     assert not ac.rerender_due(tmp_path)
-    monkeypatch.setattr(
-        ac,
-        "_readers_line",
-        lambda: "pypdf==6.18.0 pdfplumber==0.12.0 ocr-price-cards==0.4.0+abc",
-    )
+    _readers(monkeypatch, "pypdf==1 render=b")
     assert ac.rerender_due(tmp_path)
-    assert ac._reader_version("no-such-reader-installed") == "absent"
+    (tmp_path / "parser.txt").write_text(f"{ac._parser_digest()}\n")
+    assert not ac.rerender_due(tmp_path)
+    (tmp_path / "parser.txt").write_text("an older parser\n")
+    _row_with(tmp_path, {**card, "ocr": "0.4"})
+    assert not ac.rerender_due(tmp_path)
 
 
 async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
@@ -1112,14 +1143,14 @@ async def test_a_reader_that_moved_renders_the_kept_cards_by_itself(
 ) -> None:
     """The reader versions moved the digest, but a moved digest replayed the
     rows off the texts the OLD reader produced, so a pypdf or pdfplumber bump
-    never ran the new reader on a card the archive held. The versions are
-    stamped beside the digest and a run that finds them changed renders every
-    kept card afresh, as --rerender does; the workflow reads the same answer."""
+    never ran the new reader on a card the archive held. Each PDF source
+    names the readers and render code that made its text, and the replay
+    renders afresh every card whose text others made; the workflow reads the
+    same answer."""
     out, pdfs = tmp_path / "out", tmp_path / "pdfs"
     session = _PdfSession({PDF_URL: b"%PDF v1"})
     renders: list[bytes] = []
-    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
-    monkeypatch.setattr(ac, "_readers_line", lambda: "pypdf==6.18.0 pdfplumber==0.11.9")
+    _readers(monkeypatch, "pypdf==6.18.0 pdfplumber==0.11.9 render=a")
     await ac.archive(
         out,
         extractors=[_extractor(_pdf_fetch(session, renders))],
@@ -1129,22 +1160,23 @@ async def test_a_reader_that_moved_renders_the_kept_cards_by_itself(
     )
     assert renders == [b"%PDF v1"]
     assert not ac.rerender_due(out)
-    monkeypatch.setattr(ac, "_readers_line", lambda: "pypdf==7.0.0 pdfplumber==0.11.9")
+    _readers(monkeypatch, "pypdf==7.0.0 pdfplumber==0.11.9 render=a")
     assert ac.rerender_due(out)
     session.pdfs.clear()  # the supplier is gone; only the kept copy is left
-    summary = await ac.archive(
-        out,
-        extractors=[_extractor(_pdf_fetch(session, renders))],
-        pdf_dir=pdfs,
-        now=NOW.replace(day=6),
-        sleep=_no_sleep,
-    )
-    assert (summary.replayed, summary.unreplayable) == (1, [])
-    assert renders == [b"%PDF v1", b"%PDF v1"]
+    for day, replayed in ((6, 1), (7, 0)):
+        summary = await ac.archive(
+            out,
+            extractors=[_extractor(_pdf_fetch(session, renders))],
+            pdf_dir=pdfs,
+            now=NOW.replace(day=day),
+            sleep=_no_sleep,
+        )
+        assert (summary.replayed, summary.unreplayable) == (replayed, [])
+        assert renders == [b"%PDF v1", b"%PDF v1"]
     assert not ac.rerender_due(out)
-    assert (out / "parser.txt").read_text().splitlines() == [
-        "digest-a",
-        "pypdf==7.0.0 pdfplumber==0.11.9",
+    row = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert [s["readers"] for s in row["_sources"] if "pdf" in s] == [
+        "pypdf==7.0.0 pdfplumber==0.11.9 render=a"
     ]
 
 
@@ -1839,13 +1871,8 @@ async def test_an_ocr_engine_move_reads_only_the_page_image_cards_again(
         return SimpleNamespace(trusted_text=read)
 
     def readers(ocr: str) -> None:
-        monkeypatch.setattr(
-            ac,
-            "_readers_line",
-            lambda: f"pypdf==6.18.0 pdfplumber==0.11.9 ocr-price-cards==0.4.0+{ocr}",
-        )
+        monkeypatch.setattr(ac, "engine_version", lambda: f"0.4.0+{ocr}")
 
-    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
     readers("aaa")
     text_out, image_out = tmp_path / "text", tmp_path / "image"
     renders: list[bytes] = []
@@ -1869,7 +1896,6 @@ async def test_an_ocr_engine_move_reads_only_the_page_image_cards_again(
         assert (len(renders), len(engine)) == (1, 1)
 
         readers("bbb")
-        monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
         assert not ac.rerender_due(text_out)
         await ac.archive(
             text_out,
@@ -2752,6 +2778,72 @@ async def test_the_next_months_text_never_shadows_a_rows_own_card(
     after = json.loads(august.read_text())
     assert after["energy"] == before["energy"], "August replayed as another month"
     assert after["publication_label"] == before["publication_label"]
+
+
+async def test_a_next_months_card_other_readers_made_still_settles_a_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row that settles on the next month's card reads that card's text off
+    the next month's row, whose kept copy the replay does not hold. After a
+    reader upgrade that text is seeded all the same, and the next month's
+    row renders its own card afresh; left out, the row was not replayable."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    august, september = "https://acme.test/aug.pdf", "https://acme.test/sep.pdf"
+    session = _PdfSession({august: b"%PDF aug", september: b"%PDF sep"})
+    settles = False
+
+    async def read(_session: Any, url: str) -> str:
+        reader = session if url in session.pdfs else _session
+        return await _pdf._pdf_text(
+            reader,  # type: ignore[arg-type]
+            url,
+            variant="plain",
+            timeout=5,
+            render=lambda payload: f"card text for {payload.decode()}",
+        )
+
+    def snapshot(contract: str, label: str, url: str) -> SupplierSnapshot:
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.2),
+            publication_label=label,
+            source_url=url,
+        )
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await read(_session, september)
+        return snapshot(contract, "september 2026", september)
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 8:
+            return None
+        await read(_session, august)
+        if settles:
+            await read(_session, september)
+        return snapshot(contract, "augustus 2026", august)
+
+    extractor = replace(_extractor(fetch), fetch_for_month=fetch_for_month)
+    _readers(monkeypatch, "pypdf==1 render=a")
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert (out / "cards/acme/acme_fix/wallonia/2026-08.json").exists()
+    session.pdfs.clear()
+    settles = True
+    _readers(monkeypatch, "pypdf==2 render=a")
+    summary = await ac.archive(
+        out, extractors=[extractor], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    assert (summary.replayed, summary.unreplayable) == (2, [])
+    assert not ac.rerender_due(out)
 
 
 def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> None:

@@ -4305,7 +4305,7 @@ def test_a_card_served_its_ocr_text_is_reported_unreadable(tmp_path: Path) -> No
     the unreadable cards."""
     import hashlib
 
-    from card_texts import StoredTexts  # type: ignore[import-not-found]
+    from card_texts import StoredTexts, readers_line  # type: ignore[import-not-found]
 
     ocr_pdf, text_pdf = b"%PDF images", b"%PDF text"
     rows = tmp_path / "cards" / "ecofix" / "ecofix_flexy" / "flanders"
@@ -4317,7 +4317,7 @@ def test_a_card_served_its_ocr_text_is_reported_unreadable(tmp_path: Path) -> No
         (tmp_path / "texts" / f"{digest}.txt").write_text(f"stored {digest}")
         sources.append(
             {"pdf": digest, "text": f"texts/{digest}.txt", "variant": "layout"}
-            | ({"ocr": ocr} if ocr else {})
+            | ({"ocr": ocr} if ocr else {"readers": readers_line()})
         )
     (rows / "2026-10.json").write_text(json.dumps({"_sources": sources}))
     cache = StoredTexts(tmp_path)

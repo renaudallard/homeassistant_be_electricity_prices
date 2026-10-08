@@ -992,9 +992,9 @@ older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
-plus the installed `pypdf`, `pdfplumber` and OCR engine versions, the last with the git commit
-it was installed from and beside the `pypdfium2` and `numpy` it reads a page's pixels through,
-since a reader release lays a card out
+plus the installed `pypdf` and `pdfplumber` versions with a digest of the render code in
+`providers/_pdf.py`, and the OCR engine's version, with the git commit it was installed from and
+beside the `pypdfium2`, `numpy` and `pdfplumber` it reads a card through, since a reader release lays a card out
 differently and a stored text is served to every replay and to the live check for as long as the
 card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
 archive's `parser.txt`; when they differ it replays every stored row (`_replay_row`,
@@ -1046,15 +1046,18 @@ keeping its capture day; `_cached_at` moves. The replay is a regex pass per row,
 and no render, so it is minutes for the whole branch, and a day without a code change replays
 nothing. `--reparse` forces it; `--rerender` also leaves the PDF texts out of the seed, so every
 card is fetched back from its kept copy and rendered afresh, at the cost of downloading every
-kept card. A pdfplumber or pypdf upgrade takes that path by itself: the reader versions are
-stamped beside the digest in `parser.txt`, a run that finds one of them moved renders rather
-than re-reads (a reader the stamp never named is recorded, not counted as moved), and the
-workflow gives that run the six-hour budget a dispatched re-render gets (`rerender_due`,
-`Size the walk's budget`). An OCR engine move alone reads again only the cards read off their
-pixels, the sources marked `ocr`, and serves every other card its stored text within the usual
-budget: the engine is installed from its main branch, so any commit there moves its version, and
-only a page-image card can come out differently. A `pypdfium2` or `numpy` release counts as the
-engine moving. A row is rewritten only
+kept card. A pdfplumber or pypdf upgrade, or a fix to the render code, takes that path by
+itself, card by card: each PDF source names the readers and render code that made its text
+(`"readers"`), a stored text is served again only to the same, in the walk, the replay and the
+live check alike (`StoredTexts`, `scripts/card_texts.py`), and the replay renders afresh every
+card whose text others made. The workflow gives the run that will render them, the first after
+the upgrade, the six-hour budget a dispatched re-render gets (`rerender_due`, `Size the walk's
+budget`); a row that replay could not replay keeps its old texts without holding later runs on it. A source the OCR engine
+read names the engine instead (`"ocr"`), and an engine move alone reads again only those cards,
+serving every other card its stored text within the usual budget: the engine is installed from
+its main branch, so any commit there moves its version, and only a page-image card can come out
+differently. A `pypdfium2`, `numpy` or `pdfplumber` release counts as the engine moving. The live
+check installs no engine and serves the archive's readings as they are. A row is rewritten only
 when what a source was or what it parsed to changed: the path of the text it was read from is
 not compared, because a listing page with a nonce or a render that is not byte-stable would
 otherwise rewrite the row every day for nothing. A fresh archive only stamps the digest: it holds nothing older
@@ -1099,7 +1102,8 @@ refuses a mark it cannot place; the reading is taken from `trusted_text`, which 
 carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
 so a mostly-refused page is no row rather than a row of silent misses. The row it produces
 marks the SOURCE it read that way, as `"ocr"` on the `_sources` entry beside the pdf digest it
-describes; the key is absent otherwise, so every row already stored is unchanged. An installation
+describes, the engine and library versions that read it; every other PDF source names the text
+readers and render code instead (`"readers"`). An installation
 asks the sources (`_row_read_by_ocr`, `snapshot_months.py`) to know whether to tell its user the
 figures came from a reading.
 
