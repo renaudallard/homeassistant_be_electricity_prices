@@ -762,7 +762,17 @@
   "issues": {
     "snapshot_stale": {
       "title": "La carte tarifaire de {supplier} ({contract}) n'est plus à jour",
-      "description": "La carte tarifaire sur laquelle cette entrée calcule a été rafraîchie il y a plus de {days} jours, ou porte sur une période terminée depuis plus de {days} jours, ce qui arrive quand le fournisseur continue de servir une ancienne carte. Si l'archive des cartes en détient une plus récente, celle-ci est utilisée. Dernière erreur : {last_error}. Les prix peuvent ne plus refléter ce qui est facturé. Essayez le service be_electricity_prices.refresh, vérifiez votre réseau, ou ouvrez un ticket sur GitHub si le problème persiste."
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "La carte tarifaire de {supplier} ({contract}) n'est plus à jour",
+            "description": "La carte tarifaire sur laquelle cette entrée calcule a été rafraîchie il y a plus de {days} jours, ou porte sur une période terminée depuis plus de {days} jours, ce qui arrive quand le fournisseur continue de servir une ancienne carte. Si l'archive des cartes en détient une plus récente, celle-ci est utilisée. Dernière erreur : {last_error}. Les prix peuvent ne plus refléter ce qui est facturé. Validez pour récupérer la carte maintenant ; si elle reste périmée, vérifiez votre réseau ou ouvrez un ticket sur GitHub."
+          }
+        },
+        "abort": {
+          "still_stale": "La carte n'a toujours pas pu être rafraîchie. Dernière erreur : {last_error}. Elle est réessayée toutes les heures, et cette réparation reste affichée jusque-là."
+        }
+      }
     },
     "extractor_failed": {
       "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",

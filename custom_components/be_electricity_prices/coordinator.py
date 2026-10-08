@@ -478,8 +478,12 @@ class BePricesCoordinator(
             pass
         await self.async_request_refresh()
 
-    async def async_force_refresh(self, clear_history: bool = False) -> None:
-        """Force the next coordinator tick to re-fetch the supplier.
+    async def async_force_refresh(
+        self, clear_history: bool = False, *, wait: bool = False
+    ) -> None:
+        """Force the next coordinator tick to re-fetch the supplier, or with
+        ``wait`` run that tick now, once a tick still running has finished,
+        and return when it is done.
 
         Invoked by the be_electricity_prices.refresh service when the user
         wants the integration to pick up a new tariff card or correct an
@@ -536,7 +540,11 @@ class BePricesCoordinator(
         # corrected card, could not clear it.
         for month_key in _drop_monthly_rows(self.hass, key, key[0]):
             _bump_tuple_generation(self.hass, month_key)
-        await self.async_request_refresh()
+        if not wait:
+            await self.async_request_refresh()
+            return
+        async with self._debounced_refresh.async_lock():
+            await self.async_refresh()
 
     @staticmethod
     def _compute_data_signature(entry: ConfigEntry) -> frozenset[tuple[str, Any]]:

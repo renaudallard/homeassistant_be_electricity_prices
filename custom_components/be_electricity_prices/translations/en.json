@@ -762,7 +762,17 @@
   "issues": {
     "snapshot_stale": {
       "title": "Tariff card for {supplier} ({contract}) is out of date",
-      "description": "The tariff card this entry prices on was last refreshed more than {days} days ago, or covers a period that ended more than {days} days ago, which happens when the supplier keeps serving an old card. Where the card archive holds a later card it is used instead. Last fetch error: {last_error}. Prices may no longer reflect what is actually billed. Try the be_electricity_prices.refresh service, check your network, or open an issue on GitHub if the problem persists."
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Tariff card for {supplier} ({contract}) is out of date",
+            "description": "The tariff card this entry prices on was last refreshed more than {days} days ago, or covers a period that ended more than {days} days ago, which happens when the supplier keeps serving an old card. Where the card archive holds a later card it is used instead. Last fetch error: {last_error}. Prices may no longer reflect what is actually billed. Press submit to fetch the card again now; if it stays out of date, check your network or open an issue on GitHub."
+          }
+        },
+        "abort": {
+          "still_stale": "The card still could not be refreshed. Last fetch error: {last_error}. It is tried again every hour, and this repair stays until it is."
+        }
+      }
     },
     "extractor_failed": {
       "title": "Could not parse the tariff card for {supplier} ({contract})",

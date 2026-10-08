@@ -178,6 +178,7 @@ class _IssuesMixin:
         extra: dict[str, str] | None = None,
         severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
         translation_key: str | None = None,
+        fixable: bool = False,
     ) -> None:
         """Raise or clear one Repairs issue for this entry.
 
@@ -205,10 +206,12 @@ class _IssuesMixin:
             self.hass,
             DOMAIN,
             issue_id,
-            is_fixable=False,
+            is_fixable=fixable,
             severity=severity,
             translation_key=translation_key or key,
             translation_placeholders=placeholders,
+            # What the fix flow needs to find the entry (repairs.py).
+            data={"entry_id": self.entry.entry_id} if fixable else None,
         )
 
     def _snapshot_overdue(self) -> bool:
@@ -240,7 +243,9 @@ class _IssuesMixin:
         )
 
     def _sync_stale_issue(self, stale: bool) -> None:
-        """Raise or clear the 'snapshot stale' repair issue for this entry."""
+        """Raise or clear the 'snapshot stale' repair issue for this entry.
+
+        Fixable: its fix flow fetches the card again (repairs.py)."""
         self._sync_issue(
             "snapshot_stale",
             stale,
@@ -248,6 +253,7 @@ class _IssuesMixin:
                 "days": str(SNAPSHOT_STALE_DAYS),
                 "last_error": self._last_error or "unknown",
             },
+            fixable=True,
         )
 
     def _sync_exclusive_night_gap_issue(self) -> None:

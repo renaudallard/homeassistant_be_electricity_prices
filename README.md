@@ -966,7 +966,9 @@ successful refresh:
   states, or the end of the month its title names), which is what a supplier
   still serving an old month's card looks like. While it is stale the
   project's card archive is asked for its newest card, this month's first and
-  back up to a year, and that card is priced on if it is a later one. Not raised once the supplier has left the market (its
+  back up to a year, and that card is priced on if it is a later one. The
+  card offers to fetch the card again: submitting it refreshes the entry at
+  once, and the card closes only if that cleared it. Not raised once the supplier has left the market (its
   `deprecated_until` has passed): the final card stays stale for good, the
   deprecation notice below already says so, and the entry stops asking the
   supplier for a card that is gone. Nor on a product its supplier withdrew,

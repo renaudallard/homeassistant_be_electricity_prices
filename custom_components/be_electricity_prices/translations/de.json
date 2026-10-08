@@ -762,7 +762,17 @@
   "issues": {
     "snapshot_stale": {
       "title": "Die Tarifkarte für {supplier} ({contract}) ist veraltet",
-      "description": "Die Tarifkarte, nach der dieser Eintrag rechnet, wurde vor mehr als {days} Tagen aktualisiert oder gilt für einen Zeitraum, der seit mehr als {days} Tagen abgelaufen ist; das kommt vor, wenn der Lieferant weiter eine alte Karte anbietet. Hält das Kartenarchiv eine neuere Karte, wird diese verwendet. Letzter Fehler: {last_error}. Die Preise spiegeln möglicherweise nicht mehr wider, was tatsächlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, prüfen Sie Ihr Netzwerk, oder öffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Die Tarifkarte für {supplier} ({contract}) ist veraltet",
+            "description": "Die Tarifkarte, nach der dieser Eintrag rechnet, wurde vor mehr als {days} Tagen aktualisiert oder gilt für einen Zeitraum, der seit mehr als {days} Tagen abgelaufen ist; das kommt vor, wenn der Lieferant weiter eine alte Karte anbietet. Hält das Kartenarchiv eine neuere Karte, wird diese verwendet. Letzter Fehler: {last_error}. Die Preise spiegeln möglicherweise nicht mehr wider, was tatsächlich abgerechnet wird. Absenden, um die Karte jetzt neu abzurufen; bleibt sie veraltet, prüfen Sie Ihr Netzwerk oder öffnen Sie ein Issue auf GitHub."
+          }
+        },
+        "abort": {
+          "still_stale": "Die Karte konnte weiterhin nicht aktualisiert werden. Letzter Fehler: {last_error}. Sie wird stündlich erneut abgerufen, und diese Reparatur bleibt bis dahin bestehen."
+        }
+      }
     },
     "extractor_failed": {
       "title": "Tarifkarte für {supplier} ({contract}) konnte nicht ausgewertet werden",

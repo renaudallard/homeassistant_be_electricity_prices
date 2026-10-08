@@ -87,6 +87,7 @@ machinery.
 | `tests/test_api.py` | ENTSO-E spot client (`api.py`) |
 | `tests/test_backfill.py` | Recorder cost-statistics backfill |
 | `tests/test_diagnostics.py` | Diagnostics dump |
+| `tests/test_repairs.py` | The stale-card Repairs fix flow (`repairs.py`) |
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF text extraction (`providers/_pdf.py`) |

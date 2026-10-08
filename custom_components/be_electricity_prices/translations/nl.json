@@ -762,7 +762,17 @@
   "issues": {
     "snapshot_stale": {
       "title": "Tariefkaart voor {supplier} ({contract}) is verouderd",
-      "description": "De tariefkaart waarop deze invoer rekent is meer dan {days} dagen geleden vernieuwd, of geldt voor een periode die al meer dan {days} dagen voorbij is, wat gebeurt als de leverancier een oude kaart blijft aanbieden. Als het kaartenarchief een recentere kaart heeft, wordt die gebruikt. Laatste fout: {last_error}. Prijzen geven mogelijk niet meer weer wat werkelijk wordt gefactureerd. Probeer de service be_electricity_prices.refresh, controleer je netwerk, of open een issue op GitHub als het probleem aanhoudt."
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Tariefkaart voor {supplier} ({contract}) is verouderd",
+            "description": "De tariefkaart waarop deze invoer rekent is meer dan {days} dagen geleden vernieuwd, of geldt voor een periode die al meer dan {days} dagen voorbij is, wat gebeurt als de leverancier een oude kaart blijft aanbieden. Als het kaartenarchief een recentere kaart heeft, wordt die gebruikt. Laatste fout: {last_error}. Prijzen geven mogelijk niet meer weer wat werkelijk wordt gefactureerd. Druk op verzenden om de kaart nu opnieuw op te halen; blijft ze verouderd, controleer dan je netwerk of open een issue op GitHub."
+          }
+        },
+        "abort": {
+          "still_stale": "De kaart kon nog steeds niet vernieuwd worden. Laatste fout: {last_error}. Ze wordt elk uur opnieuw geprobeerd, en deze reparatie blijft staan tot dat lukt."
+        }
+      }
     },
     "extractor_failed": {
       "title": "Tariefkaart voor {supplier} ({contract}) kon niet ontleed worden",
