@@ -30,9 +30,9 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime
 from types import SimpleNamespace
-from zoneinfo import ZoneInfo
 from typing import Any
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -41,17 +41,17 @@ from custom_components.be_electricity_prices.pricing import (
     energy_eur_per_kwh,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from tests import make_text_session, fixture_text
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     ImpactRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.cociter import (
     fetch_for_month,
     parse_snapshot,
 )
+from tests import fixture_text, make_text_session
 
 
 def test_cociter_is_registered() -> None:
@@ -740,8 +740,8 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
     So billing the printed rate bills last month's index. The April 2026 card
     proves it: its printed 12,6625 c/kWh is exactly the formula at MARCH's
     BELIX of 92,61, while April settled at 78,93 and 11,5749."""
-    from types import SimpleNamespace
     from datetime import datetime
+    from types import SimpleNamespace
 
     from homeassistant.util import dt as dt_util
 

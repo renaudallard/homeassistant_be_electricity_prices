@@ -34,9 +34,6 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-
-from custom_components.be_electricity_prices import energy_meters
-
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,11 +49,20 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
-from custom_components.be_electricity_prices import backfill_window, snapshot_months
-from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices import (
+    backfill_window,
+    energy_meters,
+    snapshot_months,
+)
 from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import get as get_extractor
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    FixedRates,
+    SpotMonthlyRates,
+)
 from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
@@ -64,11 +70,6 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from custom_components.be_electricity_prices.spot_stats import _bucket_by_local_month
-from custom_components.be_electricity_prices.providers._rates import (
-    DynamicRates,
-    FixedRates,
-    SpotMonthlyRates,
-)
 from tests import make_entry, make_snapshot, make_stub_extractor
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
@@ -844,8 +845,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     closed month cached this thinly is refused by the coverage gate, which
     test_hour_spot_refuses_a_thinly_cached_closed_month pins for the energy
     leg and which the injection leg now shares."""
-    from custom_components.be_electricity_prices import backfill_window
-    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices import backfill_window, const
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
@@ -932,8 +932,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     rate. This pass dropped the hour whole instead, so every metered kWh
     inside an ENTSO-E gap cost the persisted series nothing at all and the
     imported rows disagreed with the compiled ones at the seam."""
-    from custom_components.be_electricity_prices import backfill_window
-    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices import backfill_window, const
     from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
     freezer.move_to("2026-07-15 12:00:00+02:00")
@@ -1007,8 +1006,7 @@ async def test_cost_backfill_reports_the_feed_in_it_could_not_credit(
     count alone read as a complete year. An imported row does not heal on the
     next tick the way the live sensor does.
     """
-    from custom_components.be_electricity_prices import backfill_window
-    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices import backfill_window, const
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
     )
@@ -1173,8 +1171,12 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
     and a harness that did exactly that reported the backfill 0,11 EUR high
     on Q1 2026 and sent an audit after a seam bug that was never there.
     """
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices import (
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
     from custom_components.be_electricity_prices.providers._rates import DynamicRates
 
     snap = make_snapshot(
@@ -1298,8 +1300,12 @@ async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
     prosumer tariff on the net draws against distribution and transport on
     the gross ones, the lower of the two billed. Per-hour kind, so both run
     the hourly walk, and a dear tariff, so the cap does bind."""
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices import (
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
     from custom_components.be_electricity_prices.providers._rates import DynamicRates
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
@@ -1807,8 +1813,12 @@ async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
     the live walks do, and has to leave the hours of the other days out of
     the feed-in side too: an hour whose consumption it does not bill cannot
     be credited."""
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices import (
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
     from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
         InjectionRates,
@@ -1923,13 +1933,17 @@ async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
     cap; the backfill handed the default 0, so on a Flanders card whose
     ceiling binds its capped months sat below the live sensor's and the
     imported series met the sensor at a step."""
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices import (
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         TaxOverlay,
     )
-    from custom_components.be_electricity_prices.providers._rates import FixedRates
 
     snap = make_snapshot(
         energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
@@ -2618,11 +2632,15 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
 
     And a percentage of the energy cost, valued at the rate of the contract's
     own first-year hours, on cards that change price at the start date."""
-    from custom_components.be_electricity_prices import backfill_window
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
     from dataclasses import replace
 
+    from custom_components.be_electricity_prices import (
+        backfill_window,
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
     from custom_components.be_electricity_prices.const import (
         WELCOME_CREDIT_ANNIVERSARY,
     )
@@ -2821,8 +2839,11 @@ async def test_the_credit_cap_reads_each_month_own_green_levy(
     rate it never carried. Latent while no card granting a credit has moved
     its levy, and wrong the moment one does.
     """
-    from custom_components.be_electricity_prices import ytd_energy
-    from custom_components.be_electricity_prices import energy_meters, ytd_cost
+    from custom_components.be_electricity_prices import (
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
 
     freezer.move_to("2026-03-31 23:00:00+02:00")
     january = make_snapshot(

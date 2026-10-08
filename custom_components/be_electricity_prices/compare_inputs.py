@@ -33,6 +33,15 @@ the result page prints them; none of it decides anything on its own.
 
 from __future__ import annotations
 
+import copy
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from typing import Any, cast
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.util import dt as dt_util
+
 from .compare_table import _row_label
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
@@ -50,7 +59,8 @@ from .const import (
     SOLAR_REGIME_NONE,
 )
 from .injection import _injection_bakes_to_month_mean, _injection_needs_spot
-from .providers import effective_kind, get as get_extractor
+from .providers import effective_kind
+from .providers import get as get_extractor
 from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import entry_annual_kwh
@@ -61,13 +71,6 @@ from .spot_stats import (
     _spp_weighting_enabled,
 )
 from .synergrid import RlpWeights, SppWeights
-import copy
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.util import dt as dt_util
-from typing import Any, cast
 
 
 def _label_for_supplier(supplier_id: str) -> str:

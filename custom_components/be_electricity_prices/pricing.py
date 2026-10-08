@@ -55,11 +55,6 @@ from .const import (
     REGION_WALLONIA,
     RESOLUTION_QUARTER,
 )
-from .providers.base import (
-    DsoOverlay,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -68,6 +63,11 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
     VariableRates,
+)
+from .providers.base import (
+    DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 
 MeterType = Literal["mono", "bi", "dynamic", "exclusive_night"]

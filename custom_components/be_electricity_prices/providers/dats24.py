@@ -67,22 +67,28 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
-    FLUVIUS_AREA_LABELS_UPPER,
     DSO_AIEG,
     DSO_AIESH,
     DSO_ORES,
     DSO_RESA,
     DSO_REW,
+    FLUVIUS_AREA_LABELS_UPPER,
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     head_ok,
     is_missing_card_error,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
+from ._rates import (
+    Contract,
+    EnergyRates,
+    InjectionRates,
+    VariableRates,
+)
 from ._validity import parse_valid_until
 from .base import (
     DsoOverlay,
@@ -91,12 +97,6 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     walloon_dso_overlay,
-)
-from ._rates import (
-    Contract,
-    EnergyRates,
-    InjectionRates,
-    VariableRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

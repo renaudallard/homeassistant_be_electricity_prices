@@ -27,9 +27,6 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import snapshot_resolve
-
-
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -39,13 +36,13 @@ from typing import Any
 from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
-
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import snapshot_resolve
 from custom_components.be_electricity_prices.api import (
     EntsoeAuthError,
     EntsoeError,
@@ -55,15 +52,26 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
     WELCOME_CREDIT_ANNIVERSARY,
 )
-from custom_components.be_electricity_prices.providers.base import (
-    CardNotReadableError,
-)
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
 )
 from custom_components.be_electricity_prices.coordinator_issues import (
     _successor_for,
 )
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    InjectionRates,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
+    ExtractorError,
+    SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.snapshot_codec import (
+    _SNAPSHOT_SCHEMA_VERSION,
+    _snapshot_to_dict,
+)
+from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
 from custom_components.be_electricity_prices.snapshot_store import (
     _monthly_fetched_at,
     _monthly_snapshots,
@@ -72,21 +80,7 @@ from custom_components.be_electricity_prices.snapshot_store import (
     _shared_snapshots,
     evict_shared_caches,
 )
-from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
-from custom_components.be_electricity_prices.snapshot_codec import (
-    _SNAPSHOT_SCHEMA_VERSION,
-    _snapshot_to_dict,
-)
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
-from custom_components.be_electricity_prices.providers._rates import (
-    DynamicRates,
-    InjectionRates,
-)
 from tests import make_entry, make_snapshot, make_stub_extractor
-
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _COORD = "custom_components.be_electricity_prices.coordinator"
@@ -1105,10 +1099,10 @@ async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     has to follow the leg the tick prices on."""
     from custom_components.be_electricity_prices.cohort import _CohortLegs
     from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
     )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1558,8 +1552,8 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
     snapshot. Without the guard, the user-facing be_electricity_prices.
     refresh service is a no-op on multi-entry installs."""
     from custom_components.be_electricity_prices.snapshot_store import (
-        _SharedSnapshot,
         _shared_snapshots,
+        _SharedSnapshot,
     )
 
     entry_a = _entry()
@@ -2676,10 +2670,10 @@ async def test_a_readable_card_clears_the_ocr_notice(hass: HomeAssistant) -> Non
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
     )
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
     from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
     )
-    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = make_entry()
     entry.add_to_hass(hass)
@@ -3518,8 +3512,10 @@ async def test_a_stopped_register_is_named_in_repairs_and_cleared(
     once the pair is whole again."""
     from homeassistant.helpers import issue_registry as ir
 
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
@@ -3611,8 +3607,10 @@ async def test_a_restart_the_same_day_reads_no_meter_for_the_day(
     most of a 287 s start (issue #107). The day's results are kept with the
     entry. A restart the same day reads nothing and keeps them; a setting
     edited since, or another day, reads again."""
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
@@ -3729,8 +3727,10 @@ async def test_a_setting_edited_during_the_day_read_is_not_stored_with_it(
     settings as they stood at the save, the new ones. The reloaded entry then
     took the old wiring's volume and register verdict for the rest of the
     day. The figures carry the settings their read started under."""
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
@@ -3927,8 +3927,10 @@ async def test_a_register_a_total_bills_for_has_its_own_wording(
     one on the usual wording."""
     from homeassistant.helpers import issue_registry as ir
 
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.meter_hourly import (
         MeteredHours,
@@ -4048,8 +4050,10 @@ async def test_no_injection_repairs_card_without_a_solar_regime(
     """Without a solar regime the bill does not read the injection meters, so
     a broken injection register leaves nothing short, and the card that says
     the running cost reads low would be wrong. They are not read at all."""
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
 
     freezer.move_to("2026-09-20 12:00:00+02:00")
@@ -4101,8 +4105,10 @@ async def test_a_silent_meter_side_is_named_in_repairs(
     """A consumption meter that stopped while feed-in carries on is left out
     of both sides by the walks, which reads low with nothing else to say why.
     The daily volume read names it on the same card as a stopped register."""
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.meter_hourly import (
         MeteredHours,
@@ -4209,8 +4215,10 @@ async def test_a_year_of_sold_export_is_measured_for_the_feed_in_bonus(
     """A first-year feed-in bonus multiplies a year of the export the
     household sells. The daily volume read measures it on the injection
     regime, a full trailing year or nothing, and on no other regime."""
-    from custom_components.be_electricity_prices import compare_quote
-    from custom_components.be_electricity_prices import coordinator_snapshot
+    from custom_components.be_electricity_prices import (
+        compare_quote,
+        coordinator_snapshot,
+    )
     from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
     from custom_components.be_electricity_prices.snapshot_resolve import (
         entry_annual_injection_kwh,
@@ -5562,8 +5570,8 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
     and price off the current card. The cohort re-price used to hand back a
     SpotMonthlyRates leg, which took the spot path and failed setup with
     "missing ENTSO-E API key" on a key the variable flow never asks for."""
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import VariableRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
     dsos = {"fluvius_limburg": DsoOverlay(distribution_single=0.10, transport=0.0145)}
     entry = MockConfigEntry(
@@ -8897,11 +8905,11 @@ async def test_a_month_billed_per_quarter_hour_is_fetched_on_that_grid(
     again on the right one, and a day already on it costs nothing."""
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.snapshot_store import (
-        _monthly_snapshots,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
     )
 
     freezer.move_to("2026-03-10 12:00:00+01:00")
@@ -9401,10 +9409,10 @@ async def test_an_ocr_reading_is_not_offered_as_the_entrys_own_row(
     notice was cleared on the sibling that adopted them. The reading is served,
     never offered: the tick asks the supplier again, as its docstring always
     said it would."""
+    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
     from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
     )
-    from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
     entry = _entry()
     entry.add_to_hass(hass)
@@ -9465,11 +9473,11 @@ async def test_a_replayed_ocr_blob_keeps_its_marker(
     from custom_components.be_electricity_prices.providers.base import (
         CardNotReadableError,
     )
-    from custom_components.be_electricity_prices.snapshot_store import (
-        _shared_failed_fetches,
-    )
     from custom_components.be_electricity_prices.snapshot_codec import (
         _snapshot_to_dict,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_failed_fetches,
     )
 
     freezer.move_to("2026-09-16 12:00:00+02:00")
@@ -9542,8 +9550,8 @@ async def test_the_persistent_blob_holds_the_card_as_parsed(
     would fail to undo: the reload would keep a leg already converted for the
     old answer.
     """
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_snapshot
 
     entry = _entry()

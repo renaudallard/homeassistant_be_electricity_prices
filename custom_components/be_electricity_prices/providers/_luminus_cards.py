@@ -32,8 +32,14 @@ Luminus charges for power, as opposed to what it collects for someone else.
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
+from datetime import date
+
 from ..const import WELCOME_CREDIT_ANNIVERSARY, WELCOME_CREDIT_PRO_RATA
+from ._luminus_overlays import _NUM
 from ._parse import SIGN_CHARS, numeric_row, parse_sign, tier_bound_kwh, to_float
+from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import (
     DynamicRates,
     EnergyRates,
@@ -44,11 +50,6 @@ from ._rates import (
     VariableRates,
 )
 from .base import ExtractorError
-from dataclasses import replace
-from datetime import date
-import re
-from ._luminus_overlays import _NUM
-from ._pdf import _MONTH_NAMES, vat_multiplier
 
 
 def _extract_promo(text: str, card_month: str = "") -> dict[str, object]:

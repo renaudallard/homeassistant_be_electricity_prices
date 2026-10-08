@@ -39,15 +39,14 @@ import math
 import re
 from datetime import UTC, datetime, timedelta
 
+import aiohttp
+
 # defusedxml's ElementTree disables entity expansion / external-entity
 # loading on the stdlib parser. The ENTSO-E endpoint is HTTPS-trusted,
 # but a bare xml.etree parse leaves a TLS-MitM-exposed XXE surface for
 # free; defusedxml is declared in manifest.json requirements.
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
-
-import aiohttp
-
 from homeassistant.util import dt as dt_util
 
 from .const import (

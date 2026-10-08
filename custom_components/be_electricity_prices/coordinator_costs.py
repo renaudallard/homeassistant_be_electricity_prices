@@ -33,8 +33,22 @@ contracts held earlier in the year.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
+from .cohort import (
+    _effective_snapshot_for_month,
+    signing_month_snapshot,
+    ytd_window_start,
+)
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -46,24 +60,6 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .coordinator_data import (
-    month_window_reset,
-    month_window_start,
-    ytd_window_reset,
-)
-from .coordinator_persist import settings_digest
-from .providers import (
-    SupplierSnapshot,
-    get as get_extractor,
-)
-from .snapshot_store import _monthly_snapshots
-from datetime import date, datetime, timedelta
-from .cohort import (
-    _effective_snapshot_for_month,
-    signing_month_snapshot,
-    ytd_window_start,
-)
-from .ytd_cost import _compute_current_year_cost
 from .contract_periods import (
     ContractPeriod,
     PricedPeriods,
@@ -76,18 +72,25 @@ from .contract_periods import (
     previous_periods,
     price_previous_periods,
 )
+from .coordinator_data import (
+    month_window_reset,
+    month_window_start,
+    ytd_window_reset,
+)
+from .coordinator_persist import settings_digest
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
-from .year_end_cost import _compute_year_end_cost
+from .providers import (
+    SupplierSnapshot,
+)
+from .providers import (
+    get as get_extractor,
+)
 from .snapshot_months import archived_months_present
-import asyncio
-from homeassistant.util import dt as dt_util
+from .snapshot_store import _monthly_snapshots
 from .synergrid import RlpWeights, SppWeights
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-import aiohttp
-import logging
-from dataclasses import dataclass
+from .year_end_cost import _compute_year_end_cost
+from .ytd_cost import _compute_current_year_cost
 
 _LOGGER = logging.getLogger(__name__)
 

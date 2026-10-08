@@ -34,8 +34,21 @@ tick answers from the cache and finishes the slow walks afterwards.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from collections.abc import Iterable
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.util import dt as dt_util
+
+from .api import EntsoeAuthError, EntsoeError
+from .cohort import (
+    ytd_window_start,
+)
 from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -49,20 +62,11 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .providers import (
-    DynamicRates,
-    SpotMonthlyRates,
-    SupplierSnapshot,
+from .contract_periods import (
+    periods_need_rlp,
+    periods_need_spots,
+    previous_periods,
 )
-from .providers._rates import EnergyRates
-from .api import EntsoeAuthError, EntsoeError
-from collections.abc import Iterable
-from .pricing import (
-    PriceBreakdown,
-    compute_breakdown,
-)
-from datetime import UTC, date, datetime, timedelta
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from .injection import (
     _bake_monthly_injection,
     _injection_bakes_to_month_mean,
@@ -70,14 +74,16 @@ from .injection import (
     _injection_needs_spot,
     _injection_price_for_slot,
 )
-from .cohort import (
-    ytd_window_start,
+from .pricing import (
+    PriceBreakdown,
+    compute_breakdown,
 )
-from .contract_periods import (
-    periods_need_rlp,
-    periods_need_spots,
-    previous_periods,
+from .providers import (
+    DynamicRates,
+    SpotMonthlyRates,
+    SupplierSnapshot,
 )
+from .providers._rates import EnergyRates
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
@@ -86,11 +92,6 @@ from .spot_stats import (
     _spp_weighting_enabled,
     index_window_start,
 )
-import asyncio
-from homeassistant.util import dt as dt_util
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-import logging
 
 _LOGGER = logging.getLogger(__name__)
 

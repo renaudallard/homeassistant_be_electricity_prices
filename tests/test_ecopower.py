@@ -34,21 +34,21 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
+from custom_components.be_electricity_prices.providers import ecopower
+from custom_components.be_electricity_prices.providers._ecopower_cards import (
+    _extract_energy,
+    _extract_injection,
 )
-from custom_components.be_electricity_prices.providers._resolve import apply_vat
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     InjectionRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers._ecopower_cards import (
-    _extract_energy,
-    _extract_injection,
+from custom_components.be_electricity_prices.providers._resolve import apply_vat
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
 )
-from custom_components.be_electricity_prices.providers import ecopower
 from custom_components.be_electricity_prices.providers.ecopower import (
     _card_stamp_keys,
     _resolve_latest_dbs_pdf,
@@ -57,7 +57,7 @@ from custom_components.be_electricity_prices.providers.ecopower import (
     parse_dbs_snapshot,
     parse_snapshot,
 )
-from tests import make_text_session, fixture_text
+from tests import fixture_text, make_text_session
 
 
 def _text(name: str) -> str:

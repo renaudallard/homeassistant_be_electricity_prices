@@ -85,11 +85,11 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
-from .providers.base import SupplierSnapshot
 from .providers._rates import (
     DynamicRates,
     SpotMonthlyRates,
 )
+from .providers.base import SupplierSnapshot
 
 _SPOT_BASIS = (
     "not projected: this contract settles on a Belpex index for months that "
@@ -234,17 +234,17 @@ async def _compute_projected_year_cost(
     where an exception would mark the whole update failed and take every
     entity on the device unavailable.
     """
+    from .compare_inputs import _credit_year
     from .compare_quote import (
         _annual_bill,
         _annual_volume,
         _covers_a_year,
     )
-    from .compare_inputs import _credit_year
-    from .energy_meters import _kwh_sensor_ids
     from .compare_weighting import (
         _compare_injection_credit,
         _tou_weighted_per_kwh,
     )
+    from .energy_meters import _kwh_sensor_ids
     from .meter_daily import _measured_kwh
     from .meter_hourly import (
         _hour_of_day_shares,

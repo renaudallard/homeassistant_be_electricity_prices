@@ -29,24 +29,24 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from datetime import date
 from typing import Any
 
 import pytest
-from datetime import date
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from tests import fixture_text
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     TimeOfUseRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
+)
 from custom_components.be_electricity_prices.providers.luminus import parse_snapshot
+from tests import fixture_text
 
 
 def _dynamic_w() -> SupplierSnapshot:
@@ -362,10 +362,10 @@ def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
     fixed card has no energy formula at all, and searching the whole document
     rather than the energy block would hand it the INJECTION one.
     """
-    from custom_components.be_electricity_prices.providers._rates import VariableRates
     from custom_components.be_electricity_prices.providers._luminus_cards import (
         _monthly_energy_coefficients,
     )
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     for cid, fixture, region in (
         ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders"),

@@ -35,6 +35,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .cohort import ytd_window_start
 from .const import (
     CONF_API_KEY,
     CONF_CAPACITY_PEAK_SENSOR,
@@ -43,24 +44,23 @@ from .const import (
     CONF_SUPPLIER,
     METER_SENSOR_KEYS,
 )
-from .cohort import ytd_window_start
 from .contract_periods import current_period_start
 from .coordinator import (
     BePricesCoordinator,
 )
-from .snapshot_resolve import entry_annual_kwh
 from .energy_meters import (
     _kwh_sensor_ids,
     _recorder_daily_kwh,
 )
 from .meter_daily import _resolve_daily_kwh
 from .meter_hourly import _metered_sides
+from .pricing import breakdown_row
+from .sensor_values import _current_injection
+from .snapshot_resolve import entry_annual_kwh
 from .snapshot_store import (
     _monthly_snapshots,
     _shared_failed_fetches,
 )
-from .pricing import breakdown_row
-from .sensor_values import _current_injection
 
 # The meters the household reads are its own entity ids: not needed to debug
 # a price, they should not travel with an issue report. The dump names a

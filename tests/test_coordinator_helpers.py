@@ -27,31 +27,16 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import (
-    cohort,
-    cohort_legs,
-    snapshot_resolve,
-)
-from custom_components.be_electricity_prices import (
-    snapshot_codec,
-    snapshot_months,
-    snapshot_store,
-)
-from custom_components.be_electricity_prices import ytd_cost, ytd_energy
-
-from custom_components.be_electricity_prices import energy_meters
-from custom_components.be_electricity_prices import meter_daily, meter_hourly
-
 import calendar
-from collections.abc import Mapping
 import json
 import logging
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Mapping
 from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant, State
@@ -59,9 +44,33 @@ from homeassistant.helpers.json import json_dumps
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import (
+    cohort,
+    cohort_legs,
+    energy_meters,
+    meter_daily,
+    meter_hourly,
+    snapshot_codec,
+    snapshot_months,
+    snapshot_resolve,
+    snapshot_store,
+    ytd_cost,
+    ytd_energy,
+)
+from custom_components.be_electricity_prices.cohort import (
+    _cohort_energy_leg,
+    _effective_snapshot_for_month,
+    _tariff_card_month,
+)
+from custom_components.be_electricity_prices.cohort_legs import (
+    _cohort_energy_from_archived,
+    _manual_energy_leg,
+    _month_indexed_leg,
+)
 from custom_components.be_electricity_prices.const import (
     CARD_ARCHIVE_URL,
     CONF_API_KEY,
+    CONF_CARD_ARCHIVE,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
     CONF_INCLUDE_VAT,
@@ -76,17 +85,6 @@ from custom_components.be_electricity_prices.const import (
     CONF_SUPPLIER,
     DOMAIN,
     SUPPLIER_CUSTOM,
-)
-from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE
-from custom_components.be_electricity_prices.cohort import (
-    _cohort_energy_leg,
-    _tariff_card_month,
-    _effective_snapshot_for_month,
-)
-from custom_components.be_electricity_prices.cohort_legs import (
-    _cohort_energy_from_archived,
-    _manual_energy_leg,
-    _month_indexed_leg,
 )
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
@@ -106,50 +104,16 @@ from custom_components.be_electricity_prices.injection import (
     _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_needs_spot_quarters,
-    _injection_replays_hourly_spot,
     _injection_price_for_slot,
+    _injection_replays_hourly_spot,
 )
-from custom_components.be_electricity_prices.snapshot_store import (
-    _month_row_is_provisional,
-    _monthly_failed_fetches,
-    _monthly_fetched_at,
-    _monthly_snapshots,
-)
-from custom_components.be_electricity_prices.snapshot_months import (
-    ArchivedCard,
-    _archived_card_from_github,
-    _snapshot_for_month,
-    monthly_rows_to_store,
-    restore_monthly_rows,
-)
-from custom_components.be_electricity_prices.snapshot_codec import (
-    _DEGRADED_MIN_SCHEMA_VERSION,
-    _SNAPSHOT_SCHEMA_VERSION,
-    _energy_kind,
-    _snapshot_from_dict,
-    _snapshot_to_dict,
+from custom_components.be_electricity_prices.pricing import (
+    energy_eur_per_kwh,
+    static_breakdown,
+    yearly_fixed_fee_for_meter,
 )
 from custom_components.be_electricity_prices.projected_cost import (
     _compute_projected_year_cost,
-)
-from custom_components.be_electricity_prices.spot_stats import (
-    _bucket_by_local_month,
-    _covered_month_mean,
-)
-from custom_components.be_electricity_prices.ytd_cost import _compute_current_year_cost
-from custom_components.be_electricity_prices.ytd_legs import (
-    _days_through,
-    _ytd_static_fees,
-)
-from custom_components.be_electricity_prices.ytd_energy import (
-    _ytd_spot_injection_credit,
-)
-from custom_components.be_electricity_prices.providers.base import (
-    DsoOverlay,
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
 )
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -161,10 +125,44 @@ from custom_components.be_electricity_prices.providers._rates import (
     TimeOfUseRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.pricing import (
-    energy_eur_per_kwh,
-    static_breakdown,
-    yearly_fixed_fee_for_meter,
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+)
+from custom_components.be_electricity_prices.snapshot_codec import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
+    _energy_kind,
+    _snapshot_from_dict,
+    _snapshot_to_dict,
+)
+from custom_components.be_electricity_prices.snapshot_months import (
+    ArchivedCard,
+    _archived_card_from_github,
+    _snapshot_for_month,
+    monthly_rows_to_store,
+    restore_monthly_rows,
+)
+from custom_components.be_electricity_prices.snapshot_store import (
+    _month_row_is_provisional,
+    _monthly_failed_fetches,
+    _monthly_fetched_at,
+    _monthly_snapshots,
+)
+from custom_components.be_electricity_prices.spot_stats import (
+    _bucket_by_local_month,
+    _covered_month_mean,
+)
+from custom_components.be_electricity_prices.ytd_cost import _compute_current_year_cost
+from custom_components.be_electricity_prices.ytd_energy import (
+    _ytd_spot_injection_credit,
+)
+from custom_components.be_electricity_prices.ytd_legs import (
+    _days_through,
+    _ytd_static_fees,
 )
 from tests import make_snapshot, make_stub_extractor
 
@@ -311,8 +309,8 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
     the term was billed on all four costing paths at once, 14 to 27 EUR/yr
     depending on the DSO."""
     from custom_components.be_electricity_prices.fees import _annual_static_fees
-    from tests import fixture_text
     from custom_components.be_electricity_prices.providers import engie
+    from tests import fixture_text
 
     snap = engie.parse_snapshot(
         "engie_empower_flextime",
@@ -7808,10 +7806,10 @@ def test_a_running_cost_keeps_its_period_across_the_boundary() -> None:
     the reset the figure was computed with."""
     from unittest.mock import MagicMock
 
+    from custom_components.be_electricity_prices import sensor
     from custom_components.be_electricity_prices.coordinator_data import (
         CoordinatorData,
     )
-    from custom_components.be_electricity_prices import sensor
     from custom_components.be_electricity_prices.sensor import BePriceSensor
 
     brussels = ZoneInfo("Europe/Brussels")
@@ -9493,12 +9491,11 @@ async def test_a_dynamic_cohort_settles_on_the_grid_of_the_month_billed(
     the January 2025 card, which says "elk uur", and the leg carried that
     grid onto today's card: 24 slots a day instead of 96. The cohort locks
     the coefficients; the grid is the delivery month's."""
-    from tests import fixture_text
-
     from custom_components.be_electricity_prices.cohort import _cohort_legs
     from custom_components.be_electricity_prices.providers.ecopower import (
         parse_dbs_snapshot,
     )
+    from tests import fixture_text
 
     freezer.move_to("2026-09-15 12:00:00+02:00")
     hourly = parse_dbs_snapshot(
@@ -12947,12 +12944,12 @@ def test_a_published_month_index_is_billed_without_any_spots() -> None:
     forfeited its whole commodity leg on a cold start or after a failed
     ENTSO-E fetch, and billed network and taxes alone.
     """
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
     from custom_components.be_electricity_prices.spot_stats import (
         _energy_month_spot,
         _hour_spot,
-    )
-    from custom_components.be_electricity_prices.providers._rates import (
-        SpotMonthlyRates,
     )
 
     leg = SpotMonthlyRates(factor=1.0, base=0.02, index_realised=0.0912)
@@ -14973,9 +14970,9 @@ def test_apply_vat_grosses_the_injection_floor_with_the_rates() -> None:
     """A card that taxes injection and guarantees a floor: the floor is a
     rate like the coefficients beside it and was left as printed, ex-VAT
     beside grossed rates."""
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
-    from custom_components.be_electricity_prices.providers._resolve import apply_vat
     from custom_components.be_electricity_prices.providers._rates import InjectionRates
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
 
     net = make_snapshot(
         injection=InjectionRates(

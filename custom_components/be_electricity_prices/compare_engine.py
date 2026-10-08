@@ -33,20 +33,30 @@ code, and how they are shown is somebody else's job.
 
 from __future__ import annotations
 
+import contextlib
+import logging
+from dataclasses import replace
+from datetime import date
+from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
+
 from .compare_household import _HouseholdMixin, _meters_rewired
 from .compare_inputs import (
-    _HouseholdQuote,
     _candidate_label,
     _coordinator_rlp_index_weights,
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
+    _HouseholdQuote,
     _keyless_stale_spots,
     _needs_missing_spots,
 )
-from .compare_table import DailyCompare, RankedRow
 from .compare_quote import _annual_bill, _candidate_welcome_credit
+from .compare_table import DailyCompare, RankedRow
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
-from .coordinator_persist import settings_digest
 from .const import (
     CONF_CONTRACT,
     CONF_METER,
@@ -57,22 +67,15 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
+from .coordinator_persist import settings_digest
 from .energy_meters import memoise_meter_reads
 from .flow_contracts import (
     _contract_kind,
     _ranking_candidates,
 )
-from .providers import get as get_extractor, settlement_answer
+from .providers import get as get_extractor
+from .providers import settlement_answer
 from .providers._pdf import memoise_text_fetches
-from dataclasses import replace
-from datetime import date
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.util import dt as dt_util
-from typing import Any
-import contextlib
-import logging
 
 _LOGGER = logging.getLogger(__name__)
 

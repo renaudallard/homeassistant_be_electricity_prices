@@ -62,7 +62,6 @@ from custom_components.be_electricity_prices.providers import octaplus as octapl
 from custom_components.be_electricity_prices.providers import (
     totalenergies as totalenergies_mod,
 )
-
 from tests import FIXTURES, FakeBody
 
 FIX = FIXTURES / "discover"
@@ -650,8 +649,9 @@ def _issue_form_options(field_id: str) -> list[str]:
     """The options a dropdown offers on the bug report form."""
     # PyYAML ships no stubs and homeassistant pulls it in anyway, so the
     # CI type pass needs the marker rather than another pinned dependency.
-    import yaml  # type: ignore[import-untyped]
     from pathlib import Path
+
+    import yaml  # type: ignore[import-untyped]
 
     form = yaml.safe_load(
         (

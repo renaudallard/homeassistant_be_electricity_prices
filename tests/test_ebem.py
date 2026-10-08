@@ -35,11 +35,11 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.ebem import (
     _extract_validity,
     _settled_on,
@@ -48,7 +48,7 @@ from custom_components.be_electricity_prices.providers.ebem import (
     parse_snapshot,
     published_index,
 )
-from tests import make_text_session, FIXTURES, fixture_text
+from tests import FIXTURES, fixture_text, make_text_session
 
 _VARIABLE = "ebem_variable_2026-05.pdf"
 _DYNAMIC = "ebem_dynamic_2026-05.pdf"

@@ -65,6 +65,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from ._parse import require_contract
 from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
@@ -72,15 +73,6 @@ from ._pdf import (
     is_missing_card_error,
     is_transient_fetch_error,
     printed_vat_rate,
-)
-from ._parse import require_contract
-from ._validity import parse_valid_until
-from .base import (
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-    with_vat_basis,
 )
 from ._rates import (
     ALL_REGIONS,
@@ -109,6 +101,14 @@ from ._totalenergies_overlays import (
     _extract_renewables,
     _extract_wallonia_dsos,
     cev_included,
+)
+from ._validity import parse_valid_until
+from .base import (
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    with_vat_basis,
 )
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"

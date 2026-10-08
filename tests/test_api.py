@@ -37,14 +37,14 @@ import pytest
 
 from custom_components.be_electricity_prices import api
 from custom_components.be_electricity_prices.api import (
+    _MAX_PERIOD_SLOTS,
     EnergyChartsClient,
     EntsoeAuthError,
-    EntsoeNoDataError,
     EntsoeClient,
     EntsoeError,
-    _parse_iso_utc,
-    _MAX_PERIOD_SLOTS,
+    EntsoeNoDataError,
     _parse_energy_charts,
+    _parse_iso_utc,
     _retry_after,
     fetch_day_ahead_or_fallback,
     parse_day_ahead_xml,

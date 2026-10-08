@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable
 from datetime import date
 from types import SimpleNamespace
@@ -35,15 +36,15 @@ from types import SimpleNamespace
 import aiohttp
 import pytest
 
-import re
-
 from custom_components.be_electricity_prices.providers import _pdf
-from custom_components.be_electricity_prices.providers.base import (
-    CardNotReadableError,
+from custom_components.be_electricity_prices.providers._parse import (
+    numeric_row,
+    parse_brussels_osp,
+    parse_sign,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
-    MAX_RESPONSE_BYTES,
     _MIN_TEXT_LAYER_CHARS,
+    MAX_RESPONSE_BYTES,
     _fetch_validated_pdf_bytes,
     extract_pdf_text,
     extract_pdf_text_aligned,
@@ -54,23 +55,19 @@ from custom_components.be_electricity_prices.providers._pdf import (
     is_transient_fetch_error,
     vat_multiplier,
 )
+from custom_components.be_electricity_prices.providers._rates import FixedRates
 from custom_components.be_electricity_prices.providers._validity import (
     archive_validity_check,
     parse_valid_until,
     text_mentions_month,
 )
-from custom_components.be_electricity_prices.providers._parse import (
-    numeric_row,
-    parse_brussels_osp,
-    parse_sign,
-)
 from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
     DsoOverlay,
     ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
 )
-from custom_components.be_electricity_prices.providers._rates import FixedRates
 from tests import FakeBody
 
 
@@ -691,7 +688,6 @@ def test_parse_brussels_osp_across_extractor_formats() -> None:
     from custom_components.be_electricity_prices.providers._parse import (
         parse_brussels_osp,
     )
-
     from tests import fixture_text
 
     expected = {

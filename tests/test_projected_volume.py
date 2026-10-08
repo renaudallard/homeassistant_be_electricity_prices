@@ -13,8 +13,8 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import energy_meters
-from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.compare_quote import _annual_volume
+from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.projected_volume import (
     _compute_projected_year_kwh,
     _compute_rolling_year_kwh,

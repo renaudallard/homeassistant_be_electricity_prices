@@ -702,12 +702,12 @@ def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.flow_schemas_meters import (
-        _incomplete_register_pairs,
-    )
     from custom_components.be_electricity_prices.energy_meters import (
         _hourly_consumption_sensors,
         _hourly_injection_sensors,
+    )
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
+        _incomplete_register_pairs,
     )
 
     cases = [

@@ -49,16 +49,16 @@ from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_aligned,
     extract_pdf_text_layout,
 )
+from custom_components.be_electricity_prices.providers._rates import (
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+)
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-from custom_components.be_electricity_prices.providers._rates import (
-    EnergyRates,
-    FixedRates,
-    InjectionRates,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"

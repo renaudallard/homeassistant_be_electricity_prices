@@ -27,12 +27,6 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import (
-    compare_household,
-    snapshot_resolve,
-)
-from custom_components.be_electricity_prices.compare_table import RankedRow
-
 import ast
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -47,7 +41,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.flow_switch import _validate_contract_dates
+from custom_components.be_electricity_prices import (
+    compare_household,
+    snapshot_resolve,
+)
+from custom_components.be_electricity_prices.cohort import _parse_iso_date
+from custom_components.be_electricity_prices.compare_table import RankedRow
 from custom_components.be_electricity_prices.const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CONTRACT_END_DATE,
@@ -56,7 +55,7 @@ from custom_components.be_electricity_prices.const import (
     CONF_TARIFF_CARD_DATE,
     DOMAIN,
 )
-from custom_components.be_electricity_prices.cohort import _parse_iso_date
+from custom_components.be_electricity_prices.flow_switch import _validate_contract_dates
 from tests import FakeBody, make_entry
 
 
@@ -2601,13 +2600,13 @@ def _prosumer_entry_and_snapshots(hass: HomeAssistant) -> tuple[Any, Any, Any]:
     """A Walloon compensation entry whose DSO actually publishes a prosumer
     rate, plus both sides' snapshots. The stubs used elsewhere leave that
     rate None, which zeroes the term the regime what-if turns on and off."""
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        TaxOverlay,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
     )
     from tests import make_snapshot
 
@@ -3380,8 +3379,8 @@ async def test_compare_meter_override_changes_per_kwh(
     type. Picking 'bi' must route compute_breakdown through the
     peak/offpeak rates, producing a different per-kWh number than
     the user's mono setup would."""
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     # Snapshot with distinct peak / offpeak rates so meter=bi yields a
@@ -3435,9 +3434,8 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
     from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
-
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import ImpactRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     # A Walloon overlay carrying BOTH structures, as the real cards do: the
@@ -3992,8 +3990,8 @@ def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
     from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -4037,8 +4035,8 @@ def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
     from custom_components.be_electricity_prices.compare_weighting import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import TimeOfUseRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -4231,10 +4229,10 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
 def test_solar_schema_offers_compensation_only_in_wallonia() -> None:
     # Compensation is a Walloon-only regime; offering it in Flanders/Brussels
     # would let a user double-count the capacity tariff with the prosumer fee.
+    from custom_components.be_electricity_prices.const import CONF_SOLAR_REGIME
     from custom_components.be_electricity_prices.flow_schemas_meters import (
         _solar_schema,
     )
-    from custom_components.be_electricity_prices.const import CONF_SOLAR_REGIME
 
     def _regimes(region: str) -> list[str]:
         schema = _solar_schema({"region": region})
@@ -4252,11 +4250,11 @@ def test_solar_schema_asks_for_the_meter_only_where_compensation_is_offered() ->
     """Whether the meter counts draw and injection apart decides how CWaPE
     bills a compensation install's network (fees.bills_gross_network), so it
     is asked beside the regime, in Wallonia alone, and keeps its answer."""
-    from custom_components.be_electricity_prices.flow_schemas_meters import (
-        _solar_schema,
-    )
     from custom_components.be_electricity_prices.const import (
         CONF_DOUBLE_FLOW_METER,
+    )
+    from custom_components.be_electricity_prices.flow_schemas_meters import (
+        _solar_schema,
     )
 
     def _default(defaults: dict[str, object]) -> object:
@@ -4771,8 +4769,8 @@ def test_annual_fees_include_data_management() -> None:
     # EUR/year DSO charge that must be billed alongside the supplier
     # subscription (re-audit F22).
     from custom_components.be_electricity_prices.compare_quote import _annual_fees
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -4796,8 +4794,8 @@ def test_annual_fees_exclude_capacity_for_ytd() -> None:
     # separate sensor by current_year_cost); the full annual estimate keeps
     # it. include_capacity toggles just that term.
     from custom_components.be_electricity_prices.compare_quote import _annual_fees
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -4845,11 +4843,11 @@ def test_the_ytd_what_if_accrues_capacity_like_the_live_sensor() -> None:
     from custom_components.be_electricity_prices.fees import (
         _capped_capacity_monthly_eur,
     )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         TaxOverlay,
     )
-    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from tests import make_snapshot
 
     overlay = DsoOverlay(
@@ -5556,12 +5554,12 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     term and is exactly why this went unnoticed.
     """
     from custom_components.be_electricity_prices.compare_quote import _annual_bill
-    from custom_components.be_electricity_prices.ytd_legs import _ytd_prosumer
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         TaxOverlay,
     )
-    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.ytd_legs import _ytd_prosumer
     from tests import make_snapshot
 
     freezer.move_to("2026-07-31 12:00:00+02:00")
@@ -5868,10 +5866,10 @@ def test_region_mismatch_is_a_form_error_not_an_abort() -> None:
     text even said "go back and pick a different combination", which HA gives
     no way to do from an abort.
     """
+    from custom_components.be_electricity_prices.const import CONF_REGION, CONF_SUPPLIER
     from custom_components.be_electricity_prices.flow_contracts import (
         _region_mismatch_error,
     )
-    from custom_components.be_electricity_prices.const import CONF_REGION, CONF_SUPPLIER
 
     # Eneco publishes no Brussels contract.
     assert _region_mismatch_error(
@@ -6003,14 +6001,14 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
     """
     from dataclasses import replace
 
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
     from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,
         SpotMonthlyRates,
     )
-    from custom_components.be_electricity_prices.pricing import compute_breakdown
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
     from tests import make_entry, make_snapshot
 
     # energie.be sells in Flanders only, so the current side has to be a
@@ -6205,22 +6203,23 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     Judged on the raw card it is a per-hour formula on a card whose energy is
     not dynamic, credited on the year held, here one day standing for it.
     """
-    from datetime import UTC, datetime as dt
+    from datetime import UTC
+    from datetime import datetime as dt
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.compare_inputs import CreditYear
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        SupplierSnapshot,
-        TaxOverlay,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
         SpotMonthlyRates,
         VariableRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        SupplierSnapshot,
+        TaxOverlay,
     )
 
     def _snap(energy: Any) -> SupplierSnapshot:
@@ -7673,11 +7672,11 @@ def test_archived_months_present_ignores_a_proxied_month() -> None:
     A cached None IS that case, so it must not count as coverage."""
     from datetime import date as _date
 
-    from custom_components.be_electricity_prices.snapshot_store import (
-        _monthly_snapshots,
-    )
     from custom_components.be_electricity_prices.snapshot_months import (
         archived_months_present,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
     )
 
     hass_stub = SimpleNamespace(data={})
@@ -8488,8 +8487,8 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _ytd_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -8560,8 +8559,8 @@ def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -
     from custom_components.be_electricity_prices.compare_quote import (
         _ytd_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -8740,8 +8739,8 @@ def test_the_annual_credit_nets_the_export_only_where_the_meter_nets() -> None:
     from custom_components.be_electricity_prices.compare_quote import (
         _annual_welcome_credit,
     )
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -8802,8 +8801,8 @@ def test_the_annual_credit_carries_the_feed_in_bonus_for_a_seller_only() -> None
     from custom_components.be_electricity_prices.const import (
         WELCOME_CREDIT_ANNIVERSARY,
     )
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -9092,13 +9091,13 @@ def test_the_quoted_rate_tracks_the_year_it_stands_in_for() -> None:
         MeterType,
         compute_breakdown,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        TaxOverlay,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         ImpactRates,
         TimeOfUseRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
     )
     from tests import make_snapshot
 
@@ -9609,14 +9608,14 @@ async def test_compare_fallback_prices_the_own_row_across_a_recorded_switch(
     and dropped what the household paid before a recorded switch. The own
     row has to read what current_year_cost reads: the entry's contract from
     the switch on, plus the earlier contract's priced days."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     from custom_components.be_electricity_prices.contract_periods import (
         PricedPeriod,
         PricedPeriods,
         periods_key,
         previous_periods,
     )
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
     from custom_components.be_electricity_prices.providers import get
     from custom_components.be_electricity_prices.ytd_cost import (
         _compute_current_year_cost,
@@ -9845,6 +9844,8 @@ async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
     side to the one-rate model, which priced the whole year at a recent mean
     spot, so the own row sat 5 to 11% off the current_year_cost sensor
     beside it. With the spots in hand the own row is the sensor's figure."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     from custom_components.be_electricity_prices.providers import get
     from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
@@ -9852,7 +9853,6 @@ async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
     from custom_components.be_electricity_prices.ytd_cost import (
         _compute_current_year_cost,
     )
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
     from tests import make_snapshot
 
     freezer.move_to("2026-09-24 12:00:00+02:00")
@@ -9943,6 +9943,8 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
     spot cache one day short sent a dynamic household's page to the one-rate
     model, which priced the own year too at a recent mean spot, far off the
     sensor beside it. Only the quoted side stays on that model."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     from custom_components.be_electricity_prices.providers import get
     from custom_components.be_electricity_prices.providers._rates import (
         DynamicRates,
@@ -9950,7 +9952,6 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
     from custom_components.be_electricity_prices.ytd_cost import (
         _compute_current_year_cost,
     )
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
     from tests import make_snapshot
 
     freezer.move_to("2026-09-24 12:00:00+02:00")

@@ -32,6 +32,7 @@ for power, as opposed to what it collects on someone else's behalf.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, fields, replace
 from datetime import date
@@ -41,7 +42,6 @@ from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
 from .base import ExtractorError
-import re
 
 
 def _consumption_formula(

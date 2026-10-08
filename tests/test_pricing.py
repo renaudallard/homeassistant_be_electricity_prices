@@ -27,8 +27,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 from datetime import UTC, date, datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -47,11 +47,6 @@ from custom_components.be_electricity_prices.pricing import (
     tou_slot,
     yearly_fixed_fee_for_meter,
 )
-from custom_components.be_electricity_prices.providers.base import (
-    DsoOverlay,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -60,6 +55,11 @@ from custom_components.be_electricity_prices.providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
     VariableRates,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 from tests import make_snapshot
 

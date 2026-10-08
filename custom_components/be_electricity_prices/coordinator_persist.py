@@ -37,30 +37,30 @@ from __future__ import annotations
 
 import hashlib
 import json
-
-from typing import TYPE_CHECKING, Any
-
-from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
+import logging
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
+
+from .cohort import _tariff_card_month, ytd_window_start
+from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
+from .contract_periods import PricedPeriods, priced_from_dict, priced_to_dict
 from .coordinator_profiles import (
     _load_profile_cache,
     _save_profile_cache,
     _seed_profile_cache,
 )
+from .coordinator_spots import _spot_is_sane, _spots_for_local_days
+from .providers.base import SupplierSnapshot
 from .snapshot_codec import _snapshot_from_dict, _snapshot_to_dict
+from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
 from .vat_rates import held_table as held_vat_table
 from .vat_rates import restore as restore_vat_rates
-from .coordinator_spots import _spot_is_sane, _spots_for_local_days
-from .cohort import _tariff_card_month, ytd_window_start
-from homeassistant.util import dt as dt_util
-from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
-from .providers.base import SupplierSnapshot
-from .contract_periods import PricedPeriods, priced_from_dict, priced_to_dict
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.storage import Store
-import logging
 
 _LOGGER = logging.getLogger(__name__)
 

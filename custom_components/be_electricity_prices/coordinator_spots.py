@@ -34,9 +34,16 @@ than aliased so the call sites read unchanged."""
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
-
+import asyncio
 import logging
+from collections.abc import Callable, Iterator, Mapping
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any, TypeVar
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .api import (
     EnergyChartsClient,
@@ -50,9 +57,13 @@ from .const import (
     CONF_API_KEY,
     MEASURED_FULL_YEAR_DAYS,
 )
+from .coordinator_profiles import _ProfilesMixin
 from .injection import (
     _injection_needs_spot_quarters,
 )
+from .providers._rates import EnergyRates
+from .providers.base import SupplierSnapshot
+from .snapshot_store import cached_month_card
 from .spot_stats import (
     _bucket_by_local_month,
     _bucket_spots_by_hour,
@@ -67,20 +78,6 @@ from .spot_stats import (
 from .synergrid import (
     RlpWeights,
 )
-
-import asyncio
-from collections.abc import Callable, Iterator, Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
-import aiohttp
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-
-from .providers.base import SupplierSnapshot
-from .providers._rates import EnergyRates
-from .snapshot_store import cached_month_card
-from .coordinator_profiles import _ProfilesMixin
-
 
 # Some past days genuinely have < 20 of 24 hourly day-ahead points at
 # ENTSO-E (source gaps). Without a marker, _ensure_historical_spots

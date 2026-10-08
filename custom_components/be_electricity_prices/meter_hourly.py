@@ -34,14 +34,14 @@ through the module so a test that patches one there reaches this code too.
 
 from __future__ import annotations
 
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any
 
 from . import energy_meters
 from .energy_meters import (
@@ -59,7 +59,6 @@ from .meter_faults import (
     _stopped,
     _total_stands_in,
 )
-
 
 # The fewest past days a side must have moved on before it can count as read
 # once a day. A real hourly feed-in meter moves in a single hour on a dull

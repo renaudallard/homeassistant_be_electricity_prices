@@ -40,12 +40,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .cohort import _signed_in
+from .compare_weighting import (
+    _register_network_rates,
+    _register_weights,
+    _tou_weighted_per_kwh,
+)
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_DSO,
@@ -63,29 +68,23 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
-from .cohort import _signed_in
-from .compare_weighting import (
-    _register_network_rates,
-    _register_weights,
-    _tou_weighted_per_kwh,
-)
-from .meter_daily import (
-    MeasuredKwh,
-    _measured_kwh,
-)
 from .fees import (
     _annual_static_fees,
-    _compute_capacity,
     _compensation_kva,
+    _compute_capacity,
     _compute_prosumer,
     _dso_prosumer_monthly_fee,
     _welcome_credit_eur,
     _year_ahead_welcome_credit,
     bills_gross_network,
     first_year_net_kwh,
-    gross_network_rebate,
     grants_a_welcome_credit,
+    gross_network_rebate,
     window_energy_rate,
+)
+from .meter_daily import (
+    MeasuredKwh,
+    _measured_kwh,
 )
 from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
 

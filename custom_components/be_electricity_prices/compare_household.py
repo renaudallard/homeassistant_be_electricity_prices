@@ -33,8 +33,43 @@ sits apart from the engine that loops over candidates.
 
 from __future__ import annotations
 
-
+import logging
+from collections.abc import Sequence
+from dataclasses import replace
+from datetime import date, datetime, timedelta
 from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
+
+from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
+from .compare_inputs import (
+    _credit_index_for,
+    _credit_year,
+    _detached_spot_view,
+    _effective_regime,
+    _HouseholdQuote,
+    _label_for_contract,
+    _label_for_supplier,
+    _months_billed,
+    _needs_month_mean,
+    _quote_entry,
+    _target_dso_mode,
+)
+from .compare_quote import (
+    _annual_volume,
+    _annual_welcome_credit,
+    _covers_a_year,
+    _read_total_kwh,
+)
+from .compare_table import _solar_note
+from .compare_weighting import (
+    _consumption_weighted_spot,
+    _register_weights,
+    _tou_weighted_per_kwh,
+)
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -50,8 +85,8 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
     METER_DYNAMIC,
-    METER_SENSOR_KEYS,
     METER_MONO,
+    METER_SENSOR_KEYS,
     SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
@@ -59,52 +94,19 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
-from homeassistant.config_entries import ConfigEntry
-from .pricing import MeterType
-from collections.abc import Sequence
-from .providers.base import SupplierSnapshot
-from .compare_quote import (
-    _annual_volume,
-    _annual_welcome_credit,
-    _covers_a_year,
-    _read_total_kwh,
-)
-from .compare_weighting import (
-    _consumption_weighted_spot,
-    _register_weights,
-    _tou_weighted_per_kwh,
-)
+from .contract_periods import billed_from, previous_periods
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
-from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
 from .meter_daily import _measured_kwh
 from .meter_hourly import (
     _hour_of_day_shares,
     _measured_hour_weights,
     _measured_hourly,
 )
-from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
-from .contract_periods import billed_from, previous_periods
-from .compare_table import _solar_note
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from datetime import date, datetime, timedelta
-from homeassistant.util import dt as dt_util
-from .providers import get as get_extractor, settlement_answer
-from dataclasses import replace
-from .compare_inputs import (
-    _HouseholdQuote,
-    _detached_spot_view,
-    _credit_index_for,
-    _credit_year,
-    _effective_regime,
-    _label_for_contract,
-    _label_for_supplier,
-    _months_billed,
-    _needs_month_mean,
-    _quote_entry,
-    _target_dso_mode,
-)
-from homeassistant.core import HomeAssistant
-import logging
+from .pricing import MeterType
+from .providers import get as get_extractor
+from .providers import settlement_answer
+from .providers.base import SupplierSnapshot
+from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
 
 _LOGGER = logging.getLogger(__name__)
 

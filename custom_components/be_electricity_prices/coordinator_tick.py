@@ -33,11 +33,25 @@ tick decides stays here: the repairs it raises and the static band rates.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterable
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.util import dt as dt_util
+
+from .brugel import ensure_power_term
+from .cohort import (
+    _cohort_legs,
+    _tariff_card_month,
+    ytd_window_start,
+)
 from .const import (
     CONF_CARD_ARCHIVE,
-    DEFAULT_CARD_ARCHIVE,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -45,6 +59,7 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
+    DEFAULT_CARD_ARCHIVE,
     DEFAULT_EV_HOME_CHARGING_RATE,
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
@@ -55,57 +70,49 @@ from .const import (
     RESOLUTION_QUARTER,
     SUPPLIER_CUSTOM,
 )
+from .contract_periods import (
+    PricedPeriods,
+    previous_rows,
+)
+from .coordinator_costs import TickCosts, held_costs_blob
 from .coordinator_data import (
     CoordinatorData,
     month_window_reset,
     ytd_window_reset,
 )
-from .providers import (
-    SupplierSnapshot,
-    get as get_extractor,
+from .coordinator_persist import settings_digest
+from .creg_ev import (
+    ensure_rates as ensure_ev_rates,
 )
-from .providers._rates import EnergyRates
-from collections.abc import Iterable
+from .creg_ev import (
+    quarter_start as ev_quarter_start,
+)
+from .creg_ev import (
+    rate_for as ev_rate_for,
+)
+from .fees import _compute_capacity, _compute_prosumer
+from .injection import (
+    _compute_injection_price,
+    _static_injection_bands,
+)
+from .meter_warm import KeptRows, warm_meter_reads
 from .pricing import (
     PriceBreakdown,
     static_breakdown,
     yearly_fixed_fee_for_meter,
 )
+from .providers import (
+    SupplierSnapshot,
+)
+from .providers import (
+    get as get_extractor,
+)
+from .providers._rates import EnergyRates
 from .snapshot_store import cached_month_card
-from datetime import date, datetime, timedelta
-from homeassistant.helpers.update_coordinator import UpdateFailed
-from .injection import (
-    _compute_injection_price,
-    _static_injection_bands,
-)
-from .cohort import (
-    _cohort_legs,
-    _tariff_card_month,
-    ytd_window_start,
-)
-from .fees import _compute_capacity, _compute_prosumer
-from .contract_periods import (
-    PricedPeriods,
-    previous_rows,
-)
 from .spot_stats import (
     _energy_is_quarter_hourly,
 )
-from homeassistant.util import dt as dt_util
-from .brugel import ensure_power_term
 from .vat_rates import ensure_vat_rates
-from .creg_ev import (
-    ensure_rates as ensure_ev_rates,
-    quarter_start as ev_quarter_start,
-    rate_for as ev_rate_for,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-import aiohttp
-import logging
-from .coordinator_costs import TickCosts, held_costs_blob
-from .coordinator_persist import settings_digest
-from .meter_warm import KeptRows, warm_meter_reads
 
 _LOGGER = logging.getLogger(__name__)
 

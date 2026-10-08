@@ -33,7 +33,12 @@ language branches inside theirs.
 
 from __future__ import annotations
 
+import re
+
+from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
+from ._energyvision_cards import _spp_injection, _tiered_legs
 from ._parse import SIGN_CHARS, to_float
+from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
 from ._rates import EnergyRates, FixedRates, InjectionRates, SpotMonthlyRates
 from ._validity import parse_valid_until
 from .base import (
@@ -44,10 +49,6 @@ from .base import (
     walloon_dso_overlay,
     with_vat_basis,
 )
-import re
-from ._energyvision_cards import _spp_injection, _tiered_legs
-from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
-from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 
 _NUM = NUM_NO_THOUSANDS
 

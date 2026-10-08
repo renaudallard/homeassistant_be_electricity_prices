@@ -97,6 +97,7 @@ from ._pdf import (
     fetch_text,
     is_transient_fetch_error,
 )
+from ._rates import Contract, VariableRates
 from ._settle import settled_energy, settled_injection
 from ._validity import (
     archive_validity_check,
@@ -107,7 +108,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from ._rates import Contract, VariableRates
 
 _LOGGER = logging.getLogger(__name__)
 

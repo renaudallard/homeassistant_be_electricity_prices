@@ -33,6 +33,19 @@ card", so the schemas carry the defaults rather than the steps.
 
 from __future__ import annotations
 
+from typing import Any
+
+import voluptuous as vol
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
+
 from .const import (
     CONF_CONTRACT,
     CONF_CUSTOM_DSO_BRUSSELS_OSP,
@@ -60,12 +73,12 @@ from .const import (
     CONF_CUSTOM_INJECTION_FLOOR,
     CONF_CUSTOM_INJECTION_MODE,
     CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
+    CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
     CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
     CONF_CUSTOM_TAX_FEDERAL_EXCISE,
-    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
-    CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
     CONF_CUSTOM_VAT_RATE,
     CONF_CUSTOM_YEARLY_FIXED_FEE,
     CONF_DSO_TARIFF_MODE,
@@ -74,8 +87,8 @@ from .const import (
     CUSTOM_CONTRACT_DYNAMIC,
     CUSTOM_CONTRACT_FIXED,
     CUSTOM_CONTRACT_MONTHLY,
-    CUSTOM_INJECTION_MODES,
     CUSTOM_INJECTION_MODE_CURRENT,
+    CUSTOM_INJECTION_MODES,
     DEFAULT_CUSTOM_VAT_RATE,
     DSO_MODE_IMPACT,
     METER_BI,
@@ -86,17 +99,6 @@ from .const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from homeassistant.helpers.selector import (
-    BooleanSelector,
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-)
-from typing import Any
-import voluptuous as vol
 from .flow_schemas import _add_manual_num, _custom_num
 
 

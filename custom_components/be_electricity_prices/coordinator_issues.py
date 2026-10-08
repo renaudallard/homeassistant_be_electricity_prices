@@ -34,24 +34,25 @@ way for the user to clear it."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Final
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
+
 from .brugel import (
     any_cached_power_term,
     cached_power_term,
     power_term_is_indicative,
 )
-from .providers import get as get_extractor, offers_direct_debit
-
-from .providers._rates import Contract
-from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
-from .providers._resolve import omits_brussels_power_term
-from .providers._validity import card_valid_until
-
+from .cohort import _parse_iso_date, ytd_window_start
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
-    REGION_BRUSSELS,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
@@ -59,24 +60,23 @@ from .const import (
     DOMAIN,
     DSO_MODE_IMPACT,
     METER_EXCLUSIVE_NIGHT,
+    REGION_BRUSSELS,
 )
-from .cohort import _parse_iso_date, ytd_window_start
 from .fees import (
     _compensation_kva,
     compensation_lacks_kva,
     grants_a_welcome_credit,
     last_credited_day,
 )
+from .providers import get as get_extractor
+from .providers import offers_direct_debit
+from .providers._rates import Contract
+from .providers._resolve import omits_brussels_power_term
+from .providers._validity import card_valid_until
+from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
 )
-
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Final
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import issue_registry as ir
-from homeassistant.util import dt as dt_util
 
 # Every Repairs issue this integration raises, by the kind its id opens with.
 # The ids embed the entry id and only a ticking coordinator resolves them, so

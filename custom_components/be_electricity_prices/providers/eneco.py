@@ -63,6 +63,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text,
@@ -72,7 +73,15 @@ from ._pdf import (
     printed_vat_rate,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    VariableRates,
+    vat_basis,
+)
 from ._settle import settled_injection
 from ._validity import (
     archive_validity_check,
@@ -84,15 +93,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    FixedRates,
-    InjectionRates,
-    VariableRates,
-    vat_basis,
 )
 
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"

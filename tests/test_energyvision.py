@@ -27,24 +27,23 @@
 
 from __future__ import annotations
 
-from custom_components.be_electricity_prices import snapshot_resolve
-
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from custom_components.be_electricity_prices import snapshot_resolve
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     SpotMonthlyRates,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energyvision import (
     DISCOVER_IDS,

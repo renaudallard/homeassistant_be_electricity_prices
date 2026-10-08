@@ -35,8 +35,11 @@ about what the card meant.
 
 from __future__ import annotations
 
-from .base import DsoOverlay, SupplierSnapshot
-from ..vat_rates import residential_vat, standard_vat
+from dataclasses import replace
+from datetime import date
+from typing import Any
+
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     DSO_SIBELGA,
@@ -52,6 +55,7 @@ from ..const import (
     VREG_NETWORK_CEILING_KNOWN_FROM,
     VREG_NETWORK_CEILING_KNOWN_UNTIL,
 )
+from ..vat_rates import residential_vat, standard_vat
 from ._rates import (
     DynamicRates,
     EnergyRates,
@@ -61,11 +65,7 @@ from ._rates import (
     VariableRates,
     rescale_vat,
 )
-from dataclasses import replace
-from datetime import date
-from typing import Any
-
-from homeassistant.util import dt as dt_util
+from .base import DsoOverlay, SupplierSnapshot
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:

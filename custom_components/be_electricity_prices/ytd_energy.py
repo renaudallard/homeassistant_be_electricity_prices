@@ -35,14 +35,21 @@ arithmetic on a count of days.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable, Collection
+from datetime import date, datetime, timedelta
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .cohort import _month_snapshot_cache, _parse_iso_date
 from .const import (
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
-    CONF_CONTRACT_START_DATE,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DSO_MODE_BI_HORAIRE,
@@ -51,16 +58,16 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .energy_meters import _hourly_injection_sensors
-from .meter_hourly import (
-    _metered_sides,
-    _top_up_today_hourly,
-)
 from .fees import bills_gross_network, gross_network_rebate, in_first_contract_year
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
     _injection_is_spot_formula,
     _injection_replays_hourly_spot,
+)
+from .meter_hourly import (
+    _metered_sides,
+    _top_up_today_hourly,
 )
 from .pricing import (
     MeterType,
@@ -71,24 +78,18 @@ from .pricing import (
 from .providers._rates import InjectionRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .spot_stats import (
-    _NetAllocation,
     _bucket_by_local_month,
     _energy_needs_spot,
     _hour_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _NetAllocation,
     _register_for,
     _rlp_hour_weight,
     _spp_injection_spot,
 )
 from .synergrid import RlpWeights, SppWeights
 from .ytd_legs import _dso_prosumer_day
-from collections.abc import Awaitable, Callable, Collection
-from datetime import date, datetime, timedelta
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from collections.abc import Iterable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,14 +21,14 @@ from custom_components.be_electricity_prices import const, synergrid
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
 )
+from custom_components.be_electricity_prices.coordinator_profiles import _profile_store
+from custom_components.be_electricity_prices.providers._rates import RlpBlend
 from custom_components.be_electricity_prices.spot_stats import (
     _bucket_by_local_month,
     _rlp_hour_weight,
     _rlp_month_mean,
     _rlp_weighted_month_mean,
 )
-from custom_components.be_electricity_prices.providers._rates import RlpBlend
-from custom_components.be_electricity_prices.coordinator_profiles import _profile_store
 from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
 from tests import FakeBody
 
@@ -281,10 +281,11 @@ async def test_fetch_rlp_asks_for_the_all_dso_workbook_with_an_xlsb_suffix() -> 
 def _bucket_for(prices: dict[int, float]) -> Any:
     """A September 2026 bucket with one hourly price per given local hour of
     the 10th, a Thursday."""
+    from homeassistant.util import dt as dt_util
+
     from custom_components.be_electricity_prices.spot_stats import (
         _bucket_by_local_month,
     )
-    from homeassistant.util import dt as dt_util
 
     spots = {
         datetime(2026, 9, 10, h, tzinfo=dt_util.DEFAULT_TIME_ZONE).astimezone(UTC): p

@@ -33,6 +33,15 @@ the same month list rather than each deciding what a year is.
 
 from __future__ import annotations
 
+import calendar
+from collections.abc import AsyncIterator
+from datetime import date, timedelta
+from typing import NamedTuple
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
 from .cohort import _effective_snapshot_for_month
 from .const import (
     CONF_CONTRACT,
@@ -51,13 +60,6 @@ from .fees import (
 )
 from .pricing import MeterType, yearly_fixed_fee_for_meter
 from .providers.base import SupplierExtractor, SupplierSnapshot
-from collections.abc import AsyncIterator
-from datetime import date, timedelta
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from typing import NamedTuple
-import aiohttp
-import calendar
 
 
 def _days_through(start: date, end: date) -> list[date]:

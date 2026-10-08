@@ -32,9 +32,10 @@ toward a day that has not been billed."""
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from statistics import fmean
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
-from statistics import fmean
 
 from .const import (
     CONF_CONTRACT,
@@ -56,7 +57,6 @@ from .pricing import (
     is_offpeak,
     slot_start,
 )
-from .providers.base import SupplierSnapshot
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -64,6 +64,7 @@ from .providers._rates import (
     SpotMonthlyRates,
     VariableRates,
 )
+from .providers.base import SupplierSnapshot
 from .synergrid import (
     RlpWeights,
     SppWeights,

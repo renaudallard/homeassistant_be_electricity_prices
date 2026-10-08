@@ -75,26 +75,27 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
-    VAT_RATE_STANDARD,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    VAT_RATE_STANDARD,
 )
-from ._pdf import (
-    fetch_pdf_text,
-    fetch_text,
-    is_transient_fetch_error,
-    printed_vat_rate,
+from ._mega_cards import (
+    _FR_MONTH_NAMES,
+    _VAT_PATTERNS,
+    _extract_energy,
+    _extract_injection,
+    _extract_publication_month,
+    _extract_valid_until,
+    _injection_vat_applies,
+    _realized_rates,
 )
-from ._validity import (
-    archive_validity_check,
-    parse_valid_until,
-)
-from ._parse import (
-    fold_accents,
-    require_contract,
-    tier_bound_kwh,
-    to_float,
+from ._mega_contracts import (
+    _CONTRACTS,
+    _CONTRACTS_BY_ID,
+    _DIRECT_DEBIT_RISTOURNE,
+    _KNOWN_UNSUPPORTED_PRODUCTS,
+    _ContractDef,
 )
 from ._mega_overlays import (
     _extract_brussels_dsos,
@@ -114,22 +115,28 @@ from ._mega_overlays import (
     ristourne_requires_direct_debit,
     ristourne_wait_months,
 )
-from ._mega_contracts import (
-    _CONTRACTS,
-    _CONTRACTS_BY_ID,
-    _ContractDef,
-    _DIRECT_DEBIT_RISTOURNE,
-    _KNOWN_UNSUPPORTED_PRODUCTS,
+from ._parse import (
+    fold_accents,
+    require_contract,
+    tier_bound_kwh,
+    to_float,
 )
-from ._mega_cards import (
-    _FR_MONTH_NAMES,
-    _extract_energy,
-    _extract_injection,
-    _extract_publication_month,
-    _extract_valid_until,
-    _injection_vat_applies,
-    _realized_rates,
-    _VAT_PATTERNS,
+from ._pdf import (
+    fetch_pdf_text,
+    fetch_text,
+    is_transient_fetch_error,
+    printed_vat_rate,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    ImpactRates,
+    VariableRates,
+)
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
 )
 from .base import (
     CardNotReadableError,
@@ -138,13 +145,6 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    ImpactRates,
-    VariableRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

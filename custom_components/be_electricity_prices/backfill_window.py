@@ -33,6 +33,19 @@ backfill are built on this, and neither of them owns it.
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+from functools import partial
+from typing import Any
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
+
 from .brugel import ensure_power_term
 from .cohort import (
     _month_snapshot_cache,
@@ -41,12 +54,6 @@ from .cohort import (
     ytd_window_start,
 )
 from .compare_inputs import _coordinator_rlp_index_weights
-from .contract_periods import (
-    ContractPeriod,
-    current_period_start,
-    period_card,
-    previous_periods,
-)
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -62,6 +69,12 @@ from .const import (
     REGION_BRUSSELS,
     SOLAR_REGIME_COMPENSATION,
 )
+from .contract_periods import (
+    ContractPeriod,
+    current_period_start,
+    period_card,
+    previous_periods,
+)
 from .coordinator import BePricesCoordinator
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
@@ -72,17 +85,6 @@ from .snapshot_months import _snapshot_for_month, month_card_failed
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
-from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
-from functools import partial
-from datetime import UTC, date, datetime, timedelta
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-from homeassistant.util import dt as dt_util
-from typing import Any
-import aiohttp
-import asyncio
 
 
 def _stat_id(hass: HomeAssistant, entry: ConfigEntry, key: str) -> str | None:

@@ -33,13 +33,14 @@ raise rather than guess. They know nothing about which supplier printed it.
 
 from __future__ import annotations
 
-from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from .base import DsoOverlay, ExtractorError, TaxOverlay, brussels_sibelga_overlay
-from collections.abc import Sequence
-from difflib import SequenceMatcher
 import re
 import unicodedata
+from collections.abc import Sequence
+from difflib import SequenceMatcher
 from typing import TypeVar
+
+from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from .base import DsoOverlay, ExtractorError, TaxOverlay, brussels_sibelga_overlay
 
 
 def fold_accents(text: str) -> str:

@@ -34,6 +34,13 @@ comparison and the bill share.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from datetime import date, datetime, time, timedelta
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any
+
+from homeassistant.util import dt as dt_util
+
 from .const import (
     CONF_METER,
     CONF_REGION,
@@ -45,11 +52,6 @@ from .const import (
     METER_MONO,
     REGION_FLANDERS,
 )
-from collections.abc import Iterable
-from datetime import date, datetime, time, timedelta
-from functools import lru_cache
-from homeassistant.util import dt as dt_util
-from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .compare_inputs import CreditYear

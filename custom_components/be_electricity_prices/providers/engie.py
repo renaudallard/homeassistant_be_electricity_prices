@@ -52,44 +52,23 @@ snapshots carry ``vat_rate`` and their per-kWh values as printed;
 from __future__ import annotations
 
 import re
-from datetime import date
 from dataclasses import dataclass, replace
+from datetime import date
 
 import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
-    VAT_RATE_STANDARD,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    VAT_RATE_STANDARD,
 )
-from ._pdf import (
-    FR_MONTHS,
-    fetch_pdf_text,
-    fetch_text,
-    is_transient_fetch_error,
-    printed_vat_rate,
-)
-from ._validity import (
-    archive_validity_check,
-    parse_valid_until,
-)
-from ._parse import (
-    require_contract,
-    to_float,
-)
-from .base import (
-    DsoOverlay,
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-    with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    TariffKind,
+from ._engie_cards import (
+    _VAT_RE,
+    _extract_energy,
+    _extract_injection,
+    published_index,
 )
 from ._engie_overlays import (
     _extract_brussels_dsos,
@@ -100,13 +79,34 @@ from ._engie_overlays import (
     _extract_flanders_dsos,
     _extract_wallonia_dsos,
 )
-from ._engie_cards import (
-    _extract_energy,
-    _extract_injection,
-    _VAT_RE,
-    published_index,
+from ._parse import (
+    require_contract,
+    to_float,
+)
+from ._pdf import (
+    FR_MONTHS,
+    fetch_pdf_text,
+    fetch_text,
+    is_transient_fetch_error,
+    printed_vat_rate,
+)
+from ._rates import (
+    Contract,
+    TariffKind,
 )
 from ._settle import settled_energy, settled_injection
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    with_vat_basis,
+)
 
 _API_URL = (
     "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF"

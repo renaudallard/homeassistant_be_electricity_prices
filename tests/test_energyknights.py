@@ -34,13 +34,13 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     SpotMonthlyRates,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energyknights import (
     DISCOVER_IDS,

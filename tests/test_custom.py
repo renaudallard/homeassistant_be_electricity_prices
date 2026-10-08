@@ -40,17 +40,28 @@ from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.compare_flow import (
     _compare_supplier_options,
 )
+from custom_components.be_electricity_prices.coordinator import (
+    BePricesCoordinator,
+)
 from custom_components.be_electricity_prices.flow_schemas_custom import (
     _custom_dso_schema,
     _custom_energy_schema,
 )
-from custom_components.be_electricity_prices.coordinator import (
-    BePricesCoordinator,
-)
-from tests import make_entry
 from custom_components.be_electricity_prices.injection import (
     _bake_monthly_injection,
     _floor_injection,
+)
+from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
+)
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers.custom import (
+    EXTRACTOR,
+    build_snapshot,
 )
 from custom_components.be_electricity_prices.snapshot_codec import (
     _snapshot_from_dict,
@@ -59,18 +70,7 @@ from custom_components.be_electricity_prices.snapshot_codec import (
 from custom_components.be_electricity_prices.spot_stats import (
     _mean_of_month,
 )
-from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-from custom_components.be_electricity_prices.providers.base import ExtractorError
-from custom_components.be_electricity_prices.providers._rates import (
-    DynamicRates,
-    FixedRates,
-    InjectionRates,
-    SpotMonthlyRates,
-)
-from custom_components.be_electricity_prices.providers.custom import (
-    EXTRACTOR,
-    build_snapshot,
-)
+from tests import make_entry
 
 WHEN = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
 

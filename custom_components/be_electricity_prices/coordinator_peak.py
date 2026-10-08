@@ -35,9 +35,13 @@ stubs live here, with signatures matching DataUpdateCoordinator exactly."""
 
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant, State
-
 import logging
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, State
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CAPACITY_MODE_FIXED,
@@ -49,14 +53,7 @@ from .const import (
     REGION_FLANDERS,
     VREG_CAPACITY_FLOOR_KW,
 )
-
-from datetime import date, datetime
-from typing import TYPE_CHECKING
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.util import dt as dt_util
-
 from .providers.base import SupplierSnapshot
-
 
 _LOGGER = logging.getLogger(__name__)
 

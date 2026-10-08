@@ -50,7 +50,7 @@ from .const import (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
 )
-from .providers.base import SupplierSnapshot
+from .injection import _slot_coefficients
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -61,7 +61,7 @@ from .providers._rates import (
     TimeOfUseRates,
     VariableRates,
 )
-from .injection import _slot_coefficients
+from .providers.base import SupplierSnapshot
 from .snapshot_resolve import _include_vat
 
 

@@ -44,6 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
+from ._parse import SIGN_CHARS, to_float
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
@@ -51,17 +52,6 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
-from ._parse import SIGN_CHARS, to_float
-from ._validity import archive_validity_check
-from .base import (
-    DsoOverlay,
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-    with_vat_basis,
-)
-from ._settle import settled_injection
 from ._rates import (
     Contract,
     DynamicRates,
@@ -70,6 +60,16 @@ from ._rates import (
     InjectionRates,
     SpotMonthlyRates,
     TariffKind,
+)
+from ._settle import settled_injection
+from ._validity import archive_validity_check
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    with_vat_basis,
 )
 
 _LISTING_URL = "https://trevion.be/tariefkaarten/"

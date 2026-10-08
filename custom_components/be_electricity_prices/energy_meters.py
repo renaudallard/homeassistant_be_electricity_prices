@@ -36,12 +36,13 @@ bill off the same meter, is ``meter_faults``'s."""
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
+from typing import Any, TypeVar
+
 from homeassistant.components.sensor import (
     ATTR_LAST_RESET,
     ATTR_STATE_CLASS,
@@ -58,21 +59,19 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter
-from typing import Any, TypeVar
 
 from .const import (
     CONF_CONSUMPTION_KWH,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_INJECTION_KWH,
-    METER_SENSOR_KEYS,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
     CONF_SOLAR_REGIME,
+    METER_SENSOR_KEYS,
     SOLAR_REGIME_NONE,
 )
 from .year_ahead import YEAR_AHEAD, YearAhead, last_year
-
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -46,7 +46,6 @@ the coordinator from each supplier's own publication.
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
 from datetime import date
 from typing import Any
@@ -60,30 +59,29 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
 
-from .flow_switch import (
-    _record_switch,
-    _remove_last_switch,
-    _removable_switch,
-    _switch_schema,
-    _validate_switch_date,
-)
 from .compare_sweep_flow import _SweepStepsMixin
 from .const import (
     CONF_CONTRACT,
-    CONF_SWITCH_DATE,
     CONF_DSO,
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
+    CONF_SWITCH_DATE,
     DOMAIN,
     METER_EXCLUSIVE_NIGHT,
 )
+from .flow_switch import (
+    _record_switch,
+    _removable_switch,
+    _remove_last_switch,
+    _switch_schema,
+    _validate_switch_date,
+)
+from .flow_wizard import _WizardStepsMixin
 from .providers import (
     get as get_extractor,
 )
 from .providers.base import ExtractorError
-from .flow_wizard import _WizardStepsMixin
-
 
 # ---- shared schema builders ---------------------------------------------------
 

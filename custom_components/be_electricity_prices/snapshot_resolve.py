@@ -64,7 +64,6 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
-from .providers.base import SupplierSnapshot
 from .providers._resolve import (
     apply_vat,
     resolve_brussels_power_term,
@@ -73,11 +72,12 @@ from .providers._resolve import (
     resolve_federal_contribution,
     resolve_federal_excise,
     resolve_settlement_grid,
+    resolve_vat_rate,
     resolve_volume_tier,
     resolve_vreg_network_ceiling,
-    resolve_vat_rate,
     resolve_welcome_credit_meter,
 )
+from .providers.base import SupplierSnapshot
 
 
 def _include_vat(entry: ConfigEntry) -> bool:

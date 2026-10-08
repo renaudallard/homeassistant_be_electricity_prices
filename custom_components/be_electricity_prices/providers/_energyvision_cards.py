@@ -31,11 +31,12 @@ coefficient set, the direct-debit discount and the SPP-weighted feed-in leg.
 
 from __future__ import annotations
 
+import re
+
 from ._parse import SIGN_CHARS, parse_sign, tier_bound_kwh, to_float
 from ._pdf import NUM_NO_THOUSANDS, vat_multiplier
 from ._rates import DynamicRates, FixedRates, InjectionRates, SpotMonthlyRates
 from .base import ExtractorError
-import re
 
 _NUM = NUM_NO_THOUSANDS
 

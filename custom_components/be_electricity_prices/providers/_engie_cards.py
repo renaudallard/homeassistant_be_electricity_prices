@@ -32,7 +32,12 @@ they are not interchangeable, which is most of why this is the long half.
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
+from datetime import date
+
 from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import (
     DynamicRates,
     EnergyRates,
@@ -43,10 +48,6 @@ from ._rates import (
     fixed_or_variable_rates,
 )
 from .base import ExtractorError
-from dataclasses import replace
-from datetime import date
-import re
-from ._pdf import _MONTH_NAMES, vat_multiplier
 
 
 def _epexdam_formulas(

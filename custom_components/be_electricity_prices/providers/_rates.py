@@ -34,11 +34,11 @@ without pulling in the pricing engine.
 
 from __future__ import annotations
 
-from ..const import REGIONS, VAT_RATE_REDUCED
 from dataclasses import dataclass, field, fields, replace
 from datetime import date
 from typing import Literal
 
+from ..const import REGIONS, VAT_RATE_REDUCED
 
 TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"

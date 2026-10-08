@@ -33,9 +33,17 @@ nobody watching.
 
 from __future__ import annotations
 
-from .compare_flow import _CompareStepsMixin, _REFRESH_FIELD, _YTD_FIELD
+import asyncio
+import logging
+from typing import Any
+
+import voluptuous as vol
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .compare_engine import _SweepEngine, evict_sweep_rows
+from .compare_flow import _REFRESH_FIELD, _YTD_FIELD, _CompareStepsMixin
 from .compare_inputs import _candidate_label, _effective_regime
 from .compare_table import RankedRow, _ranking_table
 from .const import (
@@ -48,13 +56,6 @@ from .const import (
 )
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .providers import get as get_extractor
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-from typing import Any
-import asyncio
-import logging
-import voluptuous as vol
 
 _LOGGER = logging.getLogger(__name__)
 

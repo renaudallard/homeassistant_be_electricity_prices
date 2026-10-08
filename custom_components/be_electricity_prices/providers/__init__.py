@@ -36,13 +36,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..const import CONF_CONTRACT, CONF_QUARTER_HOURLY, CONF_SUPPLIER
-from .base import (
-    DsoOverlay,
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from ._rates import (
     Contract,
     DynamicRates,
@@ -52,6 +45,13 @@ from ._rates import (
     VariableRates,
 )
 from .aspiravi import EXTRACTOR as _ASPIRAVI
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+)
 from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
 from .custom import EXTRACTOR as _CUSTOM
@@ -63,8 +63,8 @@ from .eneco import EXTRACTOR as _ENECO
 from .energiebe import EXTRACTOR as _ENERGIEBE
 from .energyknights import EXTRACTOR as _ENERGYKNIGHTS
 from .energyvision import EXTRACTOR as _ENERGYVISION
-from .frank import EXTRACTOR as _FRANK
 from .engie import EXTRACTOR as _ENGIE
+from .frank import EXTRACTOR as _FRANK
 from .luminus import EXTRACTOR as _LUMINUS
 from .mega import EXTRACTOR as _MEGA
 from .octaplus import EXTRACTOR as _OCTAPLUS

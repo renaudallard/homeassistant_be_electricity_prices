@@ -57,6 +57,8 @@ from ..const import (
     REGION_WALLONIA,
     WALLONIA_DSO_KEYS,
 )
+from ._cociter_settle import published_belix
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._pdf import (
     FR_MONTHS,
     fetch_pdf_text,
@@ -64,9 +66,15 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
-from ._cociter_settle import published_belix
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    ImpactRates,
+    InjectionRates,
+    VariableRates,
+)
 from ._settle import settled_energy
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -78,14 +86,6 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    ImpactRates,
-    InjectionRates,
-    VariableRates,
 )
 
 _INDEX_URL = "https://www.cociter.be/electricite/cartes-tarifaires/"

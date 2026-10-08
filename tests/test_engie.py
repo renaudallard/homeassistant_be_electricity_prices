@@ -28,10 +28,10 @@
 from __future__ import annotations
 
 import asyncio
-
-import pytest
 from datetime import date
 from typing import Any
+
+import pytest
 
 from custom_components.be_electricity_prices.const import (
     REGION_BRUSSELS,
@@ -39,15 +39,15 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from tests import fixture_text
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     TimeOfUseRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.engie import parse_snapshot
+from tests import fixture_text
 
 
 def _dynamic_three_regions() -> dict[str, str]:

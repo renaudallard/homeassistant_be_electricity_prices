@@ -80,6 +80,13 @@ from ..const import (
     REGION_FLANDERS,
     WELCOME_CREDIT_ANNIVERSARY,
 )
+from ._parse import (
+    SIGN_CHARS,
+    parse_sign,
+    parse_vreg_network_ceiling,
+    regional_tax_overlay,
+    to_float,
+)
 from ._pdf import (
     _MONTH_NAMES,
     NL_MONTHS,
@@ -89,12 +96,10 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
-from ._parse import (
-    SIGN_CHARS,
-    parse_sign,
-    parse_vreg_network_ceiling,
-    regional_tax_overlay,
-    to_float,
+from ._rates import (
+    Contract,
+    DynamicRates,
+    InjectionRates,
 )
 from ._validity import (
     archive_validity_check,
@@ -108,11 +113,6 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    InjectionRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

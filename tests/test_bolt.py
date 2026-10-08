@@ -35,27 +35,26 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers import effective_kind
-from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.pricing import compute_breakdown
-from tests import FIXTURES, fixture_text
-from custom_components.be_electricity_prices.providers.base import (
-    CardNotReadableError,
-    ExtractorError,
-)
-from custom_components.be_electricity_prices.providers._resolve import (
-    resolve_settlement_grid,
+from custom_components.be_electricity_prices.providers import EXTRACTORS, effective_kind
+from custom_components.be_electricity_prices.providers import bolt as bolt_mod
+from custom_components.be_electricity_prices.providers._pdf import (
+    is_transient_fetch_error,
 )
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
-from custom_components.be_electricity_prices.providers._pdf import (
-    is_transient_fetch_error,
+from custom_components.be_electricity_prices.providers._resolve import (
+    resolve_settlement_grid,
 )
+from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
+    ExtractorError,
+)
+from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
+from tests import FIXTURES, fixture_text
 
 # pdfplumber takes about a minute to lay out one Bolt card on a Raspberry Pi
 # 4, most of it loading the vector art, and a test reading several cards

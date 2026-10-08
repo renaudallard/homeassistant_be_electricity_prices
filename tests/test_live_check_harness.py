@@ -42,11 +42,11 @@ import re
 import shutil
 import subprocess
 import sys
-from datetime import date, datetime
-from types import SimpleNamespace
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
+from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import aiohttp
@@ -1257,7 +1257,6 @@ def test_no_standing_charge_matches_the_cards() -> None:
     """
     from custom_components.be_electricity_prices.const import REGION_FLANDERS
     from custom_components.be_electricity_prices.providers import ecopower, engie
-
     from tests import fixture_text
 
     cards = {
@@ -1287,7 +1286,6 @@ def test_the_abonnement_floor_is_dropped_per_region_not_per_contract() -> None:
     ``no_standing_charge`` override exists for exactly this, and these are
     the figures it is sized on."""
     from custom_components.be_electricity_prices.providers import energyvision
-
     from tests import fixture_text
 
     fees = {
@@ -1350,11 +1348,11 @@ def test_the_vat_check_reads_the_contract_shape_it_is_actually_given() -> None:
     really passes.
     """
     from custom_components.be_electricity_prices.providers import mega
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
-    from custom_components.be_electricity_prices.providers._rates import InjectionRates
     from custom_components.be_electricity_prices.providers._mega_cards import (
         _injection_vat_applies,
     )
+    from custom_components.be_electricity_prices.providers._rates import InjectionRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from tests import fixture_text
 
     text = fixture_text("mega_pro_dynamic_w.pdf", layout=True)
@@ -1470,7 +1468,6 @@ def test_every_month_indexed_eneco_card_is_pinned_in_the_shape_map() -> None:
     """
     from custom_components.be_electricity_prices.const import REGION_FLANDERS
     from custom_components.be_electricity_prices.providers.eneco import parse_snapshot
-
     from tests import fixture_text
 
     for fixture, cid in (
@@ -2167,16 +2164,16 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     a factor ten out all passed green and billed. Every populated figure now
     sits inside a band sized on the unit slip it catches, and a real card
     (the September 2026 figures below) trips none of them."""
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        TaxOverlay,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         ImpactRates,
         InjectionRates,
         TimeOfUseRates,
         VariableRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
     )
 
     monkeypatch.setitem(lc._EXPECTED_DSOS, "wallonia", frozenset({"ores"}))

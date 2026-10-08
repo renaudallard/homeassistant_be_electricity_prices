@@ -59,12 +59,14 @@ import re
 import struct
 import tempfile
 import zipfile
-from datetime import datetime, timedelta
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import IO, Any, Final, get_args
 from urllib.parse import unquote, urljoin
+
+import aiohttp
 
 # The four parses below run over a REMOTE workbook. The stdlib parser
 # already refuses an EXTERNAL entity (it raises ParseError rather than
@@ -76,8 +78,6 @@ from urllib.parse import unquote, urljoin
 # one, so peak memory on the 52 MB file is unchanged.
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
-
-import aiohttp
 
 from .providers._pdf import USER_AGENT, read_text_capped
 from .providers._rates import RlpBlend

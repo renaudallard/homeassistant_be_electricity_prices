@@ -33,6 +33,8 @@ regulator's calendar rather than the product's.
 
 from __future__ import annotations
 
+import re
+
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
@@ -51,8 +53,6 @@ from .base import (
     brussels_sibelga_overlay,
     walloon_dso_overlay,
 )
-import re
-
 
 # Since October 2026 the fixed cards fold the green energy contribution into
 # their energy prices and state it once, in footnote 0:

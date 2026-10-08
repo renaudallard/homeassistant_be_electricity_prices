@@ -27,22 +27,21 @@
 
 from __future__ import annotations
 
-from datetime import date
-from unittest.mock import AsyncMock
-
 import re
+from datetime import date
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     SpotMonthlyRates,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.trevion import (
     _BY_ID,
     _extract_validity,

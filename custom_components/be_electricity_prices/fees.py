@@ -42,8 +42,8 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import (
     CONF_CONNECTION_KVA_TIER,
-    CONF_DSO,
     CONF_DOUBLE_FLOW_METER,
+    CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,

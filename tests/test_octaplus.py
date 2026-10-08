@@ -38,18 +38,18 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import ExtractorError
-from custom_components.be_electricity_prices.providers._rates import (
-    DynamicRates,
-    FixedRates,
-    VariableRates,
-)
-from custom_components.be_electricity_prices.providers.octaplus import parse_snapshot
 from custom_components.be_electricity_prices.providers._octaplus_overlays import (
     _extract_flanders_renewables,
     _extract_taxes,
     _extract_wallonia_renewables,
 )
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    FixedRates,
+    VariableRates,
+)
+from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers.octaplus import parse_snapshot
 from tests import FIXTURES, fixture_text
 
 

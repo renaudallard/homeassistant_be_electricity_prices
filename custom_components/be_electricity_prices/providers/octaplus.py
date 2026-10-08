@@ -58,6 +58,15 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
 )
+from ._octaplus_overlays import (
+    _extract_flanders_dsos,
+    _extract_flanders_renewables,
+    _extract_supplier_prosumer,
+    _extract_taxes,
+    _extract_wallonia_dsos,
+    _extract_wallonia_renewables,
+)
+from ._parse import SIGN_CHARS, fold_accents, parse_sign, require_contract, to_float
 from ._pdf import (
     FR_MONTHS,
     _is_pdf_payload,
@@ -71,17 +80,6 @@ from ._pdf import (
     render_pdf,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS, fold_accents, parse_sign, require_contract, to_float
-from ._validity import (
-    archive_validity_check,
-    parse_valid_until,
-)
-from .base import (
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from ._rates import (
     Contract,
     DynamicRates,
@@ -93,13 +91,15 @@ from ._rates import (
     fixed_or_variable_rates,
     vat_basis,
 )
-from ._octaplus_overlays import (
-    _extract_flanders_dsos,
-    _extract_flanders_renewables,
-    _extract_supplier_prosumer,
-    _extract_taxes,
-    _extract_wallonia_dsos,
-    _extract_wallonia_renewables,
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from .base import (
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 
 _BASE_URL = "https://files.octaplus.be/tariffs"

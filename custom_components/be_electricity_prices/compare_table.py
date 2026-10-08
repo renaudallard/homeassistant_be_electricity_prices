@@ -33,12 +33,14 @@ wording change cannot touch a bill.
 
 from __future__ import annotations
 
-from .const import SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from homeassistant.util import dt as dt_util
 from typing import Any
+
+from homeassistant.util import dt as dt_util
+
+from .const import SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION
 
 
 def _populate_charts(

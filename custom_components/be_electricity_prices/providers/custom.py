@@ -99,13 +99,6 @@ from ..const import (
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
-from .base import (
-    DsoOverlay,
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from ._rates import (
     Contract,
     DynamicRates,
@@ -113,6 +106,13 @@ from ._rates import (
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
+)
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 
 _CONTRACTS: tuple[Contract, ...] = (

@@ -112,6 +112,23 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+# scripts/ is not a package; the line above puts it on sys.path so the card
+# month is read by the same function the live check's freshness gate uses,
+# and the render cache is the one the live check reads too.
+from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
+    StoredTexts,
+    digest_of,
+    engine_version,
+    in_daemon_thread,
+    read_text,
+    readers_line,
+)
+from homeassistant.helpers.json import json_dumps  # noqa: E402
+from live_check import (  # type: ignore[import-not-found]  # noqa: E402
+    _fetch_with_retry,
+    label_month,
+)
+
 from custom_components.be_electricity_prices.const import (  # noqa: E402
     SUPPLIER_CUSTOM,
 )
@@ -143,20 +160,6 @@ from custom_components.be_electricity_prices.snapshot_codec import (  # noqa: E4
 from custom_components.be_electricity_prices.snapshot_months import (  # noqa: E402
     _settles_after_its_month,
 )
-from homeassistant.helpers.json import json_dumps  # noqa: E402
-
-# scripts/ is not a package; the line above puts it on sys.path so the card
-# month is read by the same function the live check's freshness gate uses,
-# and the render cache is the one the live check reads too.
-from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
-    StoredTexts,
-    digest_of,
-    engine_version,
-    in_daemon_thread,
-    read_text,
-    readers_line,
-)
-from live_check import _fetch_with_retry, label_month  # type: ignore[import-not-found]  # noqa: E402
 
 _T = TypeVar("_T")
 _BRUSSELS = ZoneInfo("Europe/Brussels")

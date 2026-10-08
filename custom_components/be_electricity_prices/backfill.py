@@ -60,33 +60,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util import dt as dt_util
 
-from .const import (
-    CONF_CONTRACT,
-    CONF_REGION,
-    CONF_SOLAR_REGIME,
-    CONF_SUPPLIER,
-    SOLAR_REGIME_INJECTION,
+from .backfill_cost import (
+    _backfill_cost_sensor,
+    _injection_rate_for_hour,
 )
-from .cohort import (
-    _cohort_energy_leg,
-    ytd_window_start,
-)
-from .contract_periods import periods_need_spots, previous_periods
-from .coordinator import BePricesCoordinator
-from .coordinator_data import ytd_window_reset
-from .injection import (
-    _injection_needs_month_spot,
-    _injection_needs_spot,
-)
-from .spot_stats import (
-    _bucket_by_local_month,
-    _energy_needs_spot,
-    _hour_spot,
-)
-from .pricing import (
-    compute_breakdown,
-)
-from .providers import get as get_extractor
 from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
@@ -101,9 +78,32 @@ from .backfill_window import (
     _stand_in_spans,
     _stat_id,
 )
-from .backfill_cost import (
-    _backfill_cost_sensor,
-    _injection_rate_for_hour,
+from .cohort import (
+    _cohort_energy_leg,
+    ytd_window_start,
+)
+from .const import (
+    CONF_CONTRACT,
+    CONF_REGION,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    SOLAR_REGIME_INJECTION,
+)
+from .contract_periods import periods_need_spots, previous_periods
+from .coordinator import BePricesCoordinator
+from .coordinator_data import ytd_window_reset
+from .injection import (
+    _injection_needs_month_spot,
+    _injection_needs_spot,
+)
+from .pricing import (
+    compute_breakdown,
+)
+from .providers import get as get_extractor
+from .spot_stats import (
+    _bucket_by_local_month,
+    _energy_needs_spot,
+    _hour_spot,
 )
 
 _LOGGER = logging.getLogger(__name__)

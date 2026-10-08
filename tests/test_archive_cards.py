@@ -23,16 +23,16 @@ import pytest
 from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
 from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
+from custom_components.be_electricity_prices.providers._rates import (
+    Contract,
+    FixedRates,
+    VariableRates,
+)
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
     ExtractorError,
     SupplierExtractor,
     SupplierSnapshot,
-)
-from custom_components.be_electricity_prices.providers._rates import (
-    Contract,
-    FixedRates,
-    VariableRates,
 )
 from tests import FakeBody, make_snapshot
 

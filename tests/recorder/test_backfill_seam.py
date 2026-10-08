@@ -44,7 +44,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     StatisticMeanType,

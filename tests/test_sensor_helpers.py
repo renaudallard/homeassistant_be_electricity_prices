@@ -27,8 +27,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -51,7 +51,6 @@ from custom_components.be_electricity_prices.sensor_values import (
     _tomorrow_max,
     _tomorrow_min,
 )
-
 
 # Pin the synthetic-day fixtures to 2026-05-15 (a non-DST Thursday in
 # Brussels). The previous helpers used dt_util.now() which would have

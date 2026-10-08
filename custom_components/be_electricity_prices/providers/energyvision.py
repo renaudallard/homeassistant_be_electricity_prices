@@ -95,31 +95,12 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._pdf import (
-    fetch_pdf_text_layout,
-    fetch_text,
-    head_freshness_key,
-    head_or_raise,
-    is_transient_fetch_error,
-    printed_vat_rate,
-)
-from ._validity import (
-    archive_validity_check,
-    parse_valid_until,
-)
-from ._parse import (
-    to_float,
-)
-from .base import (
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    EnergyRates,
-    TariffKind,
+from ._energyvision_cards import (
+    _VAT_RE,
+    _direct_debit_discount,
+    _extract_dynamic,
+    _extract_fixed,
+    _extract_tiered,
 )
 from ._energyvision_overlays import (
     _extract_brussels_dsos,
@@ -130,12 +111,31 @@ from ._energyvision_overlays import (
 from ._energyvision_wallonia import (
     _parse_wallonia,
 )
-from ._energyvision_cards import (
-    _direct_debit_discount,
-    _extract_dynamic,
-    _extract_fixed,
-    _extract_tiered,
-    _VAT_RE,
+from ._parse import (
+    to_float,
+)
+from ._pdf import (
+    fetch_pdf_text_layout,
+    fetch_text,
+    head_freshness_key,
+    head_or_raise,
+    is_transient_fetch_error,
+    printed_vat_rate,
+)
+from ._rates import (
+    Contract,
+    EnergyRates,
+    TariffKind,
+)
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from .base import (
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    with_vat_basis,
 )
 from .energiebe import _NUM
 

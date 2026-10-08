@@ -40,6 +40,18 @@ it ran on a card indexed on that month (``_snapshot_for_month``).
 
 from __future__ import annotations
 
+import json
+import logging
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
+from typing import Any
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
 from .const import (
     CARD_ARCHIVE_FIRST_MONTH,
     CARD_ARCHIVE_URL,
@@ -63,18 +75,6 @@ from .snapshot_codec import (
     _snapshot_to_dict,
 )
 from .snapshot_resolve import _resolve_snapshot
-from .spot_stats import _injection_on_month_mean
-from collections.abc import Sequence
-from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-from typing import Any
-import aiohttp
-import json
-import logging
-
 from .snapshot_store import (
     _MONTHLY_FAILURE_TTL,
     _MONTHLY_PROVISIONAL_TTL,
@@ -85,6 +85,7 @@ from .snapshot_store import (
     _monthly_snapshots,
     _tuple_generation,
 )
+from .spot_stats import _injection_on_month_mean
 
 _LOGGER = logging.getLogger(__name__)
 

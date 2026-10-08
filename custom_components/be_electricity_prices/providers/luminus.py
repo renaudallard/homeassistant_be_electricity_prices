@@ -49,8 +49,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import date
 from dataclasses import dataclass, replace
+from datetime import date
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -59,30 +59,12 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._pdf import (
-    FR_MONTHS,
-    fetch_pdf_text,
-    fetch_text,
-    is_transient_fetch_error,
-    printed_vat_rate,
-)
-from ._validity import (
-    archive_validity_check,
-    parse_valid_until,
-)
-from ._parse import (
-    require_contract,
-)
-from .base import (
-    ExtractorError,
-    SupplierExtractor,
-    SupplierSnapshot,
-    TaxOverlay,
-    with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    TariffKind,
+from ._luminus_cards import (
+    _VAT_PATTERNS,
+    _extract_energy,
+    _extract_injection,
+    _extract_promo,
+    published_indices,
 )
 from ._luminus_overlays import (
     _extract_energy_fund,
@@ -92,14 +74,32 @@ from ._luminus_overlays import (
     _extract_wallonia_dsos,
     _extract_wallonia_renewables,
 )
-from ._luminus_cards import (
-    _extract_energy,
-    _extract_injection,
-    _extract_promo,
-    _VAT_PATTERNS,
-    published_indices,
+from ._parse import (
+    require_contract,
+)
+from ._pdf import (
+    FR_MONTHS,
+    fetch_pdf_text,
+    fetch_text,
+    is_transient_fetch_error,
+    printed_vat_rate,
+)
+from ._rates import (
+    Contract,
+    TariffKind,
 )
 from ._settle import settled_energy, settled_injection
+from ._validity import (
+    archive_validity_check,
+    parse_valid_until,
+)
+from .base import (
+    ExtractorError,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    with_vat_basis,
+)
 
 _API_URL = "https://www.luminus.be/api-next/get-pricelist/"
 

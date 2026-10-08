@@ -42,10 +42,8 @@ argument for it.
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from typing import Any
-
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
@@ -59,8 +57,16 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .providers import all_extractors, offers_quarter_hourly, settlement_answer
-
+from .compare_engine import (
+    _SweepEngine,
+)
+from .compare_inputs import (
+    _effective_regime,
+    _kva,
+    _label_for_contract,
+    _label_for_supplier,
+)
+from .compare_placeholders import _PlaceholdersMixin
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
@@ -80,27 +86,18 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
-from .flow_schemas import (
-    _settlement_schema,
-    _validate_entsoe_key,
-)
-from .flow_schemas_meters import _compare_solar_schema
 from .flow_contracts import (
     _contract_has_spot_injection,
     _contract_is_professional,
     _contract_kind,
     _contracts_for,
 )
-from .compare_placeholders import _PlaceholdersMixin
-from .compare_inputs import (
-    _effective_regime,
-    _kva,
-    _label_for_contract,
-    _label_for_supplier,
+from .flow_schemas import (
+    _settlement_schema,
+    _validate_entsoe_key,
 )
-from .compare_engine import (
-    _SweepEngine,
-)
+from .flow_schemas_meters import _compare_solar_schema
+from .providers import all_extractors, offers_quarter_hourly, settlement_answer
 
 
 def _compare_supplier_options(

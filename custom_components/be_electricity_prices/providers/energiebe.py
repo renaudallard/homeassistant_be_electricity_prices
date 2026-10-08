@@ -55,12 +55,11 @@ Region: Flanders only (all 8 Fluvius sub-areas).
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import json
-from datetime import date
 import logging
 import re
+from dataclasses import replace
+from datetime import date
 
 import aiohttp
 
@@ -69,6 +68,7 @@ from ..const import (
     REGION_FLANDERS,
     VAT_RATE_REDUCED,
 )
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, regional_tax_overlay, to_float
 from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
@@ -76,7 +76,15 @@ from ._pdf import (
     fetch_text,
     is_transient_fetch_error,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, regional_tax_overlay, to_float
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    vat_basis,
+)
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -87,15 +95,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    FixedRates,
-    InjectionRates,
-    SpotMonthlyRates,
-    vat_basis,
 )
 
 _LOGGER = logging.getLogger(__name__)

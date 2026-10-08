@@ -30,36 +30,36 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from dataclasses import replace
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import _mega_cards as cards_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
-from tests import FIXTURES, fixture_text
-from custom_components.be_electricity_prices.providers.mega import fetch as mega_fetch
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
-from custom_components.be_electricity_prices.providers._resolve import (
-    resolve_direct_debit,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     ImpactRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers._resolve import (
+    resolve_direct_debit,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
+)
 from custom_components.be_electricity_prices.providers.mega import (
     _find_pdf_url,
     _resolve_pdf_url,
     parse_snapshot,
 )
+from custom_components.be_electricity_prices.providers.mega import fetch as mega_fetch
+from tests import FIXTURES, fixture_text
 
 
 def test_mega_is_registered() -> None:

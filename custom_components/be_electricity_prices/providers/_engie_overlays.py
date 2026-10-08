@@ -33,6 +33,8 @@ table in particular is the federal one, and it moved under Engie's feet in
 
 from __future__ import annotations
 
+import re
+
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
@@ -51,7 +53,6 @@ from ..const import (
 )
 from ._parse import numeric_row, parse_sibelga_row, tier_bound_kwh, to_float
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
-import re
 
 
 def _extract_consumption_renewables(text: str) -> float:

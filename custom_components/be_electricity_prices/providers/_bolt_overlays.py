@@ -33,6 +33,9 @@ beside the tables they read.
 
 from __future__ import annotations
 
+import logging
+import re
+
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
@@ -59,8 +62,6 @@ from .base import (
     brussels_sibelga_overlay,
     walloon_dso_overlay,
 )
-import logging
-import re
 
 _LOGGER = logging.getLogger(__name__)
 

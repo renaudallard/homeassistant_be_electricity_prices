@@ -64,12 +64,31 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
-    VAT_RATE_STANDARD,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    VAT_RATE_STANDARD,
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
+)
+from ._bolt_cards import (
+    _VAT_PHRASE_RE,
+    _extract_energy,
+    _extract_injection,
+    _extract_promotion,
+    _prints_promotion,
+    _with_index_card_formula,
+)
+from ._bolt_overlays import (
+    _extract_brussels_dsos,
+    _extract_energy_fund,
+    _extract_flanders_dsos,
+    _extract_renewables,
+    _extract_taxes,
+    _extract_wallonia_dsos,
+)
+from ._parse import (
+    require_contract,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -80,12 +99,14 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
+from ._rates import (
+    Contract,
+    TariffKind,
+    vat_basis,
+)
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
-)
-from ._parse import (
-    require_contract,
 )
 from .base import (
     CardNotReadableError,
@@ -93,27 +114,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-from ._rates import (
-    Contract,
-    TariffKind,
-    vat_basis,
-)
-from ._bolt_overlays import (
-    _extract_brussels_dsos,
-    _extract_energy_fund,
-    _extract_flanders_dsos,
-    _extract_renewables,
-    _extract_taxes,
-    _extract_wallonia_dsos,
-)
-from ._bolt_cards import (
-    _VAT_PHRASE_RE,
-    _extract_energy,
-    _extract_injection,
-    _extract_promotion,
-    _prints_promotion,
-    _with_index_card_formula,
 )
 
 _LOGGER = logging.getLogger(__name__)

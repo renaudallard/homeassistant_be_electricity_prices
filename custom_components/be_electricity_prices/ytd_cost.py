@@ -37,11 +37,12 @@ shows up as a seam, not an exception."""
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from typing import Any
+
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any
-import aiohttp
 
 from .cohort import (
     _cohort_energy_leg,
@@ -66,7 +67,6 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .meter_daily import _resolve_daily_kwh
 from .fees import (
     _welcome_credit_eur,
     first_year_net_kwh,
@@ -77,14 +77,11 @@ from .fees import (
 from .injection import (
     _historical_injection_rate,
 )
+from .meter_daily import _resolve_daily_kwh
 from .pricing import (
     MeterType,
     renewables_eur_per_kwh,
     static_breakdown,
-)
-from .providers.base import (
-    SupplierExtractor,
-    SupplierSnapshot,
 )
 from .providers._rates import (
     DynamicRates,
@@ -92,15 +89,19 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
 )
+from .providers.base import (
+    SupplierExtractor,
+    SupplierSnapshot,
+)
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import (
-    _NetAllocation,
     _bucket_by_local_month,
     _day_register_weights,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
-    _spp_weighting_enabled,
+    _NetAllocation,
     _spp_injection_spot,
+    _spp_weighting_enabled,
 )
 from .synergrid import (
     RlpWeights,
@@ -119,7 +120,6 @@ from .ytd_legs import (
     _ytd_prosumer,
     _ytd_static_fees,
 )
-
 
 # Which hour stands for each meter register when a card prints one feed-in rate
 # per register. The walk is per DAY and the register split is the DSO's day and

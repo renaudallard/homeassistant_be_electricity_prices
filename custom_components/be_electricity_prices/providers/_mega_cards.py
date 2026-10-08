@@ -41,13 +41,11 @@ from __future__ import annotations
 import re
 from datetime import date
 
+from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import (
     FR_MONTHS,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS, parse_sign, to_float
-from ._validity import end_of_month
-from .base import ExtractorError
 from ._rates import (
     DynamicRates,
     EnergyRates,
@@ -58,6 +56,8 @@ from ._rates import (
     TariffKind,
     VariableRates,
 )
+from ._validity import end_of_month
+from .base import ExtractorError
 
 # Mega prints two distinct formulas in every Dynamic PDF:
 #   - Consumption: "...la formule tarifaire suivante : Day Ahead ... * X + Y c€/kWh"

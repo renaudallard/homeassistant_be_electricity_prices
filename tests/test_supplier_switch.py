@@ -23,16 +23,16 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices import (
     backfill_window,
     cohort,
     contract_periods,
     energy_meters,
-    ytd_cost,
     snapshot_months,
+    ytd_cost,
     ytd_energy,
 )
-from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices.cohort import _CohortLegs
 from custom_components.be_electricity_prices.compare_inputs import _QuoteEntry
 from custom_components.be_electricity_prices.const import (
@@ -64,8 +64,8 @@ from custom_components.be_electricity_prices.contract_periods import (
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.flow_switch import (
     _record_switch,
-    _remove_last_switch,
     _removable_switch,
+    _remove_last_switch,
     _validate_contract_dates,
     _validate_switch_date,
 )

@@ -27,11 +27,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
+
+import pytest
 
 from custom_components.be_electricity_prices import (
     snapshot_resolve,
@@ -42,16 +42,16 @@ from custom_components.be_electricity_prices.providers import (
     effective_kind,
     offers_quarter_hourly,
 )
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
+from custom_components.be_electricity_prices.providers._rates import (
+    DynamicRates,
+    VariableRates,
 )
 from custom_components.be_electricity_prices.providers._resolve import (
     resolve_settlement_grid,
 )
-from custom_components.be_electricity_prices.providers._rates import (
-    DynamicRates,
-    VariableRates,
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.frank import (
     _CARD_SELECT,

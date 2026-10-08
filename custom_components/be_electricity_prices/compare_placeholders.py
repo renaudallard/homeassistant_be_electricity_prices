@@ -33,19 +33,29 @@ anything, so it lives away from the steps that do.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
 from homeassistant.config_entries import OptionsFlow
-from .const import (
-    CONF_API_KEY,
-    CONF_CONTRACT,
-    CONF_CONTRACT_START_DATE,
-    CONF_METER,
-    CONF_SUPPLIER,
-    DEFAULT_ANNUAL_CONSUMPTION_KWH,
-    METER_MONO,
-    SOLAR_REGIME_INJECTION,
-    SPOT_PRICED_CONTRACT_KINDS,
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
+
+from .cohort import _parse_iso_date, _signed_in, _tariff_card_month
+from .compare_engine import _SweepEngine
+from .compare_household import _meters_rewired
+from .compare_inputs import (
+    _coordinator_rlp_index_weights,
+    _coordinator_rlp_weights,
+    _coordinator_spp_weights,
+    _detached_spot_view,
+    _keyless_stale_spots,
+    _kva,
+    _label_for_contract,
+    _label_for_supplier,
+    _quote_entry,
+    _spots_cover,
+    _target_dso_mode,
 )
 from .compare_quote import (
     _annual_bill,
@@ -62,27 +72,20 @@ from .compare_table import (
     _whatif_note,
 )
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
-from .flow_contracts import _contract_kind
-from .cohort import _parse_iso_date, _signed_in, _tariff_card_month
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.util import dt as dt_util
-from .providers import get as get_extractor, settlement_answer
-from .compare_engine import _SweepEngine
-from .compare_household import _meters_rewired
-from .compare_inputs import (
-    _detached_spot_view,
-    _coordinator_rlp_index_weights,
-    _coordinator_rlp_weights,
-    _coordinator_spp_weights,
-    _keyless_stale_spots,
-    _kva,
-    _label_for_contract,
-    _label_for_supplier,
-    _quote_entry,
-    _spots_cover,
-    _target_dso_mode,
+from .const import (
+    CONF_API_KEY,
+    CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
+    CONF_METER,
+    CONF_SUPPLIER,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    METER_MONO,
+    SOLAR_REGIME_INJECTION,
+    SPOT_PRICED_CONTRACT_KINDS,
 )
-from collections.abc import Mapping
+from .flow_contracts import _contract_kind
+from .providers import get as get_extractor
+from .providers import settlement_answer
 
 
 class _PlaceholdersMixin(OptionsFlow):
@@ -232,8 +235,8 @@ class _PlaceholdersMixin(OptionsFlow):
         # 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, overstating the
         # alternative by about 169 EUR/yr. The user's own side comes off the
         # coordinator and IS resolved, so the comparison was biased.
-        from .snapshot_store import fetch_shared
         from .snapshot_resolve import _resolve_snapshot
+        from .snapshot_store import fetch_shared
 
         # Through the shared policy rather than extractor.fetch directly, but
         # asking for a fresh card: this is one quote the user explicitly asked

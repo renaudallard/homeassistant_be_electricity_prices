@@ -41,7 +41,6 @@ from homeassistant.config_entries import (
     ConfigEntryChange,
     ConfigEntryState,
 )
-from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -49,8 +48,11 @@ from homeassistant.core import (
     SupportsResponse,
     callback,
 )
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.helpers import (
     config_validation as cv,
+)
+from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -60,16 +62,18 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 
 from .backfill import backfill_if_missing, backfill_range
+from .compare_engine import evict_sweep_rows
 from .const import (
-    CONF_DAILY_COMPARE,
     CONF_CONTRACT,
     CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
     CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_DAILY_COMPARE,
     CONF_DSO_TARIFF_MODE,
-    CONF_REGION,
     CONF_QUARTER_HOURLY,
+    CONF_REGION,
     CONF_SUPPLIER,
+    COSTS_STORAGE_VERSION,
     DAILY_COMPARE_WINDOW_MINUTES,
     DEFAULT_DAILY_COMPARE,
     DOMAIN,
@@ -77,7 +81,6 @@ from .const import (
     PLATFORMS,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
-    COSTS_STORAGE_VERSION,
     STORAGE_VERSION,
     SUPPLIER_CUSTOM,
 )
@@ -85,9 +88,8 @@ from .coordinator import BePricesCoordinator
 from .coordinator_issues import clear_issues
 from .coordinator_profiles import async_remove_profile_store
 from .creg_ev import async_remove_store as async_remove_creg_store
-from .compare_engine import evict_sweep_rows
-from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
+from .snapshot_store import evict_shared_caches
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 

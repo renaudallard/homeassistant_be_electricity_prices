@@ -67,15 +67,6 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._pdf import (
-    NL_MONTHS,
-    fetch_pdf_text_layout,
-    fetch_text,
-    head_freshness_key,
-    head_ok,
-    vat_multiplier,
-    printed_vat_rate,
-)
 from ._parse import (
     SIGN_CHARS,
     numeric_row,
@@ -83,6 +74,23 @@ from ._parse import (
     parse_sign,
     require_contract,
     to_float,
+)
+from ._pdf import (
+    NL_MONTHS,
+    fetch_pdf_text_layout,
+    fetch_text,
+    head_freshness_key,
+    head_ok,
+    printed_vat_rate,
+    vat_multiplier,
+)
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    TariffKind,
+    VariableRates,
 )
 from ._validity import scan_month_end
 from .base import (
@@ -93,14 +101,6 @@ from .base import (
     TaxOverlay,
     walloon_dso_overlay,
     with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    InjectionRates,
-    TariffKind,
-    VariableRates,
 )
 
 _LOGGER = logging.getLogger(__name__)

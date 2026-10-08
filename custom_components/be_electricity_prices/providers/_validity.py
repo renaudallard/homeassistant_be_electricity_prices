@@ -34,13 +34,15 @@ that cannot be dated is treated as undated rather than assumed current.
 
 from __future__ import annotations
 
-from ._parse import fold_accents
-from .base import SupplierSnapshot
-from datetime import date
-from homeassistant.util import dt as dt_util
 import calendar
 import re
+from datetime import date
+
+from homeassistant.util import dt as dt_util
+
+from ._parse import fold_accents
 from ._pdf import _MONTH_NAMES, _MONTH_YEAR_RE, _VALID_KEYWORDS
+from .base import SupplierSnapshot
 
 
 def end_of_month(year: int, month: int) -> date:

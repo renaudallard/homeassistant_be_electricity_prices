@@ -32,6 +32,8 @@ its own in French and is read next door.
 
 from __future__ import annotations
 
+import re
+
 from ..const import (
     DSO_SIBELGA,
     FLUVIUS_AREA_LABELS_UPPER,
@@ -39,9 +41,8 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._parse import numeric_row, parse_sibelga_row, regional_tax_overlay, to_float
-from .base import DsoOverlay, ExtractorError, TaxOverlay
-import re
 from ._pdf import NUM_NO_THOUSANDS
+from .base import DsoOverlay, ExtractorError, TaxOverlay
 from .energiebe import _NUM
 
 

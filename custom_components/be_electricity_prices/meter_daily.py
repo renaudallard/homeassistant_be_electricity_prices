@@ -35,13 +35,14 @@ code too.
 
 from __future__ import annotations
 
-
 from dataclasses import dataclass
 from datetime import date, datetime
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import energy_meters
 from .const import (
     CONF_CONSUMPTION_KWH,
     CONF_DAY_CONSUMPTION_KWH,
@@ -53,11 +54,6 @@ from .const import (
     CONF_REGION,
     METER_MONO,
 )
-from .pricing import (
-    MeterType,
-    is_offpeak,
-)
-from . import energy_meters
 from .energy_meters import (
     _LOGGER,
     _MEMO_METER_KEYS,
@@ -79,6 +75,10 @@ from .meter_faults import (
     _without_today,
 )
 from .meter_hourly import _metered_hourly_kwh
+from .pricing import (
+    MeterType,
+    is_offpeak,
+)
 
 
 async def _recorder_daily_band_ratio(

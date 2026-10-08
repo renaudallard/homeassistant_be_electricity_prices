@@ -35,11 +35,11 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.ecofix import (
     _dynamic_formula_match,
     _extract_fee_and_flanders_renewables,

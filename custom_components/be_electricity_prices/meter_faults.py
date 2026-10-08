@@ -34,16 +34,15 @@ the reading itself is ``energy_meters``.
 
 from __future__ import annotations
 
-
 from collections.abc import Collection, Iterable, Mapping
 from datetime import date, timedelta
+
 from homeassistant.util import dt as dt_util
 
 from .energy_meters import (
     _K,
     _P,
 )
-
 
 # How far a register's latest day may trail its twin's before it counts as
 # stopped. Statistics compile an hour behind, so a register a day behind is

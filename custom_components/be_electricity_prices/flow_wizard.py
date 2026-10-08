@@ -34,7 +34,6 @@ is saved.
 
 from __future__ import annotations
 
-
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -43,13 +42,51 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import HomeAssistant
 
+from .const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_API_KEY,
+    CONF_CAPACITY_PEAK_SENSOR,
+    CONF_CONTRACT,
+    CONF_CONTRACT_END_DATE,
+    CONF_CONTRACT_START_DATE,
+    CONF_DIRECT_DEBIT,
+    CONF_DSO_TARIFF_MODE,
+    CONF_INCLUDE_VAT,
+    CONF_QUARTER_HOURLY,
+    CONF_REGION,
+    CONF_SOLAR_KVA,
+    CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
+    CONF_TARIFF_CARD_DATE,
+    CONF_YTD_FROM_CONTRACT_START,
+    DSO_MODE_IMPACT,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+    SOLAR_REGIME_INJECTION,
+    SPOT_PRICED_CONTRACT_KINDS,
+    SUPPLIER_CUSTOM,
+)
+from .fees import compensation_lacks_kva
+from .flow_contracts import (
+    _contract_has_spot_injection,
+    _contract_is_month_indexed,
+    _contract_is_professional,
+    _contract_kind,
+    _contracts_for,
+    _region_mismatch_error,
+)
+from .flow_prefill import (
+    _apply_energy_manager_capacity_default,
+    _apply_energy_manager_defaults,
+)
 from .flow_schemas import (
+    _CUSTOM_DSO_FALLBACK_KEYS,
+    _CUSTOM_ENERGY_FALLBACK_KEYS,
     _api_key_schema,
     _connection_power_schema,
     _contract_schema,
     _direct_debit_schema,
-    _CUSTOM_DSO_FALLBACK_KEYS,
-    _CUSTOM_ENERGY_FALLBACK_KEYS,
     _drop_blanked,
     _dso_schema,
     _dso_tariff_mode_schema,
@@ -61,61 +98,23 @@ from .flow_schemas import (
     _user_schema,
     _validate_entsoe_key,
 )
-from .flow_schemas_meters import (
-    _METER_SENSOR_KEYS,
-    _capacity_schema,
-    _incomplete_register_pairs,
-    _reused_meter_sensors,
-    _meters_schema,
-    _solar_schema,
-)
-from .flow_switch import (
-    _MANUAL_RATE_KEYS,
-    _validate_contract_dates,
-)
 from .flow_schemas_custom import (
     _custom_dso_schema,
     _custom_energy_schema,
     _custom_injection_schema,
     _custom_tax_schema,
 )
-from .flow_contracts import (
-    _contract_has_spot_injection,
-    _contract_is_month_indexed,
-    _contract_is_professional,
-    _contract_kind,
-    _contracts_for,
-    _region_mismatch_error,
+from .flow_schemas_meters import (
+    _METER_SENSOR_KEYS,
+    _capacity_schema,
+    _incomplete_register_pairs,
+    _meters_schema,
+    _reused_meter_sensors,
+    _solar_schema,
 )
-from .fees import compensation_lacks_kva
-from .flow_prefill import (
-    _apply_energy_manager_capacity_default,
-    _apply_energy_manager_defaults,
-)
-from .const import (
-    CONF_ANNUAL_CONSUMPTION_KWH,
-    CONF_API_KEY,
-    CONF_CAPACITY_PEAK_SENSOR,
-    CONF_CONTRACT,
-    CONF_CONTRACT_END_DATE,
-    CONF_CONTRACT_START_DATE,
-    CONF_YTD_FROM_CONTRACT_START,
-    CONF_DSO_TARIFF_MODE,
-    DSO_MODE_IMPACT,
-    CONF_INCLUDE_VAT,
-    CONF_DIRECT_DEBIT,
-    CONF_QUARTER_HOURLY,
-    CONF_REGION,
-    CONF_SOLAR_KVA,
-    CONF_SOLAR_REGIME,
-    CONF_SUPPLIER,
-    CONF_TARIFF_CARD_DATE,
-    SOLAR_REGIME_INJECTION,
-    SPOT_PRICED_CONTRACT_KINDS,
-    SUPPLIER_CUSTOM,
-    REGION_BRUSSELS,
-    REGION_FLANDERS,
-    REGION_WALLONIA,
+from .flow_switch import (
+    _MANUAL_RATE_KEYS,
+    _validate_contract_dates,
 )
 from .providers import (
     offers_direct_debit,

@@ -27,9 +27,6 @@
 
 from __future__ import annotations
 
-
-from custom_components.be_electricity_prices import energy_meters
-
 import tempfile
 import zipfile
 from datetime import UTC, date, datetime, timedelta
@@ -43,13 +40,26 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices import const, synergrid
-from custom_components.be_electricity_prices.flow_schemas_custom import (
-    _custom_injection_schema,
-)
+from custom_components.be_electricity_prices import const, energy_meters, synergrid
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
 )
+from custom_components.be_electricity_prices.flow_schemas_custom import (
+    _custom_injection_schema,
+)
+from custom_components.be_electricity_prices.providers._rates import (
+    InjectionRates,
+    SpotMonthlyRates,
+)
+from custom_components.be_electricity_prices.providers._resolve import (
+    apply_vat,
+    resolve_excise_band,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    SupplierExtractor,
+    TaxOverlay,
+)
+from custom_components.be_electricity_prices.providers.custom import build_snapshot
 from custom_components.be_electricity_prices.spot_stats import (
     _spp_weighted_month_mean,
     _spp_weighting_enabled,
@@ -57,19 +67,6 @@ from custom_components.be_electricity_prices.spot_stats import (
 from custom_components.be_electricity_prices.ytd_cost import (
     _compute_current_year_cost,
 )
-from custom_components.be_electricity_prices.providers.base import (
-    SupplierExtractor,
-    TaxOverlay,
-)
-from custom_components.be_electricity_prices.providers._resolve import (
-    apply_vat,
-    resolve_excise_band,
-)
-from custom_components.be_electricity_prices.providers._rates import (
-    InjectionRates,
-    SpotMonthlyRates,
-)
-from custom_components.be_electricity_prices.providers.custom import build_snapshot
 from tests import fixture_text, make_snapshot, make_stub_extractor
 
 # ---- minimal xlsx fixture (built with the stdlib, no openpyxl) ---------------
@@ -1119,10 +1116,10 @@ def test_resolve_volume_tier_inside_the_tranche_drops_the_formula() -> None:
     come back as one. Leaving it here with a zeroed factor prices correctly and
     still demands a monthly mean, so a month with no cached spot would fail the
     tick over a coefficient that cannot matter."""
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
     from custom_components.be_electricity_prices.providers._resolve import (
         resolve_volume_tier,
     )
-    from custom_components.be_electricity_prices.providers._rates import FixedRates
 
     resolved = resolve_volume_tier(_tiered_snapshot(), 1200.0)
     assert isinstance(resolved.energy, FixedRates)
@@ -1134,12 +1131,12 @@ def test_resolve_volume_tier_inside_the_tranche_drops_the_formula() -> None:
 def test_resolve_volume_tier_is_identity_without_a_tranche() -> None:
     """Every card but EnergyVision's tiered range prices its whole volume one
     way, and a resolver that copied them would churn every snapshot read."""
-    from custom_components.be_electricity_prices.providers._resolve import (
-        resolve_volume_tier,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_volume_tier,
     )
 
     plain = make_snapshot(energy=SpotMonthlyRates(factor=1.0, base=0.0))
@@ -1222,11 +1219,11 @@ def test_resolve_volume_tier_withholds_the_tranche_from_a_night_circuit() -> Non
     per-register formula, so an exclusive-night entry falls through to the mono
     pair, and folding the tranche into that pair handed a night circuit a
     discount the card never gives it."""
-    from custom_components.be_electricity_prices.providers._resolve import (
-        resolve_volume_tier,
-    )
     from custom_components.be_electricity_prices.providers._rates import (
         SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_volume_tier,
     )
 
     resolved = resolve_volume_tier(_tiered_snapshot(), 3500.0, meter="exclusive_night")

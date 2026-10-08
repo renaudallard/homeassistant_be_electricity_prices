@@ -35,14 +35,16 @@ being a slice of the year it sits in.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.util import dt as dt_util
+
 from .cohort import ytd_window_start
 from .const import RESOLUTION_HOURLY
 from .pricing import PriceBreakdown
-from dataclasses import dataclass, field
-from datetime import date, datetime
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.util import dt as dt_util
-from typing import Any
 
 
 @dataclass

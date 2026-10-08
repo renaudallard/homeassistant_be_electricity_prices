@@ -42,11 +42,6 @@ from typing import Any
 from homeassistant.helpers.storage import Store
 
 from .const import STORAGE_VERSION, WELCOME_CREDIT_PRO_RATA
-from .providers.base import (
-    DsoOverlay,
-    SupplierSnapshot,
-    TaxOverlay,
-)
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -56,6 +51,11 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
     VariableRates,
+)
+from .providers.base import (
+    DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 
 _LOGGER = logging.getLogger(__name__)

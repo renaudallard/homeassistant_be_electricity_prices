@@ -32,6 +32,8 @@ regulator's, reprinted on the supplier's card.
 
 from __future__ import annotations
 
+import re
+
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
@@ -44,7 +46,6 @@ from ..const import (
 from ._parse import to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
-import re
 
 
 def _extract_supplier_prosumer(text: str, kind: TariffKind) -> float | None:

@@ -41,12 +41,12 @@ from typing import Any
 import aiohttp
 import pypdf
 
+from ._parse import (
+    to_float,
+)
 from .base import (
     CardNotReadableError,
     ExtractorError,
-)
-from ._parse import (
-    to_float,
 )
 
 _LOGGER = logging.getLogger(__name__)

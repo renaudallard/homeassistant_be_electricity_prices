@@ -33,17 +33,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from .brugel import cached_power_term
-from .vat_rates import residential_vat, standard_vat
-from .providers import get as get_extractor
-from .providers.custom import build_snapshot as build_custom_snapshot
-from .providers._pdf import is_missing_card_error, is_transient_fetch_error
-from .providers._validity import card_valid_until
-from .providers._rates import Contract
-from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
-
 import logging
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
+from .brugel import cached_power_term
+from .cohort import ytd_window_start
 from .const import (
     CONF_CONTRACT,
     CONF_DSO,
@@ -53,20 +53,25 @@ from .const import (
     MEASURED_FULL_YEAR_DAYS,
     SOLAR_REGIME_INJECTION,
 )
-from .snapshot_store import (
-    _SharedSnapshot,
-    _shared_failed_fetches,
-    fetch_shared,
-)
+from .coordinator_persist import settings_digest
 from .energy_meters import (
     _bills_injection,
     _kwh_sensor_ids,
     noting_failed_reads,
 )
-from .coordinator_persist import settings_digest
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
-from .cohort import ytd_window_start
+from .providers import get as get_extractor
+from .providers._pdf import is_missing_card_error, is_transient_fetch_error
+from .providers._rates import Contract
+from .providers._validity import card_valid_until
+from .providers.base import CardNotReadableError, ExtractorError, SupplierSnapshot
+from .providers.custom import build_snapshot as build_custom_snapshot
+from .snapshot_codec import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
+    _snapshot_from_dict,
+)
 from .snapshot_months import (
     ArchivedCard,
     card_for_unreadable_month,
@@ -77,19 +82,12 @@ from .snapshot_resolve import (
     _resolve_snapshot,
     entry_annual_kwh,
 )
-from .snapshot_codec import (
-    _DEGRADED_MIN_SCHEMA_VERSION,
-    _SNAPSHOT_SCHEMA_VERSION,
-    _snapshot_from_dict,
+from .snapshot_store import (
+    _shared_failed_fetches,
+    _SharedSnapshot,
+    fetch_shared,
 )
-
-from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any
-import aiohttp
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-
+from .vat_rates import residential_vat, standard_vat
 
 # A single failed fetch is almost always a transient CDN timeout that the
 # next hourly tick recovers. Raising the user-facing "extractor failed"

@@ -103,16 +103,24 @@ from ..const import (
     FLUVIUS_CARD_TOKENS,
     REGION_FLANDERS,
 )
+from ._parse import SIGN_CHARS, parse_sign, regional_tax_overlay, to_float
 from ._pdf import (
     NUM_NO_THOUSANDS,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
     is_transient_fetch_error,
-    vat_multiplier,
     printed_vat_rate,
+    vat_multiplier,
 )
-from ._parse import SIGN_CHARS, parse_sign, regional_tax_overlay, to_float
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    TariffKind,
+)
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -124,14 +132,6 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     with_vat_basis,
-)
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    InjectionRates,
-    SpotMonthlyRates,
-    TariffKind,
 )
 
 _SITE_BASE = "https://www.energyknights.be"

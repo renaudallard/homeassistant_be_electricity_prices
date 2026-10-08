@@ -34,7 +34,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -45,8 +44,8 @@ from custom_components.be_electricity_prices.compare_table import (
     RankedRow,
 )
 from custom_components.be_electricity_prices.const import DOMAIN
-from custom_components.be_electricity_prices.pricing import MeterType
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
+from custom_components.be_electricity_prices.pricing import MeterType
 from custom_components.be_electricity_prices.sensor import (
     PotentialSavingSensor,
     async_setup_entry,
@@ -324,8 +323,8 @@ async def test_the_pass_prices_a_row_on_the_same_target_side_as_its_annual_figur
     answers, in a column the table sorts.
     """
     from custom_components.be_electricity_prices import compare_engine
-    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.providers._rates import ImpactRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
     from custom_components.be_electricity_prices.snapshot_resolve import (
         _resolve_snapshot,
     )

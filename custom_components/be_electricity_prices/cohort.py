@@ -35,38 +35,44 @@ the card rate or a negotiated one."""
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date
+from typing import Any, NamedTuple
+
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any, NamedTuple
-import aiohttp
 
+from .cohort_legs import (
+    _cohort_card,
+    _cohort_energy_from_archived,
+    _cohort_injection_from_archived,
+    _manual_energy_leg,
+    _month_indexed_leg,
+)
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
-    CONF_YTD_FROM_CONTRACT_START,
     CONF_SUPPLIER,
     CONF_TARIFF_CARD_DATE,
+    CONF_YTD_FROM_CONTRACT_START,
     SUPPLIER_CUSTOM,
 )
 from .providers import takes_signing_rate
-from .year_ahead import YEAR_AHEAD
-from .providers.base import (
-    SupplierExtractor,
-    SupplierSnapshot,
-)
-from .providers._resolve import card_residential_vat, without_welcome_credit
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
     InjectionRates,
     SpotMonthlyRates,
     rescale_vat,
+)
+from .providers._resolve import card_residential_vat, without_welcome_credit
+from .providers.base import (
+    SupplierExtractor,
+    SupplierSnapshot,
 )
 from .snapshot_months import (
     _month_card_retrievable,
@@ -75,14 +81,7 @@ from .snapshot_months import (
     month_card_cached,
 )
 from .vat_rates import residential_vat
-from .cohort_legs import (
-    _cohort_card,
-    _cohort_energy_from_archived,
-    _cohort_injection_from_archived,
-    _manual_energy_leg,
-    _month_indexed_leg,
-)
-
+from .year_ahead import YEAR_AHEAD
 
 _LOGGER = logging.getLogger(__name__)
 

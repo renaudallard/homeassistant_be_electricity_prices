@@ -34,6 +34,16 @@ this the long half of a backfill.
 
 from __future__ import annotations
 
+import calendar
+import logging
+from collections.abc import Callable
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
 from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
@@ -52,7 +62,6 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .meter_hourly import _metered_sides
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -66,8 +75,7 @@ from .fees import (
     window_energy_rate,
 )
 from .injection import _historical_injection_rate, _injection_is_spot_formula
-from .providers._rates import InjectionRates
-from .providers.base import SupplierSnapshot
+from .meter_hourly import _metered_sides
 from .pricing import (
     MeterType,
     compute_breakdown,
@@ -75,28 +83,22 @@ from .pricing import (
     renewables_eur_per_kwh,
     yearly_fixed_fee_for_meter,
 )
+from .providers._rates import InjectionRates
+from .providers.base import SupplierSnapshot
 from .spot_stats import (
-    _NetAllocation,
-    _SpotMonthBucket,
     _bucket_by_local_month,
     _energy_needs_spot,
     _hour_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _NetAllocation,
     _register_for,
     _rlp_hour_weight,
+    _SpotMonthBucket,
     _spp_injection_spot,
 )
 from .synergrid import SppWeights
 from .ytd_legs import _dso_prosumer_day
-from collections.abc import Callable
-from datetime import date, datetime
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-from typing import TYPE_CHECKING, Any
-import calendar
-import logging
 
 if TYPE_CHECKING:
     # Annotations only, as _recorder_models says: the package has to load

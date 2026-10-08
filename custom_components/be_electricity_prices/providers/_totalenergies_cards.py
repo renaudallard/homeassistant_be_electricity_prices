@@ -44,9 +44,8 @@ from __future__ import annotations
 import re
 from dataclasses import fields, replace
 
-from ._pdf import vat_multiplier
 from ._parse import SIGN_CHARS, parse_sign, to_float
-from .base import ExtractorError
+from ._pdf import vat_multiplier
 from ._rates import (
     DynamicRates,
     EnergyRates,
@@ -60,7 +59,7 @@ from ._totalenergies_overlays import (
     cev_included,
     consumption_row,
 )
-
+from .base import ExtractorError
 
 # ---- energy block -------------------------------------------------------------
 

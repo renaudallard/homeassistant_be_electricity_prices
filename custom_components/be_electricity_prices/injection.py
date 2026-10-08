@@ -36,10 +36,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.util import dt as dt_util
 from statistics import fmean
 from typing import overload
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_METER,
@@ -54,7 +55,6 @@ from .pricing import (
     is_offpeak,
     tou_slot,
 )
-from .providers.base import SupplierSnapshot
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -62,6 +62,7 @@ from .providers._rates import (
     SpotMonthlyRates,
     TimeOfUseRates,
 )
+from .providers.base import SupplierSnapshot
 from .spot_stats import (
     _energy_is_quarter_hourly,
     _injection_on_month_mean,

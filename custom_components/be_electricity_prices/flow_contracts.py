@@ -33,6 +33,11 @@ does its feed-in follow an index. Read-only over the registry.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
+from homeassistant.helpers.selector import SelectOptionDict
+
 from .const import (
     CONF_CONTRACT,
     CONF_REGION,
@@ -44,15 +49,14 @@ from .const import (
 from .providers import (
     all_extractors,
     effective_kind,
-    get as get_extractor,
     is_professional,
     settlement_answer,
 )
+from .providers import (
+    get as get_extractor,
+)
 from .providers._rates import Contract
 from .providers.base import ExtractorError
-from homeassistant.helpers.selector import SelectOptionDict
-from collections.abc import Mapping
-from typing import Any
 
 
 def _supplier_options(

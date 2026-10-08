@@ -32,8 +32,6 @@ import asyncio
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from tests import fixture_text
-from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -43,9 +41,11 @@ from custom_components.be_electricity_prices.providers._rates import (
 from custom_components.be_electricity_prices.providers._totalenergies_cards import (
     _extract_injection,
 )
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.totalenergies import (
     parse_snapshot,
 )
+from tests import fixture_text
 
 
 def test_totalenergies_is_registered() -> None:

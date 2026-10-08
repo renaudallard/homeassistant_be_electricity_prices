@@ -63,6 +63,7 @@ from ..const import (
     DSO_FLUVIUS_ZENNE_DIJLE,
     REGION_FLANDERS,
 )
+from ._parse import SIGN_CHARS, numeric_row, parse_prosumer_column, parse_sign, to_float
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
@@ -71,7 +72,17 @@ from ._pdf import (
     printed_vat_rate,
     vat_multiplier,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_prosumer_column, parse_sign, to_float
+from ._rates import (
+    Contract,
+    DynamicRates,
+    EnergyRates,
+    InjectionRates,
+    RlpBlend,
+    TariffKind,
+    VariableRates,
+    vat_basis,
+)
+from ._settle import settled_injection
 from ._validity import (
     archive_validity_check,
     scan_month_end,
@@ -82,17 +93,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-from ._settle import settled_injection
-from ._rates import (
-    Contract,
-    DynamicRates,
-    EnergyRates,
-    InjectionRates,
-    RlpBlend,
-    TariffKind,
-    VariableRates,
-    vat_basis,
 )
 
 # The index the card's printed rates were computed on, in EUR/MWh. EBEM says

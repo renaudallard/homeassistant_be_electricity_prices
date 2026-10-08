@@ -27,20 +27,20 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datetime import date
+
+import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers.base import (
-    ExtractorError,
-    SupplierSnapshot,
-)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     SpotMonthlyRates,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
+    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energiebe import (
     _publication_label,

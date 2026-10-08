@@ -34,17 +34,18 @@ the average weighted by when a Belgian home actually draws power.
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from .synergrid import RLP_BLENDS, RlpWeights, fetch_rlp_blends, fetch_spp_weights
-from datetime import datetime, timedelta
-from homeassistant.util import dt as dt_util
-from .const import DOMAIN
-from .spot_stats import _rlp_weighted_month_mean, _spp_weighted_month_mean
+import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
-import aiohttp
-import asyncio
+from homeassistant.util import dt as dt_util
+
+from .const import DOMAIN
+from .spot_stats import _rlp_weighted_month_mean, _spp_weighted_month_mean
+from .synergrid import RLP_BLENDS, RlpWeights, fetch_rlp_blends, fetch_spp_weights
 
 
 class _ProfilesMixin:
