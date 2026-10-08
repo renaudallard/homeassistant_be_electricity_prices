@@ -634,6 +634,15 @@ Internals worth knowing:
   `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
+- `guard_redirect` (`_pdf.py`) refuses a card or page that a redirect carried
+  off https. The extractors check the links they read off a page, but aiohttp
+  follows a redirect wherever it points, plain http included, and from there to
+  an address only the Home Assistant host can reach, whose first bytes would
+  then land in `last_error`. The redirect is not held to the requested site,
+  since a supplier legitimately leaves it: energie.be's document API on
+  azurewebsites.net redirects to its storage on blob.core.windows.net. Every
+  redirect the live cards, listings and APIs answered on 2026-10-08 stayed on
+  https. The target goes to the debug log only.
 - `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
   `ExtractorError` message: `network error fetching` and `storage error fetching`
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient

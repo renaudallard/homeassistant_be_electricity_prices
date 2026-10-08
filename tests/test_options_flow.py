@@ -8048,6 +8048,7 @@ async def test_text_memo_collapses_repeat_listing_fetches() -> None:
         status = 200
         content_length = None
         charset = None
+        history = ()
 
         def __init__(self, url: str) -> None:
             self.content = FakeBody(f"body of {url}".encode())
@@ -8169,6 +8170,7 @@ async def test_text_memo_is_shared_across_the_sweep_s_tasks() -> None:
         status = 200
         content_length = None
         charset = None
+        history = ()
         content = FakeBody(b"listing")
 
         async def __aenter__(self) -> "_Resp":

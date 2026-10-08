@@ -74,6 +74,7 @@ class _FakeResponse:
     def __init__(self, body: str, status: int = 200) -> None:
         self.status = status
         self.headers = {"content-type": "text/html"}
+        self.history = ()
         self.content_length = None
         self.charset = None
         self.content = FakeBody(body.encode("utf-8"))

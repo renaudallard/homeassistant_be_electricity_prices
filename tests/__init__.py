@@ -343,6 +343,7 @@ def make_text_session(body: str) -> Any:
         status = 200
         content_length = None
         charset = None
+        history = ()
         content = FakeBody(body.encode("utf-8"))
 
         async def __aenter__(self) -> "_Resp":

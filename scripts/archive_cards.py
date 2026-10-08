@@ -465,6 +465,7 @@ class _KeptResponse:
 
     content_length = None
     charset = None
+    history = ()
 
     def __init__(self, payload: bytes | None, etag: str = "") -> None:
         self.content = _KeptBody(payload or b"")

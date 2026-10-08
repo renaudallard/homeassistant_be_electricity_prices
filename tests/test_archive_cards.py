@@ -53,6 +53,7 @@ class _Response:
     status = 200
     content_length = None
     charset = None
+    history = ()
 
     def __init__(self, body: str) -> None:
         self.content = FakeBody(body.encode("utf-8"))
@@ -693,6 +694,7 @@ async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:
 class _PdfResponse:
     status = 200
     content_length = None
+    history = ()
 
     def __init__(self, payload: bytes) -> None:
         self.content = FakeBody(payload)

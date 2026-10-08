@@ -183,6 +183,26 @@ async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
+def guard_redirect(url: str, resp: aiohttp.ClientResponse) -> None:
+    """Refuse an answer a redirect carried off https.
+
+    The extractors check the links they read off a page, but aiohttp
+    follows a redirect wherever it points, plain http included, and from
+    there to an address only the Home Assistant host can reach, whose
+    first bytes would then land in last_error. Over https such a host would
+    also need a certificate the client trusts. The redirect is not held to
+    the requested site: energie.be's document API on azurewebsites.net
+    answers with a redirect to its storage on blob.core.windows.net.
+    """
+    if not resp.history or not url.startswith("https://"):
+        return
+    if any(hop.url.scheme != "https" for hop in (*resp.history, resp)):
+        # The target can be a LAN appliance or a captive portal, so it goes
+        # to the debug log only, not to last_error or the diagnostics.
+        _LOGGER.debug("%s redirected to %s", url, resp.url)
+        raise ExtractorError(f"{url} redirected off https; refusing to read the answer")
+
+
 def _strip_pdf_prefix(payload: bytes) -> bytes:
     """The bytes without a UTF-8 BOM, then blank space, ahead of ``%PDF``.
 
@@ -249,6 +269,7 @@ async def _fetch_validated_pdf_bytes(
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
+            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await read_capped(resp, url)
@@ -764,6 +785,7 @@ async def fetch_text(
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
+            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             body = await read_text_capped(resp, url)

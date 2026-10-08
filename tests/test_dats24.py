@@ -290,6 +290,7 @@ class _CardResponse:
     def __init__(self, payload: bytes, status: int) -> None:
         self.status = status
         self.content_length = len(payload)
+        self.history = ()
         self.headers: dict[str, str] = {}
         self.content = FakeBody(payload)
 

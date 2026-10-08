@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from datetime import date
+from types import SimpleNamespace
 
 import aiohttp
 import pytest
@@ -76,6 +77,7 @@ from tests import FakeBody
 class _PdfResponse:
     status = 200
     content_length = None
+    history = ()
 
     def __init__(self, payload: bytes) -> None:
         self.content = FakeBody(payload)
@@ -369,6 +371,7 @@ class _FakeBodyResp:
     def __init__(self, body: bytes) -> None:
         self.status = 200
         self.content_length = len(body)
+        self.history = ()
         self.content = FakeBody(body)
 
 
@@ -1044,3 +1047,65 @@ async def test_a_page_that_is_not_utf8_is_read_not_raised(
     async with TestServer(app) as server, aiohttp.ClientSession() as session:
         text = await fetch_text(session, str(server.make_url("/")))
     assert text == "Tarif �lectricit�"
+
+
+class _RedirectedResp:
+    """An answer reached through ``hops``, the last of them the final url."""
+
+    status = 200
+    content_length = None
+    charset = None
+
+    def __init__(self, hops: list[str], body: bytes) -> None:
+        from yarl import URL
+
+        self.history = tuple(SimpleNamespace(url=URL(hop)) for hop in hops[:-1])
+        self.url = URL(hops[-1])
+        self.content = FakeBody(body)
+
+    async def __aenter__(self) -> _RedirectedResp:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _RedirectingSession:
+    def __init__(self, hops: list[str], body: bytes) -> None:
+        self._resp = _RedirectedResp(hops, body)
+
+    def get(self, *_args: object, **_kwargs: object) -> _RedirectedResp:
+        return self._resp
+
+
+@pytest.mark.parametrize("pdf", [True, False])
+@pytest.mark.parametrize(
+    ("hops", "refused"),
+    [
+        # A validated https link sent on to plain http, a LAN address here.
+        (["https://card.test/c.pdf", "http://192.168.1.1/"], True),
+        (
+            ["https://card.test/c.pdf", "http://card.test/c.pdf", "https://x.test/"],
+            True,
+        ),
+        # Another site over https is followed: energie.be's documents API
+        # answers with a redirect to its Azure storage.
+        (["https://card.test/c.pdf", "https://store.blob.core.windows.net/c"], False),
+    ],
+)
+async def test_a_redirect_off_https_is_refused(
+    pdf: bool, hops: list[str], refused: bool
+) -> None:
+    session = _RedirectingSession(hops, b"%PDF-1.7 card")
+    fetch = (
+        _fetch_validated_pdf_bytes(session, hops[0])  # type: ignore[arg-type]
+        if pdf
+        else fetch_text(session, hops[0])  # type: ignore[arg-type]
+    )
+    if refused:
+        with pytest.raises(ExtractorError, match="redirected off https") as raised:
+            await fetch
+        # The target can be a LAN address: it stays out of last_error.
+        assert "192.168" not in str(raised.value)
+    else:
+        assert await fetch
