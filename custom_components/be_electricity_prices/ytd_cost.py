@@ -776,8 +776,8 @@ async def _compute_current_year_cost(
             # helper cannot reach that branch at all, and a Trevion Vast
             # year-to-date was credited the flat printed rate while the
             # injection_price sensor beside it credited per register.
-            def _rate_at(hour: int) -> float | None:
-                return _historical_injection_rate(
+            day_rate, night_rate = (
+                _historical_injection_rate(
                     snap_d.injection,
                     inj_spot,
                     energy=snap_d.energy,
@@ -787,9 +787,8 @@ async def _compute_current_year_cost(
                     meter=meter,
                     region=region,
                 )
-
-            day_rate = _rate_at(_DAY_REGISTER_HOUR)
-            night_rate = _rate_at(_NIGHT_REGISTER_HOUR)
+                for hour in (_DAY_REGISTER_HOUR, _NIGHT_REGISTER_HOUR)
+            )
             if day_rate is not None:
                 d_cost -= d_inj * day_rate
             if night_rate is not None:

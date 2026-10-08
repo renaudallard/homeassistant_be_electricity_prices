@@ -606,7 +606,10 @@ def _blend_curves(
     if blend == "columns":
         total_cols = float(sum(group_counts))
         return [
-            sum(curve[i] * count for curve, count in zip(group_curves, group_counts))
+            sum(
+                curve[i] * count
+                for curve, count in zip(group_curves, group_counts, strict=True)
+            )
             / total_cols
             for i in range(length)
         ]

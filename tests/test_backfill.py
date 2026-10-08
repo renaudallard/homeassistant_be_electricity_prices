@@ -1093,9 +1093,12 @@ async def test_backfill_range_returns_the_hours_the_cost_left_out(
     for missing in ({"injection_hours_uncredited": 2}, {}):
 
         async def _fake_cost(
-            *_a: object, gaps: dict[str, int], **_k: object
+            *_a: object,
+            gaps: dict[str, int],
+            _missing: dict[str, int] = missing,
+            **_k: object,
         ) -> dict[str, int]:
-            gaps.update(missing)
+            gaps.update(_missing)
             return {"sensor.cost": 3}
 
         with (
@@ -3120,7 +3123,8 @@ async def test_a_january_backfill_prices_no_december_hour(
                 patch(
                     "homeassistant.components.recorder.statistics."
                     "async_import_statistics",
-                    new=lambda _h, meta, got, _l=label, _k=type(snap.energy).__name__: (
+                    # Bound when the patch is made, inside the loop.
+                    new=lambda _h, meta, got, _l=label, _k=type(snap.energy).__name__: (  # noqa: B008
                         rows.__setitem__(
                             f"{_l}:{_k}", [(r["start"], r["mean"]) for r in got]
                         )

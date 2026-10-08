@@ -308,7 +308,7 @@ async def _backfill_price_sensors(
                 # tearing the whole backfill down.
                 continue
 
-            for key, sid in stat_ids.items():
+            for key in stat_ids:
                 if key == "current_price":
                     value = bd.all_in
                 elif key == "energy_component":

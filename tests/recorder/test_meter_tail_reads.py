@@ -256,7 +256,7 @@ async def test_reading_the_last_days_again_bills_what_a_full_read_bills(
     full_rows, _, _ = await _tick(hass, freezer, today, None)
     spliced, _, _ = await _tick(hass, freezer, today, kept)
     moved = {r["start"] for r in full_rows[DAY]} - {
-        r["start"] for a, r in zip(spliced[DAY], full_rows[DAY]) if a == r
+        r["start"] for a, r in zip(spliced[DAY], full_rows[DAY], strict=False) if a == r
     }
     assert moved == {old.timestamp(), (old + timedelta(hours=1)).timestamp()}
     assert spliced[NIGHT] == full_rows[NIGHT]

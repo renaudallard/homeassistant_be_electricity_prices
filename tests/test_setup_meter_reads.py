@@ -188,7 +188,9 @@ class _Recorder:
             if eid in _METERS:
                 starts, sums = self.series(eid)
                 prior = [
-                    s for ts, s in zip(starts, sums) if ts <= start_time.timestamp()
+                    s
+                    for ts, s in zip(starts, sums, strict=True)
+                    if ts <= start_time.timestamp()
                 ]
                 out[eid] = [State(eid, str(prior[-1] if prior else sums[0]))]
         return out

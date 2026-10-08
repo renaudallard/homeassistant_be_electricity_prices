@@ -36,6 +36,7 @@ body and the actual failures were only visible in the run log.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import re
@@ -2249,7 +2250,7 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
 
     # The real figures pass every gate.
     for leg in (fixed, variable, tou, impact):
-        assert _failures(lambda: lc._validate_energy("x", "c", leg)) == []
+        assert _failures(functools.partial(lc._validate_energy, "x", "c", leg)) == []
     assert _failures(lambda: lc._validate_injection("x", snap(spot_inj), "spot")) == []
     assert _failures(lambda: lc._validate_injection("x", snap(pair), "bihourly")) == []
     assert _failures(lambda: lc._validate_dsos("x", snap(pair))) == []

@@ -9146,7 +9146,7 @@ def test_every_selector_translation_key_names_a_selector_block() -> None:
                 if not isinstance(config, ast.Dict):
                     unread.append(f"{path.name}: {ast.unparse(config)}")
                     continue
-                for key, value in zip(config.keys, config.values):
+                for key, value in zip(config.keys, config.values, strict=True):
                     if not isinstance(key, ast.Constant):
                         unread.append(f"{path.name}: {ast.unparse(config)}")
                     elif key.value == "translation_key":

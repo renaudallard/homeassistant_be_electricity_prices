@@ -81,8 +81,11 @@ class KeptRows:
 
     def rows(self) -> list[dict[str, Any]]:
         return [
-            {key: None if math.isnan(v) else v for key, v in zip(self.keys, values)}
-            for values in zip(*self.columns)
+            {
+                key: None if math.isnan(v) else v
+                for key, v in zip(self.keys, values, strict=True)
+            }
+            for values in zip(*self.columns, strict=True)
         ]
 
 
@@ -94,7 +97,7 @@ def _pack(day: date, start: date, rows: list[Any]) -> KeptRows | None:
     for row in rows:
         if tuple(row) != keys:
             return None
-        for column, key in zip(columns, keys):
+        for column, key in zip(columns, keys, strict=True):
             value = row[key]
             column.append(math.nan if value is None else float(value))
     return KeptRows(day, start, keys, columns)

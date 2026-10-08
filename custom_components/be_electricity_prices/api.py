@@ -558,7 +558,8 @@ def _parse_energy_charts(
     # two sources are interchangeable to every caller.
     sums: dict[datetime, float] = {}
     counts: dict[datetime, int] = {}
-    for raw_when, raw_price in zip(seconds, prices):
+    # Truncated to the shorter of the two if the answer is malformed.
+    for raw_when, raw_price in zip(seconds, prices, strict=False):
         if not isinstance(raw_when, (int, float)) or not isinstance(
             raw_price, (int, float)
         ):

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import itertools
 import logging
 import zlib
 from datetime import datetime, timedelta
@@ -787,7 +788,7 @@ def _find_window(
         # (a gappy dynamic table). Report the longest contiguous run.
         longest = 1
         run = 1
-        for prev, cur in zip(candidates, candidates[1:]):
+        for prev, cur in itertools.pairwise(candidates):
             run = run + 1 if cur[0] - prev[0] == delta else 1
             longest = max(longest, run)
         raise ServiceValidationError(

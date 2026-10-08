@@ -1832,7 +1832,7 @@ async def archive(
                 cards.seen.clear()
                 try:
                     snap = await _fetch_card(
-                        lambda: ex.fetch(session, contract, region), sleep
+                        functools.partial(ex.fetch, session, contract, region), sleep
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     line = f"{label}: {type(err).__name__}: {err}"
@@ -1922,8 +1922,8 @@ async def archive(
                             )
                         else:
                             past = await _fetch_card(
-                                lambda: fetch_for_month(
-                                    session, contract, region, first
+                                functools.partial(
+                                    fetch_for_month, session, contract, region, first
                                 ),
                                 sleep,
                             )

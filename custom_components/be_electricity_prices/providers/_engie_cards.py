@@ -374,7 +374,9 @@ def _extract_injection(
         month_indexed = True
         formula = "Flextime: " + "; ".join(
             f"{slot} {b * 100.0:.4f} + ({f / 10.0:.4f} x EPEXDAM)"
-            for slot, (f, b) in zip(("peak", "transition", "offpeak"), slot_coefs)
+            for slot, (f, b) in zip(
+                ("peak", "transition", "offpeak"), slot_coefs, strict=True
+            )
         )
     if current is None and factor is None and peak is None:
         return None
