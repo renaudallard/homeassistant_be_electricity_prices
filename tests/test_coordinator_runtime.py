@@ -4540,6 +4540,73 @@ async def test_unloading_an_entry_mutes_its_coordinator(
     assert coord._unloaded is True
 
 
+async def test_unloading_an_entry_clears_its_repairs_cards(
+    hass: HomeAssistant,
+) -> None:
+    """An unloaded or disabled entry no longer ticks, so nothing would ever
+    clear the cards it raised; the next setup raises again what still holds."""
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+    registry = ir.async_get(hass)
+    issue_id = f"extractor_unreadable_no_prices_{entry.entry_id}"
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id) is True
+    await hass.async_block_till_done()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_disabling_a_retrying_entry_clears_its_repairs_cards(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant does not unload an entry whose setup is retrying, it
+    only stops it, so its cards are cleared when it stops."""
+    from homeassistant.config_entries import ConfigEntryDisabler
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    issue_id = f"snapshot_stale_{entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="snapshot_stale",
+    )
+
+    async def _timeout_fetch(*args: Any, **kwargs: Any) -> None:
+        raise TimeoutError
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_timeout_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    await hass.config_entries.async_set_disabled_by(
+        entry.entry_id, ConfigEntryDisabler.USER
+    )
+    await hass.async_block_till_done()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_save_persistent_runs_during_first_refresh(
     hass: HomeAssistant,
 ) -> None:
