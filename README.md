@@ -116,6 +116,16 @@ Each of these has a section of its own further down; this is the scan.
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · Energreen · FlexiO Max *(monthly Belpex_RLP_VL, for a FlexiO EMS+; the flexibility fee the EMS+ earns is not modelled)* · *withdrawn on 2026-10-01, priced for existing entries only:* LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before; replaced by FlexiO Max)* | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | All three regions; the tax step shows only the boxes your region bills: the green levy box takes GSC + WKK in Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
 
+**Not supported, and why:**
+
+- **Belvus, Dots, Elegant, Sparki** and the six **Energy Together** brands
+  (HOA Energy, Servolt Energie, Evident Energie, Power2You, Prijspunten
+  Energie, Smappee Smiles) publish electricity tariff cards, and the gas
+  integration reads their gas cards, but no reader for their electricity
+  cards exists yet. Ask for one with the supplier request form below.
+- **Yuso** prices the energy commodity alone, with network tariffs and taxes
+  passed through; see the question about business-only suppliers below.
+
 > [!WARNING]
 > **Ecofix publishes its cards as page images, and has since August 2026.**
 > Nothing in the integration can parse a document with no text in it, so the
