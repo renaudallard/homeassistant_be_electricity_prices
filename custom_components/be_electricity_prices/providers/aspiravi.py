@@ -168,7 +168,7 @@ def _archive_month(label: str) -> date | None:
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Aspiravi only sells in Flanders.
+    region: str,  # Aspiravi only sells in Flanders.
 ) -> SupplierSnapshot:
     """Fetch and parse the current Eco Plus Flex card."""
     if contract_id != _CONTRACT_ID:
@@ -180,7 +180,7 @@ async def fetch(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Aspiravi only sells in Flanders.
+    region: str,  # Aspiravi only sells in Flanders.
 ) -> str | None:
     """The current card's ``Last-Modified``.
 
@@ -200,7 +200,7 @@ async def probe(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Aspiravi only sells in Flanders.
+    region: str,  # Aspiravi only sells in Flanders.
     year_month: date,
 ) -> SupplierSnapshot | None:
     """The card published for ``year_month``, or ``None``.

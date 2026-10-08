@@ -634,7 +634,9 @@ async def _current_card(
                 archived = await card_for_unreadable_month(
                     session, extractor.id, contract, region, dt_util.now().date(), proxy
                 )
-            except Exception as err:  # noqa: BLE001 - a blip on the archive is not this period's problem
+            except (
+                Exception
+            ) as err:  # a blip on the archive is not this period's problem
                 _LOGGER.debug(
                     "card archive read failed for %s/%s: %s",
                     extractor.id,

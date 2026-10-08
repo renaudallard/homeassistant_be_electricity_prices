@@ -1549,7 +1549,9 @@ async def _replay_row(
         if _CARD_REF.search(stored):
             try:
                 stored = await _unfold_embedded_cards(stored, replay)
-            except Exception as err:  # noqa: BLE001 - a card we cannot put back is a row we cannot replay
+            except (
+                Exception
+            ) as err:  # a card we cannot put back is a row we cannot replay
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 return
         dict.__setitem__(memo, key, stored)
@@ -1603,7 +1605,7 @@ async def _replay_row(
             if snap is not None and extractor.settle_month is not None:
                 # A month settled in place keeps the index it settled at.
                 snap = settled_as(snap, _snapshot_from_dict(row, min_schema_version=0))
-        except Exception as err:  # noqa: BLE001 - a row that will not replay is reported, not fatal
+        except Exception as err:  # a row that will not replay is reported, not fatal
             summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
             return
     if snap is None or snap.provisional:
@@ -1695,7 +1697,7 @@ async def _retry_unparsed(
         ):
             try:
                 snap = await extractor.fetch(session, contract, region)
-            except Exception as err:  # noqa: BLE001 - still unreadable is the normal answer
+            except Exception as err:  # still unreadable is the normal answer
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 continue
         if snap is None or snap.provisional:
@@ -1834,7 +1836,7 @@ async def archive(
                     snap = await _fetch_card(
                         functools.partial(ex.fetch, session, contract, region), sleep
                     )
-                except Exception as err:  # noqa: BLE001 - one card must not stop the walk
+                except Exception as err:  # one card must not stop the walk
                     line = f"{label}: {type(err).__name__}: {err}"
                     summary.failed.append(line)
                     if _ocr_failure(cards, memo, err):
@@ -1927,7 +1929,7 @@ async def archive(
                                 ),
                                 sleep,
                             )
-                    except Exception as err:  # noqa: BLE001 - one month must not stop the walk
+                    except Exception as err:  # one month must not stop the walk
                         line = f"{label}: {type(err).__name__}: {err}"
                         summary.failed.append(line)
                         if _ocr_failure(cards, memo, err):

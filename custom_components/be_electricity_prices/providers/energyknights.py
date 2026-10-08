@@ -494,7 +494,7 @@ async def fetch(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - the card is published for Flanders only.
+    region: str,  # the card is published for Flanders only.
 ) -> str | None:
     """Cheap freshness key: HEAD the product's own card.
 
@@ -513,7 +513,7 @@ async def probe(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Energy Knights only sells in Flanders.
+    region: str,  # Energy Knights only sells in Flanders.
     year_month: date,
 ) -> SupplierSnapshot | None:
     """The card Energy Knights published for one past month, or ``None``.

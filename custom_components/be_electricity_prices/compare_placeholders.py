@@ -750,7 +750,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     window_start_override=ytd_from,
                     snapshot_raw=other_raw,
                 )
-            except Exception:  # noqa: BLE001 - degrade to '-'
+            except Exception:  # degrade to '-'
                 current_ytd_val = None
                 compare_ytd_val = None
             if current_ytd_val is not None and compare_ytd_val is not None:
@@ -792,7 +792,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 current_ytd = await _own_year(
                     coord._historical_spots, coord._historical_spot_quarters
                 )
-            except Exception:  # noqa: BLE001 - degrade to '-'
+            except Exception:  # degrade to '-'
                 current_ytd = None
             compare_ytd = _annual_bill(
                 other_snap,

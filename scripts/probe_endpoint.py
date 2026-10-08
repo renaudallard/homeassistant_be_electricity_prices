@@ -67,7 +67,7 @@ sys.path.insert(0, ".")
 # extractors actually send; a supplier filtering on it would otherwise be
 # invisible here. Imported through the package, not by file path: _pdf uses
 # relative imports and cannot be loaded standalone.
-from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
+from custom_components.be_electricity_prices.providers._pdf import (
     USER_AGENT,
 )
 

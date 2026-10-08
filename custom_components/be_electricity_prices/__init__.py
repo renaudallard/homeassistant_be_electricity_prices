@@ -171,7 +171,9 @@ BACKFILL_SCHEMA = vol.Schema(
 CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001 - HA hook signature
+async def async_setup(
+    hass: HomeAssistant, config: ConfigType
+) -> bool:  # HA hook signature
     """Register the integration's services once at startup.
 
     Service handlers are domain-scoped, not entry-scoped, so they live

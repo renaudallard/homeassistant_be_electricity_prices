@@ -208,7 +208,7 @@ async def _fetch_power_term(
     try:
         text = await _sheet_text(session, year)
         pair = _parse(text) if text else None
-    except Exception as err:  # noqa: BLE001 - the docstring promises no raise
+    except Exception as err:  # the docstring promises no raise
         # The backoff is recorded below whatever happened, so a failure that
         # reaches here still costs one attempt rather than one per tick.
         _LOGGER.warning("Brugel %d tariff sheet could not be read: %s", year, err)
@@ -242,7 +242,7 @@ async def _indicative_term(
     try:
         text = await _pdf_text(session, _GRID_URL)
         return _parse_grid(text, year) if text else None
-    except Exception as err:  # noqa: BLE001 - the docstring promises no raise
+    except Exception as err:  # the docstring promises no raise
         _LOGGER.debug("Brugel tariff grid unreadable for %d: %s", year, err)
         return None
 
@@ -272,7 +272,7 @@ async def _pdf_text(session: aiohttp.ClientSession, url: str) -> str | None:
                 payload = await read_capped(r, url)
                 return await asyncio.to_thread(extract_pdf_text, payload)
             _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
-    except Exception as err:  # noqa: BLE001 - see ensure_power_term
+    except Exception as err:  # see ensure_power_term
         # Broad on purpose. The reader raises ExtractorError for a body
         # that is not a PDF, which is what a maintenance page or a
         # captive portal answers with a 200, and ExtractorError is not a

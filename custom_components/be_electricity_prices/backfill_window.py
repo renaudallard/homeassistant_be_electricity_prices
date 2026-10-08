@@ -224,7 +224,7 @@ async def _existing_stat_window(
             None,
             {"mean"},
         )
-    except Exception:  # noqa: BLE001 - recorder may surface anything
+    except Exception:  # recorder may surface anything
         return False
     return bool(rows.get(statistic_id))
 

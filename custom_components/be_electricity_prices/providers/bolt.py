@@ -326,7 +326,7 @@ async def _resolve_variable_suffix(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Bolt's PDFs cover every region.
+    region: str,  # Bolt's PDFs cover every region.
 ) -> str | None:
     """Cheap freshness probe: HEAD the listing page, return its ETag.
 

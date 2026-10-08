@@ -24,7 +24,7 @@ from custom_components.be_electricity_prices.providers.base import ExtractorErro
 from tests import make_snapshot
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-import archive_cards as ac  # type: ignore[import-not-found]  # noqa: E402
+import archive_cards as ac  # type: ignore[import-not-found]
 
 NOV = date(2026, 11, 1)
 

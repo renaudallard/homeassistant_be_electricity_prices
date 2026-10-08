@@ -75,8 +75,8 @@ class _MigratingStore(Store[dict[str, Any]]):
     async def _async_migrate_func(
         self,
         old_major_version: int,
-        old_minor_version: int,  # noqa: ARG002 - HA signature.
-        old_data: dict[str, Any],  # noqa: ARG002 - dropped wholesale.
+        old_minor_version: int,  # HA signature.
+        old_data: dict[str, Any],  # dropped wholesale.
     ) -> dict[str, Any]:
         if old_major_version < STORAGE_VERSION:
             return {}

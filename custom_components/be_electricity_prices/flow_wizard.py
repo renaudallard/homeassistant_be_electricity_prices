@@ -426,7 +426,7 @@ class _WizardStepsMixin:
 
     async def async_step_api_key_unreachable(
         self,
-        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+        user_input: dict[str, Any] | None = None,  # menu
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="api_key_unreachable",
@@ -435,7 +435,7 @@ class _WizardStepsMixin:
 
     async def async_step_api_key_recheck(
         self,
-        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+        user_input: dict[str, Any] | None = None,  # menu
     ) -> ConfigFlowResult:
         """Ask ENTSO-E again, for a user who would rather wait than proceed."""
         err = await _validate_entsoe_key(self.hass, self._pending_key)
@@ -460,7 +460,7 @@ class _WizardStepsMixin:
 
     async def async_step_api_key_unverified(
         self,
-        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+        user_input: dict[str, Any] | None = None,  # menu
     ) -> ConfigFlowResult:
         """Accept the key unverified and carry on with setup."""
         return await self._accept_pending_key()

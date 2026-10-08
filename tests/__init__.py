@@ -311,8 +311,8 @@ def make_stub_extractor(
 
 
 __all__ = [
-    "FakeBody",
     "FIXTURES",
+    "FakeBody",
     "fixture_text",
     "make_entry",
     "make_snapshot",

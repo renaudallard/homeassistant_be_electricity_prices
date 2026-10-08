@@ -306,9 +306,7 @@ async def _download(
     def _open_temp() -> IO[bytes]:
         # Named factory with a concrete return type: asyncio.to_thread cannot
         # resolve NamedTemporaryFile's overloads, so it picked the text one.
-        return tempfile.NamedTemporaryFile(  # noqa: SIM115 - closed below
-            mode="w+b", delete=False, suffix=suffix
-        )
+        return tempfile.NamedTemporaryFile(mode="w+b", delete=False, suffix=suffix)
 
     tmp = await asyncio.to_thread(_open_temp)
     written = 0

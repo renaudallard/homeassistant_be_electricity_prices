@@ -500,11 +500,11 @@ async def test_ticking_the_settlement_box_makes_the_key_mandatory(
         assert result["step_id"] == "meter"
         schema = result["data_schema"]
         assert schema is not None
-        meters = list(schema.schema.values())[0].config["options"]
+        meters = next(iter(schema.schema.values())).config["options"]
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": meters[0]}
         )
-        return meters + [result["step_id"]]
+        return [*meters, result["step_id"]]
 
     assert await _walk(False) == [
         "mono",
@@ -6495,7 +6495,7 @@ def test_compare_pickers_do_not_cross_the_professional_line() -> None:
             schema = _compare_contract_schema(
                 sup["value"], "flanders", "variable", "", professional
             )
-            selector = list(schema.schema.values())[0]
+            selector = next(iter(schema.schema.values()))
             out += [o["value"] for o in selector.config["options"]]
         return out
 
@@ -6523,7 +6523,7 @@ def test_compare_supplier_list_drops_a_segment_only_supplier() -> None:
             schema = _compare_contract_schema(
                 sup["value"], "flanders", "variable", "", professional
             )
-            selector = list(schema.schema.values())[0]
+            selector = next(iter(schema.schema.values()))
             assert selector.config["options"], (sup["value"], professional)
 
 

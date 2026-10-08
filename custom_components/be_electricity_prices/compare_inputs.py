@@ -76,7 +76,7 @@ from .synergrid import RlpWeights, SppWeights
 def _label_for_supplier(supplier_id: str) -> str:
     try:
         return get_extractor(supplier_id).label
-    except Exception:  # noqa: BLE001 - stale id
+    except Exception:  # stale id
         return supplier_id
 
 
@@ -85,7 +85,7 @@ def _label_for_contract(supplier_id: str, contract_id: str) -> str:
         for c in get_extractor(supplier_id).contracts:
             if c.id == contract_id:
                 return c.label
-    except Exception:  # noqa: BLE001 - stale id
+    except Exception:  # stale id
         pass
     return contract_id
 

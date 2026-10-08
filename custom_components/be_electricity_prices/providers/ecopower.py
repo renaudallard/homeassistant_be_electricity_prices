@@ -191,7 +191,7 @@ async def fetch(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Ecopower is Flanders-only.
+    region: str,  # Ecopower is Flanders-only.
     year_month: date,
 ) -> SupplierSnapshot | None:
     """Fetch the Ecopower card for a specific (year, month).
@@ -291,7 +291,7 @@ def _settled(snap: SupplierSnapshot, text: str, year_month: date) -> SupplierSna
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Ecopower is Flanders-only, but signature is shared.
+    region: str,  # Ecopower is Flanders-only, but signature is shared.
 ) -> str | None:
     """Cheap freshness probe: the card URL the fetcher would resolve.
 

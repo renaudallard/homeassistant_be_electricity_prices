@@ -143,7 +143,7 @@ async def ensure_vat_rates(session: aiohttp.ClientSession) -> None:
         table = json.loads(await fetch_text(session, VAT_TABLE_URL))
         if not isinstance(table, Mapping):
             raise ValueError("not a table")
-    except Exception as err:  # noqa: BLE001 - the docstring promises no raise
+    except Exception as err:  # the docstring promises no raise
         _LOGGER.debug("VAT table could not be read: %s", err)
         _failed_at = now
         return

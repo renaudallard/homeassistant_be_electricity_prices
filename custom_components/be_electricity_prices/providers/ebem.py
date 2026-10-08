@@ -159,7 +159,7 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - EBEM only sells in Flanders.
+    region: str,  # EBEM only sells in Flanders.
 ) -> SupplierSnapshot:
     """Fetch and parse the latest EBEM PDF for ``contract_id``.
 
@@ -179,7 +179,7 @@ async def fetch(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - EBEM only sells in Flanders.
+    region: str,  # EBEM only sells in Flanders.
     year_month: date,
 ) -> SupplierSnapshot | None:
     """Return the published snapshot for a specific (year, month).
@@ -379,7 +379,7 @@ def _settleable(energy: EnergyRates, injection: InjectionRates | None) -> bool:
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - EBEM only sells in Flanders.
+    region: str,  # EBEM only sells in Flanders.
 ) -> str | None:
     """The card URL the fetcher would resolve for ``contract_id``.
 

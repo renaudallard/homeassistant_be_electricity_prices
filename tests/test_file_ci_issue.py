@@ -123,11 +123,11 @@ def test_the_same_failure_within_the_cooldown_posts_nothing(
         "--fingerprint",
         str(fp),
     )
-    marker = [
+    marker = next(
         line
         for line in gh["posted"].read_text().splitlines()
         if "ci-fingerprint" in line
-    ][0]
+    )
     gh["open"].write_text("42\n")
     yesterday = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     gh["issue"].write_text(

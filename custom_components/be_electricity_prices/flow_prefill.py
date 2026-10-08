@@ -192,7 +192,7 @@ async def _energy_grid_stats(hass: HomeAssistant) -> tuple[list[str], list[str]]
         return [], []
     try:
         manager = await async_get_manager(hass)
-    except Exception:  # noqa: BLE001 - energy may not be ready
+    except Exception:  # energy may not be ready
         return [], []
     prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
     if not prefs:

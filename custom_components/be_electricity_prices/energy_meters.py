@@ -401,7 +401,7 @@ async def _query_rows(
             {"energy": "kWh"},
             set(fields),
         )
-    except Exception:  # noqa: BLE001 - recorder may surface anything
+    except Exception:  # recorder may surface anything
         return None
     rows: list[Any] = list(stats.get(entity_id, []))
     return rows
@@ -560,7 +560,7 @@ async def _read_live_today_kwh(
                 no_attributes=not cycling,
             )
         )
-    except Exception:  # noqa: BLE001 - recorder may surface anything
+    except Exception:  # recorder may surface anything
         _note_failed_read(entity_id)
         return None
     rows = history.get(entity_id, [])

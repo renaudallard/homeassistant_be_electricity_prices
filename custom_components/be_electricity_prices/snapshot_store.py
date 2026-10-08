@@ -285,7 +285,7 @@ async def fetch_shared(
     if probe_fn is not None:
         try:
             probe_key = await probe_fn(session, contract, region)
-        except Exception as err:  # noqa: BLE001 - a probe is best-effort
+        except Exception as err:  # a probe is best-effort
             # Any failure at all, not just ExtractorError and TimeoutError.
             # The probe exists to SKIP work: falling back to the TTL path is
             # always correct, so its failure must never be worse than not
@@ -388,7 +388,7 @@ async def fetch_shared(
                 cache[key] = row
                 failed.pop(key, None)
             return SharedFetch(row, "fetch", probe_key, confirmed)
-        except Exception as err:  # noqa: BLE001 - handed back as a value
+        except Exception as err:  # handed back as a value
             # Any failure populates the negative cache so siblings back off.
             # The third field counts consecutive failures on this key so a lone
             # transient timeout does not immediately raise a repair issue; it

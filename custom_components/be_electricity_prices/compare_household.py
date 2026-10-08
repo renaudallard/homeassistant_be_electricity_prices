@@ -330,7 +330,7 @@ class _HouseholdMixin:
                     spot_dict = await client.fetch_day_ahead(
                         day_start, day_start + timedelta(days=1)
                     )
-                except Exception:  # noqa: BLE001 - degrade to '-' for the dynamic side
+                except Exception:  # degrade to '-' for the dynamic side
                     pass
         # For the ANNUAL estimate a dynamic contract's all-in is
         # factor*spot + base, linear in spot, so the time-averaged yearly
@@ -849,7 +849,7 @@ class _HouseholdMixin:
                 dt_util.now().date(),
                 self.config_entry,
             )
-        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this row's problem
+        except Exception as err:  # a blip on the archive is not this row's problem
             _LOGGER.debug(
                 "card archive read failed for %s/%s: %s", supplier, contract, err
             )

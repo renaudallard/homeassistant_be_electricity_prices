@@ -679,7 +679,7 @@ def _year_avg_all_in(
                 bd = compute_breakdown(
                     snapshot, dso, region, when, spot, meter, dso_mode
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 return None
             w = (1.0 if shape is None else shape.get(hour, 0.0)) * days
             total += float(getattr(bd, component)) * w
@@ -737,7 +737,7 @@ def _tou_weighted_per_kwh(
 
     try:
         bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
     # The all-in is time-of-day dependent not only for TOU/Impact energy
     # but also when the meter routes a bi-horaire peak/offpeak split

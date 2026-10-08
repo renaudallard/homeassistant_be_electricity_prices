@@ -375,7 +375,7 @@ async def _settle_on_published_index(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Eneco's listing is region-agnostic.
+    region: str,  # Eneco's listing is region-agnostic.
 ) -> str | None:
     """Cheap freshness probe: the current PDF URL for ``contract_id``.
 

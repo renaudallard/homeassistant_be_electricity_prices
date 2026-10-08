@@ -472,7 +472,7 @@ async def test_backfill_range_writes_one_mean_row_per_hour_per_price_sensor(
         "network_component",
         "taxes_component",
     ]
-    ids = _register_sensors(hass, entry, sensor_keys + ["current_year_cost"])
+    ids = _register_sensors(hass, entry, [*sensor_keys, "current_year_cost"])
     entry.runtime_data = await _make_coordinator(entry)
     # The coordinator stand-in doesn't subclass BePricesCoordinator, so
     # patch the isinstance check used by backfill_range to gate on it.

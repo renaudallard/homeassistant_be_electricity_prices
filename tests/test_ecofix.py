@@ -385,7 +385,7 @@ def test_ores_subarea_drift_is_rejected() -> None:
         "ORES (Namur) 99,99 13,27 7,39",
         1,
     )
-    with pytest.raises(ExtractorError, match="ORES sub-area .* diverged"):
+    with pytest.raises(ExtractorError, match=r"ORES sub-area .* diverged"):
         parse_snapshot("ecofix_motion_online", bumped, "wallonia", "x")
 
 

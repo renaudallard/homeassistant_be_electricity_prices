@@ -59,7 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # scripts/ is not a package, so it is added to sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
-import live_check as lc  # type: ignore[import-not-found]  # noqa: E402
+import live_check as lc  # type: ignore[import-not-found]
 
 # Lays out real cards, Bolt's among them, which ran past 60 s with no
 # text cached on a loaded Raspberry Pi 4.
@@ -3304,7 +3304,7 @@ def test_a_dutch_edition_that_does_not_read_is_reported() -> None:
     is reported, and a transient failure on it says nothing."""
     french = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "fr")
     refused = ValueError("the Dutch card is not myComfort Variabel")
-    ((label, ok, detail),) = _editions(french, refused)
+    ((_label, ok, detail),) = _editions(french, refused)
     assert not ok and "the Dutch card does not read" in detail
     assert _editions(french, refused, transient=True) == []
 

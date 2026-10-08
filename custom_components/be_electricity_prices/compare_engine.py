@@ -349,7 +349,7 @@ class _SweepEngine(_HouseholdMixin):
                     resolved,
                     target_entry,
                 )
-            except Exception:  # noqa: BLE001 - one row loses its history
+            except Exception:  # one row loses its history
                 rows.append(row)
                 continue
             if closed and not archived_months_present(
@@ -381,7 +381,7 @@ class _SweepEngine(_HouseholdMixin):
                     window_start_override=hh.ytd_from,
                     snapshot_raw=snap,
                 )
-            except Exception:  # noqa: BLE001 - one row loses its history
+            except Exception:  # one row loses its history
                 rows.append(row)
                 continue
             # Coverage is judged AFTER the walk, which is what filled the
@@ -435,7 +435,7 @@ class _SweepEngine(_HouseholdMixin):
                 rows.append(
                     await self._sweep_one(sweep, supplier, contract, quarter_hourly)
                 )
-            except Exception as err:  # noqa: BLE001 - one row, not the sweep
+            except Exception as err:  # one row, not the sweep
                 # Same rule as the dialog: a row that raised is still a row,
                 # because dropping it would read as "not competitive".
                 rows.append(
@@ -454,7 +454,7 @@ class _SweepEngine(_HouseholdMixin):
         sweep["rows"] = rows
         try:
             rows = await self.fill_ytd_column(sweep, coord)
-        except Exception:  # noqa: BLE001 - the annual ranking still stands
+        except Exception:  # the annual ranking still stands
             _LOGGER.exception(
                 "Year-to-date column failed for %s; publishing annual only",
                 self.config_entry.title,
@@ -567,7 +567,7 @@ class _SweepEngine(_HouseholdMixin):
                 meter=hh.current_meter,
                 welcome_credit_eur=hh.own_welcome_credit,
             )
-        except Exception:  # noqa: BLE001 - the alternatives are still useful
+        except Exception:  # the alternatives are still useful
             return None
         return RankedRow(
             label=label,

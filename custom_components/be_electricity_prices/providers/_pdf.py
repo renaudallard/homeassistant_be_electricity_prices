@@ -399,7 +399,7 @@ def extract_pdf_text(payload: bytes) -> str:
         return text
     except ExtractorError:
         raise
-    except Exception as err:  # noqa: BLE001 - rewrap pypdf surface as ExtractorError
+    except Exception as err:  # rewrap pypdf surface as ExtractorError
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
@@ -428,7 +428,7 @@ def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) ->
             return text
     except ExtractorError:
         raise
-    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
+    except Exception as err:  # rewrap pdfplumber surface as ExtractorError
         raise ExtractorError(f"PDF {kind} parse error: {err}") from err
 
 

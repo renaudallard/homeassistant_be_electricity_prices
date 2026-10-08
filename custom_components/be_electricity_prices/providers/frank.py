@@ -277,7 +277,7 @@ async def fetch(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001
+    region: str,
     year_month: date,
 ) -> SupplierSnapshot | None:
     if contract_id not in _VALID_IDS:
@@ -300,7 +300,7 @@ async def fetch_for_month(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001
+    region: str,
 ) -> str | None:
     if contract_id not in _VALID_IDS:
         return None

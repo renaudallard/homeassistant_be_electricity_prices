@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-import doc_ref_check as drc  # type: ignore[import-not-found]  # noqa: E402
+import doc_ref_check as drc  # type: ignore[import-not-found]
 
 
 def _tree(tmp_path: Path, *docs: tuple[str, str]) -> Path:

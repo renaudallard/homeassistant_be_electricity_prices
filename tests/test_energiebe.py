@@ -717,7 +717,7 @@ def test_an_unknown_contract_is_rejected() -> None:
 
     from custom_components.be_electricity_prices.providers.energiebe import fetch
 
-    with pytest.raises(ExtractorError, match="unknown energie.be contract"):
+    with pytest.raises(ExtractorError, match=r"unknown energie\.be contract"):
         asyncio.run(fetch(None, "energiebe_nope", "flanders"))  # type: ignore[arg-type]
 
 

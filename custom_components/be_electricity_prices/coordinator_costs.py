@@ -667,7 +667,7 @@ class _CostsMixin:
                 await self._ensure_historical_spots(
                     periods[0].start, periods[-1].end, api_key
                 )
-            except Exception as err:  # noqa: BLE001 - priced on what is cached
+            except Exception as err:  # priced on what is cached
                 # An hour with no spot still bills its network and tax legs, as
                 # it does for the entry's own contract, so price on what the
                 # cache holds rather than not at all.
@@ -691,7 +691,7 @@ class _CostsMixin:
                 month_start=month_start,
                 load_profiles=True,
             )
-        except Exception as err:  # noqa: BLE001 - the next tick asks again
+        except Exception as err:  # the next tick asks again
             _LOGGER.warning(
                 "Could not price the contracts %s held earlier this year: %s",
                 self.entry.title,

@@ -354,7 +354,7 @@ def test_finite_prices_including_negative_zero_still_parse() -> None:
         doc = _doc(
             f"<Point><position>1</position><price.amount>{raw}</price.amount></Point>"
         )
-        assert list(parse_day_ahead_xml(doc).values())[0] == pytest.approx(want)
+        assert next(iter(parse_day_ahead_xml(doc).values())) == pytest.approx(want)
 
 
 def test_out_of_range_period_end_cannot_allocate_without_bound() -> None:

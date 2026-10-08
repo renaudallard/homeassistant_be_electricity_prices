@@ -45,7 +45,7 @@ from scripts.card_texts import RENDER_THREAD  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(
-    enable_custom_integrations: None,  # noqa: ARG001
+    enable_custom_integrations: None,
 ) -> None:
     """Enable custom_components/ loading for every test that uses hass."""
     return

@@ -43,6 +43,7 @@ import argparse
 import asyncio
 import importlib
 import importlib.util as iu
+import itertools
 import json
 import re
 import sys
@@ -65,7 +66,7 @@ import aiohttp
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # scripts/ is not a package, so it is put on sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
-from card_texts import StoredTexts  # type: ignore[import-not-found]  # noqa: E402
+from card_texts import StoredTexts  # type: ignore[import-not-found]
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "be_electricity_prices"
@@ -589,7 +590,7 @@ async def _attributed_check(
                 f"exceeded {_SUPPLIER_HARD_TIMEOUT_S:.0f}s wallclock "
                 "(cancelled inside an uncancellable parse)",
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             # Record any other failure as this supplier's row instead of
             # letting it propagate out of the top-level gather, which would
             # abort every other supplier's check and mis-report a real data
@@ -1128,7 +1129,7 @@ def _expect_excise_bands(prefix: str, taxes: object) -> None:
     )
     _expect(
         f"{prefix}: excise bands are degressive",
-        all(a >= b for a, b in zip(rates, rates[1:], strict=False)),
+        all(a >= b for a, b in itertools.pairwise(rates)),
         detail=f"rates={rates}",
     )
     _expect(
@@ -1569,7 +1570,7 @@ async def _expect_newest_listed_card(
     """
     try:
         html = await _fetch_text(session, ecopower._DBS_PAGE)
-    except Exception as err:  # noqa: BLE001 - a listing outage is not a regression
+    except Exception as err:  # a listing outage is not a regression
         _record(f"{prefix}: newest listed card", True, f"listing unread: {err}")
         return
     stamps = {d[:6] for d in re.findall(r"/(\d{6,8})[a-z]?_dbs_tariefkaart", html)}
@@ -2729,7 +2730,7 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     ).astimezone(UTC)
     try:
         prices = await _ENERGY_CHARTS_CLIENT(session).fetch_day_ahead(start, end)
-    except Exception as err:  # noqa: BLE001 - any failure is the finding
+    except Exception as err:  # any failure is the finding
         _record(label, False, f"{type(err).__name__}: {err}")
         return
     # 23/24/25 hours: a DST boundary day is a real local day, not a fault.
@@ -3030,7 +3031,7 @@ def _check_federal_tax_consensus(
     for row in residential:
         if row.stem != month:
             continue
-        supplier, contract, region = row.parts[-4:-1]
+        supplier, _contract, region = row.parts[-4:-1]
         try:
             taxes = json.loads(row.read_text(encoding="utf-8"))["taxes"]
             basis = 1.0 + float(taxes.get("vat_rate") or 0.0)
@@ -5252,7 +5253,7 @@ async def _run(texts: Path | None = None) -> int:
         with _attributed("_catalog"):
             try:
                 await _check_catalogs(session, modules)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 # The catalog phase dereferences provider-internal attributes
                 # (renamed by a refactor -> AttributeError). Record it instead
                 # of letting it escape and discard the extractor report that
@@ -5271,7 +5272,7 @@ async def _run(texts: Path | None = None) -> int:
             # a card we still resolve.
             try:
                 _check_excise_window()
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_federal: excise window check crashed",
                     False,
@@ -5279,7 +5280,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 _check_vreg_ceiling_window()
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_federal: VREG ceiling window check crashed",
                     False,
@@ -5287,7 +5288,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 _check_vreg_ceiling_consensus(texts)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_federal: VREG ceiling consensus check crashed",
                     False,
@@ -5295,7 +5296,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 _check_federal_tax_consensus(texts)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_federal: consensus check crashed",
                     False,
@@ -5303,7 +5304,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 _check_vat_consensus(texts)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_federal: VAT consensus check crashed",
                     False,
@@ -5311,7 +5312,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 _check_network_consensus(texts)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_network: consensus check crashed",
                     False,
@@ -5319,7 +5320,7 @@ async def _run(texts: Path | None = None) -> int:
                 )
             try:
                 await _check_card_freshness(session, modules)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "_freshness: probe crashed",
                     False,
@@ -5331,7 +5332,7 @@ async def _run(texts: Path | None = None) -> int:
             # had in fact completed.
             try:
                 await _check_spot_fallback(session)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _record(
                     "spot/fallback: check crashed",
                     False,

@@ -248,7 +248,7 @@ class _SnapshotMixin:
                     today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
                     today,
                 )
-            except Exception as err:  # noqa: BLE001 - never fail a tick over this
+            except Exception as err:  # never fail a tick over this
                 _LOGGER.debug(
                     "%s: annual volume unavailable: %s", self.entry.entry_id, err
                 )
@@ -764,7 +764,7 @@ class _SnapshotMixin:
                 dt_util.now().date(),
                 self.entry,
             )
-        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+        except Exception as err:  # a blip on the archive is not this tick's problem
             _LOGGER.debug("card archive read failed for an unreadable card: %s", err)
             return False
         if archived is None:
@@ -801,7 +801,7 @@ class _SnapshotMixin:
                     withdrawn,
                     self.entry,
                 )
-            except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+            except Exception as err:  # a blip on the archive is not this tick's problem
                 _LOGGER.debug(
                     "card archive read failed for a withdrawn product: %s", err
                 )
@@ -847,7 +847,7 @@ class _SnapshotMixin:
                 dt_util.now().date(),
                 self.entry,
             )
-        except Exception as err:  # noqa: BLE001 - a blip on the archive is not this tick's problem
+        except Exception as err:  # a blip on the archive is not this tick's problem
             _LOGGER.debug("card archive read failed for a stand-in card: %s", err)
             return
         if found is None:

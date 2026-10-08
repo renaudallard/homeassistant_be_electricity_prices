@@ -165,7 +165,7 @@ async def ensure_rates(
         if _fetched_quarter == current:
             try:
                 await _store(hass).async_save(_to_store())
-            except Exception as err:  # noqa: BLE001 - kept in memory regardless
+            except Exception as err:  # kept in memory regardless
                 _LOGGER.debug("CREG home charging rates not stored: %s", err)
     return _has(_table, current)
 
@@ -189,7 +189,7 @@ async def _load(hass: HomeAssistant) -> None:
     _loaded = True
     try:
         blob = await _store(hass).async_load()
-    except Exception as err:  # noqa: BLE001 - a bad file costs one download
+    except Exception as err:  # a bad file costs one download
         _LOGGER.debug("CREG home charging rates: stored table unreadable: %s", err)
         return
     if not isinstance(blob, dict) or _table:
@@ -240,7 +240,7 @@ async def _fetch(session: aiohttp.ClientSession, quarter: date) -> None:
     try:
         text = await _csv_text(session)
         table = parse(text) if text else None
-    except Exception as err:  # noqa: BLE001 - the docstring promises no raise
+    except Exception as err:  # the docstring promises no raise
         _LOGGER.warning("CREG home charging rates could not be read: %s", err)
         table = None
     if not table:
@@ -279,7 +279,7 @@ async def _csv_text(session: aiohttp.ClientSession) -> str | None:
                 # The file opens with a byte-order mark.
                 return payload.decode("utf-8-sig", "replace")
             _LOGGER.debug("CREG rates %s answered %d", _URL, r.status)
-    except Exception as err:  # noqa: BLE001 - see ensure_rates
+    except Exception as err:  # see ensure_rates
         _LOGGER.debug("CREG rates %s unreadable: %s", _URL, err)
     _LOGGER.warning("CREG home charging rate file could not be read")
     return None

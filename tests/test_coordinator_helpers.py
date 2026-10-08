@@ -14935,7 +14935,7 @@ async def test_projection_takes_the_remaining_welcome_credit_off_the_year(
 
     without, diag0 = await _project(hass, entry, _daily(10.0), priced=plain)
     with_today, diag1 = await _project(hass, entry, _daily(10.0), priced=todays_card)
-    with_signed, diag2 = await _project(
+    with_signed, _diag2 = await _project(
         hass, entry, _daily(10.0), priced=todays_card, signing=signed_card
     )
     assert without is not None and with_today is not None and with_signed is not None

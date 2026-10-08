@@ -1228,7 +1228,10 @@ It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
 release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
 their versions from that same file with pip's `-c`, so a version is written down once. The lint
 rule set is itself
-pinned in `pyproject.toml` (`[tool.ruff.lint] select`), so a ruff upgrade cannot expand what is
+pinned in `pyproject.toml` (`[tool.ruff.lint] select`: pycodestyle, pyflakes, isort, pyupgrade
+for Python 3.13, bugbear, simplify and ruff's own rules, the set the gas integration lints for,
+with line length left to the formatter and the ambiguous-Unicode rules off because the parsers
+match the dash and space variants the cards print), so a ruff upgrade cannot expand what is
 linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The steps are:
 
 | Step | Command | Notes |

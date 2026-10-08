@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # scripts/ is not a package, so it is added to sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
-from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
+from card_texts import (  # type: ignore[import-not-found]
     StoredTexts,
     digest_of,
     read_text,

@@ -145,7 +145,7 @@ _CONTRACT_PATTERNS: dict[str, re.Pattern[str]] = {
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+    region: str,  # Cociter only sells in Wallonia.
 ) -> SupplierSnapshot:
     """Fetch + parse Cociter's latest published card for ``contract_id``."""
     pattern = _CONTRACT_PATTERNS.get(contract_id)
@@ -160,7 +160,7 @@ async def fetch(
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+    region: str,  # Cociter only sells in Wallonia.
     year_month: date,
 ) -> SupplierSnapshot | None:
     """Fetch the Cociter card for a specific (year, month).
@@ -286,7 +286,7 @@ async def _settle_on_next_card(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+    region: str,  # Cociter only sells in Wallonia.
 ) -> str | None:
     """Cheap freshness probe: latest URL for ``contract_id`` from the index.
 

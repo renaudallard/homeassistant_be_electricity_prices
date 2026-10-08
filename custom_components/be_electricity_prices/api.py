@@ -153,7 +153,7 @@ class EntsoeClient:
         return await asyncio.to_thread(parse_day_ahead_xml, payload, quarter_hourly)
 
 
-def _MAX_PERIOD_SLOTS(step: timedelta) -> int:  # noqa: N802 - reads as a bound
+def _MAX_PERIOD_SLOTS(step: timedelta) -> int:  # reads as a bound
     """Most points one Period may contribute, for a resolution step.
 
     Bounds the forward-fill by 31 days' worth of slots. The document's own

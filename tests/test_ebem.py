@@ -298,7 +298,7 @@ def test_missing_renewables_block_is_fatal() -> None:
     """
     text = _layout(_VARIABLE)
     truncated = text.replace("c€/kWh incl. BTW 6%", "c€/kWh excl. BTW 6%")
-    with pytest.raises(ExtractorError, match="Totale bijdrage incl. BTW"):
+    with pytest.raises(ExtractorError, match=r"Totale bijdrage incl\. BTW"):
         parse_snapshot("ebem_variable", truncated, "test://v", "2026-05")
 
 

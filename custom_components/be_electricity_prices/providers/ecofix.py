@@ -174,7 +174,7 @@ async def fetch(
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - URL is region-agnostic.
+    region: str,  # URL is region-agnostic.
 ) -> str | None:
     """HEAD the per-contract PDF and return its freshness key.
 

@@ -40,8 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # scripts/ is not a package, so it is added to sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
-import archive_cards as ac  # type: ignore[import-not-found]  # noqa: E402
-import card_texts  # type: ignore[import-not-found]  # noqa: E402
+import archive_cards as ac  # type: ignore[import-not-found]
+import card_texts  # type: ignore[import-not-found]
 
 NOW = datetime(2026, 9, 11, 6, 0, tzinfo=UTC)
 CARD_URL = "https://acme.test/card"

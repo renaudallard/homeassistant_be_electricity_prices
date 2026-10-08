@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import itertools
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -1844,7 +1845,7 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     assert old_live is not None and new_live is not None
     sums = [row["sum"] for row in rows]
     # One running total: nothing falls back at the switch.
-    assert all(later >= earlier for earlier, later in zip(sums, sums[1:], strict=False))
+    assert all(later >= earlier for earlier, later in itertools.pairwise(sums))
     assert rows[-1]["sum"] == pytest.approx(old_live + new_live, abs=1e-3)
 
 

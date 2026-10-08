@@ -246,7 +246,7 @@ async def test_reading_the_last_days_again_bills_what_a_full_read_bills(
     # An hour corrected further back leaves the chain joined, so it is not
     # seen until the next day's full read: the one documented difference.
     old = _hour(date(2025, 11, 15), 8)
-    fixed = [r for r in series[DAY] if r["start"] == old][0]
+    fixed = next(r for r in series[DAY] if r["start"] == old)
     await _rewrite(
         hass,
         DAY,

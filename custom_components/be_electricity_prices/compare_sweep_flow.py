@@ -74,7 +74,7 @@ async def async_run_daily_compare(
     engine = _SweepEngine(hass, entry, {})
     try:
         result = await engine.run_full_sweep(coord)
-    except Exception:  # noqa: BLE001 - a timer job, not a user action
+    except Exception:  # a timer job, not a user action
         _LOGGER.exception("Scheduled comparison failed for %s", entry.title)
         return
     if isinstance(result, str):
@@ -91,7 +91,7 @@ async def async_run_daily_compare(
     # this session either way, and the next tick saves it again.
     try:
         await coord._save_persistent()
-    except Exception:  # noqa: BLE001 - a timer job, not a user action
+    except Exception:  # a timer job, not a user action
         _LOGGER.exception("Could not persist the ranking for %s", entry.title)
 
 
@@ -231,7 +231,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
             task, self._sweep_task = self._sweep_task, None
             try:
                 sweep["rows"].append(task.result())
-            except Exception as err:  # noqa: BLE001 - one row, not the sweep
+            except Exception as err:  # one row, not the sweep
                 # A row that raised is still a row: dropping it would read as
                 # "not competitive". Recorded with its reason and moved past.
                 supplier, contract, quarter_hourly = sweep["candidates"][sweep["index"]]

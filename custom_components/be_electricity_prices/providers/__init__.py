@@ -243,11 +243,11 @@ def takes_signing_rate(data: Mapping[str, Any]) -> bool:
 
 
 __all__ = [
+    "EXTRACTORS",
     "Contract",
     "DsoOverlay",
     "DynamicRates",
     "EnergyRates",
-    "EXTRACTORS",
     "ExtractorError",
     "FixedRates",
     "SpotMonthlyRates",
@@ -257,9 +257,9 @@ __all__ = [
     "VariableRates",
     "all_extractors",
     "effective_kind",
+    "get",
     "offers_direct_debit",
     "offers_quarter_hourly",
     "settlement_answer",
     "takes_signing_rate",
-    "get",
 ]

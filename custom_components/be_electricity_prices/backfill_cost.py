@@ -688,7 +688,7 @@ def _seed_short_term_sum(
         get_instance(hass).async_import_statistics(
             metadata, [seed], StatisticsShortTerm
         )
-    except Exception:  # noqa: BLE001 - recorder may surface anything
+    except Exception:  # recorder may surface anything
         _LOGGER.debug(
             "could not seed the short-term sum for %s; the first compiled "
             "hour will show a one-off negative change",

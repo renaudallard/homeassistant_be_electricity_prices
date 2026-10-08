@@ -393,7 +393,7 @@ async def _settled_by_supplier(
     """
     try:
         own = await fetch_for_month(session, contract, region, year_month)
-    except Exception as err:  # noqa: BLE001 - the archive row still bills the month
+    except Exception as err:  # the archive row still bills the month
         _LOGGER.debug(
             "settling %s/%s/%04d-%02d failed: %s",
             contract,
@@ -425,7 +425,7 @@ async def _settled_in_place(
         settled = await settle(
             session, contract, region, year_month, replace(held, provisional=False)
         )
-    except Exception as err:  # noqa: BLE001 - the held card still bills the month
+    except Exception as err:  # the held card still bills the month
         _LOGGER.debug(
             "settling %s/%s/%04d-%02d in place failed: %s",
             contract,
@@ -891,7 +891,9 @@ async def month_card(
                 archived = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )
-            except Exception as err:  # noqa: BLE001 - a blip on the archive must not cost the supplier tier
+            except (
+                Exception
+            ) as err:  # a blip on the archive must not cost the supplier tier
                 _LOGGER.debug(
                     "card archive read failed for %s/%s/%s/%s: %s",
                     extractor.id,
@@ -922,7 +924,7 @@ async def month_card(
                 snap = await extractor.fetch_for_month(
                     session, contract, region, year_month
                 )
-            except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
+            except Exception as err:  # per-month fetch must never break the year loop
                 _LOGGER.debug(
                     "fetch_for_month failed for %s/%s/%s/%s: %s",
                     extractor.id,
