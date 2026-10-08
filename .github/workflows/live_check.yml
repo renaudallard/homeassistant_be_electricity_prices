@@ -23,6 +23,8 @@ on:
     paths:
       - "custom_components/be_electricity_prices/providers/**"
       - "scripts/live_check.py"
+      # live_check imports it.
+      - "scripts/card_texts.py"
       - ".github/workflows/live_check.yml"
 
 permissions:
@@ -49,6 +51,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+        with:
+          # github.token can write issues; the card readers run third-party
+          # code, which must not find it on disk.
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

@@ -1233,8 +1233,10 @@ These validate packaging and manifest conformance, not runtime behaviour.
 
 Runs on the daily `cron: "17 6 * * *"` (06:17 UTC, after suppliers' overnight publication), on
 manual dispatch, and on pull requests that touch `providers/**`,
-`scripts/live_check.py`, or the workflow itself (`.github/workflows/live_check.yml`). It needs
-`issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml`).
+`scripts/live_check.py`, `scripts/card_texts.py` (which it imports), or the workflow itself
+(`.github/workflows/live_check.yml`). It needs `issues: write` to file drift/catalog/extractor
+issues (`.github/workflows/live_check.yml`), and checks out with `persist-credentials: false` so
+that token is not left on disk where the card readers, third-party code, run.
 
 The odd minute is deliberate. GitHub documents the start of every hour as a high-load slot for the
 `schedule` event and says queued runs may be dropped when the load is high enough, which is exactly
