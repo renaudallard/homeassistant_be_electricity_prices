@@ -3051,3 +3051,71 @@ def test_a_render_hands_back_its_text_and_its_error() -> None:
     assert asyncio.run(card_texts.in_daemon_thread(bytes.decode, b"text")) == "text"
     with pytest.raises(CardNotReadableError):
         asyncio.run(card_texts.in_daemon_thread(boom, b""))
+
+
+async def test_a_card_the_ocr_cannot_read_is_named_for_its_own_issue(
+    tmp_path: Path,
+) -> None:
+    """A card published as page images is read here and nowhere else, so the
+    run says which of its failures were the engine's: the live check cannot
+    read those cards and only notes them."""
+
+    def refuse(_payload: bytes, strict: bool) -> object:
+        raise RuntimeError("no glyph matched")
+
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    with _ocr_engine(refuse):
+        summary = await ac.archive(
+            tmp_path / "out",
+            extractors=[_extractor(_page_image_fetch(session))],
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert len(summary.failed) == 1
+    assert summary.ocr_failed == summary.failed
+    assert "OCR could not read the card" in summary.ocr_failed[0]
+
+
+async def test_a_reading_that_fails_the_parse_is_the_ocr_s_too(
+    tmp_path: Path,
+) -> None:
+    """The engine leaves out a line it refused a mark on, so a figure it could
+    not read is missing and the parse fails on it: that card is the engine's
+    to read better, not a layout change."""
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    page_image = _page_image_fetch(session)
+
+    async def fetch(s: Any, contract: str, region: str) -> SupplierSnapshot:
+        await page_image(s, contract, region)
+        raise ExtractorError("Acme: single rate not found")
+
+    read = "Verbruik\n" * 80
+    with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
+        summary = await ac.archive(
+            tmp_path / "out",
+            extractors=[_extractor(fetch)],
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert summary.ocr_failed == summary.failed
+    assert len(summary.failed) == 1
+
+
+async def test_a_card_with_a_text_layer_that_fails_is_not_the_ocr_s(
+    tmp_path: Path,
+) -> None:
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    readable = _pdf_fetch(session, [])
+
+    async def fetch(s: Any, contract: str, region: str) -> SupplierSnapshot:
+        await readable(s, contract, region)
+        raise ExtractorError("Acme: single rate not found")
+
+    summary = await ac.archive(
+        tmp_path / "out",
+        extractors=[_extractor(fetch)],
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert len(summary.failed) == 1
+    assert summary.ocr_failed == []

@@ -2141,10 +2141,10 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
     ).read_text()
     pairs = re.findall(r'--label (\S+) \\\n\s+--title "([^"]+)"', archive)
-    # The run failing, the upload token expiring, and a card carrying glyphs
-    # the OCR library has not learnt.
-    assert len(pairs) == 3, pairs
-    assert len({label for label, _ in pairs}) == 3, pairs
+    # The run failing, the upload token expiring, a card carrying glyphs the
+    # OCR library has not learnt, and a card the OCR could not read.
+    assert len(pairs) == 4, pairs
+    assert len({label for label, _ in pairs}) == 4, pairs
 
 
 def _failures(run: Callable[[], None]) -> list[str]:

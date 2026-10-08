@@ -254,6 +254,9 @@ class _Summary:
     restamped: int = 0
     unreplayable: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    # The failed lines that are the OCR engine's, filed as an issue of their
+    # own: the live check cannot read those cards and only notes them.
+    ocr_failed: list[str] = field(default_factory=list)
     given_up: list[str] = field(default_factory=list)
 
 
@@ -1329,6 +1332,23 @@ def _transient(err: BaseException) -> bool:
     return isinstance(err, TimeoutError) or is_transient_fetch_error(str(err))
 
 
+def _ocr_failure(cards: _Cards, memo: _RecordingMemo, err: BaseException) -> bool:
+    """Whether a failed fetch is the OCR engine's: it could not read the
+    card, or what it read of the card failed the parse. The reading may have
+    been made for this fetch or served from the memo, as a card two regions
+    share is."""
+    if isinstance(err, CardNotReadableError):
+        return True
+    if _transient(err):
+        return False
+    read = {digest for _url, digest in cards.seen}
+    for key in memo.touched:
+        digest = cards.digests.get(key.partition("\0")[2])
+        if digest is not None:
+            read.add(digest)
+    return any(digest in cards.ocr for digest in read)
+
+
 async def _settle_held(
     settle: MonthSettler,
     fetch_for_month: ArchivedSnapshotFetcher,
@@ -1812,7 +1832,10 @@ async def archive(
                         lambda: ex.fetch(session, contract, region), sleep
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
-                    summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                    line = f"{label}: {type(err).__name__}: {err}"
+                    summary.failed.append(line)
+                    if _ocr_failure(cards, memo, err):
+                        summary.ocr_failed.append(line)
                     read = _unparsed_sources(cards)
                     if read:
                         unreadable[
@@ -1902,7 +1925,10 @@ async def archive(
                                 sleep,
                             )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
-                        summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                        line = f"{label}: {type(err).__name__}: {err}"
+                        summary.failed.append(line)
+                        if _ocr_failure(cards, memo, err):
+                            summary.ocr_failed.append(line)
                         read = _unparsed_sources(cards)
                         if read:
                             unreadable[
@@ -2051,6 +2077,13 @@ def main() -> int:
         "archives, at most --keep-months",
     )
     parser.add_argument(
+        "--ocr-failures",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="write the cards the OCR engine could not read to FILE, one a line",
+    )
+    parser.add_argument(
         "--index-only",
         action="store_true",
         help="only rewrite the coverage sheets from what is on disk; no fetch",
@@ -2074,6 +2107,11 @@ def main() -> int:
             rerender=args.rerender,
         )
     )
+    if args.ocr_failures is not None:
+        args.ocr_failures.write_text(
+            "".join(" ".join(line.split()) + "\n" for line in summary.ocr_failed),
+            encoding="utf-8",
+        )
     return 0 if summary.stored or summary.unchanged else 1
 
 

@@ -1132,6 +1132,12 @@ now is marked on its first walk.
 The engine is installed by this workflow alone, which runs 3.13 for everything else and 3.14 for
 it: no installation ever decodes a card, it reads the row.
 
+A card the engine cannot read, or whose reading fails the parse, is also named for an issue of
+its own, since the live check has no reading of such a card and only notes it. The walk writes
+those failures to the file `--ocr-failures` names (`_ocr_failure`, `scripts/archive_cards.py`),
+and the `ocr` job files them under the `archive-cards-ocr` label, fingerprinted on the cards so
+the same card failing again within the week adds nothing.
+
 A card that even it cannot read is named in `unparsed.json`, by the row it would have become,
 with the url it was downloaded from beside each digest. That url is the half that matters later:
 an extractor asks for a card by url and cannot be told to want a digest, so it is what lets
@@ -1473,7 +1479,9 @@ artifacts, plain files and never a `.git` directory
 | `index` | no | rewrites the sheets with that manifest (`--index-only`), writes the two READMEs, hands the lot over |
 | `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token as an authorization header on their own command line |
 
-The token-expiry warning and the failure issue run in two small jobs after these.
+The OCR issue, the token-expiry warning and the failure issue run in three small jobs after these.
+The `ocr` job holds `github.token` alone and takes the walk's list of cards the OCR could not read
+as an artifact, so that token does not share a runner with the readers and the engine either.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository
