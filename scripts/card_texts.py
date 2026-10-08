@@ -18,11 +18,14 @@ it as is.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import importlib.metadata
 import json
+import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 # The two PDF text readers, pdfplumber standing for the pdfminer.six it pins,
 # and the code that drives them. Each PDF source of a row names what rendered
@@ -43,6 +46,43 @@ _RENDER_CODE = (
 # is the engine moving. A source it read names them in place of the readers.
 OCR_ENGINE = "ocr-price-cards"
 _ENGINE_LIBRARIES = ("pypdfium2", "numpy", "pdfplumber")
+
+
+# The name of a render thread, so the tests can wait for one to wind down.
+RENDER_THREAD = "card-render"
+
+
+async def in_daemon_thread[T](func: Callable[[bytes], T], payload: bytes) -> T:
+    """``func(payload)`` in a daemon thread of its own.
+
+    The scripts bound each card with a timeout, which abandons a render that
+    never returns but cannot stop its thread. asyncio.to_thread's workers
+    are then waited for when the event loop closes and again at exit, so a
+    single hung render held the job until its own timeout, and a live check
+    killed there filed nothing. A daemon thread holds neither.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[T] = loop.create_future()
+
+    def settle(result: Any, error: BaseException | None) -> None:
+        if future.done():
+            return
+        if error is None:
+            future.set_result(result)
+        else:
+            future.set_exception(error)
+
+    def run() -> None:
+        try:
+            outcome: tuple[Any, BaseException | None] = (func(payload), None)
+        except BaseException as err:  # handed to the awaiting coroutine
+            outcome = (None, err)
+        # A loop that has closed has nobody waiting for this render any more.
+        with contextlib.suppress(RuntimeError):
+            loop.call_soon_threadsafe(settle, *outcome)
+
+    threading.Thread(target=run, name=RENDER_THREAD, daemon=True).start()
+    return await future
 
 
 def read_text(path: Path) -> str:
@@ -164,7 +204,7 @@ class StoredTexts:
             self.unrendered += 1
             self.calls.append((variant, url, digest, text))
             return text
-        text = await asyncio.to_thread(renderer, payload)
+        text = await in_daemon_thread(renderer, payload)
         self.rendered += 1
         self.fresh[key] = text
         self.calls.append((variant, url, digest, text))

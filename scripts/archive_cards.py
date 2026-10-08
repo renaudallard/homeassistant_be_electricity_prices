@@ -152,6 +152,7 @@ from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
     StoredTexts,
     digest_of,
     engine_version,
+    in_daemon_thread,
     read_text,
     readers_line,
 )
@@ -401,7 +402,7 @@ class _Cards(StoredTexts):
         try:
             return await super().render(variant, url, payload, renderer)
         except CardNotReadableError:
-            text = await asyncio.to_thread(_ocr_text, payload)
+            text = await in_daemon_thread(_ocr_text, payload)
         self.rendered += 1
         self.fresh[(variant, digest)] = text
         self.calls.append((variant, url, digest, text))

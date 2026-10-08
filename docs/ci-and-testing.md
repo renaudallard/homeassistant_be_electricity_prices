@@ -284,6 +284,14 @@ report ends with how many cards were served that way and how many rendered, and 
 seven attempts on a bad morning no longer cost seven full renders. A fork's pull request has no
 stored text to read and renders everything, which is the behaviour before the cache existed.
 
+A render the cache does run, and the archiver's OCR reading, happen in a daemon thread of their
+own (`in_daemon_thread`, `scripts/card_texts.py`), not under `asyncio.to_thread`. The per-card
+timeout abandons a render that never returns but cannot stop its thread, and the default
+executor's workers are waited for when the event loop closes and again at exit, so one hung
+render held the job until the workflow's own timeout killed it with nothing filed. A daemon thread
+holds neither. The tests wait for such a thread to wind down (`_render_threads_wound_down`,
+`tests/conftest.py`) before Home Assistant's check for threads a test left behind.
+
 ### Card freshness
 
 `_check_card_freshness` (`scripts/live_check.py`) asks a question no other check here asks:

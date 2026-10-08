@@ -3021,3 +3021,33 @@ def test_the_cards_token_never_shares_a_job_with_third_party_code() -> None:
         s.get("uses", "").startswith("actions/upload-artifact")
         for s in workflow["jobs"]["walk"]["steps"]
     )
+
+
+def test_a_render_that_never_returns_does_not_hold_the_exit() -> None:
+    """The per-card timeout abandons the render; its thread must not keep
+    the event loop, or the process, from ending. Under asyncio.to_thread
+    the loop's executor shutdown waited for the hung render."""
+    import threading
+    import time
+
+    hang = threading.Event()
+
+    async def main() -> None:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(
+                card_texts.in_daemon_thread(lambda _: hang.wait(), b""), 0.1
+            )
+
+    started = time.monotonic()
+    asyncio.run(main())
+    assert time.monotonic() - started < 5.0
+    hang.set()
+
+
+def test_a_render_hands_back_its_text_and_its_error() -> None:
+    def boom(_payload: bytes) -> str:
+        raise CardNotReadableError("card has no text layer")
+
+    assert asyncio.run(card_texts.in_daemon_thread(bytes.decode, b"text")) == "text"
+    with pytest.raises(CardNotReadableError):
+        asyncio.run(card_texts.in_daemon_thread(boom, b""))
