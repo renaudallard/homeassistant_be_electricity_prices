@@ -48,6 +48,7 @@ overridden in `BePricesConfigFlow` to add the install-time unique-id reject, and
 The OptionsFlow pre-fills every field with the current value, so a user can change
 anything post-install (including supplier, contract, and region). On finalize it
 writes back to `entry.data` (not `entry.options`) and updates the entry title
+when it is still the one the wizard made; a title the user typed is kept
 (`config_flow.py` module docstring, `config_flow.py`).
 
 ## Config-flow step reference
@@ -697,7 +698,9 @@ capacity step and adds the `dso_tariff_mode` step on the next pass.
 1. Recomputes the unique id from the edited tuple and aborts `already_configured`
    on collision with another entry (`config_flow.py`).
 2. Computes the new title via `_entry_title` (`config_flow.py`),
-   `"<supplier label> - <contract label> (<Region>)"`.
+   `"<supplier label> - <contract label> (<Region>)"`, but only when the entry's
+   title still equals the one `_entry_title` gives for its stored settings. A
+   title the user renamed the entry to is kept as it is.
 3. Skips the write entirely when nothing changed. The no-op check compares against
    the *merged* `{**data, **options}` (`config_flow.py`), not `entry.data`
    alone; `self._data` was seeded from that merge, so comparing against
@@ -706,8 +709,8 @@ capacity step and adds the `dso_tariff_mode` step on the next pass.
    and unique id, the write is skipped so HA's update listener does not tear down
    entities and the warmed snapshot for no benefit (`config_flow.py` comment).
 4. Otherwise calls `async_update_entry(data=self._data, options={}, title=...,
-   unique_id=...)`: values persist to `entry.data`, stale options are discarded, the
-   title and unique id refresh. It returns `async_create_entry(title="", data={})`,
+   unique_id=...)`: values persist to `entry.data`, stale options are discarded, a
+   generated title and the unique id refresh. It returns `async_create_entry(title="", data={})`,
    the OptionsFlow idiom for "I already wrote the entry myself".
 
 Reconfigure vs re-add: there is no separate `async_step_reconfigure`; editing an

@@ -312,6 +312,43 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 
 @pytest.mark.usefixtures("enable_custom_integrations")
 @pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        (
+            "Eneco - Eneco Zon & Wind Vast (Wallonia)",
+            "Eneco - Eneco Zon & Wind Vast (Flanders)",
+        ),
+        ("Home", "Home"),
+    ],
+)
+async def test_an_edit_keeps_a_title_the_user_typed(
+    hass: HomeAssistant, title: str, expected: str
+) -> None:
+    """The title the wizard made follows the contract; one the user renamed
+    the entry to is theirs and stays."""
+    entry = make_entry(title=title, solar_kva=0.0, solar_regime="none")
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    answers: dict[str, dict[str, Any]] = {
+        "edit": {"supplier": "eneco", "region": "flanders"},
+        "contract": {"contract": "power_fix"},
+        "dso": {"dso": "fluvius_antwerpen"},
+        "meter": {"meter": "mono"},
+        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": 0.0},
+        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+    }
+    while result["type"] == data_entry_flow.FlowResultType.FORM:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], answers.get(result["step_id"], {})
+        )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["region"] == "flanders"
+    assert entry.title == expected
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
     ("key", "default"),
     [("card_archive", True), ("ev_home_charging_rate", False)],
 )

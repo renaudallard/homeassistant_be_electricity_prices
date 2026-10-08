@@ -38,7 +38,7 @@ Both ConfigFlow and OptionsFlow walk the same chain of steps:
 OptionsFlow pre-fills every field with the current value, so the user can
 change anything (including supplier/contract/region) post-install. On
 finalize, OptionsFlow writes back to ``entry.data`` and updates the entry
-title.
+title, unless the user renamed the entry.
 
 No EUR values are asked. Energy + network + tax rates are fetched live by
 the coordinator from each supplier's own publication.
@@ -81,6 +81,7 @@ from .const import (
 from .providers import (
     get as get_extractor,
 )
+from .providers.base import ExtractorError
 from .flow_wizard import _WizardStepsMixin
 
 
@@ -334,18 +335,22 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                 ):
                     return self.async_abort(reason="already_configured")
         # Persist back to entry.data so the new values are the baseline,
-        # discard any stale options, and update the title to reflect the
-        # current supplier / contract / region. Skip the write entirely
-        # when nothing changed: HA's update listener would otherwise fire
-        # a reload, tearing down all entities and the warmed snapshot for
-        # no benefit.
-        new_title = _entry_title(self._data)
+        # discard any stale options, and update a title the wizard made to
+        # reflect the current supplier / contract / region; one the user
+        # typed is theirs and stays. Skip the write entirely when nothing
+        # changed: HA's update listener would otherwise fire a reload,
+        # tearing down all entities and the warmed snapshot for no benefit.
         # ``self._data`` was seeded as ``{**entry.data, **entry.options}`` so
         # an entry that already carried options would otherwise miss this
         # shortcut on every re-edit (the merged dict can never equal
         # entry.data alone). Compare against the same merge so a no-op
         # re-edit really skips the reload.
         merged = {**self.config_entry.data, **self.config_entry.options}
+        try:
+            made = self.config_entry.title == _entry_title(merged)
+        except ExtractorError:
+            made = False
+        new_title = _entry_title(self._data) if made else self.config_entry.title
         unchanged = (
             merged == self._data
             and self.config_entry.title == new_title
