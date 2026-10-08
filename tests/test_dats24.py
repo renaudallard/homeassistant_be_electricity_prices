@@ -294,7 +294,7 @@ class _CardResponse:
         self.headers: dict[str, str] = {}
         self.content = FakeBody(payload)
 
-    async def __aenter__(self) -> "_CardResponse":
+    async def __aenter__(self) -> _CardResponse:
         return self
 
     async def __aexit__(self, *_args: Any) -> None:

@@ -695,7 +695,7 @@ class _FakeHead:
     def __init__(self, ctype: str) -> None:
         self.headers = {"Content-Type": ctype}
 
-    async def __aenter__(self) -> "_FakeHead":
+    async def __aenter__(self) -> _FakeHead:
         return self
 
     async def __aexit__(self, *a: object) -> None:

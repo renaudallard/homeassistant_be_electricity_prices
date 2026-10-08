@@ -214,7 +214,7 @@ async def fetch_for_month(
 async def _archived_card(
     session: aiohttp.ClientSession,
     contract_id: str,
-    contract: "_ContractDef",
+    contract: _ContractDef,
     year_month: date,
     html: str,
 ) -> tuple[SupplierSnapshot, str] | None:
@@ -306,7 +306,7 @@ def _settled_on(
 async def _settle_on_published_index(
     session: aiohttp.ClientSession,
     contract_id: str,
-    contract: "_ContractDef",
+    contract: _ContractDef,
     snap: SupplierSnapshot,
     year_month: date,
     html: str,

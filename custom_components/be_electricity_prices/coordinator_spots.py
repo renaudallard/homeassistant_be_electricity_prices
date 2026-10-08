@@ -38,7 +38,7 @@ import asyncio
 import logging
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -115,9 +115,6 @@ _SPOT_SANE_MIN = -1.0
 _SPOT_SANE_MAX = 5.0
 
 
-_CacheValue = TypeVar("_CacheValue")
-
-
 def _spots_for_local_days(
     spots: Mapping[datetime, float], days: set[date]
 ) -> dict[datetime, float]:
@@ -159,7 +156,9 @@ def _dates_in(start: date, end: date) -> Iterator[date]:
         day += timedelta(days=1)
 
 
-def _drop_hours_before(cache: dict[datetime, _CacheValue], cutoff: datetime) -> None:
+def _drop_hours_before[CacheValue](
+    cache: dict[datetime, CacheValue], cutoff: datetime
+) -> None:
     """Delete every hour older than ``cutoff`` from ``cache``, in place.
 
     In place rather than by rebuilding and rebinding: _ensure_historical_spots

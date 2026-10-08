@@ -1522,7 +1522,7 @@ def test_a_kept_card_that_did_not_download_marks_the_replay(
     answered = status
 
     class _Response:
-        async def __aenter__(self) -> "_Response":
+        async def __aenter__(self) -> _Response:
             if error is not None:
                 raise error
             return self
@@ -1575,7 +1575,7 @@ def test_a_kept_card_download_is_retried_before_it_holds_the_stamp(
         def __init__(self) -> None:
             self.status = answers.pop(0)
 
-        async def __aenter__(self) -> "_Response":
+        async def __aenter__(self) -> _Response:
             return self
 
         async def __aexit__(self, *_exc: object) -> bool:

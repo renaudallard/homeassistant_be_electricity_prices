@@ -275,7 +275,7 @@ class _FakeSession:
     def __init__(self, exc: Exception) -> None:
         self._exc = exc
 
-    def get(self, *_args: object, **_kwargs: object) -> "_FakeCtx":
+    def get(self, *_args: object, **_kwargs: object) -> _FakeCtx:
         return _FakeCtx(self._exc)
 
 
@@ -295,13 +295,13 @@ async def test_fetch_text_converts_timeout_to_extractor_error() -> None:
     a ClientError. Without explicit catching the bare TimeoutError
     bubbles out of every supplier's discover/fetch and crashes the
     live-check (regression: engie/catalog 2026-05-05)."""
-    session = _FakeSession(asyncio.TimeoutError())
+    session = _FakeSession(TimeoutError())
     with pytest.raises(ExtractorError, match="network error"):
         await fetch_text(session, "https://example.com/")  # type: ignore[arg-type]
 
 
 async def test_fetch_pdf_text_converts_timeout_to_extractor_error() -> None:
-    session = _FakeSession(asyncio.TimeoutError())
+    session = _FakeSession(TimeoutError())
     with pytest.raises(ExtractorError, match="network error"):
         await fetch_pdf_text(session, "https://example.com/x.pdf")  # type: ignore[arg-type]
 
@@ -332,7 +332,7 @@ async def test_blank_stringifying_exception_is_named_not_dropped(
     Asserted by exact equality, not a prefix match, so the tail cannot
     silently regress to empty again.
     """
-    session = _FakeSession(asyncio.TimeoutError())
+    session = _FakeSession(TimeoutError())
     with pytest.raises(ExtractorError) as excinfo:
         await fetcher(session)  # type: ignore[operator]
     assert str(excinfo.value) == (
@@ -349,7 +349,7 @@ class _FakeBodySession:
     def __init__(self, body: bytes) -> None:
         self._body = body
 
-    def get(self, *_args: object, **_kwargs: object) -> "_FakeBodyCtx":
+    def get(self, *_args: object, **_kwargs: object) -> _FakeBodyCtx:
         return _FakeBodyCtx(self._body)
 
 
@@ -357,7 +357,7 @@ class _FakeBodyCtx:
     def __init__(self, body: bytes) -> None:
         self._body = body
 
-    async def __aenter__(self) -> "_FakeBodyResp":
+    async def __aenter__(self) -> _FakeBodyResp:
         return _FakeBodyResp(self._body)
 
     async def __aexit__(self, *_exc: object) -> None:

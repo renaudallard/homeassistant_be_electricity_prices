@@ -31,7 +31,7 @@ import asyncio
 import re
 from collections.abc import Coroutine
 from datetime import date
-from typing import Any, TypeVar
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -52,8 +52,6 @@ from custom_components.be_electricity_prices.providers.eneco import (
     parse_snapshot,
 )
 from tests import fixture_text
-
-_T = TypeVar("_T")
 
 
 def test_every_contract_is_offered_in_both_regions() -> None:
@@ -548,7 +546,7 @@ def test_injection_survives_valorisatie_suffix_drop() -> None:
 # ---- fetch_for_month (historical billing) ----------------------------------
 
 
-def _run(coro: Coroutine[Any, Any, _T]) -> _T:
+def _run[T](coro: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(coro)
 
 

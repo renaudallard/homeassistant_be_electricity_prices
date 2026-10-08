@@ -130,7 +130,7 @@ def _extract_wallonia_renewables(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-def _row_value(text: str, label: str) -> "re.Match[str] | None":
+def _row_value(text: str, label: str) -> re.Match[str] | None:
     """The number belonging to ``label``, printed after it or above it.
 
     The column reconstruction does not always keep a value on its label's

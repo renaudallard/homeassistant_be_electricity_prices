@@ -177,7 +177,7 @@ class _CohortLegs(NamedTuple):
     vat_rate: float | None = None
 
     def energy_on(
-        self, snapshot: "SupplierSnapshot", delivery_month: date
+        self, snapshot: SupplierSnapshot, delivery_month: date
     ) -> EnergyRates | None:
         """The energy leg put onto ``snapshot``'s VAT basis and settlement
         grid for ``delivery_month``.
@@ -211,8 +211,8 @@ class _CohortLegs(NamedTuple):
         return rescale_vat(energy, (1.0 + rate) / (1.0 + self.vat_rate))
 
     def splice(
-        self, snapshot: "SupplierSnapshot", delivery_month: date | None = None
-    ) -> "SupplierSnapshot":
+        self, snapshot: SupplierSnapshot, delivery_month: date | None = None
+    ) -> SupplierSnapshot:
         """``snapshot`` billed on this cohort: each leg it overrides replaced,
         the rest of the card kept. The same object back when there is nothing
         to override, so a caller can tell the no-op by identity.
@@ -230,12 +230,12 @@ class _CohortLegs(NamedTuple):
 async def _cohort_legs(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     entry: ConfigEntry,
-    current_snapshot: "SupplierSnapshot",
-    month_snapshot: "SupplierSnapshot | None" = None,
+    current_snapshot: SupplierSnapshot,
+    month_snapshot: SupplierSnapshot | None = None,
 ) -> _CohortLegs:
     """Resolve the legs a contract actually bills at.
 
@@ -462,7 +462,7 @@ async def _cohort_legs(
     )
 
 
-def _leg_vat(snapshot: "SupplierSnapshot", month: date) -> float | None:
+def _leg_vat(snapshot: SupplierSnapshot, month: date) -> float | None:
     """The residential rate a leg read off ``snapshot`` carries, or None on a
     card priced excluding VAT, whose legs carry none."""
     taxes = snapshot.taxes
@@ -474,11 +474,11 @@ def _leg_vat(snapshot: "SupplierSnapshot", month: date) -> float | None:
 async def _cohort_energy_leg(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     entry: ConfigEntry,
-    current_snapshot: "SupplierSnapshot",
+    current_snapshot: SupplierSnapshot,
 ) -> EnergyRates | None:
     """The energy half of :func:`_cohort_legs`, for callers that price only
     the offtake side."""
@@ -491,14 +491,14 @@ async def _cohort_energy_leg(
 async def signing_month_snapshot(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     entry: ConfigEntry,
-    current_snapshot: "SupplierSnapshot",
+    current_snapshot: SupplierSnapshot,
     *,
     cached_only: bool = False,
-) -> "SupplierSnapshot":
+) -> SupplierSnapshot:
     """The card published the month this contract was signed, or the current one.
 
     Rates are not the only thing that belongs to the version signed. A welcome
@@ -568,9 +568,7 @@ async def signing_month_snapshot(
     return _signed_in(current_snapshot if resolved is None else resolved, start)
 
 
-def _signed_in(
-    snapshot: "SupplierSnapshot", card_month: date | None
-) -> "SupplierSnapshot":
+def _signed_in(snapshot: SupplierSnapshot, card_month: date | None) -> SupplierSnapshot:
     """``snapshot``, less a welcome credit its card ties to another month.
 
     A card that names the month a contract must be signed in grants nothing
@@ -594,16 +592,16 @@ def _signed_in(
 async def _effective_snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     year_month: date,
-    current_snapshot: "SupplierSnapshot",
+    current_snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     *,
     cached_only: bool = False,
-    current_raw: "SupplierSnapshot | None" = None,
-) -> "SupplierSnapshot":
+    current_raw: SupplierSnapshot | None = None,
+) -> SupplierSnapshot:
     """Delivery-month snapshot with the signing cohort's energy leg spliced in.
 
     Every archive-walking cost path calls this instead of

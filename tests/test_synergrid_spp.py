@@ -443,7 +443,7 @@ def test_a_formula_only_monthly_injection_is_never_priced_per_hour() -> None:
     0,30 EUR/kWh hour, against a contract that pays a monthly rate. The bake
     wipes the leg instead, which reads as "no credit yet".
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from custom_components.be_electricity_prices.injection import (
         _bake_monthly_injection,
@@ -467,7 +467,7 @@ def test_a_formula_only_monthly_injection_is_never_priced_per_hour() -> None:
             baked,
             snap.energy,
             0.30,
-            datetime(2026, 8, 19, 13, 0, tzinfo=timezone.utc),
+            datetime(2026, 8, 19, 13, 0, tzinfo=UTC),
         )
         is None
     )

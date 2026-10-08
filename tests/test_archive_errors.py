@@ -25,15 +25,15 @@ class _Down:
     def __init__(self) -> None:
         self.calls = 0
 
-    def get(self, *args: Any, **kwargs: Any) -> "_Down":
+    def get(self, *args: Any, **kwargs: Any) -> _Down:
         self.calls += 1
         return self
 
-    def head(self, *args: Any, **kwargs: Any) -> "_Down":
+    def head(self, *args: Any, **kwargs: Any) -> _Down:
         self.calls += 1
         return self
 
-    def post(self, *args: Any, **kwargs: Any) -> "_Down":
+    def post(self, *args: Any, **kwargs: Any) -> _Down:
         self.calls += 1
         return self
 

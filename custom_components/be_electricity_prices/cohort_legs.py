@@ -200,7 +200,7 @@ def _manual_energy_leg(
 
 
 def _cohort_energy_from_archived(
-    archived: "SupplierSnapshot",
+    archived: SupplierSnapshot,
 ) -> EnergyRates | None:
     """The energy leg a signing cohort bills at, from its archived card.
 
@@ -381,7 +381,7 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
 
 
 def _cohort_injection_from_archived(
-    archived: "SupplierSnapshot", delivery: "SupplierSnapshot"
+    archived: SupplierSnapshot, delivery: SupplierSnapshot
 ) -> InjectionRates | None:
     """The feed-in leg a signing cohort bills at, or ``None``.
 
@@ -461,7 +461,7 @@ def _cohort_injection_from_archived(
 
 
 def _month_indexed_leg(
-    snapshot: "SupplierSnapshot", entry: ConfigEntry
+    snapshot: SupplierSnapshot, entry: ConfigEntry
 ) -> EnergyRates | None:
     """The monthly-mean leg for a card whose rate IS the delivery month's index.
 
@@ -503,8 +503,8 @@ def _month_indexed_leg(
 def _cohort_card(
     start: date,
     month_now: date,
-    archived: "SupplierSnapshot | None",
-    current: "SupplierSnapshot",
+    archived: SupplierSnapshot | None,
+    current: SupplierSnapshot,
     unbilled: str | None = None,
 ) -> str:
     """Which card a contract that names a cohort month ends up billing on.

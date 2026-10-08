@@ -101,7 +101,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -161,7 +161,6 @@ from custom_components.be_electricity_prices.snapshot_months import (  # noqa: E
     _settles_after_its_month,
 )
 
-_T = TypeVar("_T")
 _BRUSSELS = ZoneInfo("Europe/Brussels")
 _ATTEMPTS = 3
 _RETRY_BACKOFF_S = (10, 30)
@@ -737,7 +736,7 @@ _EMBEDDED_CARD = re.compile(r"(data:[\w/+.-]+;base64,)([A-Za-z0-9+/=]{512,})")
 _CARD_REF = re.compile(r"\{\{card:([0-9a-f]{64})\}\}")
 
 
-def _fold_embedded_cards(text: str, cards: "_Cards") -> str:
+def _fold_embedded_cards(text: str, cards: _Cards) -> str:
     """Replace every embedded card this run keeps with a reference to it."""
 
     def fold(match: re.Match[str]) -> str:
@@ -754,7 +753,7 @@ def _fold_embedded_cards(text: str, cards: "_Cards") -> str:
     return _EMBEDDED_CARD.sub(fold, text)
 
 
-async def _unfold_embedded_cards(text: str, replay: "_ReplaySession") -> str:
+async def _unfold_embedded_cards(text: str, replay: _ReplaySession) -> str:
     """Put the kept cards back into a stored text, for a parse to read."""
     for digest in dict.fromkeys(_CARD_REF.findall(text)):
         payload = await replay.bytes_for(digest)
@@ -1127,7 +1126,7 @@ def _unparsed_key(supplier: str, contract: str, region: str, month: str) -> str:
     return f"{supplier}/{contract}/{region}/{month}"
 
 
-def _unparsed_sources(cards: "_Cards") -> list[dict[str, str]]:
+def _unparsed_sources(cards: _Cards) -> list[dict[str, str]]:
     """The cards this target downloaded, shaped like a row's ``_sources``.
 
     The url is the half that matters later: it is what lets a retry hand the
@@ -1375,10 +1374,10 @@ async def _settle_held(
     return await settle(session, contract, region, first, snap)
 
 
-async def _fetch_card(
-    fetch: Callable[[], Awaitable[_T]],
+async def _fetch_card[T](
+    fetch: Callable[[], Awaitable[T]],
     sleep: Callable[[float], Any] = asyncio.sleep,
-) -> _T:
+) -> T:
     """One card, retrying the transient failures the live check retries.
 
     ``fetch`` builds a fresh awaitable per attempt, since one can only be

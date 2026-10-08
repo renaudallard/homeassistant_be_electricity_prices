@@ -57,7 +57,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, TypeVar
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -1245,15 +1245,14 @@ def _expect_regional_levies(
 
 
 _RETRY_BACKOFF_S: tuple[float, ...] = (1.0, 3.0)
-_RetryT = TypeVar("_RetryT")
 
 
-async def _fetch_with_retry(
-    factory: Callable[[], Awaitable[_RetryT]],
+async def _fetch_with_retry[RetryT](
+    factory: Callable[[], Awaitable[RetryT]],
     *,
     attempts: int = 3,
     transient: Callable[[str], bool] | None = None,
-) -> _RetryT:
+) -> RetryT:
     """Call ``factory()`` up to ``attempts`` times, retrying transient
     network failures with a short backoff between attempts.
 

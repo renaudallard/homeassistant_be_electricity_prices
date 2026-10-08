@@ -618,11 +618,11 @@ async def _compute_current_year_cost(
     # Precompute the snapshot + breakdowns for each month touched, so
     # the per-day loop stays O(days) without repeating the breakdown
     # math for every day in a month.
-    month_breakdowns: dict[date, tuple[Any, Any, Any, "SupplierSnapshot"] | None] = {}
+    month_breakdowns: dict[date, tuple[Any, Any, Any, SupplierSnapshot] | None] = {}
 
     async def _resolve_month(
         month_first: date,
-    ) -> tuple[Any, Any, Any, "SupplierSnapshot"] | None:
+    ) -> tuple[Any, Any, Any, SupplierSnapshot] | None:
         if month_first in month_breakdowns:
             return month_breakdowns[month_first]
         snap_m = await _effective_snapshot_for_month(

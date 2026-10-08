@@ -78,7 +78,7 @@ class _FakeResponse:
         self.charset = None
         self.content = FakeBody(body.encode("utf-8"))
 
-    async def __aenter__(self) -> "_FakeResponse":
+    async def __aenter__(self) -> _FakeResponse:
         return self
 
     async def __aexit__(self, *args: Any) -> None:

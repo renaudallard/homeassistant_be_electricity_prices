@@ -110,7 +110,7 @@ def _supplier_label(supplier_id: str | None) -> str:
         return str(supplier_id or "") or "Belgian Electricity"
 
 
-def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
+def supplier_device_info(coordinator: BePricesCoordinator) -> DeviceInfo:
     """Build the HA DeviceInfo block shared by every entity on this entry.
 
     Both platforms (sensor + binary_sensor) anchor every entity onto the

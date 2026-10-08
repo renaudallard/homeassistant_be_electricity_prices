@@ -188,7 +188,7 @@ class _Response:
         self.content_length = None
         self.content = FakeBody(body)
 
-    async def __aenter__(self) -> "_Response":
+    async def __aenter__(self) -> _Response:
         return self
 
     async def __aexit__(self, *_a: object) -> bool:

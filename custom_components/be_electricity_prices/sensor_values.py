@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
-from typing import Any, TypeVar
+from typing import Any
 
 from homeassistant.util import dt as dt_util
 
@@ -45,14 +45,12 @@ from .const import RESOLUTION_HOURLY
 from .coordinator_data import CoordinatorData
 from .pricing import PriceBreakdown, breakdown_row, slot_start
 
-# What one slot of a per-slot table holds: a PriceBreakdown for the price
-# table, a plain EUR/kWh float for the injection one.
-_SlotValue = TypeVar("_SlotValue")
 
-
-def _current_slot_value(
-    slots: dict[datetime, _SlotValue], resolution: str
-) -> _SlotValue | None:
+# What one slot of a per-slot table holds (SlotValue): a PriceBreakdown for
+# the price table, a plain EUR/kWh float for the injection one.
+def _current_slot_value[SlotValue](
+    slots: dict[datetime, SlotValue], resolution: str
+) -> SlotValue | None:
     """Look ``slots`` up at the slot the wall clock is in.
 
     Reading the clock here rather than at coordinator-refresh time is what

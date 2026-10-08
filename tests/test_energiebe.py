@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date
 
 import pytest
 
@@ -538,7 +538,7 @@ def test_variable_injection_never_prices_off_an_hourly_spot() -> None:
     the formula it would otherwise resolve indexes on a MONTHLY solar-weighted
     mean, so pricing it per hour is the wrong axis entirely, not merely noisy.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from custom_components.be_electricity_prices.injection import (
         _injection_price_for_slot,
@@ -546,7 +546,7 @@ def test_variable_injection_never_prices_off_an_hourly_spot() -> None:
 
     snap = _var_snap()
     assert snap.injection is not None
-    when = datetime(2026, 8, 19, 13, 0, tzinfo=timezone.utc)
+    when = datetime(2026, 8, 19, 13, 0, tzinfo=UTC)
     flat = 3.43 / 100.0
     for spot in (0.30, -0.02, 0.0, None):
         assert _injection_price_for_slot(

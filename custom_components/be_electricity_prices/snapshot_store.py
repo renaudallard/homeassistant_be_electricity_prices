@@ -127,7 +127,7 @@ _MONTHLY_PROVISIONAL_TTL = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
 
 @dataclass
 class _SharedSnapshot:
-    snapshot: "SupplierSnapshot"
+    snapshot: SupplierSnapshot
     fetched_at: datetime
     # Last probe key seen when this snapshot was fetched. ``None`` for
     # suppliers without a probe path - those fall back to the time-based
@@ -219,7 +219,7 @@ def _adopted(
 async def fetch_shared(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     *,
@@ -512,14 +512,14 @@ def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock
 
 def _monthly_snapshots(
     hass: HomeAssistant,
-) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
+) -> dict[tuple[str, str, str, str], SupplierSnapshot | None]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
 
 
 def cached_month_card(
     hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
-) -> "SupplierSnapshot | None":
+) -> SupplierSnapshot | None:
     """The archived card the cache holds for that month, without fetching;
     None when the month was never resolved or resolved to nothing."""
     key = (supplier, contract, region, f"{year_month:%Y-%m}")
@@ -539,7 +539,7 @@ def _monthly_fetched_at(
 
 
 def _month_row_is_provisional(
-    snap: "SupplierSnapshot | None", year_month: date, today: date
+    snap: SupplierSnapshot | None, year_month: date, today: date
 ) -> bool:
     """Whether a cached row for ``year_month`` can still change.
 

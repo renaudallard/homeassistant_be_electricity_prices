@@ -480,7 +480,7 @@ def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeigh
     from pyxlsb import open_workbook
 
     with open_workbook(str(path)) as workbook, workbook.get_sheet(_RLP_SHEET) as sheet:
-        groups = _rlp_groups_from_rows(([c.v for c in row] for row in sheet.rows()))
+        groups = _rlp_groups_from_rows([c.v for c in row] for row in sheet.rows())
     out: dict[str, RlpWeights] = {}
     for blend in dict.fromkeys(blends):
         try:
@@ -492,7 +492,7 @@ def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeigh
     return out
 
 
-def _rlp_groups_from_rows(rows: Iterable[list[Any]]) -> "_RlpGroups":
+def _rlp_groups_from_rows(rows: Iterable[list[Any]]) -> _RlpGroups:
     """The sheet's distinct DSO curves, which every blend is built from.
 
     Synergrid's workbook lists one column per DSO sub-area, but only three
@@ -556,7 +556,7 @@ def _rlp_groups_from_rows(rows: Iterable[list[Any]]) -> "_RlpGroups":
     return _RlpGroups(keys, group_curves, group_counts, group_names)
 
 
-def _weights_for_blend(groups: "_RlpGroups", blend: str) -> RlpWeights:
+def _weights_for_blend(groups: _RlpGroups, blend: str) -> RlpWeights:
     """One DSO blend of the grouped curves, summed to local clock hours.
 
     Three suppliers read the same sheet three ways, and each reproduces its own

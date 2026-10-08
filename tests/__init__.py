@@ -32,7 +32,7 @@ import hashlib
 import os
 from collections.abc import AsyncIterator
 from datetime import date
-from functools import lru_cache
+from functools import cache
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -156,7 +156,7 @@ def compare_page_calls(function: str) -> list[tuple[str, ast.Call]]:
     return calls
 
 
-@lru_cache(maxsize=None)
+@cache
 def fixture_text(name: str, *, layout: bool = False, aligned: bool = False) -> str:
     """Read ``tests/fixtures/<name>`` and run it through the PDF extractor.
 
@@ -346,7 +346,7 @@ def make_text_session(body: str) -> Any:
         history = ()
         content = FakeBody(body.encode("utf-8"))
 
-        async def __aenter__(self) -> "_Resp":
+        async def __aenter__(self) -> _Resp:
             return self
 
         async def __aexit__(self, *args: Any) -> None:

@@ -441,7 +441,7 @@ class _HeadResponse:
         self.status = status
         self.headers: dict[str, str] = {}
 
-    async def __aenter__(self) -> "_HeadResponse":
+    async def __aenter__(self) -> _HeadResponse:
         return self
 
     async def __aexit__(self, *args: Any) -> None:

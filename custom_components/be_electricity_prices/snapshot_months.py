@@ -121,7 +121,7 @@ def archived_months_present(
     supplier: str,
     contract: str,
     region: str,
-    months: "Sequence[date]",
+    months: Sequence[date],
 ) -> set[tuple[int, int]]:
     """Which of ``months`` this contract has a REAL archived card for.
 
@@ -155,7 +155,7 @@ def monthly_rows_to_store(
     supplier: str,
     contract: str,
     region: str,
-    months: "Sequence[date]",
+    months: Sequence[date],
 ) -> dict[str, dict[str, Any]]:
     """Serialise this contract's SETTLED per-month archive rows for the Store.
 
@@ -598,7 +598,7 @@ def _archive_allowed(entry: ConfigEntry | None) -> bool:
 
 
 def _card_archive_may_hold(
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     year_month: date,
     today: date,
     entry: ConfigEntry | None,
@@ -624,7 +624,7 @@ def _card_archive_may_hold(
 
 
 def _month_card_retrievable(
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     year_month: date,
     today: date,
     entry: ConfigEntry | None,
@@ -680,16 +680,16 @@ def _month_key(
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     year_month: date,
-    current_snapshot: "SupplierSnapshot",
+    current_snapshot: SupplierSnapshot,
     entry: ConfigEntry | None = None,
     *,
     cached_only: bool = False,
-    current_raw: "SupplierSnapshot | None" = None,
-) -> "SupplierSnapshot":
+    current_raw: SupplierSnapshot | None = None,
+) -> SupplierSnapshot:
     """The card ``year_month`` is billed on: its own (``month_card``), or
     the current card standing in for it.
 
@@ -719,10 +719,10 @@ async def _snapshot_for_month(
 
 def _proxy_for_month(
     entry: ConfigEntry,
-    current: "SupplierSnapshot",
-    raw: "SupplierSnapshot",
+    current: SupplierSnapshot,
+    raw: SupplierSnapshot,
     year_month: date,
-) -> "SupplierSnapshot":
+) -> SupplierSnapshot:
     """``current`` standing in for ``year_month``, with the federal levies
     that month owes.
 
@@ -751,14 +751,14 @@ def _proxy_for_month(
 async def month_card(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
-    extractor: "SupplierExtractor",
+    extractor: SupplierExtractor,
     contract: str,
     region: str,
     year_month: date,
     entry: ConfigEntry | None = None,
     *,
     cached_only: bool = False,
-) -> "SupplierSnapshot | None":
+) -> SupplierSnapshot | None:
     """The month's own card, resolved for the month, or None where the
     caller has to stand its current card in for it.
 
@@ -805,7 +805,7 @@ async def month_card(
     path and asks for a refresh.
     """
 
-    def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot | None":
+    def resolved(snap: SupplierSnapshot | None) -> SupplierSnapshot | None:
         if snap is None:
             return None
         return (
