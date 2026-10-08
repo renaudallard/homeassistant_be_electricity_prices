@@ -2842,13 +2842,20 @@ async def test_a_next_months_card_other_readers_made_still_settles_a_replay(
     assert not ac.rerender_due(out)
 
 
-def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> None:
+@pytest.mark.parametrize("flaky_pull", [False, True])
+def test_the_archive_push_survives_the_water_archives_push(
+    tmp_path: Path, flaky_pull: bool
+) -> None:
     """be_water_prices pushes to the same main of the cards repository, and
     the concurrency group only queues runs of this repository, so a water
     push landing between this job's shallow clone and its push rejected the
     push and lost everything the run had written. The step's own shell, run
-    against a local repository that moved under it, must rebase and land."""
+    against a local repository that moved under it, must rebase and land.
+
+    The step runs under bash -e, so a pull that failed once, a network blip,
+    ended the step there instead of leaving it to the next attempt."""
     import os
+    import shutil
     import subprocess
 
     import yaml  # type: ignore[import-untyped]
@@ -2896,6 +2903,17 @@ def test_the_archive_push_survives_the_water_archives_push(tmp_path: Path) -> No
     stubs.mkdir()
     (stubs / "sleep").write_text("#!/bin/sh\nexit 0\n")
     (stubs / "sleep").chmod(0o755)
+    if flaky_pull:
+        # The first pull fails before touching anything; every other git
+        # call is the real one.
+        (stubs / "git").write_text(
+            "#!/bin/sh\n"
+            'case " $* " in *" pull "*)\n'
+            f'  if [ ! -e "{tmp_path}/pulled" ]; then : > "{tmp_path}/pulled"; exit 1; fi;;\n'
+            "esac\n"
+            f'exec {shutil.which("git")} "$@"\n'
+        )
+        (stubs / "git").chmod(0o755)
     env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"}
     done = subprocess.run(
         ["bash", "-e", "-c", script], cwd=work, env=env, capture_output=True, text=True

@@ -1529,7 +1529,9 @@ usually minutes apart. The trees share one path, the root `README.md`, which the
 write with the same text, so no racing commit changes what another wrote there. A rejected push
 therefore fetches, rebases onto the other commit without a conflict and tries again, up to five
 times, rather than losing everything the run wrote
-(`test_the_archive_push_survives_the_water_archives_push`).
+(`test_the_archive_push_survives_the_water_archives_push`). Should one of the README texts drift,
+`-X theirs` keeps this job's. The step runs under `bash -e`, so a pull that fails, a network blip
+or a rebase that stops, is aborted and left to the next attempt rather than ending the step.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
 Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network

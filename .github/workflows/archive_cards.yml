@@ -562,12 +562,16 @@ jobs:
           # three trees share one path, the root README.md, which all three
           # jobs write with the same text, so rebasing onto another job's
           # commit is conflict-free: a rejected push fetches, rebases and
-          # tries again rather than losing the run.
+          # tries again rather than losing the run. Should one of the texts
+          # drift, -X theirs (the commit being replayed) keeps this job's.
+          # A pull that fails, a network blip or a rebase that stops, is left
+          # to the next attempt rather than ending the step.
           for attempt in 1 2 3 4 5; do
             git -c "$auth" push -q origin HEAD:main && exit 0
             [ "$attempt" -lt 5 ] || break
             sleep $((attempt * 3))
-            git -c "$auth" pull -q --rebase origin main
+            git -c "$auth" pull -q --rebase -X theirs origin main \
+              || git rebase --abort 2>/dev/null || true
           done
           exit 1
 
