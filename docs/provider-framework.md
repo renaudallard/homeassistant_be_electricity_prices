@@ -490,7 +490,7 @@ class SupplierSnapshot:
 | `energy` | `EnergyRates` | required | One of the six rate variants above. |
 | `dsos` | `dict[str, DsoOverlay]` | required | Network/capacity overlay keyed by canonical DSO sub-area key. |
 | `taxes` | `TaxOverlay` | required | Federal + regional levies. |
-| `source_url` | `str` | required | URL the snapshot was parsed from (surfaced in diagnostics). |
+| `source_url` | `str` | required | URL the snapshot was parsed from (kept in the snapshot cache and the card archive rows, not shown in diagnostics or attributes). |
 | `publication_label` | `str` | `""` | Human-readable publication marker (for example the card's month label) for diagnostics. |
 | `injection` | `InjectionRates \| None` | `None` | Solar feed-in compensation, or `None` when the contract has no injection. |
 | `supplier_prosumer_eur_per_kva_year` | `float \| None` | `None` | Supplier-side compensation-regime prosumer forfait in EUR per kVA per year, billed ON TOP OF the DSO prosumer tariff. Cociter Variable publishes one; most cards do not. Already TVAC, never VAT-scaled. |
