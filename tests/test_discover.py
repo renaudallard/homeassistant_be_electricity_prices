@@ -470,12 +470,12 @@ def _frank_cms_body(filenames: list[str]) -> str:
 def test_frank_discover_matches_registry() -> None:
     # Frank scrapes the Sanity CMS rather than an HTML listing; one PDF
     # per tier maps back to its contract id (a bare month is the standard
-    # tier, the suffix words HV/VT/JN/SL the others).
+    # tier, the suffix words HV/VT/JN/SL/Plus the others).
     session = _FakeSession(
         _frank_cms_body(
             [
                 f"Tariefkaart Elektriciteit Dynamisch{sfx} Januari 2026.pdf"
-                for sfx in ("", " HV", " VT", " JN", " SL")
+                for sfx in ("", " HV", " VT", " JN", " SL", " Plus")
             ]
         )
     )

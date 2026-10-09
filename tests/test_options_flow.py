@@ -6794,8 +6794,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # sibling reads the same document as the variable contract beside it,
         # so the pair is one download and one parse. Trevion's FlexiO Max
         # adds one more, a monthly card like Groene Stroom Flex, and takes
-        # out the LifePowr it replaced.
-        ("flanders", "spot", False): 37,
+        # out the LifePowr it replaced. Frank's Dynamisch Plus adds one more
+        # residential tier at the 28,4 s the other five already cost, so it
+        # sorts with them at the tail of the sweep.
+        ("flanders", "spot", False): 38,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

@@ -2,7 +2,7 @@
 
 This document is the maintenance reference for the Frank Energie Belgium extractor
 (`providers/frank.py`). It explains how the extractor discovers Frank's monthly PDF
-tariff cards through a Sanity CMS API, how it maps each of the five dynamic tiers to a
+tariff cards through a Sanity CMS API, how it maps each of the six dynamic tiers to a
 contract id, how the energy / injection / tax / DSO fields are parsed out of one shared
 PDF layout, and the land mines a future maintainer must know when Frank changes its card.
 The test module `tests/test_frank.py` is treated as ground truth throughout: it pins the
@@ -56,7 +56,7 @@ a lowercased "month year" string ("april 2026") reconstructed from the filename 
 
 ## Contracts
 
-Five tiers are declared in `_TIERS` (`providers/frank.py`) and turned into `Contract`
+Six tiers are declared in `_TIERS` (`providers/frank.py`) and turned into `Contract`
 objects by the `EXTRACTOR` comprehension (`providers/frank.py`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
@@ -71,6 +71,8 @@ hourly formula; the household's own answer flips it, and every tier carries
 | `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | since October 2026 the same formula and subscription as VT; until September a higher subscription, a lower per-kWh margin and a 115 EUR cashback after 1 year |
 | `frank_dynamic_korting` | Frank Energie Dynamisch VT (Korting) | dynamic | flanders | `VT` | offered | titled "VT" since October 2026, HV's card billed on a double advance; until September titled "Korting", with a 120 EUR cashback after 1 year |
 | `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base; 35 EUR cashback after 1 year |
+| `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
+| `frank_dynamic_plus` | Frank Energie Dynamisch Plus | dynamic | flanders | `Plus` | offered | since October 2026; the lowest subscription and per-kWh margin of the six, HV's injection formula, no cashback, billed on a double advance like VT |
 
 The October 2026 VT card is HV's card under another title: diffed line by line, the two
 differ in the title, in the validity sentence (the VT card still says *"getekend in
@@ -78,7 +80,6 @@ september 2026"*, which `_valid_until` does not read because the title names the
 in the billing paragraph, where VT charges a *"dubbel voorschot"*, an advance for the next
 two months at once. Nothing priced differs. The contract id keeps the old name so an entry
 on it stays on it; only the label follows the card.
-| `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
 
 ### Cashback
 
@@ -485,14 +486,15 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 | `frank_dynamic_korting_jun.pdf` | `frank_dynamic_korting` | Korting tier (filename token `VT`), June |
 | `frank_dynamic_jn_jun.pdf` | `frank_dynamic_jn` | JN tier, June; different formula and injection base |
 | `frank_dynamic_slim_may.pdf` | `frank_dynamic_slim` | Slim tier (`SL`), May |
+| `frank_dynamic_plus_oct.pdf` | `frank_dynamic_plus` | Plus tier, October 2026, its first card; its validity sentence says September |
 | `frank_dynamic_aug.pdf` | `frank_dynamic` | standard tier, August 2026; the first card with the energy-contribution row deleted |
 | `frank_dynamic_jn_sep.pdf` | `frank_dynamic_jn` | JN tier, September 2026; its validity sentence says August |
 
-The five tiers share one PDF layout, but only the default tier had a fixture originally;
+The tiers share one PDF layout, but only the default tier had a fixture originally;
 `test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py`) was added
-with the other four fixtures to catch a tier-specific card regression. Tests load fixtures
-through `fixture_text(name, layout=True)` (`tests/test_frank.py`), matching the
-layout-preserving extraction used in production.
+with the other four fixtures to catch a tier-specific card regression, and Plus joined it
+with its first card. Tests load fixtures through `fixture_text(name, layout=True)`
+(`tests/test_frank.py`), matching the layout-preserving extraction used in production.
 
 ## When the card changes, look here
 

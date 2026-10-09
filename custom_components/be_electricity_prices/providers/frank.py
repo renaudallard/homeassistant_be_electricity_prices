@@ -26,7 +26,7 @@
 """Frank Energie Belgium dynamic tariff extractor.
 
 Frank Energie Belgium publishes monthly tariff cards as PDFs hosted on a
-Sanity CMS CDN.  Five dynamic contract tiers share the same PDF layout
+Sanity CMS CDN.  Six dynamic contract tiers share the same PDF layout
 with different formula parameters (factor, base, monthly fee):
 
   - Dynamisch (standard)
@@ -34,6 +34,7 @@ with different formula parameters (factor, base, monthly fee):
   - Dynamisch VT (titled "Korting" until September 2026)
   - Dynamisch JN (lower subscription, different formula)
   - Dynamisch Slim (requires smart devices: solar, EV, battery, heat pump)
+  - Dynamisch Plus (since October 2026, lowest subscription and margin)
 
 Since October 2026 HV and VT print the same formula and subscription and
 neither grants a cashback: the VT card differs only in billing a "dubbel
@@ -149,6 +150,7 @@ _TIERS: tuple[tuple[str, str, str | None], ...] = (
     ("frank_dynamic_korting", "Frank Energie Dynamisch VT (Korting)", "VT"),
     ("frank_dynamic_jn", "Frank Energie Dynamisch JN", "JN"),
     ("frank_dynamic_slim", "Frank Energie Dynamisch Slim", "SL"),
+    ("frank_dynamic_plus", "Frank Energie Dynamisch Plus", "Plus"),
 )
 _TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in _TIERS}
 _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
@@ -427,7 +429,7 @@ _WELCOME_RE = re.compile(
 def _welcome_credit(text: str) -> float | None:
     """The cashback in EUR, or ``None`` on a card that prints none.
 
-    Optional: two of the five tiers grant nothing, so a missing row is the
+    Optional: since October 2026 only JN grants one, so a missing row is the
     ordinary case rather than a layout drift.
 
     Every card that grants one makes it conditional, and the three tiers do not

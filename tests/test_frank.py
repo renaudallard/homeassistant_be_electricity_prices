@@ -317,6 +317,14 @@ def test_injection_base() -> None:
             35.04,
             -0.0115,
         ),
+        (
+            "frank_dynamic_plus",
+            "frank_dynamic_plus_oct.pdf",
+            1.0706,
+            0.005141,
+            15.0,
+            -0.0115,
+        ),
     ],
 )
 def test_non_default_tiers_extract_energy_and_injection(
@@ -327,10 +335,10 @@ def test_non_default_tiers_extract_energy_and_injection(
     fee: float,
     inj_base: float,
 ) -> None:
-    # The five Frank tiers share one PDF layout, but only the default tier
-    # had a fixture. Pin the other four tiers' energy + injection so a
-    # tier-specific card regression is caught. The JN tier notably carries
-    # a different injection base (-0,02 vs -0,0115 on the rest).
+    # The Frank tiers share one PDF layout, but only the default tier had a
+    # fixture. Pin the other tiers' energy + injection so a tier-specific
+    # card regression is caught. The JN tier notably carries a different
+    # injection base (-0,02 vs -0,0115 on the rest).
     snap = parse_snapshot(
         fixture_text(fixture, layout=True), "test://frank", contract_id, "test"
     )
@@ -397,6 +405,7 @@ def test_frank_is_registered() -> None:
         "frank_dynamic_korting",
         "frank_dynamic_jn",
         "frank_dynamic_slim",
+        "frank_dynamic_plus",
     }
 
 
@@ -506,11 +515,24 @@ def test_matches_suffix_handles_the_september_naming() -> None:
     )
 
 
+def test_the_plus_tier_maps_to_its_own_card() -> None:
+    """Plus first appeared on 9 October 2026. Its card says it is valid for
+    contracts signed in September, as the VT card did that month, but its
+    title and file name say October."""
+    name = "Frank Energie Tariefkaart Elektriciteit Dynamisch Plus Oktober 2026.pdf"
+    assert _matches_suffix(name, "Plus")
+    assert not _matches_suffix(name, None)
+    text = fixture_text("frank_dynamic_plus_oct.pdf", layout=True)
+    assert "getekend in september 2026" in " ".join(text.split())
+    snap = parse_snapshot(text, "test://frank", "frank_dynamic_plus", "oktober 2026")
+    assert snap.valid_until == date(2026, 10, 31)
+
+
 # ---- the uur- / kwartierprijzen choice -------------------------------------------
 
 
 def test_every_tier_offers_the_quarter_hourly_choice() -> None:
-    """The footnote is on all five cards, so all five carry the flag.
+    """The footnote is on every tier's card, so every tier carries the flag.
 
     Set per contract rather than per supplier: the flow reads it off the
     contract the user picked, and a tier that lost the footnote would have to
@@ -525,7 +547,7 @@ def test_exactly_two_suppliers_offer_the_quarter_hourly_choice() -> None:
     """Nobody is left with the parameter unexposed, and nobody gains a box
     they should not have.
 
-    Frank's five dynamic tiers and Bolt's four variable cards in both
+    Frank's dynamic tiers and Bolt's four variable cards in both
     segments. Everything else that bills per quarter says so on the card and
     the parser sets ``quarter_hourly`` itself (Cociter, EBEM, Ecofix,
     Ecopower, energie.be, Engie, EnergyVision, OCTA+), sells the two grids as
@@ -695,7 +717,11 @@ def test_cashback_is_read_from_the_tiers_that_grant_one() -> None:
 
     # The tiers that grant nothing must come back None rather than raising:
     # a missing row is the ordinary case on this supplier.
-    for fixture in ("frank_dynamic_apr.pdf", "frank_dynamic_slim_may.pdf"):
+    for fixture in (
+        "frank_dynamic_apr.pdf",
+        "frank_dynamic_slim_may.pdf",
+        "frank_dynamic_plus_oct.pdf",
+    ):
         snap = parse_snapshot(
             fixture_text(fixture, layout=True), "test://frank", "frank_dynamic", ""
         )

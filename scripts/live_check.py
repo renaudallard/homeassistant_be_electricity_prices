@@ -1657,9 +1657,9 @@ async def _check_flanders_card(
 
     Frank and energie.be checked exactly this, in two functions that differed
     only in the supplier token. ``cid`` stays a parameter rather than looping
-    ``mod.EXTRACTOR.contracts``: Frank sells five tiers off one card and this
+    ``mod.EXTRACTOR.contracts``: Frank sells six tiers off one card and this
     deliberately checks the default one, so iterating them would multiply
-    Frank's wallclock and byte draw by five and trip the drift budgets.
+    Frank's wallclock and byte draw by six and trip the drift budgets.
 
     Nothing here is dynamic-specific: the energy leg is validated by shape in
     _validate_energy, so energie.be's spot-monthly variable card reuses it.
