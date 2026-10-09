@@ -303,6 +303,26 @@ def test_dynamic_bills_per_quarter_hour() -> None:
     assert snap.energy.quarter_hourly is True
 
 
+def test_dynamic_card_before_october_2025_reads_hourly_espot() -> None:
+    """The cards up to September 2025 index on the hourly eSpot, and the
+    regex only knew eSpot_15, so every one of them failed to parse and a
+    contract signed then was billed on the current card."""
+    snap = parse_snapshot(
+        "engie_dynamic",
+        {REGION_FLANDERS: fixture_text("engie_dynamic_v_2025-09.pdf")},
+    )
+    assert snap.publication_label == "Septembre 2025"
+    assert isinstance(snap.energy, DynamicRates)
+    # "hors TVA 1,3163 + (0,1019 x eSpot)" at 6% VAT.
+    assert snap.energy.factor == pytest.approx(1.08014)
+    assert snap.energy.base == pytest.approx(0.01395278)
+    assert snap.energy.quarter_hourly is False
+    # Injection "-1,3050 + (0,1000 x eSpot)", VAT-exempt.
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert snap.injection.base == pytest.approx(-0.01305)
+
+
 def test_dynamic_missing_vat_phrase_is_fatal() -> None:
     # The Dynamic formula is printed pre-VAT and scaled by the parsed VAT
     # multiplier; a reworded VAT header must raise rather than silently

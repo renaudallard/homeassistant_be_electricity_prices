@@ -152,7 +152,8 @@ def _extract_energy(
         match = _FORMULA_RE.search(text)
         if not match:
             raise ExtractorError("could not parse Engie dynamic consumption formula")
-        # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
+        # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude,
+        # quarter-hour suffix).
         base_pre_vat_cents = parse_sign(match.group(1)) * to_float(match.group(2))
         factor_pdf = parse_sign(match.group(3)) * to_float(match.group(4))
         vat = _vat_multiplier(text, professional=professional)
@@ -160,15 +161,16 @@ def _extract_energy(
         # is EUR/kWh = EUR/MWh / 1000:
         #   factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
         #   base_eur_kwh   = base_cents  * vat / 100
-        # Engie Dynamic bills per quarter-hour: the consumer formula is
-        # (B x eSpot_15) + A, where eSpot_15 is the Belgian day-ahead EPEX
-        # price for that specific quarter-hour (engie.be/dynamic-tarief).
-        # Keep the native 15-minute slots rather than the hourly mean.
+        # The grid is the one the card's index names. From October 2025 the
+        # formula is (B x eSpot_15) + A, eSpot_15 being the Belgian day-ahead
+        # EPEX price for that specific quarter-hour (engie.be/dynamic-tarief),
+        # so keep the native 15-minute slots rather than the hourly mean.
+        # The cards before it name the hourly eSpot.
         return DynamicRates(
             factor=factor_pdf * vat * 10.0,
             base=base_pre_vat_cents * vat / 100.0,
             yearly_fixed_fee=yearly_fee,
-            quarter_hourly=True,
+            quarter_hourly=match.group(5) is not None,
         )
 
     # Capture the whole Consommation(2) row up to the newline. Most
@@ -410,9 +412,13 @@ def _extract_injection(
 # of the dashes from _parse.SIGN_CHARS. Accept the full sign-class on both
 # the base and the factor so the regex doesn't silently miss after a
 # punctuation drift, and route through parse_sign for the magnitude.
+#
+# The index is eSpot_15 from the October 2025 card on and the hourly eSpot
+# before it ("1,3163 + (0,1019 x eSpot)" in September 2025), so the fifth
+# group records which one the card names.
 _FORMULA_RE = re.compile(
     rf"Formule de prix\s+hors\s+TVA\s+([{SIGN_CHARS}]?)\s*([\d,.]+)\s*\+\s*"
-    rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot_15\)"
+    rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot(_15)?\)"
 )
 # Empower Variable / Empty House index BOTH legs on the monthly EPEXDAM and say
 # so: "Le prix de l'electricite est indexe mensuellement. Le parametre

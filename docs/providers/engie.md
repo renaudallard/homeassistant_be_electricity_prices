@@ -79,7 +79,7 @@ them, matching the framework note at `_rates.py`.
 | `engie_easy_variable` | Engie Easy Variable | variable | V, W, B | GREEN, I. Monthly-indexed. |
 | `engie_direct_online` | Engie Direct Online | variable | V, W, B | GREEN, I. Online-only variable. |
 | `engie_basic_online` | Engie Basic Online | variable | V, W | GREY, I. No Brussels document (`months_per_region` has no `_B`). |
-| `engie_dynamic` | Engie Dynamic | dynamic | V, W, B | GREY, I. `quarter_hourly=True` (see below). |
+| `engie_dynamic` | Engie Dynamic | dynamic | V, W, B | GREY, I. `quarter_hourly` from the index the card names (see below). |
 | `engie_empower_fixed` | Engie Empower Fixed | fixed | V, W, B | GREEN, F. Duration slug `00`. |
 | `engie_empower_variable` | Engie Empower Variable | variable | V, W, B | GREEN, I. 7-price Consommation row (bi-horaire + Flextime triplet + excl. night). |
 | `engie_empower_flextime` | Engie Empower Flextime | tou | V, W, B | GREEN, I. SMR3-only TOU billing of the Empower Variable card (same PDF). Month-indexed on EPEXDAM per Flextime band, energy and feed-in alike, hence `spot_indexed_injection=True`. |
@@ -136,13 +136,17 @@ every site into the top tranche.
 
 ### Dynamic billing grid
 
-`engie_dynamic` sets `quarter_hourly=True` on its `DynamicRates`
-(`_engie_cards.py`). Engie bills the dynamic consumer formula against `eSpot_15`,
-the Belgian day-ahead EPEX price for that specific quarter-hour, so the
-integration keeps the native 15-minute slots rather than aggregating to hourly
-(`engie.py`, framework note `_rates.py`). Billing of long-term YTD
-statistics still collapses to hourly because Home Assistant only retains hourly
-long-term statistics.
+`engie_dynamic` sets `quarter_hourly` on its `DynamicRates` from the index the
+card's formula names (`_engie_cards.py`). From the October 2025 card on, Engie
+bills the dynamic consumer formula against `eSpot_15`, the Belgian day-ahead EPEX
+price for that specific quarter-hour, so the flag is `True` and the integration
+keeps the native 15-minute slots rather than aggregating to hourly (`engie.py`,
+framework note `_rates.py`). The cards up to September 2025 name the hourly
+`eSpot` and carry `False`. A signing-month leg read off one of those still takes
+the grid of the card it is spliced onto (`_CohortLegs.energy_on`, `cohort.py`),
+so a contract signed before October 2025 keeps its own coefficients and settles
+per quarter-hour today. Billing of long-term YTD statistics still collapses to
+hourly because Home Assistant only retains hourly long-term statistics.
 
 ## Fetch strategy
 
@@ -287,7 +291,13 @@ visually-cheapest Flextime super-creuses column (`_engie_cards.py`, test
 
 ### Dynamic formula parsing and unit conversion
 
-Dynamic cards print `Formule de prix hors TVA <base> + (<factor> x eSpot_15)`.
+Dynamic cards print `Formule de prix hors TVA <base> + (<factor> x eSpot_15)`,
+and `x eSpot)` up to the September 2025 card, which indexes on the hourly price.
+`_FORMULA_RE` takes both and its fifth group records which one the card names.
+Before it took the hourly spelling every card up to September 2025 failed with
+`could not parse Engie dynamic consumption formula`, so a contract signed then
+was priced on the current card's coefficients
+(`test_dynamic_card_before_october_2025_reads_hourly_espot`).
 `_FORMULA_RE` (`_engie_cards.py`) accepts the full sign class `[SIGN_CHARS]` on both
 the base and the factor and routes each through `parse_sign` (`_parse.py`) so a
 re-render that swaps a hyphen-minus for a Unicode minus or en-dash does not
@@ -327,7 +337,7 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 | --- | --- | --- |
 | fixed | `FixedRates` via `fixed_or_variable_rates` (`_engie_cards.py`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
 | variable | `VariableRates` via `fixed_or_variable_rates` (`_engie_cards.py`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
-| dynamic | `DynamicRates` (`_engie_cards.py`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
+| dynamic | `DynamicRates` (`_engie_cards.py`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`; `eSpot` and `False` on the cards up to September 2025. |
 | tou | `TimeOfUseRates` (`_engie_cards.py`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`, plus `month_indexed` and one `formula_factor_*` / `formula_base_*` pair per band from the `Flextime Heures ...` EPEXDAM rows, bound by the Normal row and held to reproduce each printed slot figure at the card's index (`_flextime_coefficients`). |
 
 Empower Flextime (`kind="tou"`) is the SMR3-only TOU billing mode of the Empower
@@ -528,8 +538,8 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 
 ## Test fixtures
 
-All fixtures live under `tests/fixtures/` and are April 2026 cards (test module
-docstring `tests/test_engie.py`). The pinned numeric literals in the tests
+All fixtures live under `tests/fixtures/` and are April 2026 cards unless the
+row names another month (test module docstring `tests/test_engie.py`). The pinned numeric literals in the tests
 re-index monthly, so they are frozen snapshots, not forever-facts.
 
 | Fixture | Card variant exercised |
@@ -537,6 +547,7 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_dynamic_v.pdf` | Dynamic, Flanders (Fluvius DSO table, formula, taxes). |
 | `engie_dynamic_w.pdf` | Dynamic, Wallonia (5 DSOs, ORES divergence guard, connection fee). |
 | `engie_dynamic_b.pdf` | Dynamic, Brussels (Sibelga row, Brugel OSP, brussels renewables). |
+| `engie_dynamic_v_2025-09.pdf` | Dynamic, Flanders, **September 2025**, from `monthOffset`. Both formulas name the hourly `eSpot`, as every card before October 2025 does. |
 | `engie_easy_fixed_v.pdf` | Easy Fixed, Flanders (bi-hourly + excl-night, indicative injection). |
 | `engie_easy_indexed_v.pdf` | Easy Variable, Flanders (`Prix mensuels` vs annual estimate). |
 | `engie_empower_flextime_w.pdf` | Empower Flextime, Wallonia (7-price TOU triplet, per-slot injection). |
@@ -553,7 +564,7 @@ likely-to-break order:
    Most layout drift surfaces here first (`yearly fee row not found`,
    `unexpected price column count`, `could not parse ... consumption block`).
 2. `_FORMULA_RE` and `_vat_multiplier` (`_engie_cards.py`): dynamic
-   formula punctuation (sign chars, `eSpot_15` token) and the mandatory VAT
+   formula punctuation (sign chars, `eSpot_15` / `eSpot` token) and the mandatory VAT
    phrase.
 3. `_extract_injection` (`_engie_cards.py`): the `Injection(3)` row column order and
    the second-formula gate for dynamic.
