@@ -56,7 +56,7 @@ From `manifest.json`:
 | `config_flow` | `true` | Set up entirely through the UI wizard (`config_flow.py`). |
 | `requirements` | `pypdf>=5.1.0`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; defusedxml to parse the ENTSO-E XML safely. |
 | `after_dependencies` | `energy`, `recorder` | The integration writes cost statistics into the recorder and plugs into the Energy dashboard, but must not hard-require them, so they load first when present. |
-| `version` | `0.36.2` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
+| `version` | `0.36.3` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
 
 Home Assistant 2026.2.3 or newer is the declared minimum (README, `hacs.json`):
 the release the test suite runs on (`requirements-dev.txt`), which
