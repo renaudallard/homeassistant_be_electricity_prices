@@ -1137,6 +1137,25 @@ def test_a_withdrawn_product_is_reported_apart_from_a_supplier_that_left(
     assert "contract-withdrawn" in products
 
 
+def test_bytes_are_counted_from_the_providers_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The providers stream every body through read_capped, which aiohttp's
+    chunk trace never sees: 0.36.0 printed "-" bytes for every supplier and
+    the bytes budget could not trip."""
+    from tests import make_text_session
+
+    monkeypatch.setattr(lc, "METRICS", {})
+    lc._load_providers()
+
+    async def _read() -> str:
+        with lc._attributed("ecofix"):
+            return str(await lc._fetch_text(make_text_session("hello"), "https://x/"))
+
+    assert asyncio.run(_read()) == "hello"
+    assert lc.METRICS["ecofix"]["bytes"] == 5.0
+
+
 def test_withdrawn_products_are_read_from_the_registry() -> None:
     from custom_components.be_electricity_prices.providers import octaplus
 

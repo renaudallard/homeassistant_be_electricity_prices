@@ -166,6 +166,9 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _memoise_text_fetches = pdf.memoise_text_fetches
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
+    # The providers read every body through this copy's read_capped, looked
+    # up at call time, so wrapping it here counts the bytes of all of them.
+    setattr(pdf, "read_capped", _counting_reads(pdf.read_capped))  # noqa: B010
     global _parse_vreg_ceiling
     # The extractors' own reader, so the consensus row below sees exactly what
     # a card gives the parser rather than a second pattern that could drift.
@@ -400,34 +403,35 @@ async def _on_request_end(
     #  - Body bytes. `response.content_length` is just the ``Content-Length``
     #    header verbatim and is None on ``Transfer-Encoding: chunked``
     #    (aiohttp.helpers.HeadersMixin.content_length), so bytes are summed
-    #    in `_on_response_chunk_received` instead. Note this hook fires
+    #    by `_counting_reads` instead. Note this hook fires
     #    BEFORE the body is read, so `elapsed_s` is time-to-headers only.
     #  - Failed requests. aiohttp fires `on_request_exception` for those, so
     #    they never reach here: see `_on_request_exception`.
 
 
-async def _on_response_chunk_received(
-    _session: aiohttp.ClientSession,
-    _ctx: SimpleNamespace,
-    params: aiohttp.TraceResponseChunkReceivedParams,
-) -> None:
-    """Accumulate actual response body bytes per supplier.
+def _counting_reads(
+    read: Callable[[aiohttp.ClientResponse, str], Awaitable[bytes]],
+) -> Callable[[aiohttp.ClientResponse, str], Awaitable[bytes]]:
+    """``read``, adding each body it returns to the supplier being checked.
 
-    `on_response_chunk_received` fires regardless of whether the server set
-    Content-Length or used Transfer-Encoding: chunked, so summing
-    `len(chunk)` gives an honest byte total even for chunked responses,
-    which the previous Content-Length-only path silently counted as zero.
+    Every body the providers fetch goes through providers/_pdf.read_capped,
+    which streams it off ``resp.content``. aiohttp fires
+    ``on_response_chunk_received`` from ``ClientResponse.read()`` only, so a
+    trace hook sees none of those bytes and every supplier read ``-``.
 
-    It is not one call per network chunk: `ClientResponse.read()` buffers
-    the whole body and then fires this hook ONCE with all of it. So a
-    transfer that stalls halfway records zero bytes, not a partial count,
-    which is why an all-or-nothing byte total plus a counted fetch means
-    "headers arrived, body never finished".
+    The count is of the body once read whole, so a transfer that stalls
+    halfway records zero bytes, not a partial count, which is why a counted
+    fetch with no bytes means "headers arrived, body never finished".
     """
-    supplier = _CURRENT_SUPPLIER.get()
-    if supplier is None:
-        return
-    _metrics_bucket(supplier)["bytes"] += float(len(params.chunk))
+
+    async def counted(resp: aiohttp.ClientResponse, url: str) -> bytes:
+        payload = await read(resp, url)
+        supplier = _CURRENT_SUPPLIER.get()
+        if supplier is not None:
+            _metrics_bucket(supplier)["bytes"] += float(len(payload))
+        return payload
+
+    return counted
 
 
 async def _on_request_exception(
@@ -438,7 +442,7 @@ async def _on_request_exception(
     """Count a request that never produced a response.
 
     Without this hook a failed request is invisible in the metrics table: it
-    fires neither `on_request_end` nor `on_response_chunk_received`, so it
+    fires no `on_request_end` and returns no body, so it
     contributes 0 fetches, 0 s and 0 bytes, and a supplier whose every
     attempt died read as though it had barely been tried. Failures are kept
     in their OWN counters rather than folded into `fetches` / `elapsed_s`,
@@ -470,7 +474,6 @@ def _trace_config() -> aiohttp.TraceConfig:
     tc = aiohttp.TraceConfig()
     tc.on_request_start.append(_on_request_start)
     tc.on_request_end.append(_on_request_end)
-    tc.on_response_chunk_received.append(_on_response_chunk_received)
     tc.on_request_exception.append(_on_request_exception)
     return tc
 

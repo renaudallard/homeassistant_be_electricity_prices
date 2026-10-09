@@ -739,11 +739,13 @@ Reading a row correctly needs three facts about which hook feeds which column:
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
   its final response headers, after the redirect chain and **before** the body is read. So the
   latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
-- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py`)
-  rather than read from `Content-Length`, because that header is None on chunked responses and
-  would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
-  so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
-  then stalled mid-body.
+- **Bytes received** are summed by `_counting_reads` (`scripts/live_check.py`), which wraps
+  `read_capped` in the providers' `_pdf` and counts each body it returns, rather than read from
+  `Content-Length`, because that header is None on chunked responses and would silently count as
+  zero. A trace hook cannot do it: `read_capped` streams the body off `resp.content`, and aiohttp
+  fires `on_response_chunk_received` only from `ClientResponse.read()`. The count is
+  all-or-nothing: a fetch with a counted request but `-` bytes got its headers and then stalled
+  mid-body.
 - **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py`), which is the
   only hook a request that never produced a response fires. Failures are kept out of the success
   columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
