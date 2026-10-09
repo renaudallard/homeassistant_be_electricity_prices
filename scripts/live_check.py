@@ -773,6 +773,16 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "('7,01'); the French card is billed",
     ),
     (
+        "totalenergies/totalenergies_mycomfort/wallonia: French and Dutch cards agree",
+        "the French card does not read: ExtractorError: TotalEnergies: the card "
+        "is not myComfort Variable; the Dutch card stands in",
+    ): (
+        date(2026, 11, 1),
+        "the French card uploaded on 2026-10-08 prints its title from a form "
+        "field the readers do not see and swaps the REGIE DE WAVRE and ORES "
+        "(Verviers) distribution rows; the Dutch card is billed",
+    ),
+    (
         "totalenergies/totalenergies_myessential/flanders: French and Dutch "
         "cards agree",
         "the French card does not read: ExtractorError: TotalEnergies: yearly "

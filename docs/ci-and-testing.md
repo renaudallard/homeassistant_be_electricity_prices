@@ -537,6 +537,9 @@ comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses
 October and their entries were removed; the other two stay allowed. The French card is the one
 billed. The French myEssential card in Flanders, whose green contribution is left blank and
 whose Dutch edition has stood in for it since 1 October, is allowed until the November card.
+So is the French myComfort card in Wallonia, re-uploaded on 8 October (issue #124): its title is
+printed from a form field the readers do not see, and its REGIE DE WAVRE and ORES (Verviers)
+distribution rows are swapped, so the Dutch edition standing in for it is the right one to bill.
 The report gives these rows their own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
