@@ -654,7 +654,7 @@
   "services": {
     "refresh": {
       "name": "Vernieuwen",
-      "description": "Laat elke Belgian Electricity Prices-invoer, of alleen de invoer gekozen onder Entry-ID, meteen de tariefkaart van de leverancier, de maandkaarten waarop de kost van dit jaar berekend wordt en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de kost van dit jaar niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
+      "description": "Laat elke Belgian Electricity Prices-invoer, of alleen de invoer gekozen onder Entry-ID, meteen de tariefkaart van de leverancier, de maandkaarten waarop de kost van dit jaar berekend wordt en de ENTSO-E-prijzen van vandaag en morgen opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de kost van dit jaar niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -776,15 +776,15 @@
     },
     "extractor_failed": {
       "title": "Tariefkaart voor {supplier} ({contract}) kon niet ontleed worden",
-      "description": "De leveranciers-extractor gaf een fout: {error}. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
+      "description": "De leveranciers-extractor gaf een fout: {error}. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders neemt de nieuwste tariefkaart uit het projectarchief het over, en alleen als het archief uitgeschakeld of leeg is, blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
     },
     "extractor_unreachable": {
       "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
-      "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Werd er eerder een kaart ingelezen, dan blijft ze die prijzen tonen; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
+      "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Werd er eerder een kaart ingelezen, dan blijft ze die prijzen tonen; anders neemt de nieuwste tariefkaart uit het projectarchief het over, en alleen als het archief uitgeschakeld of leeg is, blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
     },
     "extractor_card_missing": {
       "title": "Tariefkaart voor {supplier} ({contract}) is niet beschikbaar",
-      "description": "De site van de leverancier antwoordt dat er geen tariefkaart staat op het adres dat de integratie leest: {error}. Mogelijk heeft de leverancier de kaart van deze maand nog niet gepubliceerd, het product stopgezet of zijn kaarten verplaatst. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Deze melding verdwijnt vanzelf zodra de tariefkaart weer opgehaald kan worden. Duurt het langer dan enkele dagen terwijl de leverancier het product nog aanbiedt, open dan een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
+      "description": "De site van de leverancier antwoordt dat er geen tariefkaart staat op het adres dat de integratie leest: {error}. Mogelijk heeft de leverancier de kaart van deze maand nog niet gepubliceerd, het product stopgezet of zijn kaarten verplaatst. Werd er eerder een kaart ingelezen, dan blijft de integratie die prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur; anders neemt de nieuwste tariefkaart uit het projectarchief het over, en alleen als het archief uitgeschakeld of leeg is, blijven de sensoren van deze invoer onbeschikbaar tot een ophaling lukt. Deze melding verdwijnt vanzelf zodra de tariefkaart weer opgehaald kan worden. Duurt het langer dan enkele dagen terwijl de leverancier het product nog aanbiedt, open dan een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
     },
     "card_read_by_ocr": {
       "title": "De prijzen van {supplier} worden van foto's van zijn kaart gelezen",

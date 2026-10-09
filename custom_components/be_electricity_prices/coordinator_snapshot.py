@@ -563,7 +563,10 @@ class _SnapshotMixin:
           * **No probe**: fall back to the time-based TTL, refetching
             when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h)
             or the card's validity, or the month its title names, has
-            passed. DATS 24, energie.be, Engie and Luminus take this path.
+            passed. energie.be, Engie and Luminus take this path, and so
+            do Mega's professional cards and EnergyVision's Brussels cards,
+            whose probe has no key to give. DATS 24 never gets here: its
+            supply ended and ``_supply_ended`` returns first.
 
         The shared (supplier, contract, region) cache short-circuits the
         same way: a probe-key match against a sibling coordinator's

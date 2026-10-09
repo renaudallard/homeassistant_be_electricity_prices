@@ -34,7 +34,7 @@ Four products are sold today:
   - Motion         : dynamic, 15-min Belpex-indexed, phone customer service.
   - Motion Online  : dynamic, 15-min Belpex-indexed, online-only.
   - Flexy          : variable, monthly RLP-weighted Belpex average.
-  - Flexy Online   : the same variable product, online-only.
+  - Flexy Online   : variable, online-only, with its own coefficients and fee.
 
 Cards cover Flanders + Wallonia in one PDF (no Brussels rows). The same DSO
 and tax overlay is repeated across the three monthly cards; only the

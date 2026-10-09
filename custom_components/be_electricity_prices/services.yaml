@@ -4,7 +4,7 @@ refresh:
     Force-refresh every Belgian Electricity Prices entry, or only the one
     chosen under Entry ID: drops the cached
     supplier snapshot, the month cards the year-to-date cost is billed on
-    and TODAY's ENTSO-E prices, then re-fetches them immediately. Useful after a tariff card update or to clear a temporary
+    and TODAY's and tomorrow's ENTSO-E prices, then re-fetches them immediately. Useful after a tariff card update or to clear a temporary
     fetch error without waiting for the next refresh tick. It does NOT touch
     the cache of past hourly prices that the year-to-date cost replays; that
     needs clear_history below.

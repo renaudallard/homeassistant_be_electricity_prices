@@ -165,7 +165,7 @@ month to month (both live in the CMS at once), so `_SUFFIX_ALIASES` treats them 
 
 No tier is retired. `discover()` (`providers/frank.py`) surfaces any unrecognised
 suffix as `frank_dynamic_<suffix>` so the catalog-drift detector flags a genuinely new
-sixth tier instead of silently ignoring it.
+tier instead of silently ignoring it, as it did for Plus in October 2026.
 
 ## Fetch strategy
 
@@ -501,7 +501,7 @@ with its first card. Tests load fixtures through `fixture_text(name, layout=True
 | symptom | likely culprit | why |
 | --- | --- | --- |
 | Every tier serves last month's card | `_CARD_SELECT` (`providers/frank.py`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
-| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
+| A tier stops fetching, or a new tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
 | Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` | Frank switched units or dropped the VAT multiplier |
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` | "Abonnementskost (EUR/maand)" label reworded |

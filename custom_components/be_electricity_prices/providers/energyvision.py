@@ -63,14 +63,15 @@ The residential electricity products supported:
   shape on a 1-year lock, off a French card that shares no wording with the
   Dutch ones. Parsed by the ``*_fr`` helpers below.
 
-* ``GS1800V`` (Flanders and Brussels) / ``GSVI3`` / ``GSLP`` (Flanders):
+* ``GS1800V`` (all three regions) / ``GSVI3`` / ``GSLP`` (Flanders):
   the tiered range, which bills a first tranche of the YEAR at a flat rate
   and the remainder on ``factor x Belpex-RLP-M + 20 EUR/MWh``. Parsed as a
   ``SpotMonthlyRates`` leg carrying the tranche, which ``resolve_volume_tier``
   folds into the coefficients against the entry's annual volume. GSVI3 fixes
   its feed-in price instead of indexing it, which is the only shape
-  difference. The two GS1800V cards print the same energy leg figure for
-  figure and differ only below it.
+  difference. The Flemish and Brussels GS1800V cards print the same energy
+  leg figure for figure and differ only below it; the Walloon one is the
+  French publication, read by the ``*_fr`` helpers.
 
 Out of scope: gas (``GSG``, ``GS1JVG``) and the two tiered products that also
 price self-consumed solar (``GSEZ``, ``GSEZLP``): their "Groene stroom uit

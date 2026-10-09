@@ -654,7 +654,7 @@
   "services": {
     "refresh": {
       "name": "Aktualisieren",
-      "description": "Lässt jeden Eintrag von Belgian Electricity Prices, oder nur den unter Entry-ID gewählten, sofort die Tarifkarte des Anbieters, die Monatskarten, nach denen die Kosten dieses Jahres abgerechnet werden, und die heutigen ENTSO-E-Preise neu laden, statt auf den nächsten Durchlauf zu warten. Der Zwischenspeicher der VERGANGENEN Stundenpreise hinter den Kosten dieses Jahres bleibt unberührt; dafür ist Preisverlauf löschen da.",
+      "description": "Lässt jeden Eintrag von Belgian Electricity Prices, oder nur den unter Entry-ID gewählten, sofort die Tarifkarte des Anbieters, die Monatskarten, nach denen die Kosten dieses Jahres abgerechnet werden, und die ENTSO-E-Preise von heute und morgen neu laden, statt auf den nächsten Durchlauf zu warten. Der Zwischenspeicher der VERGANGENEN Stundenpreise hinter den Kosten dieses Jahres bleibt unberührt; dafür ist Preisverlauf löschen da.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -776,15 +776,15 @@
     },
     "extractor_failed": {
       "title": "Tarifkarte für {supplier} ({contract}) konnte nicht ausgewertet werden",
-      "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geändert; öffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
+      "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls springt die neueste Tarifkarte aus dem Projektarchiv ein, und nur wenn das Archiv ausgeschaltet oder leer ist, bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geändert; öffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
     },
     "extractor_unreachable": {
       "title": "Lieferant für {supplier} ({contract}) nicht erreichbar",
-      "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Wurde früher eine Karte gelesen, verwendet sie weiterhin deren Preise; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Das ist meist ein vorübergehendes Netzwerk- oder CDN-Problem, das sich beim nächsten Aktualisieren von selbst löst; nutzen Sie den Dienst be_electricity_prices.refresh oder prüfen Sie Ihr Netzwerk, falls es weiter auftritt."
+      "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Wurde früher eine Karte gelesen, verwendet sie weiterhin deren Preise; andernfalls springt die neueste Tarifkarte aus dem Projektarchiv ein, und nur wenn das Archiv ausgeschaltet oder leer ist, bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Das ist meist ein vorübergehendes Netzwerk- oder CDN-Problem, das sich beim nächsten Aktualisieren von selbst löst; nutzen Sie den Dienst be_electricity_prices.refresh oder prüfen Sie Ihr Netzwerk, falls es weiter auftritt."
     },
     "extractor_card_missing": {
       "title": "Tarifkarte für {supplier} ({contract}) ist nicht verfügbar",
-      "description": "Die Website des Lieferanten meldet, dass unter der Adresse, die die Integration liest, keine Tarifkarte liegt: {error}. Möglicherweise hat der Lieferant die Karte dieses Monats noch nicht veröffentlicht, das Produkt eingestellt oder seine Karten verschoben. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Diese Meldung verschwindet von selbst, sobald die Tarifkarte wieder abgerufen werden kann. Hält es länger als einige Tage an, obwohl der Lieferant das Produkt noch anbietet, öffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
+      "description": "Die Website des Lieferanten meldet, dass unter der Adresse, die die Integration liest, keine Tarifkarte liegt: {error}. Möglicherweise hat der Lieferant die Karte dieses Monats noch nicht veröffentlicht, das Produkt eingestellt oder seine Karten verschoben. Wurde früher eine Karte gelesen, verwendet die Integration weiterhin deren Preise, diese stimmen aber möglicherweise nicht mehr mit der Abrechnung überein; andernfalls springt die neueste Tarifkarte aus dem Projektarchiv ein, und nur wenn das Archiv ausgeschaltet oder leer ist, bleiben die Sensoren dieses Eintrags nicht verfügbar, bis ein Abruf gelingt. Diese Meldung verschwindet von selbst, sobald die Tarifkarte wieder abgerufen werden kann. Hält es länger als einige Tage an, obwohl der Lieferant das Produkt noch anbietet, öffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
     },
     "card_read_by_ocr": {
       "title": "Die Preise von {supplier} werden aus Bildern seiner Karte gelesen",
