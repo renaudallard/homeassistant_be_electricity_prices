@@ -213,7 +213,9 @@ By kind:
   contract signed before 2026 could not read its own card and was priced on
   today's formula. Such a card settles by the clock hour, so its leg carries
   `quarter_hourly=False` where every 2026 card carries `True`
-  (`test_a_card_from_before_2026_is_read_on_the_hourly_index`).
+  (`test_a_card_from_before_2026_is_read_on_the_hourly_index`). A contract
+  with a start date on such a card is still settled on the current card's grid
+  (`_CohortLegs.energy_on`, `cohort.py`).
   The consumption formula is read by `_dynamic_consumption_formula` within a
   short distance of its own lead-in (`_CONSUMPTION_LEAD`: *"La formule tarifaire
   HTVA (en €/MWh) est la suivante:"* up to the May 2026 card, *"La formule de

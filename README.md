@@ -275,8 +275,9 @@ is the Belgian day-ahead price from the ENTSO-E Transparency Platform —
 published at 15-minute resolution since the SDAC switch of Oct 2025. The
 integration aggregates it to hourly except for suppliers that bill per
 quarter-hour (Cociter, EBEM, Ecofix, Ecopower Dynamische Burgerstroom, energie.be, Energy Knights Agilior Online and Agilior Online Green, EnergyVision, Engie, OCTA+ and Trevion, plus Bolt, Frank Energie and the custom supplier's dynamic formula with the quarter-hour box ticked), which keep the
-native 15-minute slots. An OCTA+ contract signed before 2026 is the exception: its card names the
-hourly Belpex, so with a contract start date before 2026 it is priced by the hour.
+native 15-minute slots. A contract start date on an older card that named the hourly index
+(OCTA+ before 2026, Engie Dynamic and Ecopower Dynamische Burgerstroom before October 2025)
+keeps that card's formula, settled on the grid of the current card.
 
 VAT is applied to each component and a VAT-exempt levy (the Walloon connection
 fee) is added at face value, so `energy_component + network_component +
