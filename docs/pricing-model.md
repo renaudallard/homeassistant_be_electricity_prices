@@ -308,7 +308,8 @@ different, which is the reasoning `resolve_federal_excise` already follows for
 the excise. `VREG_NETWORK_CEILING_HTVA` (`const.py`) holds it EXCLUDING VAT as
 the regulator sets it, with a `KNOWN_FROM` / `KNOWN_UNTIL` window, and
 `resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every Fluvius
-overlay inside that window.
+overlay inside that window, except on the social tariff, whose CREG network
+component replaces the operator's tariffs and has no capacity term to cap.
 
 Five suppliers read it correctly and are unaffected: Luminus, Frank and
 energie.be print 0,3472738 including the 6%, and energie.be's professional

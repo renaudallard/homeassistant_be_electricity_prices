@@ -317,8 +317,8 @@ Two fields the card does not supply:
 - `network_ceiling_eur_per_kwh` - no Energy Knights card prints the VREG `maximumtarief`.
   It is a regulated rule that applies whether or not the card prints it, so
   `resolve_vreg_network_ceiling` (`providers/_resolve.py`) now supplies it from
-  `VREG_NETWORK_CEILING_HTVA` for every Fluvius overlay, here and on the nine other
-  suppliers whose Flemish cards state none. It never binds at the 2,5 kW
+  `VREG_NETWORK_CEILING_HTVA` for every Fluvius overlay but the social tariff's, here and on every other
+  supplier whose Flemish card does not supply it. It never binds at the 2,5 kW
   floor and only on a low yearly volume above it, so the practical impact is small; see
   [the pricing model](../pricing-model.md).
 - `prosumer_eur_per_kva_year` - the card **does** print it (54,63 EUR/kVA/jaar for
