@@ -98,6 +98,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "energyvision",
     "energyknights",
     "aspiravi",
+    "social",
 )
 
 
@@ -1512,6 +1513,71 @@ async def _check_aspiravi(
     session: aiohttp.ClientSession, aspiravi: types.ModuleType
 ) -> None:
     await _check_flanders_supplier(session, aspiravi, "aspiravi")
+
+
+async def _check_social(
+    session: aiohttp.ClientSession, social: types.ModuleType
+) -> None:
+    """Walk the social tariff in every region, on its own bounds.
+
+    The shared snapshot validation does not fit it: the network component is
+    flat and carries no capacity term, and the excise is the protected
+    customer's, which the runner cannot read from the law, so the card
+    carries ``protected_excise_unread`` here for any month the law decides.
+    What is checked is what this run can know: the CREG card of the running
+    quarter parses and prices within bounds, the feed-in of the two suppliers
+    that print one is read, and the Walloon connection fee is there.
+    """
+    today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+    quarter = (today.month + 2) // 3
+    label = f"Q{quarter} {today.year}"
+    for contract in social.EXTRACTOR.contracts:
+        cid = contract.id
+        for region in sorted(contract.regions):
+            prefix = f"social/{cid}/{region}"
+            try:
+                snap = await _fetch_with_retry(
+                    partial(social.fetch, session, cid, region)
+                )
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(
+                f"{prefix}: the running quarter's card",
+                snap.publication_label == label,
+                f"{snap.publication_label!r}, expected {label!r}",
+            )
+            _expect(
+                f"{prefix}: every operator of the region",
+                set(snap.dsos) == set(_EXPECTED_DSOS[region]),
+                f"{sorted(snap.dsos)}",
+            )
+            overlay = next(iter(snap.dsos.values()), None)
+            # A unit slip is a factor of ten or a hundred, so the bounds are
+            # wide: the single register's price was 17 to 31 c/kWh since 2022.
+            total = (
+                snap.energy.current + overlay.distribution_single
+                if overlay is not None
+                else 0.0
+            )
+            _expect(f"{prefix}: price", 0.08 < total < 0.8, f"{total} EUR/kWh")
+            if cid != "social_other":
+                inj = snap.injection
+                _expect(
+                    f"{prefix}: feed-in",
+                    inj is not None
+                    and inj.current is not None
+                    and -0.05 < inj.current < 0.5,
+                    f"{inj}",
+                )
+            if region == "wallonia":
+                fee = snap.taxes.region_connection_fee
+                _expect(
+                    f"{prefix}: connection fee",
+                    not snap.taxes.region_connection_fee_unavailable
+                    and 0.0001 < fee < 0.01,
+                    f"{fee} EUR/kWh",
+                )
 
 
 async def _check_two_region_supplier(
@@ -5147,6 +5213,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "energyvision": _check_energyvision,
     "energyknights": _check_energyknights,
     "aspiravi": _check_aspiravi,
+    "social": _check_social,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "

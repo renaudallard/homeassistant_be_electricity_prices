@@ -163,6 +163,17 @@ Both cards print the quarter's CREG prices on their consumption row, and that
 is what dates them: a card whose row is not the quarter's CREG price is
 refused.
 
+## Live check
+
+`_check_social` (`scripts/live_check.py`) walks every contract in every region
+on its own bounds rather than the shared snapshot validation, which expects a
+capacity term in Flanders and a household excise: the card has to be the
+running quarter's, every operator of the region has to carry the overlay, the
+single register's price has to sit between 8 and 80 c/kWh (a unit slip is a
+factor of ten), the Engie and Luminus contracts have to carry a feed-in rate,
+and a Walloon card the connection fee. The excise is not checked there: the
+runners are not served the law, so the card carries `protected_excise_unread`.
+
 ## Tests
 
 `tests/test_social.py`, on six CREG cards from Q4 2022 to Q4 2026 (one per

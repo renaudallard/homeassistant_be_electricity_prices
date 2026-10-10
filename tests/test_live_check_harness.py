@@ -4542,3 +4542,67 @@ def test_energy_knights_catalog_names_no_product_gone() -> None:
         ("energyknights/catalog: no new products at supplier", True),
         ("energyknights/catalog: no products gone from supplier", True),
     ]
+
+
+async def test_the_social_tariff_is_checked_on_its_own_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The social tariff has no capacity term and an excise the runner cannot
+    read, so it is not put through the shared validation. A card of another
+    quarter, a missing feed-in or a missing Walloon fee is still caught."""
+    from custom_components.be_electricity_prices.providers import social
+    from tests import fixture_text
+
+    lc.CHECKS.clear()
+    monkeypatch.setitem(lc._EXPECTED_DSOS, "wallonia", frozenset({"ores"}))
+    good = social.build_snapshot(
+        social.CONTRACT_ENGIE,
+        "wallonia",
+        social.parse_creg(fixture_text("creg_social_2026_q4.pdf")),
+        date(2026, 10, 1),
+        injection=social.parse_engie(
+            fixture_text("engie_social_w_2026-10.pdf"),
+            social.parse_creg(fixture_text("creg_social_2026_q4.pdf")),
+        )[0],
+        connection_fee=0.00075,
+        source_url="t://",
+    )
+    good = replace(good, dsos={"ores": good.dsos["ores"]})
+    stale = replace(
+        good,
+        publication_label="Q3 2026",
+        injection=None,
+        taxes=replace(good.taxes, region_connection_fee_unavailable=True),
+    )
+    cards = {"wallonia": good}
+
+    async def fetch(_session: object, _cid: str, region: str) -> Any:
+        return cards[region]
+
+    module = SimpleNamespace(
+        EXTRACTOR=SimpleNamespace(
+            contracts=(
+                SimpleNamespace(
+                    id=social.CONTRACT_ENGIE, regions=frozenset({"wallonia"})
+                ),
+            )
+        ),
+        fetch=fetch,
+    )
+    monkeypatch.setattr(
+        lc,
+        "datetime",
+        SimpleNamespace(now=lambda tz=None: datetime(2026, 10, 9, tzinfo=tz)),
+    )
+    await lc._check_social(None, module)  # type: ignore[arg-type]
+    assert lc.CHECKS and all(check.ok for check in lc.CHECKS), lc.CHECKS
+
+    lc.CHECKS.clear()
+    cards["wallonia"] = stale
+    await lc._check_social(None, module)  # type: ignore[arg-type]
+    failed = {check.label for check in lc.CHECKS if not check.ok}
+    assert failed == {
+        "social/social_engie/wallonia: the running quarter's card",
+        "social/social_engie/wallonia: feed-in",
+        "social/social_engie/wallonia: connection fee",
+    }
