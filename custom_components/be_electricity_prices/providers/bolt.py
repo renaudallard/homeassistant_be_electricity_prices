@@ -714,9 +714,11 @@ def _extract_publication_month(text: str) -> str:
     the handful of accents French month names actually use. Bolt's August
     2026 fixed card prints "Aôut 2026" - the circumflex on the wrong vowel
     - and an exact `[a-zéèû]` class dropped the label to "" on a typo that
-    changes nothing about the card's meaning. This value is a display
-    label (diagnostics, the snapshot_publication attribute) and never
-    feeds pricing, so tolerating a misspelling beats blanking it.
+    changes nothing about the card's meaning. Besides the display label
+    (diagnostics, the snapshot_publication attribute) it checks that a card
+    and the index card it is priced on are the same month's, and it names
+    the quarter an index table should be (``check_quarter_table``), so a
+    blank label can refuse a card a misspelt one reads.
     """
     match = re.search(r"^([A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+\s+\d{4})\s*/", text, re.MULTILINE)
     return match.group(1) if match else ""
