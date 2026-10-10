@@ -726,8 +726,12 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     #
     # That 3-4% is the residual: Epex RLP M weights by the residual load
     # profile, which is dearer than a flat average because consumption leans
-    # into expensive hours, and Synergrid publishes that profile only as .xlsb.
-    # Documented in docs/providers/octaplus.md rather than hidden.
+    # into expensive hours. The profile is fetched now
+    # (synergrid.fetch_rlp_blends) and other suppliers resolve on it, but OCTA+
+    # stays on the plain mean until its own index is checked against a
+    # published series, since its cards print a forecast rather than a
+    # realised value. Documented in docs/providers/octaplus.md rather than
+    # hidden.
     coefs: dict[str, tuple[float, float]] = {}
     for slot, pattern in _RLP_METER_RES.items():
         m = pattern.search(text)
