@@ -1529,7 +1529,13 @@ uploads and fails the step, but only once the month's files that did land are in
 which is handed over all the same, and the `index` and `push` jobs still run whenever the walk
 itself succeeded: skipped, they threw the day's rows and texts away with the runner, and a card
 a supplier replaces at a fixed URL was lost for good. The next run offers the PDFs that did not
-land again (`test_a_failed_upload_still_records_what_landed`).
+land again (`test_a_failed_upload_still_records_what_landed`): the current month's through the
+live walk, which downloads its cards every day, and a past month's by asking the supplier's
+archive for that month once more, since nothing else would download its card again. That second
+fetch only hands the bytes the held row names to the upload and leaves the row as it is
+(`test_a_backfilled_pdf_whose_upload_failed_is_offered_again`); a supplier without a month
+archive, or whose archive serves other bytes than the card the row read, cannot give a past
+month's PDF back.
 
 The `Warn before the upload token expires` step asks GitHub for the token's expiry (a fine-grained
 token reports it in the `github-authentication-token-expiration` response header) and, from two

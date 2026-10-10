@@ -1724,6 +1724,115 @@ async def test_a_pdf_is_filed_under_the_month_of_the_card_not_the_day_taken(
     ]
 
 
+async def test_a_backfilled_pdf_whose_upload_failed_is_offered_again(
+    tmp_path: Path,
+) -> None:
+    """The rows go out even when the upload of their PDFs fails, so a held
+    month whose PDF never reached the manifest is asked for again, for its
+    bytes alone: the row is left as it was, and once the manifest records
+    the PDF the month is not asked for any more."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession(
+        {PDF_URL: b"%PDF sep", "https://acme.test/aug.pdf": b"%PDF aug"}
+    )
+    asked: list[date] = []
+
+    async def read(url: str) -> str:
+        return await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            url,
+            variant="plain",
+            timeout=5,
+            render=lambda payload: payload.decode(),
+        )
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await read(PDF_URL)
+        return make_snapshot(
+            supplier="acme", contract=contract, publication_label="september 2026"
+        )
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(month)
+        if month.month != 8:
+            return None
+        await read("https://acme.test/aug.pdf")
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.21),
+            publication_label="2026-08",
+        )
+
+    acme = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        fetch_for_month=fetch_for_month,
+    )
+    august = hashlib.sha256(b"%PDF aug").hexdigest()
+    september = hashlib.sha256(b"%PDF sep").hexdigest()
+    row = out / "cards/acme/acme_fix/wallonia/2026-08.json"
+    await ac.archive(
+        out,
+        extractors=[acme],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert (pdfs / f"electricity-2026-08/{august}.pdf").exists()
+    written = row.read_bytes()
+
+    # The upload failed: the rows were pushed, pdfs.json never heard of them.
+    shutil.rmtree(pdfs)
+    asked.clear()
+    summary = await ac.archive(
+        out,
+        extractors=[acme],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW.replace(day=12),
+        sleep=_no_sleep,
+    )
+    assert asked == [date(2026, 8, 1)]
+    assert (summary.reoffered, summary.backfilled) == (1, 0)
+    assert (pdfs / f"electricity-2026-08/{august}.pdf").read_bytes() == b"%PDF aug"
+    assert row.read_bytes() == written
+
+    # Uploaded at last: the month is held and nothing is asked again.
+    (out / "pdfs.json").write_text(
+        json.dumps(
+            {
+                august: f"electricity-2026-08/{august}.pdf",
+                september: f"electricity-2026-09/{september}.pdf",
+            }
+        )
+    )
+    shutil.rmtree(pdfs)
+    asked.clear()
+    summary = await ac.archive(
+        out,
+        extractors=[acme],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW.replace(day=13),
+        sleep=_no_sleep,
+    )
+    assert (asked, summary.reoffered) == ([], 0)
+    assert not pdfs.exists()
+
+
 @contextmanager
 def _ocr_engine(read_pdf: object) -> Iterator[None]:
     """Stand a fake ``ocr_price_cards`` in front of the archiver's import.

@@ -254,6 +254,9 @@ class _Summary:
     # Rewritten only to stamp the running schema: every schema bump restamps
     # every replayable row, which says nothing about what any row parses to.
     restamped: int = 0
+    # A held month whose PDF never reached the manifest, fetched again only so
+    # its bytes are offered to the upload once more; the row is left as it is.
+    reoffered: int = 0
     unreplayable: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     # The failed lines that are the OCR engine's, filed as an issue of their
@@ -437,6 +440,15 @@ class _Cards(StoredTexts):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
             self.saved[digest] = rel
+
+    def missing(self, row: dict[str, Any] | None) -> list[str]:
+        """The PDFs a held row names that no upload has recorded: an upload
+        that failed after the row was pushed. Nothing is missing where this
+        run keeps no PDFs at all."""
+        if row is None or self.pdf_dir is None:
+            return []
+        digests = (digest_of(s["pdf"]) for s in row.get("_sources", []) if "pdf" in s)
+        return [d for d in digests if not self.knows(d)]
 
     def file_the_rest(self) -> None:
         """Bytes no row ever named, a card whose parse failed (Ecofix's page
@@ -1899,11 +1911,20 @@ async def archive(
                         out / _ROWS / ex.id / contract / region / f"{month_id}.json"
                     )
                     settle = ex.settle_month
+                    # A held month whose PDF upload failed is fetched again for
+                    # its bytes alone: the row went out with the run, so
+                    # nothing else would ever download that card again, and
+                    # the upload is only ever offered what a run downloaded.
+                    reoffer = cards.missing(held)
                     if held is not None and not (
                         ex.settles_on_next_card
                         and _awaits_settlement(held, in_place=settle is not None)
                     ):
-                        continue
+                        if not reoffer:
+                            continue
+                        settle = None
+                    else:
+                        reoffer = []
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
                     memo.touched.clear()
@@ -1946,6 +1967,12 @@ async def archive(
                             summary.given_up.append(ex.id)
                         continue
                     patience.ok(ex.id)
+                    if reoffer:
+                        # The row stays exactly as it was; only the bytes it
+                        # names, if the answer carried them, go to the upload.
+                        cards.file(month_id, reoffer)
+                        summary.reoffered += 1
+                        continue
                     if past is None or past.provisional:
                         # Not out yet, past the horizon, or still carrying an
                         # estimate: leave the month for a later backfill. A
@@ -2021,7 +2048,7 @@ async def archive(
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.settled} settled, "
-        f"{summary.absent} absent, "
+        f"{summary.absent} absent, {summary.reoffered} offered again, "
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "

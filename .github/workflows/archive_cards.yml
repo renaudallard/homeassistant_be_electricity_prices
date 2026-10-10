@@ -383,7 +383,9 @@ jobs:
             [ "$failed" -eq 0 ] || break
           done
           # The rows are pushed all the same (the steps below run on a failed
-          # upload), and the next run offers the PDFs that did not land again.
+          # upload), and the next run offers the PDFs that did not land again:
+          # the current month's from the live walk, a past month's by asking
+          # the supplier's archive for that month once more.
           [ "$failed" -eq 0 ] || exit 1
           # Same retention as the rows: a month more than twelve back goes.
           # Only this integration's releases, not the gas or water ones, and
