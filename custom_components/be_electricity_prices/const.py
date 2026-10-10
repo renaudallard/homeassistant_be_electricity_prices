@@ -664,8 +664,8 @@ SUPPLIER_CUSTOM: Final = "custom"
 
 # The social tariff a protected customer pays whoever supplies it, set by the
 # CREG each quarter (providers/social.py). Not a market product: nobody can
-# switch to it, so the comparison pages leave it out, and it has no card for
-# the project's archive to capture.
+# switch to it, so the comparison pages leave it out. The project's archive
+# keeps it like any card, and the live check's consensus checks skip its rows.
 SUPPLIER_SOCIAL: Final = "social"
 
 # One contract per energy mode (the contract step doubles as the mode picker).
