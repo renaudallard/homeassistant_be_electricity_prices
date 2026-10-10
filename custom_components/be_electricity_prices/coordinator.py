@@ -322,8 +322,12 @@ class BePricesCoordinator(
         # step is waiting on.
         self._year_spots_deferred = True
         # Same deal for the archived tariff cards the year-to-date walk bills
-        # each past month with. See _fill_month_cards.
-        self._month_cards_deferred = True
+        # each past month with. See _fill_month_cards. Only where the costs can
+        # run inside setup: a setup that defers its meter reads publishes the
+        # held costs and computes none (issue #107), so the first walk is the
+        # background refresh, which nothing waits on, and deferring the cards
+        # there only published a year billed on the current card first.
+        self._month_cards_deferred = not defer_meter_reads
         # And for the Synergrid load / production profiles. See _fill_profiles.
         self._profiles_deferred = True
         # Whether the next refresh leaves the recorder alone: asked for by

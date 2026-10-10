@@ -588,3 +588,87 @@ async def test_the_costs_alone_moving_leaves_the_entry_blob_unwritten(
     await coord._save_persistent()
     assert blob.await_count == 1
     assert costs.await_count == 2
+
+
+async def test_the_first_year_walk_after_setup_bills_each_month_on_its_own_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Setup defers its meter reads and publishes the held costs, so the first
+    walk of the year runs in the background refresh that follows, which
+    nothing waits on. It fetches the month cards there rather than billing
+    every month it holds no card for on the current one first."""
+    from custom_components.be_electricity_prices import coordinator_costs
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    freezer.move_to("2026-06-20 10:30:00+02:00")
+    recorder = _Recorder()
+    current = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.20, peak=0.22, offpeak=0.18),
+        injection=InjectionRates(current=0.03),
+    )
+    past = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.12, peak=0.14, offpeak=0.10),
+        injection=InjectionRates(current=0.03),
+    )
+
+    async def _fetch(*_args: Any) -> Any:
+        return current
+
+    async def _probe(*_args: Any) -> str:
+        return "k"
+
+    async def _month(*_args: Any) -> Any:
+        return past
+
+    async def _none(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    eneco = replace(
+        EXTRACTORS["eneco"], fetch=_fetch, probe=_probe, fetch_for_month=_month
+    )
+    _set_meter_states(hass, recorder)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="t",
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "solar_regime": "none",
+            "card_archive": False,
+            "day_consumption_kwh": "sensor.cons_day",
+            "night_consumption_kwh": "sensor.cons_night",
+        },
+    )
+    entry.add_to_hass(hass)
+    cached_only: list[bool] = []
+    real = coordinator_costs._compute_current_year_cost
+
+    async def _spy(*args: Any, **kwargs: Any) -> Any:
+        cached_only.append(bool(kwargs.get("cached_only")))
+        return await real(*args, **kwargs)
+
+    with ExitStack() as stack:
+        for cm in (
+            patch.object(snapshot_months, "_archived_card_from_github", _none),
+            patch.dict(EXTRACTORS, {"eneco": eneco}),
+            patch.object(coordinator_costs, "_compute_current_year_cost", _spy),
+            *_recorder_patches(recorder),
+        ):
+            stack.enter_context(cm)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coord = entry.runtime_data
+        assert isinstance(coord, BePricesCoordinator)
+        await _settle(hass, freezer)
+        assert cached_only
+        assert not any(cached_only)
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()

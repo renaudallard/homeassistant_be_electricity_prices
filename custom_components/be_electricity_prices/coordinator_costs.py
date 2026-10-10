@@ -210,8 +210,8 @@ class _CostsMixin:
         # _update_body raised before calling this when there was no card.
         assert self._snapshot is not None
         ytd_breakdown: dict[str, float] = {}
-        # FIRST tick only, and for the same reason the year's spots are
-        # deferred above: this one runs inside config-entry setup. The
+        # FIRST tick only, and only when that tick runs inside config-entry
+        # setup, for the same reason the year's spots are deferred above. The
         # year-to-date walk bills each past month with that month's own
         # archived card, one PDF apiece, and a Frank Energie card takes about
         # 25 s to lay out on a Raspberry Pi: 226 s for a September start,
@@ -224,7 +224,9 @@ class _CostsMixin:
         # missing: they bill their fees, network and tax legs off the current
         # card rather than their own, which is what a supplier with no archive
         # bills all year anyway, and the refresh the fill requests puts the
-        # right ones back.
+        # right ones back. Setup now defers its meter reads and computes no
+        # costs (issue #107), so in practice this walk runs in the background
+        # refresh that follows, and fetches its cards there.
         cached_months_only = self._month_cards_deferred
         # One reading of the clock for both windows and the resets published
         # beside them, so a figure and its last_reset always name one period.
