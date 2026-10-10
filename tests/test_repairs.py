@@ -98,11 +98,51 @@ async def test_fetching_again_closes_the_card_only_when_it_is_cleared(
         assert left is not None
 
 
+async def test_the_fix_flow_runs_the_real_refresh(hass: HomeAssistant) -> None:
+    """End to end with only the update body stubbed, so the refresh the flow
+    asks for goes through Home Assistant's own coordinator and debouncer."""
+    assert await async_setup_component(hass, "repairs", {})
+    assert await async_setup_component(hass, DOMAIN, {})
+    coord = _stale_entry(hass)
+    issue_id = f"snapshot_stale_{coord.entry.entry_id}"
+    manager = hass.data["repairs"]["flow_manager"]
+    form = await manager.async_init(DOMAIN, data={"issue_id": issue_id})
+    update = AsyncMock(return_value=None)
+    with patch.object(coord, "_async_update_data", update):
+        done = await manager.async_configure(form["flow_id"], {})
+    update.assert_awaited_once()
+    # The stub fetched nothing, so the card is still overdue.
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "still_stale"
+
+
 async def test_a_forced_refresh_can_wait_for_its_tick(hass: HomeAssistant) -> None:
     """The fix flow reads the card after the fetch, so the refresh it asks
-    for runs now rather than after the debouncer's cooldown."""
+    for runs now rather than after the debouncer's cooldown, and after a
+    tick still running. Only the update body is stubbed: Home Assistant's own
+    async_refresh takes the debouncer lock, and taking it here as well raised
+    "Debouncer lock is not re-entrant" on every call."""
+    import asyncio
+
     coord = _stale_entry(hass)
-    with patch.object(coord, "async_refresh", AsyncMock()) as refresh:
+    update = AsyncMock(return_value=None)
+    with patch.object(coord, "_async_update_data", update):
         await coord.async_force_refresh(wait=True)
-    refresh.assert_awaited_once()
+        assert update.await_count == 1
+        # A tick holding the lock is waited for, not refused or dropped.
+        release = asyncio.Event()
+
+        async def tick() -> None:
+            async with coord._debounced_refresh.async_lock():
+                await release.wait()
+
+        running = hass.async_create_task(tick())
+        await asyncio.sleep(0)
+        forced = hass.async_create_task(coord.async_force_refresh(wait=True))
+        await asyncio.sleep(0)
+        assert not forced.done()
+        release.set()
+        await running
+        await forced
+        assert update.await_count == 2
     assert coord._force_refresh

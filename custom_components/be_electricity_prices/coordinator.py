@@ -544,8 +544,10 @@ class BePricesCoordinator(
         if not wait:
             await self.async_request_refresh()
             return
-        async with self._debounced_refresh.async_lock():
-            await self.async_refresh()
+        # async_refresh takes the debouncer's lock itself, so it already waits
+        # for a tick still running. Taking the lock here as well raised
+        # "Debouncer lock is not re-entrant" on every call.
+        await self.async_refresh()
 
     @staticmethod
     def _compute_data_signature(entry: ConfigEntry) -> frozenset[tuple[str, Any]]:
