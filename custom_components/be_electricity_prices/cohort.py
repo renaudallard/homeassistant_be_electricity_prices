@@ -60,6 +60,7 @@ from .const import (
     CONF_TARIFF_CARD_DATE,
     CONF_YTD_FROM_CONTRACT_START,
     SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
 )
 from .providers import takes_signing_rate
 from .providers._rates import (
@@ -283,6 +284,13 @@ async def _cohort_legs(
         #
         # Guarding here rather than only popping the keys in the flow is what
         # heals the entries already holding them.
+        return _CohortLegs(None, None)
+    if entry.data.get(CONF_SUPPLIER) == SUPPLIER_SOCIAL:
+        # The social tariff is one card for every protected customer each
+        # month, whenever they signed: the CREG's quarter for the energy and
+        # Engie's month formulas for the feed-in. Freezing the signing card's
+        # feed-in coefficients credited a start-dated entry on a formula the
+        # supplier no longer applies, and dropped the day and night pairs.
         return _CohortLegs(None, None)
     start = _tariff_card_month(entry)
     if start is None:

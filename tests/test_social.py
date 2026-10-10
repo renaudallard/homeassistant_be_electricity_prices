@@ -379,6 +379,63 @@ async def test_the_day_and_night_feed_in_sensors_show_what_is_credited(
     assert data.static_injection_offpeak == pytest.approx(0.03722)
 
 
+async def test_a_start_date_puts_no_signing_cohort_on_the_social_tariff() -> None:
+    """The social tariff is the same card for every protected customer each
+    month, so a contract start date freezes nothing: Engie's feed-in pairs on
+    a June signer's October bill are October's, not cleared or replaced by the
+    signing card's."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import cohort
+
+    card = _card("creg_social_2026_q4.pdf")
+    injection, fee = social.parse_engie(
+        fixture_text("engie_social_w_2026-10.pdf"), card
+    )
+    october = social.build_snapshot(
+        social.CONTRACT_ENGIE,
+        REGION_WALLONIA,
+        card,
+        OCT,
+        injection=injection,
+        connection_fee=fee,
+        source_url="t://",
+    )
+    july = social.build_snapshot(
+        social.CONTRACT_ENGIE,
+        REGION_WALLONIA,
+        _card("creg_social_2026_q3.pdf"),
+        date(2026, 7, 1),
+        injection=injection,
+        connection_fee=fee,
+        source_url="t://",
+    )
+    entry = SimpleNamespace(
+        entry_id="x",
+        data={
+            "supplier": "social",
+            "contract": social.CONTRACT_ENGIE,
+            "region": REGION_WALLONIA,
+            "contract_start_date": "2026-07-15",
+            "meter": "bi",
+        },
+    )
+    with (
+        patch.object(cohort, "month_card", AsyncMock(return_value=july)),
+        patch.object(cohort, "_month_card_retrievable", lambda *_: True),
+    ):
+        legs = await cohort._cohort_legs(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            social.EXTRACTOR,
+            social.CONTRACT_ENGIE,
+            REGION_WALLONIA,
+            entry,  # type: ignore[arg-type]
+            october,
+        )
+    assert legs.splice(october) == october
+
+
 def test_a_register_pair_without_formulas_is_still_credited_as_printed() -> None:
     """Trevion Vast prints a day and night feed-in pair and no formula: the
     month mean must not move it."""

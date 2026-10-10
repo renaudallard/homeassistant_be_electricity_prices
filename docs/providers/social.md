@@ -46,7 +46,8 @@ No other supplier or operator publishes one, so `social_other` credits
 nothing rather than a guess.
 
 All three are `kind="variable"`: the price moves each quarter whatever the
-signing date, so no signing cohort applies.
+signing date, so no signing cohort applies: `_cohort_legs` (`cohort.py`)
+freezes nothing for it, whatever start date the entry names.
 
 ## Price
 
