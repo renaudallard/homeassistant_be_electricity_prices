@@ -356,10 +356,13 @@ accrual, each handing the cap the card's own `vat_rate` (the backfill handed the
 default 0 and sat a fifth short on its headroom) -- because it used to sit on the
 quote paths alone, and a card printing
 a ceiling then had it honoured in the compare page and billed straight through
-by the sensor the compare page is meant to match. At the 2026 rates and the
-regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so nothing
-moves for a household and the gap only ever showed on a garage box or a second
-home.
+by the sensor the compare page is meant to match. At the regulated 2,5 kW
+floor the ceiling cannot bind at all, since the card's minimum is that same
+2,5 kW of capacity. Above it, on Fluvius Zenne-Dijle at the 2026 rates, it
+reduces the charge only below roughly 600 to 2.450 kWh a year for a peak of 3
+to 12 kW (`_capped_capacity_annual`, `fees.py`), so
+nothing moves for a typical household and the gap shows on a low-volume
+connection with a high peak, such as a garage box or a second home.
 
 ### Monthly-indexed variable cards
 
