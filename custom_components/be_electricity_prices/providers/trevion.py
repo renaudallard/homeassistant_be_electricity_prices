@@ -612,7 +612,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 # excise block ("0-3 MWh") carry no decimal comma, so this cannot read one of
 # them as a rate.
 _DEC = r"\d+,\d+"
-# Tried in order, first match wins, the way flanders_tax_overlay does it. The
+# Tried in order, first match wins, the way regional_tax_overlay does it. The
 # GSC and WKK levies keep this parser off that helper: Trevion prints them in
 # the meter table, not the tax block (_meter_shared_values).
 _EXCISE_ROWS = (
@@ -648,7 +648,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
         raise ExtractorError("Trevion: tax block not found")
     green, chp, _ = _meter_shared_values(text)
     # The contribution and the domiciled energiefonds row both print 0 since
-    # August 2026 and are optional, the policy flanders_tax_overlay holds for
+    # August 2026 and are optional, the policy regional_tax_overlay holds for
     # every other Flemish card: the levy was abolished on 2026-08-01 and the
     # other suppliers answered by deleting the row, so a card without it is
     # the abolished levy, not a layout drift, and must not take every

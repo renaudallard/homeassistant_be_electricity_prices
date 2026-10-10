@@ -920,7 +920,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
     included: 4,8760 is 4,60 x 1,06, and the one card in this repo that prints
     ex-VAT figures (Ecopower) carries 0,04748 for the same band, which is
     5,0329 / 1,06. The energy fund is the single exemption, per the card's own
-    footnote (1) "Bedrag niet onderworpen aan BTW", and flanders_tax_overlay
+    footnote (1) "Bedrag niet onderworpen aan BTW", and regional_tax_overlay
     leaves it unscaled."""
     return regional_tax_overlay(
         text,

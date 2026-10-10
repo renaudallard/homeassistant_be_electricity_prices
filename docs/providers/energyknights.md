@@ -360,9 +360,11 @@ footnote (1).
 The excise is read from the first band. Energy Knights prints three bands and they have
 **not** always been equal: every month from 2024-06 to 2026-07 read
 `5,0329 / 5,0329 / 4,8188`, and only from August 2026 is the table flat at 4,8760, after
-the federal contribution was folded into the excise. Band 1 is correct for the volumes a
-residential entry bills, and it is the convention every sibling extractor follows.
-`federal_excise_bands` stays `None`; `flanders_tax_overlay` cannot emit bands.
+the federal contribution was folded into the excise. Band 1 is correct up to 20.000 kWh a
+year, and the shared `regional_tax_overlay` (`_parse.py`) emits no bands, so
+`federal_excise_bands` stays `None` and a household above that volume is billed band 1 on
+every kWh before August 2026. Engie, Mega, Luminus and TotalEnergies read the whole table
+instead.
 
 ## Quirks and land mines
 
