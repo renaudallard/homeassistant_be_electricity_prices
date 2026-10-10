@@ -23,7 +23,7 @@ Related reading:
 | Regions served | Flanders, Wallonia, Brussels (all three) | every `Contract` uses the default `regions`; `EXTRACTOR.regions()` unions them, `_rates.py` |
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py` |
-| Probe | HEAD the listing page, prefer `ETag` then `Last-Modified` | `bolt.py` |
+| Probe | the card's address and its `Last-Modified`, the Online card's too for Plenty Online | `bolt.py` |
 | Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot | `bolt.py` |
 | VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py`, `base.py` |
 
@@ -123,8 +123,8 @@ EUR a year at 3500 kWh, too low. `parse_snapshot` refuses to price the contract 
 Online card's text rather than fall back to the professional formula, and the live check hands
 it the card it already fetched. It also refuses a pair whose `<Month> <Year>` headers differ:
 each card's version comes off its own listing read, and Bolt can list a new version between the
-two, which would pair October's card with September's, whose prices differ, and leave the professional formula in place, and Bolt's probe key, the
-listing's ETag, would keep that snapshot until the listing next changes. The refusal's message
+two, which would pair October's card with September's, whose prices differ, and leave the professional formula in place, and Bolt's probe key would keep that snapshot until
+either card next changes. The refusal's message
 opens with `OUT_OF_STEP` (`_pdf.py`), which `is_transient_fetch_error` counts as transient: the
 next fetch pairs the cards again, so it is held to the softer "could not reach the supplier"
 card rather than the layout-change one.
@@ -324,13 +324,16 @@ The month suffix in `_document_url` is deliberately `dt_util.now()` (Brussels lo
 
 ### `probe` (freshness)
 
-`probe` (`bolt.py`) HEADs the listing page and returns the first present header, preferring
-`ETag` then `Last-Modified` via `head_freshness_key` (`_pdf.py`). Bolt is the reason
-`head_freshness_key` accepts a `prefer` order: its listing returns a stable `ETag` while
-`Last-Modified` flips on every CDN edge cache, so every other supplier prefers `Last-Modified` and
-Bolt inverts it (`_pdf.py`). The probe returns a single key for the whole listing (it ignores
-`region`, and returns `None` for an unknown contract id). When the HEAD fails or carries neither
-header, `head_freshness_key` returns `None` and the coordinator's time-based TTL takes over.
+`probe` (`bolt.py`) resolves the card `fetch` reads, a variable card's version off the listing
+and a fixed card's month off the clock, and keys on its address and its own `Last-Modified`
+through `head_freshness_key` (`_pdf.py`). Plenty Online adds the Online card's, the one its formula
+is read off. The address moves with a new version or month; the header moves when Bolt overwrites
+a card in place, which it does: the October 2026 Online card was served from 30 September and
+replaced on 2 October at the same version. The probe used to key on the listing's `ETag`, which
+saw no such swap until the listing next changed. The key ignores `region` and is `None` for an
+unknown contract id, when the listing cannot be read, and when a card's HEAD fails or carries no
+header (a fixed card not yet published on the 1st answers 404): the coordinator's time-based TTL
+takes over.
 
 ### `discover` (live-check coverage)
 

@@ -329,18 +329,39 @@ async def probe(
     contract_id: str,
     region: str,  # Bolt's PDFs cover every region.
 ) -> str | None:
-    """Cheap freshness probe: HEAD the listing page, return its ETag.
+    """Cheap freshness probe: each card read, under its own Last-Modified.
 
-    Bolt's listing returns a stable ETag and the server honours
-    ``If-None-Match`` with a 304 response. We just want a key that flips
-    on supplier changes, so reading the ETag header on a HEAD round-trip
-    is enough.
+    The address carries a variable card's version and a fixed card's month,
+    so a new card moves the key. The card's own header catches what the
+    address does not: Bolt overwrites a card in place. The October 2026
+    Online card was served from 30 September and replaced on 2 October at
+    the same version. Keyed on the listing's ETag, such a swap went unseen
+    until the listing next changed. A card billed on another's formula
+    keys on both.
+
+    None, so the TTL decides, when the listing cannot say which variable
+    card is current or a card answers with no header.
     """
-    if contract_id not in _CONTRACTS_BY_ID:
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None:
         return None
-    return await head_freshness_key(
-        session, _LISTING_URL, prefer=("ETag", "Last-Modified")
-    )
+    reference = _index_card(contract)
+    keys: list[str] = []
+    for card in (contract,) if reference is None else (contract, reference):
+        try:
+            suffix = (
+                await _resolve_variable_suffix(session, card)
+                if card.folder == "var"
+                else None
+            )
+        except ExtractorError:
+            return None
+        url = _document_url(card, suffix=suffix)
+        key = await head_freshness_key(session, url)
+        if key is None:
+            return None
+        keys.append(f"{url} {key}")
+    return " ".join(keys)
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
@@ -586,7 +607,7 @@ def parse_snapshot(
         # Bolt can list a new version between the two reads. That pairs this
         # month's card with last month's, whose prices differ, and the card
         # would keep the formula it prints. A refused pair costs one tick; a
-        # mispriced one stands until the listing's ETag moves, which is
+        # mispriced one stands until either card's probe key moves, which is
         # usually the next month.
         month = _extract_publication_month(text).casefold()
         if not month or month != _extract_publication_month(index_text).casefold():

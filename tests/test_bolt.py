@@ -635,6 +635,56 @@ def test_fix_fetch_does_not_consult_the_listing() -> None:
     listing.assert_not_awaited()
 
 
+def test_probe_keys_on_the_card_and_its_own_freshness() -> None:
+    """Bolt overwrites a card in place: the October 2026 Online card was
+    served from 30 September and replaced on 2 October at the same version.
+    The probe keyed on the listing's ETag, which did not move, so the first
+    edition was held until the listing next changed. The key is now the card
+    the fetch reads and its own Last-Modified, the Online card's too for
+    Plenty Online, which is billed on its formula."""
+    listing = (
+        _LISTING_HTML
+        + '<a href="https://files.boltenergie.be/pricelists/var/'
+        + 'plenty_online_res_el_fr_14.pdf">plenty online</a>'
+    )
+    online = f"{bolt_mod._BASE_URL}/var/online_res_el_fr_14.pdf"
+    plenty = f"{bolt_mod._BASE_URL}/var/plenty_online_res_el_fr_14.pdf"
+    stamps = {
+        bolt_mod._LISTING_URL: '"listing"',
+        online: "Wed, 30 Sep 2026 12:37:55 GMT",
+        plenty: "Wed, 30 Sep 2026 12:40:02 GMT",
+    }
+
+    async def head(_session: object, url: str, **_kw: object) -> str | None:
+        return stamps.get(url)
+
+    async def key(contract_id: str, page: str = listing) -> str | None:
+        with (
+            patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=page)),
+            patch.object(bolt_mod, "head_freshness_key", new=head),
+        ):
+            return await bolt_mod.probe(None, contract_id, "flanders")  # type: ignore[arg-type]
+
+    first = asyncio.run(key("bolt_online"))
+    assert first == f"{online} Wed, 30 Sep 2026 12:37:55 GMT"
+    first_plenty = asyncio.run(key("bolt_plenty_online"))
+    assert (
+        first_plenty is not None and online in first_plenty and plenty in first_plenty
+    )
+    stamps[online] = "Fri, 02 Oct 2026 08:40:44 GMT"
+    assert asyncio.run(key("bolt_online")) != first
+    assert asyncio.run(key("bolt_plenty_online")) != first_plenty
+    # A fixed card is the month's address, no listing read.
+    fixed = bolt_mod._document_url(bolt_mod._CONTRACTS_BY_ID["bolt_fix"])
+    stamps[fixed] = "Fri, 02 Oct 2026 08:39:10 GMT"
+    assert asyncio.run(key("bolt_fix", "")) == f"{fixed} Fri, 02 Oct 2026 08:39:10 GMT"
+    # No signal, so the TTL decides: no card on the listing, a card that
+    # answers with no header, an unknown contract.
+    assert asyncio.run(key("bolt_online", "")) is None
+    assert asyncio.run(key("bolt_variable")) is None
+    assert asyncio.run(key("unknown")) is None
+
+
 def test_pro_card_is_parsed_ex_vat() -> None:
     snap = parse_snapshot(
         "bolt_pro_variable",
