@@ -623,11 +623,8 @@ def parse_snapshot(
         )
     # The table that matters is the one behind the formula billed, which is
     # the index card's for a card printing another product's prices.
-    check_quarter_table(
-        index_text if contract.index_slug is not None and index_text else text,
-        energy,
-        professional=professional,
-    )
+    table_text = index_text if contract.index_slug is not None and index_text else text
+    check_quarter_table(table_text, energy, _extract_publication_month(table_text))
     injection = _extract_injection(text)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)

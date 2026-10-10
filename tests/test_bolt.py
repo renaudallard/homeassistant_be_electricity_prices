@@ -1664,14 +1664,13 @@ def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:
         parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=online)
 
 
-def test_the_table_check_allows_a_change_of_vat_and_nothing_wider() -> None:
-    """The quarter check stays at 0,01 c/kWh: the first quarter's table on the
-    second quarter's card parts them by 0,10 c/kWh, 0,72%, and must be
-    refused. The one wider gap a consistent card shows is a change of VAT:
-    the formula is grossed by the rate the parser assumes and the price
-    carries the card's, so a price at exactly 7% over a formula at 6% passes
-    once 7% is held for a month."""
-    from custom_components.be_electricity_prices import vat_rates
+def test_a_price_off_its_table_is_refused_only_beside_another_quarter() -> None:
+    """The August 2026 card names the Q2 table, the quarter before its own. A
+    price that misses that table, as a change of VAT makes it do (the
+    formula grossed at the assumed 6%, the price at 7%), is still read; the
+    same miss beside a table that is not the quarter before the card's month
+    (the October edition named Q2, R2's case the first quarter on a later
+    card) is refused, however small."""
     from custom_components.be_electricity_prices.providers._bolt_cards import (
         check_quarter_table,
     )
@@ -1679,24 +1678,30 @@ def test_the_table_check_allows_a_change_of_vat_and_nothing_wider() -> None:
     text = fixture_text("bolt_variable_impact_w.pdf", layout=True)
     energy = parse_snapshot("bolt_variable", text, "wallonia").energy
     assert isinstance(energy, VariableRates)
-    check_quarter_table(text, energy, professional=False)
-    off_quarter = replace(energy, current=energy.current * 1.0072)
-    with pytest.raises(ExtractorError, match="index table"):
-        check_quarter_table(text, off_quarter, professional=False)
+    assert "Belpex Q2 2026" in text
     seven = replace(energy, current=energy.current * 1.07 / 1.06)
-    with pytest.raises(ExtractorError, match="index table"):
-        check_quarter_table(text, seven, professional=False)
-    held = vat_rates.held_table()
-    vat_rates.hold({"residential": {"2026-11": {"rate": 0.07}}})
-    try:
-        check_quarter_table(text, seven, professional=False)
-        # A professional card prints both excluding VAT: no rate moves them.
+    check_quarter_table(text, seven, "Aôut 2026")
+    check_quarter_table(text, seven, "Septembre 2026")
+    off_quarter = replace(energy, current=energy.current * 1.0072)
+    for label in ("Octobre 2026", "Avril 2026", "Janvier 2027", ""):
         with pytest.raises(ExtractorError, match="index table"):
-            check_quarter_table(text, seven, professional=True)
-    finally:
-        vat_rates._RESIDENTIAL.clear()
-        vat_rates._STANDARD.clear()
-        vat_rates.hold(held)
+            check_quarter_table(text, off_quarter, label)
+    # A price on its own table is read whatever the month says.
+    check_quarter_table(text, energy, "Octobre 2026")
+
+
+def test_the_quarter_before_a_card_s_month() -> None:
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        _quarter_before,
+    )
+
+    assert _quarter_before("Octobre 2026") == "Q3 2026"
+    assert _quarter_before("Avril 2026") == "Q1 2026"
+    assert _quarter_before("Juin 2026") == "Q1 2026"
+    assert _quarter_before("Aôut 2026") == "Q2 2026"
+    assert _quarter_before("Januari 2027") == "Q4 2026"
+    assert _quarter_before("") is None
+    assert _quarter_before("Brumaire 2026") is None
 
 
 @pytest.mark.parametrize(

@@ -38,7 +38,6 @@ from dataclasses import dataclass, fields, replace
 from datetime import date
 
 from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
-from ..vat_rates import residential_rates
 from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
@@ -335,21 +334,28 @@ def _with_index_card_formula(
     )
 
 
-def _vat_ratios(text: str, *, professional: bool) -> frozenset[float]:
-    """What the printed price may be over the formula's own VAT.
-
-    A residential formula is grossed by the rate the parser assumes, while the
-    printed price carries the one the card was printed under, so a change of
-    rate parts the two by exactly the ratio of the rates on a card that is
-    consistent. A professional card prints both excluding VAT.
-    """
-    if professional:
-        return frozenset({1.0})
-    vat = vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT)
-    return frozenset({1.0}) | {(1.0 + rate) / vat for rate in residential_rates()}
+def _month_number(name: str) -> int | None:
+    """A French or Dutch month name's number, accents folded: the August 2026
+    cards spell it "Aôut"."""
+    folded = unicodedata.normalize("NFKD", name.lower())
+    return _MONTH_NAMES.get("".join(c for c in folded if c.isascii()))
 
 
-def check_quarter_table(text: str, energy: EnergyRates, *, professional: bool) -> None:
+def _quarter_before(label: str) -> str | None:
+    """The quarter before the one a card's "<Month> <Year>" falls in, as its
+    index table names it ("Q3 2026" for "Octobre 2026"), or ``None``."""
+    parts = label.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        return None
+    number = _month_number(parts[0])
+    if number is None:
+        return None
+    year = int(parts[1])
+    previous = (number - 1) // 3
+    return f"Q{previous} {year}" if previous else f"Q4 {year - 1}"
+
+
+def check_quarter_table(text: str, energy: EnergyRates, label: str) -> None:
     """Refuse a variable card whose index table is not the quarter its
     monthly price was computed on.
 
@@ -362,6 +368,14 @@ def check_quarter_table(text: str, energy: EnergyRates, *, professional: bool) -
     off those tables, so such a card bills a Walloon Impact entry about
     5 c/kWh low in every band. Refused rather than read, so the card held
     before keeps serving until the supplier's copy is consistent again.
+
+    A price that misses its table is refused only when the table is not the
+    quarter before the card's month (``label``) either. Every consistent card
+    on file names that quarter, and the October edition named the one before
+    it. A change of VAT also parts price and table, since the formula is
+    grossed by the rate the parser assumes and the price carries the card's,
+    but it leaves the quarter right, so such a card is read whether or not
+    the new rate is known yet.
     """
     if (
         not isinstance(energy, VariableRates)
@@ -374,12 +388,12 @@ def check_quarter_table(text: str, energy: EnergyRates, *, professional: bool) -
         return
     index = to_float(match.group(2)) / 1000.0
     priced = energy.formula_factor * index + (energy.formula_base or 0.0)
-    if all(
-        abs(priced * ratio - energy.current) > _TABLE_TOLERANCE
-        for ratio in _vat_ratios(text, professional=professional)
+    named = " ".join(match.group(1).split())
+    if abs(priced - energy.current) > _TABLE_TOLERANCE and named != _quarter_before(
+        label
     ):
         raise ExtractorError(
-            f"Bolt: the card's index table ({' '.join(match.group(1).split())}) "
+            f"Bolt: the card's index table ({named}) "
             f"prices its monthly rate at {priced * 100.0:.2f} c/kWh, but it "
             f"prints {energy.current * 100.0:.2f}"
         )
@@ -639,9 +653,7 @@ def _extract_promotion(
     month = None
     head = span[:120]
     for match in _PROMO_MONTH_RE.finditer(span):
-        # Accents folded: the August 2026 card spells it "aôut".
-        name = unicodedata.normalize("NFKD", match.group(1).lower())
-        number = _MONTH_NAMES.get("".join(c for c in name if c.isascii()))
+        number = _month_number(match.group(1))
         if number is not None:
             month = date(int(match.group(2)), number, 1)
             head = span[: match.start()]

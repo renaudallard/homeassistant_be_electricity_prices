@@ -825,12 +825,14 @@ formula per quarter-hour.
 The table is checked against the price it stands beside. `check_quarter_table` (`_bolt_cards.py`)
 puts the table's mono index through the card's formula and refuses the card (an `ExtractorError`,
 so the card held before keeps billing) when the result is more than 0,01 c/kWh, one step of the
-printed price's last digit, from `Prix mensuel`. The one wider gap a consistent card shows is a change
-of VAT: a residential formula is grossed by the rate the parser assumes while the price carries the
-rate the card was printed under, so the result is also compared at the ratio of every residential
-rate `vat_rates` holds to the assumed one (`_vat_ratios`). A margin would not do: the first quarter's
-table on the second quarter's card parts them by only 0,72%, as the index moved from 99,24 to
-100,09 EUR/MWh. The Online card first published for October 2026
+printed price's last digit, from `Prix mensuel`, and the table is not the quarter before the card's
+month either (`_quarter_before`): every consistent card on file names that quarter (April and June
+2026 name Q1, August and September Q2, October Q3), and the refused October edition named Q2. A change
+of VAT parts price and table too, since a residential formula is grossed by the rate the parser
+assumes while the price carries the rate the card was printed under, but it leaves the quarter
+right, so such a card is read whether or not the new rate is known. A margin on the price would not
+do: the first quarter's table on the second quarter's card parts them by only 0,72%, as the index
+moved from 99,24 to 100,09 EUR/MWh. The Online card first published for October 2026
 printed 19,05 c/kWh, the formula at the third quarter's index, beside the second quarter's table
 (100,09 EUR/MWh mono), which prices it at 14,18; its Impact bands were that table's, about 5 c/kWh
 below the rest of the card. Bolt replaced the file in place two days later with the third
