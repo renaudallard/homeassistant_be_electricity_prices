@@ -9,10 +9,14 @@ modules split out of it (`flow_schemas.py`, `flow_contracts.py`,
 supplier, region, DSO, meter, solar, and sensor choices into a config entry. It
 walks the config-flow steps in order, the branching between them, the validation
 rules that reject impossible combinations, and the parallel options flow (edit
-plus the one-off "compare another supplier" quote). No EUR values are asked
-anywhere in this flow: energy, network, and tax rates are fetched live by the
-coordinator from each supplier's own publication. The flow only collects
-*structural* choices (who, where, which meter, which sensors).
+plus the one-off "compare another supplier" quote). Energy, network and tax
+rates are fetched live by the coordinator from each supplier's own publication,
+so the flow mostly collects *structural* choices (who, where, which meter, which
+sensors). Two branches do ask for EUR figures: `signed_rate`, the optional
+rate a household signed a fixed or spot-priced contract at, which wins over the
+archived card of its signing month, and the
+expert custom supplier's `custom_*` steps, which ask for the whole tariff
+because that supplier has no card.
 
 Related docs:
 
@@ -573,12 +577,12 @@ Anything pre-filled stays editable (`strings.json`).
 | ENTSO-E key validated live before finalize | `flow_wizard.py` | Prevents finalizing an entry that fails on first refresh |
 | Duplicate (supplier, contract, region, dso) tuple rejected | `config_flow.py` | Two coordinators on the same tuple double-poll the supplier |
 
-Note on partial register-pair wiring: the *config flow* accepts any subset of the
-six kWh fields (all are `vol.Optional`). The "partial register-pair wiring on either
-side is rejected" rule described in `const.py` is enforced downstream in the
-coordinator's `current_year_cost` engine (each side needs *both* day and night, or
-falls back to the single total), not in the flow. The flow's job is only to collect
-entity ids; it does not couple the day and night fields.
+Note on partial register-pair wiring: every one of the six kWh fields is
+`vol.Optional`, but the meters step refuses a day/night pair with only one half
+filled when no totals sensor covers that side (`_incomplete_register_pairs`,
+`flow_schemas_meters.py`, error `register_pair_incomplete` on the night field).
+A totals sensor rescues the pair, as it does in the coordinator, and the injection
+side is checked only with a solar regime, since it is read only then.
 
 All three billing paths share one predicate for that rule,
 `_partial_register_pair` (`energy_meters.py`). Only the static per-day path used to
@@ -630,7 +634,8 @@ stale stored value never renders as an invalid pre-selection:
 ## Options flow
 
 `BePricesOptionsFlow` (`config_flow.py`) opens on `async_step_init`
-(`config_flow.py`) with a four-item menu (`async_show_menu`):
+(`config_flow.py`) with a menu (`async_show_menu`) of four items, five while a
+switch is recorded in the running year:
 
 | Menu option | Step | Effect |
 | --- | --- | --- |
@@ -771,8 +776,8 @@ nothing reads zero.
 
 ### The ranking branch
 
-`_SweepStepsMixin` (`compare_sweep_flow.py`) is a separate branch reached from a
-third menu entry. It subclasses `_CompareStepsMixin` because it reuses
+`_SweepStepsMixin` (`compare_sweep_flow.py`) is a separate branch reached from the
+last menu entry. It subclasses `_CompareStepsMixin` because it reuses
 `_resolve_household` and the live-validated key prompt; only the menu entry and
 the steps are separate. `_sweep_candidates` (`flow_contracts.py`) narrows to
 the entry's own `KIND_GROUP`, region and professional segment, and drops the
@@ -847,10 +852,10 @@ rows.
 | --- | --- | --- |
 | `compare_all` | `compare_sweep_flow.py` | Resolves the cell through `build_sweep`. When the entry ranks on a schedule and a result is stored, jumps straight to the result step: the wait disappears rather than moving |
 | `compare_all_progress` | `compare_sweep_flow.py` | One `asyncio.Task` per candidate. HA re-renders a progress step only when the step returns a new result, and a step only returns when its task finishes, so one task for the whole sweep could never move the counter. The live task is re-shown before a new one is created, because the flow manager re-enters the step on every frontend poll |
-| `compare_all_result` | `compare_sweep_flow.py` | One `{ranking}` token carrying the whole table, plus the opt-in for the year-to-date pass. A row tagged `OCR` was priced off the archive's reading of a card published as images; a row tagged `NO FEED-IN` leaves out a feed-in credit its card grants (short of a full year of day-ahead and export, `_feed_in_left_out`), and one line under the table says so. A stored ranking dates itself and offers `refresh`, which clears the rows and the resolved household and sweeps live, own row included, then offers the year-to-date pass again on the rows just priced; nothing is reported pending, since the scheduled run skipped nothing |
+| `compare_all_result` | `compare_sweep_flow.py` | One `{ranking}` token carrying the whole table, plus the opt-in for the year-to-date pass. A row tagged `OCR` was priced off the archive's reading of a card published as images; a row tagged `NO DIRECT DEBIT` (`direct_debit_assumed`) is priced as not paying by direct debit, because its card rewards direct debit and the entry holds no answer; a row tagged `NO FEED-IN` leaves out a feed-in credit its card grants (short of a full year of day-ahead and export, `_feed_in_left_out`), and one line under the table says so. A stored ranking dates itself and offers `refresh`, which clears the rows and the resolved household and sweeps live, own row included, then offers the year-to-date pass again on the rows just priced; nothing is reported pending, since the scheduled run skipped nothing |
 | `compare_all_ytd` | `compare_sweep_flow.py` | Second pass, now a thin wrapper: the pass itself is `_SweepEngine.fill_ytd_column`, so the nightly sweep runs the same one. A row prints a figure only where it replayed the same real archived months the baseline did (`archived_months_present`), the running month left out of that question since every side prices it on its current card whether or not the supplier also answers it by date (Mega never does, Eneco does from the first), **and** where its feed-in can be credited: the pass takes the coordinator's historical spot cache, and `_needs_missing_spots` drops a row whose injection is spot-indexed when that cache is empty, since the credit is lost whole rather than approximated. For the candidates, a keyless entry's cache that does not cover the window counts as empty (`_keyless_stale_spots`, `compare_inputs.py`): it is what an earlier key left, and nothing brings it up to date, so it would credit their feed-in only up to the day the key was removed. The household's own row reads the cache as held, which is what its current_year_cost sensor bills on. After a recorded supplier switch the own walk starts on the switch day, so the baseline is the own contract's archived months from that month on plus every month before it, which the earlier contracts cover on their own cards: a candidate has to replay all of those. The window opens on the first day the year was billed (`billed_from`), not on the entry's own window start, so a first contract that billed from its own start date does not leave the candidates months the own row never covered |
 
-| `compare` | `compare_flow.py` | Supplier picker via `_compare_supplier_options` (`compare_flow.py`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare` | `compare_flow.py` | Supplier picker via `_compare_supplier_options` (`compare_flow.py`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier, the social tariff, which follows a protected status rather than a choice, and any supplier leaving the market. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py` | Contract picker via `_compare_contract_schema` (`compare_flow.py`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_settlement` | `compare_flow.py` | Shown when `offers_quarter_hourly` (`providers/__init__.py`) says the target card can settle per quarter-hour (Bolt's variable family and Frank Energie): which settlement to quote the TARGET on. Defaulted from the household's own answer only where its own contract offers the same choice; read off the entry unconditionally it would quote a Bolt card per quarter-hour because the user happens to be on Frank's quarter-hourly settlement |
 | `compare_direct_debit` | `compare_flow.py` | Shown when `offers_direct_debit` says the TARGET card prices a direct-debit payer differently (Mega's ristourne cards, EnergyVision Groene stroom / Brusol) and the entry holds no answer, which it does only where its own card asks. The answer prices the target alone, through the `direct_debit` override of `_quote_entry` (`compare_inputs.py`); the household's own side is untouched. The ranking cannot ask, so it prices such a row as not paying by direct debit and tags it `NO DIRECT DEBIT` |
