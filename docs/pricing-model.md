@@ -1199,8 +1199,10 @@ the engine respects that by default. A contract carrying a never-negative
 guarantee sets `floor_at_zero` instead, and `_floor_injection`
 (`injection.py`) then clamps the resolved rate at 0 in
 `_compute_injection_price`, in `_historical_injection_rate` and in the compare
-estimate. Only the expert custom supplier sets it (`providers/custom.py`);
-every scraped card leaves it False.
+estimate. The expert custom supplier sets it on request (`providers/custom.py`),
+and one card does: Ecopower's Groene Burgerstroom from July 2026, which states
+"De terugleververgoeding kan nooit negatief zijn" (`_ecopower_cards.py`).
+Every other card leaves it False.
 
 WHERE the clamp lands is a pricing decision, not a detail, because `max()` is
 convex and the two orders give different money:

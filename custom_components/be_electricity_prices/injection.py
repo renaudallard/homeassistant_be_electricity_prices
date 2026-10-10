@@ -538,8 +538,9 @@ def _injection_needs_spot_quarters(
     so this is the two halves agreeing before a card makes them disagree.
 
     Reachable from an expert custom entry, and from any card whose parser
-    reads a never-negative clause (Ecopower's dynamic extractor looks for one;
-    the 2026 cards do not print it). The 15-minute grid needs
+    reads a never-negative clause on a per-slot formula. None does today:
+    Ecopower's Groene Burgerstroom card states one, but on a month-indexed
+    credit. The 15-minute grid needs
     ``quarter_hourly`` energy, which is always DynamicRates, so the formula
     branch is the one that fires and neither the TOU triplet nor a month mean
     can be in play. Callers do not have to re-ask those questions.

@@ -362,7 +362,10 @@ The terugleververgoeding is a
 feed-in credit the customer *receives*; Ecopower states it is never negative, but the card prints
 it as a negative EUR/kWh figure because it sits in the energy/cost column where a credit shows as a
 negative cost. The parser takes the magnitude (`abs`) so `current` holds a positive credit,
-matching every other supplier's sign (`test_ecopower.py`).
+matching every other supplier's sign (`test_ecopower.py`). From July 2026, when half
+the credit follows the SPP index, the card adds "De terugleververgoeding kan nooit negatief
+zijn", and the parser sets `floor_at_zero` on that card (`_INJECTION_NEVER_NEGATIVE_RE`,
+`_ecopower_cards.py`), so a month whose index takes the formula below zero is credited 0.
 
 Three matching strategies, in priority order:
 
