@@ -79,7 +79,7 @@ class _Card:
     patterns: tuple[re.Pattern[str], ...]
     # Whether the parser grosses its formula by the rate those patterns read.
     # Frank and Eneco Dynamic gross by the multiplier their formula prints
-    # beside it instead, and Mega Dynamic prints its formula VAT-inclusive.
+    # beside it instead.
     grossed_by_stated_rate: bool = True
     # Engie binds each formula to the price printed beside it at the stated
     # rate, so a card restated to 7% with its prices still at 6% drops the
@@ -241,7 +241,6 @@ _PRINTING = {
         fixture_text,
         lambda t: mega.parse_snapshot("mega_dynamic", t, REGION_WALLONIA),
         _mega_cards._VAT_PATTERNS,
-        grossed_by_stated_rate=False,
     ),
     "mega_impact": _Card(
         "mega_offpeak_impact_w.pdf",
@@ -396,7 +395,7 @@ def test_a_card_stating_no_rate_records_what_was_assumed(
     [
         ("frank", (None, None)),
         ("eneco_dynamic", (None, None)),
-        ("mega_dynamic", (None, None)),
+        ("mega_dynamic", (None, VAT_RATE_REDUCED)),
         ("eneco", (None, VAT_RATE_REDUCED)),
         ("luminus", (None, VAT_RATE_REDUCED)),
     ],
@@ -405,8 +404,8 @@ def test_a_card_whose_rate_is_gone_records_an_assumption_only_if_it_grossed_on_o
     name: str, expected: tuple[Any, Any]
 ) -> None:
     """With its stated rate taken out, a card whose formula carries its own
-    multiplier, or is printed VAT-inclusive, assumed nothing; one whose parser
-    grossed its formula by the missing rate assumed the residential one."""
+    multiplier assumed nothing; one whose parser grossed its formula by the
+    missing rate assumed the residential one, Mega Dynamic's included."""
     card = _PRINTING[name]
     text = _restated(card.render(card.fixture), card.patterns, "")
     assert all(p.search(text) is None for p in card.patterns)

@@ -60,8 +60,9 @@ built. The listing entry still matters for discovery, which is what
 
 The Dynamic formula uses a different convention than Engie/Luminus:
 ``Day Ahead Epex Spot * 1.05 + 1.35 c€/kWh`` where the spot is already
-in c€/kWh and the result is TVAC, so factor and base are scaled
-straight to EUR/kWh without a VAT multiplier.
+in c€/kWh, so factor and base need no unit scaling. The result is
+excluding VAT, as the card's own table shows (it prints the formula at
+the forecast plus 6%), so a residential card is grossed by its rate.
 """
 
 from __future__ import annotations
@@ -129,7 +130,6 @@ from ._pdf import (
 )
 from ._rates import (
     Contract,
-    DynamicRates,
     EnergyRates,
     ImpactRates,
     VariableRates,
@@ -873,8 +873,6 @@ def parse_snapshot(
         ),
         None if professional else printed_vat_rate(text, *_VAT_PATTERNS),
         professional=professional,
-        # The dynamic formula is printed VAT-inclusive and grossed by nothing.
-        grossed=not isinstance(energy, DynamicRates),
     )
 
 

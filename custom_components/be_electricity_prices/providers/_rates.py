@@ -646,9 +646,9 @@ def vat_basis(
 
     ``grossed`` says whether the parser grosses this leg's formula by the
     card's stated rate, and defaults to whether the leg has one to gross
-    (:func:`vat_grossed_fields`). A parser passes False for a formula printed
-    VAT-inclusive (Mega Dynamic) or carrying its own multiplier ("x 1,06" on
-    Eneco Dynamic and Frank), which no stated rate was ever assumed for.
+    (:func:`vat_grossed_fields`). A parser passes False for a formula carrying
+    its own multiplier ("x 1,06" on Eneco Dynamic and Frank), which no stated
+    rate was ever assumed for.
     """
     if grossed is None:
         grossed = bool(vat_grossed_fields(energy))

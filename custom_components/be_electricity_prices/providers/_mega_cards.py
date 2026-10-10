@@ -61,7 +61,8 @@ from .base import ExtractorError
 
 # Mega prints two distinct formulas in every Dynamic PDF:
 #   - Consumption: "...la formule tarifaire suivante : Day Ahead ... * X + Y c€/kWh"
-#     (TVAC; spot is in c€/kWh and result is in c€/kWh)
+#     (HTVA, though the line does not say so; spot is in c€/kWh and the
+#     result is in c€/kWh)
 #   - Injection:   "...la formule suivante (HTVA) : Day Ahead ... * X - Y c€/kWh"
 #     (HTVA but injection is VAT-exempt residential, so no scaling needed)
 _FORMULA_TAIL = (
@@ -308,13 +309,19 @@ def _extract_energy(
         consumption = _parse_formula(_CONSUMPTION_FORMULA_RE.search(text))
         if consumption is None:
             raise ExtractorError("could not parse Mega dynamic consumption formula")
-        # Mega's consumption formula is TVAC and uses spot in c€/kWh, so
-        # `factor` already maps EUR/kWh-spot to EUR/kWh-energy directly.
-        # Just convert the base cents to EUR.
+        # The formula is printed excluding VAT, like the variable and Impact
+        # ones on the same cards: the residential card's table prices it at the
+        # year's forecast and adds 6% (15,827 c/kWh at 145,02 EUR/MWh, printed
+        # 16,78 in October 2026), and the professional card, priced Hors TVA,
+        # prints the same formula and a table exactly 1,06 lower. Spot is in
+        # c/kWh on the formula line, so `factor` maps EUR/kWh-spot to
+        # EUR/kWh-energy as it stands; a residential card is grossed by its
+        # stated rate onto the TVAC basis its snapshot carries.
+        vat_mult = _cohort_vat_multiplier(text, professional=professional)
         factor, base = consumption
         return DynamicRates(
-            factor=factor,
-            base=base,
+            factor=factor * vat_mult,
+            base=base * vat_mult,
             yearly_fixed_fee=yearly_fee,
         )
 

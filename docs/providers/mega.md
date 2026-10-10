@@ -468,9 +468,13 @@ The Wallonia Smart Fixed fixture pins mono / peak / offpeak / exclusive-night to
 Mega prints two distinct formulas in every Dynamic PDF (`_mega_cards.py`):
 
 - Consumption: `formule tarifaire suivante : Day Ahead Epex Spot * 1.05 + 1.35 c€/kWh`
-  (TVAC, spot already in c€/kWh, result in c€/kWh). Printed VAT-inclusive and grossed by
-  nothing, so it never records an assumed VAT rate (`grossed=False` to `with_vat_basis`).
-  The card's residential rate is read from `(TVA de 6% incluse)` or `TVAC (6%)`
+  (spot already in c€/kWh, result in c€/kWh). The line does not say so, but the formula
+  is excluding VAT: the card's table prices it at the year's forecast plus 6% (15,827
+  c/kWh at 145,02 EUR/MWh, printed 16,78 in October 2026), and the professional card,
+  priced Hors TVA, prints the same formula with a table exactly 1,06 lower. A residential
+  card is therefore grossed by its stated rate (`_cohort_vat_multiplier`), the way the
+  variable and Impact formulas are; it was read as VAT-inclusive until 0.37.0 and billed
+  about 6% low. The card's residential rate is read from `(TVA de 6% incluse)` or `TVAC (6%)`
   (`_VAT_PATTERNS`, `_mega_cards.py`); the pattern read before took `TVA 6% incluse`
   only, which no 2026 card prints, so the variable formulas were grossed by the helper's
   default rather than by the card.

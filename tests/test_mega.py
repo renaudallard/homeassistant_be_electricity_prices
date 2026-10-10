@@ -275,17 +275,41 @@ def test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract() -> Non
     asyncio.run(_run())
 
 
-def test_dynamic_extracts_consumption_formula_tvac() -> None:
+def test_dynamic_consumption_formula_is_grossed_by_the_cards_vat() -> None:
+    """The card prints "Day Ahead Epex Spot * 1,05 + 1,35 c€/kWh" and does not
+    say on which basis, but its own table does: it prices the formula at the
+    year's forecast and adds 6%. The April 2026 card prints 13,76 c/kWh, and
+    (1,05 x 11,075 + 1,35) x 1,06 is 13,757 at the 110,75 EUR/MWh forecast the
+    same month's Engie and Luminus dynamic cards state. Read as VAT-inclusive,
+    every residential hour was billed about 6% low."""
     snap = parse_snapshot(
         "mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia"
     )
     assert isinstance(snap.energy, DynamicRates)
-    # Mega's PDF: "formule tarifaire suivante : Day Ahead Epex Spot
-    # * 1,05 + 1,35 c€/kWh" - already TVAC, spot is in c€/kWh.
-    # In our model (spot in EUR/kWh): factor = 1.05, base = 0.0135 EUR.
+    # Spot in EUR/kWh: factor 1,05 and base 1,35 c/kWh, both times 1,06.
+    assert snap.energy.factor == pytest.approx(1.05 * 1.06)
+    assert snap.energy.base == pytest.approx(0.0135 * 1.06)
+    assert snap.energy.factor * 0.11075 + snap.energy.base == pytest.approx(
+        0.1376, abs=5e-5
+    )
+    assert snap.taxes.card_vat_rate == pytest.approx(0.06)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(42.4)
+
+
+def test_the_professional_dynamic_formula_stays_excluding_vat() -> None:
+    """The professional card prints the same formula Hors TVA, with its table
+    at the bare formula (14,18 c/kWh at the August forecast of 122,20), and
+    its snapshot carries the 21% the entry resolves later."""
+    snap = parse_snapshot(
+        "mega_pro_dynamic", fixture_text("mega_pro_dynamic_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, DynamicRates)
     assert snap.energy.factor == pytest.approx(1.05)
     assert snap.energy.base == pytest.approx(0.0135)
-    assert snap.energy.yearly_fixed_fee == pytest.approx(42.4)
+    assert snap.energy.factor * 0.12220 + snap.energy.base == pytest.approx(
+        0.1418, abs=5e-5
+    )
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
 
 
 def test_dynamic_bills_per_clock_hour() -> None:
