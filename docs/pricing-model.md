@@ -88,9 +88,10 @@ all_in = energy(VAT) + network(VAT) + taxes(VAT)
   taxes   = federal_excise
           + energy_contribution
           + regional_renewables(region)          # flanders | wallonia | brussels
-          + region_connection_fee                # Wallonia only (added in taxes_eur_per_kwh)
+  exempt  = region_connection_fee                # Wallonia only (taxes_vat_exempt_eur_per_kwh)
 
   each_component(VAT) = component * (1.0 + snapshot.taxes.vat_rate)
+  taxes(VAT)          = taxes * (1.0 + snapshot.taxes.vat_rate) + exempt
 ```
 
 Note what is deliberately absent from the per-kWh formula:
