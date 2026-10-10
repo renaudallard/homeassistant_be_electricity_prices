@@ -51,6 +51,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
 )
+from .providers._pdf import is_transient_fetch_error
 from .providers._validity import card_valid_until
 from .providers.base import (
     SupplierExtractor,
@@ -81,6 +82,14 @@ _SHARED_LOCKS_KEY = "snapshot_locks"
 # minute.
 _SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
 _SHARED_FAILURE_TTL = timedelta(minutes=5)
+# A card that downloaded and could not be read, by the probe key it had. The
+# same card fails the same way, so it is not downloaded and parsed again while
+# the probe answers that key: a Bolt card takes 42 to 161 s to parse on a
+# Raspberry Pi, and the hourly tick spent that on a layout it already knew it
+# could not read. Retried after a while all the same, since a refusal can
+# depend on the date (a card checked against the month it is for).
+_SHARED_UNREADABLE_KEY = "snapshot_unreadable_probe_keys"
+_UNREADABLE_RETRY = timedelta(hours=6)
 
 # How long one card fetch may take, parse included. The per-request timeouts
 # bound the network, not the parse, so a parse that never returned held the
@@ -323,6 +332,28 @@ async def fetch_shared(
             )
         return SharedFetch(row, "local", probe_key, confirmed)
 
+    # The same card as the one that could not be read, by its probe key: the
+    # answer would be the same, so wait for the key to move or the retry.
+    unreadable = _shared_unreadable(hass)
+    known_bad = unreadable.get(key)
+    if (
+        not force
+        and probe_key is not None
+        and known_bad is not None
+        and known_bad[0] == probe_key
+        and now - known_bad[1] < _UNREADABLE_RETRY
+    ):
+        last_fail = failed.get(key)
+        return SharedFetch(
+            None,
+            "backoff",
+            probe_key,
+            confirmed,
+            None,
+            last_fail[1] if last_fail is not None else "",
+            last_fail[2] if last_fail is not None else 0,
+        )
+
     # Negative cache: a sibling that just failed on this key means back off
     # rather than refire the same broken request. ``force`` bypasses it, or the
     # refresh service silently no-ops when a sibling failed in the window.
@@ -388,6 +419,7 @@ async def fetch_shared(
             if _tuple_generation(hass, key) == gen_at_entry:
                 cache[key] = row
                 failed.pop(key, None)
+                unreadable.pop(key, None)
             return SharedFetch(row, "fetch", probe_key, confirmed)
         except Exception as err:  # handed back as a value
             # Any failure populates the negative cache so siblings back off.
@@ -398,9 +430,25 @@ async def fetch_shared(
             fail_count = (prev[2] if prev is not None else 0) + 1
             if record_failure and _tuple_generation(hass, key) == gen_at_entry:
                 failed[key] = (dt_util.utcnow(), str(err), fail_count)
+                # Only a card that came back and could not be read: a network
+                # failure says nothing about the card behind the key.
+                if (
+                    probe_key is not None
+                    and not isinstance(err, TimeoutError)
+                    and not is_transient_fetch_error(str(err))
+                ):
+                    unreadable[key] = (probe_key, dt_util.utcnow())
             return SharedFetch(
                 None, "failed", probe_key, confirmed, err, str(err), fail_count
             )
+
+
+def _shared_unreadable(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str], tuple[str, datetime]]:
+    """Per-key probe key of the last card that could not be read, and when."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_SHARED_UNREADABLE_KEY, {})  # type: ignore[no-any-return]
 
 
 def _shared_snapshots(
@@ -450,6 +498,7 @@ def evict_shared_caches(
             _bump_tuple_generation(hass, month_key)
     _shared_snapshots(hass).pop(key, None)
     _shared_failed_fetches(hass).pop(key, None)
+    _shared_unreadable(hass).pop(key, None)
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(
         _SHARED_LOCKS_KEY, {}

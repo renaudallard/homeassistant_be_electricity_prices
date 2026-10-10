@@ -9666,3 +9666,68 @@ async def test_an_entry_that_may_ask_the_archive_ignores_a_no_card_cached_withou
         )
     assert got is not None
     assert archive.await_count == 1
+
+
+async def test_a_card_that_could_not_be_read_is_not_parsed_again_every_hour(
+    hass: HomeAssistant,
+) -> None:
+    """The probe says the card has not changed, so the same layout fails the
+    same way: it is read again only every six hours, as soon as the probe key
+    moves, or when a refresh is forced. A network failure is not remembered."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _SharedSnapshot,
+        fetch_shared,
+    )
+
+    fetches = 0
+    probe_answer = "etag-NEW"
+    error = ExtractorError("energy price not found on card")
+
+    async def probe(*_args: Any) -> str:
+        return probe_answer
+
+    async def fetch(*_args: Any) -> SupplierSnapshot:
+        nonlocal fetches
+        fetches += 1
+        raise error
+
+    extractor = SimpleNamespace(id="bolt", probe=probe, fetch=fetch)
+    held = _SharedSnapshot(make_snapshot(), dt_util.utcnow(), "etag-OLD")
+    start = dt_util.utcnow()
+
+    async def tick(hours: float, *, force: bool = False) -> str:
+        with patch(
+            "custom_components.be_electricity_prices.snapshot_store.dt_util.utcnow",
+            return_value=start + timedelta(hours=hours),
+        ):
+            result = await fetch_shared(
+                hass,
+                None,  # type: ignore[arg-type]
+                extractor,  # type: ignore[arg-type]
+                "bolt_variable",
+                "flanders",
+                supplier="bolt",
+                local=held,
+                force=force,
+            )
+        return result.source
+
+    sources = [await tick(hour) for hour in range(24)]
+    assert fetches == 4  # hours 0, 6, 12 and 18
+    assert sources.count("backoff") == 20
+    # A new card behind a new key is read at once.
+    probe_answer = "etag-NEWER"
+    await tick(24)
+    assert fetches == 5
+    # The refresh service reads it whatever the key.
+    await tick(24.5, force=True)
+    assert fetches == 6
+    # A transient failure says nothing about the card behind a new key: it is
+    # asked again once the ordinary five-minute backoff has passed.
+    probe_answer = "etag-NEWEST"
+    error = ExtractorError("network error fetching https://card.test: TimeoutError")
+    await tick(25)
+    await tick(26)
+    assert fetches == 8
