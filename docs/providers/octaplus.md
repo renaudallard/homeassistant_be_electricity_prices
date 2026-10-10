@@ -516,14 +516,14 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   disambiguated by magnitude, not position.
 - **Wallonia label recasing/renaming (2026)**: case-insensitive match,
   `TECTEO - RESA` -> `RESA`, `REGIEDEWAVRE`/`REGIE DE WAVRE` -> Régie de Wavre
-  (, `test_dynamic_pdf_uses_spaced_dso_label`).
+  (`test_dynamic_pdf_uses_spaced_dso_label`, `test_octaplus.py`).
 - **Flanders glyph corruption**: digital rows can lose the leading `F` and gain
   header glyphs; the suffix-anchored regex and multi-glyph separator tolerance
-  work around it (`:618-621, 634-644`).
+  work around it (`_octaplus_overlays.py`).
 - **Flanders quart-horaire data-management trap**: use group 4 (~18,92), not the
   ~61 EUR group 3, or the dynamic over-charges ~42 EUR/yr.
 - **Tax glyph explosion**: page 2 renders each character as its own word;
-  `x_join_threshold=1.0` reassembles values (,
+  `x_join_threshold=1.0` reassembles values (`octaplus.py`,
   `test_federal_taxes_use_first_tier`).
 - **Federal-tier anchor**: match on `0 & 3.000 kWh`, not the mangleable
   `Consommation` word.

@@ -331,7 +331,7 @@ minus (`providers/frank.py`).
 The April fixture yields factor `0.1 * 10 = 1.0` and base `-1.150 / 100` (illustrative,
 `tests/test_frank.py`). Watch the JN tier: it carries a different injection base
 (-0,02 vs -0,0115 on the other five tiers), pinned by the parametrized tier test
-(`tests/test_frank.py` and the comment at `tests/test_frank.py`).
+(`tests/test_frank.py`, with a comment beside it).
 
 Frank publishes no supplier-side prosumer / PV forfait; `parse_snapshot` leaves
 `supplier_prosumer_eur_per_kva_year` at its default `None`. Flanders digital meters
@@ -508,6 +508,6 @@ with its first card. Tests load fixtures through `fixture_text(name, layout=True
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` | "Abonnementskost (EUR/maand)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | "terugleveringsvergoeding" reworded or the sign dropped |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (-416) | a levy row label changed; energy fund is the only optional one |
-| A DSO sub-area missing, or all DSOs missing | `_FLUVIUS_LABELS` and the row regex in `_extract_dsos` (); the "Digitale meter"/"Klassieke meter" section markers | a label renamed, a new bracket artifact, or the section headers changed |
+| A DSO sub-area missing, or all DSOs missing | `_FLUVIUS_LABELS` and the row regex in `_extract_dsos`; the "Digitale meter"/"Klassieke meter" section markers | a label renamed, a new bracket artifact, or the section headers changed |
 | Historical months mis-billed | `_resolve_pdf_url` month query and `archive_validity_check` call | the filename month/year tokens or validity text changed |
-| Coordinator never refreshes, or refreshes constantly | `probe` GROQ and the `[0]` dict handling in `_sanity_query` () | Sanity changed the response shape |
+| Coordinator never refreshes, or refreshes constantly | `probe` GROQ and the `[0]` dict handling in `_sanity_query` | Sanity changed the response shape |
