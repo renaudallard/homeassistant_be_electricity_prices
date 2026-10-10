@@ -1183,3 +1183,36 @@ def test_discover_counts_a_feed_in_card_as_its_product(
     monkeypatch.setattr(totalenergies, "fetch_text", fetch_text)
     found = asyncio.run(totalenergies.discover(None))  # type: ignore[arg-type]
     assert found == {"MYCOMFORT", "NEWPRODUCT"}
+
+
+def test_the_pre_august_excise_tiers_are_read_into_bands() -> None:
+    """The card prints four excise tiers until July 2026 (5,03 / 5,03 / 4,82 /
+    4,75) and only the first was read, so a household above 20.000 kWh was
+    billed the 0-3.000 rate on every kWh."""
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_excise_band,
+    )
+
+    snap = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
+    )
+    bands = snap.taxes.federal_excise_bands
+    assert bands is not None
+    assert [x for band in bands for x in band] == pytest.approx(
+        [3000.0, 0.0503, 20000.0, 0.0503, 50000.0, 0.0482, 1000000.0, 0.0475]
+    )
+    blended = resolve_excise_band(snap, 50000.0).taxes.federal_excise
+    assert blended == pytest.approx((20000 * 0.0503 + 30000 * 0.0482) / 50000)
+
+
+def test_a_flat_excise_table_is_one_rate() -> None:
+    """The October 2026 card prints the same 4,88 in every tier: one rate, so
+    the card is not banded and the law's 4,876 still replaces its rounding."""
+    snap = parse_snapshot(
+        "totalenergies_electricite_variable",
+        fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True),
+        "flanders",
+    )
+    assert snap.taxes.federal_excise_bands is None

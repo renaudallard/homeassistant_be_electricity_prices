@@ -46,7 +46,7 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
 )
-from ._parse import numeric_row, parse_brussels_osp, to_float
+from ._parse import numeric_row, parse_brussels_osp, tier_bound_kwh, to_float
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -178,6 +178,30 @@ def _extract_federal_excise(text: str) -> float:
             "TotalEnergies: federal excise (0-3.000 kWh tier) not found"
         )
     return to_float(match.group(1)) / 100.0
+
+
+_EXCISE_TIER_RE = re.compile(r"Consommation entre ([\d.]+) et ([\d.]+) kWh\s+([\d.,]+)")
+
+
+def _extract_excise_bands(text: str) -> tuple[tuple[float, float], ...] | None:
+    """The four excise tiers the card prints until July 2026, or None.
+
+    Only the first was read, so a household above 20.000 kWh was billed the
+    0-3.000 rate on every kWh where the card prints 4,82 and then 4,75 above
+    it, the schedule Engie's and Mega's cards print too. Read as bands, the
+    resolver blends them over the entry's volume. A table whose tiers all
+    carry one rate, as the cards print it since August 2026, is one rate and
+    leaves this None, so the law's excise still applies to it.
+    """
+    tiers = _EXCISE_TIER_RE.findall(text)
+    if len(tiers) < 2:
+        return None
+    bands = tuple(
+        (tier_bound_kwh(upper), to_float(rate) / 100.0) for _lower, upper, rate in tiers
+    )
+    if len({rate for _upper, rate in bands}) == 1:
+        return None
+    return bands
 
 
 def _extract_energy_contribution(text: str) -> float | None:

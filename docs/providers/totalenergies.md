@@ -217,6 +217,7 @@ Fields pulled and their helpers:
 | Injection | `_extract_injection` | `_totalenergies_cards.py` |
 | Publication label | `_extract_publication_month` | `_totalenergies_cards.py` |
 | Federal excise (0-3000 kWh tier) | `_extract_federal_excise` | `_totalenergies_overlays.py` |
+| Federal excise schedule (every tier, until July 2026) | `_extract_excise_bands` | `_totalenergies_overlays.py` |
 | Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `_totalenergies_overlays.py` |
 | Yearly fee + regional renewables | `_extract_fee_and_renewables` | `_totalenergies_overlays.py` |
 | Wallonia connection fee | `_extract_connection_fee` | `_totalenergies_cards.py` |
@@ -477,6 +478,11 @@ Region specifics:
 - `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
   (`_totalenergies_overlays.py`). Illustrative pinned value 0.0503 EUR/kWh across all
   three regions (`tests/test_totalenergies.py`).
+- `federal_excise_bands`: every `Consommation entre ... kWh` tier, which the cards print
+  as a degressive schedule until July 2026 (5,03 / 5,03 / 4,82 / 4,75), so
+  `resolve_excise_band` blends it over the household's volume as it does Engie's and
+  Mega's. A table whose tiers all carry one rate (August 2026 on) is one rate and leaves
+  it None, which keeps the law's 4,876 replacing the card's rounded 4,88.
 - `energy_contribution`: federal levy. Read from the labelled "Cotisation sur
   l'énergie" line, or, when the header is wrapped, from the DSO table fallback
   (see historical bug). Both readers return `None` on a miss rather than 0.0, so

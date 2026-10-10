@@ -68,6 +68,7 @@ from ._luminus_cards import (
 )
 from ._luminus_overlays import (
     _extract_energy_fund,
+    _extract_excise_bands,
     _extract_flanders_dsos,
     _extract_flanders_renewables,
     _extract_per_kwh_taxes,
@@ -546,6 +547,7 @@ def parse_snapshot(
             dsos=dsos,
             taxes=TaxOverlay(
                 federal_excise=federal_excise,
+                federal_excise_bands=_extract_excise_bands(text, federal_excise),
                 energy_contribution=energy_contribution,
                 flanders_renewables=flanders_renewables,
                 wallonia_renewables=wallonia_renewables,

@@ -427,6 +427,7 @@ BTR, excise, contribution, and (Wallonia only) connection.
 | TaxOverlay field | Source | Notes |
 | --- | --- | --- |
 | `federal_excise` | `values[2]` / 100 | mandatory both regions |
+| `federal_excise_bands` | `_extract_excise_bands`, the `(**)` footnote's `0-3.000 kWh : 5,0329 c€/kWh, ...` tiers | until July 2026 only; a footnote whose tiers all carry one rate (August 2026 on) is one rate and leaves it None, so the law's excise still applies; the first tier has to equal `values[2]` or the card raises |
 | `energy_contribution` | `values[3]` / 100 | mandatory both regions |
 | `region_connection_fee` | `values[4]` / 100 | Wallonia only, iff `Redevance de raccordement` present |
 | `energy_fund_eur_per_month` | `_extract_energy_fund` BTR row | Flanders only, `values[1]` |

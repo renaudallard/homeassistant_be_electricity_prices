@@ -96,6 +96,7 @@ from ._totalenergies_overlays import (
     _extract_brussels_dsos,
     _extract_energy_contribution,
     _extract_energy_fund,
+    _extract_excise_bands,
     _extract_federal_excise,
     _extract_flanders_dsos,
     _extract_renewables,
@@ -477,6 +478,7 @@ def parse_snapshot(
             dsos=dsos,
             taxes=TaxOverlay(
                 federal_excise=federal_excise,
+                federal_excise_bands=_extract_excise_bands(text),
                 energy_contribution=energy_contribution,
                 flanders_renewables=flanders_renewables,
                 wallonia_renewables=wallonia_renewables,

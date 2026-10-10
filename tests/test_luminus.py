@@ -1415,3 +1415,39 @@ def test_an_anchor_without_a_gate_cannot_borrow_the_next_sentence_s() -> None:
     assert promo["welcome_credit_pct_of_energy"] == pytest.approx(0.33)
     # The loyalty clause's exclusion is not the campaign's.
     assert "welcome_credit_excludes_night_meter" not in promo
+
+
+def test_the_pre_august_excise_schedule_is_read_into_bands() -> None:
+    """Until July 2026 the tax block prints the first excise tier only and the
+    footnote prints the schedule ("20.001-50.000 kWh : 4,8188 c€/kWh"), so a
+    household above 20.000 kWh was billed 5,0329 on every kWh. Read as bands,
+    the resolver blends them over the household's volume, as on Engie's and
+    Mega's cards."""
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_excise_band,
+    )
+
+    snap = parse_snapshot(
+        "luminus_comfyflex", fixture_text("luminus_comfyflex_v.pdf"), "flanders"
+    )
+    assert snap.taxes.federal_excise == pytest.approx(0.050329)
+    bands = snap.taxes.federal_excise_bands
+    assert bands is not None
+    assert [x for band in bands for x in band] == pytest.approx(
+        [3000.0, 0.050329, 20000.0, 0.050329, 50000.0, 0.048188]
+    )
+    blended = resolve_excise_band(snap, 25000.0).taxes.federal_excise
+    assert blended == pytest.approx((20000 * 0.050329 + 5000 * 0.048188) / 25000)
+    # 3500 kWh sits in the first two tiers and is billed exactly as before.
+    assert resolve_excise_band(snap, 3500.0).taxes.federal_excise == pytest.approx(
+        0.050329
+    )
+
+
+def test_a_flat_excise_footnote_is_one_rate() -> None:
+    """From August 2026 the footnote names the same rate in every tier: one
+    rate, not a schedule, so the law's excise still applies to the card."""
+    snap = parse_snapshot(
+        "luminus_comfyflex", fixture_text("luminus_comfyflex_w_oct.pdf"), "wallonia"
+    )
+    assert snap.taxes.federal_excise_bands is None
