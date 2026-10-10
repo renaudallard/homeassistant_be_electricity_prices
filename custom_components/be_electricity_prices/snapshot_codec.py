@@ -453,7 +453,10 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 _INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised")
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
-_TAXES_OPTIONAL_KEYS = ("card_vat_rate", "assumed_vat_rate")
+# And on the tax overlay, for the same reason: only a social tariff card the
+# law was not read for carries ``protected_excise_unread``, so every other
+# row stays byte-identical to what an earlier version wrote.
+_TAXES_OPTIONAL_KEYS = ("card_vat_rate", "assumed_vat_rate", "protected_excise_unread")
 _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
 # And for the energy leg: SmartFlex's Happy Sunday band, on the card's
 # TimeOfUseRates and on the monthly leg it re-prices through. Every one

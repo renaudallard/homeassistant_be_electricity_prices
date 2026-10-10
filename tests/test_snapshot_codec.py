@@ -126,6 +126,19 @@ def test_a_card_vat_basis_is_written_only_when_set() -> None:
     assert _snapshot_from_dict(_snapshot_to_dict(assumed, NOW)).taxes == assumed.taxes
 
 
+def test_the_unread_excise_flag_is_written_only_when_set() -> None:
+    """Only a social tariff card built before the law was read carries it, so
+    every other row keeps the shape an earlier version wrote: written at its
+    default, the archive's daily replay would rewrite every stored row."""
+    plain = make_snapshot()
+    row = _snapshot_to_dict(plain, NOW)
+    assert "protected_excise_unread" not in row["taxes"]
+    unread = replace(plain, taxes=replace(plain.taxes, protected_excise_unread=True))
+    row = _snapshot_to_dict(unread, NOW)
+    assert row["taxes"]["protected_excise_unread"] is True
+    assert _snapshot_from_dict(row).taxes == unread.taxes
+
+
 def test_a_field_this_version_does_not_know_is_dropped_not_refused() -> None:
     row = _snapshot_to_dict(make_snapshot(injection=InjectionRates(current=0.05)), NOW)
     row["injection"]["from_the_future"] = True
