@@ -312,16 +312,12 @@ jobs:
         # it spills into electricity-YYYY-MM-2, and pdfs.json says which
         # release holds each file. Needs a fine-grained token with contents
         # read and write on that repository in the BE_ELECTRICITY_CARDS
-        # secret; without it the step says so and the archive still gets the
-        # parsed cards and their texts.
+        # secret; without it the job stops at its first step, and the push,
+        # which writes with the same secret, lands nothing either.
         env:
           GH_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
           CARDS_REPO: renaudallard/be_price_cards
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "BE_ELECTRICITY_CARDS is not set: today's PDFs are not kept" >&2
-            exit 0
-          fi
           # A release needs a commit to tag, and a repository created empty
           # has none: give it a first one, once.
           cards_url="https://x-access-token:${GH_TOKEN}@github.com/${CARDS_REPO}.git"

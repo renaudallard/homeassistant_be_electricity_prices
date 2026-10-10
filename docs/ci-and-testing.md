@@ -1551,9 +1551,10 @@ issue still covers a token that has already expired. They cannot live in the car
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
 repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
-empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
-cards and their texts still land in the archive, and the PDFs of that day are offered again by the
-next run that has the token. Releases older than the retention are deleted on the same cutoff the
+empty is given a first commit by the step itself, once. Without the secret the `keep` job fails at
+its first step (`Check the cards token is set`), and the push, which writes with the same secret,
+lands nothing either: the run is filed as a failure, and the next run that has the token fetches
+that day's cards again, since the archive holds none of them. Releases older than the retention are deleted on the same cutoff the
 script uses for the rows, except one `pdfs.json` still lists, which is a card a kept row still
 names (`test_a_release_the_manifest_still_lists_is_not_deleted`).
 
