@@ -9731,3 +9731,39 @@ async def test_a_card_that_could_not_be_read_is_not_parsed_again_every_hour(
     await tick(25)
     await tick(26)
     assert fetches == 8
+
+
+async def test_the_refresh_service_is_not_dropped_behind_a_long_tick(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The debouncer drops a request whose cooldown ends while a tick still
+    holds its lock, so the refresh service asked during a long card parse did
+    nothing until the next hourly tick. It now runs once that tick is done."""
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    release = asyncio.Event()
+    runs = 0
+
+    async def _body() -> Any:
+        nonlocal runs
+        runs += 1
+        if runs == 1:
+            await release.wait()
+        return None
+
+    coord._async_update_data = _body  # type: ignore[method-assign]
+    tick = hass.async_create_task(coord.async_refresh())
+    await asyncio.sleep(0)
+    await coord.async_force_refresh()
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    for _ in range(5):
+        await asyncio.sleep(0)
+    release.set()
+    await tick
+    await hass.async_block_till_done()
+    assert runs == 2

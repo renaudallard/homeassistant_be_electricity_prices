@@ -542,7 +542,15 @@ class BePricesCoordinator(
         for month_key in _drop_monthly_rows(self.hass, key, key[0]):
             _bump_tuple_generation(self.hass, month_key)
         if not wait:
-            await self.async_request_refresh()
+            # Behind a tick still holding the lock, the debouncer drops a
+            # request whose cooldown ends first, and the service then did
+            # nothing until the next hourly tick. Wait for that tick in the
+            # background so the service call itself returns at once.
+            self.entry.async_create_background_task(
+                self.hass,
+                self.async_request_refresh_after_tick(),
+                f"{DOMAIN} forced refresh {self.entry.entry_id}",
+            )
             return
         # async_refresh takes the debouncer's lock itself, so it already waits
         # for a tick still running. Taking the lock here as well raised
