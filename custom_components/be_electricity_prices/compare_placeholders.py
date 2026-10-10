@@ -228,6 +228,10 @@ class _PlaceholdersMixin(OptionsFlow):
         other_register_rates: Any = None
         other_snap = None
         other_raw = None
+        own_contract = (
+            self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
+            and self._compare[CONF_CONTRACT] == current[CONF_CONTRACT]
+        )
         # Resolve the quote against this entry's site facts through the same
         # helper the coordinator uses, not apply_vat alone. Both transforms are
         # per-entry, and skipping the excise band priced a professional quote
@@ -298,6 +302,23 @@ class _PlaceholdersMixin(OptionsFlow):
                 ),
                 fetched_snapshot,
             )
+            if own_contract:
+                # The household's own contract on another meter or regime is
+                # still the contract it signed: the rates it locked in, not
+                # today's card for a new signer. The own side is spliced the
+                # same way, so a quote that changes nothing reads zero.
+                from .cohort import _cohort_legs
+
+                legs = await _cohort_legs(
+                    self.hass,
+                    session,
+                    other_extractor,
+                    self._compare[CONF_CONTRACT],
+                    region,
+                    target_entry,
+                    other_snap,
+                )
+                other_snap = legs.splice(other_snap)
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
@@ -321,6 +342,25 @@ class _PlaceholdersMixin(OptionsFlow):
                 )
                 if other_per_kwh is None:
                     placeholders["error"] = "compute failed"
+                elif own_contract:
+                    # A contract already held grants no new welcome credit:
+                    # only what is left of the household's own first year,
+                    # read off the card it signed, on the meter quoted.
+                    other_welcome_credit = _annual_welcome_credit(
+                        other_snap,
+                        hh.signing_snapshot,
+                        _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
+                        dt_util.as_local(now_utc),
+                        dso,
+                        region,
+                        await _spot_for(other_snap),
+                        meter,
+                        other_dso_mode,
+                        hour_weights,
+                        annual_kwh,
+                        rolling_inj_kwh,
+                        regime=regime,
+                    )
                 else:
                     # A customer signing this card today, over the coming
                     # year, off the card as it prints today. The own side

@@ -761,7 +761,13 @@ together the printed supplier delta barely shifts, so without that clause the
 question "what does leaving compensation cost me" would have no direct answer on
 the page. The clause predates the picker offering the user's own contract
 (`e2a52af`); picking yourself is now a second route to the same number, and the
-table below is the authority on what the picker excludes.
+table below is the authority on what the picker excludes. Picked, the own
+contract is priced as the contract held rather than as a new signer: the target
+card is spliced with the same signing-cohort legs as the own side
+(`_cohort_legs`), and it carries what is left of the household's own first-year
+welcome credit (`_annual_welcome_credit` on the signing card) instead of the
+credit the card grants a customer signing today, so a quote that changes
+nothing reads zero.
 
 ### The ranking branch
 
