@@ -48,9 +48,9 @@ All eleven residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
 product except Off-peak Impact, which is Wallonia-only because it
 requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
-(both Wallonia-specific). The Tarif Social variant is omitted on
-purpose, same reasoning as Engie/Luminus (regulated CREG tariff,
-auto-assigned, no DSO breakdown).
+(both Wallonia-specific). The Tarif Social variant is not a product
+here: the social tariff is the CREG's and is priced by the social tariff
+supplier (social.py).
 
 Ten professional editions are registered alongside them, all addressed by
 built filename rather than by scraping: Mega links only the SME pair from

@@ -245,11 +245,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         rate="I",
         months_per_region={_V: "00", _W: "00", _B: "00"},
     ),
-    # Engie's Tarif Social (E_SOCIAL_R_GREY_C_F) is omitted on purpose: the
-    # social tariff is set quarterly by the CREG and is auto-assigned to
-    # protected customers (they don't pick it from a list). Its PDF carries
-    # an all-in regulated price with no DSO breakdown, so it doesn't fit
-    # the integration's energy-plus-network-plus-tax model.
+    # Engie's Tarif Social is not a product here: the social tariff is the
+    # CREG's, the same at every supplier, and is priced by the social tariff
+    # supplier (social.py), which reads this card only for its feed-in.
     #
     # The professional editions. Engie publishes one for every family
     # except Direct Online and Basic Online, which are residential-only.

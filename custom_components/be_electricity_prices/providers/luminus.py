@@ -34,8 +34,8 @@ through a public REST endpoint:
 
 Each request returns a fresh PDF (e.g. April 2026 -> 202604 in the
 filename). Luminus only sells residential market products in Flanders
-and Wallonia; Brussels carries only the regulated Social tariff which
-this extractor does not include (auto-assigned, no DSO breakdown).
+and Wallonia; Brussels carries only the regulated Social tariff, which
+is priced by the social tariff supplier (social.py), not here.
 
 Energy prices, distribution rows and renewables surcharges all vary
 between V and W on every product, so the extractor fetches exactly the
@@ -139,10 +139,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("luminus_basicflex", "Luminus BasicFlex", "variable", "basicflex"),
     _ContractDef("luminus_smartflex", "Luminus SmartFlex", "tou", "smartflex"),
     _ContractDef("luminus_dynamic", "Luminus Dynamic", "dynamic", "dynamic"),
-    # Luminus Sociaal/Social (regulated CREG tariff) is omitted on purpose:
-    # it is auto-assigned to protected customers (not user-selectable) and
-    # its PDF carries an all-in regulated price with no DSO breakdown -
-    # same reasoning as Engie's Tarif Social.
+    # Luminus Sociaal/Social is not a product here: the social tariff is the
+    # CREG's, the same at every supplier, and is priced by the social tariff
+    # supplier (social.py), which reads this card only for its feed-in.
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -183,7 +182,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     The /fr/particuliers/tarifs-energie/<slug>/ structure is the
     canonical product directory. Every slug there is a product
     (residential + market only). Excludes the regulated social
-    tariff which is not user-selectable.
+    tariff, which the social tariff supplier prices.
 
     Follows a sitemap INDEX one level, because Luminus re-sharded and
     ``sitemap.xml`` is now 709 bytes naming five children. Against a flat

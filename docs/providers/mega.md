@@ -104,9 +104,8 @@ Notes on the enumeration:
   registry. It parses on the existing fixed path with no parser change -- it is
   an ordinary bi-hourly fixed card (Wallonia August 2026: single 0,1932, peak
   0,2350, off-peak 0,1610, fee 74,20 EUR/yr).
-- The Tarif Social variant is deliberately omitted, same reasoning as Engie and
-  Luminus: it is a regulated CREG tariff, auto-assigned, with no DSO breakdown
-  (`mega.py`).
+- The Tarif Social variant is not a product here: the social tariff is the
+  CREG's and the social tariff supplier prices it ([social.md](social.md)).
 - `mega_dynamic` is hourly-billed. `DynamicRates.quarter_hourly` defaults to `False`
   (`_rates.py`) and Mega leaves it unset, so the coordinator aggregates the
   ENTSO-E 15-minute curve to clock hours for this contract, unlike Engie / Cociter /

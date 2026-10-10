@@ -446,10 +446,9 @@ def _welcome_credit(text: str) -> float | None:
       - "Deze korting is niet cumuleerbaar met andere promoties of kortingen" -
         only one credit is ever applied per contract here, so this holds within
         the integration, but a promotion taken outside it is invisible;
-      - "Op een sociaal tarief wordt door ons geen korting toegepast" - no
-        social tariff is modelled anywhere in this integration, so such a
-        household is already priced on the commercial card and the credit is
-        the smaller of its two errors.
+      - "Op een sociaal tarief wordt door ons geen korting toegepast" - a
+        household on the social tariff is priced by the social tariff
+        supplier, never on this card, so an entry here is not one.
 
     The Korting tier attaches none of those three: it says only that the credit
     goes to new customers and to existing ones switching to it.

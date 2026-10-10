@@ -32,9 +32,8 @@ or a test assertion and labelled as such.
 | Archive | `fetch_for_month` reads the site's price-list archive (`api/pricelist/products` then `api/pricelist/pdf`), back to September 2021 (see below) | `luminus.py` |
 
 Brussels is deliberately out of scope. Luminus sells only the regulated Social
-tariff there, which is auto-assigned to protected customers, carries an all-in
-regulated price with no DSO breakdown, and is not user-selectable
-(`luminus.py`). A fetch for `brussels` raises `ExtractorError` with the
+tariff there, which the social tariff supplier prices from the CREG's card
+([social.md](social.md)). A fetch for `brussels` raises `ExtractorError` with the
 message `not available in region` (`luminus.py`, asserted by
 `test_brussels_is_unsupported`).
 
@@ -93,9 +92,9 @@ they were.
 Declared in `_CONTRACTS` (`luminus.py`); `_CONTRACTS_BY_ID` indexes them
 (`luminus.py`); `EXTRACTOR.contracts` is built from them (`luminus.py`).
 
-Retired / omitted product: **Luminus Sociaal/Social** (the regulated CREG
-tariff) is intentionally not declared (`luminus.py`), same reasoning as
-the Brussels exclusion above.
+Not declared: **Luminus Sociaal/Social**, the regulated CREG tariff, which the
+social tariff supplier prices; it reads Luminus's social card for its feed-in
+and the Walloon connection fee ([social.md](social.md)).
 
 ### Dynamic billing grid
 

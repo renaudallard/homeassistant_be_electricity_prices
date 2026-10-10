@@ -267,7 +267,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     feed-in card names its product's slug, so a product the listing shows
     only through one still counts, and the prefix is never taken for a
     product of its own. Strip the regulated TARIFF_SOCIAL entry (not a
-    residential-market product and excluded from the registry). live_check
+    residential-market product: the social tariff supplier prices it from the
+    CREG's card). live_check
     diffs the result against ``{c.slug for c in _CONTRACTS}``.
     """
     try:

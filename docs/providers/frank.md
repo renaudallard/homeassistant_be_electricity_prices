@@ -111,7 +111,7 @@ The three tiers do not attach the same conditions, and all of them are assumed t
 | *"na een jaar ononderbroken verbruik op dit contract"* | yes | yes | effectively: a household that left stops being priced on this card at all |
 | *"op voorwaarde dat je jouw facturen ... steeds op tijd hebt betaald"* | no | yes | no, it is about the household rather than the tariff |
 | *"niet cumuleerbaar met andere promoties of kortingen"* | no | yes | within the integration yes, since only one credit is ever applied per contract; a promotion taken outside it is invisible |
-| *"Op een sociaal tarief wordt door ons geen korting toegepast"* | no | yes | no, and no social tariff is modelled anywhere here, so such a household is already priced on the commercial card |
+| *"Op een sociaal tarief wordt door ons geen korting toegepast"* | no | yes | no need: a household on the social tariff is priced by the social tariff supplier, never on this card |
 
 The Korting tier says only that the credit goes to new customers and to existing ones
 switching to it, so its single condition is the one the entry itself stands in for. HV and

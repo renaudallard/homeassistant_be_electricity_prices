@@ -99,11 +99,11 @@ Region availability is expressed only through the presence of a region letter in
 `fetch()` raises `ExtractorError("... not available in region ...")` if Brussels
 is requested for it (`engie.py`).
 
-Retired / omitted: Engie's Tarif Social (`E_SOCIAL_R_GREY_C_F`) is deliberately
-not in the catalogue (`engie.py`): the social tariff is set quarterly by the
-CREG, auto-assigned to protected customers rather than picked from a list, and
-its PDF carries an all-in regulated price with no DSO breakdown, so it does not
-fit the energy-plus-network-plus-tax model.
+Not in the catalogue: Engie's Tarif Social (`E_SOCIAL_R_GREY_C_F_00_<region>_F`).
+The social tariff is the CREG's, the same at every supplier, so the social
+tariff supplier prices it from the CREG's quarterly card and reads this card
+only for the feed-in Engie pays a protected customer
+([social.md](social.md)).
 
 ### The professional editions
 
@@ -531,7 +531,8 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - Brussels folds metering + <=13kVA power term into the DSO fee (`parse_sibelga_row`, `_parse.py`).
 - Dynamic Wallonia rows have no prosumer column (9 numbers, not 10),
   `_engie_overlays.py`.
-- Tarif Social is intentionally excluded (`engie.py`).
+- Tarif Social is priced by the social tariff supplier, which reads Engie's
+  social card for its feed-in only ([social.md](social.md)).
 - Partial-region resilience: `parse_snapshot` accepts a single-region map so a
   snapshot still builds if Engie's API is down for one region (test
   `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py`).
