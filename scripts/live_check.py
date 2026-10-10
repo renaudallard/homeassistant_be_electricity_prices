@@ -1126,9 +1126,10 @@ def _expect_excise_bands(prefix: str, taxes: object) -> None:
     """A degressive excise schedule must be ordered and plausible.
 
     Checked on the Bolt, Engie and Mega cards, whose professional editions
-    print the professional schedule. A household card has printed one rate
-    since August 2026, and the household table older cards carry is read by
-    ``excise_tier_bands``, so an absent schedule is not a failure.
+    print the professional schedule. A household card owes one rate since
+    August 2026, and most print one; the July table a few kept printing is
+    read all the same and dropped by ``resolve_federal_excise``. So an absent
+    schedule is not a failure.
     """
     bands = taxes.federal_excise_bands  # type: ignore[attr-defined]
     if not bands:
