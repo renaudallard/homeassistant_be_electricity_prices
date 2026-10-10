@@ -4,7 +4,8 @@ protected customer's excise and the feed-in two suppliers publish."""
 from __future__ import annotations
 
 from datetime import date, datetime
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -309,6 +310,73 @@ def test_engie_s_day_and_night_feed_in_follow_the_month_too() -> None:
         assert walked == pytest.approx(expected)
     # A single register keeps its own formula.
     assert baked.injection.current == pytest.approx(0.0005 + 0.632 * mean)
+
+
+async def test_the_day_and_night_feed_in_sensors_show_what_is_credited(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The two band sensors are the rates the Energy dashboard prices each
+    return register at, so they read the leg the tick credits, baked on the
+    month, not the printed pair (last month's index)."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    card = _card("creg_social_2026_q4.pdf")
+    injection, fee = social.parse_engie(
+        fixture_text("engie_social_w_2026-10.pdf"), card
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "social",
+            "contract": social.CONTRACT_ENGIE,
+            "region": REGION_WALLONIA,
+            "dso": "ores",
+            "meter": "bi",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(
+        social.build_snapshot(
+            social.CONTRACT_ENGIE,
+            REGION_WALLONIA,
+            card,
+            OCT,
+            injection=injection,
+            connection_fee=fee,
+            source_url="t://",
+        )
+    )
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    with (
+        patch.object(coord, "_maybe_refresh_snapshot", AsyncMock()),
+        patch.object(coord, "_track_monthly_peak", AsyncMock()),
+        patch.object(coord, "_tick_spot_prices", AsyncMock(return_value={})),
+        patch.object(
+            coord, "_tick_profiles", AsyncMock(return_value=(False, False, False))
+        ),
+        patch.object(coord, "_tick_month_means", Mock(return_value=(0.120, 0.120))),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
+            AsyncMock(return_value=_CohortLegs(None, None)),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+    assert data.static_injection_peak == pytest.approx(0.08978)
+    assert data.static_injection_offpeak == pytest.approx(0.03722)
 
 
 def test_a_register_pair_without_formulas_is_still_credited_as_printed() -> None:

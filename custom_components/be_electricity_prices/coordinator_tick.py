@@ -444,7 +444,12 @@ class _TickMixin:
         # Static injection (feed-in) rates for bi-hourly meters. None when the
         # contract has a single injection rate, is spot-indexed, or has TOU slots.
         # Trevion Vast and similar cards print separate day/night injection rates.
-        static_inj_peak, static_inj_offpeak = _static_injection_bands(priced.injection)
+        # Read off the leg the feed-in is credited on, so a pair indexed on the
+        # month (Engie's social card) shows the delivery month's rates rather
+        # than the printed ones.
+        static_inj_peak, static_inj_offpeak = _static_injection_bands(
+            injection_snapshot.injection
+        )
 
         return CoordinatorData(
             hourly=hourly,
