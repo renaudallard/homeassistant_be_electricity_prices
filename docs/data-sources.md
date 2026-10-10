@@ -477,10 +477,12 @@ intra-hour spread to record.
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
 injected each past hour. `_backfill_cost_sensor` (`backfill_cost.py`) recovers
-that from the recorder: it reads hourly kWh for every configured consumption
-sensor (`_hourly_consumption_sensors`) and injection sensor
-(`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
-UTC-hour totals (`energy_meters.py`). The recorder helpers treat their date
+that from the recorder: it reads both sides through `_metered_sides`
+(`meter_hourly.py`), the reader the live hourly walk bills from, as per-UTC-hour
+kWh. The register pairs, a totals sensor standing in for a broken pair, the
+hours a silent side leaves out of both and the spread of a meter read once a
+day therefore apply to the backfilled hours as they do to the live ones, and a
+wiring that cannot be billed accrues the fees alone. The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
 `_hour_iter` grid (`backfill_window.py`).
@@ -499,18 +501,23 @@ when neither holds the month, with the federal levies that month owes (`_proxy_f
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`
-(`backfill.py`). A dynamic supplier with no spot for the
-hour is skipped, because `factor * spot + base` needs both terms
-(`backfill.py`). `KeyError` / `ValueError` (a missing DSO row for an archived
-month, or a non-static rate kind reaching the static path) skips just that hour
-rather than tearing the whole backfill down (`backfill.py`).
+(`backfill.py`). On the price pass an hour whose energy leg is priced on the
+spot and has none is skipped, because `factor * spot + base` needs both terms
+(`_energy_needs_spot`, `backfill.py`). The cost pass does not skip it: the
+hour's network and taxes do not depend on the day-ahead, so it bills them
+through `compute_network_and_taxes` with no energy term, as the live walk
+does, and counts the hour under `energy_hours_unpriced`, which the run logs
+(`backfill_cost.py`). `KeyError` / `ValueError` (a missing DSO row for an
+archived month, or a non-static rate kind reaching the static path) skips that
+hour's price rows, and on the cost pass its metered charges, counted as
+unpriced too, rather than tearing the whole backfill down.
 Both passes walk their hours through `_in_turns` (`backfill_window.py`),
 which hands the event loop a turn after every 24 of them. Once the month cards
 are cached neither pass awaits anything that actually waits, and a year of
 hours would otherwise hold Home Assistant's loop for the whole run.
 
 The injection credit reuses `_historical_injection_rate` (`injection.py`,
-called at `backfill.py`), the same coordinator helper the live YTD path uses, so a
+called at `backfill_cost.py`), the same coordinator helper the live YTD path uses, so a
 monthly-indexed, spot-indexed, or fixed injection rate is resolved identically in
 both places.
 
@@ -518,12 +525,19 @@ both places.
 
 `_ensure_dynamic_spots` (`backfill.py`) reuses the coordinator's
 `_ensure_historical_spots` so the bulk-fetch logic (week-sized chunks, present
-threshold, negative cache) stays in one place. It returns an empty dict when no
-spot is needed (static energy with a monthly or no injection). The gate is
-`isinstance(snap.energy, DynamicRates) or _injection_needs_spot(snap, entry)`
-(`backfill.py`): a static-energy contract whose injection is itself
-spot-indexed (either Cociter variable card) still needs spots so its feed-in credit lands in
-the backfilled rows and no sum-chain step appears at the backfill-to-live seam.
+threshold, negative cache) stays in one place. It returns two maps, the hourly
+spots and each hour's 15-minute slots, the second filled only for a floored
+feed-in formula, which an hour's mean does not price
+(`_injection_needs_spot_quarters`, `injection.py`), and both empty when no
+spot is needed. Spots are fetched when any of four asks for them (`backfill.py`):
+the energy leg as it is priced, the signing cohort's when there is one
+(`_energy_needs_spot` on `_cohort_energy_leg`), a feed-in credit priced per
+slot on the spot (`_injection_needs_spot`) or on the month's spot mean
+(`_injection_needs_month_spot`), and a contract held earlier in the year that
+settles on the day-ahead (`periods_need_spots`, `contract_periods.py`). A
+static-energy contract whose injection is itself spot-indexed (either Cociter
+variable card) still needs spots so its feed-in credit lands in the backfilled
+rows and no sum-chain step appears at the backfill-to-live seam.
 It feeds `_ensure_historical_spots` local dates (`dt_util.as_local(...).date()`,
 `backfill.py`) to match the live coordinator's local-day anchoring.
 
@@ -624,9 +638,15 @@ are prorated per hour as `annual_static / days_in_year / hours_per_local_date`
 count makes every local day, including the 23-hour and 25-hour DST seam days, sum
 to exactly `annual / days_in_year`, matching the live per-day proration at the
 seam. The Walloon prosumer fee (compensation regime, gated to Wallonia at
-`backfill_cost.py`) is prorated the same way against `days_in_full_month`. The
-compensation regime clamps the displayed energy term at zero (`backfill.py`),
-because a Walloon reversing meter forfeits surplus injection past consumption.
+`backfill_cost.py`) is prorated the same way against `days_in_full_month`, and
+so is the Flemish capacity tariff, its month's charge on the peak the live
+coordinator bills (`_billed_peak_kw`, `_capped_capacity_monthly_eur`), so it
+meets the live `_ytd_capacity` at the seam. Under compensation the energy term
+is netted per meter register, as on the live walk: `_NetAllocation`
+(`spot_stats.py`) nets each register's injection against its consumption,
+prices the net at its slices' rates, weighted by the RLP profile when it is
+loaded, and floors each register at zero on its own, because a Walloon
+reversing meter forfeits surplus injection past consumption.
 A welcome credit (see [pricing-model.md](pricing-model.md#welcome-credits)) is
 subtracted per day through the same `_welcome_credit_eur` the live walk calls,
 off the signing month's card and capped against the same three running
