@@ -987,6 +987,11 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     the text directories on the same cutoff took texts a kept row still names,
     and that row could no longer be replayed after a parser change. The texts
     of the rows removed here are left to ``_drop_unnamed_texts``.
+
+    A PDF goes by the month of its release unless a kept row or a card on
+    the unparsed sheet still names it: an unchanged card is uploaded once,
+    under the month it was first captured in, and every later month's row
+    names that copy. The workflow keeps any release pdfs.json still lists.
     """
     cutoff = _months_before(today, keep_months)
     removed = 0
@@ -1001,17 +1006,39 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
         if not any(folder.iterdir()):
             folder.rmdir()
     manifest = out / _MANIFEST
-    if manifest.exists():
+    sources = _named_sources(out)
+    if manifest.exists() and sources is not None:
         kept = json.loads(manifest.read_text(encoding="utf-8"))
+        named = {digest_of(s["pdf"]) for s in sources if isinstance(s.get("pdf"), str)}
+        named.update(
+            digest_of(s["pdf"])
+            for value in _read_unparsed(out).values()
+            for s in _as_sources(value)
+            if s.get("pdf")
+        )
         # A release path is <prefix>-<YYYY-MM>[-n]/<digest>.pdf; the workflow
         # deletes the release itself on the same cutoff.
-        current = {d: p for d, p in kept.items() if _release_month(p) >= cutoff}
+        current = {
+            d: p for d, p in kept.items() if _release_month(p) >= cutoff or d in named
+        }
         if len(current) != len(kept):
             removed += len(kept) - len(current)
             manifest.write_text(
                 json.dumps(current, indent=1, sort_keys=True) + "\n", encoding="utf-8"
             )
     return removed
+
+
+def _named_sources(out: Path) -> list[dict[str, Any]] | None:
+    """Every source the stored rows name, or None when a row cannot be
+    read: such a row could be naming anything, so nothing may go."""
+    sources: list[dict[str, Any]] = []
+    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
+        row = _read_row(path)
+        if row is None:
+            return None
+        sources.extend(s for s in row.get("_sources", []) if isinstance(s, dict))
+    return sources
 
 
 def _drop_unnamed_texts(out: Path) -> int:
@@ -1026,14 +1053,10 @@ def _drop_unnamed_texts(out: Path) -> int:
 
     A row that cannot be read could be naming anything, so then nothing goes.
     """
-    named: set[str] = set()
-    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
-        row = _read_row(path)
-        if row is None:
-            return 0
-        for source in row.get("_sources", []):
-            if isinstance(source, dict) and isinstance(source.get("text"), str):
-                named.add(source["text"])
+    sources = _named_sources(out)
+    if sources is None:
+        return 0
+    named = {s["text"] for s in sources if isinstance(s.get("text"), str)}
     removed = 0
     for text in out.glob("texts/????-??/*.txt"):
         if f"texts/{text.parent.name}/{text.name}" not in named:

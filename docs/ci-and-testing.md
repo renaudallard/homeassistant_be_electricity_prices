@@ -1020,7 +1020,9 @@ repository (see `archive_cards.yml` below) and records where each one landed in
 `<out>/pdfs.json`, the manifest the next run seeds `_Cards` from and the one place that maps a
 digest to a release path: a digest the manifest does not list is written again until an upload
 succeeds, so a day without the token loses nothing for good. `_prune` drops manifest entries
-older than the retention alongside the rows.
+older than the retention alongside the rows, except one a kept row or a card on the unparsed
+sheet still names: an unchanged card is uploaded once, under the month it was first captured in,
+and every later month's row names that copy (`test_prune_keeps_a_pdf_a_kept_row_still_names`).
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
@@ -1550,7 +1552,8 @@ repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag
 empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
 cards and their texts still land in the archive, and the PDFs of that day are offered again by the
 next run that has the token. Releases older than the retention are deleted on the same cutoff the
-script uses for the rows.
+script uses for the rows, except one `pdfs.json` still lists, which is a card a kept row still
+names (`test_a_release_the_manifest_still_lists_is_not_deleted`).
 
 The archive lives in its own repository on purpose: three years of daily commits would bury
 `main`'s history, race the maintainer's own pushes, and land in every HACS download. The push

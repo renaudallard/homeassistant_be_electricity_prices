@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 import types
 from collections.abc import Awaitable, Callable, Iterator
@@ -2462,6 +2464,36 @@ def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -
     }
 
 
+def test_prune_keeps_a_pdf_a_kept_row_still_names(tmp_path: Path) -> None:
+    """An unchanged card is uploaded once, under the month it was first
+    captured in, and every later month's row names that copy: the manifest
+    entry, and with it the release, stays while any kept row or card on the
+    unparsed sheet names it. Pruned on its release month, a February row
+    kept a year later linked a PDF the workflow had just deleted."""
+    rows = tmp_path / "cards/acme/acme_fix/wallonia"
+    rows.mkdir(parents=True)
+    (rows / "2026-01.json").write_text(json.dumps({"_sources": [{"pdf": "jan"}]}))
+    (rows / "2026-02.json").write_text(json.dumps({"_sources": [{"pdf": "jan"}]}))
+    (tmp_path / "unparsed.json").write_text(
+        json.dumps({"beta/beta_fix/wallonia/2026-03": [{"url": "u", "pdf": "img"}]})
+    )
+    (tmp_path / "pdfs.json").write_text(
+        json.dumps(
+            {
+                "jan": "electricity-2026-01/jan.pdf",
+                "img": "electricity-2026-01/img.pdf",
+                "gone": "electricity-2026-01/gone.pdf",
+            }
+        )
+    )
+    assert ac._prune(tmp_path, 12, date(2027, 2, 10)) == 2
+    assert not (rows / "2026-01.json").exists()
+    assert json.loads((tmp_path / "pdfs.json").read_text()) == {
+        "jan": "electricity-2026-01/jan.pdf",
+        "img": "electricity-2026-01/img.pdf",
+    }
+
+
 async def test_a_supplier_not_answering_is_given_up_on_for_the_day(
     tmp_path: Path,
 ) -> None:
@@ -2972,9 +3004,7 @@ def test_the_archive_push_survives_the_water_archives_push(
 
     The step runs under bash -e, so a pull that failed once, a network blip,
     ended the step there instead of leaving it to the next attempt."""
-    import os
     import shutil
-    import subprocess
 
     import yaml  # type: ignore[import-untyped]
 
@@ -3044,15 +3074,7 @@ def test_the_archive_push_survives_the_water_archives_push(
     ]
 
 
-def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
-    """The upload step ran under bash -e, so one failed upload ended it
-    before the month's landed files reached pdfs.json, and the push step,
-    skipped after a failure, threw away the day's rows and texts. The step's
-    own shell, with gh failing the second of two uploads, must record the
-    first and fail; the jobs that index and push must not need the uploads."""
-    import os
-    import subprocess
-
+def _archive_jobs() -> dict[str, Any]:
     import yaml  # type: ignore[import-untyped]
 
     workflow = yaml.safe_load(
@@ -3060,25 +3082,20 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
             Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
         ).read_text()
     )
-    jobs = workflow["jobs"]
-    keep = jobs["keep"]["steps"]
-    script = next(s["run"] for s in keep if s.get("id") == "keep")
-    month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
-    month.mkdir(parents=True)
-    (month / "aaa.pdf").write_bytes(b"%PDF a")
-    (month / "bbb.pdf").write_bytes(b"%PDF b")
-    (tmp_path / "tmp" / "cards" / "electricity").mkdir(parents=True)
+    jobs: dict[str, Any] = workflow["jobs"]
+    return jobs
+
+
+def _run_keep_step(tmp_path: Path, gh: str) -> subprocess.CompletedProcess[str]:
+    """The keep step's own shell in ``tmp_path``, with ``gh`` the body of a
+    stub gh and git answering that the cards repository has a branch."""
+    script = next(
+        s["run"] for s in _archive_jobs()["keep"]["steps"] if s.get("id") == "keep"
+    )
+    (tmp_path / "tmp" / "cards" / "electricity").mkdir(parents=True, exist_ok=True)
     stubs = tmp_path / "bin"
     stubs.mkdir()
-    # No release of the month yet; creating one works, uploading bbb fails.
-    (stubs / "gh").write_text(
-        "#!/bin/sh\n"
-        'case "$1 $2" in\n'
-        '  "release view") exit 1 ;;\n'
-        '  "release upload") case "$4" in *bbb.pdf) exit 1 ;; esac ;;\n'
-        "esac\n"
-        "exit 0\n"
-    )
+    (stubs / "gh").write_text(f"#!/bin/sh\n{gh}")
     (stubs / "git").write_text("#!/bin/sh\necho 'abc refs/heads/main'\n")
     for stub in stubs.iterdir():
         stub.chmod(0o755)
@@ -3088,12 +3105,35 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
         "GH_TOKEN": "x",
         "CARDS_REPO": "o/r",
     }
-    done = subprocess.run(
+    return subprocess.run(
         ["bash", "-e", "-c", script],
         cwd=tmp_path,
         env=env,
         capture_output=True,
         text=True,
+    )
+
+
+def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
+    """The upload step ran under bash -e, so one failed upload ended it
+    before the month's landed files reached pdfs.json, and the push step,
+    skipped after a failure, threw away the day's rows and texts. The step's
+    own shell, with gh failing the second of two uploads, must record the
+    first and fail; the jobs that index and push must not need the uploads."""
+    jobs = _archive_jobs()
+    keep = jobs["keep"]["steps"]
+    month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
+    month.mkdir(parents=True)
+    (month / "aaa.pdf").write_bytes(b"%PDF a")
+    (month / "bbb.pdf").write_bytes(b"%PDF b")
+    # No release of the month yet; creating one works, uploading bbb fails.
+    done = _run_keep_step(
+        tmp_path,
+        'case "$1 $2" in\n'
+        '  "release view") exit 1 ;;\n'
+        '  "release upload") case "$4" in *bbb.pdf) exit 1 ;; esac ;;\n'
+        "esac\n"
+        "exit 0\n",
     )
     assert done.returncode != 0
     manifest = json.loads(
@@ -3109,6 +3149,27 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     assert "needs.index.result == 'success'" in jobs["push"]["if"]
     for job in ("index", "push"):
         assert "!cancelled()" in jobs[job]["if"], job
+
+
+def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> None:
+    """Retention deletes the releases past the cutoff, except one pdfs.json
+    still lists: the walk keeps the entry of an old card a kept row names,
+    and deleting its release broke that row's link and its replay."""
+    (tmp_path / "tmp" / "cards" / "electricity").mkdir(parents=True)
+    (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").write_text(
+        json.dumps({"aaa": "electricity-2020-01/aaa.pdf"})
+    )
+    done = _run_keep_step(
+        tmp_path,
+        'case "$1 $2" in\n'
+        '  "release list") printf "electricity-2020-01\\nelectricity-2020-02\\n'
+        'gas-2020-01\\n" ;;\n'
+        '  "release delete") echo "$3" >> deleted.txt ;;\n'
+        "esac\n"
+        "exit 0\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert (tmp_path / "deleted.txt").read_text() == "electricity-2020-02\n"
 
 
 def test_the_cards_token_never_shares_a_job_with_third_party_code() -> None:

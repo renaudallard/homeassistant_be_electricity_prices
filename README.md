@@ -1791,7 +1791,9 @@ The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the archive has not seen before is uploaded
 to an `electricity-<YYYY-MM>` release of that same repository. A release
 holds the cards for one month, whatever day each was captured or mirrored
-on, each file named by its SHA-256. Each stored card names
+on, each file named by its SHA-256. A card that did not change is uploaded
+once, under the first month it was filed for, and a release is kept as long
+as a stored month still names one of its cards. Each stored card names
 its PDF by that digest under `_sources`, and `electricity/pdfs.json` says
 which release holds it. A month of cards runs to tens of MB and more, which is
 why they live in releases rather than in the tree. That digest also keeps the daily
