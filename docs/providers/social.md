@@ -147,9 +147,12 @@ formulas, `0,0500 + (0,0632 x EPEXDAM)` for the single register in October
 2026, spelled `0,0500 + 0,0632 x EPEX DAM` (no parentheses, a space) on the
 cards before March 2024. The card prints its rates at last month's EPEXDAM but leaves the index
 itself out, so the formulas are bound by arithmetic: the three printed rates
-have to imply one index. The single register's formula is `month_indexed`, so
-it resolves on the delivery month's mean where the entry has an ENTSO-E key;
-the day and night rates are the printed ones. The card limits its feed-in to a
+have to imply one index. The leg is `month_indexed` and carries one pair per
+register (`factor` / `base` for the single one, `factor_peak` / `base_peak` and
+`factor_offpeak` / `base_offpeak` for day and night, `_register_coefficients`
+in `injection.py`), so every register resolves on the delivery month's mean
+where the entry has an ENTSO-E key, and the printed rates stand in until it is
+known. The card limits its feed-in to a
 digital or bidirectional meter.
 
 `parse_luminus` reads the feed-in row, "Tarif de l'énergie injectée" since

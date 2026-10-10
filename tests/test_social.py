@@ -18,8 +18,18 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
     WALLONIA_DSO_KEYS,
 )
+from custom_components.be_electricity_prices.injection import (
+    _bake_monthly_injection,
+    _historical_injection_rate,
+    _injection_price_for_slot,
+    _tou_injection_rate,
+)
 from custom_components.be_electricity_prices.pricing import compute_breakdown
 from custom_components.be_electricity_prices.providers import social
+from custom_components.be_electricity_prices.providers._rates import (
+    InjectionRates,
+    VariableRates,
+)
 from custom_components.be_electricity_prices.providers._resolve import (
     omits_brussels_power_term,
     resolve_federal_excise,
@@ -252,6 +262,64 @@ def test_engie_prints_its_feed_in_and_the_formulas_behind_it() -> None:
     assert injection.bi_hourly and injection.month_indexed
     assert (injection.factor, injection.base) == pytest.approx((0.632, 0.0005))
     assert fee == pytest.approx(0.00075)
+
+
+def test_engie_s_day_and_night_feed_in_follow_the_month_too() -> None:
+    """The card gives one month formula per register, so a two-register meter
+    is credited on the delivery month's EPEXDAM like a single one, on the live
+    bake and on the historical walk, instead of at the printed rates (last
+    month's index). At a 120 EUR/MWh month: day 0,05 + 0,0744 x 120 = 8,978,
+    night 0,05 + 0,0306 x 120 = 3,722 c/kWh."""
+    card = _card("creg_social_2026_q4.pdf")
+    injection, fee = social.parse_engie(
+        fixture_text("engie_social_w_2026-10.pdf"), card
+    )
+    snap = social.build_snapshot(
+        social.CONTRACT_ENGIE,
+        REGION_WALLONIA,
+        card,
+        OCT,
+        injection=injection,
+        connection_fee=fee,
+        source_url="t://",
+    )
+    mean = 0.120
+    baked = _bake_monthly_injection(snap, mean)
+    assert baked.injection is not None
+    day = datetime(2026, 10, 14, 19, tzinfo=BRUSSELS)
+    night = datetime(2026, 10, 14, 23, tzinfo=BRUSSELS)
+    for when, expected in ((day, 0.08978), (night, 0.03722)):
+        live = _injection_price_for_slot(
+            baked.injection,
+            baked.energy,
+            None,
+            when,
+            meter="bi",
+            region=REGION_WALLONIA,
+        )
+        walked = _historical_injection_rate(
+            injection,
+            mean,
+            energy=snap.energy,
+            when=when,
+            meter="bi",
+            region=REGION_WALLONIA,
+        )
+        assert live == pytest.approx(expected)
+        assert walked == pytest.approx(expected)
+    # A single register keeps its own formula.
+    assert baked.injection.current == pytest.approx(0.0005 + 0.632 * mean)
+
+
+def test_a_register_pair_without_formulas_is_still_credited_as_printed() -> None:
+    """Trevion Vast prints a day and night feed-in pair and no formula: the
+    month mean must not move it."""
+    pair = InjectionRates(current=0.05, peak=0.06, offpeak=0.04, bi_hourly=True)
+    day = datetime(2026, 10, 14, 19, tzinfo=BRUSSELS)
+    rate = _tou_injection_rate(
+        pair, VariableRates(current=0.2), day, 0.120, meter="bi", region="flanders"
+    )
+    assert rate == pytest.approx(0.06)
 
 
 def test_a_supplier_card_of_another_quarter_is_refused() -> None:

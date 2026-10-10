@@ -303,15 +303,18 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
         implied = [(p - b) / f for p, (b, f) in zip(printed, formulas, strict=True)]
         if max(implied) - min(implied) > 0.5:
             raise ExtractorError("Engie social card: the formulas do not fit the rates")
-        # The day and night rates are credited as printed: only a single
-        # register's formula has a month mean to resolve on (``month_indexed``).
-        base, factor = formulas[0]
+        # c/kWh per EUR/MWh onto a EUR/kWh spot: x10 the factor, /100 the
+        # base. Injection is exempt from VAT. One pair per register, so a
+        # two-register meter is credited on the delivery month's mean too.
+        (base, factor), (base_day, factor_day), (base_night, factor_night) = formulas
         rates = replace(
             rates,
-            # c/kWh per EUR/MWh onto a EUR/kWh spot: x10 the factor, /100 the
-            # base. Injection is exempt from VAT.
             factor=factor * 10.0,
             base=base / 100.0,
+            factor_peak=factor_day * 10.0,
+            base_peak=base_day / 100.0,
+            factor_offpeak=factor_night * 10.0,
+            base_offpeak=base_night / 100.0,
             formula=f"{base:.4f} + ({factor:.4f} x EPEXDAM) c€/kWh",
             month_indexed=True,
         )

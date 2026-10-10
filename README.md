@@ -140,10 +140,10 @@ Feed-in is the part no rule sets: each supplier pays its own or none. Engie and
 Luminus print it on their social card and those two contracts credit it;
 Fluvius, as social supplier, says it pays none, and no other supplier or
 network operator publishes a rate, so the third contract credits nothing
-rather than a guess. Engie's single-register rate follows the delivery month's
-EPEXDAM where you have an ENTSO-E key; its day and night rates, and Luminus's
-rates, are credited as the card prints them, which is the previous month's
-index on Engie's card and the previous quarter's on Luminus's.
+rather than a guess. Engie's rates, single and day/night alike, follow the
+delivery month's EPEXDAM where you have an ENTSO-E key, as its card's formulas
+say; Luminus's are credited as its card prints them, which is the previous
+quarter's index.
 
 Until the law has been read once (Justel unreachable on the very first start),
 a social tariff entry publishes nothing and a Repairs card says why, since

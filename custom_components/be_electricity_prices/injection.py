@@ -92,6 +92,32 @@ def _slot_coefficients(
     )
 
 
+def _register_coefficients(
+    inj: InjectionRates,
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """The day and night month coefficient pairs of a meter's two registers,
+    or ``None``.
+
+    The two-register sibling of :func:`_slot_coefficients`: a ``bi_hourly``
+    leg whose card prints one month formula per register (Engie's social
+    card: "heures pleines = 0,0500 + (0,0744 x EPEXDAM)", "heures creuses =
+    0,0500 + (0,0306 x EPEXDAM)"). Carried on the peak and off-peak pairs with
+    no transition pair, which is what tells it from a time-of-use triplet.
+    Both pairs or none.
+    """
+    if (
+        not inj.bi_hourly
+        or inj.factor_transition is not None
+        or inj.base_transition is not None
+        or inj.factor_peak is None
+        or inj.base_peak is None
+        or inj.factor_offpeak is None
+        or inj.base_offpeak is None
+    ):
+        return None
+    return (inj.factor_peak, inj.base_peak), (inj.factor_offpeak, inj.base_offpeak)
+
+
 def _tou_weekend_rule(energy: EnergyRates | None) -> str | None:
     """The weekend rule of a time-of-use ENERGY leg, or ``None`` when the leg
     is not banded by TOU slot.
@@ -135,6 +161,8 @@ def _bake_monthly_injection(
     pairs are cleared, so the slot rate the engine selects is this month's.
     With no mean the printed triplet stands: those are month coefficients on
     fields no per-hour path reads, so nothing mistakes them for a spot formula.
+    A two-register pair (:func:`_register_coefficients`) is baked the same way
+    into ``peak`` / ``offpeak``, and the single register's formula with it.
     """
     inj = snapshot.injection
     if inj is None:
@@ -159,6 +187,21 @@ def _bake_monthly_injection(
                 base_offpeak=None,
             ),
         )
+    registers = _register_coefficients(inj)
+    if registers is not None:
+        if mean is None:
+            return snapshot
+        (f_day, b_day), (f_night, b_night) = registers
+        inj = replace(
+            inj,
+            peak=f_day * mean + b_day,
+            offpeak=f_night * mean + b_night,
+            factor_peak=None,
+            base_peak=None,
+            factor_offpeak=None,
+            base_offpeak=None,
+        )
+        snapshot = replace(snapshot, injection=inj)
     if inj.factor is None or inj.base is None:
         return snapshot
     current = None if mean is None else inj.factor * mean + inj.base
@@ -319,7 +362,8 @@ def _tou_injection_rate(
     ``current``, which is the rate its card prints for it. A pair without
     the flag is not read at all, so no other supplier's credit changes.
 
-    ``month_mean`` is the delivery month's mean for a triplet indexed on one,
+    ``month_mean`` is the delivery month's mean for a triplet or a register
+    pair indexed on one,
     whether ``month_indexed`` or ``spp_indexed`` (the month's Belpex_SPP), as
     the live bake reads it: the slot's own coefficient pair is resolved
     against it, and the printed slot rate is the answer without one. Only
@@ -339,9 +383,16 @@ def _tou_injection_rate(
     if rule is None:
         if not inj.bi_hourly or meter not in ("bi", "dynamic"):
             return None
-        return _floor_injection(
-            inj.offpeak if is_offpeak(when, region) else inj.peak, inj
-        )
+        night = is_offpeak(when, region)
+        registers = _register_coefficients(inj)
+        if (
+            registers is not None
+            and month_mean is not None
+            and (inj.month_indexed or inj.spp_indexed)
+        ):
+            factor, base = registers[1] if night else registers[0]
+            return _floor_injection(factor * month_mean + base, inj)
+        return _floor_injection(inj.offpeak if night else inj.peak, inj)
     slot = tou_slot(when, rule)
     if month_mean is not None and (inj.month_indexed or inj.spp_indexed):
         coefs = _slot_coefficients(inj)
