@@ -195,6 +195,7 @@ def _manual_energy_leg(
             yearly_fixed_fee_exclusive_night=(
                 None if fee_raw is not None else energy.yearly_fixed_fee_exclusive_night
             ),
+            single_under_impact=energy.single_under_impact,
         )
     return None
 
@@ -322,6 +323,9 @@ def _cohort_energy_from_archived(
             # exclusive-night meter keeps its own fee instead of falling back to
             # the standard abonnement (yearly_fixed_fee_for_meter reads it).
             yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
+            # And whether the card bills its day/night split under Impact at
+            # all, or an Impact entry holding a key is banded again.
+            single_under_impact=energy.single_under_impact,
         )
     return None
 
@@ -377,6 +381,7 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
         quarter_indexed=True,
         yearly_fixed_fee=energy.yearly_fixed_fee,
         yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
+        single_under_impact=energy.single_under_impact,
     )
 
 

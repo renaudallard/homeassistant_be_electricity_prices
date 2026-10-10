@@ -1216,3 +1216,150 @@ def test_a_flat_excise_table_is_one_rate() -> None:
         "flanders",
     )
     assert snap.taxes.federal_excise_bands is None
+
+
+def test_the_walloon_cards_say_their_day_night_split_is_off_under_impact() -> None:
+    """Both editions of the Walloon cards print it, and nothing else does:
+    "Le tarif bihoraire n'est pas compatible avec la structure tarifaire
+    incitative (Tarif IMPACT)", "Het tweevoudig tarief is niet compatibel met
+    de incitatieve tariefstructuur"."""
+    for name, contract, region, expected in (
+        (
+            "totalenergies_mycomfort_fixed_w.pdf",
+            "totalenergies_mycomfort_fixed",
+            "wallonia",
+            True,
+        ),
+        (
+            "totalenergies_myessential_fixed_w_2026-10.pdf",
+            "totalenergies_myessential_fixed",
+            "wallonia",
+            True,
+        ),
+        (
+            "totalenergies_mycomfort_w_2026-10_nl.pdf",
+            "totalenergies_mycomfort",
+            "wallonia",
+            True,
+        ),
+        (
+            "totalenergies_electricite_fixe_v_2026-10.pdf",
+            "totalenergies_electricite_fixe",
+            "flanders",
+            False,
+        ),
+        (
+            "totalenergies_mycomfort_b_2026-10.pdf",
+            "totalenergies_mycomfort",
+            "brussels",
+            False,
+        ),
+        (
+            "totalenergies_impact_w_2026-10.pdf",
+            "totalenergies_impact",
+            "wallonia",
+            False,
+        ),
+    ):
+        snap = parse_snapshot(contract, fixture_text(name, layout=True), region)
+        assert isinstance(snap.energy, (FixedRates, VariableRates)), name
+        assert snap.energy.single_under_impact is expected, name
+
+
+def test_an_impact_connection_pays_the_single_rate_in_every_band() -> None:
+    """A Walloon TotalEnergies entry on Tarif Impact with a day/night meter
+    is billed the "Compteur simple" price around the clock, as the card says,
+    where every other supplier bills its night rate in ECO and its day rate
+    in PIC and MEDIUM. Off Impact the meter keeps its day/night split."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    snap = parse_snapshot(
+        "totalenergies_mycomfort_fixed",
+        fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, FixedRates)
+    brussels = ZoneInfo("Europe/Brussels")
+    eco = datetime(2026, 10, 14, 12, tzinfo=brussels)
+    pic = datetime(2026, 10, 14, 18, tzinfo=brussels)
+    for when in (eco, pic):
+        assert energy_eur_per_kwh(
+            snap.energy, when, None, "bi", "wallonia", "impact"
+        ) == pytest.approx(0.1841)
+    # 08:00 is a day hour on the Walloon schedule; midday is a night one.
+    morning = datetime(2026, 10, 14, 8, tzinfo=brussels)
+    assert energy_eur_per_kwh(
+        snap.energy, morning, None, "bi", "wallonia", "bi_horaire"
+    ) == pytest.approx(0.1966)
+    # The same card without the statement is banded as before.
+    from dataclasses import replace
+
+    banded = replace(snap.energy, single_under_impact=False)
+    assert energy_eur_per_kwh(
+        banded, eco, None, "bi", "wallonia", "impact"
+    ) == pytest.approx(0.1732)
+
+
+def test_the_month_leg_keeps_the_single_rate_under_impact() -> None:
+    """An entry holding a key bills a variable card on the delivery month's
+    index through the monthly leg, which has to carry the same rule."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    snap = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True),
+        "wallonia",
+    )
+    leg = _cohort_energy_from_archived(snap)
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.single_under_impact
+    assert leg.factor_peak is not None and leg.factor_offpeak is not None
+    mean = 0.12
+    eco = datetime(2026, 10, 14, 12, tzinfo=ZoneInfo("Europe/Brussels"))
+    mono = leg.factor * mean + leg.base
+    assert energy_eur_per_kwh(
+        leg, eco, mean, "bi", "wallonia", "impact"
+    ) == pytest.approx(mono)
+    morning = datetime(2026, 10, 14, 8, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert energy_eur_per_kwh(
+        leg, morning, mean, "bi", "wallonia", "bi_horaire"
+    ) == pytest.approx(leg.factor_peak * mean + (leg.base_peak or 0.0))
+
+
+def test_the_impact_statement_is_left_out_of_rows_that_do_not_carry_it() -> None:
+    """Only the Walloon cards set it, so every other row keeps the shape an
+    earlier version wrote, and a set flag round-trips."""
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _snapshot_from_dict,
+        _snapshot_to_dict,
+    )
+
+    now = datetime(2026, 10, 10, tzinfo=UTC)
+    flanders = parse_snapshot(
+        "totalenergies_electricite_fixe",
+        fixture_text("totalenergies_electricite_fixe_v_2026-10.pdf", layout=True),
+        "flanders",
+    )
+    assert "single_under_impact" not in _snapshot_to_dict(flanders, now)["energy"]
+    wallonia = parse_snapshot(
+        "totalenergies_mycomfort_fixed",
+        fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True),
+        "wallonia",
+    )
+    row = _snapshot_to_dict(wallonia, now)
+    assert row["energy"]["single_under_impact"] is True
+    assert _snapshot_from_dict(row).energy == wallonia.energy

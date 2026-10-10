@@ -478,6 +478,9 @@ _ENERGY_OPTIONAL_KEYS = (
     "formula_factor_eco",
     "formula_base_eco",
     "quarter_indexed",
+    # And TotalEnergies' statement that its day/night split does not apply
+    # under Impact, which only its Walloon cards carry.
+    "single_under_impact",
 )
 # The RLP pair is optional on the Impact leg alone: VariableRates and
 # SpotMonthlyRates have carried it since before the archive went live, and

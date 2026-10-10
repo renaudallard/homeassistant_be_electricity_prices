@@ -517,7 +517,11 @@ different, as long as the edit keeps the same supplier, contract and region
    requires a smart meter; Simple and Bi-hourly follow the existing
    meter convention. A card that prices the same product on the bands too
    (Bolt's variable cards, OCTA+ Boost Flex, Eco Boost Flex and Basic Online
-   in Wallonia) bills its energy on them under Tarif Impact.
+   in Wallonia) bills its energy on them under Tarif Impact. Otherwise a
+   day/night meter under Tarif Impact pays the night rate in the ECO band and
+   the day rate in PIC and MEDIUM, except on TotalEnergies' Walloon cards,
+   which say their day/night split does not apply under Impact and bill the
+   single rate in every band.
 8. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every

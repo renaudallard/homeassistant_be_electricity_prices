@@ -276,11 +276,15 @@ def _routed_rate(
     plain bi-horaire schedule: the ECO band bills the off-peak rate and the
     MEDIUM/PIC bands the peak rate (per the supplier cards' Impact footnote).
     This keeps the energy side aligned with the Impact-banded distribution.
+    A card that says its day/night split does not apply under Impact
+    (``single_under_impact``) bills the single rate in every band instead.
     """
     if meter == "exclusive_night" and energy.exclusive_night is not None:
         return energy.exclusive_night
     if bi_capable and energy.peak is not None and energy.offpeak is not None:
         if dso_tariff_mode == "impact":
+            if energy.single_under_impact:
+                return base
             return energy.offpeak if dso_impact_band(when) == "eco" else energy.peak
         return energy.offpeak if is_offpeak(when, region) else energy.peak
     return base
@@ -357,6 +361,7 @@ def energy_eur_per_kwh(
             peak=energy.ceiling_peak,
             offpeak=energy.ceiling_offpeak,
             exclusive_night=energy.ceiling_exclusive_night,
+            single_under_impact=energy.single_under_impact,
         )
         return min(
             rate,
@@ -453,6 +458,7 @@ def energy_eur_per_kwh(
             bi_capable
             and energy.factor_peak is not None
             and energy.factor_offpeak is not None
+            and not (dso_tariff_mode == "impact" and energy.single_under_impact)
         ):
             # A card that prints one formula per meter is billed per meter.
             # Mega's bands differ by a fifth (1,3275 peak against 1,1095 mono),
@@ -481,6 +487,7 @@ def energy_eur_per_kwh(
             peak=energy.ceiling_peak,
             offpeak=energy.ceiling_offpeak,
             exclusive_night=energy.ceiling_exclusive_night,
+            single_under_impact=energy.single_under_impact,
         )
         return min(
             rate,

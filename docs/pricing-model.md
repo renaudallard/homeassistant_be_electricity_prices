@@ -897,7 +897,12 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
    published: pick one by schedule (`pricing.py`):
    - Under `dso_tariff_mode == "impact"`: ECO band bills off-peak, MEDIUM/PIC bill
      peak (`pricing.py`). This aligns the energy side with the Impact-banded
-     distribution when an SMR3 meter registers in CWaPE bands.
+     distribution when an SMR3 meter registers in CWaPE bands. A card whose
+     `single_under_impact` is set bills its single rate in every band instead:
+     TotalEnergies' Walloon cards say "Le tarif bihoraire n'est pas compatible
+     avec la structure tarifaire incitative (Tarif IMPACT)". The monthly leg a
+     variable card re-prices through (`SpotMonthlyRates`) carries the flag and
+     follows the same rule.
    - Otherwise: `is_offpeak(when, region)` picks off-peak vs peak
      (`pricing.py`).
 4. Fall back to the single/current `base` rate (`pricing.py`).

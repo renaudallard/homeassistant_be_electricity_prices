@@ -77,8 +77,10 @@ from ._pdf import (
 from ._rates import (
     ALL_REGIONS,
     Contract,
+    FixedRates,
     InjectionRates,
     TariffKind,
+    VariableRates,
 )
 from ._totalenergies_cards import (
     _IMPACT_BANDS,
@@ -421,11 +423,25 @@ def parse_injection_card(
     return _extract_injection(text, contract.kind), dated.group(1) if dated else ""
 
 
+# The Walloon cards' footnote saying their day/night split is not billed on
+# the CWaPE incitative tariff, in either edition: "Le tarif bihoraire n'est
+# pas compatible avec la structure tarifaire incitative (Tarif IMPACT)" and
+# "Het tweevoudig tarief is niet compatibel met de incitatieve
+# tariefstructuur (Tariefimpact)". Read before a Dutch card is put in French.
+_NO_BI_HOURLY_UNDER_IMPACT_RE = re.compile(
+    r"tarif\s+bihoraire\s+n['’]est\s+pas\s+compatible\s+avec\s+la\s+structure"
+    r"\s+tarifaire\s+incitative"
+    r"|tweevoudig\s+tarief\s+is\s+niet\s+compatibel\s+met\s+de\s+incitatieve",
+    re.IGNORECASE,
+)
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
+    single_under_impact = _NO_BI_HOURLY_UNDER_IMPACT_RE.search(text) is not None
     if is_dutch_card(text):
         place = rf"Elektriciteit\s+in\s+het\s+{_DUTCH_PLACES[region]}"
         _check_card(text, contract.dutch_title, place, region)
@@ -436,6 +452,10 @@ def parse_snapshot(
 
     columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
+    if single_under_impact and isinstance(energy, (FixedRates, VariableRates)):
+        # An Impact connection on this product pays the single rate in every
+        # band, which only the card says; see FixedRates.single_under_impact.
+        energy = replace(energy, single_under_impact=True)
     included = cev_included(text)
     if included is not None:
         energy = _without_renewables(energy, included)

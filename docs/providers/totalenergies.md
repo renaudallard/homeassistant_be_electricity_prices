@@ -128,6 +128,16 @@ Notes on the kind mapping:
   `distribution_medium` and `distribution_eco`, applied under `dso_tariff_mode=impact`). See
   `test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands`
   (`tests/test_totalenergies.py`).
+- **The other Walloon products bill their single rate under Impact.** Their
+  cards, French and Dutch, say "Le tarif bihoraire n'est pas compatible avec la
+  structure tarifaire incitative (Tarif IMPACT)" / "Het tweevoudig tarief is
+  niet compatibel met de incitatieve tariefstructuur". `parse_snapshot` reads
+  it (`_NO_BI_HOURLY_UNDER_IMPACT_RE`, before a Dutch card is put in French)
+  into `single_under_impact` on the energy leg, and the engine then bills a
+  day/night meter on Tarif Impact the single rate in every band rather than the
+  ECO/night, PIC-MEDIUM/day mapping other suppliers print. Measured on the
+  October 2026 cards with the residential load profile, the mapping over-billed
+  11 to 29 EUR a year at 3500 kWh.
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
   defaults `False` (`providers/_rates.py`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
