@@ -324,8 +324,91 @@ async def _import_cost_rows(
     base = await _chain_before(hass, metadata["statistic_id"], rows[0]["start"], reset)
     if base:
         rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
+    later = await _short_term_after(hass, metadata["statistic_id"], rows[-1]["start"])
     import_statistics(hass, metadata, rows)
     _seed_short_term_sum(hass, metadata, rows[-1], reset)
+    _rechain_short_term(hass, metadata, rows[-1], reset, later)
+
+
+async def _short_term_after(
+    hass: HomeAssistant, statistic_id: str, last: datetime
+) -> list[Any]:
+    """The short-term rows the live compile has written after ``last``.
+
+    The compiler resumes from the newest short-term row, so a seed at ``last``
+    only holds while nothing newer exists. A setup's first compile can land
+    before the backfill finishes, and a service call always runs on a live
+    entry, so those rows are read before anything is written.
+    """
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+
+        got = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            last + timedelta(minutes=5),
+            None,
+            {statistic_id},
+            "5minute",
+            None,
+            {"sum", "state", "last_reset"},
+        )
+    except Exception:  # recorder may surface anything
+        return []
+    return list(got.get(statistic_id, []))
+
+
+def _rechain_short_term(
+    hass: HomeAssistant,
+    metadata: StatisticMetaData,
+    last: StatisticData,
+    reset: datetime,
+    later: list[Any],
+) -> None:
+    """Put the live short-term rows after the backfill onto its chain.
+
+    Each keeps the state it compiled and takes the imported total plus what
+    the bill moved since the last backfilled hour, so the newest short-term
+    row, which the compiler resumes from, continues the imported series. Only
+    rows of the same cycle are moved. Best effort, like the seed.
+    """
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.db_schema import StatisticsShortTerm
+    except ImportError:  # pragma: no cover - recorder always ships with HA
+        return
+    cycle = reset.timestamp()
+    total = float(last.get("sum") or 0.0)
+    bill = float(last.get("state") or 0.0)
+    moved: list[StatisticData] = []
+    for row in later:
+        state = row.get("state")
+        if state is None or row.get("last_reset") != cycle:
+            continue
+        moved.append(
+            {
+                "start": datetime.fromtimestamp(row["start"], tz=UTC),
+                "state": state,
+                "sum": round(total + state - bill, 4),
+                "last_reset": reset,
+            }
+        )
+    if not moved:
+        return
+    try:
+        get_instance(hass).async_import_statistics(metadata, moved, StatisticsShortTerm)
+    except Exception:  # recorder may surface anything
+        _LOGGER.debug(
+            "could not move the live short-term rows of %s onto the backfill",
+            metadata["statistic_id"],
+        )
 
 
 async def _chain_before(

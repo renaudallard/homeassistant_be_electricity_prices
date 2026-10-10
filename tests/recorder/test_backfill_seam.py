@@ -58,7 +58,10 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     do_adhoc_statistics,
 )
 
-from custom_components.be_electricity_prices.backfill_cost import _seed_short_term_sum
+from custom_components.be_electricity_prices.backfill_cost import (
+    _import_cost_rows,
+    _seed_short_term_sum,
+)
 from custom_components.be_electricity_prices.coordinator_data import ytd_window_reset
 
 
@@ -157,3 +160,63 @@ async def test_seeding_continues_the_sum_chain(
     last = rows[-1]
     assert last[2] == pytest.approx(500.3), f"sum did not continue the chain: {rows}"
     assert last[3] == pytest.approx(0.2, abs=1e-6), f"wrong change at seam: {rows}"
+
+
+async def test_a_live_compile_before_the_backfill_keeps_the_seam(
+    recorder_mock: Any, hass: HomeAssistant, freezer: Any
+) -> None:
+    """The first compile of a setup can land before the backfill has written
+    anything, and a service call always runs on a live entry. The compiler
+    resumes from the newest short-term row, so a seed at the last backfilled
+    hour alone left that newer row's own chain in charge: the next hour read
+    sum 0.1 and change -499.9. The live rows after the backfill are moved onto
+    its chain, so the seam holds in either order."""
+    assert await async_setup_component(hass, "sensor", {})
+    await hass.async_block_till_done()
+    h = datetime(2026, 10, 10, 11, tzinfo=UTC)
+    freezer.move_to(h)
+    reset = jan1_reset()
+    attrs = {
+        "device_class": "monetary",
+        "state_class": "total",
+        "unit_of_measurement": "EUR",
+        "last_reset": reset.isoformat(),
+    }
+
+    async def live(when: datetime, value: str) -> None:
+        freezer.move_to(when)
+        hass.states.async_set(SID, value, attrs)
+        await hass.async_block_till_done()
+        await async_wait_recording_done(hass)
+        do_adhoc_statistics(
+            hass, start=when.replace(minute=when.minute - when.minute % 5, second=0)
+        )
+        await async_wait_recording_done(hass)
+
+    await live(h + timedelta(hours=2, minutes=21), "500.2")
+    meta = StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=None,
+        source="recorder",
+        statistic_id=SID,
+        unit_class=None,
+        unit_of_measurement="EUR",
+    )
+    rows = [
+        StatisticData(start=h, state=499.9, sum=499.9),
+        StatisticData(start=h + timedelta(hours=1), state=500.0, sum=500.0),
+    ]
+    await _import_cost_rows(hass, meta, rows, reset, async_import_statistics)
+    await async_wait_recording_done(hass)
+    await live(h + timedelta(hours=2, minutes=56), "500.3")
+
+    def hours() -> list[Any]:
+        return statistics_during_period(
+            hass, h - timedelta(hours=1), None, {SID}, "hour", None, {"sum", "change"}
+        )[SID]
+
+    got = await hass.async_add_executor_job(hours)
+    changes = [float(c) for r in got if (c := r.get("change")) is not None]
+    assert min(changes) > -1.0, got
+    assert got[-1].get("sum") == pytest.approx(500.3), got

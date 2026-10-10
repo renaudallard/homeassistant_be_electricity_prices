@@ -604,10 +604,16 @@ backfilled instant to hand the platform its resume point. That row must carry
 `last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
 missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
 `last_reset`, taking the meter-reset branch and adding the whole live reading on
-top of the resumed sum (observed: `sum` 1000.4 instead of 500.3). The seed is best
-effort and swallows recorder errors, since failing to seed is no worse than not
-trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
-real recorder.
+top of the resumed sum (observed: `sum` 1000.4 instead of 500.3). The compiler
+resumes from the NEWEST short-term row, so the seed alone only holds while nothing
+newer exists, and a setup's first compile can land before the backfill finishes
+(a service call always runs on a live entry). `_rechain_short_term` therefore
+moves the live short-term rows written after the last backfilled hour onto the
+imported chain: each keeps its state and takes the imported total plus what the
+bill moved since (`_short_term_after` reads them before anything is written).
+Both are best effort and swallow recorder errors, since failing is no worse than
+not trying. `tests/recorder/test_backfill_seam.py` pins the three seed states
+and the race against a real recorder.
 
 `_backfill_cost_sensor` runs one running total per hour (`backfill_cost.py`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
