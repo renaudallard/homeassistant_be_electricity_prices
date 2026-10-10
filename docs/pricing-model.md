@@ -265,8 +265,10 @@ each entry's store, so a restart without the network still bills it.
 
 Justel serves only the wording in force, so a month before the first step it
 holds is billed as the card prints it, which is every month before August 2026.
-The same holds while the law has not been read at all, on a first start with
-Justel unreachable. A page that does not parse as the article (a layout change,
+The same holds while the law has never been read, which is a host that cannot
+reach Justel at all: once read, the table is kept in the store across
+restarts, and a fetch that fails with nothing held logs a warning every six
+hours. A page that does not parse as the article (a layout change,
 or a bot check served instead of the law) keeps what is held and logs a
 warning. GitHub's runners are served such a check, so the live check cannot
 read the law; the parser is tested on a saved copy of the page

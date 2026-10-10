@@ -171,6 +171,30 @@ async def test_a_failed_read_keeps_what_is_held_and_backs_off(
     assert excise_law.held_table() == held
 
 
+async def test_an_unread_law_is_a_warning_and_a_held_one_is_not(
+    fresh_fetch: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """With nothing held every card bills its own excise, which a stale card
+    gets wrong, so a host that cannot reach Justel has to be told; with the
+    law held from the store it goes on billing the law."""
+    down = AsyncMock(side_effect=ExtractorError("HTTP 403 fetching the law"))
+    held = excise_law.held_table()
+    with patch.object(excise_law, "fetch_text", down), caplog.at_level(logging.DEBUG):
+        await excise_law.ensure_excise_law(AsyncMock())
+    assert [r.levelno for r in caplog.records if "Justel" in r.message] == [
+        logging.DEBUG
+    ]
+    caplog.clear()
+    excise_law._failed_at = None
+    excise_law._HELD.clear()
+    with patch.object(excise_law, "fetch_text", down), caplog.at_level(logging.DEBUG):
+        await excise_law.ensure_excise_law(AsyncMock())
+    assert [r.levelno for r in caplog.records if "Justel" in r.message] == [
+        logging.WARNING
+    ]
+    excise_law.hold(held)
+
+
 async def test_a_read_replaces_the_table(fresh_fetch: None, page: str) -> None:
     excise_law._HELD.clear()
     with patch.object(excise_law, "fetch_text", AsyncMock(return_value=page)):

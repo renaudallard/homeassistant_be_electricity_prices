@@ -318,7 +318,16 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
         _failed_at = now
         return
     except ExtractorError as err:
-        _LOGGER.debug("The excise law could not be fetched: %s", err)
+        # With nothing held, every card is billed the excise it prints, which
+        # a stale card gets wrong, so say so where it is seen: once per retry,
+        # since the backoff below spaces the attempts six hours apart. A held
+        # table goes on billing the law, so a failure then is no news.
+        log = _LOGGER.debug if _HELD else _LOGGER.warning
+        log(
+            "The excise law could not be fetched from Justel, so each card's "
+            "own excise is billed until it is: %s",
+            err,
+        )
         _failed_at = now
         return
     _HELD.update(table)

@@ -983,15 +983,17 @@ steps out of order, or a rate outside the plausible range.
 and reads the page once a day for the whole process. The table is kept in each
 entry's store (the `excise_law` key) and restored only into a kind nothing
 holds yet, since another entry may already have read the law. A failure keeps
-what is held and retries after six hours. A page that comes back and does not
-parse logs a warning: a layout change, or the bot check Justel serves GitHub's
+what is held and retries after six hours; it is logged as a warning while
+nothing is held, since every card then bills its own excise, and at debug
+level once the law has been read. A page that comes back and does not parse
+logs a warning: a layout change, or the bot check Justel serves GitHub's
 runners instead of the law. Nothing here raises.
 
 `standard_excise` answers for a month with the rate in force on its first day,
 or `None` before the first step held, which is every month before August 2026,
 since Justel serves only the wording in force. `resolve_federal_excise`
 (`providers/_resolve.py`) then bills the card as printed, which is also what
-happens on a first start with Justel unreachable.
+happens while the law has never been read.
 
 `protected_excise` answers the protected residential customer's rate the same
 way, for the social tariff (`providers/social.py`). No card prints it reliably,

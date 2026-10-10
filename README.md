@@ -360,9 +360,11 @@ same measure steps the excise down each January, to 43, 40 and then 38 € per
 MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
 because the law states it. Your card's own excise is used for the months
 before August 2026, so a bill for an earlier month is unaffected, and also
-while the law has not been read yet (Justel unreachable on the very first
-start). The contribution stays dropped: it was abolished, not set for a
-period.
+for as long as the law has never been read. Once read it is kept across
+restarts, so that only happens while Justel (ejustice.just.fgov.be) cannot
+be reached from your Home Assistant at all, and a warning in the log says so
+every six hours until it can. The contribution stays dropped: it was
+abolished, not set for a period.
 
 The daily live check compares every supplier's federal block against the rest
 and reports a card that drifts, which is how a supplier that corrects itself
