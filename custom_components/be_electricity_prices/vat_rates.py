@@ -72,6 +72,11 @@ def residential_vat(month: date) -> float:
     return VAT_RATE_REDUCED if rate is None else rate
 
 
+def residential_rates() -> frozenset[float]:
+    """Every reduced rate held for any month, and the constant."""
+    return frozenset(_RESIDENTIAL.values()) | {VAT_RATE_REDUCED}
+
+
 def standard_vat(month: date) -> float:
     """The standard rate a professional connection pays in ``month``."""
     rate = _rate_for(_STANDARD, month)

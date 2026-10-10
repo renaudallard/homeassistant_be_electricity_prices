@@ -1664,6 +1664,41 @@ def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:
         parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=online)
 
 
+def test_the_table_check_allows_a_change_of_vat_and_nothing_wider() -> None:
+    """The quarter check stays at 0,01 c/kWh: the first quarter's table on the
+    second quarter's card parts them by 0,10 c/kWh, 0,72%, and must be
+    refused. The one wider gap a consistent card shows is a change of VAT:
+    the formula is grossed by the rate the parser assumes and the price
+    carries the card's, so a price at exactly 7% over a formula at 6% passes
+    once 7% is held for a month."""
+    from custom_components.be_electricity_prices import vat_rates
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        check_quarter_table,
+    )
+
+    text = fixture_text("bolt_variable_impact_w.pdf", layout=True)
+    energy = parse_snapshot("bolt_variable", text, "wallonia").energy
+    assert isinstance(energy, VariableRates)
+    check_quarter_table(text, energy, professional=False)
+    off_quarter = replace(energy, current=energy.current * 1.0072)
+    with pytest.raises(ExtractorError, match="index table"):
+        check_quarter_table(text, off_quarter, professional=False)
+    seven = replace(energy, current=energy.current * 1.07 / 1.06)
+    with pytest.raises(ExtractorError, match="index table"):
+        check_quarter_table(text, seven, professional=False)
+    held = vat_rates.held_table()
+    vat_rates.hold({"residential": {"2026-11": {"rate": 0.07}}})
+    try:
+        check_quarter_table(text, seven, professional=False)
+        # A professional card prints both excluding VAT: no rate moves them.
+        with pytest.raises(ExtractorError, match="index table"):
+            check_quarter_table(text, seven, professional=True)
+    finally:
+        vat_rates._RESIDENTIAL.clear()
+        vat_rates._STANDARD.clear()
+        vat_rates.hold(held)
+
+
 @pytest.mark.parametrize(
     ("contract", "fixture", "quarter", "mono"),
     [

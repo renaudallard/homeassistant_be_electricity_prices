@@ -38,6 +38,7 @@ from dataclasses import dataclass, fields, replace
 from datetime import date
 
 from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
+from ..vat_rates import residential_rates
 from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
@@ -334,7 +335,21 @@ def _with_index_card_formula(
     )
 
 
-def check_quarter_table(text: str, energy: EnergyRates) -> None:
+def _vat_ratios(text: str, *, professional: bool) -> frozenset[float]:
+    """What the printed price may be over the formula's own VAT.
+
+    A residential formula is grossed by the rate the parser assumes, while the
+    printed price carries the one the card was printed under, so a change of
+    rate parts the two by exactly the ratio of the rates on a card that is
+    consistent. A professional card prints both excluding VAT.
+    """
+    if professional:
+        return frozenset({1.0})
+    vat = vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT)
+    return frozenset({1.0}) | {(1.0 + rate) / vat for rate in residential_rates()}
+
+
+def check_quarter_table(text: str, energy: EnergyRates, *, professional: bool) -> None:
     """Refuse a variable card whose index table is not the quarter its
     monthly price was computed on.
 
@@ -359,7 +374,10 @@ def check_quarter_table(text: str, energy: EnergyRates) -> None:
         return
     index = to_float(match.group(2)) / 1000.0
     priced = energy.formula_factor * index + (energy.formula_base or 0.0)
-    if abs(priced - energy.current) > _TABLE_TOLERANCE * abs(energy.current):
+    if all(
+        abs(priced * ratio - energy.current) > _TABLE_TOLERANCE
+        for ratio in _vat_ratios(text, professional=professional)
+    ):
         raise ExtractorError(
             f"Bolt: the card's index table ({' '.join(match.group(1).split())}) "
             f"prices its monthly rate at {priced * 100.0:.2f} c/kWh, but it "
@@ -497,12 +515,8 @@ _QUARTER_MONO_INDEX_RE = re.compile(
     r"Belpex\s+(Q[1-4]\s+\d{4}).*?Simple\s+([\d.,]+)\s*€/MWh", re.S
 )
 # How far the table's index through the formula may sit from the printed
-# monthly price, as a share of that price. The formula is grossed by the VAT
-# the parser assumes and the price carries the one the card was printed
-# under, so a rate change moves them apart (6 to 7% is 0,94%) on a card that
-# is consistent. A wrong quarter moves them much further: 34% on the October
-# 2026 edition, and Q1 to Q2 2026 alone moved the index 8%.
-_TABLE_TOLERANCE = 0.02
+# monthly price: one step of the price's last printed digit, 0,01 c/kWh.
+_TABLE_TOLERANCE = 1e-4
 # The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
 #   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
 # printed price, that band's own quarterly index, then the shared formula.

@@ -625,6 +625,7 @@ def parse_snapshot(
     check_quarter_table(
         index_text if contract.index_slug is not None and index_text else text,
         energy,
+        professional=professional,
     )
     injection = _extract_injection(text)
     if professional and injection is not None:
