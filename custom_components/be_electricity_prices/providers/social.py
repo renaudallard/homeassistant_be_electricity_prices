@@ -219,7 +219,9 @@ _ENGIE_CONSUMPTION_RE = re.compile(
     rf"Consommation\s*\(\d+\)\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}"
 )
 _ENGIE_INJECTION_RE = re.compile(rf"Injection\s*\(\d+\)\s+{_NUM}\s+{_NUM}\s+{_NUM}")
-_ENGIE_FORMULA = r"=\s*(\d+,\d+)\s*\+\s*\((\d+,\d+)\s*x\s*EPEXDAM\)"
+# "0,0500 + (0,0632 x EPEXDAM)" since March 2024, "0,0500 + 0,0632 x EPEX DAM"
+# on the cards before it, without the parentheses and with a space.
+_ENGIE_FORMULA = r"=\s*(\d+,\d+)\s*\+\s*\(?(\d+,\d+)\s*x\s*EPEX\s?DAM\)?"
 _ENGIE_FORMULAS = (
     re.compile(rf"Normal\s*{_ENGIE_FORMULA}"),
     re.compile(rf"heures pleines\s*{_ENGIE_FORMULA}"),
@@ -271,10 +273,10 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
     """Engie's social feed-in and the Walloon connection fee it prints.
 
     The card prints its feed-in for a single register, the day and the night
-    one. Since 2024 they are last month's EPEXDAM put through a formula on
-    the delivery month's, and the index itself is left out of this card, so
-    the formulas are bound by arithmetic: all three printed rates have to
-    imply one index. The 2023 cards print the month's rates and no formula.
+    one, last month's EPEXDAM put through a formula on the delivery month's.
+    The index itself is left out of this card, so the formulas are bound by
+    arithmetic: all three printed rates have to imply one index. A card with
+    no formula at all is credited as printed.
     """
     consumption = _ENGIE_CONSUMPTION_RE.search(text)
     if consumption is None or not _matches_creg(

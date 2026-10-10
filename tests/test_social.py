@@ -344,17 +344,19 @@ def test_every_layout_the_creg_has_used_is_read(
     assert card.mono.total == pytest.approx(mono)
 
 
-def test_engie_s_2023_card_prints_the_month_s_feed_in_and_no_formula() -> None:
-    """The footnote marks sit on the line under each label, and the feed-in
-    is that month's figure, so it is credited as printed."""
+def test_engie_s_2023_card_spells_its_formula_without_parentheses() -> None:
+    """The 2023 cards print "Normal = 0,0500 + 0,0632 x EPEX DAM", with a
+    space and no parentheses, and the footnote marks sit on the line under
+    each label. The formula is read all the same: the feed-in follows the
+    delivery month's index, not the August figure the card prints at."""
     injection, fee = social.parse_engie(
         fixture_text("engie_social_w_2023-09.pdf"), _card("creg_social_2023_q3.pdf")
     )
     assert (injection.current, injection.peak, injection.offpeak) == pytest.approx(
         (0.05862, 0.06892, 0.02864)
     )
-    assert not injection.month_indexed
-    assert injection.factor is None
+    assert injection.month_indexed
+    assert (injection.factor, injection.base) == pytest.approx((0.632, 0.0005))
     assert fee == pytest.approx(0.00075)
 
 

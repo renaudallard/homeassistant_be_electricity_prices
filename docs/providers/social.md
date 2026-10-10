@@ -142,10 +142,10 @@ levy, VREG ceiling and network consensus (`_OFF_MARKET_SUPPLIERS`,
 
 ## Feed-in
 
-`parse_engie` reads the "Injection" row (single, day, night) and, since 2024,
-the three formulas, `0,0500 + (0,0632 x EPEXDAM)` for the single register in
-October 2026; the 2023 cards print the month's rates and no formula, which
-are credited as printed. The card prints its rates at last month's EPEXDAM but leaves the index
+`parse_engie` reads the "Injection" row (single, day, night) and the three
+formulas, `0,0500 + (0,0632 x EPEXDAM)` for the single register in October
+2026, spelled `0,0500 + 0,0632 x EPEX DAM` (no parentheses, a space) on the
+cards before March 2024. The card prints its rates at last month's EPEXDAM but leaves the index
 itself out, so the formulas are bound by arithmetic: the three printed rates
 have to imply one index. The single register's formula is `month_indexed`, so
 it resolves on the delivery month's mean where the entry has an ENTSO-E key;
@@ -177,7 +177,8 @@ runners are not served the law, so the card carries `protected_excise_unread`.
 ## Tests
 
 `tests/test_social.py`, on six CREG cards from Q4 2022 to Q4 2026 (one per
-layout), the Walloon social cards of Engie for September 2023 (no formula) and
+layout), the Walloon social cards of Engie for September 2023 (the older formula
+spelling) and
 October 2026, and those of Luminus for June 2025 (two dated feed-in rows) and
 October 2026. Parsed beyond the fixtures when this was written: all seventeen
 CREG quarters, Engie's Walloon social card monthly back to November 2022 and
